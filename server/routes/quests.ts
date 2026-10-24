@@ -187,6 +187,8 @@ export function register(app: Express, deps: Deps): void {
     delete body.valueMinor;
     delete body.valueCurrency;
     delete body.valueTokens;
+    delete body.cashMinor;
+    delete body.cashCurrency;
     // `pay` is what this route SENDS. A client that posts a quest back as it
     // received it must not have the projection written onto the row.
     delete body.pay;
@@ -207,6 +209,11 @@ export function register(app: Express, deps: Deps): void {
       out.valueCurrency = input.valueMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
     }
     if (input.tokens !== undefined) out.valueTokens = input.tokens;
+    // The cash it pays (0285), stamped with the same currency for the same reason.
+    if (input.cashMinor !== undefined) {
+      out.cashMinor = input.cashMinor;
+      out.cashCurrency = input.cashMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+    }
     return out;
   };
 

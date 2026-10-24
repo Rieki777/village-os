@@ -14,6 +14,11 @@
  *
  * THE REVIEW JOB REGISTERS HERE, hourly, beside the doors that set what it
  * brings back.
+ *
+ * THE ADVICE PROCESS'S DOORS register from here too (server/routes/sessionAdvice.ts),
+ * after this module's own, and so does a circle's season (server/routes/sessionPulse.ts):
+ * server/index.ts has no room for another counted line, and a decision, the
+ * advice before it and the season it shapes belong together.
  */
 import type { Express, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -24,13 +29,16 @@ import { DECISION_REVIEW_EVERY_MS, DECISION_REVIEW_JOB, circleDecisionLog, runDe
 import { liveCircles } from "./sessionRhythm";
 import { CIRCLES_API } from "../../shared/sessionRhythm";
 import { DECISION_LIMITS, DECISION_REFUSALS } from "../../shared/sessionDecisions";
+import { register as registerAdvice } from "./sessionAdvice";
+import { register as registerPulse } from "./sessionPulse";
 
 /**
  * What this module touches, and why. `circlesRepo` says which circles are
  * live. `lapseContext` reads whose seat terms still run, for standing.
- * `overLimit` bounds the door that writes.
+ * `overLimit` bounds the door that writes. `members` and `notify` are the
+ * advice process's: it names people and rings bells.
  */
-type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "circlesRepo" | "lapseContext">;
+type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "circlesRepo" | "lapseContext" | "members" | "notify">;
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -72,4 +80,7 @@ export function register(app: Express, deps: Deps): void {
     if (!who) return;
     answer(res, await setReview(getPool(), who, circleIdOf(req), Number(req.params?.entryId), req.body, decisions), (v) => v);
   });
+
+  registerAdvice(app, deps);
+  registerPulse(app, deps);
 }

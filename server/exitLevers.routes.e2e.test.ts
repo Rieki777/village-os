@@ -1,5 +1,12 @@
 /**
- * THE SIX REFUSALS, DRIVEN THROUGH THE DOOR A FOUNDER ACTUALLY USES (R4).
+ * THE FIVE REFUSALS, DRIVEN THROUGH THE DOOR A FOUNDER ACTUALLY USES (R4),
+ * AND WHAT RESOLVE DOES ON THE SHIPPED DIALS (the ruling of 2026-10-23).
+ *
+ * There were seven refusals until the founder ruled that members keep their
+ * tokens. A share of equity and keeping Voice were lifted that day, and the
+ * cases for them below now assert that each SAVES. The last describe drives
+ * the departure itself: a leaver still holding tokens is kept as a former
+ * member, and an empty account is erased as before.
  *
  * `server/lib/exitPolicy.test.ts` proves `exitLeverProblem` in isolation, with
  * every fact injected. That is a claim about a function. This file is the claim
@@ -32,6 +39,8 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
+import { balanceOf, loadTokenRegistry, memberAccount, MINT_FAUCET, postTransfer, tokenDef } from "./lib/ledger";
+import { fromLedgerUnits, VILLAGE_VOICE } from "./lib/economy";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -186,12 +195,14 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
     expect(await storedValue("exit.keep_pct.recognition")).toBeNull();
   });
 
-  it("a share of EQUITY is refused, and nothing is written", async () => {
+  it("a share of EQUITY saves since the ruling of 2026-10-23, and the shipped 100 is the inherited default", async () => {
+    // Refused until that day, when the only equity token was the Hypha mirror.
+    // Earned Equity is a platform token, and members keep their tokens.
     const r = await setDial("exit.keep_pct.equity", "10");
-    expect(r.status).toBe(400);
-    expect(r.json?.error).toBe(
-      "Equity is governed on Base under Hypha and this platform never moves it. What happens to it on departure is decided there.",
-    );
+    expect(r.status, `equity share: ${JSON.stringify(r.json)}`).toBe(200);
+    expect(await storedValue("exit.keep_pct.equity")).toBe("10");
+    // Back to the platform default, which removes the row.
+    expect((await setDial("exit.keep_pct.equity", "100")).status).toBe(200);
     expect(await storedValue("exit.keep_pct.equity")).toBeNull();
   });
 
@@ -235,6 +246,8 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
 
   it("CONVERT with a rate but a Voice share of zero is refused, because nothing would convert", async () => {
     expect((await setDial("exit.voice_convert_rate", "2.5")).status).toBe(200);
+    // The share is 100 by default since 2026-10-23, so the village sets it to 0.
+    expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(200);
     const r = await setDial("exit.voice_on_exit", "convert");
     expect(r.status).toBe(400);
     expect(r.json?.error).toBe(
@@ -251,18 +264,23 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
     // The share cannot be taken back to zero underneath a standing conversion.
     expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(400);
     expect(await storedValue("exit.keep_pct.voice")).toBe("50");
-    // And back, so the rest of the suite runs on the shipped answers.
-    expect((await setDial("exit.voice_on_exit", "forfeit")).status).toBe(200);
+    // And back, so the rest of the suite runs on the shipped answers, each of
+    // which removes its row.
+    expect((await setDial("exit.voice_on_exit", "keep")).status).toBe(200);
     expect((await setDial("exit.voice_convert_rate", "0")).status).toBe(200);
-    expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(200);
+    expect((await setDial("exit.keep_pct.voice", "100")).status).toBe(200);
+    for (const key of ["exit.voice_on_exit", "exit.voice_convert_rate", "exit.keep_pct.voice"]) {
+      expect(await storedValue(key), key).toBeNull();
+    }
   });
 
-  it("KEEPING Voice is refused while a resolved exit anonymizes the account", async () => {
+  it("KEEPING Voice saves, and it is the shipped answer, because a leaver who holds it stays on", async () => {
+    // Refused until 2026-10-23, while a resolved exit always made the account a
+    // tombstone. The last describe in this file drives the former-member resolve.
+    expect((await setDial("exit.voice_on_exit", "forfeit")).status).toBe(200);
+    expect(await storedValue("exit.voice_on_exit")).toBe("forfeit");
     const r = await setDial("exit.voice_on_exit", "keep");
-    expect(r.status).toBe(400);
-    expect(r.json?.error).toBe(
-      "Keeping Voice needs an account that still exists after the departure, and a resolved exit makes the account a tombstone. This becomes available when a village can record a departure without one.",
-    );
+    expect(r.status, `keep: ${JSON.stringify(r.json)}`).toBe(200);
     expect(await storedValue("exit.voice_on_exit")).toBeNull();
   });
 
@@ -309,14 +327,19 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
      * A full credit keep with no vote over any amount. On a token somebody can
      * buy this is a withdrawal window wearing an exit, and it is still the
      * village's call, so the route answers 200 and stores it. The sentence
-     * about it is the test run's to print.
+     * about it is the test run's to print. Since 2026-10-23 a full keep is the
+     * shipped default, so the case moves away from it and back.
      */
+    const away = await setDial("exit.keep_pct.credit", "40");
+    expect(away.status).toBe(200);
+    expect(await storedValue("exit.keep_pct.credit")).toBe("40");
     const r = await setDial("exit.keep_pct.credit", "100");
     expect(r.status).toBe(200);
     expect(r.json?.error).toBeUndefined();
-    expect(await storedValue("exit.keep_pct.credit")).toBe("100");
+    // The inherited default again: no row, which every village that never
+    // touched the dial is reading.
+    expect(await storedValue("exit.keep_pct.credit")).toBeNull();
     expect(await storedValue("exit.vote_over")).toBeNull(); // 0 by default: no departure asks anybody
-    expect((await setDial("exit.keep_pct.credit", "0")).status).toBe(200);
   });
 
   it("A PASSED PROPOSAL cannot land what an admin is refused, and the apply names the element", async () => {
@@ -427,7 +450,8 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
 
     // Back to the shipped answers for the rest of the file. A no-op when the
     // element never landed, which is why it belongs here and not below.
-    expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(200);
+    expect((await setDial("exit.keep_pct.voice", "100")).status).toBe(200);
+    expect(await storedValue("exit.keep_pct.voice")).toBeNull();
   });
 
   it("a dial outside the Exit category is untouched by any of this", async () => {
@@ -436,5 +460,201 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
     const r = await setDial("gratitude.base_budget", "250");
     expect(r.status).toBe(200);
     expect(await storedValue("gratitude.base_budget")).toBe("250");
+  });
+});
+
+/*
+ * ── WHAT RESOLVE DOES ON THE SHIPPED DIALS (Rye, 2026-10-23) ─────────────────
+ *
+ * "As a general rule members keep their tokens", and on staying a former member
+ * or being erased after a Hypha claim: "a if b hasn't already happened". So a
+ * leaver who still holds value is KEPT, account and balances intact, with their
+ * membership and roles ended; an account with nothing of value left is erased
+ * exactly as before. Both are driven through the routes an admin and a member
+ * actually use, against the built server, with every Exit dial at its default
+ * (the describe above puts each one back, and the first case here checks).
+ *
+ * The balances are posted from this process through `postTransfer` into the
+ * schema the server is writing to. The server reads balances off
+ * `token_balances` on every request, so it sees them, and the ledger primitive
+ * is the only door a posting may use.
+ */
+describe.skipIf(!DB_CONFIGURED)("resolving a departure: a former member, or a tombstone", () => {
+  const CREDIT_UNITS = 5_000;
+  const VOICE_UNITS = 300;
+  let holder = { id: "", token: "", email: "" };
+  let empty = { id: "", token: "", email: "" };
+  let holderExit = "";
+
+  const register = async (name: string, slug: string) => {
+    const email = `${slug}-${PORT}@example.test`;
+    const r = await call("POST", "/api/auth/register", {
+      token: null,
+      body: { name, email, password: PASSWORD, paths: ["resident"] },
+    });
+    expect(r.status, `${name} must register: ${JSON.stringify(r.json)}`).toBe(200);
+    return { id: String(r.json?.user?.id ?? ""), token: String(r.json?.token ?? ""), email };
+  };
+  const player = async (id: string) =>
+    ((await call("GET", "/api/admin/players")).json ?? []).find((p: any) => p.id === id);
+  const exitRecord = async (id: string) =>
+    ((await call("GET", "/api/admin/exits")).json?.exits ?? []).find((e: any) => e.id === id);
+  const seed = async (userId: string, token: string, units: number) => {
+    const r = await postTransfer(pool, {
+      from: MINT_FAUCET,
+      to: memberAccount(userId),
+      tokenType: token,
+      amount: units,
+      source: "test_seed",
+      idempotencyKey: `exit-resolve:seed:${userId}:${token}`,
+    });
+    expect(r.ok, `seed ${token}: ${r.error}`).toBe(true);
+  };
+
+  it("every Exit dial is at its shipped default before a departure is driven", async () => {
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT `config_key` FROM `game_variables` WHERE `config_key` LIKE 'exit.%'",
+    );
+    expect(rows.map((r) => r.config_key)).toEqual([]);
+  });
+
+  it("a member who holds credits and Voice, and sits in a role, opens their own departure", async () => {
+    await loadTokenRegistry(pool);
+    expect(tokenDef(VILLAGE_VOICE), "the village must carry Village Voice").toBeTruthy();
+    holder = await register("Ash Holder", "ash-holder");
+    /*
+     * Admitted BOTH ways a village records it (`isAdmitted`), so the case can
+     * show both cleared: a signed membership letter the village accepted, which
+     * is what writes `membershipGranted`, and a stage grant at Member.
+     */
+    const letter = await call("GET", "/api/membership-letter", { token: null });
+    expect(letter.status, `letter: ${JSON.stringify(letter.json)}`).toBe(200);
+    const signed = await call("POST", "/api/forms/submit", {
+      token: holder.token,
+      body: {
+        type: "membership-508",
+        data: {
+          name: "Ash Holder", email: holder.email, phone: "", paths: ["resident"],
+          why: "I would like to belong here.", monthlyContribution: "108",
+          acknowledgedGoodNeighbor: true, acknowledgedCommitments: true,
+          signedAt: new Date().toISOString(), letterVersion: String(letter.json?.version ?? ""),
+        },
+      },
+    });
+    expect(signed.status, `sign: ${JSON.stringify(signed.json)}`).toBe(200);
+    const accepted = await call("PUT", `/api/admin/submissions/${String(signed.json?.id ?? "")}/status`, { body: { status: "accepted" } });
+    expect(accepted.status, `accept: ${JSON.stringify(accepted.json)}`).toBe(200);
+    const admitted = await call("PUT", `/api/admin/players/${holder.id}/stage`, { body: { stageId: "member" } });
+    expect(admitted.status, `admit: ${JSON.stringify(admitted.json)}`).toBe(200);
+    const seated = await call("POST", "/api/admin/roles/treasury/holders", { body: { userId: holder.id, action: "add" } });
+    expect(seated.status, `seat: ${JSON.stringify(seated.json)}`).toBe(200);
+    await seed(holder.id, "credits", CREDIT_UNITS);
+    await seed(holder.id, VILLAGE_VOICE, VOICE_UNITS);
+
+    const before = await player(holder.id);
+    expect(before?.membership, "the control: they are a member before they leave").toBe(true);
+    const state = await call("GET", `/api/admin/players/${holder.id}/exit-state`);
+    expect(state.json?.states?.find((s: any) => s.domain === "roles")?.count).toBe(1);
+
+    const opened = await call("POST", "/api/profile/request-exit", { token: holder.token, body: { password: PASSWORD } });
+    expect(opened.status, `request-exit: ${JSON.stringify(opened.json)}`).toBe(200);
+    holderExit = String(opened.json?.exit?.id ?? "");
+    expect(holderExit).toBeTruthy();
+  });
+
+  it("the settle act keeps every credit and every Voice, because that is the shipped share", async () => {
+    const settled = await call("POST", `/api/admin/exits/${holderExit}/settle-balances`, {});
+    expect(settled.status, `settle: ${JSON.stringify(settled.json)}`).toBe(200);
+    expect(settled.json?.swept?.credits).toBeUndefined();
+    expect(settled.json?.swept?.[VILLAGE_VOICE]).toBeUndefined();
+  });
+
+  it("resolve keeps them as a former member, says so, and names what they still hold", async () => {
+    const resolved = await call("POST", `/api/admin/exits/${holderExit}/resolve`, { body: { agreementRef: "kept-2026-10" } });
+    expect(resolved.status, `resolve: ${JSON.stringify(resolved.json)}`).toBe(200);
+    expect(resolved.json?.outcome).toBe("former");
+    expect(resolved.json?.vacatedRoles).toEqual(["treasury"]);
+    const held = Object.fromEntries((resolved.json?.held ?? []).map((h: any) => [h.token, h.amount]));
+    expect(held).toEqual({
+      credits: fromLedgerUnits("credits", CREDIT_UNITS),
+      [VILLAGE_VOICE]: fromLedgerUnits(VILLAGE_VOICE, VOICE_UNITS),
+    });
+
+    const row = await exitRecord(holderExit);
+    expect(row?.status).toBe("resolved");
+    expect(row?.agreementRef).toBe("kept-2026-10");
+    expect(row?.userName, "the account is not a tombstone").toBe("Ash Holder");
+    expect(String(row?.resolution ?? "")).toContain(
+      `kept as a former member: still holds ${fromLedgerUnits("credits", CREDIT_UNITS)} credits, ${fromLedgerUnits(VILLAGE_VOICE, VOICE_UNITS)} ${VILLAGE_VOICE}`,
+    );
+
+    // The stewards still hear which role opened.
+    const titles = ((await call("GET", "/api/notifications")).json?.notifications ?? []).map((n: any) => String(n.title));
+    expect(titles).toContain("An opening in treasury (departure resolved)");
+  });
+
+  it("membership ends and the role is vacated; the name, the tier and the balances stay", async () => {
+    const after = await player(holder.id);
+    expect(after?.name).toBe("Ash Holder");
+    expect(after?.membership).toBe(false);
+    expect(after?.stageGranted).toBeNull();
+    expect(after?.role).toBe("member");
+    const state = await call("GET", `/api/admin/players/${holder.id}/exit-state`);
+    expect(state.json?.states?.find((s: any) => s.domain === "roles")?.count).toBe(0);
+    expect(await balanceOf(pool, memberAccount(holder.id), "credits")).toBe(CREDIT_UNITS);
+    expect(await balanceOf(pool, memberAccount(holder.id), VILLAGE_VOICE)).toBe(VOICE_UNITS);
+  });
+
+  it("a former member can still sign in, read their wallet, and reach the claim door", async () => {
+    // The session they held through the departure still works.
+    expect((await call("GET", "/api/profile", { token: holder.token })).status).toBe(200);
+    // And a fresh sign-in works, because nothing about the account was scrubbed.
+    const login = await call("POST", "/api/auth/login", { token: null, body: { email: holder.email, password: PASSWORD } });
+    expect(login.status, `login: ${JSON.stringify(login.json)}`).toBe(200);
+    const fresh = String(login.json?.token ?? "");
+    expect(fresh).toBeTruthy();
+
+    const wallet = await call("GET", "/api/me/wallet", { token: fresh });
+    expect(wallet.status).toBe(200);
+    const rows = Object.fromEntries((wallet.json?.rows ?? []).map((r: any) => [r.token, r.heldUnits]));
+    expect(rows.credits).toBe(CREDIT_UNITS);
+    expect(rows[VILLAGE_VOICE]).toBe(VOICE_UNITS);
+
+    // The claim door asks for a session and nothing about membership. In this
+    // build it answers every account the same way, because the connection to
+    // Hypha is not built yet (`BRIDGE_DISPATCH_BUILT`): a 503 before anything
+    // is debited. The point measured here is that a former member meets THAT
+    // answer and no refusal of their own.
+    const claim = await call("POST", "/api/me/wallet/claim", { token: fresh, body: { token: VILLAGE_VOICE } });
+    expect(claim.status, `claim: ${JSON.stringify(claim.json)}`).toBe(503);
+    expect(String(claim.json?.error ?? "")).toContain("The connection to Hypha is still being finished");
+    expect(await balanceOf(pool, memberAccount(holder.id), VILLAGE_VOICE)).toBe(VOICE_UNITS);
+  });
+
+  it("an admin can admit a former member again, through the door that admits anybody", async () => {
+    const back = await call("PUT", `/api/admin/players/${holder.id}/stage`, { body: { stageId: "member" } });
+    expect(back.status).toBe(200);
+    expect(back.json?.stageComputed).toBe("member");
+    expect((await player(holder.id))?.stageGranted).toBe("member");
+  });
+
+  it("a member holding nothing of value is erased on resolve, exactly as before", async () => {
+    empty = await register("Bay Empty", "bay-empty");
+    const opened = await call("POST", "/api/profile/request-exit", { token: empty.token, body: { password: PASSWORD } });
+    expect(opened.status, `request-exit: ${JSON.stringify(opened.json)}`).toBe(200);
+    const exitId = String(opened.json?.exit?.id ?? "");
+    // The control: the session works until the resolve.
+    expect((await call("GET", "/api/profile", { token: empty.token })).status).toBe(200);
+
+    const resolved = await call("POST", `/api/admin/exits/${exitId}/resolve`, {});
+    expect(resolved.status, `resolve: ${JSON.stringify(resolved.json)}`).toBe(200);
+    expect(resolved.json?.outcome).toBe("erased");
+    expect(resolved.json?.held).toEqual([]);
+
+    expect((await call("GET", "/api/profile", { token: empty.token })).status).toBe(401);
+    const row = await exitRecord(exitId);
+    expect(row?.status).toBe("resolved");
+    expect(row?.userName).toBe("A departed member");
+    expect(String(row?.resolution ?? "")).not.toContain("kept as a former member");
   });
 });
