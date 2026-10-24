@@ -286,7 +286,8 @@ describe.skipIf(!configured)("every new erasure step, stopped part way and resum
     ["rz2", "event-places-after-tombstone", (s) => withParam("DELETE FROM event_waitlist WHERE user_id", (ps) => ps[0] === s.leaver.id)],
     ["rz3", "event-places-after-tombstone", (s) => withParam("INTO token_ledger (id", (ps) => ps.some((v) => typeof v === "string" && v.endsWith(":refund") && v.includes(s.leaver.id)))],
     ["rz4", "housing-contacts-after-tombstone", (s) => withParam("DELETE FROM comms_contacts", (ps) => Array.isArray(ps[1]) && (ps[1] as unknown[]).includes(s.workContact))],
-    ["rz5", "housing-reservations-after-tombstone", () => has("UPDATE health_events")],
+    // The housing audit line by its kind: the seat journal's rewrite in "org-seatings" is an earlier UPDATE of the same table.
+    ["rz5", "housing-reservations-after-tombstone", () => has("WHERE kind = 'housing_reservation'")],
     ["rz6", "vouches-after-tombstone", () => has("UPDATE member_vouches SET note = NULL")],
     ["rz7", "conversations-after-tombstone", () => has("SET role = 'owner'")],
     ["rz8", "delegations-after-tombstone", () => has("UPDATE delegations SET revoked_at")],
