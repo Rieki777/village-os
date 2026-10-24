@@ -46,6 +46,8 @@ const headers = (): Record<string, string> => {
 interface WalletRow {
   token: string;
   name: string;
+  /** The village's own words for what this token means, or null. */
+  description: string | null;
   kind: string;
   role: "claimable" | "village" | "gratitude";
   decimals: number;
@@ -223,6 +225,7 @@ export default function WalletCard() {
           {visible.map((row) => (
             <li key={row.token} className="rounded-xl border border-border p-4">
               <h4 className="font-semibold text-card-foreground">{row.name}</h4>
+              {row.description && <p className="mt-1 text-sm text-muted-foreground whitespace-pre-line">{row.description}</p>}
 
               <dl className="mt-3 space-y-2 text-sm">
                 {row.role === "gratitude" ? (
