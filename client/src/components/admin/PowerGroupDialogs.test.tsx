@@ -37,7 +37,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { toast } from "sonner";
 import GameRolesTab from "./GameRolesTab";
-import { listWords, stageNeeds } from "./PowerGroupDialogs";
+import { stageNeeds } from "./PowerGroupDialogs";
 
 type Call = { url: string; method: string; body: any };
 let calls: Call[] = [];
@@ -127,8 +127,10 @@ describe("removing somebody from a power group", () => {
     await openTab();
     await userEvent.click(screen.getByRole("button", { name: "Remove Ana Ortiz from Steward Circle" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/Nobody else holds Seating people in roles\./)).toBeTruthy();
-    expect(within(dialog).getByText(/once Ana Ortiz is out, nobody can use it/)).toBeTruthy();
+    expect(within(dialog).getByText("Nobody else holds this power, and the village has taken it on:")).toBeTruthy();
+    // The served title, as its own list item, never spliced into the sentence.
+    expect(within(dialog).getByText("Seating people in roles").tagName).toBe("LI");
+    expect(within(dialog).getByText(/Once Ana Ortiz is out, nobody can use it until someone is appointed/)).toBeTruthy();
   });
 
   it("warns about nobody only on the server's word", async () => {
@@ -231,12 +233,6 @@ describe("appointing somebody below the group's stage floor", () => {
 });
 
 describe("the words", () => {
-  it("joins a list the way a sentence does", () => {
-    expect(listWords(["a"])).toBe("a");
-    expect(listWords(["a", "b"])).toBe("a and b");
-    expect(listWords(["a", "b", "c"])).toBe("a, b and c");
-  });
-
   it("says how every kind of stage is reached, about somebody else", () => {
     expect(stageNeeds({ type: "quests", min: 1 })).toBe("It opens at 1 consented quest.");
     expect(stageNeeds({ type: "quests", min: 3 })).toBe("It opens at 3 consented quests.");

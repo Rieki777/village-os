@@ -42,12 +42,6 @@ const CONTENT = "max-w-lg max-h-[90vh] overflow-y-auto bg-white text-gray-900 bo
 const QUIET = "min-h-11 text-sm rounded-lg px-4 py-2 border border-gray-300 text-gray-700 bg-white";
 const LOUD = "min-h-11 text-sm rounded-lg px-4 py-2 font-medium text-white disabled:opacity-40";
 
-/** "a", "a and b", "a, b and c". */
-export function listWords(items: readonly string[]): string {
-  if (items.length <= 1) return items.join("");
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-}
-
 /**
  * ARE YOU SURE YOU WANT TO REMOVE THEM.
  *
@@ -107,11 +101,16 @@ export function RemoveHolderDialog({
             </p>
           )}
           {leftEmpty.length > 0 && (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
-              Nobody else holds {listWords(leftEmpty)}. The village has taken {one ? "this power" : "these powers"} on,
-              so once {who} out, nobody can use {one ? "it" : "them"} until someone is appointed to a
-              group that carries {one ? "it" : "them"}.
-            </p>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 space-y-1">
+              <p>Nobody else holds {one ? "this power" : "these powers"}, and the village has taken {one ? "it" : "them"} on:</p>
+              <ul className="list-disc pl-5">
+                {leftEmpty.map((t) => <li key={t}>{t}</li>)}
+              </ul>
+              <p>
+                Once {who} out, nobody can use {one ? "it" : "them"} until someone is appointed to a
+                group that carries {one ? "it" : "them"}.
+              </p>
+            </div>
           )}
         </div>
         <DialogFooter>
