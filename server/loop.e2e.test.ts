@@ -3571,6 +3571,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // settle path for loans (2.2 #8 stands): the borrower cancels.
     expect((await api("POST", `/api/library/loans/${loan.json.loanId}/cancel`, {}, mToken)).status).toBe(200);
 
+    // A village that settles credits at departure. Since the founder's ruling
+    // of 2026-10-23 a leaver keeps every credit by default, and resolve keeps a
+    // holder as a former member (server/exitLevers.routes.e2e.test.ts drives
+    // that end). This case is the TOMBSTONE end, so this village keeps none of
+    // a leaver's credits, and the dial goes back to its default further down.
+    expect((await api("PUT", "/api/admin/variables/exit.keep_pct.credit", { value: "0" }, founderToken)).status).toBe(200);
+
     // The ONE settlement move exit owns: sweep positive balances, idempotent.
     const sweep1 = await api("POST", `/api/admin/exits/${exitId}/settle-balances`, {}, founderToken);
     expect(sweep1.status).toBe(200);
@@ -3597,7 +3604,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // POINTER (never content) sits on the record, and the economy conserves.
     const resolved = await api("POST", `/api/admin/exits/${exitId}/resolve`, { agreementRef: "handshake-2026-07" }, founderToken);
     expect(resolved.status).toBe(200);
+    expect(resolved.json.outcome, "nothing of value was left, so the account is erased").toBe("erased");
     expect((await api("GET", "/api/profile", undefined, mToken)).status).toBe(401);
+    // Back to the shipped share for everything after this case.
+    expect((await api("PUT", "/api/admin/variables/exit.keep_pct.credit", { value: "100" }, founderToken)).status).toBe(200);
     const list = await api("GET", "/api/admin/exits", undefined, founderToken);
     const row = list.json.exits.find((e: any) => e.id === exitId);
     expect(row.status).toBe("resolved");
