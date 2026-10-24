@@ -147,7 +147,8 @@ describe("the application page draws the candidate's card in proposal mode", () 
   it("one card for both roles, live sections reading Starts once adopted, the controls still below", async () => {
     const { container } = render(<SeatApplication />);
     await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward and Platform steward" });
-    const card = await screen.findByText("Applies for Lead steward and Platform steward").then(() =>
+    // The approved design's tagline; each role it asks for is named on its tile and in full.
+    const card = await screen.findByText(/^Applying for two roles/).then(() =>
       container.querySelector('[data-player-card][data-card-mode="proposal"]'),
     );
     expect(card).toBeTruthy();
