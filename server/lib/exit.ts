@@ -39,6 +39,9 @@ import {
 import { numberVar, stringVar } from "./variables";
 import { tokenTypesPostedTo } from "../repos/tokenLedger";
 import { cancelOpenExit, ownExitResolutions, setExitResolution } from "../repos/exitNotes";
+import { abandonErasure } from "../repos/memberErasure";
+import { recordEvent } from "./events";
+import { isTombstone } from "./oauthAccounts";
 import { openRedemptionCount } from "./redemptionStore";
 
 /*
@@ -154,16 +157,73 @@ export interface CancelExitOutcome {
   body: Record<string, unknown>;
 }
 
+/** Why a cancel cannot close the departure once the account is closed. */
+const ALREADY_CLOSED =
+  "This account is already closed, so the departure cannot be undone. Finish the deletion from the review queue (/review).";
+
 /**
- * A person who stays: the exit closes without a tombstone.
+ * A person who stays: the exit closes without a tombstone, and so does a
+ * deletion its resolve began (round 2, finding 1).
+ *
+ * THE DEFECT. Resolving runs the erasure and only then marks the exit
+ * resolved, so a sweep that stops before the tombstone (a portrait that will
+ * not come off the volume, a dropped connection) leaves the exit open and the
+ * admin's "They're staying" button on it. This used to flip the exit and
+ * nothing else. The erasure record stayed open, holding the member's identity,
+ * and Finish them on /review restarts every unfinished record from the top, so
+ * the next steward to press it, clearing somebody else's stuck sweep, closed
+ * the account of a member the village had decided keeps it.
+ *
+ * THE ORDER, so a cancel never succeeds while that record is still armed:
+ *
+ *   1. The exit must be open or settling, as before.
+ *   2. An account that is already a tombstone cannot stay. The sweep finished
+ *      or got past the close while the exit never reached "resolved".
+ *   3. The record ends (`abandonErasure`, one conditional statement), unless
+ *      it got past the tombstone or may still be running. Either refuses.
+ *   4. Only then does the exit flip.
+ *
+ * WHAT A CANCEL CANNOT DO is put back what the stopped sweep already removed:
+ * role holdings, org seatings, skill tags, agent tokens and the rest of the
+ * steps before the close. The answer says so, with the steps, so the admin
+ * keeping the member knows to restore them by hand.
  */
 export async function cancelExit(
   pool: Pool,
   exitId: string,
-  _deps: { memberById(id: string): Promise<any>; actorId: string | null },
+  deps: { memberById(id: string): Promise<any>; actorId: string | null },
 ): Promise<CancelExitOutcome> {
-  if (!(await cancelOpenExit(pool, exitId))) return { status: 404, body: { error: "No open exit with that id" } };
-  return { status: 200, body: { success: true } };
+  const exit = await exitById(pool, exitId);
+  if (!exit || (exit.status !== "open" && exit.status !== "settling")) {
+    return { status: 404, body: { error: "No open exit with that id" } };
+  }
+  const member = await deps.memberById(exit.userId);
+  if (member && isTombstone({ email: String(member.email ?? "") })) return { status: 409, body: { error: ALREADY_CLOSED } };
+  const erasure = await abandonErasure(pool, exit.userId);
+  if (erasure.outcome === "closed") return { status: 409, body: { error: ALREADY_CLOSED } };
+  if (erasure.outcome === "running") {
+    return { status: 409, body: { error: "This member's account is being deleted right now. Try again in a few minutes." } };
+  }
+  if (!(await cancelOpenExit(pool, exit.id))) return { status: 404, body: { error: "No open exit with that id" } };
+  if (erasure.outcome !== "abandoned") return { status: 200, body: { success: true } };
+  await recordEvent(pool, {
+    kind: "audit",
+    text: "member:erasure-abandoned:exit-cancelled",
+    actorUserId: deps.actorId,
+    entityType: "user",
+    entityRef: exit.userId,
+    audience: "admin",
+  });
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message:
+        "They're staying. The deletion that stopped had already removed some of what they held, such as their roles and skill tags, " +
+        "and those do not come back on their own. Put back what they still need by hand.",
+      alreadyRemoved: erasure.stepsDone,
+    },
+  };
 }
 
 /** A line the settle route appends to `exits.resolution`, as `sweepBalances` writes it. */

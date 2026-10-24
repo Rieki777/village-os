@@ -175,6 +175,7 @@ import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
 import { isTombstone } from "./oauthAccounts";
 import {
+  abandonErasure,
   beginErasure,
   erasedIdentity,
   erasureRecord,
@@ -182,6 +183,7 @@ import {
   noteErasureFinished,
   noteResumeAttempt,
   noteStepDone,
+  stayedSinceLastAttempt,
   type ErasedIdentity,
 } from "../repos/memberErasure";
 
@@ -229,6 +231,11 @@ export interface SweepResult {
    * to ask because an earlier one already had.
    */
   external: ErasureOutcome | null;
+  /**
+   * True when the resume ran nothing because the member's departure was
+   * cancelled after this sweep stopped: they stayed (`resumeErasure`).
+   */
+  stayed?: boolean;
 }
 
 const ANON = "A departed member";
@@ -1359,6 +1366,36 @@ export async function anonymizeMember(
 }
 
 /**
+ * A sweep that stopped before the close, whose member's departure was then
+ * cancelled: they stayed, so it is ended and never run (round 2, finding 1).
+ *
+ * The exit cancel ends such a record itself now (`cancelExit`,
+ * server/lib/exit.ts). A cancel made before it did left the record armed, and
+ * without this the next Finish them, pressed for somebody else, restarted it
+ * from the top and closed the account of a member who stayed. Only the restart
+ * asks: past the tombstone the account is closed and the sweep finishes as
+ * before. An erasure asked for again after the cancel moves the record's last
+ * attempt past it, so it runs (`stayedSinceLastAttempt`).
+ *
+ * The record goes the way the cancel would have taken it (`abandonErasure`);
+ * one that may still be running is left alone and still not run.
+ */
+async function endForAMemberWhoStayed(pool: Pool, userId: string): Promise<SweepResult> {
+  const ended = await abandonErasure(pool, userId);
+  if (ended.outcome === "abandoned") {
+    await recordEvent(pool, {
+      kind: "audit",
+      text: "member:erasure-abandoned:stayed",
+      actorUserId: null,
+      entityType: "user",
+      entityRef: userId,
+      audience: "admin",
+    });
+  }
+  return { ran: [], finished: false, external: null, stayed: true };
+}
+
+/**
  * Finish a sweep that stopped part way.
  *
  * WHO CALLS THIS. Nothing else will ever erase these members again, because
@@ -1383,6 +1420,9 @@ export async function anonymizeMember(
  * idempotent by the rule this list's header states, so running them all again
  * costs only the writes that match something. Past the tombstone nothing can
  * write any more, and the record's steps are skipped as they always were.
+ *
+ * A RESTART NEVER RUNS FOR A MEMBER WHO STAYED: a departure cancelled after
+ * the sweep stopped ends the record instead (`endForAMemberWhoStayed`).
  */
 export async function resumeErasure(
   pool: Pool,
@@ -1404,6 +1444,7 @@ export async function resumeErasure(
 
   const done = new Set(record?.stepsDone ?? []);
   const restart = !done.has("tombstone");
+  if (restart && (await stayedSinceLastAttempt(pool, userId))) return endForAMemberWhoStayed(pool, userId);
   await noteResumeAttempt(pool, userId, { restart, identity: identityOf(target) });
   // The actor is the village rather than a person: a resume is the queue
   // finishing an obligation, and attributing it to whoever pressed the button

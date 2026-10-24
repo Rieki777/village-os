@@ -261,6 +261,76 @@ export async function clearFinishedIdentities(pool: Pool): Promise<number> {
   return Number((result as { affectedRows?: number }).affectedRows ?? 0);
 }
 
+/**
+ * How long after its last attempt began a sweep with no failing step may still
+ * be going. A sweep takes seconds, so this is generous. The failed-actions
+ * report reads it as "running", and `abandonErasure` refuses to end one inside it.
+ */
+export const MAY_STILL_BE_RUNNING_SECONDS = 10 * 60;
+
+/** What `abandonErasure` found, and whether it ended anything. */
+export type AbandonedErasure =
+  | { outcome: "none" }
+  | { outcome: "abandoned"; stepsDone: string[] }
+  | { outcome: "closed" }
+  | { outcome: "running" };
+
+/**
+ * End an unfinished erasure that never closed the account, because the member
+ * is staying (round 2, finding 1).
+ *
+ * THE ONE WRITER THAT REMOVES A RECORD, and it is narrow on purpose. One
+ * conditional DELETE, so a resume landing the tombstone between a read and
+ * this statement cannot be undone by it:
+ *
+ *   - only an UNFINISHED record: a finished one is the account's history;
+ *   - only one whose steps never reached "tombstone": past it the account is
+ *     closed and the sweep has to finish ("closed");
+ *   - only one that is not still going: a failing step recorded, or its last
+ *     attempt older than `MAY_STILL_BE_RUNNING_SECONDS` ("running").
+ *
+ * The identity it held goes with it. `stepsDone` is what the sweep had already
+ * removed by the time it stopped, read just before the delete: none of it comes
+ * back, and the caller says so to whoever is keeping the member.
+ */
+export async function abandonErasure(pool: Pool, userId: string): Promise<AbandonedErasure> {
+  const before = await erasureRecord(pool, userId);
+  const [result] = await pool.query(
+    "DELETE FROM `member_erasures` WHERE `user_id` = ? AND `finished_at` IS NULL " +
+      "AND NOT JSON_CONTAINS(COALESCE(`steps_done`, JSON_ARRAY()), '\"tombstone\"') " +
+      "AND (`failed_step` IS NOT NULL OR `last_attempt_at` IS NULL OR `last_attempt_at` <= CURRENT_TIMESTAMP - INTERVAL ? SECOND)",
+    [userId, MAY_STILL_BE_RUNNING_SECONDS],
+  );
+  if (Number((result as { affectedRows?: number }).affectedRows ?? 0) > 0) {
+    return { outcome: "abandoned", stepsDone: before?.stepsDone ?? [] };
+  }
+  const now = await erasureRecord(pool, userId);
+  if (!now || now.finishedAt) return { outcome: "none" };
+  return now.stepsDone.includes("tombstone") ? { outcome: "closed" } : { outcome: "running" };
+}
+
+/**
+ * Whether this member's unfinished erasure was overtaken by a departure that
+ * was CANCELLED at or after its last attempt began: the village decided they
+ * stay, after the sweep stopped.
+ *
+ * The case `abandonErasure` exists for, seen from the other side. The cancel
+ * route ends the record itself now, but a cancel made before it did left the
+ * record armed, and a resume reads this so it never closes the account of a
+ * member who stayed. An erasure asked for again AFTER the cancel (a self
+ * delete, an admin's) moves `last_attempt_at` past it, so it still runs.
+ * Compared in SQL, both columns TIMESTAMP, so no host offset enters it.
+ */
+export async function stayedSinceLastAttempt(pool: Pool, userId: string): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT EXISTS(SELECT 1 FROM `exits` WHERE `user_id` = ? AND `status` = 'cancelled' AND `resolved_at` IS NOT NULL " +
+      "AND `resolved_at` >= (SELECT COALESCE(`last_attempt_at`, `started_at`) FROM `member_erasures` " +
+      "WHERE `user_id` = ? AND `finished_at` IS NULL)) AS stayed",
+    [userId, userId],
+  );
+  return Number(rows[0]?.stayed ?? 0) === 1;
+}
+
 /** Which step stopped, and what it said. Clipped, never truncated by the engine. */
 export async function noteErasureFailed(
   pool: Pool,

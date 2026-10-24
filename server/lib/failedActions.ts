@@ -129,7 +129,14 @@ import {
   type TroubledPeerRow,
 } from "../repos/failureSources";
 import { isReleaseFailure, stuckLandings, type StuckLanding } from "../repos/governanceExecutorPending";
-import { claimResume, clearFinishedIdentities, countUnfinishedErasures, unfinishedErasuresWithAge } from "../repos/memberErasure";
+import {
+  claimResume,
+  clearFinishedIdentities,
+  countUnfinishedErasures,
+  // A sweep with no failing step whose last attempt began this recently may still be going.
+  MAY_STILL_BE_RUNNING_SECONDS,
+  unfinishedErasuresWithAge,
+} from "../repos/memberErasure";
 import { withNamedLock } from "../repos/namedLock";
 
 export const FAILED_ACTIONS_JOB = "failed-actions";
@@ -239,9 +246,6 @@ export interface ErasureRowForReport {
 }
 
 export type ErasureStanding = "running" | "before-close" | "after-close" | "needs-a-person";
-
-/** A sweep with no failing step whose last attempt began this recently may still be going. */
-const MAY_STILL_BE_RUNNING_SECONDS = 10 * 60;
 
 /**
  * Where an unfinished deletion stands. The tombstone step is what closes the
