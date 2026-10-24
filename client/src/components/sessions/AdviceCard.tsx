@@ -87,7 +87,7 @@ export default function AdviceCard({
       tabIndex={-1}
       className={`rounded-xl border bg-card px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring ${lit ? "border-notice" : "border-border"}`}
     >
-      <p className="text-sm text-muted-foreground">{ADVICE_COPY.fromWho(r.askerName, r.circleName)}</p>
+      <p className="text-sm text-muted-foreground">{r.mine ? ADVICE_COPY.youAsked(r.circleName) : ADVICE_COPY.fromWho(r.askerName, r.circleName)}</p>
       <p className="mt-1 whitespace-pre-line break-words font-semibold text-foreground">{r.intent}</p>
       {r.context && <p className="mt-1 whitespace-pre-line break-words text-sm text-foreground">{r.context}</p>}
       <p className="mt-1 text-sm">

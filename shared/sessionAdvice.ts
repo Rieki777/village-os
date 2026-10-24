@@ -194,6 +194,7 @@ export const ADVICE_COPY = {
   nothingAsked: "Nobody has asked you for advice yet.",
   nothingMine: "You have not asked for advice yet.",
   fromWho: (asker: string, circleName: string): string => `${asker} asks the ${circleWords(circleName)}`,
+  youAsked: (circleName: string): string => `You asked the ${circleWords(circleName)}`,
   decideByLine: (date: string): string => `Decides by ${dateWords(date)}`,
   decideByPassed: (date: string): string => `The decide-by date was ${dateWords(date)}`,
   adviceCount: (given: number, asked: number): string => `${given} of ${asked} ${asked === 1 ? "person" : "people"} gave advice`,
