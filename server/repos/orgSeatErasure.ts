@@ -81,6 +81,13 @@ async function seatingsOf(pool: Pool, userId: string): Promise<Array<{ roleId: s
   return rows.map((r) => ({ roleId: String(r.org_role_id), name: r.display_name == null ? "" : String(r.display_name) }));
 }
 
+/** The recorded name an ask in the old words quotes, or null for any other line. */
+function quotedAskName(text: string): string | null {
+  const at = text.indexOf(ASKED_MARKER);
+  if (at < 0 || !text.endsWith('"')) return null;
+  return text.slice(at + ASKED_MARKER.length, -1);
+}
+
 /** The seat and the quoted name of every ask the member wrote in the old words. */
 async function askedNames(pool: Pool, userId: string): Promise<SeatName[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
@@ -89,12 +96,101 @@ async function askedNames(pool: Pool, userId: string): Promise<SeatName[]> {
   );
   const out: SeatName[] = [];
   for (const r of rows) {
-    const text = String(r.text ?? "");
-    const at = text.indexOf(ASKED_MARKER);
-    if (at < 0 || !text.endsWith('"')) continue;
-    out.push({ roleId: String(r.entity_ref ?? ""), name: text.slice(at + ASKED_MARKER.length, -1), held: false });
+    const name = quotedAskName(String(r.text ?? ""));
+    if (name !== null) out.push({ roleId: String(r.entity_ref ?? ""), name, held: false });
   }
   return out;
+}
+
+/** Rewrite one seat's line whose WHOLE text is `was`. Returns how many rows changed. */
+async function rewriteLine(pool: Pool, roleId: string, was: string, now: string): Promise<number> {
+  const [r] = await pool.query<ResultSetHeader>(
+    "UPDATE health_events SET text = ?, at = at WHERE entity_type = 'org_role' AND entity_ref = ? AND text = ?",
+    [now, roleId, was],
+  );
+  return Number(r.affectedRows ?? 0);
+}
+
+/** The steward's lines that quote a recorded name, and the admin's `seated` line when the name is the holder's. */
+async function rewriteNamedLines(pool: Pool, roleId: string, name: string, held: boolean): Promise<number> {
+  let changed = 0;
+  changed += await rewriteLine(pool, roleId, `confirmed: the holder recorded "${name}" is a member here`, SEAT_JOURNAL_LINE.confirm);
+  changed += await rewriteLine(pool, roleId, `declined: the role stays recorded under "${name}"`, SEAT_JOURNAL_LINE.decline);
+  if (held) changed += await rewriteLine(pool, roleId, `seated ${name}`, SEAT_JOURNAL_LINE.seated);
+  return changed;
+}
+
+/*
+ * A DOCUMENTED HOLDER, WHO HAS NO ACCOUNT (adversarial round 3, finding 12).
+ *
+ * `forgetDocumentedHolder` (server/lib/orgChart.ts) is the only door for a
+ * person recorded on the chart who never signed up, and it took the name off
+ * the seatings and left it in the journal: "seated <name>" from the admin who
+ * documented them, the steward's quoted confirm and decline, and the ask of
+ * whoever claimed to be them. The same rewrite as the member's, keyed on the
+ * names the seatings themselves carry, because nothing joins this person to a
+ * user id.
+ *
+ * ORDER. The forget runs no transaction, so it reads the names and rewrites
+ * the journal BEFORE it nulls them. A failure part way leaves the names on the
+ * seatings, and the next attempt finds them again.
+ *
+ * WHAT NOTHING CAN REACH. A holder forgotten before this existed has lost
+ * `display_name` and the slug in `holder_key` both, so no line of theirs can
+ * be matched by name any more. Only serving non-admin readers the public
+ * lines alone would hide those.
+ */
+
+/** A recorded name on one seat. */
+export interface SeatRecordedName {
+  roleId: string;
+  name: string;
+}
+
+/**
+ * Every recorded name under one documented holder key, seat by seat, ended
+ * seatings included. Two spellings slug to one key, so both come back.
+ */
+export async function documentedSeatNames(pool: Pool, holderKey: string): Promise<SeatRecordedName[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT DISTINCT org_role_id, display_name FROM org_role_assignments " +
+      "WHERE holder_key = ? AND holder_kind = 'documented' AND display_name IS NOT NULL",
+    [holderKey],
+  );
+  return rows
+    .map((r) => ({ roleId: String(r.org_role_id ?? ""), name: String(r.display_name ?? "") }))
+    .filter((p) => p.roleId && p.name.trim());
+}
+
+/**
+ * Rewrite every journal line on each seat that names the person recorded
+ * there: `seated <name>`, the quoted confirm and decline, and an ask quoting
+ * the name, whoever wrote it. The ask starts with the asker's first name, so
+ * it is found by its seat and its quoted name, then rewritten by id. A
+ * neighbour's line on the same seat matches none of these. Returns how many
+ * lines changed, which a second run makes zero.
+ */
+export async function forgetNamesInSeatJournals(pool: Pool, names: readonly SeatRecordedName[]): Promise<number> {
+  const pairs = new Map<string, SeatRecordedName>();
+  for (const p of names) if (p.roleId && p.name.trim()) pairs.set(`${p.roleId}\u0000${p.name}`, p);
+  let changed = 0;
+  for (const { roleId, name } of Array.from(pairs.values())) {
+    changed += await rewriteNamedLines(pool, roleId, name, true);
+    const [asks] = await pool.query<RowDataPacket[]>(
+      "SELECT id, text FROM health_events WHERE entity_type = 'org_role' AND entity_ref = ? AND text LIKE ?",
+      [roleId, `%${ASKED_MARKER}%`],
+    );
+    for (const r of asks) {
+      const text = String(r.text ?? "");
+      if (quotedAskName(text) !== name) continue;
+      const [u] = await pool.query<ResultSetHeader>(
+        "UPDATE health_events SET text = ?, at = at WHERE id = ? AND text = ?",
+        [SEAT_JOURNAL_LINE.ask, r.id, text],
+      );
+      changed += Number(u.affectedRows ?? 0);
+    }
+  }
+  return changed;
 }
 
 /**
@@ -123,17 +219,8 @@ export async function forgetSeatJournalNames(
   }
 
   let changed = 0;
-  const rewrite = async (roleId: string, was: string, now: string) => {
-    const [r] = await pool.query<ResultSetHeader>(
-      "UPDATE health_events SET text = ?, at = at WHERE entity_type = 'org_role' AND entity_ref = ? AND text = ?",
-      [now, roleId, was],
-    );
-    changed += Number(r.affectedRows ?? 0);
-  };
   for (const { roleId, name, held } of Array.from(pairs.values())) {
-    await rewrite(roleId, `confirmed: the holder recorded "${name}" is a member here`, SEAT_JOURNAL_LINE.confirm);
-    await rewrite(roleId, `declined: the role stays recorded under "${name}"`, SEAT_JOURNAL_LINE.decline);
-    if (held) await rewrite(roleId, `seated ${name}`, SEAT_JOURNAL_LINE.seated);
+    changed += await rewriteNamedLines(pool, roleId, name, held);
   }
   // Their own asks last, because way 2 reads the name out of them.
   const [asks] = await pool.query<ResultSetHeader>(

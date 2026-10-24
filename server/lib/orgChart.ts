@@ -23,6 +23,7 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
 import { circleStatusRows } from "../repos/circles";
+import { documentedSeatNames, forgetNamesInSeatJournals } from "../repos/orgSeatErasure";
 import {
   decidesByProblem,
   domainsProblem,
@@ -1190,6 +1191,12 @@ export async function releaseSeatingsForUser(
  * because `documentedKey` derives it from the name and a slug is a name with
  * hyphens. Ending comes first: the key is part of a generated column under a
  * unique index while the seating is live, and NULL once it ends.
+ *
+ * The seat's journal goes before either (adversarial round 3, finding 12):
+ * "seated <name>" and the quoted claim lines are served to every account at
+ * the guest rung, and the names on the seatings are the only way to find
+ * those lines, so they are rewritten while the names are still there to read.
+ * See `forgetNamesInSeatJournals`.
  */
 export async function forgetDocumentedHolder(
   pool: Pool,
@@ -1202,6 +1209,7 @@ export async function forgetDocumentedHolder(
   );
   const key = (rows as any[])[0]?.holder_key;
   if (!key) return { found: false, seatings: 0 };
+  await forgetNamesInSeatJournals(pool, await documentedSeatNames(pool, String(key)));
   const [ended]: any = await pool.query(
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? " +
       "WHERE holder_key = ? AND holder_kind = 'documented' AND ended_at IS NULL",
