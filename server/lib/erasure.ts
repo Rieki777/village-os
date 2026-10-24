@@ -1225,15 +1225,12 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        * A permission holding that landed after "role-holdings" ran: a carried
        * role_seat vote coming due, or an appointment, while they were not yet
        * a tombstone. The closer and the appoint route refuse a tombstone, so
-       * after this nothing seats them again.
+       * after this nothing seats them again. The same call as "role-holdings"
+       * and the former-member resolve, so the three end a holding one way.
        */
       name: "role-holdings-after-tombstone",
       run: async () => {
-        await withRoleHolderLock(async () => {
-          await roleHoldersRepo.remove(
-            loadRoleHolders().filter((h) => h.userId === target.id).map((h) => String(h.id)),
-          );
-        });
+        await endPermissionHoldings(target.id, { roleHoldersRepo, withRoleHolderLock, loadRoleHolders });
       },
     },
     {
