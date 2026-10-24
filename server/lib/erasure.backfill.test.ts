@@ -326,6 +326,23 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     expect(again).toMatchObject({ given: 0, steps: 0, stopped: 0 });
     expect(await everything()).toEqual(before);
     expect(notices).toEqual([]);
+
+    // A death between a step and its note: the next boot runs the steps that
+    // refund and seat a second time, and they move nothing.
+    const money = ["guest-places-after-tombstone", "meet-me-windows-after-tombstone", "event-places-after-tombstone", "housing-contacts-after-tombstone"];
+    await q("UPDATE member_erasures SET steps_done = ? WHERE user_id = ?", [
+      JSON.stringify([...FINISHED_ON_2026_10_20, ...GIVEN_TO_IT.filter((s) => !money.includes(s))]),
+      wren.id,
+    ]);
+    const valueBefore = await everything();
+    const rerun = await backfillFinishedErasures(pool, deps(), () => undefined);
+    expect(rerun).toMatchObject({ given: 1, steps: money.length, stopped: 0 });
+    const valueAfter = await everything();
+    for (const book of ["rsvps", "waitlist", "charges", "ledger", "balances", "events"]) {
+      expect(valueAfter[book], `a rerun of the steps that refund and seat moved nothing in ${book}`).toEqual(valueBefore[book]);
+    }
+    expect(await balanceOf(pool, memberAccount(wren.id), TOKEN), "the fee came back once").toBe(paid + toLedgerUnits(TOKEN, 5));
+    expect(notices).toEqual([]);
   });
 
   it("gives a tombstone from before records existed a finished record of what ran, and runs nothing for it again", async () => {
