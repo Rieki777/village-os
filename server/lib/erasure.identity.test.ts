@@ -4,7 +4,7 @@
  * ── A RESUME AFTER THE TOMBSTONE ─────────────────────────────────────────
  *
  * The tombstone rewrites the user row: the name becomes "A departed member",
- * the address `deleted-<id>@anonymized.invalid`, the handle `departed-<id>`.
+ * the address `deleted-<id>@anonymized.invalid`, and the handle goes.
  * Every step after it that matches the member by name or address (the comms
  * address book, the alignment words) was handed the row as it stood when the
  * sweep began, which is right on a first run. A resume re-reads the row, so it
@@ -625,7 +625,7 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
 
     const after = await usersRepo(pool).byId(id);
     expect(after!.name, "a save in flight wrote the member's name back onto the tombstone").toBe(ANON);
-    expect(after!.handle).toBe(`departed-${id.slice(-8)}`);
+    expect(after!.handle, "a tombstone holds no handle (round 2, finding 5)").toBeNull();
     expect(after!.bio).toBe("");
     expect(res.status).toBe(401);
   });
@@ -663,7 +663,7 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
 
     const after = await repo.byId(id);
     expect(after!.name, "a write after the tombstone put the member's name back").toBe(ANON);
-    expect(after!.handle).toBe(`departed-${id.slice(-8)}`);
+    expect(after!.handle, "a tombstone holds no handle (round 2, finding 5)").toBeNull();
     expect(after!.email).toBe(`deleted-${id}@anonymized.invalid`);
     expect(after!.bio).toBe("");
     expect(after!.prefs).toEqual({});
@@ -808,6 +808,62 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
     expect(await q("SELECT `email_key` FROM `comms_suppressions` WHERE `email_key` = ?", [address])).toEqual([]);
     expect(await heldIdentity(id)).toBeNull();
   }
+
+  /*
+   * A NAME ANOTHER MEMBER CAN TAKE FIRST (round 2, finding 5). The tombstone
+   * wrote the handle `departed-<last eight of the id>` and the address
+   * `deleted-<id>@anonymized.invalid`, both under a unique key, in the one
+   * update that also ends the member's sessions. Any member who can read an id
+   * could take either first: the handle through their own profile, the address
+   * at sign-up. The tombstone then failed on the duplicate key every time it
+   * ran, so the leaver kept their name, address, role and sessions for good.
+   */
+  async function expectClosed(id: string, before: any): Promise<any> {
+    const record = await erasureRecord(pool, id);
+    expect(record!.finishedAt, `the erasure stopped at ${record!.failedStep}: ${record!.lastError}`).not.toBeNull();
+    const after = await usersRepo(pool).byId(id);
+    expect(isTombstone({ email: String(after!.email) }), "the leaver's account was never closed").toBe(true);
+    expect(after!.name).toBe(ANON);
+    expect(Number(after!.tokenVersion ?? 0), "the leaver's sessions still live").toBe(Number(before.tokenVersion ?? 0) + 1);
+    return after;
+  }
+
+  it("closes the account when a living member took the handle the tombstone used to write (round 2, finding 5)", async () => {
+    const id = "er-squat-handle-1";
+    const squatter = "er-squatter-1";
+    const target = await seedMember(id, "wrenh17");
+    await seedNeighbour(squatter);
+    // Through the member's own profile, which reserves nothing.
+    const took = await profileRoutes(async () => usersRepo(pool).byId(squatter))("PUT /api/profile", { handle: `departed-${id.slice(-8)}` });
+    expect(took.status, "the squat must land, or this is a different case").toBe(200);
+
+    await anonymizeMember(pool, target, null, deps());
+
+    const after = await expectClosed(id, target);
+    expect(after!.handle, "a tombstone holds no handle anybody could have taken first").toBeNull();
+    expect((await usersRepo(pool).byId(squatter))!.handle).toBe(`departed-${id.slice(-8)}`);
+  });
+
+  it("closes the account when a living member took the address the tombstone writes, and again when asked twice (round 2, finding 5)", async () => {
+    const id = "er-squat-address-1";
+    const squatter = "er-squatter-2";
+    const target = await seedMember(id, "wrenh18");
+    // Taken at sign-up before sign-up refused the domain; a live database may hold one.
+    await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [squatter, "Mallory", `DELETED-${id}@anonymized.invalid`]);
+
+    await anonymizeMember(pool, target, null, deps());
+
+    const after = await expectClosed(id, target);
+    expect(String(after!.email).toLowerCase()).not.toBe(`deleted-${id}@anonymized.invalid`);
+    expect(String(after!.email)).toMatch(new RegExp(`^deleted-${id}-[0-9a-f]+@anonymized\\.invalid$`));
+    expect((await usersRepo(pool).byId(squatter))!.email, "the squatter's own row moved").toBe(`DELETED-${id}@anonymized.invalid`);
+
+    // Asked again of the tombstone, which runs every step, the tombstone included.
+    await anonymizeMember(pool, after, null, deps());
+    const again = await erasureRecord(pool, id);
+    expect(again!.finishedAt, `the second erasure stopped at ${again!.failedStep}: ${again!.lastError}`).not.toBeNull();
+    expect(isTombstone({ email: String((await usersRepo(pool).byId(id))!.email) })).toBe(true);
+  });
 
   it("holds who the member was from a restart, for a record that held nobody (round 2, finding 18)", async () => {
     await stoppedBeforeTheCloseHoldingNothing("er-resume-holds-1", "wrenh15", "identity");

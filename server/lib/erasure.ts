@@ -127,6 +127,7 @@
  * silent any more.
  */
 import type { Pool } from "mysql2/promise";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { forgetStewardActs } from "./stewardship";
@@ -296,6 +297,50 @@ function unlink(uploadsDir: string, fileName: string): void {
   } catch (err: any) {
     if (err?.code === "ENOENT") return;
     throw new Error(`could not take "${name}" off the volume: ${err?.message ?? err}`);
+  }
+}
+
+/** A duplicate key on the users table's address, the one collision the tombstone answers. */
+const isAddressTaken = (err: any): boolean => err?.code === "ER_DUP_ENTRY" && /users_email_unique/.test(String(err?.message ?? ""));
+
+/**
+ * Close the account: the update the "tombstone" step makes, and the reason
+ * that step's header gives for its handle and its address.
+ *
+ * The address is tried in its plain form first, so every tombstone nobody
+ * squatted reads exactly as it always has. Only a duplicate key on the address
+ * is answered, by the suffixed form; the database's own key decides, so an
+ * address that differs by case or by an accent the collation folds is caught
+ * the same way. Anything else still throws, and the sweep records where.
+ *
+ * `erasure`: a second erasure of a tombstone writes these fields again, and
+ * only this step may (see ErasureDeps).
+ */
+async function writeTombstone(members: ErasureDeps["members"], id: string): Promise<void> {
+  const close = (address: string) =>
+    members.update(id, (u: any) => {
+      u.name = ANON;
+      u.email = address;
+      u.handle = null;
+      u.passwordHash = "";
+      u.tokenVersion = (u.tokenVersion ?? 0) + 1; // every session dies now
+      u.bio = "";
+      u.avatar = null;
+      u.paths = [];
+      u.journeys = {};
+      u.prefs = {};
+      u.contributions = [];
+      u.role = "member";
+      u.stageGranted = null;
+      u.membershipGranted = false;
+      u.walletAddress = null;
+      u.walletVerifiedAt = null;
+    }, { erasure: true });
+  try {
+    await close(tombstoneAddress(id));
+  } catch (err) {
+    if (!isAddressTaken(err)) throw err;
+    await close(`deleted-${id}-${randomBytes(6).toString("hex")}@anonymized.invalid`);
   }
 }
 
@@ -642,28 +687,30 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * NOTHING HERE IS A NAME ANOTHER MEMBER CAN TAKE FIRST (round 2, finding
+       * 5). This update ends the member's sessions, so it has to land whatever
+       * anybody else did. It used to write the handle `departed-<last eight of
+       * the id>` and the address `deleted-<id>@anonymized.invalid`, both under a
+       * unique key, and any member who could read an id could take either first:
+       * the handle through their own profile, the address at sign-up. Every run
+       * then failed on the duplicate key, and the leaver kept their name,
+       * address, role and live sessions for good.
+       *
+       * So the handle is NULL, which the unique key admits any number of times
+       * and which a handle already means when nobody has chosen one. The address
+       * keeps its form, because `isTombstone` and every `@anonymized.invalid`
+       * filter read it, and sign-up now refuses that domain
+       * (server/routes/register.ts). A database may already hold an account at
+       * one, though, so when the address is taken the step writes the same form
+       * with a random suffix nobody can guess (`writeTombstone`). A later run
+       * writes a tombstone address again the same way, so the step stays
+       * idempotent in what it leaves: an account closed at an address that is
+       * its own.
+       */
       name: "tombstone",
       run: async () => {
-        // `erasure`: a second erasure of a tombstone writes these fields again,
-        // and only this step may (see ErasureDeps).
-        await members.update(target.id, (u: any) => {
-          u.name = ANON;
-          u.email = tombstoneAddress(u.id);
-          u.handle = `departed-${String(u.id).slice(-8)}`;
-          u.passwordHash = "";
-          u.tokenVersion = (u.tokenVersion ?? 0) + 1; // every session dies now
-          u.bio = "";
-          u.avatar = null;
-          u.paths = [];
-          u.journeys = {};
-          u.prefs = {};
-          u.contributions = [];
-          u.role = "member";
-          u.stageGranted = null;
-          u.membershipGranted = false;
-          u.walletAddress = null;
-          u.walletVerifiedAt = null;
-        }, { erasure: true });
+        await writeTombstone(members, target.id);
       },
     },
     {
@@ -1254,7 +1301,7 @@ function identityOf(row: any): ErasedIdentity | null {
  *
  * THE DEFECT THIS CLOSES. A resume re-reads the user row, and after the
  * tombstone that row says "A departed member" at `deleted-<id>@anonymized.invalid`
- * with the handle `departed-<id>`. Every step that finds the member by name or
+ * with no handle. Every step that finds the member by name or
  * address (the comms address book, the alignment words, and any step added
  * later) then matched nothing, and the record still read finished.
  *
