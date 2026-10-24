@@ -15,9 +15,9 @@
  *
  * Once a seating is the member's, that name is theirs. `releaseSeatingsForUser`
  * takes it off the seating for exactly that reason, and the journal went on
- * serving it to every account. The routes write the first three with no name
- * now (server/routes/org.ts, from the constants below); this is for the lines
- * already written.
+ * serving it to every account. The routes write all four with no name now
+ * (server/routes/org.ts, from the constants below; the `seated` line since
+ * adversarial round 3); this is for the lines already written.
  *
  * WHICH NAMES ARE THEIRS, found four ways, because no one way survives every
  * path a sweep can take:

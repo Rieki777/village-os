@@ -16,6 +16,10 @@
  *      closer's own refusal is driven over HTTP in
  *      `server/steward.routes.e2e.test.ts`, which boots the server the closer
  *      lives in.
+ *  12. (Round 3.) A documented holder, who has no account, was written into
+ *      the journal as "seated <name>", and forgetting them took the name off
+ *      the seatings and left it there. The lines written before are rewritten
+ *      in `server/lib/orgForget.test.ts`; this file drives the route.
  *
  * EVERY CASE READS THE LEFTOVER FIRST, so a zero after the sweep is about rows
  * that were there, and every case carries a neighbour whose rows of the same
@@ -36,7 +40,9 @@ import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/
 import { anonymizeMember, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
 import { recordEvent } from "./events";
-import { claimSeating, releaseSeatingsForUser, seatHolder } from "./orgChart";
+import { claimSeating, forgetDocumentedHolder, releaseSeatingsForUser, seatHolder } from "./orgChart";
+import { SEAT_JOURNAL_LINE } from "../repos/orgSeatErasure";
+import { stageIndex } from "../../shared/gameConfig";
 import { usersRepo } from "../repos/users";
 import { erasureRecord } from "../repos/memberErasure";
 import { dbCollection } from "../repos/store-db";
@@ -178,7 +184,8 @@ describe.skipIf(!configured)("what a seat still held for a member who left", () 
       getPool: () => pool,
       members: { all: () => members.all(), byId: (id: string) => members.byId(id) },
       firstName: (n: string) => String(n).split(/\s+/)[0],
-      capabilityCtx: async () => ({}),
+      // The guest rung: no role, no badge, an account. The journal's door asks it.
+      capabilityCtx: async () => ({ stageIndex: stageIndex("guest"), stageIndexOf: stageIndex, roleCapabilities: [] }),
       lapseContext: () => ({}),
       currentPatternId: () => null,
       seasonState: () => ({ seasons: [], current: null, timezone: "UTC" }),
@@ -405,6 +412,36 @@ describe.skipIf(!configured)("what a seat still held for a member who left", () 
       await erase("p10-wren");
 
       expect(holders.map((h) => h.userId), "the departed member holds nothing; the neighbour keeps theirs").toEqual(["p10-ash"]);
+    });
+  });
+
+  // ── 12 (round 3) ──────────────────────────────────────────────────────────
+  describe("12: a documented holder who is forgotten", () => {
+    it("records the seating with no name in the journal, and once they are forgotten no account reads their name there", async () => {
+      await q("INSERT IGNORE INTO `org_roles` (`id`, `name`, `aim`, `seats`) VALUES ('d12-bakers', 'Bakers', 'Bread for the long table.', 3)");
+      viewer = { id: "seat-steward", name: "Sam Steward" };
+      const seated = await call("POST /api/admin/org/roles/:id/holders", {
+        params: { id: "d12-bakers" },
+        body: { displayName: "Maria Lopez", termEndsOn: new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10) },
+      });
+      expect(seated.status, JSON.stringify(seated.body)).toBe(200);
+      // The route writes its line fire-and-forget, so wait for it to land.
+      let lines: string[] = [];
+      for (let i = 0; i < 50 && lines.length === 0; i++) {
+        lines = await journalOf("d12-bakers");
+        if (lines.length === 0) await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(lines, "the seat's journal says it changed hands, and names nobody").toEqual([SEAT_JOURNAL_LINE.seated]);
+
+      const [{ id: seating }] = await q("SELECT `id` FROM `org_role_assignments` WHERE `org_role_id` = 'd12-bakers'");
+      expect((await forgetDocumentedHolder(pool, String(seating), "forgotten at their request")).found).toBe(true);
+
+      // Any account at the guest rung holds map.viewPeople, the journal's door.
+      viewer = { id: "d12-guest", name: "Gale Guest" };
+      const read = await call("GET /api/org/:kind/:id/journal", { params: { kind: "roles", id: "d12-bakers" } });
+      expect(read.status, JSON.stringify(read.body)).toBe(200);
+      expect(read.body.map((r: any) => r.text), "the line stays, so the seat's history does").toEqual([SEAT_JOURNAL_LINE.seated]);
+      expect(JSON.stringify(read.body)).not.toMatch(/Maria|Lopez/);
     });
   });
 });

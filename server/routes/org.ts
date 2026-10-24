@@ -1007,10 +1007,12 @@ export function register(app: Express, deps: Deps): void {
     // only edits to the seat's card were. Names are not written into the line;
     // the journal is admin-audience and the seat's holders are already
     // readable at their own tier, so the event says that the seat changed
-    // hands and lets the reader look.
+    // hands and lets the reader look. A documented holder's line once carried
+    // the name, and the journal serves every line to the guest rung, so a
+    // forgotten person stayed in it (adversarial round 3, finding 12).
     void recordEvent(getPool(), {
       kind: "org",
-      text: req.body?.userId ? "seated a member" : `seated ${String(req.body?.displayName ?? "someone")}`,
+      text: req.body?.userId ? "seated a member" : SEAT_JOURNAL_LINE.seated,
       actorUserId: actor?.id ?? null,
       entityType: "org_role", entityRef: req.params.id, audience: "admin",
     });

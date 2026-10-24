@@ -5625,11 +5625,29 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // this test cannot prove it. server/lib/orgForget.test.ts reads the rows.
 
     // ── The documented holder, who has no account to delete ───────────────
+    // The seat's journal is served to any account holding map.viewPeople,
+    // which opens at the guest rung. Each seating went in as a line that names
+    // nobody (adversarial round 3, finding 12); the holders route writes it
+    // fire-and-forget, so wait for both to land.
+    const journalOf = async () => {
+      const j = await api("GET", `/api/org/roles/${seatId}/journal`, undefined, doerToken);
+      expect(j.status, JSON.stringify(j.json)).toBe(200);
+      return (j.json as any[]).map((l) => String(l.text));
+    };
+    let seatedLines: string[] = [];
+    for (let i = 0; i < 50 && seatedLines.length < 2; i++) {
+      seatedLines = (await journalOf()).filter((t) => t.startsWith("seated"));
+      if (seatedLines.length < 2) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(seatedLines, "both seatings are in the journal, and name nobody").toEqual(["seated someone", "seated someone"]);
     const keptId = history.json.find((h: any) => h.name === "Kept Documented")?.id;
     expect(keptId, "the unclaimed documented seating").toBeTruthy();
     const forget = await api("POST", `/api/admin/org/seatings/${keptId}/forget`, {}, founderToken);
     expect(forget.status, JSON.stringify(forget.json)).toBe(200);
     expect(forget.json.seatings).toBe(1);
+    const journalBlob = JSON.stringify(await journalOf());
+    expect(journalBlob, "the journal a guest reads").not.toContain("Kept Documented");
+    expect(journalBlob).not.toContain(leaverName);
 
     const gone = await api("GET", "/api/org", undefined, doerToken);
     const goneSeat = gone.json.roles.find((r: any) => r.id === seatId);
