@@ -105,14 +105,14 @@ describe("asking for advice", () => {
 
   it("takes advice from somebody asked, and shows it on the card", async () => {
     answers["PUT /api/sessions/advice/requests/3/advice"] = () =>
-      json({ request: card({ myAdvice: "Tuesdays.", advice: [{ by: "Bo Fern", words: "Tuesdays.", at: "2026-10-24T09:00:00.000Z", mine: true }] }) });
+      json({ request: card({ myAdvice: "Tuesdays.", advice: [{ by: "Bo Fern", words: "Tuesdays.", at: "2026-10-24T09:00:00.000Z", on: "2026-10-24", mine: true }] }) });
     render(<AdviceProcess />);
     fireEvent.change(await screen.findByLabelText(ADVICE_COPY.yourAdvice), { target: { value: "Tuesdays." } });
     fireEvent.click(screen.getByRole("button", { name: ADVICE_COPY.giveAdvice }));
     await waitFor(() => expect(calls.at(-1)).toEqual({ path: "/api/sessions/advice/requests/3/advice", method: "PUT", body: { advice: "Tuesdays." } }));
     expect(await screen.findByText(ADVICE_COPY.adviceBy("Bo Fern"))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: ADVICE_COPY.changeAdvice })).toBeInTheDocument();
-    expect(screen.getByText(ADVICE_COPY.saved)).toBeInTheDocument();
+    expect(await screen.findByText(ADVICE_COPY.savedAdvice("Ana Reyes"))).toBeInTheDocument();
   });
 
   it("lets the asker record a decision, and withdraw only after a confirm", async () => {
@@ -124,13 +124,18 @@ describe("asking for advice", () => {
     fireEvent.click(await screen.findByRole("button", { name: ADVICE_COPY.withdraw }));
     const confirm = screen.getByRole("group", { name: ADVICE_COPY.withdraw });
     expect(within(confirm).getByText(ADVICE_COPY.withdrawConfirm)).toBeInTheDocument();
+    await waitFor(() => expect(within(confirm).getByRole("button", { name: ADVICE_COPY.keep })).toHaveFocus());
     fireEvent.click(within(confirm).getByRole("button", { name: ADVICE_COPY.keep }));
+    await waitFor(() => expect(screen.getByRole("button", { name: ADVICE_COPY.withdraw })).toHaveFocus());
     expect(calls.filter((c) => c.method === "POST")).toEqual([]);
     fireEvent.change(screen.getByLabelText(ADVICE_COPY.decisionLabel), { target: { value: "Tuesdays it is." } });
     fireEvent.click(screen.getByRole("button", { name: ADVICE_COPY.recordDecision }));
     await waitFor(() => expect(calls.at(-1)).toEqual({ path: "/api/sessions/advice/requests/4/decide", method: "POST", body: { decision: "Tuesdays it is." } }));
     expect(await screen.findByText(ADVICE_COPY.decided(TODAY))).toBeInTheDocument();
     expect(screen.getByText("Tuesdays it is.")).toBeInTheDocument();
+    // The forms are gone, so the focus goes to the card, and what landed is read out.
+    await waitFor(() => expect(document.activeElement?.id).toBe("advice-4"));
+    expect(await screen.findByText(ADVICE_COPY.savedDecision)).toBeInTheDocument();
   });
 
   it("says a refusal in the server's words", async () => {
@@ -154,10 +159,32 @@ describe("asking for advice", () => {
     expect(await screen.findByText("We fill the tanks on Mondays.")).toBeInTheDocument();
   });
 
-  it("lands a notice's link on its request", async () => {
+  it("lands a notice's link on its request once, and never pulls the focus back after a save", async () => {
+    answers["PUT /api/sessions/advice/requests/3/advice"] = () => json({ request: card({ myAdvice: "Tuesdays." }) });
     window.history.replaceState(null, "", "/sessions#advice-3");
     render(<AdviceProcess />);
     await screen.findByText("We fill the tanks on Mondays.");
     await waitFor(() => expect(document.activeElement?.id).toBe("advice-3"));
+    const box = screen.getByLabelText(ADVICE_COPY.yourAdvice);
+    box.focus();
+    fireEvent.change(box, { target: { value: "Tuesdays." } });
+    const save = screen.getByRole("button", { name: ADVICE_COPY.giveAdvice });
+    save.focus();
+    fireEvent.click(save);
+    expect(await screen.findByText(ADVICE_COPY.savedAdvice("Ana Reyes"))).toBeInTheDocument();
+    expect(document.activeElement?.id).not.toBe("advice-3");
+  });
+
+  it("reads the lists again when a notice links to a request they do not have yet", async () => {
+    let reads = 0;
+    answers["GET /api/sessions/advice/requests"] = () => {
+      reads += 1;
+      return json(payload(reads === 1 ? {} : { askedOfMe: [card(), card({ id: 9, intent: "Paint the shed blue." })] }));
+    };
+    window.history.replaceState(null, "", "/sessions#advice-9");
+    render(<AdviceProcess />);
+    expect(await screen.findByText("Paint the shed blue.")).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement?.id).toBe("advice-9"));
+    expect(reads).toBe(2);
   });
 });

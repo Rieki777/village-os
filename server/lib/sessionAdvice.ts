@@ -27,7 +27,9 @@ import * as room from "../repos/liveSessions";
 import { ensureMemberNo, memberNo, namesFor, type MemberLookup, type Named, type Outcome, type Refusal } from "./liveSessions";
 import { circleMemberUserIds } from "./sessionRhythm";
 import { villageTimezone } from "./villageReaders";
+import { effectiveLifecycle } from "./modules";
 import type { LapseContext } from "./orgChart";
+import { LIFECYCLE_RANK, type ModuleLifecycle } from "../../shared/modules";
 import { villageKey } from "../../shared/sessionRhythm";
 import { SESSION_SOMEONE } from "../../shared/sessions";
 import {
@@ -51,6 +53,8 @@ export interface AdviceDeps {
   circles: () => { id: string; name: string }[];
   lapseContext?: () => LapseContext;
   lookup: MemberLookup;
+  /** The module's lifecycle; the live one unless a suite names it. */
+  lifecycle?: () => string;
 }
 
 export interface AdviceAsker {
@@ -93,6 +97,7 @@ function asCard(
         by: names.get(Number(a.member_no))?.name ?? SESSION_SOMEONE,
         words: String(a.advice),
         at: toIso(a.advised_at),
+        on: villageKey(asDate(a.advised_at), zone),
         mine: viewerNo != null && Number(a.member_no) === viewerNo,
       })),
     canAdvise: open && !!myAsk,
@@ -133,9 +138,11 @@ async function cardOf(q: Pool | PoolConnection, id: number, viewerNo: number, de
 }
 
 /**
- * Ask a circle for advice. Refused in this order: a body that does not read
- * (400), an asker with too many requests open (409), and a circle with nobody
- * else in it to ask (409). Hands back the request and who to tell.
+ * Ask a circle for advice. Refused in this order: a module not yet open to
+ * members (409: the people asked could not open what their bell links to), a
+ * body that does not read (400), an asker with too many requests open (409),
+ * and a circle with nobody else in it to ask (409). Hands back the request and
+ * who to tell.
  */
 export async function askAdvice(
   pool: Pool,
@@ -144,6 +151,8 @@ export async function askAdvice(
   deps: AdviceDeps,
   now = new Date(),
 ): Promise<Outcome<{ request: AdviceRequestCard; askedUserIds: string[] }>> {
+  const lifecycle = deps.lifecycle ?? (() => effectiveLifecycle("sessions"));
+  if ((LIFECYCLE_RANK[lifecycle() as ModuleLifecycle] ?? 0) < LIFECYCLE_RANK.members) return refuse(409, ADVICE_REFUSALS.notOpenYet);
   const today = villageKey(now, villageTimezone());
   const input = cleanAdviceAsk(raw, new Set(deps.circles().map((c) => c.id)), today);
   if (!input.ok) return refuse(400, input.error);
@@ -193,7 +202,8 @@ export async function giveAdvice(
   const words = cleanAdvice(raw);
   if (!words.ok) return refuse(400, words.error);
   const before = (await store.askRows(pool, [id])).find((a) => Number(a.member_no) === no);
-  await store.putAdvice(pool, id, no!, words.value, now);
+  // Written only while the request is still open, so advice never lands on a decision already made.
+  if (!(await store.putAdvice(pool, id, no!, words.value, now))) return refuse(409, ADVICE_REFUSALS.settled);
   const names = await namesFor(pool, [Number(found.value.row.asker_no), no!], deps.lookup);
   return done({
     request: await cardOf(pool, id, no!, deps),

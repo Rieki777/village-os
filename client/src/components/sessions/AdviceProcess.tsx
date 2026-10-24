@@ -9,7 +9,11 @@
  * advice" opens the form: the circle, what and why, and the decide-by date
  * (In 3 days, In a week, In two weeks, or a date up to sixty days ahead). A
  * notice's link lands on its request (`#advice-<id>`), which is lit and takes
- * the focus. A list that did not load can be tried again.
+ * the focus once per link (never again after a save, and never while somebody
+ * is typing); a link to a request the lists do not have yet reads them again.
+ * The lists are read again every minute while the page is in view, so new
+ * requests and advice show without a reload, and typed words survive it. A
+ * list that did not load can be tried again.
  *
  * Every write reads `res.ok` before it says anything, what landed is read out
  * in one polite line, and the focus goes into the form when it opens and back
@@ -29,6 +33,9 @@ import AdviceCard from "./AdviceCard";
 import { adviceCall } from "./adviceCall";
 import { BTN_PRIMARY, BTN_QUIET, HINT, INPUT, LABEL, PANEL } from "./roomUi";
 import { useHash } from "./useHash";
+
+/** How often the lists are read again while the page is in view. */
+const REREAD_MS = 60_000;
 
 function AskForm({
   payload,
@@ -138,28 +145,71 @@ export default function AdviceProcess() {
   const [asking, setAsking] = useState(false);
   const [said, setSaid] = useState("");
   const opener = useRef<HTMLButtonElement>(null);
+  const landed = useRef<string | null>(null);
+  const loaded = useRef(false);
+  const reread = useRef<string | null>(null);
+  const sayLater = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hash = useHash();
   const litId = /^#advice-(\d+)$/.exec(hash)?.[1];
 
   useEffect(() => {
     let live = true;
-    setError(null);
+    if (!loaded.current) setError(null);
     void adviceCall<AdvicePayload>(ADVICE_API, "GET").then((out) => {
       if (!live) return;
       // An answer without the lists (an older server, a proxy's page) says it didn't load, and never takes the page down.
-      if (out.ok && Array.isArray(out.body.mine) && Array.isArray(out.body.askedOfMe)) setPayload(out.body);
-      else setError(out.ok ? ADVICE_COPY.loadFailed : out.error);
+      if (out.ok && Array.isArray(out.body.mine) && Array.isArray(out.body.askedOfMe)) {
+        loaded.current = true;
+        setPayload(out.body);
+        setError(null);
+      } else if (!loaded.current) {
+        // A later read that fails keeps the lists already here, and says nothing over them.
+        setError(out.ok ? ADVICE_COPY.loadFailed : out.error);
+      }
     });
     return () => {
       live = false;
     };
   }, [tries]);
 
-  // A notice's link lands on its request once the lists are here.
+  // Read again every minute while the page is in view.
   useEffect(() => {
-    if (!litId || !payload) return;
+    const id = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") setTries((n) => n + 1);
+    }, REREAD_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  // A notice's link lands on its request once per link, never while somebody is typing.
+  useEffect(() => {
+    if (!litId || !payload || landed.current === hash) return;
+    const known = payload.mine.some((r) => String(r.id) === litId) || payload.askedOfMe.some((r) => String(r.id) === litId);
+    if (!known) {
+      // A request newer than the lists: read them again, once for this link.
+      if (reread.current !== hash) {
+        reread.current = hash;
+        setTries((n) => n + 1);
+      }
+      return;
+    }
+    const typing = document.activeElement?.tagName;
+    if (typing === "INPUT" || typing === "TEXTAREA" || typing === "SELECT") return;
+    landed.current = hash;
     document.getElementById(`advice-${litId}`)?.focus();
-  }, [litId, payload]);
+  }, [litId, payload, hash]);
+
+  // What landed is read out each time, the same words twice included.
+  const say = (words: string) => {
+    setSaid("");
+    if (sayLater.current) clearTimeout(sayLater.current);
+    sayLater.current = setTimeout(() => setSaid(words), 50);
+  };
+  useEffect(
+    () => () => {
+      if (sayLater.current) clearTimeout(sayLater.current);
+    },
+    [],
+  );
 
   const replace = useCallback((next: AdviceRequestCard) => {
     setPayload((p) =>
@@ -193,8 +243,9 @@ export default function AdviceProcess() {
               lit={litId === String(r.id)}
               onSaved={(next, words) => {
                 replace(next);
-                setSaid(words);
+                say(words);
               }}
+              onStale={() => setTries((n) => n + 1)}
             />
           ))}
         </ul>
@@ -228,7 +279,7 @@ export default function AdviceProcess() {
                 onCancel={closeForm}
                 onAsked={(request) => {
                   setPayload((p) => (p ? { ...p, mine: [request, ...p.mine] } : p));
-                  setSaid(ADVICE_COPY.asked(request.circleName, request.askedCount));
+                  say(ADVICE_COPY.asked(request.circleName, request.askedCount));
                   closeForm();
                 }}
               />

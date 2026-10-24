@@ -18,7 +18,9 @@
  * THE BELLS go here, after each write commits, and never fail the write: the
  * people asked hear they were asked, the asker hears the first advice from
  * each person, and the people asked hear what was decided. A withdrawal rings
- * nobody.
+ * nobody. Every bell names its actor (`actorUserId`: the asker, or the person
+ * who advised), so when that person leaves the village the erasure rewrites
+ * the bell in everybody else's inbox and their name and words go with them.
  */
 import type { Express, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -32,9 +34,12 @@ import { ADVICE_API, ADVICE_LIMITS, ADVICE_NOTICES, ADVICE_REFUSALS } from "../.
  * What this module touches, and why. `circlesRepo` says which circles are
  * live. `lapseContext` reads whose role terms still run, for standing.
  * `members` names people. `notify` rings the bells. `overLimit` bounds every
- * door that writes.
+ * door that writes. `lifecycle` is the module's own, read live unless a suite
+ * names it.
  */
-type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "circlesRepo" | "lapseContext" | "members" | "notify">;
+type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "circlesRepo" | "lapseContext" | "members" | "notify"> & {
+  lifecycle?: () => string;
+};
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -47,6 +52,7 @@ export function register(app: Express, deps: Deps): void {
     circles: () => liveCircles(circlesRepo),
     lapseContext: deps.lapseContext,
     lookup: async (userId) => (await members.byId(userId)) as Record<string, unknown> | null,
+    lifecycle: deps.lifecycle,
   };
 
   app.use(ADVICE_API, requireModule("sessions"));
@@ -68,12 +74,12 @@ export function register(app: Express, deps: Deps): void {
     return { userId, admin: await isAdmin(req) };
   };
 
-  /** One bell, never failing the write it follows. */
-  const ring = async (n: { userId: string; type: string; title: string; body: string; link: string; dedupeKey: string }) => {
+  /** One bell's sending, never failing the write it follows. */
+  const quietly = async (sending: Promise<unknown>, what: string) => {
     try {
-      await notify(n as Parameters<typeof notify>[0]);
+      await sending;
     } catch (e) {
-      console.error(`[sessions] an advice notice did not go (${n.type})`, e);
+      console.error(`[sessions] an advice notice did not go (${what})`, e);
     }
   };
 
@@ -91,14 +97,18 @@ export function register(app: Express, deps: Deps): void {
     if (!out.ok) return res.status(out.status).json({ error: out.error });
     const r = out.value.request;
     for (const userId of out.value.askedUserIds) {
-      await ring({
-        userId,
-        type: "session_advice_asked",
-        title: ADVICE_NOTICES.asked(r.askerName, r.circleName),
-        body: r.intent,
-        link: requestLink(r.id),
-        dedupeKey: `session-advice-asked:${r.id}:${userId}`,
-      });
+      await quietly(
+        notify({
+          userId,
+          type: "session_advice_asked",
+          title: ADVICE_NOTICES.asked(r.askerName, r.circleName),
+          body: r.intent,
+          link: requestLink(r.id),
+          actorUserId: who.userId,
+          dedupeKey: `session-advice-asked:${r.id}:${userId}`,
+        }),
+        "asked",
+      );
     }
     res.json({ request: r });
   });
@@ -110,14 +120,18 @@ export function register(app: Express, deps: Deps): void {
     if (!out.ok) return res.status(out.status).json({ error: out.error });
     const r = out.value.request;
     if (out.value.askerUserId) {
-      await ring({
-        userId: out.value.askerUserId,
-        type: "session_advice_given",
-        title: ADVICE_NOTICES.given(out.value.advisorName),
-        body: r.intent,
-        link: requestLink(r.id),
-        dedupeKey: `session-advice-given:${r.id}:${who.userId}`,
-      });
+      await quietly(
+        notify({
+          userId: out.value.askerUserId,
+          type: "session_advice_given",
+          title: ADVICE_NOTICES.given(out.value.advisorName),
+          body: r.intent,
+          link: requestLink(r.id),
+          actorUserId: who.userId,
+          dedupeKey: `session-advice-given:${r.id}:${who.userId}`,
+        }),
+        "given",
+      );
     }
     res.json({ request: r });
   });
@@ -129,14 +143,18 @@ export function register(app: Express, deps: Deps): void {
     if (!out.ok) return res.status(out.status).json({ error: out.error });
     const r = out.value.request;
     for (const userId of out.value.askedUserIds) {
-      await ring({
-        userId,
-        type: "session_advice_decided",
-        title: ADVICE_NOTICES.decided(out.value.askerName),
-        body: r.decision ?? r.intent,
-        link: requestLink(r.id),
-        dedupeKey: `session-advice-decided:${r.id}:${userId}`,
-      });
+      await quietly(
+        notify({
+          userId,
+          type: "session_advice_decided",
+          title: ADVICE_NOTICES.decided(out.value.askerName),
+          body: r.decision ?? r.intent,
+          link: requestLink(r.id),
+          actorUserId: who.userId,
+          dedupeKey: `session-advice-decided:${r.id}:${userId}`,
+        }),
+        "decided",
+      );
     }
     res.json({ request: r });
   });

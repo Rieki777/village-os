@@ -13,7 +13,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
-import { forgetMemberSessions } from "./lib/liveSessions";
+import { forgetMemberSessions, memberNo } from "./lib/liveSessions";
+import { putAdvice } from "./repos/sessionAdvice";
 import { exportMemberSessions, register as registerRoom } from "./routes/liveSessions";
 import { register as registerAdvice } from "./routes/sessionAdvice";
 import { ADVICE_LIMITS, ADVICE_NOTICES, ADVICE_REFUSALS, type AdvicePayload } from "../shared/sessionAdvice";
@@ -79,6 +80,7 @@ describe.skipIf(!configured)("the advice process, against a real schema", () => 
   const today = new Date().toISOString().slice(0, 10);
   const inAWeek = addDaysTo(today, 7);
   let tanks = 0;
+  let lifecycle = "members";
 
   const q = async (sql: string, params: unknown[] = []) => (await pool.query<any[]>(sql, params))[0]; // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned, never a production table
   const as = async (who: string | null, key: string, req: any = {}) => {
@@ -113,6 +115,7 @@ describe.skipIf(!configured)("the advice process, against a real schema", () => 
       notifyAdmins: async () => undefined,
       circlesRepo: { all: () => CIRCLES },
       lapseContext: () => ({ currentSeasonId: null, cadence: "never" }),
+      lifecycle: () => lifecycle,
     } as any;
     registerRoom(c.app, deps);
     registerAdvice(c.app, deps);
@@ -131,6 +134,13 @@ describe.skipIf(!configured)("the advice process, against a real schema", () => 
     await db?.drop();
   });
 
+  it("asks nobody while the module is only in preview, since the people asked could not open their bell", async () => {
+    lifecycle = "preview";
+    expect(await ask("m-founder", { intent: "Try the advice process." })).toMatchObject({ status: 409, body: { error: ADVICE_REFUSALS.notOpenYet } });
+    expect(bells).toEqual([]);
+    lifecycle = "members";
+  });
+
   it("asks everybody with standing in the circle, the asker aside, and rings each of them", async () => {
     expect(await ask("m-ana", { circleId: "c-moon", intent: "x" })).toMatchObject({ status: 400, body: { error: ADVICE_REFUSALS.circleUnknown } });
     expect(await ask("m-ana", { intent: "x", decideBy: today })).toMatchObject({ status: 400, body: { error: ADVICE_REFUSALS.pastDate } });
@@ -142,6 +152,8 @@ describe.skipIf(!configured)("the advice process, against a real schema", () => 
     expect(out.body.request).toMatchObject({ circleName: "Garden circle", askerName: "Ana Reyes", mine: true, askedCount: 2, canDecide: true, canAdvise: false, status: "open", decideBy: inAWeek });
     expect(ofType("session_advice_asked").map((b) => b.userId).sort()).toEqual(["m-ben", "m-cai"]);
     expect(ofType("session_advice_asked")[0]).toMatchObject({ title: ADVICE_NOTICES.asked("Ana Reyes", "Garden circle"), body: "We fill the tanks on Mondays.", link: `/sessions#advice-${tanks}` });
+    // Each bell names its actor, so the erasure rewrites it in everybody's inbox when Ana leaves.
+    expect(ofType("session_advice_asked").every((b) => b.actorUserId === "m-ana")).toBe(true);
   });
 
   it("shows a request to whoever asked and the people asked, and to nobody else", async () => {
@@ -163,7 +175,7 @@ describe.skipIf(!configured)("the advice process, against a real schema", () => 
     expect((await give("m-cai", tanks, "The pump needs a day's notice.")).status).toBe(200);
     const given = ofType("session_advice_given");
     expect(given.map((b) => b.dedupeKey)).toEqual([`session-advice-given:${tanks}:m-ben`, `session-advice-given:${tanks}:m-ben`, `session-advice-given:${tanks}:m-cai`]);
-    expect(given[0]).toMatchObject({ userId: "m-ana", title: ADVICE_NOTICES.given("Ben Ortiz") });
+    expect(given[0]).toMatchObject({ userId: "m-ana", title: ADVICE_NOTICES.given("Ben Ortiz"), actorUserId: "m-ben" });
     // Cai reads Ben's advice too.
     const cai = (await list("m-cai")).askedOfMe[0];
     expect(cai.advice.map((a) => [a.by, a.words, a.mine])).toEqual([
@@ -178,7 +190,10 @@ describe.skipIf(!configured)("the advice process, against a real schema", () => 
     const out = await decide("m-ana", tanks, "We fill the tanks on Tuesdays, with a day's notice to the pump keeper.");
     expect(out.body.request).toMatchObject({ status: "decided", canDecide: false, decision: "We fill the tanks on Tuesdays, with a day's notice to the pump keeper.", settledOn: today });
     expect(ofType("session_advice_decided").map((b) => b.userId).sort()).toEqual(["m-ben", "m-cai"]);
+    expect(ofType("session_advice_decided").every((b) => b.actorUserId === "m-ana")).toBe(true);
     expect(await give("m-ben", tanks, "Too late?")).toMatchObject({ status: 409, body: { error: ADVICE_REFUSALS.settled } });
+    // The write itself reads the status, so advice that loses the race to a decision never lands.
+    expect(await putAdvice(pool, tanks, (await memberNo(pool, "m-ben"))!, "Raced.", new Date())).toBe(0);
     expect(await decide("m-ana", tanks, "Again.")).toMatchObject({ status: 409, body: { error: ADVICE_REFUSALS.settled } });
     expect((await list("m-ben")).askedOfMe[0]).toMatchObject({ status: "decided", canAdvise: false });
   });

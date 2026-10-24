@@ -86,6 +86,8 @@ export interface AdviceGiven {
   words: string;
   /** When they last changed it, an ISO instant. */
   at: string;
+  /** The village date of that, YYYY-MM-DD. */
+  on: string;
   mine: boolean;
 }
 
@@ -209,6 +211,9 @@ export const ADVICE_COPY = {
   decided: (date: string): string => `Decided on ${dateWords(date)}`,
   withdrawn: (date: string): string => `Withdrawn on ${dateWords(date)}`,
   saved: "Saved.",
+  savedAdvice: (asker: string): string => `Your advice to ${asker} is saved.`,
+  savedDecision: "Your decision is recorded, and the people you asked will hear it.",
+  savedWithdrawn: "The request is withdrawn.",
   failed: "That did not go through. Try again in a moment.",
   loadFailed: "The requests for advice didn't load.",
   retry: "Try again",
@@ -230,6 +235,7 @@ export const ADVICE_REFUSALS = {
   adviceNeeded: "Say your advice in a few words.",
   decisionNeeded: "Say what you decided.",
   slowDown: "That was a lot at once. Try again in a little while.",
+  notOpenYet: "Asking for advice reaches people once Live Sessions is open to members.",
 } as const;
 
 /** The bells (bell only, server/lib/notify.ts). */

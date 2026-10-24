@@ -83,10 +83,15 @@ export async function insertAsks(q: Queryable, requestId: number, nos: readonly 
   );
 }
 
-/** One person's advice, given or changed. Hands back 1 when they were asked. */
+/**
+ * One person's advice, given or changed, only while the request is open: the
+ * status is read in the same statement, so a decision that lands first wins.
+ * Hands back 1, or 0 when they were not asked or the request is settled.
+ */
 export async function putAdvice(q: Queryable, requestId: number, no: number, advice: string, now: Date): Promise<number> {
   const [r] = await q.query<any>(
-    "UPDATE `live_session_advice_asks` SET `advice` = ?, `advised_at` = ? WHERE `request_id` = ? AND `member_no` = ?",
+    "UPDATE `live_session_advice_asks` a JOIN `live_session_advice_requests` r ON r.`id` = a.`request_id` " +
+      "SET a.`advice` = ?, a.`advised_at` = ? WHERE a.`request_id` = ? AND a.`member_no` = ? AND r.`status` = 'open'",
     [advice, now, requestId, no],
   );
   return Number(r.affectedRows ?? 0);

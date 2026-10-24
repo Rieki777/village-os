@@ -393,7 +393,12 @@ A request is read by whoever asked and the people asked, and by nobody else: to 
 exist, and every refusal says so in the same words. A member keeps at most ten requests open. The bells
 are bell only: the people asked hear they were asked (`session_advice_asked`), the asker hears the first
 advice from each person (`session_advice_given`), and the people asked hear what was decided
-(`session_advice_decided`). A withdrawal rings nobody.
+(`session_advice_decided`). A withdrawal rings nobody. Every bell names its actor, so when the asker or an
+adviser leaves the village the erasure rewrites the bell in everybody else's inbox. While Live Sessions is
+only in preview nobody can be asked, since the people asked could not open what their bell links to.
+Advice lands only on a request still open: the write reads the status in the same statement, so a
+decision that lands first wins. The lists are read again every minute while the page is in view, and a
+bell's link lands on its request once, reading the lists again when the request is newer than they are.
 
 | Door | Who | Limit |
 |---|---|---|

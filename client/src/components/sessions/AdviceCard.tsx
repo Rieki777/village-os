@@ -10,11 +10,16 @@
  *
  * Every write reads `res.ok` before it says anything: a refusal shows under
  * the form in the server's words, and what landed goes to the section's one
- * polite line (`onSaved`).
+ * polite line (`onSaved`). A refusal that says the request moved on (409)
+ * asks the section to read the lists again (`onStale`). The focus moves into
+ * the withdraw confirm when it opens, back to Withdraw when it is kept, and to
+ * the card itself once the request is settled, since its forms are gone.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { ADVICE_COPY, ADVICE_LIMITS, adviceDecideUrl, adviceGiveUrl, adviceWithdrawUrl, type AdviceRequestCard } from "@shared/sessionAdvice";
 import { dateWords } from "@shared/sessionDecisions";
+
 import { BTN_PRIMARY, BTN_QUIET, CHIP, HINT, INPUT, LABEL } from "./roomUi";
 import { adviceCall } from "./adviceCall";
 
@@ -23,12 +28,15 @@ export default function AdviceCard({
   today,
   lit,
   onSaved,
+  onStale,
 }: {
   request: AdviceRequestCard;
   today: string;
   /** A notice's link landed on this request. */
   lit: boolean;
   onSaved: (next: AdviceRequestCard, said: string) => void;
+  /** The server says the request moved on: read the lists again. */
+  onStale?: () => void;
 }) {
   const r = request;
   const [advice, setAdvice] = useState(r.myAdvice ?? "");
@@ -38,18 +46,35 @@ export default function AdviceCard({
   const [error, setError] = useState<string | null>(null);
   const idBase = `advice-${r.id}`;
   const open = r.status === "open";
+  const card = useRef<HTMLLIElement>(null);
+  const withdrawButton = useRef<HTMLButtonElement>(null);
+  const keepButton = useRef<HTMLButtonElement>(null);
+  const confirmTouched = useRef(false);
 
-  const write = async (path: string, method: string, body?: unknown) => {
+  useEffect(() => {
+    if (!confirmTouched.current) return;
+    if (confirmWithdraw) keepButton.current?.focus();
+    else withdrawButton.current?.focus();
+  }, [confirmWithdraw]);
+
+  const write = async (path: string, method: string, said: string, settles: boolean, body?: unknown) => {
     setBusy(true);
     setError(null);
     const out = await adviceCall<{ request: AdviceRequestCard }>(path, method, body);
     setBusy(false);
     if (!out.ok || !out.body.request) {
       setError(out.ok ? ADVICE_COPY.failed : out.error);
+      if (!out.ok && out.status === 409) onStale?.();
       return;
     }
+    confirmTouched.current = false;
     setConfirmWithdraw(false);
-    onSaved(out.body.request, ADVICE_COPY.saved);
+    onSaved(out.body.request, said);
+    if (settles) requestAnimationFrame(() => card.current?.focus());
+  };
+  const askWithdraw = (yes: boolean) => {
+    confirmTouched.current = true;
+    setConfirmWithdraw(yes);
   };
 
   const settledLine =
@@ -57,6 +82,7 @@ export default function AdviceCard({
 
   return (
     <li
+      ref={card}
       id={idBase}
       tabIndex={-1}
       className={`rounded-xl border bg-card px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring ${lit ? "border-notice" : "border-border"}`}
@@ -66,7 +92,7 @@ export default function AdviceCard({
       {r.context && <p className="mt-1 whitespace-pre-line break-words text-sm text-foreground">{r.context}</p>}
       <p className="mt-1 text-sm">
         {open ? (
-          <span className={r.decideBy < today ? `${CHIP} border-notice text-foreground` : "text-muted-foreground"}>
+          <span className={r.decideBy < today ? cn(CHIP, "border-notice text-foreground") : "text-muted-foreground"}>
             {r.decideBy < today ? ADVICE_COPY.decideByPassed(r.decideBy) : ADVICE_COPY.decideByLine(r.decideBy)}
           </span>
         ) : (
@@ -83,7 +109,7 @@ export default function AdviceCard({
             {r.advice.map((a, i) => (
               <li key={`${a.by}-${i}`} className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground">
                 <span className="font-semibold">{ADVICE_COPY.adviceBy(a.by)}</span>{" "}
-                <span className="text-xs text-muted-foreground">{dateWords(a.at.slice(0, 10))}</span>
+                <span className="text-xs text-muted-foreground">{dateWords(a.on)}</span>
                 <span className="mt-0.5 block whitespace-pre-line break-words">{a.words}</span>
               </li>
             ))}
@@ -107,7 +133,12 @@ export default function AdviceCard({
             value={advice}
             onChange={(e) => setAdvice(e.target.value)}
           />
-          <button type="button" className={BTN_PRIMARY} disabled={busy || !advice.trim()} onClick={() => void write(adviceGiveUrl(r.id), "PUT", { advice })}>
+          <button
+            type="button"
+            className={BTN_PRIMARY}
+            disabled={busy || !advice.trim()}
+            onClick={() => void write(adviceGiveUrl(r.id), "PUT", ADVICE_COPY.savedAdvice(r.askerName), false, { advice })}
+          >
             {r.myAdvice ? ADVICE_COPY.changeAdvice : ADVICE_COPY.giveAdvice}
           </button>
         </div>
@@ -126,20 +157,25 @@ export default function AdviceCard({
             onChange={(e) => setDecision(e.target.value)}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={BTN_PRIMARY} disabled={busy || !decision.trim()} onClick={() => void write(adviceDecideUrl(r.id), "POST", { decision })}>
+            <button
+              type="button"
+              className={BTN_PRIMARY}
+              disabled={busy || !decision.trim()}
+              onClick={() => void write(adviceDecideUrl(r.id), "POST", ADVICE_COPY.savedDecision, true, { decision })}
+            >
               {ADVICE_COPY.recordDecision}
             </button>
             {!confirmWithdraw ? (
-              <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => setConfirmWithdraw(true)}>
+              <button ref={withdrawButton} type="button" className={BTN_QUIET} disabled={busy} onClick={() => askWithdraw(true)}>
                 {ADVICE_COPY.withdraw}
               </button>
             ) : (
               <span role="group" aria-label={ADVICE_COPY.withdraw} className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-foreground">{ADVICE_COPY.withdrawConfirm}</span>
-                <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void write(adviceWithdrawUrl(r.id), "POST")}>
+                <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void write(adviceWithdrawUrl(r.id), "POST", ADVICE_COPY.savedWithdrawn, true)}>
                   {ADVICE_COPY.withdrawYes}
                 </button>
-                <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => setConfirmWithdraw(false)}>
+                <button ref={keepButton} type="button" className={BTN_QUIET} disabled={busy} onClick={() => askWithdraw(false)}>
                   {ADVICE_COPY.keep}
                 </button>
               </span>
