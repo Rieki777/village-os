@@ -412,11 +412,15 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     await finishedRecord(fine.id, FINISHED_ON_2026_10_20);
 
     // The spine refuses the delegation notice, so the delegations step throws for that member.
-    await expect(backfillFinishedErasures(pool, deps({ notifyThrows: true }), () => undefined)).rejects.toThrow(
-      /1 finished erasure\(s\) stopped part way/,
+    const failure = await backfillFinishedErasures(pool, deps({ notifyThrows: true }), () => undefined).then(
+      () => null,
+      (err: unknown) => err as Error,
     );
 
     expect((await agentRowsRemaining(pool, fine.id)).tokens, "the member after it was still given every step").toBe(0);
+    expect(failure?.message, "and the job throws at the end, so runOnce leaves it unrecorded for the next boot").toMatch(
+      /^1 finished erasure\(s\) stopped part way/,
+    );
     expect((await erasureRecord(pool, fine.id))!.stepsDone).toEqual([...FINISHED_ON_2026_10_20, ...GIVEN_TO_IT]);
     const halfway = (await erasureRecord(pool, stuck.id))!.stepsDone;
     const at = GIVEN_TO_IT.indexOf("delegations-after-tombstone");
