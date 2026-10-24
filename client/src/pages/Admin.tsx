@@ -54,6 +54,7 @@ import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import VillageAnswers from "@/components/admin/VillageAnswers";
 import VillageCurrencyField from "@/components/admin/VillageCurrencyField";
+import { BadgeDefinitionRow } from "@/components/admin/BadgeMultipliersEditor";
 import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -5035,28 +5036,7 @@ function BadgesAdminTab({ password }: { password: string }) {
         <h3 className="font-semibold text-gray-900 mb-3">Badge definitions</h3>
         <div className="space-y-2 mb-5">
           {(data?.badges ?? []).map((b: any) => (
-            <div key={b.id} className={`border rounded-lg px-4 py-3 ${b.active ? "border-gray-200" : "border-gray-100 opacity-60"}`}>
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {b.name} <span className="text-xs text-gray-400">({b.kind})</span>
-                    {b.isExample && <ExampleChip className="ml-2 align-middle" />}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {b.kind === "earned" && b.rule ? `at ${b.rule.threshold} ${String(b.rule.metric).replace(/_/g, " ")}${b.rule.stackable ? ` · stacks ×${b.rule.maxStack}` : ""} · ` : ""}
-                    {(b.capabilities ?? []).length ? `grants ${b.capabilities.join(", ")} · ` : ""}
-                    {(b.denies ?? []).length ? `denies ${b.denies.join(", ")} · ` : ""}
-                    {b.description || "no description"}
-                  </p>
-                </div>
-                <button
-                  onClick={async () => { const d = await call(`/admin/badges/${b.id}`, { active: !b.active }, "PUT"); if (d) load(); }}
-                  className="text-xs text-gray-500 hover:text-gray-900"
-                >
-                  {b.active ? "Deactivate" : "Reactivate"}
-                </button>
-              </div>
-            </div>
+            <BadgeDefinitionRow key={b.id} badge={b} call={call} onSaved={load} />
           ))}
           {(data?.badges ?? []).length === 0 && <p className="text-sm text-gray-400">No badges yet.</p>}
         </div>

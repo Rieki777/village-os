@@ -123,7 +123,7 @@ import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTer
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, rolesCarryingCapability, stewardSeatRefusal } from "./lib/roleGrants";
-import { liveHoldersNow, type HolderReads } from "./lib/holdersNow";
+import { leftEmptyByRemovalNow, liveHoldersNow, type HolderReads } from "./lib/holdersNow";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
@@ -635,8 +635,8 @@ import {
   holderStands, mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
 } from "./lib/agentTokens";
 import {
-  DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, removeInbox,
-  setInbox,
+  DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, queueWeekAhead,
+  removeInbox, setInbox,
 } from "./lib/agentInbox";
 import {
   MEMBER_KEY_PROVIDERS, NO_MEMBER_SECRETS_KEY_SENTENCE, memberKeyView, memberSecretsConfigured, removeMemberKey,
@@ -789,9 +789,12 @@ import {
   listPatterns,
   planRoll,
   removeMember as removePatternMember,
+  rewardMultipliersFor,
   seasonallyDormantBadgeIds,
   type PatternKind,
 } from "./lib/seasonPatterns";
+import { payAcceptedProposal } from "./lib/proposalAward";
+import { GRATITUDE_ONLY_SENT } from "../shared/workValue";
 import { buildRetrospective, proposeNextPattern } from "./lib/seasonRetrospective";
 import {
   assertCanPurchase,
@@ -1075,8 +1078,6 @@ const DEFAULT_WORK_WITH_US = {
     { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share. For example, 10% of revenue in exchange for rent or water infrastructure." },
     { value: "Memorandum of Understanding", title: "Memorandum of Understanding", desc: "A clear, living exchange of contribution. For example, you grow vegetables, share some harvest, and add to the beauty of the land." },
   ],
-  // Gratitude credited to a signed-in member when their proposal is accepted.
-  acceptGratitude: 100,
 };
 
 // Project settings: the plain numbers a non-technical admin should be able to
@@ -1909,7 +1910,6 @@ async function ensureDataFiles() {
   //   ledger-opening-balances — seeded the JSON ledger; the MySQL ledger
   //     carries those rows forward via the 0009 backfill.
   await runOnce("canonicalize-regen-units", canonicalizeRegenUnits);
-  await runOnce("accept-award-to-registry", migrateAcceptAwardToRegistry);
   await runOnce("retire-legacy-peg-copy", retireLegacyPegCopy);
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
@@ -2431,8 +2431,7 @@ async function runOnce(id: string, fn: () => void | Promise<void>) {
  * the seeded "Gratitude" the moment this deployed — the registry would simply
  * start winning an argument the brand field used to win alone.
  *
- * Same shape as migrateAcceptAwardToRegistry below, and for the same reason:
- * when a value moves house, the deploy that moves it must not change what
+ * When a value moves house, the deploy that moves it must not change what
  * anybody sees.
  *
  * Reads the table rather than the in-memory registry on purpose. This runs
@@ -2459,32 +2458,6 @@ async function migrateCurrencyNameIntoTokens() {
   console.log(`[MIGRATION] carried the village's currency name into the token registry: ${custom}`);
 }
 
-/**
- * gratitude.proposal_accept_award used to live as `acceptGratitude` inside
- * the Work With Us content document. It is recognition ISSUANCE, so it moved
- * to the variables registry (bounds, admin visibility, the mechanics page,
- * the amendment ledger). This one-shot carries a village's customized
- * document value into the registry so behaviour does not change on deploy;
- * an untouched document (default 100 = the registry default) writes nothing.
- */
-async function migrateAcceptAwardToRegistry() {
-  const stored = workWithUsRepo.get() as any;
-  const docValue = stored?.acceptGratitude;
-  if (docValue === undefined || docValue === null) return;
-  const n = Math.max(0, Math.floor(Number(docValue) || 0));
-  const def = VARIABLES_BY_KEY["gratitude.proposal_accept_award"];
-  if (!def || String(n) === def.default) return;
-  const r = await setVariable(getPool(), "gratitude.proposal_accept_award", String(n));
-  if (r.ok) {
-    await recordMechanicsChange(
-      "gratitude.proposal_accept_award", r, null, "platform", null,
-      "Migrated from the Work With Us content document into the variables registry",
-    );
-    console.log(`[MIGRATION] acceptGratitude ${n} moved from work-with-us doc to the registry`);
-  } else {
-    console.error(`[MIGRATION] acceptGratitude ${docValue} could not move to the registry: ${r.error}`);
-  }
-}
 
 /**
  * The regen entry unit is written from the registry now, but rows recorded
@@ -2705,7 +2678,7 @@ async function authedUser(req: express.Request): Promise<any | null> {
   const decoded = decodeToken(AUTH_TOKEN_SECRET, header.slice(7));
   if (!decoded) return null;
   const user = await members.byId(decoded.userId);
-  if (!user) return null;
+  if (!holderStands(user)) return null; // a tombstone holds no session, whatever version one was signed at
   // Session revocation (S1): a token minted before the member's tokenVersion
   // was bumped is dead. Tokens from before this field existed carry no `v` and
   // are accepted while the member's version is still 0, so shipping this did
@@ -4170,14 +4143,15 @@ function stayPostingHooks() {
       // village's own word for it, which is the only word the guest has seen.
       const payName = tokenDef(stay.rateSnapshotToken ?? STAY_CREDIT)?.name ?? "stay credits";
       // S5 (Wave 1): the nudge names actual doors, not a category of door.
-      // "Pick up a quest" is advice; "Fix the pump house (30 gratitude)" is
-      // a plan for tomorrow morning.
+      // "Pick up a quest" is advice; "Fix the pump house" is a plan for
+      // tomorrow morning. It printed each quest's old Gratitude range, which
+      // no quest pays (Rye, 2026-10-23), so it names the quest alone.
       let questLines = "";
       try {
         const open = (await questsRepo.all())
           .filter((q: any) => q.status === "open")
           .slice(0, 3)
-          .map((q: any) => `• ${q.title}${q.gratitude ? ` (${q.gratitude})` : ""}`);
+          .map((q: any) => `• ${q.title}`);
         if (open.length) questLines = `\n\nOpen quests right now:\n${open.join("\n")}`;
       } catch {
         /* the nudge still lands without suggestions */
@@ -4654,22 +4628,23 @@ function getWorkWithUs() {
 
 /**
  * When a Work With Us proposal is accepted, fold it into the game for a
- * matching member: a logged contribution, Gratitude credit, and a pulse.
- * Idempotent.
+ * matching member: a logged contribution, the work tokens the village pays
+ * for an accepted proposal, and a pulse. Idempotent.
+ *
+ * NEVER GRATITUDE (Rye, 2026-10-23): "GRATITUDE is only sent from player to
+ * player using the send gratitude function, gratitude is not distributed in
+ * any other way!" This minted `gratitude.proposal_accept_award` (100) from
+ * the recognition faucet; it pays the `proposal.accepted` rules now
+ * (server/lib/proposalAward.ts), with the member's badge multipliers.
  *
  * A STEWARD MAY NOT PAY THEMSELVES THROUGH THIS DOOR. `canConfirm` in
  * server/lib/economy.ts already states the rule for the whole build: "A
  * steward may not witness their own work. Confirming releases value, so it
  * must be structurally impossible to do it for yourself, admin included."
  * This path releases value and did not ask. Anyone holding `intake.moderate`
- * could send a Work With Us proposal in their own name, accept it, and mint
- * themselves `gratitude.proposal_accept_award`, which defaults to 100. Once
- * per submission, and nothing bounds how many submissions a person sends.
- *
- * That token is the DEFAULT `governance.weight_token`, so in a village
- * running `governance.weight_mode = token` the amount minted here is voting
- * weight. The admin mint cap does not reach it either: `mintCapGuard` counts
- * `from_account = 'sys:mint'` and this issues from the recognition faucet.
+ * could send a Work With Us proposal in their own name, accept it, and pay
+ * themselves. Once per submission, and nothing bounds how many submissions a
+ * person sends.
  *
  * The acceptance itself still stands. Whether a steward may accept their own
  * proposal at all is a question for the village, and this is not the place to
@@ -4701,46 +4676,27 @@ async function applyAcceptReward(
     return {
       rewarded: false,
       refused:
-        "The proposal is accepted. The recognition for it waits for another steward, " +
+        "The proposal is accepted. The payment for it waits for another steward, " +
         "because this proposal is yours.",
     };
   }
-  // Registry, not the content document: this is recognition ISSUANCE, and it
-  // sat in Work With Us page copy with no bounds and no mechanics visibility.
-  // A runOnce migrated any customized document value into the variable.
-  const amount = Math.max(0, numberVar("gratitude.proposal_accept_award"));
-  // Through the ledger, never `+=`: this was the one recognition credit in
-  // the repo that assigned the cache without a post, so the balance it
-  // granted was phantom — invisible to /api/game/ledger and wiped by the
-  // next recompute. The entry id keys the post, so a re-accept credits once.
-  // amount 0 still logs the contribution (postTransfer refuses zero legs).
-  let newBalance: number | null = null;
-  if (amount > 0) {
-    const credit = await postTransfer(getPool(), {
-      from: RECOGNITION_FAUCET,
-      to: memberAccount(match.id),
-      amount: toLedgerUnits(PLATFORM_TOKEN, amount),
-      source: "proposal_accepted",
-      sourceRef: entry.id,
-      description: "Work With Us proposal accepted",
-      idempotencyKey: `proposal_accepted:${entry.id}`,
-    });
-    if (!credit.ok) {
-      console.error(`[submissions] accept credit failed for submission ${entry.id}: ${credit.error}`);
-      return { rewarded: false };
-    }
-    newBalance = credit.toBalance;
-  }
+  const paid = await payAcceptedProposal(getPool(), {
+    submissionId: String(entry.id),
+    userId: match.id,
+    boost: await rewardMultipliersFor(getPool(), match.id, await dormantBadgeIds()),
+  });
+  if (!paid.ok) return { rewarded: false };
   const updated = await members.update(match.id, (u: any) => {
     u.contributions = u.contributions ?? [];
     u.contributions.push({
       id: `contrib-${Date.now()}`,
       type: "proposal",
       description: `Work With Us proposal accepted: ${String(entry.data?.work ?? "your offering").slice(0, 120)}`,
-      recognitionEarned: amount,
+      // No Gratitude: what the acceptance paid, token by token.
+      recognitionEarned: 0,
+      paid: paid.paid,
       date: new Date().toISOString(),
     });
-    if (newBalance != null) u.recognitionBalance = newBalance;
   });
   if (!updated) return { rewarded: false };
   await addActivity("proposal", `${firstName(updated.name)}'s proposal was welcomed into the village`, { actorUserId: updated.id, entityType: "submission", entityRef: entry.id });
@@ -5479,7 +5435,7 @@ async function startServer() {
    */
   registerJob("moon-settlement", 60 * 60 * 1000, async () => {
     try {
-      const result = await runSettlement(getPool());
+      const result = await runSettlement(getPool(), new Date(), { boostFor: async (u) => rewardMultipliersFor(getPool(), u, await dormantBadgeIds()) });
       if (!result.alreadyRun && result.stewardsThanked > 0) {
         console.log(
           `[economy] ${result.cycleKey}: ${result.stewardsThanked} steward(s) thanked`,
@@ -7260,13 +7216,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // payload never carries a row the member could not see themselves.
     registerJob("agent-week-ahead", 24 * 60 * 60 * 1000, async () => {
       if (effectiveLifecycle("events") === "off") return "events off";
-      const [inboxes] = await getPool().query<any[]>("SELECT user_id FROM agent_inboxes WHERE enabled = 1");
-      let queued = 0;
-      for (const r of inboxes) {
-        const items = await weekAhead(getPool(), { userId: String(r.user_id), isAdmin: false });
-        const q = await enqueueAgentDelivery(getPool(), String(r.user_id), { kind: "week_ahead", data: { timezone: getSeasonConfig().timezone, items } });
-        if (q.ok) queued += 1;
-      }
+      const { queued } = await queueWeekAhead(getPool(), {
+        timezone: getSeasonConfig().timezone,
+        build: (userId) => weekAhead(getPool(), { userId, isAdmin: false }),
+      });
       return `queued ${queued}`;
     });
     // Drafts nobody answered in seven days expire, so the panel does not fill
@@ -13191,7 +13144,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       roles: rolesRepo.all().map((r: any) => ({
         id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadRoleHolders(), r.id),
       })),
-      notYetWired: NOT_YET_WIRED,
+      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()), // Power groups: the removal warning
     });
   });
 
@@ -16769,6 +16722,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (def.governance !== "platform") {
       return res.status(400).json({ error: `${slug} is issued on Hypha and cannot be minted here` });
     }
+    // Rye, 2026-10-23: Gratitude is only sent member to member.
+    if (slug === HEARTS) return res.status(400).json({ error: GRATITUDE_ONLY_SENT });
     if (!toUserId || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "toUserId and a positive amount are required" });
     if (finerThanScale(amt, def.decimals)) return res.status(400).json({ error: `${def.name} ${def.decimals > 0 ? `goes to ${def.decimals} decimal places` : "is minted in whole amounts"}, so ${amt} cannot be minted exactly. Nothing was minted` });
     if (!String(reason ?? "").trim()) {
@@ -16985,6 +16940,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (def.governance !== "platform") {
       return res.status(400).json({ error: `${request.tokenSlug} is issued on Hypha and cannot be minted here` });
     }
+    // A grant queued before Gratitude stopped being mintable is refused at the second door too.
+    if (request.tokenSlug === HEARTS) return res.status(400).json({ error: GRATITUDE_ONLY_SENT });
     const target = await members.byId(request.toUserId);
     if (!target) return res.status(404).json({ error: "Member not found" });
     // The rule that has no exception, re-read at the second door: the person
@@ -17743,17 +17700,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.put("/api/admin/work-with-us-config", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    // acceptGratitude moved to the variables registry (it is recognition
-    // issuance, not page copy). An old client still sending it gets routed
-    // there — through validation and the mechanics ledger — never stored in
-    // the document where nothing reads it anymore.
-    const { acceptGratitude, ...rest } = req.body as any;
-    if (acceptGratitude !== undefined) {
-      const r = await setVariable(getPool(), "gratitude.proposal_accept_award", String(acceptGratitude));
-      if (!r.ok) return res.status(400).json({ error: r.error });
-      await recordMechanicsChange("gratitude.proposal_accept_award", r, (await authedUser(req))?.id ?? adminActor(req)?.id ?? null, "admin");
-    }
-    await workWithUsRepo.put({ ...getWorkWithUs(), ...rest });
+    // `acceptGratitude` is retired with its dial: an accepted proposal pays
+    // work tokens from the Mint panel's rules (server/lib/proposalAward.ts),
+    // never Gratitude. A stored or posted copy is dropped, never read.
+    const { acceptGratitude: _retired, ...rest } = req.body as any;
+    const { acceptGratitude: _stored, ...current } = getWorkWithUs() as any;
+    await workWithUsRepo.put({ ...current, ...rest });
     res.json({ success: true });
   });
 

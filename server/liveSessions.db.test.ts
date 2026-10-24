@@ -303,7 +303,9 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     const mark = (who: string) => as(who, "PATCH /api/sessions/:id/entries/:entryId", { params: room(sid, { entryId: String(proposal) }), body: { status: "done" } });
     expect(await mark("m-ana")).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
     // Sleeping on it needs no sentence and is never an objection, and the round waits for the answer after the night.
-    expect((await answer("m-dee", "sleep")).status).toBe(200);
+    // Since 0281 a night names when it ends, and the round waits until then.
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
+    expect((await as("m-dee", "POST /api/sessions/:id/respond", { params: room(sid), body: { target: `decision:${proposal}`, value: "sleep", answerBy: tomorrow } })).status).toBe(200);
     expect(await mark("m-ana")).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
     await answer("m-dee", "consent");
     expect(await mark("m-ben")).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.facilitatorOnly } });

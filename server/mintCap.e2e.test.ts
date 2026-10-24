@@ -678,6 +678,27 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
   }, 120_000);
 
   /**
+   * NO HAND-MINT OF GRATITUDE (Rye, 2026-10-23: "GRATITUDE is only sent from
+   * player to player using the send gratitude function, gratitude is not
+   * distributed in any other way!"). The same door still mints credits, so the
+   * refusal is about the token and never about the door.
+   */
+  it("refuses to hand-mint Gratitude, and still mints credits", async () => {
+    await setVar("ledger.admin_mint_cycle_cap", "100000");
+    const before = (await guardView()).minted;
+    const hearts = await call("POST", "/api/admin/tokens/gratitude/mint", {
+      toUserId: oraId, amount: 5, reason: "a hand-mint of thanks",
+    }, founderToken);
+    expect(hearts.status, hearts.text.slice(0, 300)).toBe(400);
+    expect(String(hearts.json?.error ?? "")).toContain("only ever sent from one member to another");
+    const credits = await call("POST", `/api/admin/tokens/${CREDIT}/mint`, {
+      toUserId: oraId, amount: 5, reason: "credits through the same door",
+    }, founderToken);
+    expect(credits.status, credits.text.slice(0, 300)).toBe(200);
+    expect((await guardView()).minted).toBe(before + 5);
+  }, 120_000);
+
+  /**
    * A RETURN OF LAST MOON'S CREDITS BUYS NO ROOM THIS MOON.
    *
    * The floor is the whole window decision. Issuance dated BEFORE the cycle

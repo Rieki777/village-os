@@ -1,0 +1,38 @@
+-- 0282: an erasure remembers who it is for, until it finishes.
+--
+-- WHAT WAS WRONG.
+-- The tombstone step (server/lib/erasure.ts) rewrites the user row: the name
+-- becomes "A departed member", the address deleted-<id>@anonymized.invalid,
+-- the handle departed-<id>. Several steps run after it and match the member
+-- by name or address: the comms address book, the alignment words, and in
+-- open work the housing requests and guest orders. On a first run they are
+-- handed the row as it stood before the sweep, so they find everything. A
+-- RESUME re-reads the row, and after the tombstone that row is the tombstone,
+-- so the address matched nothing, the scrub looked for "A departed member",
+-- and the record still read finished. The hourly failed-actions job resumes
+-- exactly these sweeps with nobody watching.
+--
+-- WHAT THIS HOLDS.
+-- `erased_identity`: the member's name, address and handle as a JSON object,
+-- {"name": ..., "email": ..., "handle": ...}, written when an attempt starts
+-- on a row that is not yet a tombstone and never overwritten by one that is.
+-- A resume hands it to every step in place of the tombstone's strings.
+--
+-- HELD ONLY WHILE THE OBLIGATION IS OPEN.
+-- The step that finishes the sweep sets it back to NULL in the same statement
+-- that stamps `finished_at`, so a finished erasure holds nothing about who it
+-- was for. It is personal data while it stands, and nothing reads it but the
+-- resume: the steward's queue and the failed-actions job read a column list
+-- that leaves it out (server/repos/memberErasure.ts), and the data export
+-- does not read this table at all.
+--
+-- EXPAND ONLY, AND THE ROLLBACK HOLDS.
+-- One nullable column with no default. The previous release names its columns
+-- on every read and write of this table, so it never reads this one and never
+-- writes it. That release also never clears it: a sweep it finishes leaves the
+-- value standing. So every finish in this release also clears the column on
+-- any record that is already finished, and the first erasure to finish after
+-- the image comes forward again takes whatever the rollback left.
+
+ALTER TABLE `member_erasures`
+  ADD COLUMN `erased_identity` json NULL;
