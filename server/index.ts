@@ -85,7 +85,7 @@ import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
-import { register as registerOrgDraftDecideRoutes } from "./routes/orgDraftDecide";
+import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
 import { register as registerSeasonRoutes } from "./routes/seasons";
 import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
@@ -1458,12 +1458,12 @@ const circlesRepo = dbCollection(getPool(), {
      * that did not save.
      */
     { js: "homeStructureKey", db: "home_structure_key" },
+    { js: "layer", db: "layer" }, // 0286: the governance layer the map ranks by; listed for the reason above
     /*
      * `replaceAll` is DELETE-all plus a re-INSERT of exactly the columns in
      * this spec, so a column left out is not preserved: it is re-defaulted.
      * `circles.created_at` is `NOT NULL DEFAULT CURRENT_TIMESTAMP`, so every
-     * admin circle edit was resetting EVERY circle's birth date to the moment
-     * of that edit.
+     * admin circle edit was resetting EVERY circle's birth date to that moment.
      *
      * Nothing reads it today, which is why this was quiet rather than
      * harmless: the next feature wanting "how long has this circle existed"
@@ -9776,7 +9776,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       viewer: {
         viewPeople,
         canContact: false, mayStyleMap: admin, mayEditWalk: admin, mayNameMapThings: admin, // the three map editors: admin today because their endpoints are, see power/types.ts
-        mayArrange: admin, // the drag publishes an org draft: admin until the decide gate lands
+        ...(await arrangeViewer(getPool(), viewer, admin, liveHoldersOf)), // who may drag circles into place, and through which door: whoever may publish the org draft
         // Where this viewer may declare (P10): "village" and/or circle ids.
         // The pencil shows where this says; the server re-checks on write.
         // 0103: a LOOK, and the admin door stays OPEN here. The pencil this

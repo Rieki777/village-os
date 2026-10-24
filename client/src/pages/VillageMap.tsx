@@ -694,6 +694,7 @@ export default function VillageMap() {
                         onPropose={arrange.propose}
                         onSettled={arrange.settle}
                         onDiscard={arrange.clear}
+                        door={data.viewer.arrangeDoor === "power" ? "power" : "admin"}
                       />
                     )}
                     {selectedSeat ? (

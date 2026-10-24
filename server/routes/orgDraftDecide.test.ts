@@ -30,7 +30,7 @@ import {
   putToVillageRefusal,
   withdrawDraftBallot,
 } from "../lib/orgDraftDecide";
-import { register } from "./orgDraftDecide";
+import { arrangeViewer, register } from "./orgDraftDecide";
 import { register as registerOrg } from "./org";
 
 const configured = testDbConfigured();
@@ -424,6 +424,76 @@ describe.skipIf(!configured)("org.decide: who adopts a reorganisation", () => {
       expect(refused.ok).toBe(false);
       expect((await ballotById(pool, opened.json.ballot.id))?.status).toBe("open");
       expect((await withdrawDraftBallot(pool, d.id, "admin-1", true)).ok).toBe(true);
+    });
+  });
+
+  describe("the arrangement door (0286): who may arrange the circles, and the one act that publishes it", () => {
+    const placeOf = async (id: string) => {
+      const [[row]] = await pool.query<any[]>("SELECT parent_circle_id, sort_order, layer FROM circles WHERE id = ?", [id]); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+      return { parent: row.parent_circle_id ?? null, order: Number(row.sort_order), layer: row.layer ?? null };
+    };
+    const draftCount = async () => {
+      const [[row]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_drafts"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+      return Number(row.n);
+    };
+
+    beforeEach(async () => {
+      await pool.query("DELETE FROM circles WHERE id IN ('arr-gcc', 'arr-lead', 'arr-demo')"); // module-review-ok: resetting the rows this block seeds
+      await pool.query( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+        `INSERT INTO circles (id, name, parent_circle_id, is_example, status, sort_order) VALUES
+           ('arr-gcc', 'Coordinating Circle', NULL, 0, 'active', 1),
+           ('arr-lead', 'Leadership Circle', NULL, 0, 'active', 4),
+           ('arr-demo', 'Demo Circle', NULL, 1, 'active', 5)`,
+      );
+    });
+
+    it("refuses a member who holds nothing, and makes no draft", async () => {
+      const before = await draftCount();
+      const r = await call("POST", "/api/org/arrangements", "member-1", { moves: [{ circleId: "arr-lead", parentCircleId: "arr-gcc" }] });
+      expect(r.status).toBe(403);
+      expect(await draftCount()).toBe(before);
+      expect((await placeOf("arr-lead")).parent).toBeNull();
+    });
+
+    it("publishes a holder's arrangement in one act: the circle moves, and takes its place and its layer", async () => {
+      holders.add("holder-1");
+      const r = await call("POST", "/api/org/arrangements", "holder-1", {
+        moves: [{ circleId: "arr-lead", parentCircleId: "arr-gcc", order: 0, layer: "lead" }],
+      });
+      expect(r.status, JSON.stringify(r.json)).toBe(200);
+      expect(await placeOf("arr-lead")).toEqual({ parent: "arr-gcc", order: 0, layer: "lead" });
+      expect((await getDraft(pool, r.json.draftId))?.status).toBe("published");
+      expect(reloads, "the circles cache is told the table changed").toBeGreaterThan(0);
+    });
+
+    it("refuses an arrangement that does not fit the village, in words, and leaves no open draft", async () => {
+      holders.add("holder-1");
+      const r = await call("POST", "/api/org/arrangements", "holder-1", { moves: [{ circleId: "arr-demo", parentCircleId: "arr-gcc" }] });
+      expect(r.status).toBe(409);
+      expect(String(r.json.message)).toContain("standing example");
+      expect(r.json.blockedLines).toHaveLength(1);
+      const [[open]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_drafts WHERE status = 'open' AND title = 'Circles arranged on the map'"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+      expect(Number(open.n), "a refused arrangement is withdrawn, never left open").toBe(0);
+      expect((await placeOf("arr-demo")).parent).toBeNull();
+    });
+
+    it("refuses a malformed arrangement before any draft is made", async () => {
+      holders.add("holder-1");
+      const before = await draftCount();
+      const r = await call("POST", "/api/org/arrangements", "holder-1", { moves: [{ circleId: "arr-lead", parentCircleId: null, layer: "chief" }] });
+      expect(r.status).toBe(400);
+      expect(String(r.json.message)).toContain("governance layer");
+      expect(await draftCount()).toBe(before);
+    });
+
+    it("tells the map who may arrange, and through which door", async () => {
+      holders.add("holder-1");
+      const live = async () => Array.from(holders);
+      expect(await arrangeViewer(pool, { id: "holder-1" }, false, live)).toEqual({ mayArrange: true, arrangeDoor: "power" });
+      // Before a launch vote the admin panel keeps its own door.
+      expect(await arrangeViewer(pool, { id: "admin-1" }, true, live)).toEqual({ mayArrange: true, arrangeDoor: "admin" });
+      expect(await arrangeViewer(pool, { id: "member-1" }, false, live)).toEqual({ mayArrange: false, arrangeDoor: null });
+      expect(await arrangeViewer(pool, null, false, live)).toEqual({ mayArrange: false, arrangeDoor: null });
     });
   });
 
