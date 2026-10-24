@@ -56,7 +56,7 @@ function input(over: Partial<PlayerCardInput> = {}): PlayerCardInput {
     owner: { userId: "u-owner", displayName: "Lena Ortiz", avatar: "/api/uploads/portrait-1.webp" },
     viewerUserId: "u-owner",
     villageName: "Riverbend",
-    season: { id: "s2", name: "Season of Foundations", startsOn: "2026-10-01", endsOn: "2026-12-31" },
+    season: { id: "s2", name: "Season of Foundations", startsOn: "2026-10-01", endsOn: "2027-01-01" }, // endsOn is the next season's first day
     nextSeasonId: null,
     archetypeNames: {},
     roles: [1, 2, 3].map((n) => role(n, { timeCommitment: "Part of a full-time season" })),
@@ -190,5 +190,13 @@ describe("the role tiles", () => {
     );
     if (card.tiles.items.kind !== "shown") throw new Error("tiles");
     expect(card.tiles.items.value.map((t) => t.icon)).toEqual(["door", "screen", "circles", "sprout", "star"]);
+  });
+});
+
+describe("the season's end", () => {
+  it("is the day before `endsOn`, because a season runs while today is before it", () => {
+    const h = buildPlayerCard(input({ season: { id: "s2", name: "Autumn", startsOn: "2026-09-22", endsOn: "2026-12-21" } })).header;
+    expect(h.span).toBe("22 September to 20 December 2026");
+    expect(h.moon.words).toBe("October Moon · Day 31 of 90");
   });
 });

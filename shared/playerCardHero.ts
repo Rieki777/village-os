@@ -178,7 +178,10 @@ export function heroOf(input: HeroIn): HeroOut {
   const tz = input.timeZone;
   const season = input.season ?? null;
   const seasonStart = season ? instantOf(season.startsOn, tz) : null;
-  const seasonEnd = season ? instantOf(season.endsOn, tz) : null;
+  // A season's `endsOn` is the day the NEXT one starts (`seasonState` runs a
+  // season while `today < endsOn`), so its last day is the day before.
+  const seasonEndsAt = season ? instantOf(season.endsOn, tz) : null;
+  const seasonEnd = seasonEndsAt ? new Date(seasonEndsAt.getTime() - 1) : null;
 
   const eyebrow = [clean(input.villageName ?? null), clean(season?.name ?? null)].filter((s): s is string => s !== null).join(" · ");
 
