@@ -91,6 +91,13 @@
   border-radius: 16px;
   min-width: 0;
 }
+/* On a phone the page around the card already keeps the design's 16px gutter,
+   so the card adds none of its own: its sections are the design's width. */
+@media (max-width: 640px) {
+  .pc-card {
+    padding-inline: 0;
+  }
+}
 .pc-card *,
 .pc-card *::before,
 .pc-card *::after {

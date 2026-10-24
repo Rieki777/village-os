@@ -17,7 +17,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { describeFailures } from "@/test/tokenContrast";
-import { measureCard } from "@/test/cardContrast";
+import { cardOverlay, measureCard } from "@/test/cardContrast";
 import { fixturePayload, fixtureRole } from "@/test/playerCardFixture";
 import { PlayerRoleCardView } from "./PlayerRoleCard";
 
@@ -79,16 +79,18 @@ describe("the instrument reads the card's own stylesheet", () => {
   it("measures the design's dim ink and gold, on the design's grounds", () => {
     render(<PlayerRoleCardView data={fixturePayload(1, "self")} />);
     const results = measureCard(root());
+    // The palette, read from the card's own token block rather than typed here.
+    const t = cardOverlay();
     const purpose = results.find((r) => r.text === "Purpose")!;
-    expect(purpose.fg).toBe("#dfab4d");
+    expect(purpose.fg).toBe(t["--pc-gold"]);
     const eyebrow = results.find((r) => r.text === "What I look after")!;
-    expect(eyebrow).toMatchObject({ fg: "#9cb0a3", bg: "#16221c" });
-    expect(results.find((r) => r.text === "Lena Ortiz")).toMatchObject({ fg: "#e9efe6", bg: "#0d1411", floor: 3 });
+    expect(eyebrow).toMatchObject({ fg: t["--pc-dim"], bg: t["--pc-panel"] });
+    expect(results.find((r) => r.text === "Lena Ortiz")).toMatchObject({ fg: t["--pc-ink"], bg: t["--pc-ground"], floor: 3 });
   });
 
   it("fails when the dim ink is darkened toward the ground", () => {
     render(<PlayerRoleCardView data={fixturePayload(1, "self")} />);
-    const failures = describeFailures(measureCard(root(), "light", { "--pc-dim": "#4a5a50" }));
+    const failures = describeFailures(measureCard(root(), "light", { "--pc-dim": "var(--pc-line)" }));
     expect(failures.some((f) => f.includes("What I look after"))).toBe(true);
   });
 });
