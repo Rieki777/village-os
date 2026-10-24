@@ -133,7 +133,8 @@ export async function forgetBallotWordsOf(
 ): Promise<BallotErasureCounts> {
   const counts: BallotErasureCounts = { about: 0, opened: 0, lines: 0 };
   if (!who.id) return counts;
-  const known = !isTombstone({ email: String(who.email ?? "") });
+  // A resume whose old address another account holds now gets the address back empty and the name still (`asTheyWere`).
+  const known = !isTombstone({ email: String(who.email ?? "") }) && !!String(who.name ?? "").trim() && String(who.name).trim() !== "A departed member";
   const handle = String(who.handle ?? "").trim().replace(/^@/, "");
   const ownSpellings = known ? [who.name, handle ? `@${handle}` : null, firstNameOf(who.name)] : [];
 
