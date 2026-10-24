@@ -294,6 +294,8 @@ describe.skipIf(!configured)("every new erasure step, stopped part way and resum
     ["rz10", "investor-fact-words-after-tombstone", () => has("UPDATE investor_path_facts SET detail = NULL")],
     ["rz11", "stay-notes-after-tombstone", () => has("UPDATE stays SET notes = NULL")],
     ["rz12", "purchase-emails-after-tombstone", () => has("UPDATE product_purchases SET payer_email = NULL")],
+    // The read of their subscriptions, before Stripe is asked; the Stripe side is server/lib/erasure.subscriptions.test.ts.
+    ["rzsub", "product-subscriptions-after-tombstone", () => has("pp.stripe_subscription_id IS NOT NULL")],
   ];
 
   it.each(cases)("%s: stopped inside %s, resumed, and finished the same as an unbroken sweep", async (prefix, step, match) => {

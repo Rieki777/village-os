@@ -168,7 +168,8 @@ import { insertNotification, type NotifyDeps, type NotifyInput } from "./notify"
 import { forgetVenturesOf } from "../repos/ventures";
 import { forgetFactWordsOf } from "../repos/investorPath";
 import { forgetStayNotesOf } from "../repos/stays";
-import { forgetPayerEmailOf } from "../repos/productPurchases";
+import { forgetPayerEmailOf, liveSubscriptionsOf } from "../repos/productPurchases";
+import { cancelSubscription } from "./payments";
 import { heldByAnotherAccount } from "../repos/users";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
@@ -1151,6 +1152,32 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
           entityRef: target.id,
           audience: "admin",
         });
+      },
+    },
+    {
+      /*
+       * Recurring purchases (0032, S69): every Stripe subscription their
+       * purchases hold is cancelled, so their card stops being charged. The
+       * village gives a member no door to cancel one, so before this a member
+       * who left kept paying every period, and each renewal paid the
+       * product's tokens into the tombstone (round 3, finding 5). The orders
+       * stay as the record of what was paid; nothing is refunded and no token
+       * moves. A charge that lands anyway is refused delivery and an admin is
+       * told (`settleProductPurchase`, server/index.ts).
+       *
+       * LAST BEFORE THE OUTSIDE STORES, after the audit line, because it asks
+       * Stripe: the local sweep finishes first, for the reason this file's
+       * header gives. After the tombstone, and a new name, so a resume or a
+       * second erasure runs it. Idempotent: `cancelSubscription` reads first,
+       * and one already over or unknown to Stripe is done. Stripe not
+       * connected, or failing, throws: the sweep stops here, loudly, and the
+       * hourly job and the queue resume it.
+       */
+      name: "product-subscriptions-after-tombstone",
+      run: async () => {
+        for (const sub of await liveSubscriptionsOf(pool, target.id)) {
+          await cancelSubscription(sub.subscriptionId);
+        }
       },
     },
   ];

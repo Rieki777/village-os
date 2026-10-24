@@ -109,6 +109,73 @@ export async function createCheckout(input: CheckoutInput): Promise<{ url: strin
   return { url: String(data.url), sessionId: String(data.id) };
 }
 
+// ── Stopping a subscription ─────────────────────────────────────────────────
+
+/** The Stripe statuses a subscription never charges from again. */
+const ENDED_SUBSCRIPTION = new Set(["canceled", "incomplete_expired"]);
+
+/** What became of one subscription the village asked Stripe to stop. */
+export type SubscriptionCancel = "cancelled" | "already-ended" | "missing";
+
+/**
+ * Stop one Stripe subscription charging again, now. The erasure's
+ * `product-subscriptions-after-tombstone` step calls this for every
+ * subscription a departed member's purchases hold (server/lib/erasure.ts),
+ * because the village offers a member no door to cancel one themselves and
+ * nothing else would ever stop it.
+ *
+ * IT READS FIRST, then cancels, so a second run is a read and nothing more.
+ * A subscription Stripe says is already over (cancelled in the dashboard, or
+ * by an earlier run of the step) is done, and so is one Stripe has no record
+ * of: neither can charge anybody. Reading the state is the check, because
+ * Stripe's answer to cancelling twice is an error whose wording is not a
+ * contract.
+ *
+ * IT NEVER REFUNDS AND NEVER MOVES A TOKEN. A cancel ends future charges and
+ * leaves every period already paid as it stands. Whether a period is refunded
+ * stays a person's call in Stripe, which the renewal alarm in
+ * `settleProductPurchase` asks for when a charge lands after the account is
+ * gone.
+ *
+ * IT THROWS on anything else: Stripe not connected, an error, a timeout.
+ * The erasure records the step as stopped and the sweep is resumed, so the
+ * failure is loud and retried and never recorded as done.
+ */
+export async function cancelSubscription(subscriptionId: string): Promise<SubscriptionCancel> {
+  const id = String(subscriptionId ?? "").trim();
+  if (!id) throw new Error("No subscription id to cancel");
+  const key = secretValue("stripe_secret_key");
+  if (!key) {
+    throw new Error(
+      `Stripe is not connected, so subscription ${id} cannot be cancelled and may keep charging. ` +
+        "Connect Stripe in Admin, Integrations, and the next retry of this erasure cancels it",
+    );
+  }
+  const url = `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(id)}`;
+  const ask = async (method: "GET" | "DELETE"): Promise<{ missing: boolean; status: string | null }> => {
+    const verb = method === "GET" ? "read" : "cancel";
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (err: any) {
+      throw new Error(`Stripe could not ${verb} subscription ${id}: ${err?.message ?? err}`);
+    }
+    const data: any = await res.json().catch(() => null);
+    if (res.status === 404 || data?.error?.code === "resource_missing") return { missing: true, status: null };
+    if (!res.ok) throw new Error(`Stripe could not ${verb} subscription ${id}: ${data?.error?.message ?? res.status}`);
+    return { missing: false, status: data?.status == null ? null : String(data.status) };
+  };
+  const now = await ask("GET");
+  if (now.missing) return "missing";
+  if (now.status && ENDED_SUBSCRIPTION.has(now.status)) return "already-ended";
+  const after = await ask("DELETE");
+  return after.missing ? "missing" : "cancelled";
+}
+
 // ── Signature verification (Stripe v1 scheme, on the RAW body) ──────────────
 
 export function verifyStripeSignature(rawBody: Buffer | string, sigHeader: string | undefined, secret: string): boolean {
