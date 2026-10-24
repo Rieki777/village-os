@@ -271,10 +271,14 @@ export async function makeAddress(pool: Pool, who: { userId: string }, origin: s
   return feedUrl(origin, raw);
 }
 
-/** The address answers nothing any more. */
-export async function stopAddress(pool: Pool, who: { userId: string }): Promise<void> {
+/**
+ * The address answers nothing any more. Hands back how many it stopped, 1 or
+ * 0, so a caller that ends a member's reach (`endAgentReach`) can say whether
+ * there was one.
+ */
+export async function stopAddress(pool: Pool, who: { userId: string }): Promise<number> {
   const no = await memberNo(pool, who.userId);
-  if (no != null) await store.deleteKey(pool, no);
+  return no == null ? 0 : store.deleteKey(pool, no);
 }
 
 // ── The feed ────────────────────────────────────────────────────────────────

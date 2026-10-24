@@ -24,12 +24,14 @@
 import { revokeLiveTokensOf } from "../repos/agentTokens";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import { revokeOpenInvitesOf } from "../repos/memberInvites";
 import { lockSessionFieldsForUpdate } from "../repos/users";
 import { removeInbox } from "./agentInbox";
 import { recordEvent } from "./events";
 import { revokeFeedTokens } from "./icsFeed";
 import { removeMemberKey } from "./memberSecrets";
 import { isTombstone } from "./oauthAccounts";
+import { stopAddress } from "./sessionCalendar";
 
 export const TOKEN_PREFIX = "vat_";
 
@@ -301,11 +303,15 @@ export interface AgentReachEnded {
   inbox: boolean;
   /** The member's own model key removed. */
   key: boolean;
+  /** Open invitation links withdrawn. A link somebody already used stays: it records an admission. */
+  invites: number;
+  /** The circle calendar's private address stopped, 1 or 0. */
+  circleFeed: number;
 }
 
-const NOTHING_ENDED: AgentReachEnded = { agentTokens: 0, feeds: 0, inbox: false, key: false };
+const NOTHING_ENDED: AgentReachEnded = { agentTokens: 0, feeds: 0, inbox: false, key: false, invites: 0, circleFeed: 0 };
 
-/** What the audit lines say ended the feed, the inbox and the key. */
+/** What the audit lines say ended the feeds, the inbox, the key and the links. */
 const ENDED_BY = "a new password or a session revoke ended it";
 
 /** Thrown once every part was tried and one or more could not be ended. */
@@ -324,7 +330,7 @@ export class AgentReachNotEnded extends Error {
  * End everything a signed-in session can leave standing for an agent, and say
  * what ended (adversarial round 1, findings 0 and 33).
  *
- * A token is one of four. A stolen session can also mint a private calendar
+ * A token is one of six. A stolen session can also mint a private calendar
  * feed address, which never expires and serves the member's own layers; point
  * the agent inbox at a host it owns, so the week ahead, the weekly digest and
  * every introduction keep arriving there signed; and store a model key on an
@@ -332,14 +338,26 @@ export class AgentReachNotEnded extends Error {
  * prompt, the member's own note among it, to that host. All four stood past
  * the reset that answered the theft until this ended them.
  *
+ * Two more act in the member's name (adversarial round 3, finding 7). A
+ * session holding `member.vouch` can make up to twenty invitation links, and
+ * each one admits a stranger on the member's vouch for fourteen days, in an
+ * invite-only village too, where a link is the only way in. And it can make
+ * the circle calendar's private address, which never expires and serves the
+ * members-only meetings of the circles the member follows. Open links are
+ * withdrawn; a link somebody already used made an account and stays the
+ * record of that admission, with the arrival vouch it recorded.
+ *
  * It only calls the functions that already end each one, so this file grows
  * no SQL: `revokeAllTokens`, `revokeFeedTokens` (lib/icsFeed.ts),
- * `removeInbox` (lib/agentInbox.ts, which also drops the queue) and
- * `removeMemberKey` (lib/memberSecrets.ts). The member's own notes, drafts and
- * agent profile stay: a reset ends access, never what the member wrote.
+ * `removeInbox` (lib/agentInbox.ts, which also drops the queue),
+ * `removeMemberKey` (lib/memberSecrets.ts), `revokeOpenInvitesOf`
+ * (repos/memberInvites.ts) and `stopAddress` (lib/sessionCalendar.ts). The
+ * member's own notes, drafts and agent profile stay: a reset ends access,
+ * never what the member wrote. The member can make links and an address
+ * again from the session the reset hands back.
  *
  * Every part is tried even when an earlier one throws, so one bad table never
- * leaves the other three standing. Then, if any failed, it throws
+ * leaves the others standing. Then, if any failed, it throws
  * `AgentReachNotEnded` naming them. Idempotent: a second run ends nothing.
  */
 export async function endAgentReach(pool: Pool, userId: string): Promise<AgentReachEnded> {
@@ -359,6 +377,8 @@ export async function endAgentReach(pool: Pool, userId: string): Promise<AgentRe
     feeds: await part("calendar feed", () => revokeFeedTokens(pool, userId), 0),
     inbox: await part("agent inbox", () => removeInbox(pool, userId, ENDED_BY), false),
     key: await part("model key", () => removeMemberKey(pool, userId), false),
+    invites: await part("invitation links", () => revokeOpenInvitesOf(pool, userId), 0),
+    circleFeed: await part("circle calendar address", () => stopAddress(pool, { userId }), 0),
   };
   const line = { actorUserId: userId, actorKind: "system" as const, audience: "admin" as const };
   if (ended.feeds) {
@@ -367,12 +387,26 @@ export async function endAgentReach(pool: Pool, userId: string): Promise<AgentRe
   if (ended.key) {
     await recordEvent(pool, { ...line, kind: "agent_key", text: `own assistant key removed: ${ENDED_BY}`, entityType: "member_key", entityRef: userId });
   }
+  if (ended.invites) {
+    const links = ended.invites === 1 ? "1 open invitation link" : `${ended.invites} open invitation links`;
+    await recordEvent(pool, { ...line, kind: "invites_withdrawn", text: `${links} withdrawn: ${ENDED_BY}`, entityType: "member_invites", entityRef: userId });
+  }
+  if (ended.circleFeed) {
+    await recordEvent(pool, { ...line, kind: "calendar_feed_revoked", text: `circle calendar address stopped: ${ENDED_BY}`, entityType: "calendar", entityRef: "circles" });
+  }
   if (failed.length) throw new AgentReachNotEnded(failed, ended, cause);
   return ended;
 }
 
 function addEnded(a: AgentReachEnded, b: AgentReachEnded): AgentReachEnded {
-  return { agentTokens: a.agentTokens + b.agentTokens, feeds: a.feeds + b.feeds, inbox: a.inbox || b.inbox, key: a.key || b.key };
+  return {
+    agentTokens: a.agentTokens + b.agentTokens,
+    feeds: a.feeds + b.feeds,
+    inbox: a.inbox || b.inbox,
+    key: a.key || b.key,
+    invites: a.invites + b.invites,
+    circleFeed: a.circleFeed + b.circleFeed,
+  };
 }
 
 /**
@@ -403,8 +437,9 @@ function addEnded(a: AgentReachEnded, b: AgentReachEnded): AgentReachEnded {
  * close that themselves: they write under the member's row lock only while
  * the session's tokenVersion is still the row's (`whileSessionHolds`), so
  * such a write either lands before the bump, and the second end removes it,
- * or is refused. A `vat_` token or a calendar feed minted in that window is
- * not covered by this (adversarial round 2, finding 15).
+ * or is refused. A `vat_` token, a calendar feed, an invitation link or a
+ * circle calendar address made in that window is not covered by this
+ * (adversarial round 2, finding 15; round 3, finding 7).
  */
 export async function withAgentReachEnded<T>(
   pool: Pool,

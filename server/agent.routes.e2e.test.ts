@@ -714,7 +714,7 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     expect(revoke.json.agentTokensRevoked).toBe(2);
     await expectAudited(fay.id, 2);
     await expectReachEnded(fay.id, fayFeed, "the admin's revoke sessions");
-    expect(revoke.json.agentReachEnded, "the answer says what else ended").toEqual({ agentTokens: 2, feeds: 1, inbox: true, key: true });
+    expect(revoke.json.agentReachEnded, "the answer says what else ended").toEqual({ agentTokens: 2, feeds: 1, inbox: true, key: true, invites: 0, circleFeed: 0 });
     expect((await call("GET", "/api/profile", undefined, fay.token)).status, "the session itself still dies").toBe(401);
     expect((await call("GET", "/api/agent/v1/me", undefined, bystander)).status, "another member's token died with this revoke").toBe(200);
     await expectReachStands(hal.id, halFeed, "this revoke");

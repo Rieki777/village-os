@@ -19,8 +19,12 @@ import { usersRepo } from "../repos/users";
 import { endAgentReach, mintToken, revokeAllTokens, revokeToken, verifyToken, withAgentReachEnded } from "./agentTokens";
 import { enqueueAgentDelivery, getInbox, setInbox } from "./agentInbox";
 import { mintFeedToken, resolveFeedToken } from "./icsFeed";
+import { makeInviteDoor } from "./inviteDoor";
+import { INVITE_REFUSALS, hashInviteToken, mintInviteToken } from "./invites";
 import { MEMBER_SECRETS_ENV, memberKeyView, storeMemberKey } from "./memberSecrets";
 import { makeSetPasswordToken, readSetPasswordToken, setPasswordLinkRefusal } from "./memberTokens";
+import { feedFor, makeAddress } from "./sessionCalendar";
+import { claimInvite, createInvite } from "../repos/memberInvites";
 
 const configured = testDbConfigured();
 
@@ -118,8 +122,66 @@ describe.skipIf(!configured)("revokeAllTokens", () => {
  * password and an admin's revoke sessions end all four.
  */
 
+/*
+ * AND TWO DOORS THAT ACT IN THE MEMBER'S NAME (adversarial round 3, finding
+ * 7). A stolen session that holds `member.vouch` can make invitation links,
+ * and each one admits a stranger on the member's vouch for fourteen days,
+ * in an invite-only village too. It can also make the circle calendar's
+ * private address, which never expires. Both stood past a new password and
+ * an admin's revoke sessions. A link somebody already used made an account
+ * and stays the record of that admission.
+ */
+
+let inviteSeq = 0;
+
+/** One invitation link, as `POST /api/invites` makes it. */
+async function link(inviter: string): Promise<{ id: string; token: string }> {
+  const token = mintInviteToken();
+  const id = `inv-reach-${String(++inviteSeq).padStart(3, "0")}`;
+  await createInvite(pool, { id, tokenHash: hashInviteToken(token), inviterUserId: inviter, days: 14 });
+  return { id, token };
+}
+
+/** The invitation door both sign-up routes hold, over the real users repository. */
+const inviteDoor = () => makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+
+const ORIGIN = "https://village.example";
+
+/**
+ * The circle feed's door with the module open to members. The member is
+ * answered as an admin, whom the feed serves without asking about admission,
+ * so the one thing between a key and a calendar body here is the key's row.
+ */
+const circleFeed = {
+  circles: () => [],
+  lifecycle: () => "members",
+  villageName: () => "Test village",
+  origin: () => ORIGIN,
+  member: async (id: string) => {
+    const found = await usersRepo(pool).byId(id);
+    return found ? { ...found, role: "admin" } : null;
+  },
+};
+
+/** The key in a circle calendar address. */
+const keyIn = (address: string): string => new URL(address).searchParams.get("key") ?? "";
+
+/** A circle calendar address for this member, as `POST FOLLOW_KEY_API` makes it. */
+const circleAddress = async (userId: string): Promise<string> => keyIn(await makeAddress(pool, { userId }, ORIGIN));
+
+interface Planted {
+  token: string;
+  feed: string;
+  /** An open invitation link's token. */
+  invite: string;
+  /** A link somebody already used. */
+  used: string;
+  /** The circle calendar address's key. */
+  address: string;
+}
+
 /** Everything a signed-in session can plant for an agent, written the way the routes write it where that needs only the database. */
-async function plantReach(userId: string): Promise<{ token: string; feed: string }> {
+async function plantReach(userId: string): Promise<Planted> {
   // A member the village still holds. The inbox and key writes refuse a holder
   // with no row, the way they refuse a tombstone, so a fixture without one
   // would plant nothing and the zeros below would prove nothing.
@@ -134,23 +196,34 @@ async function plantReach(userId: string): Promise<{ token: string; feed: string
     "INSERT INTO member_llm_keys (user_id, provider, base_url, model, ciphertext, iv, tag, last4) VALUES (?,?,?,?,?,?,?,?)",
     [userId, "openai_compatible", "https://attacker.example", "m", "cipher", "iv", "tag", "abcd"],
   );
-  return { token, feed };
+  const invite = await link(userId);
+  const used = await link(userId);
+  expect(await claimInvite(pool, used.id, `${userId}-arrived`), "the used link must really be used, or its row below proves nothing").toBe(userId);
+  const address = await circleAddress(userId);
+  return { token, feed, invite: invite.token, used: used.id, address };
 }
 
-/** Which of the four still stand for this member. */
-async function standing(userId: string, planted: { token: string; feed: string }) {
+/** Which of them still stand for this member. */
+async function standing(userId: string, planted: Planted) {
   const [queued] = await q("SELECT COUNT(*) AS n FROM agent_deliveries WHERE inbox_id = ?", [`inb-${userId}`]);
+  const [used] = await q("SELECT used_by_user_id, revoked_at FROM member_invites WHERE id = ?", [planted.used]);
   return {
     token: (await verifyToken(pool, planted.token)).ok,
     feed: (await resolveFeedToken(pool, planted.feed)) === userId,
     inbox: (await getInbox(pool, userId)) !== null,
     queued: Number(queued.n),
     key: (await memberKeyView(pool, userId)) !== null,
+    invite: (await inviteDoor().resolve(planted.invite)).ok,
+    address: (await feedFor(pool, planted.address, circleFeed)) !== null,
+    // Not something that acts: the record that a link admitted somebody.
+    usedLinkKept: used?.used_by_user_id === `${userId}-arrived` && used?.revoked_at === null,
   };
 }
 
-const ALL_STANDING = { token: true, feed: true, inbox: true, queued: 1, key: true };
-const NONE_STANDING = { token: false, feed: false, inbox: false, queued: 0, key: false };
+const ALL_STANDING = { token: true, feed: true, inbox: true, queued: 1, key: true, invite: true, address: true, usedLinkKept: true };
+const NONE_STANDING = { token: false, feed: false, inbox: false, queued: 0, key: false, invite: false, address: false, usedLinkKept: true };
+/** What `endAgentReach` answers when nothing stood. */
+const ENDED_NONE = { agentTokens: 0, feeds: 0, inbox: false, key: false, invites: 0, circleFeed: 0 };
 
 /** A pool whose connections drop: the token revoke (a transaction) throws, and every plain query still answers. */
 function droppingConnections(): mysql.Pool {
@@ -161,22 +234,31 @@ function droppingConnections(): mysql.Pool {
 }
 
 describe.skipIf(!configured)("endAgentReach", () => {
-  it("ends the tokens, the private calendar feed, the inbox with its queue and the model key, and nobody else's", async () => {
+  it("ends the tokens, the private calendar feed, the inbox with its queue, the model key, the open invitation links and the circle calendar address, and nobody else's", async () => {
     const mia = await plantReach("usr-reach-mia");
     const ned = await plantReach("usr-reach-ned");
     expect(await standing("usr-reach-mia", mia)).toEqual(ALL_STANDING);
 
-    expect(await endAgentReach(pool, "usr-reach-mia")).toEqual({ agentTokens: 1, feeds: 1, inbox: true, key: true });
+    const ended = await endAgentReach(pool, "usr-reach-mia");
 
     expect(await standing("usr-reach-mia", mia), "something outlived the end of the agent's reach").toEqual(NONE_STANDING);
     expect(await standing("usr-reach-ned", ned), "another member's agent was ended").toEqual(ALL_STANDING);
+    expect(ended).toEqual({ ...ENDED_NONE, agentTokens: 1, feeds: 1, inbox: true, key: true, invites: 1, circleFeed: 1 });
+    // The refusal a stranger holding the link reads is the one a withdrawn link gets.
+    expect(await inviteDoor().resolve(mia.invite)).toEqual({ ok: false, error: INVITE_REFUSALS.revoked });
 
-    // The audit says the platform ended the inbox, the feed and the key. It never credits the member with pressing Remove.
+    // The audit says the platform ended each one. It never credits the member with pressing Remove.
     const lines = await q(
-      "SELECT kind, text, actor_kind FROM health_events WHERE actor_user_id = ? AND kind IN ('agent_inbox','calendar_feed_revoked','agent_key') ORDER BY kind",
+      "SELECT kind, entity_ref, text, actor_kind FROM health_events WHERE actor_user_id = ? AND kind IN ('agent_inbox','calendar_feed_revoked','agent_key','invites_withdrawn') ORDER BY kind, entity_ref",
       ["usr-reach-mia"],
     );
-    expect(lines.map((l) => l.kind)).toEqual(["agent_inbox", "agent_key", "calendar_feed_revoked"]);
+    expect(lines.map((l) => `${l.kind}:${l.entity_ref}`)).toEqual([
+      "agent_inbox:inb-usr-reach-mia",
+      "agent_key:usr-reach-mia",
+      "calendar_feed_revoked:circles",
+      "calendar_feed_revoked:feed",
+      "invites_withdrawn:usr-reach-mia",
+    ]);
     for (const l of lines) {
       expect(l.actor_kind, l.text).toBe("system");
       expect(l.text).toContain("a new password or a session revoke");
@@ -184,8 +266,8 @@ describe.skipIf(!configured)("endAgentReach", () => {
   });
 
   it("is safe to call again: a second run ends nothing", async () => {
-    expect(await endAgentReach(pool, "usr-reach-mia")).toEqual({ agentTokens: 0, feeds: 0, inbox: false, key: false });
-    expect(await endAgentReach(pool, "usr-reach-nobody")).toEqual({ agentTokens: 0, feeds: 0, inbox: false, key: false });
+    expect(await endAgentReach(pool, "usr-reach-mia")).toEqual(ENDED_NONE);
+    expect(await endAgentReach(pool, "usr-reach-nobody")).toEqual(ENDED_NONE);
   });
 
   it("still ends every other part when one throws, then names the part that did not end", async () => {
@@ -193,12 +275,32 @@ describe.skipIf(!configured)("endAgentReach", () => {
     await expect(endAgentReach(droppingConnections(), "usr-reach-ola")).rejects.toMatchObject({
       name: "AgentReachNotEnded",
       parts: ["agent tokens"],
-      ended: { agentTokens: 0, feeds: 1, inbox: true, key: true },
+      ended: { ...ENDED_NONE, feeds: 1, inbox: true, key: true, invites: 1, circleFeed: 1 },
     });
     expect(await standing("usr-reach-ola", ola)).toEqual({ ...NONE_STANDING, token: true });
     // A second run on a healthy pool finishes it.
-    expect(await endAgentReach(pool, "usr-reach-ola")).toEqual({ agentTokens: 1, feeds: 0, inbox: false, key: false });
+    expect(await endAgentReach(pool, "usr-reach-ola")).toEqual({ ...ENDED_NONE, agentTokens: 1 });
     expect(await standing("usr-reach-ola", ola)).toEqual(NONE_STANDING);
+  });
+
+  it("a new password and an admin's revoke sessions each withdraw the open links and stop the circle address, and leave another member's", async () => {
+    const bump = (id: string) => usersRepo(pool).update(id, (u) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; });
+    const una = await plantReach("usr-reach-una");
+    const vic = await plantReach("usr-reach-vic");
+    const wes = await plantReach("usr-reach-wes");
+
+    // set-password: end, bump, end.
+    const reset = await withAgentReachEnded(pool, "usr-reach-una", () => bump("usr-reach-una"));
+    expect(await standing("usr-reach-una", una), "a new password left a door open").toEqual(NONE_STANDING);
+    expect(reset.ended).toMatchObject({ invites: 1, circleFeed: 1 });
+
+    // revoke-sessions: bump, then end once.
+    await bump("usr-reach-vic");
+    const revoked = await endAgentReach(pool, "usr-reach-vic");
+    expect(await standing("usr-reach-vic", vic), "an admin's revoke left a door open").toEqual(NONE_STANDING);
+    expect(revoked).toMatchObject({ invites: 1, circleFeed: 1 });
+
+    expect(await standing("usr-reach-wes", wes), "another member's links or address ended with them").toEqual(ALL_STANDING);
   });
 });
 
@@ -233,15 +335,23 @@ describe.skipIf(!configured)("withAgentReachEnded", () => {
     expect(await standing("usr-reach-pia", pia)).toEqual(NONE_STANDING);
   });
 
-  it("ends again after the change, so a token minted between the two calls dies too", async () => {
+  it("ends again after the change, so a token, a link or an address made between the two calls dies too", async () => {
     await plantReach("usr-reach-quy");
     let late = "";
+    let lateLink = "";
+    let lateAddress = "";
     const { ended } = await withAgentReachEnded(pool, "usr-reach-quy", async () => {
       late = (await mint("usr-reach-quy", "minted while the password changed")).token;
+      lateLink = (await link("usr-reach-quy")).token;
+      lateAddress = await circleAddress("usr-reach-quy");
     });
-    expect(ended.agentTokens, "both tokens, one from each side of the change").toBe(2);
     const verdict = await verifyToken(pool, late);
     expect(verdict.ok ? null : verdict.reason, "a token minted during the change outlived it").toBe("revoked");
+    expect(await inviteDoor().resolve(lateLink), "a link made during the change outlived it").toEqual({ ok: false, error: INVITE_REFUSALS.revoked });
+    expect(await feedFor(pool, lateAddress, circleFeed), "an address made during the change outlived it").toBeNull();
+    expect(ended.agentTokens, "both tokens, one from each side of the change").toBe(2);
+    expect(ended.invites, "both links, one from each side of the change").toBe(2);
+    expect(ended.circleFeed, "both addresses, one from each side of the change").toBe(2);
   });
 
   it("after the change it never throws: it tries again, and a second failure is logged and recorded for an admin", async () => {

@@ -8260,7 +8260,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.json({ success: true, emailed });
   });
 
-  /** Revoke every session (S1's tokenVersion lever) and all the member's agent holds: tokens, private calendar feed, inbox, own model key. */
+  /** Revoke every session (S1's tokenVersion lever) and what a session left standing: agent tokens, private calendar feed, inbox, own model key, open invitation links, circle calendar address. */
   app.post("/api/admin/users/:id/revoke-sessions", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const target = await members.byId(req.params.id);
