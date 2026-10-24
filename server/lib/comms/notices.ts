@@ -21,6 +21,14 @@ import type { NotifyInput, NotifyResult } from "../notify";
 type Notify = (input: NotifyInput) => Promise<NotifyResult>;
 
 /**
+ * The key of the day-21 hand-off for one walker's enrollment: the bell row's
+ * dedupe key, and the idempotency key of the inbox email sent instead when the
+ * path's contact person has no account. The erasure reads it back to find the
+ * hand-off that names a departed walker (server/lib/erasure.ts).
+ */
+export const pathHandoffKey = (enrollmentId: string): string => `comms_path_handoff:${enrollmentId}`;
+
+/**
  * Ask a path's contact person to write to somebody who has walked it for
  * three weeks. The first name and the path's name are all the notice
  * carries: the address and the rest live on the People screen, which only
@@ -35,7 +43,7 @@ export function noticePathHandoff(
     type: "comms_path_handoff",
     title: `${input.firstName} has been on the ${input.pathName} path for three weeks. Write to them.`,
     link: input.link ?? null,
-    dedupeKey: `comms_path_handoff:${input.enrollmentId}`,
+    dedupeKey: pathHandoffKey(input.enrollmentId),
   });
 }
 

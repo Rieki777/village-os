@@ -763,7 +763,13 @@ The retention sweep never deletes an unstamped row, at any age.
   ends, each living delegator is told through the notification spine, and
   open ballots are derived again, so no vote copied from them stays cast.
   Ventures go. Investor path facts, stays and orders stay as records and lose
-  their words and the payer's address. The header of `server/lib/erasure.ts`
+  their words and the payer's address. A ballot about them (a vote to seat
+  them, or to take a role back) keeps its subject, votes and outcome and stops
+  naming them in its title, document and notices, and its public pulse lines
+  go (`ballot-words-after-tombstone`); the day-21 path hand-off that names
+  them to a path's contact person loses its words; and a living person's own
+  housing alert, or guest contact, at an address they also typed stays that
+  person's. The header of `server/lib/erasure.ts`
   says why each kept thing is kept, and
   `server/lib/erasure.ownedRows.resume.test.ts` stops each of these steps
   part way and resumes it.
