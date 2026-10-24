@@ -82,6 +82,7 @@ import {
   noteAuthor,
   noticesAfterSettle,
   releaseForDiscard,
+  sentTensionsFor,
   settleForClose,
   takenBySession,
   writeTakes,
@@ -90,6 +91,7 @@ import {
 } from "./sessionLibrary";
 import { exportRhythmsFor, forgetRhythmsFor } from "./sessionRhythm";
 import { exportFollowsFor, forgetFollowsFor } from "./sessionCalendar";
+import { exportReviewsFor, forgetReviewsFor } from "./sessionDecisions";
 import { taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
 import { LIBRARY_REFUSALS, cleanIds } from "../../shared/sessionLibrary";
 import { numberVar, stringVar } from "./variables";
@@ -1715,13 +1717,14 @@ export function selectCarried(
   current: readonly SessionItem[],
   prevId: number,
   fromLibrary: ReadonlySet<number> = new Set(),
+  sent: ReadonlySet<number> = new Set(),
 ): { actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } {
   const broughtOver = new Set(current.filter((i) => i.fromSessionId === prevId).map((i) => i.title.toLowerCase()));
   const asTitle = (text: string) => (cleanLine(text, SESSION_LIMITS.agendaTitle) ?? "").toLowerCase();
   return {
     actions: prev.entries.filter((e) => e.kind === "action" && e.status === "open"),
     backlog: prev.entries.filter(
-      (e) => ((e.kind === "tension" && e.status !== "done") || e.status === "parked") && !broughtOver.has(asTitle(e.text)),
+      (e) => ((e.kind === "tension" && e.status !== "done") || e.status === "parked") && !broughtOver.has(asTitle(e.text)) && !sent.has(e.id),
     ),
     parkedItems: [...prev.items]
       .sort((a, b) => a.position - b.position)
@@ -1764,7 +1767,7 @@ export async function buildView(
   s: SessionRec,
   viewer: Viewer,
   joined: boolean,
-  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null; lapseContext?: () => LapseContext },
+  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null; lapseContext?: () => LapseContext; circles?: () => { id: string; name: string }[] },
   now = Date.now(),
 ): Promise<SessionView> {
   const roles = rolesIn(s, viewer);
@@ -1834,6 +1837,12 @@ export async function buildView(
   // receives no answers to count from, and would read everyone as waiting.
   const waiting: ConsentWaiting = open && seesAnswers ? consentWaiting(peopleOut, entries, responsesOut) : {};
 
+  // Tensions sent on to a circle's agenda items (0279): this room says where each went, and "From last time" offers it no more.
+  const tensionIds = [...entries, ...(carriedFrom?.entries ?? [])].filter((e) => e.kind === "tension").map((e) => e.id);
+  const sent = await sentTensionsFor(pool, tensionIds);
+  const sentTensions: SessionView["sentTensions"] = {};
+  for (const e of entries) if (sent.has(e.id)) sentTensions[String(e.id)] = { circleName: ctx.circleName(sent.get(e.id) ?? null) };
+
   let carried: SessionView["carried"] = null;
   if (carriedFrom) {
     const picked = selectCarried(
@@ -1841,6 +1850,7 @@ export async function buildView(
       items,
       carriedFrom.prev.id,
       carriedFrom.fromLibrary,
+      new Set(sent.keys()),
     );
     if (picked.actions.length || picked.backlog.length || picked.parkedItems.length) {
       carried = { sessionId: carriedFrom.prev.id, title: carriedFrom.prev.title, ...picked };
@@ -1877,6 +1887,9 @@ export async function buildView(
     seats: seats.options,
     arrival: s.status === "closed" ? (s.summary?.arrival ?? null) : null,
     carried,
+    sentTensions,
+    // Only somebody in the room, an admin, or somebody From last time is shown to sends a tension on, so only they are handed the list.
+    circleOptions: joined || viewer.admin || carriedFrom != null ? (ctx.circles?.() ?? []) : [],
     circleTasks: circle.cards,
     circleLastMetAt: circle.lastMetAt,
     me: { userId: viewer.no ?? 0, joined, facilitates: roles.facilitates, secretary: roles.secretary, admin: viewer.admin },
@@ -1938,9 +1951,11 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   rhythmsSet: Record<string, unknown>[];
   circlesFollowed: Record<string, unknown>[];
   calendarAddress: Record<string, unknown>[];
+  ownCalendarsAttached: Record<string, unknown>[];
+  reviewsSet: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -2015,8 +2030,9 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   const { library, libraryTakes, libraryNotes } = await exportLibraryFor(pool, no);
   // A circle's rhythm (0271): the ones they set last.
   const rhythmsSet = await exportRhythmsFor(pool, no);
-  const { circlesFollowed, calendarAddress } = await exportFollowsFor(pool, no);
-  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress };
+  const { circlesFollowed, calendarAddress, ownCalendarsAttached } = await exportFollowsFor(pool, no);
+  const reviewsSet = await exportReviewsFor(pool, no);
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet };
 }
 
 /**
@@ -2090,6 +2106,12 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
     // A circle's rhythm (0271): one they set last says it was set by nobody.
     await forgetRhythmsFor(conn, no);
     await forgetFollowsFor(conn, no);
+    // A decision's review (0280): the date and its items go with a decision they wrote.
+    await forgetReviewsFor(
+      conn,
+      no,
+      written.filter((e) => String(e.kind) === "decision").map((e) => Number(e.id)),
+    );
   });
   await repo.deleteMemberNo(pool, no);
 }
