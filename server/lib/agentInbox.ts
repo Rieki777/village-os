@@ -210,14 +210,22 @@ export async function setInbox(pool: Pool, userId: string, rawUrl: unknown, env:
   return { ok: true, inbox, secret };
 }
 
-export async function removeInbox(pool: Pool, userId: string): Promise<boolean> {
+/**
+ * Remove the member's inbox and everything still queued for it.
+ *
+ * `endedBy` names what ended it when the member did not press Remove: a new
+ * password or an admin's revoke sessions (`endAgentReach`,
+ * server/lib/agentTokens.ts). The audit line then says the platform did it,
+ * and never credits the member with a removal somebody else caused.
+ */
+export async function removeInbox(pool: Pool, userId: string, endedBy?: string): Promise<boolean> {
   const inbox = await getInbox(pool, userId);
   if (!inbox) return false;
   await pool.query("DELETE FROM agent_deliveries WHERE inbox_id = ?", [inbox.id]);
   await pool.query("DELETE FROM agent_inboxes WHERE user_id = ?", [userId]);
   await recordEvent(pool, {
-    kind: "agent_inbox", text: "removed their agent inbox",
-    actorUserId: userId, actorKind: "agent", entityType: "agent_inbox", entityRef: inbox.id, audience: "admin",
+    kind: "agent_inbox", text: endedBy ? `agent inbox removed: ${endedBy}` : "removed their agent inbox",
+    actorUserId: userId, actorKind: endedBy ? "system" : "agent", entityType: "agent_inbox", entityRef: inbox.id, audience: "admin",
   });
   return true;
 }

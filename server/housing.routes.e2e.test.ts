@@ -873,7 +873,14 @@ describe.skipIf(!DB_CONFIGURED)("housing routes: the guards nothing was testing"
     expect(made.status).toBe(200);
     await settle(1200); // let the create route's own sends land and be counted
     const address = `deleted-hs-gone-${PORT}@anonymized.invalid`;
-    expect(await scrubReservationsOf(pool, { userId: `hs-gone-${PORT}`, emailKey: askEmail, name: "A departed member", address })).toBe(1);
+    // One request, matched by the address it was sent under, and the admin audit line the route wrote for it.
+    expect(await scrubReservationsOf(pool, { userId: `hs-gone-${PORT}`, emailKey: askEmail, name: "A departed member", address })).toEqual({
+      scrubbed: 1,
+      addressOnly: 0,
+      auditLines: 1,
+    });
+    const [audit] = await pool.query<any[]>("SELECT text FROM health_events WHERE entity_type = 'housing_reservation' AND entity_ref = ?", [made.json.id]); // module-review-ok: reading back the audit line the route wrote, which is the assertion
+    expect(audit, "the founder's history keeps what was asked for and loses who asked").toEqual([{ text: "A departed member asked for a casita in eraseKey" }]);
 
     const before = resendAttempts();
     const reserved = await call("PUT", `/api/housing/reservations/${made.json.id}/status`, { body: { status: "reserved" } });
