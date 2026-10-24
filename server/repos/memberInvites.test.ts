@@ -16,7 +16,7 @@ import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/
 import { hashInviteToken, inviteStanding, mintInviteToken } from "../lib/invites";
 import {
   claimInvite,
-  createInvite,
+  createInviteOn,
   inviteByHash,
   invitesBy,
   openInviteCount,
@@ -35,7 +35,12 @@ const nextId = () => `inv-t-${String(++seq).padStart(3, "0")}`;
 async function made(inviter: string, days = 14): Promise<{ id: string; token: string }> {
   const token = mintInviteToken();
   const id = nextId();
-  await createInvite(pool, { id, tokenHash: hashInviteToken(token), inviterUserId: inviter, days });
+  const conn = await pool.getConnection();
+  try {
+    await createInviteOn(conn, { id, tokenHash: hashInviteToken(token), inviterUserId: inviter, days });
+  } finally {
+    conn.release();
+  }
   return { id, token };
 }
 

@@ -25,6 +25,7 @@ import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/
 import { castVote, openBallot } from "../lib/ballots";
 import { acceptDelegations, liveDelegationOf, setDelegation } from "../lib/delegation";
 import { register } from "./delegation";
+import { usersRepo } from "../repos/users";
 
 const configured = testDbConfigured();
 
@@ -128,6 +129,10 @@ describe.skipIf(!configured)("delegation routes (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the crews.test.ts shape
+    // The roster stands in the users table too: an offer is written under the
+    // delegator's own row, at the tokenVersion a session signed now carries
+    // (`whileSessionHolds`), and a member with no row is refused.
+    for (const m of ROSTER) await usersRepo(pool).add({ id: m.id, name: m.name, email: `${m.id}@example.test`, passwordHash: "x", paths: [] });
   });
 
   afterAll(async () => {
@@ -487,5 +492,28 @@ describe.skipIf(!configured)("delegation routes (MySQL)", () => {
     // With no ballot named the answer says so rather than inventing one.
     const wide = await call(handlersFor({ id: "u-cai" }).get("GET /api/governance/concentration")!);
     expect(wide.body.onBallot).toBeNull();
+  });
+
+  /*
+   * THE OFFER IS WRITTEN ONLY WHILE THE SESSION HOLDS (adversarial round 3).
+   * The route hands the write the tokenVersion its session was signed at.
+   * Dot reset her password, so her row and the session it handed back carry
+   * version 2, and a session signed before the reset still carries 1.
+   */
+  it("offers for the session the member's row still carries, and answers 401 with nothing written to one a new password ended", async () => {
+    await clearDelegations();
+    await usersRepo(pool).add({ id: "u-dot", name: "Dot Vale", email: "u-dot@example.test", passwordHash: "x", paths: [] });
+    await usersRepo(pool).update("u-dot", (u) => { u.tokenVersion = 2; });
+    const put = (tokenVersion: number) =>
+      call(handlersFor({ id: "u-dot", tokenVersion } as { id: string }).get("PUT /api/governance/delegation")!, { body: { delegateId: "u-ann" } });
+
+    const ended = await put(1);
+    expect(ended.status, "an offer from a session the reset ended was taken").toBe(401);
+    expect(ended.body).toEqual({ error: "auth_required" });
+    expect(await liveDelegationOf(pool, "u-dot"), "a refused offer was written").toBeNull();
+
+    const current = await put(2);
+    expect(current.status, `the member's current session was refused: ${JSON.stringify(current.body)}`).toBe(200);
+    expect((await liveDelegationOf(pool, "u-dot"))?.delegateId).toBe("u-ann");
   });
 });

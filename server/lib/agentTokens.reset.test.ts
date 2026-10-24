@@ -14,12 +14,20 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
-import { endAgentReach, mintToken, revokeAllTokens, revokeToken, verifyToken, withAgentReachEnded } from "./agentTokens";
-import { enqueueAgentDelivery, getInbox } from "./agentInbox";
+import { provisionTestDb, testDbConfigured, testPool, untilALockIsAwaited, type TestDb } from "../db/testDb";
+import { usersRepo } from "../repos/users";
+import { endAgentReach, mintToken, revokeAllTokens, revokeToken, verifyToken, withAgentReachEnded, type AgentReachEnded } from "./agentTokens";
+import { enqueueAgentDelivery, getInbox, setInbox } from "./agentInbox";
 import { mintFeedToken, resolveFeedToken } from "./icsFeed";
-import { memberKeyView } from "./memberSecrets";
+import { makeInviteDoor } from "./inviteDoor";
+import { INVITE_REFUSALS } from "./invites";
+import { MEMBER_SECRETS_ENV, memberKeyView, storeMemberKey } from "./memberSecrets";
 import { makeSetPasswordToken, readSetPasswordToken, setPasswordLinkRefusal } from "./memberTokens";
+import { feedFor, makeAddress } from "./sessionCalendar";
+import { castVote, openBallot, voteOf } from "./ballots";
+import { VOICE_BACK_NOTICE, acceptDelegations, delegationOf, isCarrying, revokeDelegation, setDelegation } from "./delegation";
+import { claimInvite, openInviteCount } from "../repos/memberInvites";
+import { makeInvite } from "../routes/invites";
 
 const configured = testDbConfigured();
 
@@ -32,6 +40,11 @@ const JON = "usr-reset-jon";
 async function q(sql: string, params: unknown[] = []): Promise<any[]> {
   const [rows] = await pool.query<any[]>(sql, params); // module-review-ok: seeding and reading back the scratch schema this suite provisioned, which is the assertion
   return rows;
+}
+
+/** The tokenVersion a session signed for this member now carries. */
+async function versionOf(userId: string): Promise<number> {
+  return Number((await usersRepo(pool).byId(userId))?.tokenVersion ?? 0);
 }
 
 async function mint(userId: string, name: string): Promise<{ token: string; id: string }> {
@@ -117,8 +130,67 @@ describe.skipIf(!configured)("revokeAllTokens", () => {
  * password and an admin's revoke sessions end all four.
  */
 
+/*
+ * AND TWO DOORS THAT ACT IN THE MEMBER'S NAME (adversarial round 3, finding
+ * 7). A stolen session that holds `member.vouch` can make invitation links,
+ * and each one admits a stranger on the member's vouch for fourteen days,
+ * in an invite-only village too. It can also make the circle calendar's
+ * private address, which never expires. Both stood past a new password and
+ * an admin's revoke sessions. A link somebody already used made an account
+ * and stays the record of that admission.
+ */
+
+/** One invitation link, made the way `POST /api/invites` makes it, for the member's current session. */
+async function link(inviter: string): Promise<{ id: string; token: string }> {
+  const made = await makeInvite(pool, inviter, await versionOf(inviter));
+  if (!made.ok) throw new Error(`the link was refused: ${made.error}`);
+  return { id: made.id, token: made.token };
+}
+
+/** The invitation door both sign-up routes hold, over the real users repository. */
+const inviteDoor = () => makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+
+const ORIGIN = "https://village.example";
+
+/**
+ * The circle feed's door with the module open to members. The member is
+ * answered as an admin, whom the feed serves without asking about admission,
+ * so the one thing between a key and a calendar body here is the key's row.
+ */
+const circleFeed = {
+  circles: () => [],
+  lifecycle: () => "members",
+  villageName: () => "Test village",
+  origin: () => ORIGIN,
+  member: async (id: string) => {
+    const found = await usersRepo(pool).byId(id);
+    return found ? { ...found, role: "admin" } : null;
+  },
+};
+
+/** The key in a circle calendar address. */
+const keyIn = (address: string): string => new URL(address).searchParams.get("key") ?? "";
+
+/** A circle calendar address for this member, as `POST FOLLOW_KEY_API` makes it for their current session. */
+async function circleAddress(userId: string): Promise<string> {
+  const made = await makeAddress(pool, { userId }, ORIGIN, await versionOf(userId));
+  if (!made.ok) throw new Error(`the address was refused: ${made.error}`);
+  return keyIn(made.value);
+}
+
+interface Planted {
+  token: string;
+  feed: string;
+  /** An open invitation link's token. */
+  invite: string;
+  /** A link somebody already used. */
+  used: string;
+  /** The circle calendar address's key. */
+  address: string;
+}
+
 /** Everything a signed-in session can plant for an agent, written the way the routes write it where that needs only the database. */
-async function plantReach(userId: string): Promise<{ token: string; feed: string }> {
+async function plantReach(userId: string): Promise<Planted> {
   // A member the village still holds. The inbox and key writes refuse a holder
   // with no row, the way they refuse a tombstone, so a fixture without one
   // would plant nothing and the zeros below would prove nothing.
@@ -133,23 +205,34 @@ async function plantReach(userId: string): Promise<{ token: string; feed: string
     "INSERT INTO member_llm_keys (user_id, provider, base_url, model, ciphertext, iv, tag, last4) VALUES (?,?,?,?,?,?,?,?)",
     [userId, "openai_compatible", "https://attacker.example", "m", "cipher", "iv", "tag", "abcd"],
   );
-  return { token, feed };
+  const invite = await link(userId);
+  const used = await link(userId);
+  expect(await claimInvite(pool, used.id, `${userId}-arrived`), "the used link must really be used, or its row below proves nothing").toBe(userId);
+  const address = await circleAddress(userId);
+  return { token, feed, invite: invite.token, used: used.id, address };
 }
 
-/** Which of the four still stand for this member. */
-async function standing(userId: string, planted: { token: string; feed: string }) {
+/** Which of them still stand for this member. */
+async function standing(userId: string, planted: Planted) {
   const [queued] = await q("SELECT COUNT(*) AS n FROM agent_deliveries WHERE inbox_id = ?", [`inb-${userId}`]);
+  const [used] = await q("SELECT used_by_user_id, revoked_at FROM member_invites WHERE id = ?", [planted.used]);
   return {
     token: (await verifyToken(pool, planted.token)).ok,
     feed: (await resolveFeedToken(pool, planted.feed)) === userId,
     inbox: (await getInbox(pool, userId)) !== null,
     queued: Number(queued.n),
     key: (await memberKeyView(pool, userId)) !== null,
+    invite: (await inviteDoor().resolve(planted.invite)).ok,
+    address: (await feedFor(pool, planted.address, circleFeed)) !== null,
+    // Not something that acts: the record that a link admitted somebody.
+    usedLinkKept: used?.used_by_user_id === `${userId}-arrived` && used?.revoked_at === null,
   };
 }
 
-const ALL_STANDING = { token: true, feed: true, inbox: true, queued: 1, key: true };
-const NONE_STANDING = { token: false, feed: false, inbox: false, queued: 0, key: false };
+const ALL_STANDING = { token: true, feed: true, inbox: true, queued: 1, key: true, invite: true, address: true, usedLinkKept: true };
+const NONE_STANDING = { token: false, feed: false, inbox: false, queued: 0, key: false, invite: false, address: false, usedLinkKept: true };
+/** What `endAgentReach` answers when nothing stood. */
+const ENDED_NONE = { agentTokens: 0, feeds: 0, inbox: false, key: false, invites: 0, circleFeed: 0, delegation: false };
 
 /** A pool whose connections drop: the token revoke (a transaction) throws, and every plain query still answers. */
 function droppingConnections(): mysql.Pool {
@@ -160,22 +243,31 @@ function droppingConnections(): mysql.Pool {
 }
 
 describe.skipIf(!configured)("endAgentReach", () => {
-  it("ends the tokens, the private calendar feed, the inbox with its queue and the model key, and nobody else's", async () => {
+  it("ends the tokens, the private calendar feed, the inbox with its queue, the model key, the open invitation links and the circle calendar address, and nobody else's", async () => {
     const mia = await plantReach("usr-reach-mia");
     const ned = await plantReach("usr-reach-ned");
     expect(await standing("usr-reach-mia", mia)).toEqual(ALL_STANDING);
 
-    expect(await endAgentReach(pool, "usr-reach-mia")).toEqual({ agentTokens: 1, feeds: 1, inbox: true, key: true });
+    const ended = await endAgentReach(pool, "usr-reach-mia");
 
     expect(await standing("usr-reach-mia", mia), "something outlived the end of the agent's reach").toEqual(NONE_STANDING);
     expect(await standing("usr-reach-ned", ned), "another member's agent was ended").toEqual(ALL_STANDING);
+    expect(ended).toEqual({ ...ENDED_NONE, agentTokens: 1, feeds: 1, inbox: true, key: true, invites: 1, circleFeed: 1 });
+    // The refusal a stranger holding the link reads is the one a withdrawn link gets.
+    expect(await inviteDoor().resolve(mia.invite)).toEqual({ ok: false, error: INVITE_REFUSALS.revoked });
 
-    // The audit says the platform ended the inbox, the feed and the key. It never credits the member with pressing Remove.
+    // The audit says the platform ended each one. It never credits the member with pressing Remove.
     const lines = await q(
-      "SELECT kind, text, actor_kind FROM health_events WHERE actor_user_id = ? AND kind IN ('agent_inbox','calendar_feed_revoked','agent_key') ORDER BY kind",
+      "SELECT kind, entity_ref, text, actor_kind FROM health_events WHERE actor_user_id = ? AND kind IN ('agent_inbox','calendar_feed_revoked','agent_key','invites_withdrawn') ORDER BY kind, entity_ref",
       ["usr-reach-mia"],
     );
-    expect(lines.map((l) => l.kind)).toEqual(["agent_inbox", "agent_key", "calendar_feed_revoked"]);
+    expect(lines.map((l) => `${l.kind}:${l.entity_ref}`)).toEqual([
+      "agent_inbox:inb-usr-reach-mia",
+      "agent_key:usr-reach-mia",
+      "calendar_feed_revoked:circles",
+      "calendar_feed_revoked:feed",
+      "invites_withdrawn:usr-reach-mia",
+    ]);
     for (const l of lines) {
       expect(l.actor_kind, l.text).toBe("system");
       expect(l.text).toContain("a new password or a session revoke");
@@ -183,8 +275,8 @@ describe.skipIf(!configured)("endAgentReach", () => {
   });
 
   it("is safe to call again: a second run ends nothing", async () => {
-    expect(await endAgentReach(pool, "usr-reach-mia")).toEqual({ agentTokens: 0, feeds: 0, inbox: false, key: false });
-    expect(await endAgentReach(pool, "usr-reach-nobody")).toEqual({ agentTokens: 0, feeds: 0, inbox: false, key: false });
+    expect(await endAgentReach(pool, "usr-reach-mia")).toEqual(ENDED_NONE);
+    expect(await endAgentReach(pool, "usr-reach-nobody")).toEqual(ENDED_NONE);
   });
 
   it("still ends every other part when one throws, then names the part that did not end", async () => {
@@ -192,12 +284,32 @@ describe.skipIf(!configured)("endAgentReach", () => {
     await expect(endAgentReach(droppingConnections(), "usr-reach-ola")).rejects.toMatchObject({
       name: "AgentReachNotEnded",
       parts: ["agent tokens"],
-      ended: { agentTokens: 0, feeds: 1, inbox: true, key: true },
+      ended: { ...ENDED_NONE, feeds: 1, inbox: true, key: true, invites: 1, circleFeed: 1 },
     });
     expect(await standing("usr-reach-ola", ola)).toEqual({ ...NONE_STANDING, token: true });
     // A second run on a healthy pool finishes it.
-    expect(await endAgentReach(pool, "usr-reach-ola")).toEqual({ agentTokens: 1, feeds: 0, inbox: false, key: false });
+    expect(await endAgentReach(pool, "usr-reach-ola")).toEqual({ ...ENDED_NONE, agentTokens: 1 });
     expect(await standing("usr-reach-ola", ola)).toEqual(NONE_STANDING);
+  });
+
+  it("a new password and an admin's revoke sessions each withdraw the open links and stop the circle address, and leave another member's", async () => {
+    const bump = (id: string) => usersRepo(pool).update(id, (u) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; });
+    const una = await plantReach("usr-reach-una");
+    const vic = await plantReach("usr-reach-vic");
+    const wes = await plantReach("usr-reach-wes");
+
+    // set-password: end, bump, end.
+    const reset = await withAgentReachEnded(pool, "usr-reach-una", () => bump("usr-reach-una"));
+    expect(await standing("usr-reach-una", una), "a new password left a door open").toEqual(NONE_STANDING);
+    expect(reset.ended).toMatchObject({ invites: 1, circleFeed: 1 });
+
+    // revoke-sessions: bump, then end once.
+    await bump("usr-reach-vic");
+    const revoked = await endAgentReach(pool, "usr-reach-vic");
+    expect(await standing("usr-reach-vic", vic), "an admin's revoke left a door open").toEqual(NONE_STANDING);
+    expect(revoked).toMatchObject({ invites: 1, circleFeed: 1 });
+
+    expect(await standing("usr-reach-wes", wes), "another member's links or address ended with them").toEqual(ALL_STANDING);
   });
 });
 
@@ -232,15 +344,23 @@ describe.skipIf(!configured)("withAgentReachEnded", () => {
     expect(await standing("usr-reach-pia", pia)).toEqual(NONE_STANDING);
   });
 
-  it("ends again after the change, so a token minted between the two calls dies too", async () => {
+  it("ends again after the change, so a token, a link or an address made between the two calls dies too", async () => {
     await plantReach("usr-reach-quy");
     let late = "";
+    let lateLink = "";
+    let lateAddress = "";
     const { ended } = await withAgentReachEnded(pool, "usr-reach-quy", async () => {
       late = (await mint("usr-reach-quy", "minted while the password changed")).token;
+      lateLink = (await link("usr-reach-quy")).token;
+      lateAddress = await circleAddress("usr-reach-quy");
     });
-    expect(ended.agentTokens, "both tokens, one from each side of the change").toBe(2);
     const verdict = await verifyToken(pool, late);
     expect(verdict.ok ? null : verdict.reason, "a token minted during the change outlived it").toBe("revoked");
+    expect(await inviteDoor().resolve(lateLink), "a link made during the change outlived it").toEqual({ ok: false, error: INVITE_REFUSALS.revoked });
+    expect(await feedFor(pool, lateAddress, circleFeed), "an address made during the change outlived it").toBeNull();
+    expect(ended.agentTokens, "both tokens, one from each side of the change").toBe(2);
+    expect(ended.invites, "both links, one from each side of the change").toBe(2);
+    expect(ended.circleFeed, "both addresses, one from each side of the change").toBe(2);
   });
 
   it("after the change it never throws: it tries again, and a second failure is logged and recorded for an admin", async () => {
@@ -269,5 +389,434 @@ describe.skipIf(!configured)("withAgentReachEnded", () => {
     expect(logged[0]).toContain("usr-reach-ray");
     const reported = await q("SELECT audience, actor_kind FROM health_events WHERE kind = 'agent_reach' AND entity_ref = ?", ["usr-reach-ray"]);
     expect(reported, "an admin cannot see that the end after a credential change failed").toEqual([{ audience: "admin", actor_kind: "system" }]);
+  });
+});
+
+/*
+ * A WRITE ALREADY PAST ITS SESSION CHECK (adversarial round 2, finding 15).
+ * `PUT /api/agent/inbox` and `PUT /api/agent/key` check the session once, at
+ * the start, and then wait on a DNS lookup that the attacker's own nameserver
+ * can hold for seconds. A new password or an admin's revoke sessions that
+ * lands in that wait ends what stood on both sides of the bump and returns,
+ * and the write then landed after it for a member who is still alive: the
+ * check after the write only asked about a tombstone. The inbox handed the
+ * thief its signing secret, and the key took every prompt the member sent.
+ *
+ * The write now asks under the member's row lock whether the row is still
+ * the session's (`whileSessionHolds`, server/lib/agentTokens.ts).
+ */
+describe.skipIf(!configured)("a write already past its session check when the credential changes", () => {
+  const SECRETS_ENV = { [MEMBER_SECRETS_ENV]: "ab".repeat(32) } as NodeJS.ProcessEnv;
+  // An address literal, so the guard answers without a DNS lookup and the
+  // test never reaches the network. TEST-NET-1 passes the range check.
+  const HOOK = "https://192.0.2.10/hook";
+  const KEY = { provider: "anthropic" as const, key: "sk-ant-example-0000" };
+  const REFUSED = { ok: false, status: 401, error: "auth_required" };
+
+  /** A living member, and the tokenVersion a session signed now carries. */
+  async function seedMember(id: string): Promise<number> {
+    await q("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,'x')", [id, `Member ${id}`, `${id}@examples.invalid`]);
+    return Number((await usersRepo(pool).byId(id))!.tokenVersion ?? 0);
+  }
+
+  const bump = (id: string) => usersRepo(pool).update(id, (u) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; });
+  /** What set-password runs: end, bump, end. */
+  const resetPassword = (id: string) => withAgentReachEnded(pool, id, () => bump(id));
+  /** What an admin's revoke sessions runs: bump, then end once. */
+  const revokeSessions = async (id: string) => { await bump(id); return endAgentReach(pool, id); };
+
+  /**
+   * A pool that calls `hook` on each statement before passing it to this
+   * suite's pool, including statements on a connection it hands out, because
+   * a write inside a transaction runs on one.
+   */
+  function hooked(hook: (sql: string) => Promise<void>): mysql.Pool {
+    return {
+      query: async (sql: string, params?: unknown[]) => {
+        await hook(sql);
+        return pool.query(sql, params); // module-review-ok: passes the code under test's own SQL through to this suite's scratch schema, and writes none of its own
+      },
+      getConnection: async () => {
+        const conn = await pool.getConnection();
+        return new Proxy(conn, {
+          get(target, prop) {
+            if (prop === "query") {
+              return async (sql: string, params?: unknown[]) => {
+                await hook(sql);
+                return target.query(sql, params); // module-review-ok: passes the code under test's own SQL through on the connection it asked for
+              };
+            }
+            const value = Reflect.get(target, prop, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      },
+    } as unknown as mysql.Pool;
+  }
+
+  /**
+   * The finding's order: `change` runs to the end just before the write's
+   * first statement reaches the database. That is after the request's
+   * session check and its DNS wait, and before it has read, locked or
+   * written anything.
+   */
+  function changedJustBefore(change: () => Promise<unknown>): { pool: mysql.Pool; changed: () => boolean } {
+    let changed = false;
+    const racing = hooked(async () => {
+      if (changed) return;
+      changed = true;
+      await change();
+    });
+    return { pool: racing, changed: () => changed };
+  }
+
+  it("setInbox refuses when a new password lands after its session check, and leaves no inbox and no secret", async () => {
+    const id = "usr-race-mia";
+    const version = await seedMember(id);
+    const race = changedJustBefore(() => resetPassword(id));
+
+    const out = await setInbox(race.pool, id, HOOK, SECRETS_ENV, version);
+
+    expect(race.changed(), "the reset must land inside the write, or this is the plain case").toBe(true);
+    expect(out, "an inbox written for a session the reset ended must refuse itself and hand back no secret").toEqual(REFUSED);
+    expect(await getInbox(pool, id), "the inbox outlived the reset that answered the theft").toBeNull();
+  });
+
+  it("storeMemberKey refuses when a new password lands after its session check, and keeps no key", async () => {
+    const id = "usr-race-max";
+    const version = await seedMember(id);
+    const race = changedJustBefore(() => resetPassword(id));
+
+    const out = await storeMemberKey(race.pool, id, KEY, SECRETS_ENV, version);
+
+    expect(race.changed(), "the reset must land inside the write, or this is the plain case").toBe(true);
+    expect(out, "a key stored for a session the reset ended must refuse itself").toEqual(REFUSED);
+    expect(await memberKeyView(pool, id), "the key outlived the reset that answered the theft").toBeNull();
+  });
+
+  it("an admin's revoke sessions that lands after the session check refuses both writes the same way", async () => {
+    const id = "usr-race-mae";
+    const version = await seedMember(id);
+
+    const inbox = await setInbox(changedJustBefore(() => revokeSessions(id)).pool, id, HOOK, SECRETS_ENV, version);
+    expect(inbox).toEqual(REFUSED);
+    expect(await getInbox(pool, id)).toBeNull();
+
+    const key = await storeMemberKey(changedJustBefore(() => revokeSessions(id)).pool, id, KEY, SECRETS_ENV, version + 1);
+    expect(key).toEqual(REFUSED);
+    expect(await memberKeyView(pool, id)).toBeNull();
+  });
+
+  it("a session that has already ended is refused before it touches what the member set since", async () => {
+    const id = "usr-race-ida";
+    const before = await seedMember(id);
+    const inbox = await setInbox(pool, id, HOOK, SECRETS_ENV, before);
+    expect(inbox.ok, "a living member with a current session sets an inbox").toBe(true);
+    expect((await storeMemberKey(pool, id, KEY, SECRETS_ENV, before)).ok, "and stores a key").toBe(true);
+
+    // Signing out on another device: the bump alone, with nothing ended.
+    await bump(id);
+
+    expect(await setInbox(pool, id, "https://192.0.2.11/other", SECRETS_ENV, before)).toEqual(REFUSED);
+    expect((await getInbox(pool, id))?.id, "a refused write replaced the member's inbox").toBe(inbox.ok ? inbox.inbox.id : "set");
+    expect(await storeMemberKey(pool, id, { provider: "anthropic", key: "sk-ant-other-9999" }, SECRETS_ENV, before)).toEqual(REFUSED);
+    expect((await memberKeyView(pool, id))?.last4, "a refused write replaced the member's key").toBe("0000");
+
+    // The session signed after the bump writes as before.
+    const now = await setInbox(pool, id, "https://192.0.2.11/other", SECRETS_ENV, before + 1);
+    expect(now.ok, "the member's current session was refused").toBe(true);
+    expect((await storeMemberKey(pool, id, { provider: "anthropic", key: "sk-ant-other-9999" }, SECRETS_ENV, before + 1)).ok).toBe(true);
+    expect((await memberKeyView(pool, id))?.last4).toBe("9999");
+  });
+
+  /**
+   * A pool whose `write` statement, once it reaches the database, first starts
+   * a reset (end, bump, end) and holds the write until the reset's bump is
+   * stuck behind the member's row. The write's transaction holds that row by
+   * then, so a bump that commits while the write waits proves the write held
+   * nothing, and the case fails by that name. The lock poll alone cannot say
+   * so: on a local MariaDB `innodb_trx` can still list an earlier case's wait
+   * long after it ended, and a stale row answers it at once.
+   */
+  function resetFromInside(id: string, write: RegExp) {
+    const race: { resetting: Promise<{ ended: AgentReachEnded }> | null; bumping: boolean; bumped: boolean } = {
+      resetting: null,
+      bumping: false,
+      bumped: false,
+    };
+    const racing = hooked(async (sql) => {
+      if (race.resetting || !write.test(sql)) return;
+      race.resetting = withAgentReachEnded(pool, id, async () => {
+        race.bumping = true;
+        await bump(id);
+        race.bumped = true;
+      });
+      const deadline = Date.now() + 10_000;
+      while (!race.bumping) {
+        if (Date.now() > deadline) throw new Error("the reset never reached its bump");
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      // Long enough for a bump nothing holds back to commit many times over.
+      await new Promise((r) => setTimeout(r, 250));
+      expect(race.bumped, "the bump did not wait for the row this write holds, so nothing here is serialised").toBe(false);
+      await untilALockIsAwaited(pool);
+    });
+    return { pool: racing, race };
+  }
+
+  it("a reset that arrives while the write holds the member's row waits for it, and its second end takes the write back", async () => {
+    const id = "usr-race-ned";
+    const version = await seedMember(id);
+    const { pool: racing, race } = resetFromInside(id, /^INSERT INTO `?agent_inboxes\b/);
+
+    const out = await setInbox(racing, id, HOOK, SECRETS_ENV, version);
+    expect(race.resetting, "the reset must start inside the write").not.toBeNull();
+    const { ended } = await race.resetting!;
+
+    expect(out.ok, "the write held the row first, so it landed before the bump").toBe(true);
+    expect(ended.inbox, "the end after the bump must find the inbox the write left").toBe(true);
+    expect(await getInbox(pool, id)).toBeNull();
+    expect(Number((await usersRepo(pool).byId(id))!.tokenVersion)).toBe(version + 1);
+  });
+
+  /*
+   * THE THREE DOORS ROUND 3 GAVE THE END (adversarial round 3, findings 7 and
+   * 8), and the same window. `POST /api/invites`, `POST FOLLOW_KEY_API` and
+   * `PUT /api/governance/delegation` check the session at the start too. A
+   * new password or a revoke that landed after that check ended what stood
+   * and returned, and the link, the address or the delegation was then
+   * written for a session that had ended. Each now writes under the same
+   * lock (`whileSessionHolds`).
+   */
+  const DELEGATE = "usr-race-bea";
+  let doorSeq = 0;
+  /** A living member nobody has made anything for yet. */
+  const fresh = async (): Promise<{ id: string; version: number }> => {
+    const id = `usr-race-door-${String(++doorSeq).padStart(2, "0")}`;
+    return { id, version: await seedMember(id) };
+  };
+  const DOORS: Record<string, {
+    make: (p: mysql.Pool, id: string, version: number) => Promise<{ ok: boolean }>;
+    /** The write's own statement, which a racing change waits behind. */
+    write: RegExp;
+    /** Whether one stands for this member. */
+    stands: (id: string) => Promise<boolean>;
+  }> = {
+    "an invitation link": {
+      make: (p, id, version) => makeInvite(p, id, version),
+      write: /^INSERT INTO `?member_invites\b/,
+      stands: async (id) => (await openInviteCount(pool, id)) > 0,
+    },
+    "a circle calendar address": {
+      make: (p, id, version) => makeAddress(p, { userId: id }, ORIGIN, version),
+      write: /^INSERT INTO `?live_session_feed_keys\b/,
+      stands: async (id) => {
+        const [row] = await q("SELECT COUNT(*) AS n FROM live_session_feed_keys k JOIN live_session_members m ON m.`no` = k.member_no WHERE m.user_id = ?", [id]);
+        return Number(row.n) > 0;
+      },
+    },
+    "a delegation": {
+      make: (p, id, version) => setDelegation(p, id, DELEGATE, version),
+      write: /^INSERT INTO `?delegations\b/,
+      stands: async (id) => {
+        const given = await delegationOf(pool, id);
+        return !!given && given.revokedAt === null;
+      },
+    },
+  };
+
+  for (const [what, door] of Object.entries(DOORS)) {
+    it(`${what} refuses when a new password lands after its session check, and none is left`, async () => {
+      const { id, version } = await fresh();
+      const race = changedJustBefore(() => resetPassword(id));
+
+      const out = await door.make(race.pool, id, version);
+
+      expect(race.changed(), "the reset must land inside the write, or this is the plain case").toBe(true);
+      expect(out, `${what} made for a session the reset ended must refuse itself`).toEqual(REFUSED);
+      expect(await door.stands(id), `${what} outlived the reset that answered the theft`).toBe(false);
+    });
+
+    it(`${what} refuses the same way when an admin's revoke sessions lands after the check`, async () => {
+      const { id, version } = await fresh();
+
+      const out = await door.make(changedJustBefore(() => revokeSessions(id)).pool, id, version);
+
+      expect(out, `${what} made for a session the revoke ended must refuse itself`).toEqual(REFUSED);
+      expect(await door.stands(id), `${what} outlived the admin's revoke`).toBe(false);
+    });
+
+    it(`${what}: a session that has already ended makes none, and the member's current session makes one`, async () => {
+      const { id, version } = await fresh();
+      // Signing out on another device: the bump alone, with nothing ended.
+      await bump(id);
+
+      expect(await door.make(pool, id, version), `${what} was made for a session that had ended`).toEqual(REFUSED);
+      expect(await door.stands(id)).toBe(false);
+
+      expect((await door.make(pool, id, version + 1)).ok, "the member's current session was refused").toBe(true);
+      expect(await door.stands(id)).toBe(true);
+    });
+
+    it(`${what}: a reset that arrives while the write holds the member's row waits for it, and its second end takes the write back`, async () => {
+      const { id, version } = await fresh();
+      const { pool: racing, race } = resetFromInside(id, door.write);
+
+      const out = await door.make(racing, id, version);
+      expect(race.resetting, "the reset must start inside the write").not.toBeNull();
+      await race.resetting!;
+
+      expect(out.ok, "the write held the row first, so it landed before the bump").toBe(true);
+      expect(await door.stands(id), `${what} the write left outlived the end after the bump`).toBe(false);
+      expect(Number((await usersRepo(pool).byId(id))!.tokenVersion)).toBe(version + 1);
+    });
+  }
+});
+
+/*
+ * THE VOTE A STOLEN SESSION HANDED ON (adversarial round 3, finding 8, a
+ * decision for Rye built as recommended). A session holding `ballot.vote`
+ * can hand the member's vote to an account the thief controls, and once that
+ * account accepts, every open ballot copies its choice onto the member's row
+ * unless the member votes in person. A new password and an admin's revoke
+ * sessions now end the delegation the member GAVE, accepted or still an
+ * offer, derive every open ballot again so nothing copied stays cast, and
+ * tell the member in the bell. A delegation somebody else handed TO the
+ * member is that member's choice and stays.
+ */
+describe.skipIf(!configured)("the vote the member handed on", () => {
+  const WREN = "usr-voice-wren";
+  const BEA = "usr-voice-bea";
+  const CAL = "usr-voice-cal";
+  const bump = (id: string) => usersRepo(pool).update(id, (u) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; });
+  let seq = 0;
+
+  async function seat(id: string): Promise<void> {
+    await q("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,'x') ON DUPLICATE KEY UPDATE name = VALUES(name)", [id, `Member ${id}`, `${id}@examples.invalid`]);
+  }
+
+  /** An open ballot this roll votes on, on a subject where a delegation carries. */
+  async function ballot(roll: string[]) {
+    const opened = await openBallot(pool, {
+      subjectType: "mechanics",
+      subjectRef: `reach-delegation-${++seq}`,
+      title: `Ballot ${seq}`,
+      docMarkdown: "# The document as checked",
+      method: "custom",
+      weightMode: "equal",
+      unityPct: 80,
+      quorumPct: 20,
+      durationDays: 7,
+      openedBy: "usr-voice-proposer",
+      electorate: roll.map((userId) => ({ userId, weight: 1 })),
+    });
+    if (!opened.ok) throw new Error(`ballot refused to open: ${opened.error}`);
+    return opened.ballot;
+  }
+
+  /** Give a delegation and have it accepted, which is what makes it carry. */
+  async function handed(delegator: string, delegate: string): Promise<void> {
+    const given = await setDelegation(pool, delegator, delegate);
+    if (!given.ok) throw new Error(`delegation refused: ${given.error}`);
+    expect((await acceptDelegations(pool, delegate, delegator)).changed, "the acceptance must land, or nothing below carries").toBe(1);
+  }
+
+  const notices = (userId: string) =>
+    q("SELECT type, title, body, link, actor_user_id, dedupe_key FROM notifications WHERE user_id = ? ORDER BY created_at, id", [userId]);
+
+  it("a new password ends the delegation the member gave, takes back the votes it copied, tells them once, and leaves the one handed to them", async () => {
+    for (const id of [WREN, BEA, CAL]) await seat(id);
+    const open = await ballot([WREN, BEA, CAL]);
+    await handed(WREN, BEA); // the stolen session's gift, accepted by an account the thief holds
+    await handed(CAL, WREN); // a member who handed their own vote to Wren
+    await castVote(pool, open.id, BEA, "yes");
+    expect(await voteOf(pool, open.id, WREN), "the delegate's choice must be on Wren's row, or the take-back below proves nothing").toMatchObject({ choice: "yes", followedUserId: BEA });
+
+    const told: unknown[] = [];
+    const tell = async (notice: unknown) => { told.push(notice); };
+    const { ended } = await withAgentReachEnded(pool, WREN, () => bump(WREN), { notify: tell });
+
+    expect((await delegationOf(pool, WREN))?.revokedAt, "the vote a stolen session handed on outlived the new password").not.toBeNull();
+    expect(await voteOf(pool, open.id, WREN), "a vote copied from the delegate is still cast for the member").toBeNull();
+    expect(isCarrying(await delegationOf(pool, CAL)), "the vote somebody handed to the member was ended").toBe(true);
+    expect(ended.delegation).toBe(true);
+    expect(told, "the member was not told, or was told twice").toEqual([
+      { userId: WREN, type: "governance", title: VOICE_BACK_NOTICE.title, body: VOICE_BACK_NOTICE.body, link: "/governance", actorUserId: null, dedupeKey: expect.stringContaining(WREN) },
+    ]);
+
+    // A ballot opened since: the delegate's vote copies nothing onto Wren.
+    const later = await ballot([WREN, BEA, CAL]);
+    await castVote(pool, later.id, BEA, "no");
+    expect(await voteOf(pool, later.id, WREN), "a later ballot still copied the delegate's choice").toBeNull();
+
+    // A second reset finds nothing to end and tells nobody.
+    const again = await withAgentReachEnded(pool, WREN, () => bump(WREN), { notify: tell });
+    expect(again.ended.delegation).toBe(false);
+    expect(told).toHaveLength(1);
+  });
+
+  it("an admin's revoke sessions ends an offer still waiting on its delegate, writes the notice to the bell when handed no mailer, and nobody else's", async () => {
+    const DEE = "usr-voice-dee";
+    const FAY = "usr-voice-fay";
+    const GUS = "usr-voice-gus";
+    for (const id of [DEE, FAY, GUS]) await seat(id);
+    // An offer the stolen session made: it carries the day the thief's account accepts.
+    expect((await setDelegation(pool, DEE, BEA)).ok).toBe(true);
+    await handed(FAY, GUS); // a bystander's own delegation
+
+    await bump(DEE);
+    const ended = await endAgentReach(pool, DEE);
+
+    expect((await delegationOf(pool, DEE))?.revokedAt, "an offer the stolen session made outlived the revoke").not.toBeNull();
+    expect(ended.delegation).toBe(true);
+    expect(isCarrying(await delegationOf(pool, FAY)), "another member's delegation was ended").toBe(true);
+    expect(await notices(DEE)).toEqual([
+      { type: "governance", title: VOICE_BACK_NOTICE.title, body: VOICE_BACK_NOTICE.body, link: "/governance", actor_user_id: null, dedupe_key: expect.stringContaining(DEE) },
+    ]);
+    expect(await notices(FAY)).toEqual([]);
+  });
+
+  it("a member who handed nothing on, or took it back themselves, is told nothing", async () => {
+    const HAL = "usr-voice-hal";
+    const IDA = "usr-voice-ida";
+    for (const id of [HAL, IDA]) await seat(id);
+    await handed(IDA, BEA);
+    expect(await revokeDelegation(pool, IDA)).toBe(true);
+
+    for (const id of [HAL, IDA]) {
+      const { ended } = await withAgentReachEnded(pool, id, () => bump(id));
+      expect(ended.delegation, id).toBe(false);
+      expect(await notices(id), `${id} was told of a delegation a reset did not end`).toEqual([]);
+    }
+  });
+
+  it("a reset whose derivation fails after the delegation ended takes the copied vote back on the next try, and tells the member once", async () => {
+    const IVO = "usr-voice-ivo";
+    await seat(IVO);
+    const open = await ballot([IVO, BEA]);
+    await handed(IVO, BEA);
+    await castVote(pool, open.id, BEA, "yes");
+    expect(await voteOf(pool, open.id, IVO)).toMatchObject({ followedUserId: BEA });
+
+    let dropped = false;
+    const dropsTheDerivation = {
+      query: async (sql: string, params?: unknown[]) => {
+        if (!dropped && /FROM ballots WHERE status = 'open'/.test(sql)) {
+          dropped = true;
+          throw new Error("connection dropped");
+        }
+        return pool.query(sql, params); // module-review-ok: passes the code under test's own SQL through to this suite's scratch schema
+      },
+      getConnection: () => pool.getConnection(),
+    } as unknown as mysql.Pool;
+
+    await expect(endAgentReach(dropsTheDerivation, IVO)).rejects.toMatchObject({ name: "AgentReachNotEnded", parts: ["delegation"] });
+    expect(dropped, "the derivation must really have been dropped, or this is the plain case").toBe(true);
+    expect((await delegationOf(pool, IVO))?.revokedAt).not.toBeNull();
+
+    // Pressing again finishes it: the delegation is already ended, and the derivation runs.
+    expect((await endAgentReach(pool, IVO)).delegation).toBe(false);
+    expect(await voteOf(pool, open.id, IVO), "the copied vote outlived the retry that should take it back").toBeNull();
+    expect(await notices(IVO), "the member was not told, or was told twice").toHaveLength(1);
   });
 });

@@ -10,7 +10,7 @@
  * test pool does not, so a JavaScript Date on one side of the comparison and
  * the database's clock on the other would disagree by the host's offset.
  */
-import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
 const VILLAGE = "local";
 
@@ -43,12 +43,20 @@ const toRow = (r: RowDataPacket): InviteRow => ({
   secondsLeft: Number(r.seconds_left ?? 0),
 });
 
-/** One new link. The expiry is set by the database's clock. */
-export async function createInvite(
-  pool: Pool,
+/**
+ * One new link. The expiry is set by the database's clock.
+ *
+ * ON THE CALLER'S CONNECTION, and never a pool: `makeInvite`
+ * (server/routes/invites.ts) runs it inside the transaction that holds the
+ * inviter's row and has just asked whether the session still holds it
+ * (`whileSessionHolds`, server/lib/agentTokens.ts). On a pool it would run on
+ * another connection, outside that lock, and the check would cover nothing.
+ */
+export async function createInviteOn(
+  conn: PoolConnection,
   input: { id: string; tokenHash: string; inviterUserId: string; days: number },
 ): Promise<void> {
-  await pool.query( // module-review-ok: one table, one row, no cache above it
+  await conn.query( // module-review-ok: one table, one row, no cache above it
     "INSERT INTO member_invites (id, village_id, token_hash, inviter_user_id, expires_at) " +
       "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP + INTERVAL ? DAY)",
     [input.id, VILLAGE, input.tokenHash, input.inviterUserId, Math.max(1, Math.trunc(input.days))],

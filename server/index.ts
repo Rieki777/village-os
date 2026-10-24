@@ -6837,7 +6837,7 @@ async function startServer() {
     app.put("/api/agent/inbox", async (req, res) => {
       const user = await me(req, res);
       if (!user) return;
-      const out = await setInbox(getPool(), user.id, req.body?.url);
+      const out = await setInbox(getPool(), user.id, req.body?.url, process.env, Number(user.tokenVersion ?? 0)); // a session ended since its check answers 401
       if (!out.ok) return res.status(out.status).json({ error: out.error });
       // The secret, once.
       res.json({ inbox: out.inbox, secret: out.secret, signatureHeader: SIGNATURE_HEADER });
@@ -6879,8 +6879,8 @@ async function startServer() {
         key: String(req.body?.key ?? ""),
         baseUrl: req.body?.baseUrl,
         model: req.body?.model,
-      });
-      if (!out.ok) return res.status(400).json({ error: out.error });
+      }, process.env, Number(user.tokenVersion ?? 0));
+      if (!out.ok) return res.status(out.status ?? 400).json({ error: out.error }); // 401 when the session ended since its check
       void recordEvent(getPool(), {
         kind: "agent_key", text: `set their own assistant key (${out.view.provider})`,
         actorUserId: user.id, actorKind: "agent", entityType: "member_key", entityRef: user.id, audience: "admin",
@@ -8122,7 +8122,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if ((lost.refusal = setPasswordLinkRefusal(claim, u.tokenVersion))) return;
       u.passwordHash = hash;
       u.tokenVersion = (u.tokenVersion ?? 0) + 1;
-    }));
+    }), { notify }); // notify: the member hears that a delegation they gave was ended (endVoiceGiven)
     if (lost.refusal) return res.status(401).json({ error: lost.refusal });
     if (!fresh) return res.status(404).json({ error: "Account not found" });
     const authTokenStr = encodeToken(AUTH_TOKEN_SECRET, fresh.id, fresh.email, fresh.tokenVersion ?? 0);
@@ -8186,13 +8186,13 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.json({ success: true, emailed });
   });
 
-  /** Revoke every session (S1's tokenVersion lever) and all the member's agent holds: tokens, private calendar feed, inbox, own model key. */
+  /** Revoke every session (S1's tokenVersion lever) and what a session left standing: agent tokens, private calendar feed, inbox, own model key, open invitation links, circle calendar address, the delegation the member gave. */
   app.post("/api/admin/users/:id/revoke-sessions", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const target = await members.byId(req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
     await members.update(target.id, (u: any) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; }); // sessions end first, whatever happens next
-    const ended = await endAgentReach(getPool(), target.id); // a failure answers 500 by name, and pressing again finishes it
+    const ended = await endAgentReach(getPool(), target.id, { notify }); // a failure answers 500 by name, and pressing again finishes it
     res.json({ success: true, agentTokensRevoked: ended.agentTokens, agentReachEnded: ended });
   });
 
