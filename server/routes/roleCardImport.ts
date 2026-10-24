@@ -155,7 +155,7 @@ export function registerRoleCardRoutes(app: Express, h: RoleCardRouteHelpers): v
     return { ok: false, status: 400, error: "Bring in a file, paste the words, or share a Google Doc link.", source: "text" };
   }
 
-  app.post(`${BASE}/:id/import`, async (req, res) => {
+  app.post(`${BASE}/:id/import`, async (req, res) => { // limit-ok: guarded by h.member (the role proposal routes' own guard, handed in: 401 to a visitor, 403 to a guest) and bounded by h.limited, which is their overLimit, 20 in ten minutes per member, before any read or Google call
     const user = await h.member(req, res);
     if (!user) return;
     if (await h.limited(res, `role-proposal-import:${String(user.id)}`, IMPORTS_PER_WINDOW)) return;

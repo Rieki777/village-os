@@ -73,7 +73,7 @@ export const DOCUMENT_WORDS = {
   tooLong: `That holds more than ${ROLE_DOCUMENT_TEXT_MAX.toLocaleString("en-US")} characters. Bring in the part about your role.`,
   tooBig: `That file is over ${ROLE_DOCUMENT_MAX_BYTES / 1024 / 1024} MB. Bring in the part about your role, or paste its words.`,
   notGoogleDoc: "That is not a Google Doc link. Paste a link that starts with https://docs.google.com/document/d/",
-  notShared: 'That Google Doc is not shared as "anyone with the link". Change its sharing in Google Docs, or download it and bring in the file.',
+  notShared: 'That Google Doc is shared with some people only. Set its sharing to "anyone with the link" in Google Docs, or download it and bring in the file.',
   noDoc: "There is no Google Doc at that link.",
   slow: "Google Docs took too long to answer. Try again in a moment, or download the document and bring in the file.",
   googleFailed: "Google Docs did not send the document. Try again in a moment, or download it and bring in the file.",
@@ -226,8 +226,9 @@ async function readPdf(bytes: Buffer): Promise<Extracted> {
   const { getDocumentProxy } = await import("unpdf");
   let pdf: Awaited<ReturnType<typeof getDocumentProxy>>;
   try {
-    // No eval (the PDF.js font hardening), no logging: a stranger's broken PDF says nothing in the server's log.
-    pdf = await getDocumentProxy(new Uint8Array(bytes), { isEvalSupported: false, verbosity: 0, useSystemFonts: false, disableFontFace: true });
+    // No font faces and no logging: text only, and a stranger's broken PDF says nothing in the server's log.
+    // (This PDF.js has no eval path left to switch off.)
+    pdf = await getDocumentProxy(new Uint8Array(bytes), { verbosity: 0, useSystemFonts: false, disableFontFace: true });
   } catch (e: any) {
     return fail(422, /password/i.test(String(e?.name ?? "") + String(e?.message ?? "")) ? DOCUMENT_WORDS.lockedPdf : DOCUMENT_WORDS.brokenPdf);
   }

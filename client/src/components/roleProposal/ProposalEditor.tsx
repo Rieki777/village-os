@@ -6,7 +6,9 @@
  *   1 Pick your roles        existing roles (held by you, open, held by
  *                            someone else) or a new one, at most five
  *   2 Each role's words      every role word the card shows, gold where it
- *                            differs from the posted role
+ *                            differs from the posted role; above them, bring
+ *                            in a description of your role, and the prompt
+ *                            for your own AI (./BringInRole.tsx, ./OwnAiPrompt.tsx)
  *   3 Your season            aim, 1 to 3 seasonal goals, the village's goals
  *                            for that season each serves
  *   4 Terms and review dates one set of terms, a review date per role, and
@@ -50,6 +52,8 @@ import StepWords, { type WordsRole } from "./StepWords";
 import StepSeason, { type SeasonState } from "./StepSeason";
 import StepTerms from "./StepTerms";
 import StepShare from "./StepShare";
+import BringInRole from "./BringInRole";
+import OwnAiPrompt from "./OwnAiPrompt";
 import ProposalState from "./ProposalState";
 
 interface LocalNew {
@@ -167,6 +171,17 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   }, []);
 
   const save = useAutosave(send);
+
+  /** A draft the server answered as a whole (a role card filled it): everything typed starts again from it. */
+  const adopt = (p: ProposalOut) => {
+    setProposal(p);
+    setPicked(p.roles.map((r) => r.roleId));
+    setNewRoles(p.newRoles.map((r) => ({ id: r.id, circleId: r.circle?.id ?? "", seats: r.seats })));
+    setReviews(reviewsFrom(p));
+    setTyped({});
+    setSettings(p.settings ?? { v: 1 });
+    setSeason(seasonFrom(p));
+  };
   const isNewId = (id: string) => latest.current.newRoles.some((n) => n.id === id);
 
   // A field scrolled to by focus stops above the sticky save bar and the tab bar, never under them.
@@ -319,7 +334,13 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             onRemoveNew={removeNew}
           />
         )}
-        {step === "words" && <StepWords roles={wordsRoles} typed={typed} frameworkTerms={proposal.frameworkTerms === true} onType={type} onReview={review} />}
+        {step === "words" && (
+          <>
+            <BringInRole proposal={proposal} org={org} beforeImport={save.flush} onFilled={adopt} />
+            <OwnAiPrompt proposal={proposal} org={org} />
+            <StepWords roles={wordsRoles} typed={typed} frameworkTerms={proposal.frameworkTerms === true} onType={type} onReview={review} />
+          </>
+        )}
         {step === "season" && (
           <StepSeason
             season={season}

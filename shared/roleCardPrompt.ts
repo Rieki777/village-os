@@ -203,7 +203,7 @@ export function roleCardPrompt(input: RoleCardPromptInput): string {
     "The card starts with this line, exactly:",
     header,
     "",
-    "Then, for each role, these headings in this order:",
+    "Then, for each role, these headings in this order. Write each heading exactly as it is shown. The indented line under it says what goes there and is not part of the card.",
     line("##", "name"),
     line("###", "circle", circles ? `The village's circles are: ${circles}.` : ""),
     line("###", "aim"),
@@ -238,7 +238,7 @@ export function roleCardPrompt(input: RoleCardPromptInput): string {
       ? ["WHAT THE VILLAGE ALREADY KNOWS", "This is the member's card as it stands. Start from it, and change only what the member wants changed:", "", known, ""]
       : []),
     "A WORKED EXAMPLE",
-    `This is a real card from ${v}, in the format, for three roles one person holds. Its season served these goals: ${list(EXAMPLE_ORG_GOALS)}.`,
+    `This is a worked example in the format: one person's card for three roles. Its season served these goals: ${list(EXAMPLE_ORG_GOALS)}.`,
     "",
     writeRoleCard(workedExample(v)).trim(),
     "",
