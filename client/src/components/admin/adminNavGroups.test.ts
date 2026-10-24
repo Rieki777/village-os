@@ -109,7 +109,7 @@ describe("navGroups", () => {
     // `money` is a CONTENT_SECTIONS entry the economics branch adds (Money &
     // Value Claims, the editor behind `client/src/lib/moneyClaims.ts`), so it
     // rides in with the other three rather than being placed here.
-    ["Make it yours", ["team", "legal", "covenant", "money", "work-with-us", "faqs", "milestones", "visit-config", "investor-summary"]],
+    ["Make it yours", ["pages", "team", "legal", "covenant", "money", "work-with-us", "faqs", "milestones", "visit-config", "investor-summary"]],
     // Email Settings became the start of Comms Settings on 2026-10-02 and moved
     // to the Comms group below; its old key still renders that screen.
     ["Connections", ["integrations"]],
@@ -168,6 +168,8 @@ describe("navGroups", () => {
       "failures",
       // Village Comms, 2026-10-02.
       "comms-overview", "comms-journeys", "comms-words", "comms-people", "comms-letters", "comms-sent", "comms-settings",
+      // Pages, 2026-10-22: every word the public pages say, edited from the page specs.
+      "pages",
     ];
     // Rows that LEFT the rail, each with a key that still renders a screen, so
     // a deep link to it still lands. `email-settings` renders Comms Settings.

@@ -123,3 +123,22 @@ export async function revokeInvite(pool: Pool, inviteId: string, inviterUserId: 
   );
   return Number(result.affectedRows ?? 0) === 1;
 }
+
+/**
+ * Withdraw every link one person made that nobody has used, because they left.
+ *
+ * The erasure's `invites-after-tombstone` step (server/lib/erasure.ts). A link
+ * is its maker's vouch, and a member who asked to be forgotten has none left
+ * to give. A link already used made an account and stays the record of that.
+ *
+ * Idempotent: the first run sets `revoked_at` on every row it matches, so a
+ * second run matches nothing. Returns how many it withdrew.
+ */
+export async function revokeOpenInvitesOf(pool: Pool, inviterUserId: string): Promise<number> {
+  const [result] = await pool.query<ResultSetHeader>( // module-review-ok: one table, keyed on one member, no cache above it
+    "UPDATE member_invites SET revoked_at = CURRENT_TIMESTAMP " +
+      "WHERE village_id = ? AND inviter_user_id = ? AND used_at IS NULL AND revoked_at IS NULL",
+    [VILLAGE, inviterUserId],
+  );
+  return Number(result.affectedRows ?? 0);
+}

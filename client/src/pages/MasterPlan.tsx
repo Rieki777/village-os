@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 import { Image } from "@/components/Image";
 import { useVillageName } from "@/hooks/useVillageName";
+import { usePageContent } from "@/hooks/usePageContent";
+import { Emphasized } from "@/components/PageText";
+import { MASTER_PLAN_PAGE, zoneTags } from "@shared/pageContent/masterPlan";
+import type { ResolvedPage } from "@shared/pageContent/types";
 
 
 /*
@@ -32,12 +36,19 @@ import { useVillageName } from "@/hooks/useVillageName";
  * codebase always ends up needing. A village states it once, in Settings, or
  * the tile does not appear.
  */
-const statShapes = [
-  { key: "acres", label: "Total Acres", icon: Mountain },
-  { key: "plannedHomes", label: "Planned Homes", icon: Home },
-  { key: "guestRooms", label: "Retreat Keys", icon: Tent },
-  { key: "appraisal", label: "Appraised Value", icon: Building },
-];
+/*
+ * The tile labels are the village's own words (Admin, Pages, Master Plan,
+ * Land figures). The land tile's label is still built from the unit, below.
+ */
+function statShapes(page: ResolvedPage | null) {
+  const labels = page?.stats.fields;
+  return [
+    { key: "acres", label: "Total Acres", icon: Mountain },
+    { key: "plannedHomes", label: labels?.plannedHomesLabel ?? "", icon: Home },
+    { key: "guestRooms", label: labels?.guestRoomsLabel ?? "", icon: Tent },
+    { key: "appraisal", label: labels?.appraisalLabel ?? "", icon: Building },
+  ];
+}
 
 /*
  * THE UNIT ON THE LAND TILE BELONGS TO THE VILLAGE TOO.
@@ -68,52 +79,37 @@ function withStatedUnit<T extends { key: string; label: string; note: string }>(
   return { ...stat, label: `Total ${stat.note || "Acres"}` };
 }
 
-const villageZones = (villageName: string) => [
-  {
-    title: "Village Center",
-    description: `The heart of ${villageName} featuring the community center, café, market, and gathering spaces.`,
-    icon: Users,
-    features: ["Community Center", "Café & Restaurant", "Artisan Market", "Event Spaces"],
-  },
-  {
-    title: "Residential Neighborhoods",
-    description: "Clustered housing areas designed for community connection while maintaining privacy.",
-    icon: Home,
-    features: ["150+ home sites", "Various lot sizes", "Walking paths", "Community gardens"],
-  },
-  {
-    title: "Retreat & Wellness",
-    description: "The retreat center and health facilities serving guests and residents.",
-    icon: Tent,
-    features: ["120-150 key retreat", "Health Center", "Spa facilities", "Workshop spaces"],
-  },
-  {
-    title: "Agricultural Land",
-    description: "Regenerative farms and food forests providing sustenance for the community.",
-    icon: TreePine,
-    features: ["Organic gardens", "Food forest", "Medicinal herbs", "Livestock areas"],
-  },
-  {
-    title: "Commons & Conservation",
-    description: "Protected natural areas, trails, and shared spaces for all to enjoy.",
-    icon: Droplets,
-    features: ["Nature preserves", "Hiking trails", "Water features", "Wildlife corridors"],
-  },
-];
+/** Icons for the zone cards, handed out in order. The words are the village's (Admin, Pages, Master Plan). */
+const ZONE_ICONS = [Users, Home, Tent, TreePine, Droplets, Mountain, Building, Map];
+
+/** The pill colour a phase's status earns. Any other status reads plain. */
+function phaseStatusClass(status: string): string {
+  if (status === "In Progress") return "bg-sage/10 text-sage";
+  if (status === "Planning") return "bg-teal-deep/10 text-foreground";
+  return "bg-muted text-muted-foreground";
+}
 
 export default function MasterPlan() {
   // Blank hides the button rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
   const villageName = useVillageName();
-  const zones = villageZones(villageName);
+  // Every word on this page is the village's own, from Admin, Pages, Master
+  // Plan (shared/pageContent/masterPlan.ts). Null until the saved words have
+  // arrived, so the defaults never flash first.
+  const page = usePageContent(MASTER_PLAN_PAGE);
   const brand = useBrandImages();
   const settings = useVillageSettings();
-  const stats = statedFacts(settings, statShapes).map(withStatedUnit);
+  // The tiles wait for the words too, so a label never changes under a figure.
+  const stats = page ? statedFacts(settings, statShapes(page)).map(withStatedUnit) : [];
   // Same rule as the investor page: null is "not loaded", never "nothing to
   // say". A village with a valuation must not be told it has none while its
   // own settings are still in flight.
   const loaded = settings !== null;
   const appraisal = stats.find((s) => s.key === "appraisal");
+  const vision = page?.vision;
+  const valuation = page?.valuation;
+  const phases = page?.phases;
+  const cta = page?.cta;
   return (
     <Layout>
       {/* Hero.
@@ -169,12 +165,11 @@ export default function MasterPlan() {
               animate={{ opacity: 1, y: 0 }}
             >
               <Map className="w-16 h-16 text-white mb-6 opacity-80" />
-              <h1 className="font-display text-4xl md:text-6xl font-bold text-white mb-6">
+              <h1 className="font-display text-4xl md:text-6xl font-bold text-white mb-6 break-words">
                 The {villageName} Master Plan
               </h1>
-              <p className="text-xl text-white leading-relaxed">
-                Our vision for a regenerative village that harmonizes human habitation 
-                with the natural beauty of the land it sits on.
+              <p className={`text-xl text-white leading-relaxed break-words${page ? "" : " invisible"}`}>
+                <Emphasized text={page?.hero.fields.subline || "\u00a0"} />
               </p>
             </motion.div>
           </div>
@@ -187,21 +182,24 @@ export default function MasterPlan() {
       {stats.length ? (
       <section className="py-12 bg-teal-deep text-white">
         <div className="container">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          {/* A figure steps down a size on a phone, and breaks only as a last
+              resort: "$4,200,000" at text-3xl measured 161px in a 128px
+              column at 320px wide and pushed the whole page sideways. */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8">
             {stats.map((stat, index) => (
               <motion.div
-                key={stat.label}
+                key={stat.key}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="text-center"
+                className="text-center min-w-0"
               >
                 <stat.icon className="w-8 h-8 mx-auto mb-2 opacity-80" />
-                <div className="font-display text-3xl md:text-4xl font-bold mb-1">
+                <div className="font-display text-2xl sm:text-3xl md:text-4xl font-bold mb-1 break-words">
                   {stat.value}
                 </div>
-                <div className="text-sm text-white">{stat.label}</div>
+                <div className="text-sm text-white break-words">{stat.label}</div>
               </motion.div>
             ))}
           </div>
@@ -210,65 +208,69 @@ export default function MasterPlan() {
       ) : null}
 
       {/* Vision */}
+      {vision && !vision.hidden && (
       <section className="py-20 bg-background overflow-x-clip">
         <div className="container">
           <div className="max-w-3xl mx-auto text-center mb-16">
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Our Vision
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4 break-words">
+              {vision.fields.heading}
             </h2>
-            <p className="text-muted-foreground text-lg leading-relaxed">
-              {villageName} is designed as a complete village ecosystem, a place where people live, 
-              work, learn, and thrive together. Our master plan balances development with 
-              conservation, ensuring that the land regenerates even as we build upon it.
+            <p className="text-muted-foreground text-lg leading-relaxed break-words">
+              <Emphasized text={vision.fields.body} />
             </p>
           </div>
 
           {/* Zones */}
           <div className="space-y-8 max-w-4xl mx-auto">
-            {zones.map((zone, index) => (
+            {vision.lists.zones.map((zone, index) => {
+              const Icon = ZONE_ICONS[index % ZONE_ICONS.length];
+              return (
               <motion.div
-                key={zone.title}
+                key={`${index}-${zone.title}`}
                 initial={{ opacity: 0, x: index % 2 === 0 ? -20 : 20 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
-                className="bg-card p-8 rounded-2xl shadow-sm"
+                className="bg-card p-6 sm:p-8 rounded-2xl shadow-sm"
               >
-                <div className="flex items-start gap-6">
-                  <div className="w-14 h-14 rounded-xl bg-teal-deep/10 flex items-center justify-center flex-shrink-0">
-                    <zone.icon className="w-7 h-7 text-teal-deep" />
+                <div className="flex flex-wrap items-start gap-4 sm:gap-6">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-teal-deep/10 flex items-center justify-center flex-shrink-0">
+                    <Icon className="w-6 h-6 sm:w-7 sm:h-7 text-teal-deep" />
                   </div>
-                  <div className="flex-1">
-                    <h3 className="font-display text-2xl font-bold text-foreground mb-2">
+                  <div className="flex-1 min-w-[12rem]">
+                    <h3 className="font-display text-2xl font-bold text-foreground mb-2 break-words">
                       {zone.title}
                     </h3>
-                    <p className="text-muted-foreground mb-4">
+                    <p className="text-muted-foreground mb-4 break-words">
                       {zone.description}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {zone.features.map((feature) => (
+                      {zoneTags(zone.tags ?? "").map((tag, i) => (
                         <span
-                          key={feature}
-                          className="px-3 py-1 bg-muted text-muted-foreground text-sm rounded-full"
+                          key={`${i}-${tag}`}
+                          className="px-3 py-1 bg-muted text-muted-foreground text-sm rounded-full max-w-full break-words"
                         >
-                          {feature}
+                          {tag}
                         </span>
                       ))}
                     </div>
                   </div>
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
+      )}
 
       {/* Appraisal Info */}
+      {valuation && !valuation.hidden && (
       <section className="py-20 bg-aqua-light">
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
             <Building className="w-12 h-12 text-teal-deep mx-auto mb-6" />
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Land Valuation
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4 break-words">
+              {valuation.fields.heading}
             </h2>
             {/* The appraisal sentence names the village's own figure or it does
                 not appear. It used to name one specific property's valuation and
@@ -279,88 +281,90 @@ export default function MasterPlan() {
                   {appraisal.note ? `${appraisal.note}: an appraisal ` : "An appraisal "}
                   valued the property at <strong>{appraisal.value}</strong>.
                 </p>
-                <p className="text-muted-foreground">
-                  This valuation supports the financing strategy and shows the asset base
-                  underneath the village.
+                {valuation.fields.support && (
+                <p className="text-muted-foreground break-words">
+                  <Emphasized text={valuation.fields.support} />
                 </p>
+                )}
               </>
             ) : (
               <p className="text-muted-foreground">
                 This village has not published a land valuation yet.
               </p>
             )}
-            <button
-              type="button"
-              disabled
-              className="inline-flex items-center gap-2 mt-6 px-6 py-3 bg-teal-deep/30 text-teal-deep rounded-lg font-semibold cursor-not-allowed opacity-60"
-              title="Master Plan PDF coming soon"
-            >
-              <Map className="w-5 h-5" />
-              Master Plan PDF, Coming Soon
-            </button>
+            {/* The village's own document, or no button. This was a disabled
+                "Coming Soon" on every village, including ones with no plan
+                to publish. */}
+            {valuation.fields.pdfUrl && (
+              <a
+                href={valuation.fields.pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 mt-6 px-6 py-3 bg-teal-deep text-white rounded-lg font-semibold hover:bg-teal-deep-dark transition-colors max-w-full break-words"
+              >
+                <Map className="w-5 h-5 flex-shrink-0" />
+                {valuation.fields.pdfLabel}
+              </a>
+            )}
           </div>
         </div>
       </section>
+      )}
 
-      {/* Development Timeline */}
+      {/* Development Timeline. Words the village keeps in Admin, Pages, not
+          its milestones: see shared/pageContent/masterPlan.ts. */}
+      {phases && !phases.hidden && (
       <section className="py-20 bg-background">
         <div className="container">
           <div className="text-center mb-12">
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Development Phases
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4 break-words">
+              {phases.fields.heading}
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              With a potential 1% regenerative development loan, multiple phases can 
-              proceed simultaneously, accelerating our timeline significantly.
+            {phases.fields.intro && (
+            <p className="text-muted-foreground max-w-2xl mx-auto break-words">
+              <Emphasized text={phases.fields.intro} />
             </p>
+            )}
           </div>
 
           <div className="max-w-3xl mx-auto">
             <div className="space-y-4">
-              {[
-                { phase: "Infrastructure", items: "Roads, utilities, water systems", status: "In Progress" },
-                { phase: "Community Center", items: "Café, gathering spaces, offices", status: "Planning" },
-                { phase: "Show Homes", items: "10 homes of various styles", status: "Planning" },
-                { phase: "Retreat Center", items: "120-150 key wellness facility", status: "Planning" },
-                { phase: "Health Center", items: "Integrative health services", status: "Planning" },
-                { phase: "Residential Phase 1", items: "First 50 home sites", status: "Future" },
-              ].map((item, index) => (
+              {phases.lists.phases.map((item, index) => (
                 <motion.div
-                  key={item.phase}
+                  key={`${index}-${item.phase}`}
                   initial={{ opacity: 0, y: 10 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.05 }}
-                  className="flex items-center justify-between p-4 bg-card rounded-lg"
+                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-4 bg-card rounded-lg"
                 >
-                  <div>
-                    <div className="font-semibold text-foreground">{item.phase}</div>
-                    <div className="text-sm text-muted-foreground">{item.items}</div>
+                  <div className="flex-1 min-w-[10rem]">
+                    <div className="font-semibold text-foreground break-words">{item.phase}</div>
+                    <div className="text-sm text-muted-foreground break-words">{item.items}</div>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    item.status === "In Progress" ? "bg-sage/10 text-sage" :
-                    item.status === "Planning" ? "bg-teal-deep/10 text-foreground" :
-                    "bg-muted text-muted-foreground"
-                  }`}>
+                  {item.status && (
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${phaseStatusClass(item.status)}`}>
                     {item.status}
                   </span>
+                  )}
                 </motion.div>
               ))}
             </div>
           </div>
         </div>
       </section>
+      )}
 
       {/* CTA */}
+      {cta && !cta.hidden && (
       <section className="py-20 bg-teal-deep text-white">
         <div className="container">
           <div className="max-w-2xl mx-auto text-center">
-            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
-              Be Part of the Vision
+            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4 break-words">
+              {cta.fields.heading}
             </h2>
-            <p className="text-white mb-8">
-              Whether you want to invest, live, work, or create at {villageName}, 
-              there's a place for you in our master plan.
+            <p className="text-white mb-8 break-words">
+              <Emphasized text={cta.fields.body} />
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               {eventsUrl && (
@@ -371,19 +375,20 @@ export default function MasterPlan() {
                   className="px-8 py-4 bg-white text-teal-deep rounded-lg font-semibold hover:bg-white/90 transition-colors flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
-                  Join Community Call
+                  {cta.fields.callLabel}
                 </a>
               )}
               <Link
                 href="/"
                 className="px-8 py-4 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-colors"
               >
-                Choose Your Path
+                {cta.fields.pathLabel}
               </Link>
             </div>
           </div>
         </div>
       </section>
+      )}
     </Layout>
   );
 }

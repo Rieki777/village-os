@@ -1,37 +1,40 @@
 import Layout from "@/components/Layout";
 import { useHypha } from "@/modules/ModuleProvider";
 import { useVillageLinks } from "@/lib/gameApi";
-import { useVillageName } from "@/hooks/useVillageName";
-import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
-import { useValueConversion } from "@/lib/moneyClaims";
+import { usePageContent } from "@/hooks/usePageContent";
+import { fillPageWords, useGoodNeighborName } from "@/hooks/useGoodNeighborName";
+import { Emphasized } from "@/components/PageText";
+import { HyphaAdminNote } from "@/components/HyphaAdminNote";
 import EarningsFromTheWork from "@/components/EarningsFromTheWork";
+import {
+  CO_CREATORS_GUIDE_PAGE,
+  type CONTRIBUTION_LOOP_IDS,
+  type GUIDE_CTA_IDS,
+  type GUIDE_ELDER_IDS,
+  type HYPHA_ACTION_IDS,
+  type IKIGAI_CIRCLE_IDS,
+} from "@shared/pageContent/coCreatorsGuide";
+import { GOOD_NEIGHBOR_WORD } from "@shared/pageContent/goodNeighborName";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
+import { useMemo } from "react";
 import {
   BookOpen,
   ArrowRight,
   Heart,
   Users,
   Calendar,
-  Zap,
-  Target,
   Star,
   Compass,
   Crown,
   Home,
-  Sparkles,
   TreePine,
   Circle,
-  CheckCircle2,
   MessageCircle,
-  MapPin,
   Leaf,
   DollarSign,
   TrendingUp,
-  Lightbulb,
-  HandshakeIcon,
   AlertCircle,
-  GitBranch,
   ExternalLink,
   ClipboardList,
   Receipt,
@@ -39,98 +42,84 @@ import {
   Vote,
 } from "lucide-react";
 
-type ScrollNavPill = { id: string; label: string };
+/*
+ * Every word on this page is the village's own, from Admin, Pages,
+ * Co-Creators Guide (shared/pageContent/coCreatorsGuide.ts). What stays here
+ * is what is not words: icons, colours, links, and the live card of what
+ * quests and roles are worth (EarningsFromTheWork), which reads the work.
+ *
+ * THE TOKEN SECTION NAMES THE TOKEN AND SAYS NOTHING ABOUT WHAT IT DOES
+ * (Rye, 2026-10-22). The hold card, the spend card with its pool and
+ * conversion lines, and the flow chips are gone; the section links to
+ * /game-mechanics, which is generated from the rules the village set.
+ */
 
-const navPills = (tokenName: string): ScrollNavPill[] => [
-  { id: "r-ikigai", label: "R-Ikigai" },
-  { id: "recognition", label: `Pay and ${tokenName}` },
-  { id: "voice", label: "Voice & Governance" },
-  { id: "hypha", label: "Hypha Platform" },
-  { id: "spaces", label: "The Four Spaces" },
-  { id: "progression", label: "Path of Growth" },
-  { id: "good-neighbor", label: "Good Neighbor" },
-];
+type IkigaiId = (typeof IKIGAI_CIRCLE_IDS)[number];
+type HyphaActionId = (typeof HYPHA_ACTION_IDS)[number];
+type LoopId = (typeof CONTRIBUTION_LOOP_IDS)[number];
+type ElderId = (typeof GUIDE_ELDER_IDS)[number];
+type CtaId = (typeof GUIDE_CTA_IDS)[number];
 
-// ─── Hypha Action Cards ────────────────────────────────────────────────────────
+/**
+ * Where each circle's label sits on the diagram, and how its box is drawn.
+ * The diagram is 440 wide (-20..420) and the two side labels sit 15 in from
+ * where they were: at 400 wide, today's own "What You're GOOD AT" and "What
+ * the VILLAGE NEEDS" ran past both edges and were clipped (measured
+ * 2026-10-22, 236..404 and -18..177), and a label at its limit ran further.
+ */
+const IKIGAI_LOOK: Record<IkigaiId, { x: number; y: number; fill: string; box: string; icon: typeof Heart; iconColor: string }> = {
+  love: { x: 200, y: 80, fill: "fill-primary", box: "bg-primary/5 border-primary", icon: Heart, iconColor: "text-primary" },
+  good: { x: 305, y: 260, fill: "fill-sage", box: "bg-sage/5 border-sage", icon: Star, iconColor: "text-sage" },
+  needs: { x: 95, y: 320, fill: "fill-sage", box: "bg-emerald-100/50 border-emerald-600", icon: Leaf, iconColor: "text-emerald-600" },
+  pays: { x: 280, y: 150, fill: "fill-amber", box: "bg-amber/5 border-amber", icon: DollarSign, iconColor: "text-amber" },
+};
 
-// S14: the DHO address is DATA (the hypha.org_url variable, resolved by the
-// server and read through useHypha) — the live [YOUR-DHO-SLUG] placeholder
-// this file used to ship is gone. Cards carry suffixes; the render resolves.
-
-const buildHyphaActions = (villageName: string, tokenName: string) => [
-  {
+/*
+ * The DHO address is DATA (the hypha.org_url variable, resolved by the server
+ * and read through useHypha). Each card carries a path suffix on it.
+ * All their text is white: each card is a 5% tint of the dark band, where
+ * light-page ink read at 1.00 to 1.96:1. The icons keep the per-card colours.
+ * CoCreatorsGuide.contrast.test.tsx
+ */
+const HYPHA_ACTION_LOOK: Record<HyphaActionId, { icon: typeof Heart; suffix: string; color: string; iconColor: string; iconBg: string }> = {
+  agreement: {
     icon: ClipboardList,
-    title: "Start with an Agreement",
-    subtitle: "Proposing a role, quest, or new contribution",
-    description:
-      `Before you begin any new type of contribution, a seasonal role, a quest, or a new initiative, you open it to the community with an Agreement. Describe what you're bringing, what ${villageName} receives, and what you're requesting in return. The community votes. Value in = value out.`,
-    cta: "Create Agreement",
     suffix: "/agreements/create",
     color: "border-teal-deep/30 bg-teal-deep/5",
     iconColor: "text-teal-deep",
     iconBg: "bg-teal-deep/10",
   },
-  {
+  claim: {
     icon: Receipt,
-    title: "Claim Your Tokens",
-    subtitle: "After completing a task, pay period, or season",
-    description:
-      `When you've done the work, completed a quest, finished a season as a role holder, or reached a milestone, you come back and propose a Contribution Claim. Detail what you delivered, what ${villageName} gained, and claim the tokens it earned. This is how the value you create becomes visible and rewarded.`,
-    cta: "Propose a Contribution",
     suffix: "/agreements/create/propose-contribution",
     color: "border-sage/30 bg-sage/5",
     iconColor: "text-sage",
     iconBg: "bg-sage/10",
   },
-  {
+  expenses: {
     icon: DollarSign,
-    title: "Propose Expenses",
-    subtitle: "When your work has real costs",
-    description:
-      "If your contribution requires purchasing materials, covering travel, or paying for services that benefit the community, you can propose those expenses for reimbursement. Be transparent and specific, the community is the budget committee here, and your integrity in how you handle shared resources is part of your contribution.",
-    cta: "Pay for Expenses",
     suffix: "/agreements/create/pay-for-expenses",
     color: "border-amber/30 bg-amber/5",
     iconColor: "text-amber-700",
     iconBg: "bg-amber/10",
   },
-  {
+  delegate: {
     icon: UserCheck,
-    title: "Delegate Your Voice",
-    subtitle: "Trust someone to vote on your behalf",
-    description:
-      `Your voice is your governance power, it grows as you contribute. If you trust another member to represent your perspective while you're away or unavailable, you can delegate your voice to them. Choose someone whose judgment aligns with yours and whose commitment to ${villageName} you trust deeply.`,
-    cta: "View Members",
     suffix: "/members",
     color: "border-coral/30 bg-coral/5",
     iconColor: "text-coral",
     iconBg: "bg-coral/10",
   },
-];
+};
 
-/*
- * A function of the live token names AND of the conversion sentence (lib/moneyClaims.ts), so a rename and a correction both reach every card.
- *
- * NO PAYOUT FIGURE IS TYPED HERE ANY MORE (Rye, 2026-10-21). This page used to
- * say quests paid "40-300" Gratitude and circle roles "200-500/month", numbers
- * nothing in the platform paid. Quests and roles pay in the village's own
- * tokens, never in Gratitude, and what each one pays is read off the work itself
- * by `EarningsFromTheWork` below. Gratitude is thanks members give each other.
- */
-const recognitionItems = (tokenName: string, valueName: string, villageName: string, conversionNote: string) => ({
-  hold: [
-    "Members give it to each other as thanks, from an allowance each cycle",
-    "Thanks received shows on your profile",
-    "No quest and no role pays it",
-    "Represents community trust",
-  ],
-  spend: [
-    `Each cycle, a real pool of ${valueName} is shared across everyone's ${tokenName}`,
-    "Village dues & utilities",
-    "Cafe & shop services",
-    ...(conversionNote ? [conversionNote] : []),
-  ],
-});
+const LOOP_EMOJI: Record<LoopId, string> = { sense: "🌀", propose: "✍️", create: "🌱" };
+
+const VOICE_PRINCIPLE_LOOKS = [
+  { box: "border-primary bg-primary/5", icon: Circle, iconColor: "text-primary" },
+  { box: "border-teal-light bg-teal-light/5", icon: MessageCircle, iconColor: "text-teal-deep" },
+  { box: "border-sage bg-sage/5", icon: Users, iconColor: "text-sage" },
+  { box: "border-amber bg-amber/5", icon: AlertCircle, iconColor: "text-amber" },
+];
 
 /* Four cards, one pattern: a light tinted panel carrying a dark heading and
    dark body copy. Each `color` is a tint and each `textColor` is measured
@@ -143,131 +132,94 @@ const recognitionItems = (tokenName: string, valueName: string, villageName: str
    1.40:1 - it looked like the card that worked only because the other three had
    no background at all. Amber and green headings moved off text-amber and
    text-green-600 for the same reason: both are light accents that disappear on
-   a light panel. */
-const spaces = (tokenName: string) => [
-  {
-    id: "village-steward",
-    title: "Village Steward Space",
-    color: "bg-aqua-light",
-    textColor: "text-teal-deep",
-    icon: Users,
-    description: "Coordinates overall village success, open to all path members",
-  },
-  {
-    id: "resident",
-    title: "Resident Space",
-    color: "bg-sage-light",
-    textColor: "text-sage",
-    icon: Home,
-    description: "Governs residential life and neighbor relations",
-  },
-  {
-    id: "prosperity",
-    title: "Prosperity Space",
-    color: "bg-amber-light",
-    textColor: "text-gold",
-    icon: TrendingUp,
-    description: `Manages business interests and ${tokenName} economy`,
-  },
-  {
-    id: "land",
-    title: "Land Stewardship Space",
-    color: "bg-green-light",
-    textColor: "text-forest",
-    icon: TreePine,
-    description: "Cares for land and ecosystem health",
-  },
+   a light panel. Handed out by position. */
+const SPACE_LOOKS = [
+  { color: "bg-aqua-light", textColor: "text-teal-deep", icon: Users },
+  { color: "bg-sage-light", textColor: "text-sage", icon: Home },
+  { color: "bg-amber-light", textColor: "text-gold", icon: TrendingUp },
+  { color: "bg-green-light", textColor: "text-forest", icon: TreePine },
 ];
 
-const buildProgressionStages = (villageName: string) => [
-  { label: "Visitor", phase: "early" },
-  { label: "Guest", phase: "early" },
-  { label: "Immersant", phase: "early" },
-  { label: "Participant", phase: "early" },
-  { label: "Member", phase: "member", subLabel: `(${villageName} Family)` },
-  { label: "Contributor", phase: "member" },
-  { label: "Quest Seeker", phase: "member" },
-  { label: "Initiate", phase: "cocreator" },
-  { label: "Co-Creator", phase: "cocreator" },
-  { label: "Role Holder", phase: "cocreator" },
-  { label: "Guide", phase: "guide", subLabel: "(7+ years)" },
-  { label: "Sage", phase: "sage", subLabel: "(21+ years)" },
-];
+/** Stage chips are tinted by position: four early, three member, three co-creator, then guide and sage. */
+const STAGE_TINTS = [
+  ...Array(4).fill({ bg: "bg-muted", text: "text-muted-foreground" }),
+  ...Array(3).fill({ bg: "bg-primary/10", text: "text-primary" }),
+  ...Array(3).fill({ bg: "bg-teal-light/10", text: "text-teal-deep" }),
+  { bg: "bg-blue-100", text: "text-blue-900" },
+  { bg: "bg-amber-100", text: "text-amber-900" },
+] as Array<{ bg: string; text: string }>;
 
-const goodNeighborPillars = [
-  {
-    icon: Heart,
-    title: "Love Letter Values",
-    description: "Commitment to community values",
-  },
-  {
-    icon: MessageCircle,
-    title: "Authentic Communication",
-    description: "Resolve conflicts with integrity",
-  },
-  {
-    icon: DollarSign,
-    title: "Financial Stability",
-    description: "Meet community dues",
-  },
-  {
-    icon: Users,
-    title: "Governance Participation",
-    description: "Active in decision-making",
-  },
-];
+const ELDER_LOOK: Record<ElderId, { card: string; icon: typeof Heart; title: string; body: string; duties: string }> = {
+  guide: { card: "bg-blue-50 border-blue-200", icon: Compass, title: "text-blue-900", body: "text-blue-800", duties: "text-blue-700" },
+  sage: { card: "bg-amber-50 border-amber-200", icon: Crown, title: "text-amber-900", body: "text-amber-800", duties: "text-amber-700" },
+};
 
-const ctaCards = [
-  {
-    title: "The Love Letter",
-    description: "Read our community covenant and founding values",
-    icon: Heart,
-    href: "/love-letter",
-    external: false,
-    color: "text-primary",
-  },
-  {
-    title: "Find Your Quest",
-    description: "Discover opportunities that match your gifts",
-    icon: Compass,
-    href: "/quests",
-    external: false,
-    color: "text-teal-deep",
-  },
-  {
-    title: "Join Community Call",
-    description: "Meet us live and ask your questions",
-    icon: Calendar,
-    // Resolved at render from this village's own eventsUrl, and the card drops
-    // out of the grid when there is none.
-    href: "",
-    external: true,
-    color: "text-sage",
-  },
-];
+const PILLAR_ICONS = [Heart, MessageCircle, DollarSign, Users];
+
+/** The headline steps down a size when long, so it wraps between words on a phone. Short ones keep today's size. */
+function headlineSize(text: string): string {
+  return Array.from(text).length <= 28 ? "text-5xl md:text-6xl" : "text-4xl md:text-5xl";
+}
+
+const CTA_LOOK: Record<CtaId, { icon: typeof Heart; href: string; external: boolean; color: string }> = {
+  commitment: { icon: Heart, href: "/love-letter", external: false, color: "text-primary" },
+  quests: { icon: Compass, href: "/quests", external: false, color: "text-teal-deep" },
+  // Resolved at render from this village's own eventsUrl; the card drops out
+  // of the grid when there is none.
+  events: { icon: Calendar, href: "", external: true, color: "text-sage" },
+};
 
 export default function CoCreatorsGuide() {
   const hypha = useHypha();
-  const valueName = useValueTokenName();
-  const tokenName = useTokenName("Recognition");
-  const villageName = useVillageName();
-  const hyphaActions = buildHyphaActions(villageName, tokenName);
-  const progressionStages = buildProgressionStages(villageName);
-  // The one external card points at this village's own events page.
-  // No events page, no card: better an absent invitation than one that
-  // takes a reader to a different village's calendar.
   const { eventsUrl } = useVillageLinks();
-  const cards = ctaCards
-    .map((card) => (card.external ? { ...card, href: eventsUrl } : card))
-    .filter((card) => card.href);
-  const conversionNote = useValueConversion({ village: villageName, value: valueName });
-  const recognition = recognitionItems(tokenName, valueName, villageName, conversionNote);
+  const resolved = usePageContent(CO_CREATORS_GUIDE_PAGE);
+  // The name the village gave its criteria on the Good Neighbor page.
+  const goodNeighborName = useGoodNeighborName();
+  const page = useMemo(
+    () =>
+      resolved && goodNeighborName !== null
+        ? fillPageWords(resolved, { [GOOD_NEIGHBOR_WORD]: goodNeighborName })
+        : null,
+    [resolved, goodNeighborName],
+  );
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
     if (element) {
       element.scrollIntoView({ behavior: "smooth" });
     }
   };
+
+  if (!page) {
+    // Nothing until the saved words arrive, so the defaults never flash first.
+    return (
+      <Layout>
+        <section className="min-h-[70vh] bg-teal-deep" aria-busy="true" />
+      </Layout>
+    );
+  }
+
+  const { hero, ikigai, recognition, voice, spaces, progression, goodNeighbor, cta, closing } = page;
+  const hyphaSection = page.hypha;
+  // A Hypha section needs a Hypha space to describe: the village's switch AND its DHO link.
+  const showHypha = !hyphaSection.hidden && hypha.configured;
+  const navPills = [
+    { id: "r-ikigai", label: ikigai.fields.navLabel, shown: !ikigai.hidden },
+    { id: "recognition", label: recognition.fields.navLabel, shown: !recognition.hidden },
+    { id: "voice", label: voice.fields.navLabel, shown: !voice.hidden },
+    { id: "hypha", label: hyphaSection.fields.navLabel, shown: showHypha },
+    { id: "spaces", label: spaces.fields.navLabel, shown: !spaces.hidden },
+    { id: "progression", label: progression.fields.navLabel, shown: !progression.hidden },
+    { id: "good-neighbor", label: goodNeighbor.fields.navLabel, shown: !goodNeighbor.hidden },
+  ].filter((pill) => pill.shown);
+  const ctaCards = cta.lists.cards
+    .map((card) => {
+      const look = CTA_LOOK[card.id as CtaId];
+      return look
+        ? { ...look, id: card.id, title: card.title, description: card.description, href: look.external ? eventsUrl : look.href }
+        : null;
+    })
+    .filter((card): card is NonNullable<typeof card> => !!card && !!card.href);
+  const circles = ikigai.lists.circles;
 
   return (
     <Layout>
@@ -285,919 +237,685 @@ export default function CoCreatorsGuide() {
               transition={{ duration: 0.6 }}
             >
               <BookOpen className="w-16 h-16 mx-auto mb-6 opacity-90" />
-              <h1 className="font-display text-5xl md:text-6xl font-bold mb-6 leading-tight">
-                The {villageName} Game Guide
+              <h1 className={`font-display ${headlineSize(hero.fields.headline)} font-bold mb-6 leading-tight break-words`}>
+                {hero.fields.headline}
               </h1>
               <p className="text-lg md:text-xl text-white leading-relaxed max-w-2xl mx-auto">
-                Your complete guide to co-creating this village. How the economy works, how decisions get made, how to use our governance platform, and what the journey from visitor to Sage looks like.
+                <Emphasized text={hero.fields.intro} />
               </p>
-              <p className="text-sm text-white mt-4">
-                Also called: The Co-Creators Guide
-              </p>
+              {hero.fields.alsoCalled && <p className="text-sm text-white mt-4">{hero.fields.alsoCalled}</p>}
             </motion.div>
           </div>
         </div>
       </section>
 
       {/* QUICK NAV BAR: sticks under the 96px site header (top-24 z-30, like the quest board's filters); at top-0 z-50 it covered the home link and menu. Its sections carry scroll-mt-40. */}
-      <section className="sticky top-24 z-30 bg-background/95 backdrop-blur border-b border-muted">
-        <div className="container py-4">
-          <div className="overflow-x-auto scrollbar-hide">
-            <div className="flex gap-2 min-w-min">
-              {navPills(tokenName).map((pill) => (
-                <motion.button
-                  key={pill.id}
-                  onClick={() => scrollToSection(pill.id)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
-                    bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                >
-                  {pill.label}
-                </motion.button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* R-IKIGAI SECTION */}
-      <section id="r-ikigai" className="scroll-mt-40 py-20 bg-background">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="max-w-5xl mx-auto"
-          >
-            <div className="mb-12">
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3">
-                Your R-Ikigai
-              </h2>
-              <p className="text-muted-foreground text-lg">
-                The intersection of what you love, what you're good at, what {villageName} needs,
-                and what the village pays for.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              {/* VENN DIAGRAM */}
-              <div className="relative w-full h-80 flex items-center justify-center">
-                <svg viewBox="0 0 400 400" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
-                  {/* Top: Passion */}
-                  <circle
-                    cx="200"
-                    cy="130"
-                    r="90"
-                    fill="rgba(244, 63, 94, 0.2)"
-                    stroke="rgba(244, 63, 94, 0.5)"
-                    strokeWidth="2"
-                  />
-                  {/* Right: Skills */}
-                  <circle
-                    cx="280"
-                    cy="240"
-                    r="90"
-                    fill="rgba(130, 201, 185, 0.2)"
-                    stroke="rgba(130, 201, 185, 0.5)"
-                    strokeWidth="2"
-                  />
-                  {/* Bottom: Regeneration */}
-                  <circle
-                    cx="120"
-                    cy="240"
-                    r="90"
-                    fill="rgba(142, 168, 156, 0.2)"
-                    stroke="rgba(142, 168, 156, 0.5)"
-                    strokeWidth="2"
-                  />
-                  {/* Left: Gratitude */}
-                  <circle
-                    cx="200"
-                    cy="200"
-                    r="60"
-                    fill="rgba(251, 191, 36, 0.3)"
-                    stroke="rgba(251, 191, 36, 0.6)"
-                    strokeWidth="2"
-                  />
-
-                  {/* Labels */}
-                  <text x="200" y="80" textAnchor="middle" className="text-sm font-bold fill-primary">
-                    What You LOVE
-                  </text>
-                  <text x="320" y="260" textAnchor="middle" className="text-sm font-bold fill-sage">
-                    What You&apos;re GOOD AT
-                  </text>
-                  {/*
-                    Generic on purpose, and the one label on this page that is.
-                    This is an SVG <text> at a fixed x with no wrapping, and the
-                    three labels around it name generic roles ("You", "GRATITUDE"),
-                    so a village name of unknown length would be the only variable
-                    thing in a fixed layout and would run off the diagram. The
-                    heading below, which flows, does name the village.
-                  */}
-                  <text x="80" y="320" textAnchor="middle" className="text-sm font-bold fill-sage">
-                    What the VILLAGE NEEDS
-                  </text>
-                  <text x="280" y="150" textAnchor="middle" className="text-sm font-bold fill-amber">
-                    What PAYS
-                  </text>
-
-                  {/* Center */}
-                  <text
-                    x="200"
-                    y="210"
-                    textAnchor="middle"
-                    className="text-lg font-bold fill-teal-deep"
+      {navPills.length > 0 && (
+        <section className="sticky top-24 z-30 bg-background/95 backdrop-blur border-b border-muted">
+          <div className="container py-4">
+            <div className="overflow-x-auto scrollbar-hide">
+              <div className="flex gap-2 min-w-min">
+                {navPills.map((pill) => (
+                  <motion.button
+                    key={pill.id}
+                    onClick={() => scrollToSection(pill.id)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
+                      bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                   >
-                    Your
-                  </text>
-                  <text
-                    x="200"
-                    y="232"
-                    textAnchor="middle"
-                    className="text-lg font-bold fill-teal-deep"
-                  >
-                    R-Ikigai
-                  </text>
-                </svg>
-              </div>
-
-              {/* DESCRIPTIONS */}
-              <div className="space-y-6">
-                <div className="p-4 rounded-lg bg-primary/5 border-l-4 border-primary">
-                  <h3 className="font-bold text-foreground mb-2 flex items-center gap-2">
-                    <Heart className="w-5 h-5 text-primary" />
-                    What You LOVE (Passion)
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Your authentic desires and what brings you alive. What would you do
-                    even if no one paid you?
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg bg-sage/5 border-l-4 border-sage">
-                  <h3 className="font-bold text-foreground mb-2 flex items-center gap-2">
-                    <Star className="w-5 h-5 text-sage" />
-                    What You&apos;re GOOD AT (Skills)
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Your natural abilities, experience, and expertise. What do others
-                    come to you for?
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg bg-emerald-100/50 border-l-4 border-emerald-600">
-                  <h3 className="font-bold text-foreground mb-2 flex items-center gap-2">
-                    <Leaf className="w-5 h-5 text-emerald-600" />
-                    What {villageName} NEEDS (Regeneration)
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    The gaps we need filled to create a thriving, regenerative community.
-                    Where can you fill a real need?
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg bg-amber/5 border-l-4 border-amber">
-                  <h3 className="font-bold text-foreground mb-2 flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-amber" />
-                    What PAYS (Compensation)
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Roles and quests, each with its own value and the tokens it pays, on its card.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* GRATITUDE ECONOMY SECTION */}
-      <section id="recognition" className="scroll-mt-40 py-20 bg-primary/5">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="mb-12 text-center">
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3">
-                Pay, and {tokenName}
-              </h2>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Two different things. Quests and roles pay in {villageName}'s own tokens, and every card says what.{" "}
-                {tokenName} is thanks members give each other, with no financial value of its own: each cycle the community
-                shares a real pool of {valueName} across everyone's {tokenName}.{conversionNote ? ` ${conversionNote}` : ""}
-              </p>
-            </div>
-
-            {/* THREE COLUMN CARDS */}
-            <div className="grid md:grid-cols-3 gap-8 mb-12">
-              {/* EARN */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0 }}
-                className="bg-card rounded-xl p-8 border border-muted hover:shadow-lg transition-shadow"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6 text-green-600" />
-                  </div>
-                  <h3 className="font-bold text-xl text-foreground">Get paid for your work</h3>
-                </div>
-                <EarningsFromTheWork />
-              </motion.div>
-
-              {/* HOLD */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.1 }}
-                className="bg-card rounded-xl p-8 border border-muted hover:shadow-lg transition-shadow"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-lg bg-teal-100 flex items-center justify-center">
-                    <Heart className="w-6 h-6 text-teal-deep" />
-                  </div>
-                  <h3 className="font-bold text-xl text-foreground">Give and receive {tokenName}</h3>
-                </div>
-                <div className="space-y-3">
-                  {recognition.hold.map((item, idx) => (
-                    <div key={idx} className="flex items-start gap-3 pb-3 border-b border-muted last:border-0">
-                      <Star className="w-5 h-5 text-teal-deep mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-foreground">{item}</p>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-
-              {/* SPEND */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.2 }}
-                className="bg-card rounded-xl p-8 border border-muted hover:shadow-lg transition-shadow"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-lg bg-amber-100 flex items-center justify-center">
-                    <Zap className="w-6 h-6 text-amber" />
-                  </div>
-                  <h3 className="font-bold text-xl text-foreground">Receive {valueName}</h3>
-                </div>
-                <div className="space-y-3">
-                  {recognition.spend.map((item, idx) => (
-                    <div key={idx} className="flex items-start gap-3 pb-3 border-b border-muted last:border-0">
-                      <ArrowRight className="w-5 h-5 text-amber mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-foreground">{item}</p>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            </div>
-
-            {/* GRATITUDE FLOW DIAGRAM */}
-            <div className="bg-card rounded-xl p-8 border border-muted">
-              <h3 className="font-bold text-lg text-foreground mb-6 text-center">
-                How Value Flows Through {villageName}
-              </h3>
-              <div className="flex flex-col md:flex-row items-center justify-center gap-4 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <div className="px-4 py-2 bg-green-100 rounded-lg text-sm font-medium text-green-900">
-                    Contribution
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="px-4 py-2 bg-primary/10 rounded-lg text-sm font-medium text-primary">
-                    {tokenName} Given
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="px-4 py-2 bg-amber-100 rounded-lg text-sm font-medium text-amber-900">
-                    Cycle Pool of {valueName}
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="px-4 py-2 bg-teal-100 rounded-lg text-sm font-medium text-teal-deep">
-                    Community Spending
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div className="px-4 py-2 bg-sage-light rounded-lg text-sm font-medium text-sage">
-                  Regenerative Loop
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-
-      {/* VOICE & GOVERNANCE SECTION */}
-      <section id="voice" className="scroll-mt-40 py-20 bg-background overflow-x-clip">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="mb-12 text-center">
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3">
-                Voice & Governance
-              </h2>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                {villageName} practices consent-based decision making where everyone's voice matters,
-                circles hold authority within their domains, and all concerns are heard.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-12">
-              {/* HOW PROPOSALS WORK */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0 }}
-              >
-                <h3 className="font-bold text-2xl text-foreground mb-6">How Proposals Work</h3>
-                <div className="space-y-4">
-                  {[
-                    {
-                      step: "1",
-                      title: "Proposal",
-                      description:
-                        "Anyone can raise a proposal for action or change. Proposals are presented clearly with context and goals.",
-                    },
-                    {
-                      step: "2",
-                      title: "Clarification",
-                      description:
-                        "The circle asks clarifying questions. This isn't debate, just understanding. Proposals may be refined.",
-                    },
-                    {
-                      step: "3",
-                      title: "Consent",
-                      description:
-                        "We look for consent, not unanimous agreement. No reasoned objections means we move forward.",
-                    },
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex gap-4">
-                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="font-bold text-primary">{item.step}</span>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-foreground mb-1">{item.title}</h4>
-                        <p className="text-sm text-muted-foreground">{item.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-8 p-4 rounded-lg bg-sage/5 border border-sage/20">
-                  <p className="text-sm text-foreground">
-                    <span className="font-semibold">Monthly All-Village Calls:</span> Major cross-circle
-                    decisions happen here, with full transparency and participation.
-                  </p>
-                </div>
-              </motion.div>
-
-              {/* KEY PRINCIPLES */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.1 }}
-                className="space-y-4"
-              >
-                <h3 className="font-bold text-2xl text-foreground mb-6">Key Principles</h3>
-
-                <div className="p-4 rounded-lg border-2 border-primary bg-primary/5">
-                  <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                    <Circle className="w-5 h-5 text-primary" />
-                    Circles Hold Authority
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Each circle has decision-making power within its domain. No single person
-                    overrides the circle.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg border-2 border-teal-light bg-teal-light/5">
-                  <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                    <MessageCircle className="w-5 h-5 text-teal-deep" />
-                    Objections vs. Disagreements
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    A reasoned objection blocks progress. A disagreement is noted but doesn't
-                    stop the work. Know the difference.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg border-2 border-sage bg-sage/5">
-                  <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-sage" />
-                    Consent Culture
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    We're not seeking unanimous agreement. We're looking for no reasoned
-                    objections. That's enough to move forward.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg border-2 border-amber bg-amber/5">
-                  <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-amber" />
-                    Anyone Can Raise Concerns
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    If you see a problem, speak up. Concerns shape better decisions. Silence
-                    isn't consent.
-                  </p>
-                </div>
-              </motion.div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* HYPHA PLATFORM SECTION */}
-      <section id="hypha" className="scroll-mt-40 py-20 bg-teal-deep">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="mb-12 text-center max-w-3xl mx-auto">
-              <span className="text-sm font-medium uppercase tracking-wide text-cream/60">
-                Where Governance Gets Real
-              </span>
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-cream mb-4 mt-2">
-                Meet Hypha
-              </h2>
-              <p className="text-cream/80 text-lg leading-relaxed">
-                Hypha is the platform where every {villageName} decision lives, recorded, verifiable,
-                and tamper-proof on a distributed ledger. This isn't a shared Google Doc or a
-                Discord vote that disappears. It's an{" "}
-                <strong className="text-cream">incredibly secure, globally trusted governance
-                system</strong>{" "}
-                used by communities around the world to hold their most important decisions.
-                Your voice here is permanent. Your contributions here are real.
-              </p>
-              <p className="text-cream/70 text-base mt-4 leading-relaxed">
-                No single person, not even the founders, can override a community consent
-                vote on Hypha. That's the point. When we say {villageName} is community-governed, this
-                is what makes it true.
-              </p>
-              <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-                <a
-                  href="https://app.hypha.earth"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cream text-teal-deep text-sm font-semibold hover:bg-cream/90 transition-colors"
-                >
-                  Open Hypha Platform
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-                {/*
-                  This read "[AMORA: Add your Hypha DHO link...]": a note written
-                  to one client during a build, shipped to every village and
-                  rendered to every anonymous visitor of every one of them. It is
-                  an instruction for whoever runs this village, so it addresses
-                  them and names nobody.
-                */}
-                <p className="text-xs text-cream/80 self-center italic">
-                  Add this village's Hypha DHO link in Admin, Variables, to make this live.
-                </p>
-              </div>
-            </div>
-
-            {/* Value philosophy */}
-            <div className="max-w-3xl mx-auto mb-12 rounded-2xl border border-white/20 bg-white/10 p-6 md:p-8">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-                  <Vote className="w-5 h-5 text-cream" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-cream text-lg mb-2">
-                    Value In = Value Out
-                  </h3>
-                  <p className="text-cream/80 text-sm leading-relaxed">
-                    Every proposal puts one question to the community: does this contribution serve{" "}
-                    {villageName} at the level of {tokenName} being requested? Not hours logged, hours are
-                    not a contribution. What matters is the actual value created, articulated
-                    clearly, and assessed honestly by your peers. The more you contribute, the more
-                    weight your voice carries in those votes.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* 4 Action Cards. All their text is white: each card is a 5% tint of the dark band, where light-page ink read at 1.00 to 1.96:1. The icons keep the per-card colours. CoCreatorsGuide.contrast.test.tsx */}
-            <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-              {hyphaActions.map((action, idx) => {
-                const Icon = action.icon;
-                const href = hypha.configured ? hypha.orgUrl + action.suffix : "";
-                return (
-                  <motion.div
-                    key={action.title}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: idx * 0.08 }}
-                    className={`rounded-2xl border-2 p-6 ${action.color}`}
-                  >
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className={`w-10 h-10 rounded-xl ${action.iconBg} flex items-center justify-center flex-shrink-0`}>
-                        <Icon className={`w-5 h-5 ${action.iconColor}`} />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-white">{action.title}</h3>
-                        <p className="text-xs font-medium text-white">{action.subtitle}</p>
-                      </div>
-                    </div>
-                    <p className="text-white text-sm leading-relaxed mb-5">
-                      {action.description}
-                    </p>
-                    {href ? (
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm font-semibold text-white hover:underline"
-                    >
-                      {action.cta}
-                      <ExternalLink className="w-4 h-4 opacity-60" />
-                    </a>
-                    ) : (
-                      <p className="text-xs text-white italic">
-                        Available once your village's Hypha space is connected.
-                      </p>
-                    )}
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            {/* The loop */}
-            <div className="mt-14 max-w-3xl mx-auto">
-              <p className="text-center text-cream/60 text-xs uppercase tracking-widest font-medium mb-5">
-                The {villageName} Contribution Loop
-              </p>
-              <div className="grid sm:grid-cols-3 gap-4 text-center">
-                {[
-                  { label: "Sense", emoji: "🌀", description: "Find where your gifts are most needed. A quest waiting. A gap in the land. A conversation that sparks something." },
-                  { label: "Propose", emoji: "✍️", description: "Open your intention to the community in Hypha. Consent-based: the check is simply whether this serves us." },
-                  { label: "Create", emoji: "🌱", description: `Do the work. Document it. Return and claim ${tokenName} for the value you actually created.` },
-                ].map((step) => (
-                  <div key={step.label} className="rounded-xl bg-white/10 border border-white/20 p-5">
-                    <div className="text-2xl mb-2">{step.emoji}</div>
-                    <div className="text-lg font-display font-bold text-cream mb-2">{step.label}</div>
-                    <p className="text-cream/80 text-sm leading-relaxed">{step.description}</p>
-                  </div>
+                    {pill.label}
+                  </motion.button>
                 ))}
               </div>
             </div>
-          </motion.div>
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
-      {/* THE FOUR SPACES SECTION */}
-      <section id="spaces" className="scroll-mt-40 py-20 bg-primary/5">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="mb-12 text-center">
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3">
-                The Four Spaces
-              </h2>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                {villageName} is organized into four interconnected circles, each stewarding
-                a different dimension of our community.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              {spaces(tokenName).map((space, idx) => (
-                <motion.div
-                  key={space.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.1 }}
-                  id={space.id}
-                  className={`${space.color} rounded-xl p-8 border border-muted/20 hover:shadow-lg transition-shadow`}
-                >
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-lg bg-white/70 flex items-center justify-center flex-shrink-0">
-                      <space.icon className={`w-6 h-6 ${space.textColor}`} />
-                    </div>
-                    <h3 className={`font-bold text-xl ${space.textColor}`}>
-                      {space.title}
-                    </h3>
-                  </div>
-                  <p className="text-foreground text-sm leading-relaxed">
-                    {space.description}
-                  </p>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* PATH OF GROWTH SECTION */}
-      <section id="progression" className="scroll-mt-40 py-20 bg-background">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="mb-12 text-center">
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3">
-                Path of Growth
-              </h2>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Your journey through {villageName}, from first contact to deepest participation.
-                Each stage has its own gifts and responsibilities.
-              </p>
-            </div>
-
-            {/* PROGRESSION TIMELINE */}
-            <div className="max-w-5xl mx-auto mb-16">
-              <div className="relative">
-                {/* RESPONSIVE GRID */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                  {progressionStages.map((stage, idx) => {
-                    let bgColor = "bg-muted";
-                    let textColor = "text-muted-foreground";
-
-                    if (stage.phase === "member") {
-                      bgColor = "bg-primary/10";
-                      textColor = "text-primary";
-                    } else if (stage.phase === "cocreator") {
-                      bgColor = "bg-teal-light/10";
-                      textColor = "text-teal-deep";
-                    } else if (stage.phase === "guide") {
-                      bgColor = "bg-blue-100";
-                      textColor = "text-blue-900";
-                    } else if (stage.phase === "sage") {
-                      bgColor = "bg-amber-100";
-                      textColor = "text-amber-900";
-                    }
-
-                    return (
-                      <motion.div
-                        key={stage.label}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        whileInView={{ opacity: 1, scale: 1 }}
-                        viewport={{ once: true }}
-                        transition={{ delay: idx * 0.05 }}
-                        className="text-center"
-                      >
-                        <div className={`${bgColor} rounded-lg p-3 mb-2`}>
-                          <p className={`text-xs md:text-sm font-semibold ${textColor}`}>
-                            {stage.label}
-                          </p>
-                          {stage.subLabel && (
-                            <p className={`text-xs ${textColor}`}>
-                              {stage.subLabel}
-                            </p>
-                          )}
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* GUIDE & SAGE DETAILS */}
-            <div className="grid md:grid-cols-2 gap-8">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0 }}
-                className="bg-blue-50 rounded-xl p-8 border border-blue-200"
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <Compass className="w-8 h-8 text-blue-900" />
-                  <h3 className="font-bold text-2xl text-blue-900">Guide</h3>
-                </div>
-                <p className="text-blue-800 mb-4">
-                  After 7+ years of deep participation, you become a Guide. Guides mentor
-                  others, hold institutional memory, and help newer members navigate their
-                  journey.
-                </p>
-                <p className="text-sm text-blue-700">
-                  <span className="font-semibold">Responsibilities:</span> Mentorship, wisdom
-                  sharing, ceremony holding, and intergenerational connection.
-                </p>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.1 }}
-                className="bg-amber-50 rounded-xl p-8 border border-amber-200"
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <Crown className="w-8 h-8 text-amber-900" />
-                  <h3 className="font-bold text-2xl text-amber-900">Sage</h3>
-                </div>
-                <p className="text-amber-800 mb-4">
-                  After 21+ years, a Guide may become a Sage. Sages are the living embodiment
-                  of {villageName}'s values and vision, holding space for the village's evolution.
-                </p>
-                <p className="text-sm text-amber-700">
-                  <span className="font-semibold">Responsibilities:</span> Long-term vision,
-                  values stewardship, conflict resolution, and community healing.
-                </p>
-              </motion.div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* GOOD NEIGHBOR SECTION */}
-      <section id="good-neighbor" className="scroll-mt-40 py-20 bg-primary/5">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="mb-12 text-center">
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3">
-                Good Neighbor Criteria
-              </h2>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                To become a resident of {villageName}, you commit to embodying these four pillars.
-              </p>
-            </div>
-
-            {/* FOUR PILLAR CARDS */}
-            <div className="grid md:grid-cols-4 gap-6 mb-12">
-              {goodNeighborPillars.map((pillar, idx) => (
-                <motion.div
-                  key={pillar.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.1 }}
-                  className="text-center"
-                >
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <pillar.icon className="w-8 h-8 text-primary" />
-                  </div>
-                  <h3 className="font-semibold text-foreground mb-2">{pillar.title}</h3>
-                  <p className="text-sm text-muted-foreground">{pillar.description}</p>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* LINK TO FULL DOCUMENT */}
+      {/* R-IKIGAI SECTION */}
+      {!ikigai.hidden && (
+        <section id="r-ikigai" className="scroll-mt-40 py-20 bg-background">
+          <div className="container">
             <motion.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
-              className="bg-card rounded-xl p-8 border border-muted text-center max-w-2xl mx-auto"
+              transition={{ duration: 0.6 }}
+              className="max-w-5xl mx-auto"
             >
-              <p className="text-muted-foreground mb-6">
-                The Good Neighbor Criteria are essential for anyone seeking to become a
-                Resident. They reflect our commitment to authentic community and mutual
-                respect.
-              </p>
-              <Link href="/good-neighbor">
-                <a className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
-                  Read the Full Good Neighbor Document
-                  <ArrowRight className="w-4 h-4" />
-                </a>
-              </Link>
+              <div className="mb-12">
+                <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3 break-words">
+                  {ikigai.fields.heading}
+                </h2>
+                <p className="text-muted-foreground text-lg">
+                  <Emphasized text={ikigai.fields.intro} />
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-12 items-center">
+                {/* VENN DIAGRAM. The labels sit at fixed points with no wrapping, which is why their limit is short. */}
+                <div className="relative w-full h-80 flex items-center justify-center">
+                  <svg viewBox="-20 0 440 400" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+                    {/* Top: Passion */}
+                    <circle
+                      cx="200"
+                      cy="130"
+                      r="90"
+                      fill="rgba(244, 63, 94, 0.2)"
+                      stroke="rgba(244, 63, 94, 0.5)"
+                      strokeWidth="2"
+                    />
+                    {/* Right: Skills */}
+                    <circle
+                      cx="280"
+                      cy="240"
+                      r="90"
+                      fill="rgba(130, 201, 185, 0.2)"
+                      stroke="rgba(130, 201, 185, 0.5)"
+                      strokeWidth="2"
+                    />
+                    {/* Bottom: Regeneration */}
+                    <circle
+                      cx="120"
+                      cy="240"
+                      r="90"
+                      fill="rgba(142, 168, 156, 0.2)"
+                      stroke="rgba(142, 168, 156, 0.5)"
+                      strokeWidth="2"
+                    />
+                    {/* Middle */}
+                    <circle
+                      cx="200"
+                      cy="200"
+                      r="60"
+                      fill="rgba(251, 191, 36, 0.3)"
+                      stroke="rgba(251, 191, 36, 0.6)"
+                      strokeWidth="2"
+                    />
+
+                    {circles.map((circle) => {
+                      const look = IKIGAI_LOOK[circle.id as IkigaiId];
+                      if (!look) return null;
+                      return (
+                        <text key={circle.id} x={look.x} y={look.y} textAnchor="middle" className={`text-sm font-bold ${look.fill}`}>
+                          {circle.label}
+                        </text>
+                      );
+                    })}
+
+                    {/* Center */}
+                    <text x="200" y="210" textAnchor="middle" className="text-lg font-bold fill-teal-deep">
+                      {ikigai.fields.centerTop}
+                    </text>
+                    <text x="200" y="232" textAnchor="middle" className="text-lg font-bold fill-teal-deep">
+                      {ikigai.fields.centerBottom}
+                    </text>
+                  </svg>
+                </div>
+
+                {/* DESCRIPTIONS */}
+                <div className="space-y-6">
+                  {circles.map((circle) => {
+                    const look = IKIGAI_LOOK[circle.id as IkigaiId];
+                    if (!look) return null;
+                    return (
+                      <div key={circle.id} className={`p-4 rounded-lg border-l-4 ${look.box}`}>
+                        <h3 className="font-bold text-foreground mb-2 flex items-center gap-2">
+                          <look.icon className={`w-5 h-5 flex-shrink-0 ${look.iconColor}`} />
+                          <span className="min-w-0 break-words">{circle.title}</span>
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          <Emphasized text={circle.body} />
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </motion.div>
-          </motion.div>
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
+      {/* TOKENS: named, with a link to the rules the village set, and the live card of what work is worth. */}
+      {!recognition.hidden && (
+        <section id="recognition" className="scroll-mt-40 py-20 bg-primary/5">
+          <div className="container">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="mb-12 text-center">
+                <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3 break-words">
+                  {recognition.fields.heading}
+                </h2>
+                <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-3">
+                  <Emphasized text={recognition.fields.intro} />
+                </p>
+                {recognition.fields.linkLabel && (
+                  <Link
+                    href="/game-mechanics"
+                    className="inline-flex items-center gap-1 text-primary font-semibold hover:underline"
+                  >
+                    {recognition.fields.linkLabel}
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                )}
+              </div>
 
-      {/* CTA SECTION */}
-      <section className="py-20 bg-background">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="text-center mb-12">
-              <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3">
-                Ready to Begin?
-              </h2>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                The infinite journey starts with a single step. Choose your path below.
-              </p>
-            </div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="max-w-xl mx-auto bg-card rounded-xl p-8 border border-muted hover:shadow-lg transition-shadow"
+              >
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="w-6 h-6 text-green-600" />
+                  </div>
+                  <h3 className="font-bold text-xl text-foreground min-w-0 break-words">{recognition.fields.cardTitle}</h3>
+                </div>
+                <EarningsFromTheWork />
+              </motion.div>
+            </motion.div>
+          </div>
+        </section>
+      )}
 
-            <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-              {cards.map((card, idx) => (
+      {/* VOICE & GOVERNANCE SECTION */}
+      {!voice.hidden && (
+        <section id="voice" className="scroll-mt-40 py-20 bg-background overflow-x-clip">
+          <div className="container">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="mb-12 text-center">
+                <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3 break-words">
+                  {voice.fields.heading}
+                </h2>
+                <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                  <Emphasized text={voice.fields.intro} />
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-12">
+                {/* HOW PROPOSALS WORK */}
                 <motion.div
-                  key={card.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
-                  transition={{ delay: idx * 0.1 }}
-                  className="group"
+                  transition={{ delay: 0 }}
+                  className="min-w-0"
                 >
-                  {card.external ? (
+                  <h3 className="font-bold text-2xl text-foreground mb-6 break-words">{voice.fields.stepsHeading}</h3>
+                  <div className="space-y-4">
+                    {voice.lists.steps.map((item, idx) => (
+                      <div key={idx} className="flex gap-4">
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="font-bold text-primary">{idx + 1}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-semibold text-foreground mb-1 break-words">{item.title}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            <Emphasized text={item.description} />
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {voice.fields.note && (
+                    <div className="mt-8 p-4 rounded-lg bg-sage/5 border border-sage/20">
+                      <p className="text-sm text-foreground">
+                        <Emphasized text={voice.fields.note} strongClassName="font-semibold" />
+                      </p>
+                    </div>
+                  )}
+                </motion.div>
+
+                {/* KEY PRINCIPLES */}
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.1 }}
+                  className="space-y-4 min-w-0"
+                >
+                  <h3 className="font-bold text-2xl text-foreground mb-6 break-words">{voice.fields.principlesHeading}</h3>
+
+                  {voice.lists.principles.map((principle, i) => {
+                    const look = VOICE_PRINCIPLE_LOOKS[i % VOICE_PRINCIPLE_LOOKS.length];
+                    return (
+                      <div key={`${i}-${principle.title}`} className={`p-4 rounded-lg border-2 ${look.box}`}>
+                        <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                          <look.icon className={`w-5 h-5 flex-shrink-0 ${look.iconColor}`} />
+                          <span className="min-w-0 break-words">{principle.title}</span>
+                        </h4>
+                        <p className="text-sm text-muted-foreground">
+                          <Emphasized text={principle.body} />
+                        </p>
+                      </div>
+                    );
+                  })}
+                </motion.div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* HYPHA PLATFORM SECTION: drawn only while this village has a Hypha space to describe. */}
+      {showHypha && (
+        <section id="hypha" className="scroll-mt-40 py-20 bg-teal-deep">
+          <div className="container">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="mb-12 text-center max-w-3xl mx-auto">
+                {hyphaSection.fields.eyebrow && (
+                  <span className="text-sm font-medium uppercase tracking-wide text-cream/60">
+                    {hyphaSection.fields.eyebrow}
+                  </span>
+                )}
+                <h2 className="font-display text-4xl md:text-5xl font-bold text-cream mb-4 mt-2 break-words">
+                  {hyphaSection.fields.heading}
+                </h2>
+                <p className="text-cream/80 text-lg leading-relaxed">
+                  <Emphasized text={hyphaSection.fields.intro} strongClassName="text-cream" />
+                </p>
+                {hyphaSection.fields.body && (
+                  <p className="text-cream/70 text-base mt-4 leading-relaxed">
+                    <Emphasized text={hyphaSection.fields.body} strongClassName="text-cream" />
+                  </p>
+                )}
+                {/* This village's own Hypha space. It used to be one shared
+                    address for every village, beside an instruction to admins
+                    printed to every visitor (HyphaAdminNote now tells admins). */}
+                {hypha.orgUrl && (
+                  <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
                     <a
-                      href={card.href}
+                      href={hypha.orgUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="h-full block bg-card rounded-xl p-8 border border-muted
-                        hover:border-primary hover:shadow-lg hover:translate-y-1 transition-all duration-300 cursor-pointer"
+                      className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-cream text-teal-deep text-sm font-semibold hover:bg-cream/90 transition-colors"
                     >
+                      {hyphaSection.fields.openLabel}
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Value philosophy */}
+              <div className="max-w-3xl mx-auto mb-12 rounded-2xl border border-white/20 bg-white/10 p-6 md:p-8">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <Vote className="w-5 h-5 text-cream" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-cream text-lg mb-2 break-words">{hyphaSection.fields.valueHeading}</h3>
+                    <p className="text-cream/80 text-sm leading-relaxed">
+                      <Emphasized text={hyphaSection.fields.valueBody} strongClassName="text-cream" />
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 Action Cards. All their text is white: each card is a 5% tint of the dark band, where light-page ink read at 1.00 to 1.96:1. The icons keep the per-card colours. CoCreatorsGuide.contrast.test.tsx */}
+              <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                {hyphaSection.lists.actions.map((action, idx) => {
+                  const look = HYPHA_ACTION_LOOK[action.id as HyphaActionId];
+                  if (!look) return null;
+                  const Icon = look.icon;
+                  return (
+                    <motion.div
+                      key={action.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: idx * 0.08 }}
+                      className={`rounded-2xl border-2 p-6 min-w-0 ${look.color}`}
+                    >
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className={`w-10 h-10 rounded-xl ${look.iconBg} flex items-center justify-center flex-shrink-0`}>
+                          <Icon className={`w-5 h-5 ${look.iconColor}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-white break-words">{action.title}</h3>
+                          <p className="text-xs font-medium text-white">{action.subtitle}</p>
+                        </div>
+                      </div>
+                      <p className="text-white text-sm leading-relaxed mb-5">
+                        <Emphasized text={action.description} />
+                      </p>
+                      <a
+                        href={hypha.orgUrl + look.suffix}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-sm font-semibold text-white hover:underline"
+                      >
+                        {action.cta}
+                        <ExternalLink className="w-4 h-4 opacity-60" />
+                      </a>
+                    </motion.div>
+                  );
+                })}
+              </div>
+
+              {/* The loop */}
+              <div className="mt-14 max-w-3xl mx-auto">
+                <p className="text-center text-cream/60 text-xs uppercase tracking-widest font-medium mb-5">
+                  {hyphaSection.fields.loopHeading}
+                </p>
+                <div className="grid sm:grid-cols-3 gap-4 text-center">
+                  {hyphaSection.lists.loop.map((step) => (
+                    <div key={step.id} className="rounded-xl bg-white/10 border border-white/20 p-5 min-w-0">
+                      <div className="text-2xl mb-2">{LOOP_EMOJI[step.id as LoopId]}</div>
+                      <div className="text-lg font-display font-bold text-cream mb-2 break-words">{step.label}</div>
+                      <p className="text-cream/80 text-sm leading-relaxed">
+                        <Emphasized text={step.description} />
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
+      {!hyphaSection.hidden && (
+        <div className="container">
+          <HyphaAdminNote />
+        </div>
+      )}
+
+      {/* THE SPACES SECTION */}
+      {!spaces.hidden && (
+        <section id="spaces" className="scroll-mt-40 py-20 bg-primary/5">
+          <div className="container">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="mb-12 text-center">
+                <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3 break-words">
+                  {spaces.fields.heading}
+                </h2>
+                <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                  <Emphasized text={spaces.fields.intro} />
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {spaces.lists.items.map((space, idx) => {
+                  const look = SPACE_LOOKS[idx % SPACE_LOOKS.length];
+                  return (
+                    <motion.div
+                      key={`${idx}-${space.title}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: idx * 0.1 }}
+                      className={`${look.color} rounded-xl p-8 border border-muted/20 hover:shadow-lg transition-shadow min-w-0`}
+                    >
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-lg bg-white/70 flex items-center justify-center flex-shrink-0">
+                          <look.icon className={`w-6 h-6 ${look.textColor}`} />
+                        </div>
+                        <h3 className={`font-bold text-xl min-w-0 break-words ${look.textColor}`}>{space.title}</h3>
+                      </div>
+                      <p className="text-foreground text-sm leading-relaxed break-words">{space.description}</p>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* PATH OF GROWTH SECTION */}
+      {!progression.hidden && (
+        <section id="progression" className="scroll-mt-40 py-20 bg-background">
+          <div className="container">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="mb-12 text-center">
+                <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3 break-words">
+                  {progression.fields.heading}
+                </h2>
+                <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                  <Emphasized text={progression.fields.intro} />
+                </p>
+              </div>
+
+              {/* PROGRESSION TIMELINE */}
+              {progression.lists.stages.length > 0 && (
+                <div className="max-w-5xl mx-auto mb-16">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {progression.lists.stages.map((stage, idx) => {
+                      const tint = STAGE_TINTS[Math.min(idx, STAGE_TINTS.length - 1)];
+                      return (
+                        <motion.div
+                          key={`${idx}-${stage.label}`}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          whileInView={{ opacity: 1, scale: 1 }}
+                          viewport={{ once: true }}
+                          transition={{ delay: idx * 0.05 }}
+                          className="text-center min-w-0"
+                        >
+                          <div className={`${tint.bg} rounded-lg p-3 mb-2`}>
+                            <p className={`text-xs md:text-sm font-semibold break-words ${tint.text}`}>{stage.label}</p>
+                            {stage.note && <p className={`text-xs break-words ${tint.text}`}>{stage.note}</p>}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* GUIDE & SAGE DETAILS */}
+              <div className="grid md:grid-cols-2 gap-8">
+                {progression.lists.elders.map((elder, idx) => {
+                  const look = ELDER_LOOK[elder.id as ElderId];
+                  if (!look) return null;
+                  return (
+                    <motion.div
+                      key={elder.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: idx * 0.1 }}
+                      className={`rounded-xl p-8 border min-w-0 ${look.card}`}
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        <look.icon className={`w-8 h-8 flex-shrink-0 ${look.title}`} />
+                        <h3 className={`font-bold text-2xl min-w-0 break-words ${look.title}`}>{elder.title}</h3>
+                      </div>
+                      <p className={`mb-4 ${look.body}`}>
+                        <Emphasized text={elder.body} />
+                      </p>
+                      {elder.duties && (
+                        <p className={`text-sm ${look.duties}`}>
+                          <Emphasized text={elder.duties} strongClassName="font-semibold" />
+                        </p>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* GOOD NEIGHBOR SECTION */}
+      {!goodNeighbor.hidden && (
+        <section id="good-neighbor" className="scroll-mt-40 py-20 bg-primary/5">
+          <div className="container">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="mb-12 text-center">
+                <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3 break-words">
+                  {goodNeighbor.fields.heading}
+                </h2>
+                <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                  <Emphasized text={goodNeighbor.fields.intro} />
+                </p>
+              </div>
+
+              {/* PILLAR CARDS */}
+              {goodNeighbor.lists.pillars.length > 0 && (
+                <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-6 mb-12">
+                  {goodNeighbor.lists.pillars.map((pillar, idx) => {
+                    const Icon = PILLAR_ICONS[idx % PILLAR_ICONS.length];
+                    return (
+                      <motion.div
+                        key={`${idx}-${pillar.title}`}
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: idx * 0.1 }}
+                        className="text-center min-w-0"
+                      >
+                        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                          <Icon className="w-8 h-8 text-primary" />
+                        </div>
+                        <h3 className="font-semibold text-foreground mb-2 break-words">{pillar.title}</h3>
+                        <p className="text-sm text-muted-foreground break-words">{pillar.description}</p>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* LINK TO FULL DOCUMENT */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                viewport={{ once: true }}
+                className="bg-card rounded-xl p-8 border border-muted text-center max-w-2xl mx-auto"
+              >
+                <p className="text-muted-foreground mb-6">
+                  <Emphasized text={goodNeighbor.fields.body} />
+                </p>
+                <Link href="/good-neighbor">
+                  <a className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
+                    {goodNeighbor.fields.buttonLabel}
+                    <ArrowRight className="w-4 h-4 flex-shrink-0" />
+                  </a>
+                </Link>
+              </motion.div>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* CTA SECTION */}
+      {!cta.hidden && (
+        <section className="py-20 bg-background">
+          <div className="container">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="text-center mb-12">
+                <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3 break-words">
+                  {cta.fields.heading}
+                </h2>
+                <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                  <Emphasized text={cta.fields.intro} />
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                {ctaCards.map((card, idx) => {
+                  const inner = (
+                    <>
                       <div className="mb-6">
                         <card.icon className={`w-12 h-12 ${card.color}`} />
                       </div>
-                      <h3 className="font-bold text-xl text-foreground mb-2">
-                        {card.title}
-                      </h3>
-                      <p className="text-muted-foreground text-sm mb-6">
-                        {card.description}
-                      </p>
+                      <h3 className="font-bold text-xl text-foreground mb-2 break-words">{card.title}</h3>
+                      <p className="text-muted-foreground text-sm mb-6 break-words">{card.description}</p>
                       <div className="flex items-center gap-2 text-primary font-semibold">
-                        Learn More
+                        {cta.fields.moreLabel}
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                       </div>
-                    </a>
-                  ) : (
-                    <Link href={card.href}>
-                      <a className="h-full block bg-card rounded-xl p-8 border border-muted
-                        hover:border-primary hover:shadow-lg hover:translate-y-1 transition-all duration-300 cursor-pointer">
-                        <div className="mb-6">
-                          <card.icon className={`w-12 h-12 ${card.color}`} />
-                        </div>
-                        <h3 className="font-bold text-xl text-foreground mb-2">
-                          {card.title}
-                        </h3>
-                        <p className="text-muted-foreground text-sm mb-6">
-                          {card.description}
-                        </p>
-                        <div className="flex items-center gap-2 text-primary font-semibold">
-                          Learn More
-                          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                        </div>
-                      </a>
-                    </Link>
-                  )}
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      </section>
+                    </>
+                  );
+                  const cardClass =
+                    "h-full block bg-card rounded-xl p-8 border border-muted hover:border-primary hover:shadow-lg hover:translate-y-1 transition-all duration-300 cursor-pointer";
+                  return (
+                    <motion.div
+                      key={card.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="group min-w-0"
+                    >
+                      {card.external ? (
+                        <a href={card.href} target="_blank" rel="noopener noreferrer" className={cardClass}>
+                          {inner}
+                        </a>
+                      ) : (
+                        <Link href={card.href}>
+                          <a className={cardClass}>{inner}</a>
+                        </Link>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
 
       {/* FOOTER WISDOM */}
-      <section className="py-16 bg-teal-deep text-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl" />
-        </div>
-        <div className="container relative z-10">
-          <div className="max-w-2xl mx-auto text-center">
-            <p className="text-lg italic text-white leading-relaxed">
-              "{villageName} is an Infinite Game, played to keep creating
-              together. We co-become the most beautiful village, where all beings belong and
-              thrive. Success is measured by the flourishing of our
-              community, land, and relationships."
-            </p>
-            <div className="mt-8 flex items-center justify-center gap-4 text-white">
-              <Heart className="w-5 h-5" />
-              <span className="text-sm">Welcome to {villageName}</span>
-              <Heart className="w-5 h-5" />
+      {!closing.hidden && (
+        <section className="py-16 bg-teal-deep text-white relative overflow-hidden">
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl" />
+          </div>
+          <div className="container relative z-10">
+            <div className="max-w-2xl mx-auto text-center">
+              <p className="text-lg italic text-white leading-relaxed">
+                "<Emphasized text={closing.fields.quote} />"
+              </p>
+              {closing.fields.signoff && (
+                <div className="mt-8 flex items-center justify-center gap-4 text-white">
+                  <Heart className="w-5 h-5 flex-shrink-0" />
+                  <span className="text-sm min-w-0 break-words">{closing.fields.signoff}</span>
+                  <Heart className="w-5 h-5 flex-shrink-0" />
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </Layout>
   );
 }

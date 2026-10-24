@@ -52,6 +52,8 @@ vi.mock("@/lib/gameApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/gameApi")>()),
   useBrandImages: () => ({}),
   useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
+  // The page's words come from its spec, filled with this village's names.
+  useGameConfig: () => ({ project: { name: "Willowbrook" }, currency: { name: "Gratitude" } }),
 }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
 vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: () => "Gratitude" }));
@@ -67,6 +69,8 @@ vi.mock("@/hooks/useVillageContent", () => ({
     section === "money"
       ? { content: moneySection.current, loading: false, isPlaceholder: !moneySection.current }
       : { content: null, loading: false, isPlaceholder: true },
+  // The page's own saved words (page-journey-resident): none, so the defaults.
+  readVillageSection: () => Promise.resolve(null),
 }));
 
 import ResidentJourney from "./ResidentJourney";
