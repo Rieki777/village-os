@@ -180,8 +180,10 @@ export function harness() {
     });
     return { status: res.status, text: await res.clone().text(), body: (await res.json().catch(() => ({}))) as any };
   };
+  /** A request with its own body and headers (a file upload), answered as the raw response (a text download). */
+  const raw = (url: string, init: RequestInit = {}) => fetch(`${base}${url}`, init); // module-review-ok: this suite's own loopback server, not an outbound call
   const as = (id: string | null, stage = "member") => {
     state.viewer = id ? { id, stage } : null;
   };
-  return { state, notices, start, stop, call, as };
+  return { state, notices, start, stop, call, raw, as };
 }

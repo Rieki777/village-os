@@ -26,6 +26,7 @@ import { ROOM_COPY, SESSION_LIMITS, SESSION_REFUSALS, cleanText, type SessionEnt
 import Celebration from "@/components/natural/Celebration";
 import { useArrival, useMomentWindow } from "@/components/natural/moments";
 import ConsentRound, { WaitingLine } from "./ConsentRound";
+import RegenLens from "./RegenLens";
 import EditableText from "./EditableText";
 import {
   BTN_ICON,
@@ -153,6 +154,7 @@ export default function Proposal({ view, actions, entry, now }: Omit<StageProps,
         </p>
       ) : (
         <div className="mt-4">
+          <RegenLens entryId={entry.id} />
           <ConsentRound
             view={view}
             actions={actions}

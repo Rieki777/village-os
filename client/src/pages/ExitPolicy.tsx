@@ -168,8 +168,8 @@ export default function ExitPolicy() {
               <p className="font-semibold text-foreground text-sm mb-2">Begin your own departure</p>
               <p className="text-xs text-muted-foreground mb-3">
                 This opens the process above. It does not close your account.
-                Your contributions stay part of the village's record; your
-                identity is removed at the end, when everything is settled.
+                If you still hold tokens when it ends, you stay on as a former
+                member and keep your account and balances. Otherwise your identity is removed at the end and your contributions stay part of the village's record.
               </p>
               <LeavingEnds titles={endingTerms} />
               <div className="space-y-2">
