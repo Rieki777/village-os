@@ -4883,9 +4883,10 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // A recurring purchase kept charging after the account was deleted, and
     // every renewal paid the product's tokens from the treasury into the
     // tombstone, with no alarm. The erasure now cancels the subscription in
-    // Stripe; this harness has no Stripe key on purpose, so the delete stops
-    // loudly at that step with the account already closed, which is the shape
-    // in which a charge can still land. The renewal gate refuses it.
+    // Stripe; this harness has no Stripe key on purpose, so the erasure hands
+    // the cancel to the admins and finishes, and the subscription is still
+    // live in Stripe, which is the shape in which a charge can still land.
+    // The renewal gate refuses it.
     const lapsedProd = await api("POST", "/api/admin/products", {
       kind: "membership", name: "Lapsed membership", amountMinor: 500, recurring: "month",
       tokenSlug: "pack-tok", tokenAmount: 1, active: true,
@@ -4912,17 +4913,29 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(lapsedDesk.json.states.find((st: any) => st.domain === "subscriptions")).toMatchObject({ count: 1, blocking: false });
     expect(lapsedDesk.json.blocking).toEqual([]);
     const lapsedNotices = await api("GET", "/api/profile/leaving-notices", undefined, lapsedToken);
+    // No key here, so the notice says the admins cancel it by hand.
     expect(lapsedNotices.json.notices.map((n: any) => n.description)).toEqual([
       "1 recurring payment(s) still renewing through Stripe: Lapsed membership (every month). " +
-        "Deleting the account cancels each one in Stripe, and nothing already paid is refunded",
+        "Stripe is not connected to this village, so deleting the account asks the admins to cancel each one by hand in Stripe, " +
+        "and nothing already paid is refunded",
     ]);
 
-    // The delete closes the account and stops at the Stripe step, recorded for the retry.
-    expect((await api("POST", "/api/profile/delete-account", { password: "LoopTest123!" }, lapsedToken)).status).toBe(500);
-    const [[lapsedErasure]] = await testDb.conn.query<any[]>("SELECT failed_step FROM member_erasures WHERE user_id = ?", [lapsedId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    expect(lapsedErasure.failed_step).toBe("product-subscriptions-after-tombstone");
+    // The delete closes the account and finishes: with no Stripe key the
+    // subscriptions step asks every admin to cancel by hand and counts itself
+    // done, where it used to hold the sweep open at that step for good.
+    expect((await api("POST", "/api/profile/delete-account", { password: "LoopTest123!" }, lapsedToken)).status).toBe(200);
+    const [[lapsedErasure]] = await testDb.conn.query<any[]>("SELECT failed_step, finished_at FROM member_erasures WHERE user_id = ?", [lapsedId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(lapsedErasure.failed_step).toBeNull();
+    expect(lapsedErasure.finished_at).not.toBeNull();
     const [[lapsedRow]] = await testDb.conn.query<any[]>("SELECT email FROM users WHERE id = ?", [lapsedId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(String(lapsedRow.email)).toMatch(/@anonymized\.invalid$/);
+    const [byHand] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT n.title, n.body, n.type, u.role FROM notifications n JOIN users u ON u.id = n.user_id WHERE n.dedupe_key LIKE ?", [`erasure-subscriptions-by-hand:${lapsedId}:%`],
+    );
+    expect(byHand.length).toBeGreaterThan(0);
+    expect(byHand.every((n: any) => (n.role === "admin" || n.role === "founder") && n.type === "payments_alert"
+      && String(n.title).startsWith("Cancel 1 recurring payment(s) by hand in the Stripe dashboard.")
+      && String(n.body).includes("sub_lapsed"))).toBe(true);
 
     // Month two lands anyway: banked, nothing delivered, every admin told once.
     const refusedNotices = async () => (await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
