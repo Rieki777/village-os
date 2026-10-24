@@ -84,6 +84,17 @@ let founderToken = "";
 let leaver = { token: "", id: "" };
 let bystander = { token: "", id: "" };
 
+/**
+ * A member erased on an older release, whose record finished before the needs
+ * deletion moved past the tombstone and before open links were withdrawn
+ * (adversarial round 2, finding 14). Written before the server boots, so the
+ * boot job is what finds it.
+ */
+const GONE = "needstomb-gone-old";
+/** Waiting for the seat the old erasure left them holding. */
+const WAITER = "needstomb-waiter";
+const SEATED = "needstomb-bread-night";
+
 interface Answer { status: number; json: any; text: string }
 
 async function call(method: string, route: string, body?: unknown, token = founderToken): Promise<Answer> {
@@ -125,6 +136,28 @@ beforeAll(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-needstomb-"));
   testDb = await provisionTestDb();
   pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+
+  // The old erasure: a tombstone, a record that finished with that release's
+  // steps ("needs" still ran before the tombstone then), the answer saved after
+  // it, and a link nobody used.
+  const seed = (sql: string, params: unknown[]) => pool.query(sql, params); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  await seed("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?, 'A departed member', ?, '')", [GONE, `deleted-${GONE}@anonymized.invalid`]);
+  await seed("INSERT INTO `member_erasures` (`user_id`, `attempts`, `steps_done`, `finished_at`) VALUES (?, 1, ?, '2026-09-20 10:00:00')", [
+    GONE,
+    JSON.stringify(["needs", "tombstone", "audit", "external-stores"]),
+  ]);
+  await seed("INSERT INTO `member_needs` (`id`, `user_id`, `need_key`, `depth`, `cycle_id`) VALUES (?, ?, 'vitality', 'unmet', 'cycle-old')", [`need-${GONE}`, GONE]);
+  await seed("INSERT INTO `member_invites` (`id`, `token_hash`, `inviter_user_id`, `expires_at`) VALUES (?, ?, ?, CURRENT_TIMESTAMP + INTERVAL 7 DAY)", [
+    `inv-${GONE}`,
+    "a".repeat(64),
+    GONE,
+  ]);
+  // And the one seat at a gathering ahead, with a living member waiting for it.
+  await seed("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?, 'Ida Fenn', ?, 'x')", [WAITER, `${WAITER}@example.test`]);
+  await seed("INSERT INTO `events` (`id`, `title`, `starts_at`, `status`, `kind`, `layer`, `capacity`) VALUES (?, 'Bread night', CURRENT_TIMESTAMP + INTERVAL 5 DAY, 'scheduled', 'gathering', 'village', 1)", [SEATED]);
+  await seed("INSERT INTO `event_rsvps` (`id`, `event_id`, `user_id`, `status`, `idempotency_key`) VALUES (?, ?, ?, 'going', ?)", [`rsvp-${GONE}`, SEATED, GONE, `seed:${GONE}`]);
+  await seed("INSERT INTO `event_waitlist` (`id`, `event_id`, `user_id`) VALUES (?, ?, ?)", [`wl-${WAITER}`, SEATED, WAITER]);
+  expect(await needRows(GONE), "the control: the old erasure left their answer").toBe(1);
 
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
@@ -173,6 +206,30 @@ afterAll(async () => {
 });
 
 describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", () => {
+  it("gives an erasure that finished on an older release the steps it predates, once, at boot", async () => {
+    expect(await needRows(GONE), "the answer the old erasure left is gone").toBe(0);
+    const [links] = await pool.query<any[]>("SELECT `revoked_at` FROM `member_invites` WHERE `id` = ?", [`inv-${GONE}`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(links[0]?.revoked_at, "their open link lets nobody in").not.toBeNull();
+    const [records] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT CAST(`steps_done` AS CHAR) AS steps, DATE_FORMAT(`finished_at`, '%Y-%m-%d %H:%i:%s') AS finished FROM `member_erasures` WHERE `user_id` = ?",
+      [GONE],
+    );
+    expect(JSON.parse(records[0].steps), "what ran is written on the record").toEqual(
+      expect.arrayContaining(["needs", "tombstone", "needs-after-tombstone", "invites-after-tombstone"]),
+    );
+    expect(records[0].finished, "and the finish did not move").toBe("2026-09-20 10:00:00");
+    // The seat went to the person waiting, and they were told: the job runs once the promotion sink is wired.
+    const [seats] = await pool.query<any[]>("SELECT `user_id`, `status` FROM `event_rsvps` WHERE `event_id` = ? ORDER BY `user_id`", [SEATED]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(seats.map((r) => ({ ...r }))).toEqual([{ user_id: WAITER, status: "going" }]);
+    const [told] = await pool.query<any[]>("SELECT `type` FROM `notifications` WHERE `user_id` = ? AND `dedupe_key` = ?", [WAITER, `waitlist:${SEATED}:${WAITER}`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(told.map((r) => r.type), "the member given the seat is told it is theirs").toEqual(["waitlist_promoted"]);
+    expect(logs.join("")).toMatch(/\[erasure\] finished-erasure backfill: 1 finished erasure\(s\) read, 1 given \d+ step\(s\) they predate, 0 stopped part way\./);
+    const [ledger] = await pool.query<any[]>("SELECT `value` FROM `app_config` WHERE `config_key` = 'data-migrations'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(JSON.stringify(ledger[0]?.value ?? ""), "recorded in the runOnce ledger, so the next boot does not run it again").toMatch(
+      /erasure-steps-backfill-[0-9a-f]{12}/,
+    );
+  });
+
   it("both members fill in the card, and the rows are really there", async () => {
     // The control the two assertions below depend on. Without it, a zero after
     // the tombstone would be indistinguishable from two saves that never

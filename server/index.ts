@@ -1,4 +1,4 @@
-import { anonymizeMember } from "./lib/erasure";
+import { anonymizeMember, backfillFinishedErasures, erasureBackfillJob } from "./lib/erasure";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
 import { joiningOf, pickNextAction } from "./lib/nextAction";
@@ -26561,7 +26561,6 @@ ${inner}
     if (res.headersSent) return next(err);
     respondToTerminalError(err, res);
   });
-
   const port = parseInt(String(process.env.PORT || 3000), 10);
   const staticExists = fs.existsSync(staticPath);
   const indexExists = fs.existsSync(path.join(staticPath, "index.html"));
@@ -26570,6 +26569,7 @@ ${inner}
   console.log(`[startup] staticPath exists=${staticExists}`);
   console.log(`[startup] index.html exists=${indexExists}`);
   console.log(`[startup] PORT=${port}`);
+  await runOnce(erasureBackfillJob(), async () => { await backfillFinishedErasures(getPool(), erasureDeps); }); // after the sinks its steps fire are wired: server/lib/erasure.ts
   // Arm the scheduler tick only now that every boot stage has succeeded and
   // every registerJob call above has run. See the note at the old call site.
   startScheduler(getPool());
