@@ -216,9 +216,13 @@ export async function secondAddressesOf(pool: Pool, userId: string): Promise<str
  * that whoever owns the inbox has used it: see the last rule above. Read-only,
  * every table asked by bound values.
  *
- * A contact the request made is written a moment AFTER the request, and its
- * stamp holds whole seconds where the request's holds milliseconds, so a
- * contact counts as older only when it is more than two seconds older.
+ * A contact the request made carries a first source the request route
+ * writes: `housing` from the ticked box, or the origin of the first email
+ * the route posted to the address (`housing.ack`, `housing.status`), which can
+ * land before the box's trigger does. It is written a moment AFTER the
+ * request, and its stamp holds whole seconds where the request's holds
+ * milliseconds, so a contact counts as older only when it is more than two
+ * seconds older.
  */
 async function addressesInUse(pool: Pool, userId: string, keys: string[]): Promise<string[]> {
   if (!keys.length) return [];
@@ -233,12 +237,13 @@ async function addressesInUse(pool: Pool, userId: string, keys: string[]): Promi
     [VILLAGE, userId],
   );
   const firstAt = new Map(firsts.map((r) => [String(r.k ?? ""), Number(r.at)]));
+  const byRequest = (source: unknown): boolean => String(source ?? "") === "housing" || String(source ?? "").startsWith("housing.");
   const keyOf = new Map<string, string>();
   for (const c of contacts) {
     const k = String(c.k ?? "");
     keyOf.set(String(c.id), k);
     const first = firstAt.get(k);
-    if (String(c.first_source) !== "housing" || (first !== undefined && Number(c.at) < first - 2)) used.add(k);
+    if (!byRequest(c.first_source) || (first !== undefined && Number(c.at) < first - 2)) used.add(k);
   }
   const [suppressed] = await pool.query<RowDataPacket[]>( // module-review-ok: an unsubscribe or a complaint kept for these addresses
     "SELECT email_key AS k FROM comms_suppressions WHERE village_id = ? AND email_key IN (?)",
@@ -248,11 +253,13 @@ async function addressesInUse(pool: Pool, userId: string, keys: string[]): Promi
   const ids = Array.from(keyOf.keys());
   if (!ids.length) return Array.from(used);
   const guestKeys = ids.map((id) => `guest:${id}`);
-  const byContact: Array<[string, unknown[]]> = [
-    // A yes the inbox gave at another door than the housing form.
-    ["SELECT contact_id AS c FROM comms_permissions WHERE contact_id IN (?) AND source <> 'housing'", [ids]],
-    ["SELECT contact_id AS c FROM event_guest_requests WHERE contact_id IN (?)", [ids]],
-  ];
+  const [permissions] = await pool.query<RowDataPacket[]>( // module-review-ok: the yeses recorded on these contacts, and where each was given
+    "SELECT contact_id AS c, source FROM comms_permissions WHERE contact_id IN (?)",
+    [ids],
+  );
+  // A yes the inbox gave at another door than the housing form.
+  for (const r of permissions) if (!byRequest(r.source)) used.add(keyOf.get(String(r.c)) ?? "");
+  const byContact: Array<[string, unknown[]]> = [["SELECT contact_id AS c FROM event_guest_requests WHERE contact_id IN (?)", [ids]]];
   const byGuestKey: Array<[string, unknown[]]> = [
     ["SELECT user_id AS g FROM event_rsvps WHERE user_id IN (?)", [guestKeys]],
     ["SELECT user_id AS g FROM event_waitlist WHERE user_id IN (?)", [guestKeys]],

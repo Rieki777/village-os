@@ -506,8 +506,14 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     // The leaver, signed in, typed Rowan's address into a request of their own, with the paths box ticked.
     const filed = await createReservation(pool, { structureKey: null, homeType: "casita", name: "Wren Halloway", email: rowan, phone: null, notes: null, userId: leaver.id });
     await handlePathTrigger({ getPool: () => pool, members: usersRepo(pool) }, { type: "housing_status", reservationId: filed.id, status: "new", email: rowan, name: "Wren Halloway", consentPaths: true } as any);
+    // And a second address of the leaver's own, with no box ticked: the route's acknowledgement made its contact, and nobody used it since.
+    const own = "wren.porch@x-own.test";
+    await createReservation(pool, { structureKey: null, homeType: "casita", name: "Wren Halloway", email: own, phone: null, notes: null, userId: leaver.id });
+    await contactFor(own, null, "housing.ack");
 
     await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT id FROM comms_contacts WHERE email_key = ?", [own]), "a contact only the leaver's own request made still goes").toEqual([]);
 
     expect(await q("SELECT id FROM comms_contacts WHERE email_key = ?", [rowan]), "Rowan's contact stays").toEqual([{ id: rowanContact }]);
     expect(await answer("own-gx-full", rowanKey), "and so does Rowan's seat").toBe("going");
