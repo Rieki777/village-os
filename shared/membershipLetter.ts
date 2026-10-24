@@ -41,6 +41,7 @@ import { LOVE_LETTER_PAGE } from "./pageContent/loveLetter";
 import { resolvePage } from "./pageContent/resolve";
 import { pageSectionKey, type PageVars } from "./pageContent/types";
 import { pageVarsFrom } from "./pageContent/vars";
+import { articleFor } from "./villageWord";
 
 /**
  * The subject type a membership letter's text is stored under. Typed against
@@ -238,13 +239,21 @@ export function renderMembershipLetter(src: LetterSource): Omit<ServedLetter, "v
   return { title, body: letterBody(parts), parts, intent: letterIntent(title) };
 }
 
-/** What the page says to a member about aligning with the letter. Never "sign": that word is the letter's own. */
+/**
+ * What the page says to a member about aligning with the letter. Never "sign": that word is the letter's own.
+ *
+ * `member` is the village's word for a member (Admin, Make This Yours, "What
+ * a member is called"). These said "join the {village} Family", one village's
+ * own word for its members, under every village's name, while the setting
+ * that names them was read nowhere (audit, 2026-10-22).
+ */
 export const LETTER_WORDS = {
   readReflect: "Read. Reflect. Align.",
   heading: (title: string) => `Align with the ${title}`,
-  lede: (village: string) => `Read the letter above, add a few words about yourself, and align from your account to join the ${village} Family.`,
+  lede: (village: string, member: string) =>
+    `Read the letter above, add a few words about yourself, and align from your account to join ${village} as ${articleFor(member)} ${member}.`,
   asYou: (name: string) => `Aligning as ${name}, from your account. No typed name.`,
-  button: (village: string) => `Align and join the ${village} Family`,
+  button: (village: string) => `Align and join ${village}`,
   busy: "Aligning…",
   kept: "Your alignment is kept under What you have aligned with, on your profile.",
   changed: "The letter changed while you were reading it. Read it again, then align.",

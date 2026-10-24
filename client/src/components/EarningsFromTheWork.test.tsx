@@ -11,13 +11,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-const ctl = vi.hoisted(() => ({ org: null as unknown, orgOk: true }));
+const ctl = vi.hoisted(() => ({ org: null as unknown, orgOk: true, roleName: "" }));
 
 vi.mock("wouter", () => ({
   Link: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
 }));
 vi.mock("@/lib/gameApi", () => ({
   gameFetch: async () => ({ ok: ctl.orgOk, status: ctl.orgOk ? 200 : 500, json: async () => ctl.org }),
+  useGameConfig: () => ({ project: { roleName: ctl.roleName } }),
 }));
 
 import EarningsFromTheWork, { questLine, roleLine } from "./EarningsFromTheWork";
@@ -38,6 +39,7 @@ describe("the work, counted", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    ctl.roleName = "";
   });
 
   it("counts the open quests and the roles, leaving out examples and closed quests", async () => {
@@ -74,6 +76,18 @@ describe("the work, counted", () => {
     expect(await screen.findByText("The quest board lists every open quest.")).toBeTruthy();
     expect(await screen.findByText("The roles page lists every role.")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(PAY_WORDS);
+  });
+
+  it("names roles in the village's own word", async () => {
+    serveQuests([]);
+    ctl.orgOk = true;
+    ctl.roleName = "Office";
+    ctl.org = { roles: [{ id: "r1" }, { id: "r2" }, { id: "r3" }] };
+    render(<EarningsFromTheWork />);
+    expect(await screen.findByText("3 offices")).toBeTruthy();
+    expect(screen.getByText("Offices")).toBeTruthy();
+    expect(screen.getByText("See the offices").getAttribute("href")).toBe("/roles");
+    expect(screen.getByText("No open quests yet.")).toBeTruthy();
   });
 
   it("says no pay words while it reads, or for an empty board", () => {

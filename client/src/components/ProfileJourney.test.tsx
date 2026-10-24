@@ -42,11 +42,19 @@ const progression = {
 const flows = { totals: { received: 4, sent: 2, distinctAcknowledgers: 3 }, byCycle: [] };
 const ledger = { currency: "recognition", entries: [] };
 
-/** Route each of the four reads this component makes, by path. */
+/**
+ * Route each of the four reads this component makes, by path. The public
+ * config answers the same in every test, because the client caches the first
+ * answer for the whole file: this village calls its letter "Love Letter".
+ */
 const routing = (answer: (path: string) => Promise<any>) =>
   vi.stubGlobal(
     "fetch",
-    vi.fn((path: string) => answer(String(path))),
+    vi.fn((path: string) =>
+      String(path).includes("/api/game/config")
+        ? Promise.resolve(ok({ project: { commitmentName: "Love Letter" } }))
+        : answer(String(path)),
+    ),
   );
 
 const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body });

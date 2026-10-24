@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, Heart, ScrollText, ShieldCheck, Users } from "lucide-react";
-import { authToken, useRoleWord } from "@/lib/gameApi";
+import { authToken, useGameConfig, useRoleWord } from "@/lib/gameApi";
+import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenNameLower } from "@/hooks/useTokenNames";
 import Celebration from "@/components/natural/Celebration";
 import BreathingLoader from "@/components/natural/BreathingLoader";
@@ -163,6 +164,8 @@ function dayOf(at: unknown): string {
  * show it on.
  */
 function TheSigning({ signing }: { signing?: MembershipSigning | null }) {
+  // What this village calls the letter (Admin, Make This Yours), as typed.
+  const commitment = pageVarsFrom(useGameConfig() ?? {}).commitment;
   if (!signing) return null;
   const day = dayOf(signing.at);
   return (
@@ -171,7 +174,7 @@ function TheSigning({ signing }: { signing?: MembershipSigning | null }) {
       <div className="flex items-start gap-3 text-sm">
         <ScrollText className="mt-0.5 w-4 h-4 text-notice shrink-0" aria-hidden="true" />
         <span>
-          <span className="text-card-foreground">You signed the Love Letter</span>
+          <span className="text-card-foreground">You signed the {commitment}</span>
           <span className="block text-muted-foreground mt-0.5">{SIGNING_WORDS[signing.answer]}</span>
           {day && <span className="block text-xs text-muted-foreground mt-0.5">{day}</span>}
         </span>

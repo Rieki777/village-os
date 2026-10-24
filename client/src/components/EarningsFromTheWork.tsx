@@ -14,7 +14,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { CheckCircle2 } from "lucide-react";
-import { gameFetch } from "@/lib/gameApi";
+import { gameFetch, useGameConfig } from "@/lib/gameApi";
+import { villageWord, type CatalystLabel } from "@shared/villageWord";
+
+/** The platform's word for a role until the village names its own: `ROLE_FALLBACK` in gameApi. */
+const ROLE_WORD = "Role";
 
 interface Read {
   /** Null when the board could not be read. */
@@ -33,15 +37,18 @@ export function questLine(read: Read | null): string {
   return count(read.quests, "open quest", "open quests");
 }
 
-/** The role line, the same way. */
-export function roleLine(read: Read | null): string {
-  if (!read) return "Reading the roles.";
-  if (read.roles === null) return "The roles page lists every role.";
-  if (read.roles === 0) return "No roles yet.";
-  return count(read.roles, "role", "roles");
+/** The role line, the same way, in the village's own word for a role (Admin, Make This Yours). */
+export function roleLine(read: Read | null, role: CatalystLabel = villageWord("", ROLE_WORD)): string {
+  const one = role.name.toLowerCase();
+  const many = role.plural.toLowerCase();
+  if (!read) return `Reading the ${many}.`;
+  if (read.roles === null) return `The ${many} page lists every ${one}.`;
+  if (read.roles === 0) return `No ${many} yet.`;
+  return count(read.roles, one, many);
 }
 
 export default function EarningsFromTheWork() {
+  const role = villageWord(useGameConfig()?.project?.roleName, ROLE_WORD);
   const [read, setRead] = useState<Read | null>(null);
   useEffect(() => {
     let alive = true;
@@ -67,7 +74,7 @@ export default function EarningsFromTheWork() {
 
   const rows = [
     { label: "Quests", line: questLine(read), href: "/quests", link: "See the quest board" },
-    { label: "Roles", line: roleLine(read), href: "/roles", link: "See the roles" },
+    { label: role.plural, line: roleLine(read, role), href: "/roles", link: `See the ${role.plural.toLowerCase()}` },
   ];
 
   return (

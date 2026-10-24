@@ -16,6 +16,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useBrochurePages } from "@/lib/brochure";
+import { useGameConfig } from "@/lib/gameApi";
+import { pageVarsFrom } from "@shared/pageContent/vars";
 
 const PRINCIPLES = [
   {
@@ -49,6 +51,8 @@ const DECISION_STEPS = [
 export default function Governance() {
   const brochureOn = useBrochurePages() === true;
   const villageName = useVillageName();
+  // What this village calls the letter a member signs (Admin, Make This Yours).
+  const commitment = pageVarsFrom(useGameConfig() ?? {}).commitment;
   return (
     <Layout>
       {/* Hero */}
@@ -286,7 +290,7 @@ export default function Governance() {
               href="/love-letter"
               className="inline-flex items-center gap-2 bg-white/10 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/20 transition-colors border border-white/20"
             >
-              Sign the Love Letter
+              Sign the {commitment}
             </Link>
           </div>
         </div>
