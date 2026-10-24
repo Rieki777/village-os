@@ -215,6 +215,17 @@ describe("the member wallet's decisions", () => {
     expect(row(rows, "earned-equity").onBase?.mirrorName).toBe("Our Stake");
   });
 
+  it("shows what a token means in the village's own words, and nothing where it wrote none", () => {
+    // 0283. The village's text and only the village's: a token with no
+    // description carries null, never a platform sentence standing in for one.
+    const described = TOKENS.map((t) => (t.slug === "credits" ? { ...t, description: "  What we pay each other in for work.  " } : t));
+    const { rows } = assembleWallet(inputs({ tokens: described }));
+    expect(row(rows, "credits").description).toBe("What we pay each other in for work.");
+    expect(row(rows, "village-voice").description).toBeNull();
+    const blank = assembleWallet(inputs({ tokens: TOKENS.map((t) => (t.slug === "credits" ? { ...t, description: "   " } : t)) }));
+    expect(row(blank.rows, "credits").description).toBeNull();
+  });
+
   it("keeps a balance in sight even when its token left the registry or retired", () => {
     const retired = TOKENS.map((t) => (t.slug === "credits" ? { ...t, active: false } : t));
     const { rows } = assembleWallet(

@@ -5,8 +5,10 @@
  * says what it pays: the value in the village's currency, and the token amounts
  * the cycle settlement pays each seat, in full, from the village's `role.cycle`
  * rules (no ceiling binds work, Rye 2026-10-22). A role with no list of its own is paid the standard amounts, which
- * is what the boxes open on. The cash a role pays is in its terms, set through
- * the terms editor beside this one, and the platform states it and never pays it.
+ * is what the boxes open on. The cash a role pays each seat is set here too
+ * (0285), and the platform records it as owed each cycle and never pays it. The
+ * cash in its terms on offer is the agreement's own figure, set through the
+ * terms editor beside this one.
  *
  * Admin is a light-only workspace by ruling (2026-09-04): fixed grays here.
  */
@@ -20,7 +22,7 @@ export default function RoleValueEditor({
   call,
   onSaved,
 }: {
-  role: { id: string; valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null };
+  role: { id: string; valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null; cashMinor?: number | null; cashCurrency?: string | null };
   call: (path: string, body?: unknown, method?: string) => Promise<any>;
   onSaved: () => void;
 }) {
@@ -53,7 +55,7 @@ export default function RoleValueEditor({
                 toast.error(body.error);
                 return;
               }
-              const ok = await call(`/admin/org/roles/${role.id}`, { valueMinor: body.valueMinor, valueTokens: body.valueTokens }, "PUT");
+              const ok = await call(`/admin/org/roles/${role.id}`, { valueMinor: body.valueMinor, valueTokens: body.valueTokens, cashMinor: body.cashMinor }, "PUT");
               if (ok) {
                 toast.success("Saved");
                 setDraft(null);

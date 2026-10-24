@@ -785,9 +785,16 @@ The retention sweep never deletes an unstamped row, at any age.
   semantics applied to a person. ENUMERATE every domain's open state
   (loans, stays, orders, debts block; balances, roles, warnings inform);
   SETTLE through each domain's own terminals — exit adds exactly ONE move
-  of its own, sweeping positive balances to `sys:exit-settlement`,
-  idempotent per `(exit, token)`; RESOLVE refuses until clean, then the
-  anonymise tombstone runs. Restorative content flows only to its
+  of its own, splitting each positive balance by the village's
+  `exit.keep_pct.*` shares and sending the rest to
+  `exit.remainder_account`, idempotent per `(exit, token)`; RESOLVE refuses
+  until clean. Then (Rye, 2026-10-23: members keep their tokens, "a if b
+  hasn't already happened") a leaver whose account still holds a positive
+  platform-governed, non-recognition balance stays on as a FORMER MEMBER,
+  account and balances intact, with membership ended and roles vacated
+  (`resolveExit`, `server/lib/exitResolve.ts`); anybody else meets the
+  anonymise tombstone. On the shipped dials a leaver keeps every credit,
+  Voice and equity balance. Restorative content flows only to its
   recipients; the `exits` row carries a pointer and a status, never the
   content.
 
