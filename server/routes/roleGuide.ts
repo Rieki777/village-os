@@ -9,6 +9,10 @@
  * owner, and an accepted one is saved by the owner's own autosave, under their
  * own session. The guide never saves or submits.
  *
+ * THE CARD TRAVELS IN THE ROLE CARD TEXT FORMAT both ways, written and read
+ * by shared/roleCardText.ts, so the guide's answer goes through the one strict
+ * reader every other card does.
+ *
  * THE DOCUMENT IS READ AND THROWN AWAY. It arrives in the request body as
  * extracted text, is handed to the guide for this one turn, and is never
  * written anywhere: not to the draft, not to a log, not to the usage row.
@@ -29,10 +33,13 @@ import { recordAssistantUsage } from "../lib/assistantUsage";
 import { instanceIdentity } from "../lib/identity";
 import { resolveMemberKey } from "../lib/memberSecrets";
 import type { LapseContext } from "../lib/orgChart";
-import { rosterOf } from "../lib/saberraOutbox";
 import { roleGuideContext } from "../lib/roleGuideContext";
-import { clipDocument, guideBrief, guideSystemPrompt, sentencesOf, suggestionsFrom, trimConversation, type CardTextFormat } from "../lib/roleGuide";
+import { clipDocument, guideBrief, guideSystemPrompt, sentencesOf, suggestionsFrom, trimConversation } from "../lib/roleGuide";
+import { ROLE_WORD_FIELDS } from "../lib/roleProposals";
 import { readProposal } from "../repos/roleProposals";
+import { docFromBody } from "@shared/roleCardApply";
+import { readRoleCard, writeRoleCard } from "@shared/roleCardText";
+import { MAX_PROPOSAL_ROLES } from "@shared/roleProposals";
 import { guideStateFor } from "./guideChoice";
 import type { GuideAnswer, RoleGuideStep } from "@shared/roleGuide";
 
@@ -40,7 +47,6 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "clientIp" | "overLimit" | 
   lapse: () => LapseContext;
   villageGuideName: () => string;
   villageName: () => string;
-  cardText: CardTextFormat;
 };
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -84,7 +90,7 @@ async function noteUsage(pool: Pool, call: AssistantResult, userId: string): Pro
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse, villageGuideName, villageName, cardText } = deps;
+  const { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse, villageGuideName, villageName } = deps;
 
   const goalsOf = (seasonId: string | null): string[] => {
     const s = (seasonState().seasons ?? []).find((x: any) => x && String(x.id) === seasonId);
@@ -117,15 +123,12 @@ export function register(app: Express, deps: Deps): void {
 
     const document = clipDocument(req.body?.document);
     const conversation = trimConversation(req.body?.conversation);
-    const ctx = await roleGuideContext(pool, {
-      userId: uid,
-      body: p.body,
-      orgGoals: goalsOf(p.targetSeasonId),
-      lapse: lapse(),
-      roster: rosterOf(await members.all()),
-    });
+    const orgGoals = goalsOf(p.targetSeasonId);
+    const ctx = await roleGuideContext(pool, { userId: uid, body: p.body, orgGoals, lapse: lapse(), records: await members.all() });
     const tidy = (t: string) => tidyWords(ctx.swap(t));
-    const brief = guideBrief(step, cardText.write(p.body), ctx, document, conversation);
+    // The card as it stands, in the role card text format, without its measures: they sit in the terms, which the guide never reads.
+    const card = writeRoleCard({ ...docFromBody(p.body, { words: ROLE_WORD_FIELDS, roles: ctx.card.roles, circles: ctx.card.circles, village: villageName() }), measures: [] });
+    const brief = guideBrief(step, card, ctx, document, conversation);
 
     // The outside agent has no guide call yet (server/lib/saberraGuide.ts), so
     // it never answers here; `guideStateFor` already falls back to the village
@@ -151,12 +154,15 @@ export function register(app: Express, deps: Deps): void {
     if (!call.ok) return res.status(call.status).json({ error: call.error });
 
     const read = readReplyFields(call.text, ["card", "question"] as const, { stopReason: call.stopReason, proseField: "question" });
-    const reading = read?.card ? cardText.read(read.card) : { ok: false, proposalBody: null, problems: [] };
-    const sources = sentencesOf([document ?? "", ...conversation.filter((l) => l.from === "member").map((l) => l.text)].join("\n"));
+    const reading = read?.card
+      ? readRoleCard(read.card, { words: ROLE_WORD_FIELDS, ...ctx.card, orgGoals, current: p.body, maxRoles: MAX_PROPOSAL_ROLES })
+      : { proposalBody: {}, problems: [] };
+    // The member's own words, names swapped, so a quoted source never prints a person's name either.
+    const sources = sentencesOf(ctx.swap([document ?? "", ...conversation.filter((l) => l.from === "member").map((l) => l.text)].join("\n")));
     const answer: GuideAnswer = {
       guide: { id: "village", name: villageOption.name },
       note: state.note,
-      suggestions: suggestionsFrom(step, p.body, reading.proposalBody ?? {}, reading.problems, { roles: ctx.roles, swap: tidy }, sources),
+      suggestions: suggestionsFrom(step, p.body, reading.proposalBody, reading.problems, { roles: ctx.roles, swap: tidy }, sources),
       question: read?.question ? tidy(read.question).slice(0, QUESTION_MAX) || null : null,
       flags: ctx.checks,
     };

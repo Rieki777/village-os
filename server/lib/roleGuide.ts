@@ -37,13 +37,8 @@ import { contentWords } from "@shared/roleGuideChecks";
 import type { GuideLine, GuideSuggestion, RoleGuideStep } from "@shared/roleGuide";
 import { GUIDE_ANSWER_MAX, GUIDE_DOCUMENT_MAX, GUIDE_TURNS_MAX } from "@shared/roleGuide";
 import type { ProposalBody } from "@shared/roleProposals";
+import type { RoleCardBody, RoleCardProblem } from "@shared/roleCardText";
 import type { RoleGuideContext } from "./roleGuideContext";
-
-/** The card text format, as the guide uses it. The real one is shared/roleCardText.ts. */
-export interface CardTextFormat {
-  write(body: ProposalBody): string;
-  read(text: string): { ok: boolean; proposalBody: Partial<ProposalBody> | null; problems: Array<{ field: string; sentence: string }> };
-}
 
 /** The fields a guide may suggest, per step. Terms and review dates are never the guide's. */
 export const GUIDE_FIELDS: Record<RoleGuideStep, readonly string[]> = {
@@ -63,15 +58,9 @@ export function sentencesOf(document: string): string[] {
     .filter((s) => s.length >= 3);
 }
 
-/**
- * The document's sentence a suggestion came from, or null. PURE.
- *
- * The sentence sharing the most content words with the suggestion wins, and
- * it must share at least two, or every content word of a suggestion of one or
- * two words. A tie goes to the earlier sentence.
- */
-export function sourceFor(words: string | readonly string[], sentences: readonly string[]): string | null {
-  const want = contentWords(Array.isArray(words) ? words.join(" ") : String(words));
+/** The one sentence sharing the most content words with a line, or null. PURE. */
+function bestSentence(line: string, sentences: readonly string[]): string | null {
+  const want = contentWords(line);
   if (want.size === 0) return null;
   const need = want.size <= 2 ? want.size : 2;
   let best: { s: string; n: number } | null = null;
@@ -81,6 +70,24 @@ export function sourceFor(words: string | readonly string[], sentences: readonly
     if (n >= need && (!best || n > best.n)) best = { s, n };
   }
   return best?.s ?? null;
+}
+
+/**
+ * Where a suggestion came from in the member's own writing, or null. PURE.
+ *
+ * The sentence sharing the most content words wins, and it must share at
+ * least two, or every content word of a line of one or two words. A tie goes
+ * to the earlier sentence. A list is traced line by line, and each sentence
+ * found is quoted once, in the order the lines found them.
+ */
+export function sourceFor(words: string | readonly string[], sentences: readonly string[]): string | null {
+  const lines = Array.isArray(words) ? words : [String(words)];
+  const found: string[] = [];
+  for (const line of lines) {
+    const s = bestSentence(line, sentences);
+    if (s && !found.includes(s)) found.push(s);
+  }
+  return found.length ? found.join(" ") : null;
 }
 
 type Words = string | string[] | null;
@@ -115,20 +122,22 @@ export function goalLines(goals: unknown): string[] | null {
  *
  * `current` is the draft as it stands; `proposed` is what the reader made of
  * the guide's text. Roles are matched by the posted role they renew, new
- * roles by their place in the list. A field outside the step's set, or the
- * same as the member already has, is no suggestion.
+ * roles by the draft id the reader found them by. A role the guide added is
+ * never a suggestion: the member picks roles on the first step. A field
+ * outside the step's set, or the same as the member already has, is no
+ * suggestion. Only a problem that would stop the save holds one back.
  */
 export function suggestionsFrom(
   step: RoleGuideStep,
   current: ProposalBody,
-  proposed: Partial<ProposalBody>,
-  problems: ReadonlyArray<{ field: string; sentence: string }>,
+  proposed: RoleCardBody,
+  problems: readonly RoleCardProblem[],
   ctx: Pick<RoleGuideContext, "roles" | "swap">,
   sentences: readonly string[],
 ): GuideSuggestion[] {
   const out: GuideSuggestion[] = [];
   const fields = new Set(GUIDE_FIELDS[step]);
-  const problemAt = (path: string) => problems.find((p) => p.field === path || p.field.startsWith(`${path}.`))?.sentence ?? null;
+  const problemAt = (path: string) => problems.find((p) => p.blocks && (p.field === path || p.field.startsWith(`${path}.`)))?.sentence ?? null;
   const push = (path: string, role: string | null, roleId: string | null, field: string, was: Words, now: Words) => {
     if (now === null || sameWords(was, now)) return;
     const words = swapWords(now, ctx.swap);
@@ -147,8 +156,9 @@ export function suggestionsFrom(
         if (fields.has(field)) push(`${key}.words.${field}`, roleName(key), p.roleId, field, asWords(was[field]), asWords(value));
       }
     });
-    (proposed.newRoles ?? []).forEach((n, i) => {
-      if (i >= current.newRoles.length) return;
+    (proposed.newRoles ?? []).forEach((n) => {
+      const i = n.id ? current.newRoles.findIndex((r) => r.id === n.id) : -1;
+      if (i < 0) return;
       const key = `newRoles.${i}`;
       const was = current.newRoles[i].words as Record<string, unknown>;
       for (const [field, value] of Object.entries(n.words ?? {})) {
@@ -156,8 +166,8 @@ export function suggestionsFrom(
       }
     });
   } else if (proposed.season) {
-    push("season.aim", null, null, "aim", asWords(current.season.aim), asWords(proposed.season.aim));
-    push("season.seasonalGoals", null, null, "seasonalGoals", goalLines(current.season.seasonalGoals), goalLines(proposed.season.seasonalGoals));
+    if (proposed.season.aim !== undefined) push("season.aim", null, null, "aim", asWords(current.season.aim), asWords(proposed.season.aim));
+    if (proposed.season.seasonalGoals) push("season.seasonalGoals", null, null, "seasonalGoals", goalLines(current.season.seasonalGoals), goalLines(proposed.season.seasonalGoals));
   }
   return out;
 }
@@ -200,16 +210,28 @@ export function clipDocument(v: unknown): string | null {
   return t ? t.slice(0, GUIDE_DOCUMENT_MAX) : null;
 }
 
-/** Everything a guide is handed for one turn, already named by role. PURE. */
+/**
+ * Everything a guide is handed for one turn, named by role. PURE.
+ *
+ * Every piece of prose goes through the name swap here, the card and the
+ * circles' charters as well as the document and the conversation, because a
+ * member may have written a person's name into any of them.
+ */
 export function guideBrief(step: RoleGuideStep, cardText: string, ctx: RoleGuideContext, document: string | null, conversation: readonly GuideLine[]) {
+  const swap = ctx.swap;
   return {
     step,
-    card: cardText,
+    card: swap(cardText),
     member: { roles: ctx.memberRoles },
-    circles: ctx.circles,
-    seasonGoalsOfTheOrg: ctx.orgGoals,
+    circles: ctx.circles.map((c) => ({
+      name: c.name,
+      existsWhile: c.existsWhile ? swap(c.existsWhile) : null,
+      accountabilities: c.accountabilities.map(swap),
+      domains: c.domains.map(swap),
+    })),
+    seasonGoalsOfTheOrg: ctx.orgGoals.map(swap),
     accomplished: ctx.accomplished,
-    checks: ctx.checks.map((c) => c.sentence),
+    checks: ctx.checks.map((c) => swap(c.sentence)),
     missing: gapsOf(step, ctx),
     document: document ? ctx.swap(document) : null,
     conversation: conversation.map((l) => ({ from: l.from, text: ctx.swap(l.text) })),

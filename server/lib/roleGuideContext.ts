@@ -25,11 +25,14 @@ import { listOrgAssignments, listOrgRoles, type LapseContext, type OrgAssignment
 import { accomplishmentsOf } from "./sessionTasks";
 import { swapNames, SHARED_NAME_STAND_IN, type NamedMember } from "./nameSwap";
 import { goalLines } from "./roleGuide";
+import { rosterOf } from "./saberraOutbox";
 import { readCharterRow } from "../repos/circleCard";
 import { villageCircles } from "../repos/roleProposals";
 import { charterFromRow } from "@shared/circleCharter";
 import { guideChecks, type ChartRoleIn, type CircleIn, type GuideFlag, type GuideRoleIn } from "@shared/roleGuideChecks";
 import type { ProposalBody } from "@shared/roleProposals";
+import type { LiveCircle } from "@shared/proposedSeats";
+import type { RoleCardPerson, RoleCardRoleIn } from "@shared/roleCardText";
 
 /** One role in the proposal, as the guide reads it. */
 export interface GuideRole {
@@ -62,6 +65,8 @@ export interface RoleGuideContext {
   checks: GuideFlag[];
   /** Swaps every member's name in a text for their role titles. */
   swap: (text: string) => string;
+  /** What the role card text format's reader and writer are handed (shared/roleCardText.ts). */
+  card: { roles: RoleCardRoleIn[]; circles: LiveCircle[]; people: RoleCardPerson[] };
 }
 
 /** The most accomplished items the guide reads: enough to see the work, short enough to keep each call cheap. */
@@ -114,8 +119,8 @@ export interface ContextInput {
   /** The goals of the season the proposal is for. */
   orgGoals: readonly string[];
   lapse: LapseContext;
-  /** Every member whose names the swap must know (`rosterOf` in server/lib/saberraOutbox.ts). */
-  roster: readonly NamedMember[];
+  /** Every member record (`members.all()`), for the name swap and the card reader's name rule. */
+  records: readonly unknown[];
 }
 
 /** Everything the guide starts from, for one member's draft. */
@@ -127,7 +132,8 @@ export async function roleGuideContext(pool: Pool, input: ContextInput): Promise
     accomplishmentsOf(pool, input.userId, { lapseContext: () => input.lapse }),
   ]);
   const titles = roleTitlesByUser(assignments, roles);
-  const swap = roleNameSwap(input.roster, titles);
+  const roster: NamedMember[] = rosterOf(input.records);
+  const swap = roleNameSwap(roster, titles);
   const live = roles.filter((r) => r.active && !r.isExample);
   const roleById = new Map(live.map((r) => [r.id, r]));
   const circleName = new Map(circles.filter((c) => c.live).map((c) => [c.id, c.name]));
@@ -174,5 +180,10 @@ export async function roleGuideContext(pool: Pool, input: ContextInput): Promise
     accomplished: done.map(swap),
     checks: guideChecks({ roles: checkRoles, chart, circles: checkCircles }),
     swap,
+    card: {
+      roles: live.map((r) => ({ id: r.id, name: r.name, circleId: r.circleId, posted: r as unknown as Record<string, unknown> })),
+      circles: circles.filter((c) => c.live).map((c) => ({ id: c.id, name: c.name })),
+      people: roster.map((m) => ({ name: m.names[0] ?? "", roles: titles.get(m.id) ?? [] })).filter((p) => p.name.trim()),
+    },
   };
 }

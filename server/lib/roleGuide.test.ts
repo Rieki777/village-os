@@ -56,20 +56,32 @@ describe("the guide's card as suggestions", () => {
   });
 
   it("swaps a name the guide wrote back in for the person's role", () => {
-    const proposed = { newRoles: [{ words: { name: "Garden Steward", accountabilities: ["Keep the compost going with Wren Example"] } } as any] };
+    const proposed = { newRoles: [{ id: "n1", words: { name: "Garden Steward", accountabilities: ["Keep the compost going with Wren Example"] } } as any] };
     const [s] = suggestionsFrom("words", current, proposed, [], ctx, sentencesOf(DOC));
     expect(s.words).toEqual(["Keep the compost going with the Kitchen Lead"]);
   });
 
   it("carries the reader's sentence when the card cannot take a field as it stands", () => {
-    const proposed = { newRoles: [{ words: { accountabilities: ["One thing"] } } as any] };
-    const problems = [{ field: "newRoles.0.words.accountabilities", sentence: "A role answers for 3 to 6 things." }];
+    const proposed = { newRoles: [{ id: "n1", words: { accountabilities: ["One thing"] } } as any] };
+    const problems = [{ field: "newRoles.0.words.accountabilities", sentence: "A role answers for 3 to 6 things.", kind: "limit" as const, blocks: true }];
     const [s] = suggestionsFrom("words", current, proposed, problems, ctx, []);
     expect(s.problem).toBe("A role answers for 3 to 6 things.");
   });
 
+  it("does not hold a suggestion back for a problem the save would let through", () => {
+    const proposed = { newRoles: [{ id: "n1", words: { aim: "Feed the village" } } as any] };
+    const problems = [{ field: "newRoles.0.words.aim", sentence: "A name was swapped for a role.", kind: "name" as const, blocks: false }];
+    expect(suggestionsFrom("words", current, proposed, problems, ctx, [])[0].problem).toBeNull();
+  });
+
+  it("matches a new role by its draft id, and never suggests a role the guide added", () => {
+    const proposed = { newRoles: [{ words: { name: "Compost Lead", aim: "Rich soil" } } as any, { id: "n1", words: { aim: "Feed the village" } } as any] };
+    const out = suggestionsFrom("words", current, proposed, [], ctx, []);
+    expect(out.map((s) => [s.path, s.roleId])).toEqual([["newRoles.0.words.aim", "n1"]]);
+  });
+
   it("never suggests a field outside the step, such as terms", () => {
-    const proposed = { newRoles: [{ words: { reviewOn: "2027-01-09", payMinor: "700000" } } as any], settings: { v: 1, pay: 1 } as any };
+    const proposed = { newRoles: [{ id: "n1", words: { reviewOn: "2027-01-09", payMinor: "700000" } } as any], settings: { v: 1, pay: 1 } as any };
     expect(suggestionsFrom("words", current, proposed, [], ctx, [])).toEqual([]);
     expect(GUIDE_FIELDS.words).not.toContain("reviewOn");
   });

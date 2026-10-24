@@ -20,8 +20,8 @@ import type { GuideFlag } from "./roleGuideChecks";
 
 export type RoleGuideStep = "words" | "season";
 
-/** The longest document text one turn carries, after extraction. */
-export const GUIDE_DOCUMENT_MAX = 40_000;
+/** The longest document text one turn carries: the most the upload extracts (ROLE_DOCUMENT_TEXT_MAX, server/lib/roleDocumentText.ts). */
+export const GUIDE_DOCUMENT_MAX = 60_000;
 /** The longest one answer of the member's may run. */
 export const GUIDE_ANSWER_MAX = 2_000;
 /** Turns kept in one conversation: the guide's questions and the member's answers. */
