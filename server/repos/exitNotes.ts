@@ -1,12 +1,13 @@
 /**
- * `exits.resolution`, for the erasure's exit step and for resolve: a home
+ * `exits`, for the erasure's exit step, for resolve and for the cancel: a home
  * being started.
  *
  * server/lib/exit.ts still creates, reads and settles exits where it always
- * did, and the settle route in server/index.ts still writes this column. What
- * lives here is the erasure's read and write (lane E2), called from
- * `forgetOwnExitNotes` in exit.ts, which decides what the note becomes, and
- * the terminal write of a resolve, called from `resolveExit`.
+ * did, and the settle route in server/index.ts still writes `resolution`. What
+ * lives here is the erasure's read and write of that column (lane E2), called
+ * from `forgetOwnExitNotes` in exit.ts, which decides what the note becomes;
+ * the terminal write of a resolve, called from `resolveExit`; and the cancel's
+ * status write, called from `cancelExit`.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
@@ -22,6 +23,18 @@ export async function ownExitResolutions(pool: Pool, userId: string): Promise<Ar
 /** Write one exit's resolution text, or NULL when nothing is left of it. */
 export async function setExitResolution(pool: Pool, exitId: string, resolution: string | null): Promise<void> {
   await pool.query("UPDATE exits SET resolution = ? WHERE id = ?", [resolution, exitId]);
+}
+
+/**
+ * Close one exit as cancelled while it is still open or settling. True when
+ * this call closed it; false when there is no such exit or it already ended.
+ */
+export async function cancelOpenExit(pool: Pool, exitId: string): Promise<boolean> {
+  const [result] = await pool.query(
+    "UPDATE exits SET status = 'cancelled', resolved_at = NOW() WHERE id = ? AND status IN ('open','settling')",
+    [exitId],
+  );
+  return Number((result as { affectedRows?: number }).affectedRows ?? 0) > 0;
 }
 
 /**

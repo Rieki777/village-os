@@ -422,15 +422,7 @@ import {
   staysOpenState,
 } from "./lib/stays";
 import { createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
-import {
-  allExits,
-  blockingStates,
-  createExit,
-  exitById,
-  exitOpenState,
-  openExitFor,
-  sweepBalances,
-} from "./lib/exit";
+import { allExits, blockingStates, cancelExit, createExit, exitById, exitOpenState, openExitFor, sweepBalances } from "./lib/exit";
 import {
   DEFAULT_EXIT_POLICY,
   EXIT_POLICY_TERMS,
@@ -14394,15 +14386,11 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json({ success: true, outcome: out.outcome, held: out.held, vacatedRoles: roleIds });
   });
 
-  /** A person who stays: the exit closes without a tombstone. */
+  /** A person who stays: the exit closes without a tombstone, and so does a deletion it began (cancelExit). */
   app.post("/api/admin/exits/:id/cancel", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [r] = await getPool().query<any>(
-      "UPDATE exits SET status = 'cancelled', resolved_at = NOW() WHERE id = ? AND status IN ('open','settling')",
-      [req.params.id],
-    );
-    if (!(r as any).affectedRows) return res.status(404).json({ error: "No open exit with that id" });
-    res.json({ success: true });
+    const out = await cancelExit(getPool(), String(req.params.id), { memberById: (id) => members.byId(id), actorId: adminActor(req)?.id ?? null });
+    res.status(out.status).json(out.body);
   });
 
   /**
