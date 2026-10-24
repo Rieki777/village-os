@@ -356,6 +356,9 @@ function recruitmentPack(role: OrgRole) {
     valueMinor: role.valueMinor ?? null,
     valueCurrency: role.valueCurrency ?? null,
     valueTokens: role.valueTokens ?? null,
+    // 0285: the cash it pays each cycle, as stored, for the same editor.
+    cashMinor: role.cashMinor ?? null,
+    cashCurrency: role.cashCurrency ?? null,
   };
 }
 

@@ -98,7 +98,7 @@ import { readWorkValueInput, type TokenAmount } from "../../shared/workValue";
 import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS } from "../../shared/roleCcos";
 
 /** A role's checked value edit. `undefined` leaves a field alone. */
-type RoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null };
+type RoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null; cashMinor?: number | null; cashCurrency?: string | null };
 
 type Deps = Pick<
   AppDeps,
@@ -857,6 +857,11 @@ export function register(app: Express, deps: Deps): void {
       out.valueCurrency = input.valueMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
     }
     if (input.tokens !== undefined) out.valueTokens = input.tokens;
+    // 0285: the cash it pays each cycle, stamped the same way.
+    if (input.cashMinor !== undefined) {
+      out.cashMinor = input.cashMinor;
+      out.cashCurrency = input.cashMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+    }
     return out;
   };
 
@@ -868,7 +873,7 @@ export function register(app: Express, deps: Deps): void {
     const valued = await checkedRoleValue(req.body ?? {}, res);
     if (!valued) return;
     const id = await createOrgRole(getPool(), req.body ?? {});
-    if (valued.valueMinor !== undefined || valued.valueTokens !== undefined) await updateOrgRole(getPool(), id, {}, valued);
+    if (valued.valueMinor !== undefined || valued.valueTokens !== undefined || valued.cashMinor !== undefined) await updateOrgRole(getPool(), id, {}, valued);
     // Anything made while a season runs joins that season's pattern, so a
     // village never sits down to author one. Nothing happens when the season
     // names no pattern, which is every village that has not opted in.
@@ -899,7 +904,7 @@ export function register(app: Express, deps: Deps): void {
     const valued = await checkedRoleValue(req.body ?? {}, res);
     if (!valued) return;
     const changes = describeOrgChange(role, req.body ?? {});
-    if (valued.valueMinor !== undefined || valued.valueTokens !== undefined) changes.push("what the role is worth and pays updated");
+    if (valued.valueMinor !== undefined || valued.valueTokens !== undefined || valued.cashMinor !== undefined) changes.push("what the role is worth and pays updated");
     const ok = await updateOrgRole(getPool(), req.params.id, req.body ?? {}, valued);
     if (ok && changes.length) {
       await recordEvent(getPool(), {
