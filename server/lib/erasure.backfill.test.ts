@@ -241,7 +241,7 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     const wren = await member("bf-wren", "Wren Halloway", 50);
     await member("bf-ash", "Ash Moreno");
     await member("bf-bo", "Bo Lind");
-    await member("bf-pip", "Pip Arden");
+    await member("bf-pip", "Pip Arden", 20);
     await member("bf-moss", "Moss Tal");
 
     // While they were here: a token minted in the window "member-agent" had already passed.
@@ -254,6 +254,8 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     expect((await joinWaitlist(pool, "bf-full", "bf-bo")).ok).toBe(true);
     await gathering("bf-fee", { price: 5 });
     expect((await rsvp(pool, "bf-fee", wren.id, "going")).ok).toBe(true);
+    // Pip paid for a place there too, so the escrow holds a fee that is not theirs to have back.
+    expect((await rsvp(pool, "bf-fee", "bf-pip", "going")).ok).toBe(true);
     // A meet-me window: "Meet Wren", with the place, on the village layer.
     const starts = new Date(Date.now() + 26 * 3600_000);
     const window = await createMeetMe(pool, {
