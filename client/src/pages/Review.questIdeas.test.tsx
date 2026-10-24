@@ -34,6 +34,7 @@ vi.mock("sonner", () => ({
 }));
 
 import Review from "./Review";
+import { forgetPayOptions } from "@/components/WorkValueEditor";
 
 const ANSWERS = [
   "What they bring: Two afternoons and my own seeds",
@@ -90,6 +91,8 @@ const renderReview = () =>
 describe("a quest idea on /review says where it came from, and what the person answered", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    // The editor keeps the pay options for the page; each case reads its own.
+    forgetPayOptions();
   });
 
   it("names the form, and puts each answer on its own line beneath the idea", async () => {

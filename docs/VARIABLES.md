@@ -22,26 +22,26 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 190 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 189 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 208 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 207 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-235 dials in 35 categories. 140 carry a minimum and a maximum. By type: 104 integer, 19 decimal, 18 percentage, 27 boolean, 29 choice, 37 text, 1 longtext.
+234 dials in 35 categories. 139 carry a minimum and a maximum. By type: 103 integer, 19 decimal, 18 percentage, 27 boolean, 29 choice, 37 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 3 | 3 | 0 |
-| Gratitude | 11 | 11 | 0 |
+| Gratitude | 10 | 10 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
 | Progression | 29 | 29 | 0 |
@@ -95,7 +95,6 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How long the village has to answer a settlement | `cycle.settlement_vote_days` | Gratitude | integer | `3` | the whole village |
 | Gratitude each heart sends | `feed.heart_amount` | Gratitude | integer | `1` | the whole village |
 | Hearts one member can tap for another per cycle | `feed.max_hearts_per_recipient_per_cycle` | Gratitude | integer | `5` | the whole village |
-| Recognition for an accepted Work With Us proposal | `gratitude.proposal_accept_award` | Gratitude | integer | `100` | the whole village |
 | Issuance cap per lunar cycle | `ledger.admin_mint_cycle_cap` | Ledger | integer | `10000` | the whole village |
 | Second steward needed above | `ledger.admin_mint_cosign_over` | Ledger | integer | `100` | the whole village |
 | Bonus for a circle that finished under its cap | `resources.circle_cap_bonus_pct` | Ledger | percentage | `10` | the whole village |
@@ -367,7 +366,7 @@ The role whose holders are told the moment somebody joins. Greeting belongs to a
 
 ## Gratitude
 
-11 dials. 11 for the whole village.
+10 dials. 10 for the whole village.
 
 ### Base sending allowance per cycle
 
@@ -522,21 +521,6 @@ How many separate taps of appreciation one member can leave for another in a cyc
 | Counted in | hearts |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
-| What it costs to change | a routine vote |
-
-### Recognition for an accepted Work With Us proposal
-
-How much recognition is minted for a member whose Work With Us proposal is accepted. This used to live inside the Work With Us content settings with no bounds; it is issuance, so it belongs here with the other Gratitude dials.
-
-| Fact | Value |
-| --- | --- |
-| Key | `gratitude.proposal_accept_award` |
-| Type | integer, a whole number |
-| Default | `100` |
-| Range | 0 to 100000 |
-| Counted in | Gratitude |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
 ## Ledger

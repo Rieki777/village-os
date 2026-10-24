@@ -228,7 +228,7 @@ export default function ItemPage({ view, now, actions, item }: StageProps & { it
               {ROOM_COPY.proposal}
             </h4>
             {proposals.map((p) => (
-              <Proposal key={p.id} view={view} actions={actions} entry={p} />
+              <Proposal key={p.id} view={view} actions={actions} entry={p} now={now} />
             ))}
             {canAdd && (proposals.length === 0 || item.aim === "decide") && (
               <AddBox

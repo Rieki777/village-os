@@ -64,13 +64,17 @@ import { isAdmitted } from "../lib/admission";
 import type { AppDeps } from "../lib/appDeps";
 import { recordFeedback } from "../lib/feedback";
 import {
+  NIGHT_EVERY_MS,
+  NIGHT_JOB,
   actInRoom,
   addEntry,
+  answerAfterNight,
   addItem,
   buildView,
   cleanStart,
   closeSession,
   closeStaleRooms,
+  decideAfterNight,
   defaultDuration,
   discardSession,
   ensureMemberNo,
@@ -82,6 +86,7 @@ import {
   maySee,
   memberNo,
   noticesAfterClose,
+  noticesAfterNights,
   openSession,
   parseId,
   patchEntry,
@@ -94,12 +99,14 @@ import {
   sessionEtag,
   sessionForViewer,
   setHosts,
+  settleNights,
   type Actor,
   type MemberLookup,
   type Outcome,
   type Viewer,
 } from "../lib/liveSessions";
 import { requireModule } from "../lib/modules";
+import { registerJob } from "../lib/scheduler";
 import { libraryFor, noticesAfterTakes, reconcileLibrary } from "../lib/sessionLibrary";
 import { comingUpFor } from "../lib/sessionRhythm";
 import { queueCloseMail } from "../lib/sessionTaskMail";
@@ -164,6 +171,8 @@ const RESPONSES_PER_HOUR = 300;
 const DISCARDS_PER_HOUR = 30;
 /** Ideas for the tool in an hour. */
 const TOOL_IDEAS_PER_HOUR = 10;
+/** Answers after a night and decisions marked from a record (0281): a person answers a handful at most. */
+const NIGHT_WRITES_PER_HOUR = 60;
 /** How long a person's name is remembered between polls. */
 const NAME_TTL_MS = 30_000;
 
@@ -219,7 +228,7 @@ export function register(app: Express, deps: Deps): void {
     const c = (circlesRepo.all() as Array<{ id?: unknown; name?: unknown }>).find((x) => x?.id === id);
     return c ? String(c.name ?? id) : null;
   };
-  const ctx = { lookup, circleName, lapseContext: deps.lapseContext };
+  const ctx = { lookup, circleName, lapseContext: deps.lapseContext, circles };
   /** The close's task emails, started and left. Absent when the post office is not wired, as in a suite. */
   const closeMail = deps.commsPostOffice
     ? (sessionId: number) => {
@@ -227,6 +236,8 @@ export function register(app: Express, deps: Deps): void {
       }
     : undefined;
   const notices = { notify, notifyAdmins, lapseContext: deps.lapseContext, closeMail };
+  // A round that outlived its call settles once no night on it lasts (0281).
+  registerJob(NIGHT_JOB, NIGHT_EVERY_MS, () => settleNights(getPool(), lookup, { notify }));
 
   /**
    * One room's row for a read or a join, after closing it if it has gone quiet
@@ -481,6 +492,30 @@ export function register(app: Express, deps: Deps): void {
     if (!out.ok) return res.status(out.status).json({ ...(out.body ?? {}), error: out.error });
     await noticesAfterClose(w.pool, out.value, notices);
     res.json({ ok: true });
+  });
+
+  /**
+   * A round that outlived its call (0281): somebody who asked for a night
+   * answers it from the record, by their time. `{ entryId, value, text }`.
+   * When the answer settles the round, its facilitator hears how it went.
+   */
+  app.post("/api/sessions/:id/night", async (req, res) => {
+    const w = await writer(req, res, { key: "sessions-night", max: NIGHT_WRITES_PER_HOUR });
+    if (!w) return;
+    const out = await answerAfterNight(w.pool, w.id, w.actor, req.body, lookup);
+    if (!out.ok) return res.status(out.status).json({ ...(out.body ?? {}), error: out.error });
+    if (out.value.settled) await noticesAfterNights(w.pool, [out.value.settled], { notify });
+    res.json({ ok: true });
+  });
+
+  /** The facilitator, or an admin, marks a round that consented after its call decided, from the record. */
+  app.post("/api/sessions/:id/entries/:entryId/decide", async (req, res) => {
+    const w = await writer(req, res, { key: "sessions-night", max: NIGHT_WRITES_PER_HOUR });
+    if (!w) return;
+    const entryId = parseId(req.params?.entryId);
+    if (entryId == null) return res.status(404).json({ error: R.entryUnknown });
+    const out = await decideAfterNight(w.pool, w.id, entryId, w.actor, lookup);
+    answer(res, out, () => ({ ok: true }));
   });
 
   /**

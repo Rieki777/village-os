@@ -2112,14 +2112,11 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     /*
      * A STEWARD CANNOT PAY THEMSELVES THROUGH THIS DOOR.
      *
-     * Accepting a Work With Us proposal mints `gratitude.proposal_accept_award`
-     * to the matching member, 100 by default, and nothing checked that the
-     * matching member was not the steward pressing accept. Recognition is the
-     * DEFAULT `governance.weight_token`, so in a village weighting votes by
-     * token that is self-issued voting weight, once per submission, with
-     * nothing bounding how many submissions a person sends. The admin mint cap
-     * does not see it either: that guard counts `from_account = 'sys:mint'`
-     * and this issues from the recognition faucet.
+     * Accepting a Work With Us proposal pays the matching member the village's
+     * `proposal.accepted` rules (it minted 100 Gratitude until 2026-10-23), and
+     * nothing checked that the matching member was not the steward pressing
+     * accept: self-issued pay, once per submission, with nothing bounding how
+     * many submissions a person sends.
      *
      * The acceptance still stands. The payment does not, and the route says
      * which, because an accept with a silently unpaid mint teaches nobody

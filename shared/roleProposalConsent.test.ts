@@ -18,10 +18,13 @@ import {
   decisionWords,
   dueNudges,
   NUDGE_WORDS,
+  OBJECTION_MAX,
   objectionTension,
   parseConsentAnswer,
   powerPhrase,
   readNudge,
+  TALLY_WORDS,
+  tallyWords,
   type AskIn,
 } from "./roleProposalConsent";
 
@@ -86,6 +89,25 @@ describe("an answer", () => {
   it("refuses a long reason and one carrying payment details", () => {
     expect(parseConsentAnswer({ answer: "object", reason: "a".repeat(601) }).ok).toBe(false);
     expect(parseConsentAnswer({ answer: "object", reason: "Use 4111 1111 1111 1111" }).ok).toBe(false);
+  });
+
+  it("holds a reason to the 300 characters the page's box holds (PR D)", () => {
+    expect(OBJECTION_MAX).toBe(300);
+    expect(parseConsentAnswer({ answer: "object", reason: "a".repeat(300) }).ok).toBe(true);
+    expect(parseConsentAnswer({ answer: "object", reason: "a".repeat(301) })).toEqual({ ok: false, field: "reason", error: "Keep the reason to 300 characters." });
+    // The tension it writes keeps room for the roles' names in front of it.
+    expect(objectionTension(["Kitchen keeper"], "a".repeat(300))).toHaveLength("An objection to a role proposal for Kitchen keeper: ".length + 300);
+  });
+});
+
+describe("the tally (PR D)", () => {
+  it("is a count with the roles' titles, never a name", () => {
+    expect(tallyWords(2, ["Gate keeper", "Orchard keeper"])).toBe("2 (Gate keeper, Orchard keeper)");
+    expect(tallyWords(1, ["Gate keeper"])).toBe("1 (Gate keeper)");
+    // A holder who has left their role is counted with no title.
+    expect(tallyWords(2, [])).toBe("2");
+    expect(tallyWords(0, [])).toBe(TALLY_WORDS.none);
+    expect(tallyWords(0, ["Gate keeper"])).toBe("None");
   });
 });
 
