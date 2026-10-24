@@ -1924,9 +1924,12 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "seat-application-words-after-tombstone",
   "meet-me-windows-after-tombstone",
   "notices-naming-after-tombstone",
+  "ballot-words-after-tombstone",
   "exit-notes-after-tombstone",
   "relayed-mail-after-tombstone",
   "checkin-notes-after-tombstone",
+  "pulse-lines-naming-after-tombstone",
+  "submission-words-after-tombstone",
   "season-plan-words-after-tombstone",
   "role-tensions-after-tombstone",
   "event-places-after-tombstone",
@@ -1940,8 +1943,13 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "stay-notes-after-tombstone",
   "purchase-emails-after-tombstone",
   "role-proposals-after-tombstone",
+  "seat-journal-after-tombstone",
+  "seat-claims-after-tombstone",
+  "org-seatings-after-tombstone",
+  "role-holdings-after-tombstone",
   "sessions-after-tombstone",
   "gene-keys-after-tombstone",
+  "product-subscriptions-after-tombstone",
 ]);
 
 /** Steps after the tombstone a finished erasure is never given, and why. */

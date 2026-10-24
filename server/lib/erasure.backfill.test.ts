@@ -39,7 +39,7 @@ import { userIdForHandle } from "./profile";
 import { agentRowsRemaining } from "../repos/memberAgent";
 import { erasureRecord } from "../repos/memberErasure";
 import { recordVouch, vouchesFor } from "../repos/vouches";
-import { createInvite } from "../repos/memberInvites";
+import { createInviteOn } from "../repos/memberInvites";
 import { hashInviteToken, mintInviteToken } from "./invites";
 import { mintToken } from "./agentTokens";
 import { rsvp } from "./gatherings";
@@ -47,6 +47,7 @@ import { createMeetMe, joinWaitlist, setPromotionSink } from "./calendarCommunit
 import { seatChargeFor } from "./eventSeats";
 import { createGroup } from "./messaging";
 import { acceptDelegations, setDelegation } from "./delegation";
+import { openBallot } from "./ballots";
 import { CYCLE_POOL_FAUCET, balanceOf, checkLedgerInvariants, loadTokenRegistry, memberAccount, postTransfer } from "./ledger";
 import { toLedgerUnits } from "./economy";
 
@@ -82,9 +83,12 @@ const GIVEN_TO_IT = [
   "invites-after-tombstone",
   "meet-me-windows-after-tombstone",
   "notices-naming-after-tombstone",
+  "ballot-words-after-tombstone",
   "exit-notes-after-tombstone",
   "relayed-mail-after-tombstone",
   "checkin-notes-after-tombstone",
+  "pulse-lines-naming-after-tombstone",
+  "submission-words-after-tombstone",
   "role-tensions-after-tombstone",
   "event-places-after-tombstone",
   "housing-contacts-after-tombstone",
@@ -97,7 +101,12 @@ const GIVEN_TO_IT = [
   "stay-notes-after-tombstone",
   "purchase-emails-after-tombstone",
   "role-proposals-after-tombstone",
+  "seat-journal-after-tombstone",
+  "seat-claims-after-tombstone",
+  "org-seatings-after-tombstone",
+  "role-holdings-after-tombstone",
   "gene-keys-after-tombstone",
+  "product-subscriptions-after-tombstone",
 ];
 
 let db: TestDb;
@@ -111,6 +120,27 @@ async function q(sql: string, params: unknown[] = []): Promise<any[]> {
 
 /** Every notice the backfill hands the spine, in order. */
 let notices: any[] = [];
+
+/** The submissions store and the permission holdings, as the erasure's singletons hold them. */
+let submissions: any[] = [];
+let holders: Array<{ id: string; userId: string }> = [];
+/** Every list of holding ids the backfill handed `roleHoldersRepo.remove`. */
+let removed: string[][] = [];
+
+/** What a removed value reads as (server/lib/submissionWords.ts). */
+const REMOVED = "[removed at member's request]";
+
+/** An open claim on a seat, the shape POST /api/org/seatings/:id/claim writes (server/routes/org.ts). */
+const claim = (id: string, userId: string, name: string) => ({
+  id,
+  type: "seat-claim",
+  status: "new",
+  rewarded: false,
+  data: { assignmentId: `asg-${id}`, roleId: "bf-role-steward", roleName: "Steward", recordedName: name, name, email: null },
+  userId,
+  userName: name,
+  submittedAt: "2026-10-19T09:00:00.000Z",
+});
 
 /**
  * The erasure's singletons with the real users repository, and the spine as a
@@ -126,10 +156,20 @@ function deps(opts: { notifyThrows?: boolean } = {}): ErasureDeps {
       byId: (id: string) => real.byId(id),
       update: (id: string, fn: (u: any) => void, how?: { erasure?: boolean }) => real.update(id, fn, how),
     },
-    submissionsRepo: { all: () => [], replaceAll: async () => undefined },
-    roleHoldersRepo: { remove: async () => undefined },
+    submissionsRepo: {
+      all: () => submissions,
+      replaceAll: async (rows: unknown[]) => {
+        submissions = rows as any[];
+      },
+    },
+    roleHoldersRepo: {
+      remove: async (ids: string[]) => {
+        removed.push([...ids]);
+        holders = holders.filter((h) => !ids.includes(h.id));
+      },
+    },
     withRoleHolderLock: (fn) => fn(),
-    loadRoleHolders: () => [],
+    loadRoleHolders: () => holders,
     uploadsDir,
     notify: async (input: any) => {
       if (opts.notifyThrows) throw new Error("the spine refused the notice");
@@ -185,8 +225,14 @@ async function recordRow(id: string): Promise<any> {
   return r ?? null;
 }
 
+/** An open link. The repository writes on the caller's connection, never a pool (`createInviteOn`). */
 async function link(inviter: string, id: string): Promise<void> {
-  await createInvite(pool, { id, tokenHash: hashInviteToken(mintInviteToken()), inviterUserId: inviter, days: 14 });
+  const conn = await pool.getConnection();
+  try {
+    await createInviteOn(conn, { id, tokenHash: hashInviteToken(mintInviteToken()), inviterUserId: inviter, days: 14 });
+  } finally {
+    conn.release();
+  }
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
@@ -250,6 +296,9 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     clearMemberDrivers();
     setPromotionSink(null);
     notices = [];
+    submissions = [];
+    holders = [];
+    removed = [];
   });
 
   it("ends the agent token, the open link, the places, the vouch, the group and the delegation an old record left, and a second run changes nothing", async () => {
@@ -285,6 +334,16 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     // Ash handed them a voice, and they took it up.
     expect((await setDelegation(pool, "bf-ash", wren.id)).ok).toBe(true);
     await acceptDelegations(pool, wren.id, "bf-ash");
+    // Ash thanked them on the public pulse, which a signed-out visitor reads at GET /api/game/pulse.
+    await q(
+      "INSERT INTO health_events (id, kind, text, actor_user_id, actor_kind, entity_type, entity_ref, audience, at) " +
+        "VALUES ('bf-grat-wren', 'gratitude', 'Ash appreciated Wren', 'bf-ash', 'human', 'user', ?, 'public', CURRENT_TIMESTAMP - INTERVAL 1 HOUR)",
+      [wren.id],
+    );
+    // A permission holding in a role, with Ash's beside it: a carried seat vote can seat them after "role-holdings" ran.
+    holders = [{ id: "rh-bf-wren", userId: wren.id }, { id: "rh-bf-ash", userId: "bf-ash" }];
+    // An open claim on a seat recorded under their name, which the stewards read, with Ash's open claim beside it.
+    submissions = [claim("bf-claim-wren", wren.id, "Wren Halloway"), claim("bf-claim-ash", "bf-ash", "Ash Moreno")];
 
     const paid = await balanceOf(pool, memberAccount(wren.id), TOKEN);
     // Erased on 2026-10-20: the tombstone, and a record that finished with that day's steps.
@@ -306,11 +365,25 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     expect(await standing(), "the fixture holds one of each, and the erasure left every one").toEqual({
       agentTokens: 1, openLinks: 1, places: 2, meetMeWindows: 1, vouchesForThePending: 1, groupsOwned: 1, liveDelegations: 1,
     });
+    const thanks = async () => (await q("SELECT text FROM health_events WHERE id = 'bf-grat-wren'"))[0]?.text ?? null;
+    const claimOf = (id: string) => submissions.find((s) => s.id === id);
+    // Three more, read as one (adversarial round 3, finding 0): the public line, the holding and the open claim.
+    const leftovers = async () => ({
+      thanks: await thanks(),
+      holdingsEnded: removed.flat(),
+      claim: { status: claimOf("bf-claim-wren")?.status, recordedName: claimOf("bf-claim-wren")?.data.recordedName },
+    });
+    expect(await leftovers(), "the control: the line names them, the holding is theirs, the claim is open under their name").toEqual({
+      thanks: "Ash appreciated Wren", holdingsEnded: [], claim: { status: "new", recordedName: "Wren Halloway" },
+    });
 
     const counts = await backfillFinishedErasures(pool, deps(), () => undefined);
 
     expect(await standing(), "nothing of theirs still acts, holds a place or speaks for them").toEqual({
       agentTokens: 0, openLinks: 0, places: 0, meetMeWindows: 0, vouchesForThePending: 0, groupsOwned: 0, liveDelegations: 0,
+    });
+    expect(await leftovers(), "the public line names nobody gone, the holding is ended, and the claim is closed with its name taken off").toEqual({
+      thanks: "Ash appreciated a departed member", holdingsEnded: ["rh-bf-wren"], claim: { status: "declined", recordedName: REMOVED },
     });
     expect(counts).toMatchObject({ given: 1, steps: GIVEN_TO_IT.length, stopped: 0 });
 
@@ -329,6 +402,8 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     expect(await q("SELECT delegator_id FROM delegations WHERE (delegator_id = ? OR delegate_id = ?) AND revoked_at IS NULL", [wren.id, wren.id]), "no delegation they are half of is live").toEqual([]);
     expect(notices.map((n) => [n.userId, n.dedupeKey]), "Ash is told their voice is theirs again").toEqual([["bf-ash", `delegation-ended:${wren.id}:bf-ash`]]);
     expect((await checkLedgerInvariants(pool)).problems).toEqual([]);
+    expect(holders.map((h) => h.id), "Ash still holds theirs").toEqual(["rh-bf-ash"]);
+    expect(claimOf("bf-claim-ash"), "Ash's claim is untouched").toEqual(claim("bf-claim-ash", "bf-ash", "Ash Moreno"));
 
     // What it ran is written down, after what the sweep ran, and the finish did not move.
     const record = (await erasureRecord(pool, wren.id))!;
@@ -338,11 +413,15 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
 
     // A second run gives nobody anything: no refund, no seat, no notice, no note.
     const before = await everything();
+    const claimsBefore = JSON.stringify(submissions);
     notices = [];
+    removed = [];
     const again = await backfillFinishedErasures(pool, deps(), () => undefined);
     expect(again).toMatchObject({ given: 0, steps: 0, stopped: 0 });
     expect(await everything()).toEqual(before);
     expect(notices).toEqual([]);
+    expect(JSON.stringify(submissions), "and no claim changes").toBe(claimsBefore);
+    expect(removed, "and no holding is asked to end").toEqual([]);
 
     // A death between a step and its note: the next boot runs the steps that
     // refund and seat a second time, and they move nothing.
@@ -505,6 +584,44 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     const before = await everything();
     expect(await backfillFinishedErasures(pool, deps(), () => undefined)).toMatchObject({ given: 0, steps: 0 });
     expect(await everything()).toEqual(before);
+  });
+
+  /*
+   * Adversarial round 3, finding 0. The backfill gives an old record
+   * "ballot-words-after-tombstone". A vote to take a role back from a
+   * tombstone is titled with the tombstone's first name, which is "A"
+   * ("...take the role back from A"). Read back off the title as a
+   * spelling, "A" would rewrite every standalone "A" in the words of the
+   * living member who opened it (`nameInTitle`, server/lib/ballotErasure.ts).
+   */
+  it("gives an old record the ballot words step, and reads no name off a title about a tombstone, so the living opener's reason keeps every word", async () => {
+    const gone = await member("bf-ballot-wren", "Wren Halloway");
+    await member("bf-ballot-ann", "Ann Pryor");
+    await tombstone(gone.id);
+    await finishedRecord(gone.id, FINISHED_ON_2026_10_20);
+    // Exactly the words the role-unseats door writes for a member whose name is the tombstone's.
+    const title = "Steward: the village asks to take the role back from A";
+    const doc = [
+      `# ${title}`, "",
+      "## What changes if this carries", "",
+      "A stops sitting in Steward. The role carries no powers today, so nothing anybody can do changes.", "",
+      "Steward keeps everything it carries, and anybody else sitting in it is untouched.", "",
+      "## Why now", "",
+      "A cleanup vote. A role held by nobody who lives here keeps the circle from filling it.", "",
+      "Asked by Ann on 2026-10-04.", "",
+    ].join("\n");
+    const r = await openBallot(pool, {
+      subjectType: "role_unseat", subjectRef: `${gone.id}@role-steward`, title, docMarkdown: doc, method: "majority",
+      weightMode: "equal", unityPct: 50, quorumPct: 10, durationDays: 7, openedBy: "bf-ballot-ann", electorate: [{ userId: "bf-ballot-ann", weight: 1 }],
+    } as any);
+    if (!r.ok) throw new Error(`ballot refused to open: ${r.error}`);
+    const words = async () => (await q("SELECT title, doc_markdown, outcome_note FROM ballots WHERE id = ?", [r.ballot.id]))[0];
+    expect(await words(), "the control: the ballot is stored as the door wrote it").toEqual({ title, doc_markdown: doc, outcome_note: null });
+
+    expect((await backfillFinishedErasures(pool, deps(), () => undefined)).stopped).toBe(0);
+
+    expect((await erasureRecord(pool, gone.id))!.stepsDone, "the old record is given the ballot words step").toContain("ballot-words-after-tombstone");
+    expect(await words(), "the living opener's reason, every standalone A in it, is untouched").toEqual({ title, doc_markdown: doc, outcome_note: null });
   });
 });
 
