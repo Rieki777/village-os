@@ -16,7 +16,9 @@ vi.mock("@/lib/gameApi", () => ({
   useVillageLinks: () => ({ eventsUrl: "" }),
   useBrandImages: () => ({}),
   altOr: (a: string | undefined, b: string) => a || b,
+  useGameConfig: () => ({ project: { name: "Hollow Oak" } }),
 }));
+vi.mock("@/hooks/useVillageContent", () => ({ readVillageSection: () => Promise.resolve(null) }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Hollow Oak" }));
 vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: (fallback: string) => fallback }));
 
@@ -33,7 +35,8 @@ describe("StewardJourney form, once it is sent", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true }) }));
     const user = userEvent.setup();
     render(<StewardJourney />);
-    await user.type(screen.getByLabelText(/your name/i), "Juno Reed");
+    // The form draws once the page's saved words have answered.
+    await user.type(await screen.findByLabelText(/your name/i), "Juno Reed");
     await user.type(screen.getByLabelText(/^email/i), "juno@example.test");
     await user.click(screen.getByRole("button", { name: /begin my stewardship journey/i }));
 

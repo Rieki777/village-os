@@ -6,8 +6,10 @@ import { Image } from "@/components/Image";
 import { useEffect, useState } from "react";
 import { gameFetch, useGameConfig, useVillageLinks } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
-import { useVillageName } from "@/hooks/useVillageName";
 import { readVillageSection } from "@/hooks/useVillageContent";
+import { usePageContent } from "@/hooks/usePageContent";
+import { Emphasized } from "@/components/PageText";
+import { TEAM_PAGE } from "@shared/pageContent/team";
 import { orgRowIsAgent } from "@shared/roleSheetInputs";
 
 interface TeamMember {
@@ -18,25 +20,33 @@ interface TeamMember {
   photo?: string;
 }
 
-const advisoryHighlights = [
-  "Regenerative Agriculture & Permaculture Leaders",
-  "Wellness & Healing Arts Practitioners",
-  "Education & Child Development Experts",
-  "Arts & Culture Leaders",
-  "Local Community Representatives",
-  "Cultural Liaisons from where the village sits"
-];
+/**
+ * How many roles have a place nobody holds, from the counts /api/org gives
+ * every reader. An example role is the platform's, never this village's
+ * opening. The page used to say "several roles are open right now" under a
+ * village with every role filled; this is what it asks first now.
+ */
+export function openRoleCount(roles: ReadonlyArray<{ seats?: unknown; holderCount?: unknown; isExample?: unknown }>): number {
+  return roles.filter((r) => !r.isExample && Number(r.holderCount ?? 0) < Number(r.seats ?? 1)).length;
+}
+
+/** A board column's lines, blanks left out. */
+const columnLines = (column: Readonly<Record<string, string>>) =>
+  [column.first, column.second, column.third, column.fourth].filter((line) => (line ?? "").trim() !== "");
 
 export default function Team() {
   const config = useGameConfig();
-  const villageName = useVillageName();
+  // Every word on this page that is not a person's is the village's own, from
+  // Admin, Pages, Team (shared/pageContent/team.ts). Null until the saved
+  // words have arrived, so the defaults never flash first.
+  const page = usePageContent(TEAM_PAGE);
   // Blank hides the button rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   // The tier this page's copy of /api/org came back at, plus the two counts
   // that are public on every tier. Held for the lock note below.
   const [people, setPeople] = useState<PeopleTier | null>(null);
-  const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
+  const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0, open: 0 });
 
   useEffect(() => {
     // Two sources, merged. Seats and their holders come from the org rows
@@ -64,6 +74,7 @@ export default function Team() {
         setSeatCounts({
           seats: (org.roles ?? []).reduce((n: number, r: any) => n + Number(r.seats ?? 0), 0),
           held: (org.roles ?? []).reduce((n: number, r: any) => n + Number(r.holderCount ?? 0), 0),
+          open: openRoleCount(org.roles ?? []),
         });
         const profileByName = new Map<string, any>();
         for (const c of Array.isArray(cards) ? cards : []) {
@@ -141,8 +152,8 @@ export default function Team() {
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
               {config?.project?.name ? `The ${config.project.name} Team` : "The Team"}
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              The people holding roles here, and the circles they hold them in.
+            <p className={`text-xl text-muted-foreground max-w-2xl mx-auto break-words${page ? "" : " invisible"}`}>
+              <Emphasized text={page?.header.fields.intro || "\u00a0"} />
             </p>
           </motion.div>
 
@@ -154,8 +165,8 @@ export default function Team() {
               viewport={{ once: true }}
               className="text-center mb-12"
             >
-              <h2 className="font-display text-3xl font-bold text-foreground mb-4">
-                Leadership Circle
+              <h2 className={`font-display text-3xl font-bold text-foreground mb-4 break-words${page ? "" : " invisible"}`}>
+                {page?.leadership.fields.heading || "\u00a0"}
               </h2>
               <p className="text-muted-foreground max-w-2xl mx-auto">
                 The full circle of roles, filled and open, lives on the{" "}
@@ -224,40 +235,48 @@ export default function Team() {
               ))}
             </div>
 
+            {/* Said only while a role really is open: counted from /api/org,
+                whose seat counts every reader gets. */}
+            {page && seatCounts.open > 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="text-center mt-10"
             >
-              <p className="text-muted-foreground text-sm max-w-xl mx-auto mb-4">
-                The team is growing, and several leadership roles and steward roles are open right now.
+              {page.leadership.fields.openNote && (
+              <p className="text-muted-foreground text-sm max-w-xl mx-auto mb-4 break-words">
+                <Emphasized text={page.leadership.fields.openNote} />
               </p>
+              )}
               <Link href="/roles" className="inline-flex items-center gap-2 text-sage font-semibold hover:underline">
-                See the open roles <ArrowRight className="w-4 h-4" />
+                {page.leadership.fields.openLink} <ArrowRight className="w-4 h-4" />
               </Link>
             </motion.div>
+            )}
           </div>
 
-          {/* Advisory Council */}
+          {/* Advisory Council: a village with none hides it in Admin, Pages, Team. */}
+          {page && !page.advisory.hidden && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="bg-amber/5 rounded-3xl p-8 md:p-12 border border-amber/20 mb-20"
+            className="bg-amber/5 rounded-3xl p-6 sm:p-8 md:p-12 border border-amber/20 mb-20"
           >
             <div className="text-center mb-10">
-              <h2 className="font-display text-3xl font-bold text-foreground mb-4">
-                Community Advisory Council
+              <h2 className="font-display text-3xl font-bold text-foreground mb-4 break-words">
+                {page.advisory.fields.heading}
               </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto">
-                Practitioners and thought leaders shaping this village's culture, partnerships, and community integration.
+              <p className="text-muted-foreground max-w-2xl mx-auto break-words">
+                <Emphasized text={page.advisory.fields.intro} />
               </p>
             </div>
+            {page.advisory.lists.items.length > 0 && (
             <div className="grid md:grid-cols-2 gap-4 max-w-4xl mx-auto mb-8">
-              {advisoryHighlights.map((highlight, index) => (
+              {page.advisory.lists.items.map((item, index) => (
                 <motion.div
-                  key={highlight}
+                  key={`${index}-${item.text}`}
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
@@ -265,75 +284,70 @@ export default function Team() {
                   className="flex gap-3 items-start"
                 >
                   <span className="text-amber font-bold text-lg flex-shrink-0">✦</span>
-                  <p className="text-muted-foreground">{highlight}</p>
+                  <p className="text-muted-foreground min-w-0 break-words">{item.text}</p>
                 </motion.div>
               ))}
             </div>
-            <p className="text-center text-sm text-muted-foreground">
-              Advisors receive First Right of Refusal on lot purchases, retreat discounts, and recognition as Founding Advisors.
+            )}
+            {page.advisory.fields.terms && (
+            <p className="text-center text-sm text-muted-foreground break-words">
+              <Emphasized text={page.advisory.fields.terms} />
             </p>
+            )}
           </motion.div>
+          )}
 
-          {/* Development Board */}
+          {/* Board: a village with none hides it in Admin, Pages, Team. */}
+          {page && !page.board.hidden && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="bg-teal-deep/5 rounded-3xl p-8 md:p-12 border border-teal-deep/20 mb-20"
+            className="bg-teal-deep/5 rounded-3xl p-6 sm:p-8 md:p-12 border border-teal-deep/20 mb-20"
           >
             <div className="text-center">
-              <h2 className="font-display text-3xl font-bold text-foreground mb-4">
-                Development Board of Directors
+              <h2 className="font-display text-3xl font-bold text-foreground mb-4 break-words">
+                {page.board.fields.heading}
               </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto mb-8">
-                5-7 expert members providing strategic oversight, fiduciary responsibility, and guidance on business, legal, and financial aspects.
+              <p className="text-muted-foreground max-w-2xl mx-auto mb-8 break-words">
+                <Emphasized text={page.board.fields.intro} />
               </p>
+              {page.board.lists.columns.length > 0 && (
               <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-                <div className="text-left">
-                  <h3 className="font-semibold text-foreground mb-2">Expertise Areas</h3>
+                {page.board.lists.columns.map((column, index) => (
+                <div key={`${index}-${column.heading}`} className="text-left min-w-0">
+                  <h3 className="font-semibold text-foreground mb-2 break-words">{column.heading}</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>Legal &amp; Regulatory</li>
-                    <li>Real Estate Development</li>
-                    <li>Financial &amp; Investment</li>
+                    {columnLines(column).map((line, i) => (
+                      <li key={`${i}-${line}`} className="break-words">{line}</li>
+                    ))}
                   </ul>
                 </div>
-                <div className="text-left">
-                  <h3 className="font-semibold text-foreground mb-2">Responsibilities</h3>
-                  <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>Financial Oversight</li>
-                    <li>Development Milestones</li>
-                    <li>Investor Relations</li>
-                  </ul>
-                </div>
-                <div className="text-left">
-                  <h3 className="font-semibold text-foreground mb-2">Meeting Schedule</h3>
-                  <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>Monthly Meetings</li>
-                    <li>Quarterly Sessions</li>
-                    <li>Annual Retreat</li>
-                  </ul>
-                </div>
+                ))}
               </div>
+              )}
             </div>
           </motion.div>
+          )}
 
           {/* CTA */}
+          {page && !page.cta.hidden && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mt-16 bg-sage/5 p-8 rounded-2xl border border-sage/20"
+            className="text-center mt-16 bg-sage/5 p-6 sm:p-8 rounded-2xl border border-sage/20"
           >
-            <h2 className="font-display text-2xl font-bold text-foreground mb-4">
-              Join Our Community
+            <h2 className="font-display text-2xl font-bold text-foreground mb-4 break-words">
+              {page.cta.fields.heading}
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto mb-6">
-              Whether you're an investor, resident, steward, or prosperity creator, there's a place for you at {villageName}.
+            <p className="text-muted-foreground max-w-2xl mx-auto mb-6 break-words">
+              <Emphasized text={page.cta.fields.body} />
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link href="/#choose-path">
                 <span className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium cursor-pointer">
-                  Find Your Path
+                  {page.cta.fields.pathLabel}
                   <ArrowRight className="w-4 h-4" />
                 </span>
               </Link>
@@ -344,12 +358,13 @@ export default function Team() {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-6 py-3 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors font-medium"
                 >
-                  Join Community Call
+                  {page.cta.fields.callLabel}
                   <ExternalLink className="w-4 h-4" />
                 </a>
               )}
             </div>
           </motion.div>
+          )}
         </div>
       </section>
     </Layout>
