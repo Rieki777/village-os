@@ -137,6 +137,8 @@ export interface PowerData {
     mayDeclare?: string[];
     /** Arrange mode: this reader may drag circles into each other (0208). */
     mayArrange?: boolean;
+    /** Which door an arrangement publishes through: the holder's power, or the admin panel's (0286). */
+    arrangeDoor?: "power" | "admin" | null;
     /*
      * THE THREE MAP EDITORS, and why there are three of them reading one
      * source. The reasoning lives here rather than beside the fields in
