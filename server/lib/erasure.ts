@@ -186,6 +186,7 @@ import { forgetVenturesOf } from "../repos/ventures";
 import { forgetFactWordsOf } from "../repos/investorPath";
 import { forgetStayNotesOf } from "../repos/stays";
 import { forgetPayerEmailOf } from "../repos/productPurchases";
+import { heldByAnotherAccount } from "../repos/users";
 import { forgetPulseLinesNaming } from "../repos/pulseLines";
 import { forgetSubmissionWords } from "./submissionWords";
 import { emailKeyOf } from "../../shared/comms/address";
@@ -258,9 +259,10 @@ const tombstoneAddress = (id: string): string => `deleted-${id}@anonymized.inval
  * `target` carries their real address on every run: the record read before
  * the sweep began on a first run, and on a resume the identity
  * `member_erasures` held from before the tombstone (`asTheyWere`, 0282). Only
- * a record from before 0282 that stopped past the tombstone gets "", and the
- * steps that match by address then find its rows by user id alone, the limit
- * the comms step states.
+ * a record from before 0282 that stopped past the tombstone gets "", and so
+ * does a resume whose old address another account holds now (`asTheyWere`
+ * says why). The steps that match by address then find its rows by user id
+ * alone, the limit the comms step states.
  */
 const realEmailKey = (target: any): string => {
   const email = String(target?.email ?? "");
@@ -268,14 +270,21 @@ const realEmailKey = (target: any): string => {
 };
 
 /**
- * The member's real name and address, or nothing for a target that is still
- * a tombstone, by the same reading as `realEmailKey`. For the steps that can
- * only find a line or an alert by the name it printed.
+ * The member's real name, or null for a target that is still a tombstone and
+ * names nobody. A resume whose old address somebody else holds now comes back
+ * with no address and its real name (`asTheyWere`), and the name still counts.
+ * For the steps that can only find a line or an alert by the name it printed.
  */
+const realName = (target: any): string | null => {
+  if (isTombstone({ email: String(target?.email ?? "") })) return null;
+  const name = String(target?.name ?? "").trim();
+  return name && name !== ANON ? name : null;
+};
+
+/** The real name and the real address, whichever of the two the sweep still knows. */
 const knownAs = (target: any): string[] => {
   const email = String(target?.email ?? "");
-  if (!email || isTombstone({ email })) return [];
-  return [String(target?.name ?? "").trim(), email].filter(Boolean);
+  return [realName(target) ?? "", email && !isTombstone({ email }) ? email : ""].filter(Boolean);
 };
 
 /**
@@ -766,8 +775,9 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        * address here on every run: the record read before the sweep began on a
        * first run, and on a resume the identity `member_erasures` held from
        * before the tombstone (`asTheyWere`). Only a record from before 0282
-       * that stopped past the tombstone has no address left, and that one
-       * finds the rest by user id alone.
+       * that stopped past the tombstone has no address left, or a resume whose
+       * old address another account holds now, and those find the rest by
+       * user id alone.
        */
       name: "comms",
       run: async () => {
@@ -949,8 +959,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        */
       name: "pulse-lines-naming-after-tombstone",
       run: async () => {
-        const name = knownAs(target).length ? String(target.name ?? "").trim() || null : null;
-        await forgetPulseLinesNaming(pool, { userId: target.id, name });
+        await forgetPulseLinesNaming(pool, { userId: target.id, name: realName(target) });
       },
     },
     {
@@ -972,7 +981,8 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        * village presets; the words otherwise stay, de-attributed (decision 2).
        * Hash, parties and seal are untouched, so receipts still verify.
        * `target` holds the member's real name and handle on every run, a
-       * resume included, for the reason the comms step gives.
+       * resume included, for the reason the comms step gives; a handle
+       * another account holds now is left out (`asTheyWere`).
        *
        * A target that is STILL a tombstone has no name left to look for: a
        * record from before 0282 that stopped past the tombstone, or an erasure
@@ -1314,12 +1324,26 @@ function identityOf(row: any): ErasedIdentity | null {
  * `member_erasures.erased_identity` (0282), which the finish clears. Only those
  * three fields come back; the id and every other field stay the row's own. A
  * record from before 0282 holds nothing, and the tombstone is all there is.
+ *
+ * AN ADDRESS OR HANDLE SOMEBODY ELSE HOLDS NOW IS NOT HANDED BACK. The
+ * tombstone frees both, so the person can sign up again with them before the
+ * retry comes round, and matching by them then scrubbed the living account's
+ * housing request, order and comms contact (round 2, finding 0). Such an
+ * address comes back empty, so every step finds the leaver by user id alone,
+ * the limit the comms step states; such a handle comes back null. The name
+ * still comes back.
  */
 async function asTheyWere(pool: Pool, target: any): Promise<any> {
   if (identityOf(target)) return target;
   const held = await erasedIdentity(pool, String(target.id));
   if (!held) return target;
-  return { ...target, name: held.name, email: held.email, handle: held.handle };
+  const taken = await heldByAnotherAccount(pool, String(target.id), { emailKey: emailKeyOf(held.email), handle: held.handle });
+  return {
+    ...target,
+    name: held.name,
+    email: taken.email ? "" : held.email,
+    handle: taken.handle ? null : held.handle,
+  };
 }
 
 /**

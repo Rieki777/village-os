@@ -301,6 +301,9 @@ describe.skipIf(!configured)("what an erased member left on the pulse and in the
       const stopped = await erasureRecord(pool, wren);
       expect(stopped?.failedStep).toBe("pulse-lines-naming-after-tombstone");
       expect((await rowOf("pr-grat")).text, "the fault landed before the rewrite").toBe("Ann appreciated Wren");
+      // Somebody signs up with the address the tombstone freed before the retry
+      // comes round, so the resume gets no address back, and still the name.
+      await person("r2-pause-newcomer", "Bea Newcomer", `${wren}@example.test`);
 
       const out = await resumeErasure(pool, wren, deps());
 
