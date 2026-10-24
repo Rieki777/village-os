@@ -23,6 +23,8 @@ export interface PageMeta {
   siteName: string;
   type: "website" | "article";
   imageSize?: { width: number; height: number };
+  /** Ask search engines to leave this address out: a page this village does not serve. */
+  noindex?: boolean;
 }
 
 const escapeAttr = (s: string) =>
@@ -46,6 +48,7 @@ export function metaTags(m: PageMeta): string {
     m.image && m.imageSize ? `<meta property="og:image:height" content="${m.imageSize.height}" />` : "",
     `<meta name="twitter:card" content="${m.image ? "summary_large_image" : "summary"}" />`,
     m.url ? `<link rel="canonical" href="${escapeAttr(m.url)}" />` : "",
+    m.noindex ? `<meta name="robots" content="noindex" />` : "",
   ]
     .filter(Boolean)
     .join("\n    ");
@@ -79,8 +82,19 @@ const absolute = (src: string, origin: string): string => {
  * The share card for an ordinary page: the page's own name, the village's
  * share sentence (Admin, Pages, Whole site) or its Tagline, and its share
  * picture or homepage picture.
+ *
+ * `hidden` is a story page this village does not serve (shared/brochure.ts):
+ * its route is the not-found page, so its card must not advertise it. It reads
+ * as the village alone, names no address of its own, and asks search engines
+ * to leave it out.
  */
-export function sitePageMeta(path: string, origin: string, config: SiteConfig, content: Record<string, unknown> | null): PageMeta {
+export function sitePageMeta(
+  path: string,
+  origin: string,
+  config: SiteConfig,
+  content: Record<string, unknown> | null,
+  hidden = false,
+): PageMeta {
   const village = config.project.name;
   const site = resolvePage(SITE_PAGE, content?.[pageSectionKey(SITE_PAGE)], {
     village,
@@ -88,12 +102,13 @@ export function sitePageMeta(path: string, origin: string, config: SiteConfig, c
     location: config.project.location ?? "",
   }).share.fields;
   return {
-    title: documentTitle(path, village, { commitment: config.project.commitmentName }),
+    title: hidden ? village : documentTitle(path, village, { commitment: config.project.commitmentName }),
     description: trimTo((site.description || config.project.tagline || "").trim()),
     image: absolute(site.image || config.images?.hero || "", origin),
-    url: origin ? origin + path : "",
+    url: origin && !hidden ? origin + path : "",
     siteName: village,
     type: "website",
+    ...(hidden ? { noindex: true } : {}),
   };
 }
 

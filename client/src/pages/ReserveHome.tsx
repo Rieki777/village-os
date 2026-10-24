@@ -40,6 +40,7 @@ import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConse
 import { Link } from "wouter";
 import { Home, ArrowLeft, Check, MapPin } from "lucide-react";
 import { hamletNumbers, homeChoices, preselectedHome, type PublicHome } from "@/lib/housingForm";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /*
  * THE FOUR HOME TYPES THAT USED TO LIVE HERE ARE GONE (0131).
@@ -69,6 +70,9 @@ interface HousingEntry {
 }
 
 export default function ReserveHome() {
+  // The way back goes only to a Housing page this village has not switched
+  // off on its own (Admin, Pages, "Show this page").
+  const housingOn = !useStoryPageOffAlone()("/housing");
   /*
    * Read once, on first render. `useState` with an initialiser and not a
    * `useEffect`: reading the query string in an effect renders one frame with
@@ -221,12 +225,14 @@ export default function ReserveHome() {
               {email}. Someone from the founding team will be in touch to walk you through the
               deposit and what happens next.
             </p>
-            <Link
-              href="/housing"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium"
-            >
-              Back to housing options
-            </Link>
+            {housingOn && (
+              <Link
+                href="/housing"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium"
+              >
+                Back to housing options
+              </Link>
+            )}
           </div>
         </section>
       </Layout>
@@ -264,12 +270,14 @@ export default function ReserveHome() {
               nothing to hold for you today. Come back, or reach the founding team through
               the housing page and tell them what you are looking for.
             </p>
-            <Link
-              href="/housing"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium"
-            >
-              Back to housing
-            </Link>
+            {housingOn && (
+              <Link
+                href="/housing"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium"
+              >
+                Back to housing
+              </Link>
+            )}
           </div>
         </section>
       </Layout>
@@ -280,13 +288,15 @@ export default function ReserveHome() {
     <Layout>
       <section className="py-16 bg-background">
         <div className="container max-w-2xl">
-          <Link
-            href="/housing"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground mb-6"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Housing options
-          </Link>
+          {housingOn && (
+            <Link
+              href="/housing"
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground mb-6"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Housing options
+            </Link>
+          )}
 
           <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-3">
             Reserve your home

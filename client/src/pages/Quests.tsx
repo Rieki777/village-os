@@ -31,7 +31,7 @@ import {
   type FieldSigns,
   type Ring,
 } from "@/lib/questBoard";
-import { useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 
 type Difficulty = "Beginner" | "Intermediate" | "Advanced";
 
@@ -72,7 +72,7 @@ const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
  * hardcoded list.
  */
 export default function Quests() {
-  const brochureOn = useBrochurePages() === true;
+  const letterOn = useStoryPageShown()("/love-letter");
   // The recognition and value tokens' live names (Admin → Tokens) — a fork's
   // rename reaches every line below without a code change.
   const cfg = useGameConfig();
@@ -525,7 +525,7 @@ export default function Quests() {
                   Join a Community Call
                 </a>
               )}
-              {brochureOn && (
+              {letterOn && (
                 <Link href="/love-letter">
                   <a className="px-6 py-3 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors flex items-center gap-2">
                     <Heart className="w-5 h-5" />

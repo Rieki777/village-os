@@ -46,7 +46,7 @@ import { usePathLadders } from "@/hooks/usePathLadders";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { onProfileRefresh } from "@/lib/profileRefresh";
-import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 
 /**
  * THE CHARACTER SHEET.
@@ -90,7 +90,7 @@ import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
  */
 
 export default function Profile() {
-  const brochureOn = useBrochurePages() === true;
+  const storyShown = useStoryPageShown();
   const [, navigate] = useLocation();
   const tokenName = useTokenName("Recognition");
   const { user, logout, loading, updateProfile } = useAuth();
@@ -312,7 +312,8 @@ export default function Profile() {
       id: p.id,
       label: p.label,
       role: p.role,
-      route: p.route,
+      // A path whose page is switched off keeps its tile and loses the link.
+      route: storyShown(p.route) ? p.route : "",
       offered: true,
     })),
     ...user.paths
@@ -712,7 +713,7 @@ export default function Profile() {
                     client calls, or from an admin accepting a Work With Us
                     proposal. So the card links the second one.
                   */
-                  brochureOn ? (
+                  storyShown("/work-with-us") ? (
                     <p className="text-muted-foreground">
                       No contributions yet. Propose one through{" "}
                       <Link href="/work-with-us" className="font-medium text-foreground underline underline-offset-2">
@@ -915,7 +916,7 @@ export default function Profile() {
                     { href: "/quests", label: "Quests" },
                     { href: "/circles", label: "Circles" },
                     { href: "/housing", label: "Housing" },
-                  ].filter((l) => brochureOn || !isBrochurePath(l.href)).map((l) => (
+                  ].filter((l) => storyShown(l.href)).map((l) => (
                     <li key={l.href}>
                       <Link
                         href={l.href}

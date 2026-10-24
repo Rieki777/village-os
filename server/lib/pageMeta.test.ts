@@ -57,6 +57,26 @@ describe("what a shared link shows", () => {
   });
 });
 
+describe("the share card of a story page this village switched off", () => {
+  it("names the village alone, no address of its own, and asks search engines to leave it out", () => {
+    const meta = sitePageMeta("/housing", "https://willow.example", config, null, true);
+    expect(meta.title).toBe("Willowbrook");
+    expect(meta.url).toBe("");
+    const html = spliceMeta(SHELL, meta);
+    expect(html).toContain("<title>Willowbrook</title>");
+    expect(html).not.toContain("Housing");
+    expect(html).not.toContain("/housing");
+    expect(html).toContain('<meta name="robots" content="noindex" />');
+  });
+
+  it("is the ordinary card while the page is served, the control for the case above", () => {
+    const html = spliceMeta(SHELL, sitePageMeta("/housing", "https://willow.example", config, null));
+    expect(html).toContain("<title>Housing · Willowbrook</title>");
+    expect(html).toContain('<link rel="canonical" href="https://willow.example/housing" />');
+    expect(html).not.toContain("noindex");
+  });
+});
+
 describe("the names of the story pages in the menu and footer", () => {
   it("serves every story page's name, with the village's commitment word, and marks none as changed by default", async () => {
     const { siteWords } = await import("./pageMeta");

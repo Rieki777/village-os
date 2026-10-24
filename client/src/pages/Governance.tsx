@@ -15,7 +15,7 @@ import {
   Scale,
   ShieldCheck,
 } from "lucide-react";
-import { useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 
 const PRINCIPLES = [
   {
@@ -47,7 +47,7 @@ const DECISION_STEPS = [
 ];
 
 export default function Governance() {
-  const brochureOn = useBrochurePages() === true;
+  const storyShown = useStoryPageShown();
   const villageName = useVillageName();
   return (
     <Layout>
@@ -254,7 +254,7 @@ export default function Governance() {
           <p className="text-stone-700 leading-relaxed mb-4">
             Governance is logged on Hypha, an open-source platform owned by its contributors. Every proposal, vote, and contribution is transparent and traceable. Value in, value out.
           </p>
-          {brochureOn && (
+          {storyShown("/co-creators-guide") && (
             <Link
               href="/co-creators-guide"
               className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
@@ -265,8 +265,9 @@ export default function Governance() {
         </div>
       </section>
 
-      {/* CTA. Both of its doors are brochure pages, so it goes with them. */}
-      {brochureOn && (
+      {/* CTA. Both of its doors are brochure pages, so it goes with them,
+          and each door goes with its own page when that one is off alone. */}
+      {(storyShown("/steward") || storyShown("/love-letter")) && (
       <section className="bg-teal-deep text-white py-20">
         <div className="container max-w-3xl mx-auto px-4 text-center">
           <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
@@ -276,18 +277,22 @@ export default function Governance() {
             Join the circle closest to your gifts and start shaping the village from the inside.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href="/steward"
-              className="inline-flex items-center gap-2 bg-amber text-foreground font-semibold px-6 py-3 rounded-xl hover:bg-amber/90 transition-colors"
-            >
-              Become a Steward <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/love-letter"
-              className="inline-flex items-center gap-2 bg-white/10 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/20 transition-colors border border-white/20"
-            >
-              Sign the Love Letter
-            </Link>
+            {storyShown("/steward") && (
+              <Link
+                href="/steward"
+                className="inline-flex items-center gap-2 bg-amber text-foreground font-semibold px-6 py-3 rounded-xl hover:bg-amber/90 transition-colors"
+              >
+                Become a Steward <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
+            {storyShown("/love-letter") && (
+              <Link
+                href="/love-letter"
+                className="inline-flex items-center gap-2 bg-white/10 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/20 transition-colors border border-white/20"
+              >
+                Sign the Love Letter
+              </Link>
+            )}
           </div>
         </div>
       </section>

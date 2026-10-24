@@ -559,7 +559,7 @@ import {
   type Candidate,
 } from "./lib/map";
 import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION, PRODUCT_NAME } from "./lib/identity";
-import { brochurePagesOn, isBrochurePath, loadBrochurePages } from "./lib/brochurePages";
+import { brochureConfig, brochurePageServed, loadBrochurePages } from "./lib/brochurePages";
 import { listDrafts, measureVisionMetrics, tierDraftWords, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
 import { noteSeen, readSeen } from "./lib/sheetSeen"; import { displayCurrencyProblem } from "../shared/money";
@@ -4628,7 +4628,7 @@ async function runRetentionSweep(): Promise<string> {
 
 async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
   // The letter is a guest's step only where the village serves it; a signing it has not answered is its own step (lib/nextAction.ts).
-  const joining = brochurePagesOn() && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
+  const joining = brochurePageServed("/love-letter") && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
   return pickNextAction(GAME_CONFIG.nextActions, {
     trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user),
   });
@@ -18857,7 +18857,7 @@ ${inner}
       paths: GAME_CONFIG.paths,
       stages: servedLadder(mergedConfig().project.commitmentName),
       season: seasonState(),
-      brochurePages: brochurePagesOn(),
+      ...brochureConfig(),
       site: siteWords(contentRepo.get() ?? null, m),
     });
   });
@@ -26414,7 +26414,7 @@ ${inner}
   app.get("/sitemap.xml", (req, res) => {
     const origin = requestOrigin(req);
     const paths = [
-      ...PUBLIC_PATHS.filter((p) => brochurePagesOn() || !isBrochurePath(p)),
+      ...PUBLIC_PATHS.filter((p) => brochurePageServed(p)),
       ...GATED_PATHS.filter(([, id]) => effectiveLifecycle(id) === "public").map(([p]) => p),
     ];
     const urls = paths
@@ -26596,7 +26596,7 @@ ${inner}
       console.error(`[sendFile error] ${indexPath}: the shell is missing`);
       return res.status(500).send(`Server error: could not serve index.html from ${indexPath}`);
     }
-    const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null);
+    const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null, !brochurePageServed(req.path));
     res.type("html").set("Cache-Control", "no-cache").send(spliceMeta(shellWithTheme(shell, getBrand), meta));
   });
 

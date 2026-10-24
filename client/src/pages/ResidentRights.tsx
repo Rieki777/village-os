@@ -22,6 +22,7 @@ import {
   Baby,
   RefreshCw,
 } from "lucide-react";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /**
  * Every word on this page is the village's own, from Admin, Pages, Resident
@@ -52,6 +53,8 @@ export default function ResidentRights() {
   // stays invisible meanwhile, so a visitor never reads the platform's
   // defaults and then watches them change.
   const page = usePageContent(RIGHTS_RESIDENT_PAGE);
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   const hero = page?.hero.fields;
   const ownership = page?.ownership;
   const rightsSection = page?.rights;
@@ -319,14 +322,16 @@ export default function ResidentRights() {
               button", and invalid HTML. self-center keeps the content width
               the old inline button had in the phone's column. */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/resident"
-              className="self-center inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep-dark transition-colors"
-            >
-              {cta.fields.primaryLabel}
-              <ArrowRight className="w-4 h-4 flex-shrink-0" />
-            </Link>
-            {cta.fields.secondaryLabel && (
+            {!pageOff("/resident") && (
+              <Link
+                href="/resident"
+                className="self-center inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep-dark transition-colors"
+              >
+                {cta.fields.primaryLabel}
+                <ArrowRight className="w-4 h-4 flex-shrink-0" />
+              </Link>
+            )}
+            {cta.fields.secondaryLabel && !pageOff("/good-neighbor") && (
               <Link
                 href="/good-neighbor"
                 className="self-center inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-teal-deep text-teal-deep font-medium hover:bg-teal-deep/5 transition-colors"

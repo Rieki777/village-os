@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Crown,
 } from "lucide-react";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /*
  * Every word on this page is the village's own, from Admin, Pages, Steward
@@ -46,6 +47,8 @@ export default function StewardRights() {
   // stays invisible meanwhile, so a visitor never reads the platform's
   // defaults and then watches them change.
   const page = usePageContent(RIGHTS_STEWARD_PAGE);
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   const hero = page?.hero.fields;
   const ownership = page?.ownership;
   const rights = page?.rights;
@@ -280,13 +283,15 @@ export default function StewardRights() {
               button", and invalid HTML. self-center keeps the content width
               the old inline button had in the phone's column. */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/steward"
-              className="self-center inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep-dark transition-colors"
-            >
-              {cta.fields.primaryLabel}
-              <ArrowRight className="w-4 h-4 flex-shrink-0" />
-            </Link>
+            {!pageOff("/steward") && (
+              <Link
+                href="/steward"
+                className="self-center inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep-dark transition-colors"
+              >
+                {cta.fields.primaryLabel}
+                <ArrowRight className="w-4 h-4 flex-shrink-0" />
+              </Link>
+            )}
             {cta.fields.secondaryLabel && (
               <Link
                 href="/quests"

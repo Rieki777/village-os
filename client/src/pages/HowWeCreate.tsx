@@ -24,6 +24,7 @@ import {
   Leaf,
   Compass,
 } from "lucide-react";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /*
  * Every word on this page is the village's own, from Admin, Pages, How We
@@ -75,6 +76,8 @@ const itemVariants = {
 export default function HowWeCreate() {
   // Blank hides the button rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   const hypha = useHypha();
   const page = usePageContent(HOW_WE_CREATE_PAGE);
   if (!page) {
@@ -427,13 +430,15 @@ export default function HowWeCreate() {
                 <Emphasized text={cta.fields.body} />
               </p>
               <div className="flex flex-wrap justify-center gap-4">
-                <Link
-                  href="/co-creators-guide"
-                  className="px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium uppercase tracking-wider text-sm hover:bg-teal-deep-dark transition-all hover:scale-105 flex items-center gap-2"
-                >
-                  {cta.fields.guideLabel}
-                  <ArrowRight className="w-5 h-5" />
-                </Link>
+                {!pageOff("/co-creators-guide") && (
+                  <Link
+                    href="/co-creators-guide"
+                    className="px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium uppercase tracking-wider text-sm hover:bg-teal-deep-dark transition-all hover:scale-105 flex items-center gap-2"
+                  >
+                    {cta.fields.guideLabel}
+                    <ArrowRight className="w-5 h-5" />
+                  </Link>
+                )}
                 {eventsUrl && cta.fields.eventsLabel && (
                   <a
                     href={eventsUrl}
