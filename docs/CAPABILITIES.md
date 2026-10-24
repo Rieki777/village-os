@@ -242,7 +242,7 @@ Four columns need a word before the tables:
 
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
-| `cash.pay` | Read the cash the village owes its members, and mark a payment made | yes | yes | yes | no rung | no module |
+| `cash.pay` | Read the cash the village owes its members, and mark a payment made | yes | yes | no | no rung | no module |
 
 ### `module`
 
@@ -276,7 +276,7 @@ The line this draws is narrow on purpose. A key stays grantable while an ordinar
 
 ## The keys a village can take off the admin panel
 
-23 of the 39 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm`, `cash.pay`, `module.switch`, `steward.veto` and `comms.manage`.
+22 of the 39 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm`, `module.switch`, `steward.veto` and `comms.manage`.
 
 A key is only marked transferable once every route that REFUSES on it asks the gate in a shape that can carry the break-glass and write the public record. A ceiling an operator cannot climb over is not a ceiling, it is an outage. The keys left out are of two kinds: personal acts, where there is nobody for the key to move to, and keys nothing refuses on yet, where a promise that an admin must reach past the village in the open would have nothing under it.
 
@@ -312,7 +312,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     "keys": 39,
     "steps": 8,
     "voices": 5,
-    "villageHoldable": 23,
+    "villageHoldable": 22,
     "badgeUngrantable": 1,
     "climbable": 14,
     "undeclared": 17
@@ -745,7 +745,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       "key": "cash.pay",
       "label": "Read the cash the village owes its members, and mark a payment made",
       "deniable": true,
-      "transferable": true,
+      "transferable": false,
       "stageUnlock": null,
       "stageRung": null,
       "modules": []
