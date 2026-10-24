@@ -451,6 +451,8 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "exit-notes-after-tombstone",
       "relayed-mail-after-tombstone",
       "checkin-notes-after-tombstone",
+      "pulse-lines-naming-after-tombstone",
+      "submission-words-after-tombstone",
       "alignment-names-after-tombstone",
       "season-plan-words-after-tombstone",
       "role-tensions-after-tombstone",
