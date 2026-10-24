@@ -232,7 +232,7 @@ export default function BringInRole({
           <div className="grid gap-2">
             <label className="grid gap-1 text-sm font-medium text-stone-800">
               {RC_WORDS.linkLabel}
-              <input type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://docs.google.com/document/d/..." className={INPUT} data-role-link="" />
+              <input type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste the Google Doc link" className={INPUT} data-role-link="" />
             </label>
             <p className="text-xs text-stone-600">{RC_WORDS.linkHint}</p>
             <div>
