@@ -1,25 +1,8 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Users,
-  ArrowRight,
-  Home,
-  Building,
-  Leaf,
-  Zap,
-  ChevronDown,
-  Stethoscope,
-  BookOpen,
-  Palette,
-  DollarSign,
-  Users2,
-  Lightbulb,
-  Building2,
-  Briefcase,
-  Handshake,
-  CircleDot,
-} from "lucide-react";
+import { Users, ArrowRight, ChevronDown } from "lucide-react";
+import { iconFor } from "@/lib/circleIcons";
 import { useEffect, useState } from "react";
 import CircleScene from "@/components/CircleScene";
 import CirclesMiniMap from "@/components/CirclesMiniMap";
@@ -58,12 +41,6 @@ interface CircleEntry {
   holders: CircleHolder[];
 }
 
-/** Icon names a card may reference; anything unknown falls back to CircleDot. */
-const ICONS: Record<string, React.ElementType> = {
-  Users, Home, Building, Leaf, Zap, Stethoscope, BookOpen, Palette,
-  DollarSign, Users2, Lightbulb, Building2, Briefcase, Handshake, CircleDot,
-};
-
 function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
   circle: CircleEntry;
   expanded: boolean;
@@ -72,7 +49,7 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
   /** A seat chip was pressed: open that seat's card. */
   onOpenSeat: (seatId: string) => void;
 }) {
-  const Icon = ICONS[circle.icon ?? ""] ?? CircleDot;
+  const Icon = iconFor(circle.icon);
   /*
    * THE CARD WEARS THE SAME COLOUR THE MAP DRAWS.
    *
