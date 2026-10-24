@@ -18,6 +18,7 @@ import bcrypt from "bcrypt";
 import { securityHeaders } from "./lib/securityHeaders";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
+import { guidePromptName } from "../shared/guideName";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
 // the active clock now, and it had no caller left here. `sceneStopsFor` and
 // `cleanCrewName` go with main's dead-import pass for the same reason,
@@ -1065,7 +1066,7 @@ const DEFAULT_BRAND = {
 const DEFAULT_WORK_WITH_US = {
   intro:
     "We grow through the people who bring their gifts to us. We welcome ideas, offerings, and ventures: a garden, a piece of infrastructure, a service, a craft, a program, or something we haven't yet imagined. Propose it here.",
-  assistantName: "Maia",
+  assistantName: "",
   assistantGreeting:
     "Hi, I'm {name}. I help people shape their offering to the village. There's no wrong way to start. What are you dreaming of bringing?",
   reciprocityOptions: [
@@ -1570,7 +1571,7 @@ async function initStores(): Promise<void> {
   {
     const shelves = loadShelves(process.cwd());
     console.log(
-      `[knowledge] ${shelves.knowledge} literature section(s) and ${shelves.modules} module-contract section(s) on Maia's shelves`,
+      `[knowledge] ${shelves.knowledge} literature section(s) and ${shelves.modules} module-contract section(s) on the guide's shelves`,
     );
   }
   // S73: the reader registry's gates. Module state and variables are read
@@ -7174,7 +7175,7 @@ async function startServer() {
       const memberKey = await resolveMemberKey(getPool(), user.id);
       const [note, lines] = await Promise.all([aboutMeForAssistant(getPool(), user.id), geneKeysForAssistant(getPool(), String(user.id))]);
       const wcfg = getWorkWithUs();
-      const assistantName = wcfg.assistantName || "Maia";
+      const assistantName = guidePromptName(wcfg.assistantName);
       const villageName = mergedConfig().project.name;
       const system = `You are ${assistantName}, the in-app assistant of ${villageName}, talking to one of its members about their own week: what is on, where to be, who to ask, and what they might say yes to.
 
@@ -12414,7 +12415,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
 
     const status = await launchStatus(getPool(), launchDeps);
     const wcfg = getWorkWithUs();
-    const assistantName = wcfg.assistantName || "Maia";
+    const assistantName = guidePromptName(wcfg.assistantName);
     const villageName = mergedConfig().project.name;
     // Live state, serialized for her — titles, why, status, and where to fix.
     // Deliberately NO secrets, NO last4s, NO member data: her whole world is
@@ -13082,7 +13083,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const ownVoice = await relevantSyntheses(getPool(), query, 3);
     const uncovered = modulesWithoutContracts(MODULES.map((m) => m.id));
     const wcfg = getWorkWithUs();
-    const assistantName = wcfg.assistantName || "Maia";
+    const assistantName = guidePromptName(wcfg.assistantName);
     const villageName = mergedConfig().project.name;
 
     const system = `You are ${assistantName}, organizing counsel for ${villageName}, a regenerative village. You are talking to one of its own admins about how to organize: governance, conflict, membership, legal structure, internal economics, and which of this platform's modules earn their place.
@@ -13498,7 +13499,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const memberCount = memberRows.length;
     const cap = roleBatchCap(memberCount);
     const wcfg = getWorkWithUs();
-    const assistantName = wcfg.assistantName || "Maia";
+    const assistantName = guidePromptName(wcfg.assistantName);
     const villageName = mergedConfig().project.name;
     // Only the sections she needs to size and justify structure ride in full.
     // LANE Q: and they ride FENCED. These bodies are the village's own written
@@ -17662,7 +17663,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
     const guideName = mergedConfig().project.name;
     const wcfg = getWorkWithUs();
-    const assistantName = wcfg.assistantName || "Maia";
+    const assistantName = guidePromptName(wcfg.assistantName);
     const recipValues = (wcfg.reciprocityOptions ?? DEFAULT_WORK_WITH_US.reciprocityOptions)
       .map((o: any) => `"${o.value}"`).join(", ");
     const spec = PROPOSAL_KINDS[kind];

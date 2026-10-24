@@ -8,7 +8,7 @@
  * Amora using Gene Keys naming, and every card sends people to genekeys.com to
  * go deeper (Rye, 2026-10-22).
  *
- * The owner's copy adds their controls: show or hide, Maia's yes, find again,
+ * The owner's copy adds their controls: show or hide, the guide's yes, find again,
  * remove. Somebody else's copy never shows a control.
  */
 import { useState } from "react";
@@ -16,6 +16,8 @@ import { Link } from "wouter";
 import { GENE_KEYS_SITE, withArticle, type GeneKeysView, type OwnGeneKeysView } from "@shared/geneKeys";
 import { changeMyGeneKeys, removeMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
 import { setMyGeneKeys } from "./useMyGeneKeys";
+import { useGuideName } from "@/hooks/useGuideName";
+import { guideNameAtSentenceStart } from "@shared/guideName";
 import { BTN_LINK, BTN_PLAIN, EYEBROW, HINT, TILE } from "./ui";
 
 export function GeneKeysLines({ view, whose }: { view: GeneKeysView; whose: string | null }) {
@@ -55,6 +57,8 @@ export function GeneKeysLines({ view, whose }: { view: GeneKeysView; whose: stri
 export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // The village's own guide, or "the village guide" while it has no name.
+  const guide = useGuideName().name;
 
   const act = async (fn: () => Promise<OwnGeneKeysView | null>) => {
     setBusy(true);
@@ -73,7 +77,7 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
     <div className="flex flex-col gap-3 border-t border-border pt-4">
       <p className={HINT}>
         {shown ? "Shown on your profile, in your circle and on your role applications." : "Hidden. Only you see your lines."}{" "}
-        {mine.maia ? "Maia uses your lines to shape what she suggests." : "Maia does not use your lines."}
+        {guideNameAtSentenceStart(guide)} {mine.maia ? "uses your lines to shape quest and role suggestions." : "does not use your lines."}
       </p>
       {mine.stale ? (
         <p className="text-sm text-notice">Your lines were found with an older calculator. Find them again to be sure they are right.</p>
@@ -83,7 +87,7 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
           {shown ? "Hide my lines" : "Show my lines"}
         </button>
         <button type="button" className={BTN_PLAIN} disabled={busy} onClick={() => act(() => changeMyGeneKeys({ maia: !mine.maia }))}>
-          {mine.maia ? "Stop Maia using them" : "Let Maia use them"}
+          {mine.maia ? `Stop ${guide} using them` : `Let ${guide} use them`}
         </button>
         <Link href="/profile/gene-keys" className={BTN_PLAIN}>
           Find them again

@@ -76,7 +76,7 @@ export function parseSave(body: unknown): SaveParse {
   if (b.visibility !== undefined && b.visibility !== "show" && b.visibility !== "hide") {
     return { ok: false, problem: "Lines are shown or hidden." };
   }
-  if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "Maia's permission is a yes or a no." };
+  if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "The guide's permission is a yes or a no." };
   return {
     ok: true,
     chart,
@@ -91,7 +91,7 @@ export type SettingsParse = { ok: true; visibility?: GeneKeysVisibility; maia?: 
 export function parseSettings(body: unknown): SettingsParse {
   const b = (body ?? {}) as Record<string, unknown>;
   if (b.visibility !== undefined && b.visibility !== "show" && b.visibility !== "hide") return { ok: false, problem: "Lines are shown or hidden." };
-  if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "Maia's permission is a yes or a no." };
+  if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "The guide's permission is a yes or a no." };
   if (b.visibility === undefined && b.maia === undefined) return { ok: false, problem: "Nothing to change." };
   return { ok: true, visibility: b.visibility as GeneKeysVisibility | undefined, maia: b.maia as boolean | undefined };
 }
