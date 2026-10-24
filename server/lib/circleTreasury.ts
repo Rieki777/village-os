@@ -102,6 +102,7 @@ import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { CIRCLE_STATUSES, type CircleStatus } from "../../shared/draftKinds";
 import { MAX_SOURCE_REF, fromLedgerUnits } from "./economy";
 import { MINT_FAUCET, TREASURY, memberAccount, postTransfer, tokenDef } from "./ledger";
+import { GRATITUDE_ONLY_SENT } from "../../shared/workValue";
 import { REDEEMED } from "./redemption";
 import { mintCapGuard } from "./mintCap";
 import {
@@ -361,6 +362,8 @@ export async function fundTreasury(
   if (def.governance !== "platform") {
     return { ok: false, error: `${input.tokenSlug} is issued on Hypha and cannot be minted here` };
   }
+  // A budget stored in Gratitude before the unit check refused it is refused here.
+  if (input.tokenSlug === "gratitude") return { ok: false, error: GRATITUDE_ONLY_SENT };
   const units = Math.trunc(Number(input.amountMinor) || 0);
   if (units <= 0) return { ok: false, error: "A funding is a positive number of minor units" };
 
@@ -439,6 +442,8 @@ export async function spendTreasury(
 
   const units = Math.trunc(Number(input.amountMinor) || 0);
   if (units <= 0) return { ok: false, error: "A spend is a positive number of minor units" };
+  // Gratitude reaches a member only by a member's send (Rye, 2026-10-23).
+  if (input.tokenSlug === "gratitude") return { ok: false, error: GRATITUDE_ONLY_SENT };
   if (!String(input.toUserId ?? "").trim()) return { ok: false, error: "A spend names who is paid" };
 
   const payee = String(input.toUserId);

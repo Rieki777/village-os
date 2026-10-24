@@ -47,10 +47,12 @@ import {
   badgeProblem,
   badgesOpenState,
   evaluateEarnedBadges,
+  readBadgeMultipliers,
   removeSkill,
   skillsFor,
   upsertAward,
 } from "../lib/badges";
+import { tokenDef } from "../lib/ledger";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow, isExampleUser, onRealItemPublished } from "../lib/examples";
 import { requireModule } from "../lib/modules";
@@ -66,6 +68,18 @@ type Deps = Pick<
   | "notify"
   | "getPool"
 >;
+
+/**
+ * A multiplier map names tokens this village actually runs. `badgeProblem`
+ * judges the factors; the registry is read here because the validator also
+ * runs at boot, before the registry is loaded.
+ */
+function unknownMultiplierToken(multipliers: Record<string, number> | null): string | null {
+  for (const token of Object.keys(multipliers ?? {})) {
+    if (!tokenDef(token)) return `"${token}" is not a token this village runs, so a badge cannot multiply it`;
+  }
+  return null;
+}
 
 export function register(app: Express, deps: Deps): void {
   const { adminActor, authedUser, firstName, isAdmin, members, notify, getPool } = deps;
@@ -331,7 +345,7 @@ export function register(app: Express, deps: Deps): void {
 
   app.post("/api/admin/badges", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const { name, description, icon, kind, capabilities, denies, rule, seasonScope, multiplier } = req.body ?? {};
+    const { name, description, icon, kind, capabilities, denies, rule, seasonScope, multiplier, multipliers } = req.body ?? {};
     if (!String(name ?? "").trim()) return res.status(400).json({ error: "A name is required" });
     const candidate = {
       kind: String(kind ?? "granted"),
@@ -343,17 +357,20 @@ export function register(app: Express, deps: Deps): void {
       // by hand-written SQL, which is the one path that validates nothing.
       seasonScope: seasonScope === "seasonal" ? "seasonal" : "permanent",
       multiplier: multiplier === undefined || multiplier === null || multiplier === "" ? null : Number(multiplier),
+      // 0278: what the badge multiplies, token by token.
+      multipliers: readBadgeMultipliers(multipliers),
     };
-    const problem = badgeProblem(candidate as any);
+    const problem = badgeProblem(candidate as any) ?? unknownMultiplierToken(candidate.multipliers);
     if (problem) return res.status(400).json({ error: problem });
     const id = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || `badge-${Date.now()}`;
     if (await badgeById(getPool(), id)) return res.status(409).json({ error: `A badge with id "${id}" already exists` });
     await getPool().query(
-      "INSERT INTO badges (id, name, description, icon, kind, capabilities, denies, rule, season_scope, multiplier) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO badges (id, name, description, icon, kind, capabilities, denies, rule, season_scope, multiplier, multipliers) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
       [id, String(name).trim().slice(0, 120), description ?? null, icon ?? null, candidate.kind,
         JSON.stringify(candidate.capabilities), JSON.stringify(candidate.denies),
         candidate.rule ? JSON.stringify(candidate.rule) : null,
-        candidate.seasonScope, candidate.multiplier],
+        candidate.seasonScope, candidate.multiplier,
+        candidate.multipliers ? JSON.stringify(candidate.multipliers) : null],
     );
     onRealItemPublished(getPool(), "badges", adminActor(req)?.id ?? null);
     res.json({ success: true, badge: await badgeById(getPool(), id) });
@@ -385,9 +402,11 @@ export function register(app: Express, deps: Deps): void {
       multiplier: req.body?.multiplier !== undefined
         ? (req.body.multiplier === null || req.body.multiplier === "" ? null : Number(req.body.multiplier))
         : existing.multiplier,
+      // 0278. Partial-update shape: absent keeps what is stored, null clears it.
+      multipliers: req.body?.multipliers !== undefined ? readBadgeMultipliers(req.body.multipliers) : existing.multipliers,
       active: req.body?.active !== undefined ? !!req.body.active : existing.active,
     };
-    const problem = badgeProblem(merged as any);
+    const problem = badgeProblem(merged as any) ?? (req.body?.multipliers !== undefined ? unknownMultiplierToken(merged.multipliers) : null);
     if (problem) return res.status(400).json({ error: problem });
     // KIND IS THE AUTHORITY EACH AWARD WAS MADE UNDER. Flipping it
     // retroactively re-interprets every existing award: a self-claimed badge
@@ -475,10 +494,11 @@ export function register(app: Express, deps: Deps): void {
       }
     }
     await getPool().query(
-      "UPDATE badges SET name=?, description=?, icon=?, kind=?, capabilities=?, denies=?, rule=?, season_scope=?, multiplier=?, active=? WHERE id=?",
+      "UPDATE badges SET name=?, description=?, icon=?, kind=?, capabilities=?, denies=?, rule=?, season_scope=?, multiplier=?, multipliers=?, active=? WHERE id=?",
       [merged.name, merged.description, merged.icon, merged.kind, JSON.stringify(merged.capabilities),
         JSON.stringify(merged.denies), merged.rule ? JSON.stringify(merged.rule) : null,
-        merged.seasonScope, merged.multiplier, merged.active ? 1 : 0, req.params.id],
+        merged.seasonScope, merged.multiplier, merged.multipliers ? JSON.stringify(merged.multipliers) : null,
+        merged.active ? 1 : 0, req.params.id],
     );
     // Every AWARD leaves a trail; the DEFINITION they answer to did not.
     void recordEvent(getPool(), {
