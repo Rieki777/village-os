@@ -26,6 +26,7 @@ import { numberVar } from "./variables";
 import { recordEvent } from "./events";
 import { secretConfigured, secretValue } from "./secrets";
 import { reportError } from "./errors";
+import { isTombstone } from "./oauthAccounts";
 
 // ── Configuration ────────────────────────────────────────────────────────────
 // S63: keys resolve through the secrets store — admin-typed first, env
@@ -532,6 +533,21 @@ export async function suspendPurchasing(pool: Pool, userId: string, reason: stri
     "INSERT INTO payment_suspensions (id, user_id, reason, order_ref) VALUES (?,?,?,?)",
     [`sus-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, userId, reason.slice(0, 500), orderRef ?? null],
   );
+}
+
+/** The refusal a charge for somebody no longer in the village is given (round 3, finding 5). */
+export const BUYER_HAS_LEFT = "the buyer has left the village";
+
+/**
+ * Whether a purchase's buyer can be delivered anything: false for a tombstone,
+ * and for a user row that is gone. `settleProductPurchase` (server/index.ts)
+ * asks it of EVERY period it settles, a first one included, because a checkout
+ * opened before the member left can complete after, and the two events for a
+ * subscription's first period can land either side of the delete. A refusal
+ * banks the money, posts no grant and no receipt, and tells the admins.
+ */
+export function buyerHasLeft(member: { email?: unknown } | null | undefined): boolean {
+  return !member || isTombstone({ email: String(member.email ?? "") });
 }
 
 export async function isSuspended(pool: Pool, userId: string): Promise<boolean> {

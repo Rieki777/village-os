@@ -4869,6 +4869,89 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // ...goods withheld, and an admin told to cancel and refund.
     expect(await grantLegs(subBuyId)).toBe(grantsBeforeRenew);
 
+    // ── A MEMBER WHO HAS LEFT IS PAID NOTHING, AND AN ADMIN HEARS (round 3, finding 5). ──
+    // A recurring purchase kept charging after the account was deleted, and
+    // every renewal paid the product's tokens from the treasury into the
+    // tombstone, with no alarm. The erasure now cancels the subscription in
+    // Stripe; this harness has no Stripe key on purpose, so the delete stops
+    // loudly at that step with the account already closed, which is the shape
+    // in which a charge can still land. The renewal gate refuses it.
+    const lapsedProd = await api("POST", "/api/admin/products", {
+      kind: "membership", name: "Lapsed membership", amountMinor: 500, recurring: "month",
+      tokenSlug: "pack-tok", tokenAmount: 1, active: true,
+    }, founderToken);
+    expect((await api("POST", "/api/admin/exchange/stock", { tokenSlug: "pack-tok", amount: 2 }, founderToken)).status).toBe(200);
+    const lapsedReg = await api("POST", "/api/auth/register", {
+      email: `lapsed-${PORT}@example.test`, password: "LoopTest123!", name: "Lapsed Member", paths: ["resident"],
+    });
+    const lapsedToken = lapsedReg.json.token;
+    const lapsedId = String(lapsedReg.json.user.id);
+    const lapsedBuy = `pp-lapsed-${Date.now()}`;
+    await testDb.conn.query(
+      "INSERT INTO product_purchases (id, product_id, user_id, amount_minor, receipt_no) VALUES (?,?,?,500,9107)",
+      [lapsedBuy, lapsedProd.json.id, lapsedId],
+    );
+    expect((await hook({
+      id: "evt_lapsed_cs", type: "checkout.session.completed",
+      data: { object: { id: "cs_lapsed", subscription: "sub_lapsed", invoice: "in_lapsed_1", metadata: { module: "commerce", orderId: lapsedBuy } } },
+    })).status).toBe(200);
+    expect(await grantLegs(lapsedBuy)).toBe(1); // month one, delivered while they were here
+
+    // Before the delete, the exit desk and the member both read the notice, and it blocks nothing.
+    const lapsedDesk = await api("GET", `/api/admin/players/${lapsedId}/exit-state`, undefined, founderToken);
+    expect(lapsedDesk.json.states.find((st: any) => st.domain === "subscriptions")).toMatchObject({ count: 1, blocking: false });
+    expect(lapsedDesk.json.blocking).toEqual([]);
+    const lapsedNotices = await api("GET", "/api/profile/leaving-notices", undefined, lapsedToken);
+    expect(lapsedNotices.json.notices.map((n: any) => n.description)).toEqual([
+      "1 recurring payment(s) still renewing through Stripe: Lapsed membership (every month). " +
+        "Deleting the account cancels each one in Stripe, and nothing already paid is refunded",
+    ]);
+
+    // The delete closes the account and stops at the Stripe step, recorded for the retry.
+    expect((await api("POST", "/api/profile/delete-account", { password: "LoopTest123!" }, lapsedToken)).status).toBe(500);
+    const [[lapsedErasure]] = await testDb.conn.query<any[]>("SELECT failed_step FROM member_erasures WHERE user_id = ?", [lapsedId]);
+    expect(lapsedErasure.failed_step).toBe("product-subscriptions-after-tombstone");
+    const [[lapsedRow]] = await testDb.conn.query<any[]>("SELECT email FROM users WHERE id = ?", [lapsedId]);
+    expect(String(lapsedRow.email)).toMatch(/@anonymized\.invalid$/);
+
+    // Month two lands anyway: banked, nothing delivered, every admin told once.
+    const refusedNotices = async () => (await testDb.conn.query<any[]>(
+      "SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`product-renewrefused:${lapsedBuy}:%`],
+    ))[0];
+    expect((await hook({
+      id: "evt_lapsed_inv2", type: "invoice.paid",
+      data: { object: { id: "in_lapsed_2", payment_intent: "pi_lapsed_2", billing_reason: "subscription_cycle", subscription_details: { metadata: { module: "commerce", orderId: lapsedBuy } } } },
+    })).status).toBe(200);
+    expect(Number((await byId(lapsedBuy)).periods_paid)).toBe(2);
+    expect(await grantLegs(lapsedBuy)).toBe(1);
+    const told = await refusedNotices();
+    expect(told.length).toBeGreaterThan(0);
+    expect(told.every((n: any) => String(n.title).startsWith("Renewal charged but NOT delivered") && String(n.title).includes("the buyer has left the village"))).toBe(true);
+    // No receipt goes into the tombstone's bell.
+    const [lapsedBell] = await testDb.conn.query<any[]>("SELECT dedupe_key FROM notifications WHERE user_id = ?", [lapsedId]);
+    expect(lapsedBell).toEqual([]);
+    // The same period delivered again under another event id still pays nothing, and tells nobody twice.
+    expect((await hook({
+      id: "evt_lapsed_inv2b", type: "invoice.paid",
+      data: { object: { id: "in_lapsed_2", payment_intent: "pi_lapsed_2", billing_reason: "subscription_cycle", subscription_details: { metadata: { module: "commerce", orderId: lapsedBuy } } } },
+    })).status).toBe(200);
+    expect(await grantLegs(lapsedBuy)).toBe(1);
+    expect((await refusedNotices()).length).toBe(told.length);
+    // A checkout they opened before leaving and paid after is a FIRST period, and pays nothing either.
+    const lateBuy = `pp-lapsed-late-${Date.now()}`;
+    await testDb.conn.query(
+      "INSERT INTO product_purchases (id, product_id, user_id, amount_minor, receipt_no) VALUES (?,?,?,1000,9108)",
+      [lateBuy, pack.json.id, lapsedId],
+    );
+    expect((await hook({
+      id: "evt_lapsed_late", type: "checkout.session.completed",
+      data: { object: { id: "cs_lapsed_late", payment_intent: "pi_lapsed_late", metadata: { module: "commerce", orderId: lateBuy } } },
+    })).status).toBe(200);
+    expect(await grantLegs(lateBuy)).toBe(0);
+    const [lateTold] = await testDb.conn.query<any[]>("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`product-renewrefused:${lateBuy}:%`]);
+    expect(lateTold.length).toBeGreaterThan(0);
+    expect(lateTold.every((n: any) => String(n.title).startsWith("Purchase charged but NOT delivered") && String(n.title).endsWith("Refund this payment."))).toBe(true);
+
     // The books balance after payments, grants, renewals and a clawback.
     const rec2 = await api("GET", "/api/admin/ledger/reconciliation", undefined, founderToken);
     expect(rec2.json.invariants.problems).toEqual([]);
