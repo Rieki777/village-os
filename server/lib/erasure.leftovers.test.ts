@@ -60,6 +60,8 @@ import type { Transport } from "./comms/transport";
 import { castVote, openBallot } from "./ballots";
 import { notifyRollRows } from "./ballotNotices";
 import { recordEvent } from "./events";
+import { HAND_NOTE_WENT } from "./ballotErasure";
+import { handVoteReason, SEAT_VOTE_REASON_HEADING } from "../../shared/powerHands";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -861,6 +863,103 @@ describe.skipIf(!configured)("what an erased member left behind after the sweep"
       await erase(leaver);
 
       expect(await words(), "the living opener's reason, every standalone A in it, is untouched").toEqual({ title, doc_markdown: doc, outcome_note: null });
+    });
+
+    /*
+     * ROUND 3, FINDING 11. A seat vote opened from a raised hand
+     * (POST /api/powers/hands/:id/put-to-village) quotes the hand's note under
+     * "## Why this person", after a line naming the hand's author by the full
+     * name they raised it under. The erasure takes the note off the hand and
+     * swapped only name spellings here, so the note stayed on a ballot anybody
+     * who can read ballots reads, and where the step knew only the first name
+     * off the title, the surname stayed beside it.
+     */
+    describe("round 3, 11: a seat vote opened from the member's raised hand", () => {
+      const NOTE = "I keep the bakery's books\n\nand live by the mill";
+      // The member putting it to the village writes their own words, a quote of their own among them.
+      const SAID = "> Ann's own line, from the circle's minutes.\nShe has kept the market float for a year.";
+      const RAISED = "A departed member raised a hand to keep the treasury on 2026-10-01.";
+      const gone = /mill|bakery|Halloway|\bWren\b/;
+      // Exactly the document openSeatVote writes around the reason the hand door builds.
+      const openFromHand = async (input: { userId: string; roleId: string; first: string; userName: string; note: string; openedBy: string; electorate: string[] }) => {
+        const title = `Treasurer: the village asks ${input.first} to sit in it`;
+        const reason = handVoteReason(
+          { userName: input.userName, note: input.note, powerLabel: "Keep the treasury", capability: "treasury.keep", submittedAt: "2026-10-01T09:00:00.000Z" },
+          SAID,
+          "Ann",
+        );
+        const doc = [
+          `# ${title}`, "",
+          "## The role", "",
+          "Treasurer. Keeps the village's books.", "",
+          `## What ${input.first} would be able to do`, "",
+          "Treasurer carries no powers today, so this seats somebody in a role that grants nothing yet.", "",
+          SEAT_VOTE_REASON_HEADING, "",
+          reason, "",
+          "## How long", "",
+          "Until 2027-03-01. When the term ends the role ends, and the village can seat them again.", "",
+          "## Taking it back", "",
+          "The village can vote this role back at any time, and that vote is an ordinary one.", "",
+          "Asked by Ann on 2026-10-02.", "",
+        ].join("\n");
+        const r = await openBallot(pool, {
+          subjectType: "role_seat", subjectRef: `${input.userId}@${input.roleId}`, title, docMarkdown: doc, method: "majority",
+          weightMode: "equal", unityPct: 50, quorumPct: 10, durationDays: 7, openedBy: input.openedBy,
+          electorate: input.electorate.map((userId) => ({ userId, weight: 1 })),
+        } as any);
+        if (!r.ok) throw new Error(`ballot refused to open: ${r.error}`);
+        return r.ballot.id as string;
+      };
+      const words = async (id: string) => (await q("SELECT title, doc_markdown, outcome_note FROM ballots WHERE id = ?", [id]))[0];
+      const reasonBlock = (raised: string, quoted: string) => `${SEAT_VOTE_REASON_HEADING}\n\n${raised}\n\n${quoted}\n\n${SAID}\n\nAnn put that hand to the village.\n\n## How long`;
+
+      it("loses the note and the full name while the step still knows the name, and the opener's own words stay", async () => {
+        const leaver = "e2-hand-wren";
+        const ann = "e2-hand-ann";
+        const sage = "e2-hand-sage";
+        await person(leaver, "Wren Halloway");
+        await person(ann, "Ann Pryor");
+        await person(sage, "Sage Okafor");
+        const theirs = await openFromHand({ userId: leaver, roleId: "role-treasurer", first: "Wren", userName: "Wren Halloway", note: NOTE, openedBy: ann, electorate: [ann, sage] });
+        const bystander = await openFromHand({ userId: sage, roleId: "role-treasurer", first: "Sage", userName: "Sage Okafor", note: "I balanced the mill's books", openedBy: ann, electorate: [ann, sage] });
+        const before = await words(theirs);
+        expect(before.doc_markdown, "the control: the ballot quotes the note today").toContain("> and live by the mill");
+        expect(before.doc_markdown, "and names its author in full").toContain("Wren Halloway raised a hand to keep the treasury on 2026-10-01.");
+        const bystanderBefore = await words(bystander);
+
+        await erase(leaver);
+
+        const after = await words(theirs);
+        expect(after.doc_markdown, "nothing of the note or the name is left").not.toMatch(gone);
+        expect(after.title).toBe("Treasurer: the village asks a departed member to sit in it");
+        expect(after.doc_markdown, "the hand reads as raised by a departed member, with the note gone and the opener's own words, quote and all, as they wrote them").toContain(
+          reasonBlock(RAISED, HAND_NOTE_WENT),
+        );
+        expect(await words(bystander), "a living member's seat vote from the same door, note and all").toEqual(bystanderBefore);
+
+        // A second sweep finds nothing left to change.
+        await erase(leaver);
+        expect(await words(theirs)).toEqual(after);
+      });
+
+      it("loses the surname too where the target is already a tombstone and only the title's first name is known", async () => {
+        const leaver = "e2-hand2-wren";
+        const ann = "e2-hand2-ann";
+        await person(leaver, "Wren Halloway");
+        await person(ann, "Ann Pryor");
+        await erase(leaver);
+        // A vote opened before the step existed, about a member erased since: the sweep that reaches it has a tombstone in hand.
+        const theirs = await openFromHand({ userId: leaver, roleId: "role-keeper", first: "Wren", userName: "Wren Halloway", note: NOTE, openedBy: ann, electorate: [ann] });
+        expect((await words(theirs)).doc_markdown, "the control").toContain("Wren Halloway raised a hand");
+
+        await erase(leaver);
+
+        const after = await words(theirs);
+        expect(after.doc_markdown, "no surname is left beside the first name the title gave").not.toMatch(gone);
+        expect(after.doc_markdown).toContain(reasonBlock(RAISED, HAND_NOTE_WENT));
+        await erase(leaver);
+        expect(await words(theirs), "and a third sweep changes nothing").toEqual(after);
+      });
     });
   });
 });

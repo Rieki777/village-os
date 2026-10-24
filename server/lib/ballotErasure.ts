@@ -23,6 +23,20 @@
  * and "31 May" stay. The line "Asked by <first name> on <date>." names whoever
  * opened the ballot, who is somebody else, so it is never touched here.
  *
+ * A SEAT VOTE OPENED FROM THEIR RAISED HAND (round 3, finding 11). The hand
+ * door's reason, under "## Why this person", opens with the full name the hand
+ * was raised under, then quotes the hand's note line by line. The note is the
+ * member's own words, which the erasure takes off the hand itself, so here it
+ * goes too: the "They wrote:" line and its run of "> " lines become one line
+ * saying a note went with them, and the opening line's subject reads "A
+ * departed member" whatever name it carried, which is the one place a surname
+ * survives when the step knows only the first name off the title. Both are
+ * found by the door's own wording (`handVoteReason`, shared/powerHands.ts) and
+ * only at that place, so whatever the member who put the hand to the village
+ * wrote after it, quotes of their own included, stays as they wrote it. A
+ * name that member typed into their own words is left to the spellings above,
+ * so on a tombstone a surname typed there can still stand.
+ *
  * IDEMPOTENT, as the sweep requires: a rewritten text names nobody, so a
  * second run writes the same words or none. A target that is still a
  * tombstone (a record from before 0282 that stopped past the tombstone, or an
@@ -37,6 +51,7 @@ import {
   rewriteBallotWords,
   type BallotWords,
 } from "../repos/ballotWords";
+import { HAND_NOTE_OPENS, HAND_RAISED_LINE, SEAT_VOTE_REASON_HEADING } from "../../shared/powerHands";
 import { isTombstone } from "./oauthAccounts";
 
 /** What the member's name reads as inside a ballot's words. */
@@ -44,6 +59,13 @@ export const DEPARTED_IN_A_BALLOT = "a departed member";
 
 /** The same words where a sentence begins, which is also the name the tombstone carries. */
 export const DEPARTED_OPENS_A_SENTENCE = "A departed member";
+
+/**
+ * What a seat vote opened from their raised hand says where it quoted the
+ * hand's note. Never "They wrote nothing with it.", the door's words for a
+ * hand with no note, because they did write one.
+ */
+export const HAND_NOTE_WENT = "They wrote a note with it, and the note went when they left.";
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -122,6 +144,42 @@ export function scrubBallotText(text: string, spellings: readonly string[]): str
     .join("\n");
 }
 
+/**
+ * A seat vote's document with the hand door's opening taken off the member,
+ * found where the door writes it and nowhere else: the first line under
+ * "## Why this person" when it is the door's "<name> raised a hand <offer> on
+ * <date>.", and the "They wrote:" paragraph straight after it, its blank line
+ * and its run of lines starting ">". The run ends at the first line that does
+ * not start with ">", which is the blank line the door puts before the next
+ * part, so the opener's own words after it are never reached. Every write is
+ * a constant or a part of the line it replaces, so a second run writes the
+ * same text. A document of any other shape comes back as it was.
+ */
+export function forgetHandNoteIn(doc: string): string {
+  const lines = doc.split("\n");
+  const bare = (i: number) => (lines[i] ?? "").replace(/\r$/, "");
+  const cr = (i: number) => ((lines[i] ?? "").endsWith("\r") ? "\r" : "");
+  const nextFilled = (from: number) => {
+    let i = from;
+    while (i < lines.length && bare(i).trim() === "") i += 1;
+    return i;
+  };
+  const heading = lines.findIndex((_, i) => bare(i) === SEAT_VOTE_REASON_HEADING);
+  if (heading < 0) return doc;
+  const first = nextFilled(heading + 1);
+  const raised = HAND_RAISED_LINE.exec(bare(first));
+  if (!raised) return doc;
+  lines[first] = `${DEPARTED_OPENS_A_SENTENCE} raised a hand ${raised[2]} on ${raised[3]}.${cr(first)}`;
+  const opens = nextFilled(first + 1);
+  if (bare(opens) === HAND_NOTE_OPENS) {
+    const quote = nextFilled(opens + 1);
+    let end = quote;
+    while (end < lines.length && bare(end).startsWith(">")) end += 1;
+    if (end > quote) lines.splice(opens, end - opens, `${HAND_NOTE_WENT}${cr(opens)}`);
+  }
+  return lines.join("\n");
+}
+
 /** The document of a ballot the member opened, with its last "Asked by" line naming nobody. */
 export function scrubAskedBy(doc: string): string {
   const lines = doc.split("\n");
@@ -161,7 +219,9 @@ export async function forgetBallotWordsOf(
   counts.lines = await forgetPublicLinesOn(pool, about.map((b) => b.id));
   for (const b of about) {
     const spellings = spellingsOf([...ownSpellings, nameInTitle(b.subjectType, b.title)]);
-    if (await rewrite(pool, b, (text) => scrubBallotText(text, spellings))) counts.about += 1;
+    // Only a seat vote is opened from a hand, and its subject is always the hand's author.
+    const doc = b.subjectType === "role_seat" ? forgetHandNoteIn(b.docMarkdown) : b.docMarkdown;
+    if (await rewrite(pool, b, (text) => scrubBallotText(text, spellings), doc)) counts.about += 1;
   }
   for (const b of await ballotWordsOpenedBy(pool, who.id)) {
     const doc = scrubAskedBy(b.docMarkdown);
@@ -170,10 +230,10 @@ export async function forgetBallotWordsOf(
   return counts;
 }
 
-async function rewrite(pool: Pool, b: BallotWords, scrub: (text: string) => string): Promise<boolean> {
+async function rewrite(pool: Pool, b: BallotWords, scrub: (text: string) => string, docMarkdown = b.docMarkdown): Promise<boolean> {
   const next = {
     title: scrub(b.title),
-    docMarkdown: scrub(b.docMarkdown),
+    docMarkdown: scrub(docMarkdown),
     outcomeNote: b.outcomeNote == null ? null : scrub(b.outcomeNote),
   };
   if (next.title === b.title && next.docMarkdown === b.docMarkdown && next.outcomeNote === b.outcomeNote) return false;
