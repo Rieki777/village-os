@@ -823,5 +823,44 @@ describe.skipIf(!configured)("what an erased member left behind after the sweep"
       await erase(leaver);
       expect({ about: await ballot(about.id), seat: await ballot(seat.id), opened: await ballot(opened.id) }).toEqual(settled);
     });
+
+    /*
+     * ROUND 3, THE GUARD FROM FINDING 0'S FIX. A door that opens a ballot about
+     * a member who is already a tombstone titles it with the tombstone's first
+     * name, which is "A" ("...take the role back from A"). Read back off the
+     * title as a spelling, "A" rewrites every standalone "A" in the words of a
+     * living member who opened it. A title written about a tombstone names
+     * nobody the sweep should look for.
+     */
+    it("reads no name off a title written about a tombstone, so the living opener's reason keeps every word", async () => {
+      const leaver = "e2-bal3-wren";
+      const ann = "e2-bal3-ann";
+      await person(leaver, "Wren Halloway");
+      await person(ann, "Ann Pryor");
+      await erase(leaver);
+      // Exactly the words the role-unseats door writes for a member whose name is the tombstone's.
+      const title = "Steward: the village asks to take the role back from A";
+      const doc = [
+        `# ${title}`, "",
+        "## What changes if this carries", "",
+        "A stops sitting in Steward. The role carries no powers today, so nothing anybody can do changes.", "",
+        "Steward keeps everything it carries, and anybody else sitting in it is untouched.", "",
+        "## Why now", "",
+        "A cleanup vote. A role held by nobody who lives here keeps the circle from filling it.", "",
+        "Asked by Ann on 2026-10-04.", "",
+      ].join("\n");
+      const r = await openBallot(pool, {
+        subjectType: "role_unseat", subjectRef: `${leaver}@role-steward`, title, docMarkdown: doc, method: "majority",
+        weightMode: "equal", unityPct: 50, quorumPct: 10, durationDays: 7, openedBy: ann, electorate: [{ userId: ann, weight: 1 }],
+      } as any);
+      if (!r.ok) throw new Error(`ballot refused to open: ${r.error}`);
+      const words = async () => (await q("SELECT title, doc_markdown, outcome_note FROM ballots WHERE id = ?", [r.ballot.id]))[0];
+      expect(await words(), "the control: the ballot is stored as the door wrote it").toEqual({ title, doc_markdown: doc, outcome_note: null });
+
+      // The erasure asked again, which is the sweep a tombstone target gets.
+      await erase(leaver);
+
+      expect(await words(), "the living opener's reason, every standalone A in it, is untouched").toEqual({ title, doc_markdown: doc, outcome_note: null });
+    });
   });
 });

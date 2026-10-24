@@ -42,10 +42,28 @@ import { isTombstone } from "./oauthAccounts";
 /** What the member's name reads as inside a ballot's words. */
 export const DEPARTED_IN_A_BALLOT = "a departed member";
 
+/** The same words where a sentence begins, which is also the name the tombstone carries. */
+export const DEPARTED_OPENS_A_SENTENCE = "A departed member";
+
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** The first name the ballot doors write: `firstName` in server/index.ts, less its "Someone" for a member with no name. */
 const firstNameOf = (name: unknown): string => String(name ?? "").trim().split(/\s+/)[0] ?? "";
+
+/**
+ * Words a title can carry where a name stood that are never a name to look
+ * for (round 3, the guard from finding 0's fix). A door that opens a ballot
+ * about a member who is already a tombstone writes the tombstone's first
+ * name, "A", and `firstName` writes "Someone" for a member with no name. Read
+ * back as a spelling, either would rewrite every standalone "A" or "Someone"
+ * in the words of the living member who opened the ballot.
+ */
+const NEVER_A_SPELLING: ReadonlySet<string> = new Set([
+  DEPARTED_IN_A_BALLOT,
+  DEPARTED_OPENS_A_SENTENCE,
+  firstNameOf(DEPARTED_OPENS_A_SENTENCE),
+  "Someone",
+]);
 
 /** The line every door that opens a ballot ends its document with. */
 const ASKED_BY = /^Asked by (.+) on (\d{4}-\d{2}-\d{2})\.$/;
@@ -53,7 +71,8 @@ const ASKED_BY = /^Asked by (.+) on (\d{4}-\d{2}-\d{2})\.$/;
 /**
  * The name the title was written with, read back off its template, or null
  * when the title is not one the two doors write (a title cut at 200
- * characters, say).
+ * characters, say), or when what stands there is never a name (the
+ * tombstone's "A", see NEVER_A_SPELLING).
  */
 export function nameInTitle(subjectType: string, title: string): string | null {
   const m =
@@ -63,7 +82,7 @@ export function nameInTitle(subjectType: string, title: string): string | null {
         ? /^.+: the village asks (.+) to sit in it$/.exec(title)
         : null;
   const name = m?.[1]?.trim() ?? "";
-  return name && name !== DEPARTED_IN_A_BALLOT ? name : null;
+  return name && !NEVER_A_SPELLING.has(name) ? name : null;
 }
 
 /** Every spelling to take out, longest first so "Ana Q" goes before "Ana". */
@@ -71,7 +90,7 @@ export function spellingsOf(names: ReadonlyArray<string | null | undefined>): st
   const out = new Set<string>();
   for (const n of names) {
     const s = String(n ?? "").trim();
-    if (s && s !== DEPARTED_IN_A_BALLOT) out.add(s);
+    if (s && !NEVER_A_SPELLING.has(s)) out.add(s);
   }
   return Array.from(out).sort((a, b) => b.length - a.length);
 }
@@ -88,7 +107,7 @@ function scrubLine(line: string, spellings: readonly string[]): string {
     out = out.replace(re, (_m, offset: number, whole: string) => {
       const before = whole.slice(0, offset).replace(/^\s*(?:#+\s*|[-*>]\s*)?/, "");
       const opens = before.trim() === "" || /[.!?]\s+$/.test(before);
-      return opens ? "A departed member" : DEPARTED_IN_A_BALLOT;
+      return opens ? DEPARTED_OPENS_A_SENTENCE : DEPARTED_IN_A_BALLOT;
     });
   }
   return out;
@@ -134,7 +153,7 @@ export async function forgetBallotWordsOf(
   const counts: BallotErasureCounts = { about: 0, opened: 0, lines: 0 };
   if (!who.id) return counts;
   // A resume whose old address another account holds now gets the address back empty and the name still (`asTheyWere`).
-  const known = !isTombstone({ email: String(who.email ?? "") }) && !!String(who.name ?? "").trim() && String(who.name).trim() !== "A departed member";
+  const known = !isTombstone({ email: String(who.email ?? "") }) && !!String(who.name ?? "").trim() && String(who.name).trim() !== DEPARTED_OPENS_A_SENTENCE;
   const handle = String(who.handle ?? "").trim().replace(/^@/, "");
   const ownSpellings = known ? [who.name, handle ? `@${handle}` : null, firstNameOf(who.name)] : [];
 
