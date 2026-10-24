@@ -34,6 +34,18 @@ export const CARD_WORDS = {
   seasonNotRead: "No season set",
   appliesFor: (names: string) => `Applies for ${names}`,
 
+  // The hero, in the approved design (Rye 2026-10-22): the moon pill, the
+  // tagline and the span. Moons are named by the month their new moon falls in.
+  moonName: (month: string) => `${month} Moon`,
+  moonPill: (moon: string, day: number, of: number) => `${moon} · Day ${day} of ${of}`,
+  moonLine: (moon: string, from: string, to: string) => `${moon}, ${from} to ${to}`,
+  heroSpan: (from: string, to: string) => `${from} to ${to}`,
+  tagline: (count: string, n: number, circles: string | null, time: string | null, applying: boolean) =>
+    `${applying ? `Applying for ${count}` : count} ${n === 1 ? "role" : "roles"}${circles ? ` in ${circles}` : ""}${time ? ` · ${time}` : ""}`,
+  fullTime: "Full-time",
+  aboutHours: (n: number) => `About ${n} hours a week`,
+  portraitAlt: (name: string) => `${name}'s character portrait`,
+
   // Doors
   applyDoor: "Apply for a role",
   planDoor: "Plan my season",
@@ -45,6 +57,8 @@ export const CARD_WORDS = {
   // Across
   acrossOne: "Across my role",
   acrossMany: (n: number) => `Across all ${n} roles`,
+  myNRoles: (n: number) => (n === 1 ? "My role" : `My ${n} roles`),
+  eachInFull: (n: number) => (n === 1 ? "My role in full" : "Each role in full"),
   aim: "My aim this season",
   noAim: "No aim written yet",
   noPlan: "No season plan filed yet",
@@ -52,16 +66,18 @@ export const CARD_WORDS = {
   seasonalGoalsLede: "One to three bigger goals for the whole season. Each moon's tasks build toward them.",
   noSeasonalGoals: "No seasonal goals set yet",
   goalDoneBy: (day: string, w: string) => `Done by ${day} when ${w}`,
-  goals: "Village goals I serve",
+  goals: "Village goals it serves",
   noGoals: "No village goals named yet",
   howItHelps: "How it helps",
   howItHelpsMissing: "How it helps is not written yet",
-  tasks: "My tasks this moon",
+  tasks: "This moon's tasks",
   noTasks: "No tasks this moon yet",
   taskOpen: "In progress",
   taskDone: "Done",
   doneWhen: (w: string) => `Done when ${w}`,
   signs: "How we'll know it's working",
+  signsLede: (village: string | null) =>
+    `Only signs ${village ?? "the village"} can count by itself, from the game and the site, updated as things happen.`,
   signFrom: (countedFrom: string, role: string) => `${countedFrom} · ${role}`,
   nOf: (n: number, of: number) => `${n} of ${of}`,
   noSigns: "No signs named yet",
@@ -129,6 +145,9 @@ export const CARD_WORDS = {
 
   // Timeline
   timeline: "My moon cycle",
+  timelineEyebrow: "The season, new moon to new moon",
+  invoiceDue: "Invoice due",
+  today: "Today",
   timelineLede: "Work is planned a moon at a time, from one new moon to the next.",
   gettingStarted: "Getting started",
   newMoon: "New moon",
@@ -153,7 +172,8 @@ export const CARD_WORDS = {
 
   // Applications
   applications: "My applications",
-  past: "Past",
+  historyEyebrow: "My role history",
+  past: "Past seasons",
   thisSeason: "This season",
   nextSeason: "Next season",
   noPast: "No past seasons yet",
@@ -164,6 +184,8 @@ export const CARD_WORDS = {
 
   // Agreements
   agreements: "My agreements",
+  agreementsEyebrow: "Agreements",
+  termsOnce: (count: string) => `Terms for all ${count} roles, recorded once`,
   noTerms: "No terms written yet",
   clocks: "Clocks",
   payByMonth: "Paid by the calendar month",

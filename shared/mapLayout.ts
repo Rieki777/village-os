@@ -52,6 +52,28 @@ export interface NestedInput {
   questCount: number;
   /** The circle's name. The layout sizes the circle to hold it. */
   name?: string;
+  /**
+   * active, forming or dormant. Only the nested picture reads it: a forming
+   * circle with no roles and nothing inside it rides its container's band
+   * instead of taking a place in the pack. Absent, nothing changes.
+   */
+  status?: string | null;
+  /**
+   * The circle's governance layer: link, lead, operating, advisory or council.
+   * It decides which circle holds the middle of its container and the order
+   * round the ring. Absent or unknown behaves as operating.
+   */
+  layer?: string | null;
+}
+
+/** Where a circle on a band sits: an arc of its container's band, angles in
+ *  radians in screen space (y down, -PI/2 at twelve o'clock). */
+export interface BandPlace {
+  containerId: string | null;
+  a0: number;
+  a1: number;
+  inner: number;
+  outer: number;
 }
 
 export interface NestedCircle {
@@ -63,6 +85,21 @@ export interface NestedCircle {
   roles: Array<{ id: string; x: number; y: number; vacant: boolean }>;
   questDots: Array<{ x: number; y: number }>;
   questOverflow: number;
+  /** Present when the circle rides its container's band. Its x, y and r are
+   *  then the middle of its arc, so focus, search and the camera still work. */
+  band?: BandPlace;
+}
+
+/** One container's band: the track the forming circles ride, open at the top
+ *  by `crown` radians either side of twelve o'clock for the container's name. */
+export interface NestedBand {
+  containerId: string | null;
+  x: number;
+  y: number;
+  inner: number;
+  outer: number;
+  crown: number;
+  members: string[];
 }
 
 export interface NestedLayout {
@@ -76,6 +113,8 @@ export interface NestedLayout {
     roles: Array<{ id: string; x: number; y: number; vacant: boolean }>;
   };
   circles: NestedCircle[];
+  /** Present only when some container has a band. */
+  bands?: NestedBand[];
 }
 
 const ROLE_DOT_R = 11;
@@ -89,6 +128,35 @@ const PACK_GAP = 14;
 const VILLAGE_PAD = ROLE_DOT_R + 12;
 /** Only reached by a village with no circles yet, so it never looks broken. */
 const MIN_CANVAS = 320;
+
+/**
+ * THE GOVERNANCE LAYER RANK. A link or lead circle holds the middle of its
+ * container; everything else rings it in this order, then by sortOrder. The
+ * middle used to go to whichever circle had the most rows, so a busy circle
+ * read as the most important one in the village. The layer is data a village
+ * sets, never a name written here.
+ */
+export const CIRCLE_LAYERS = ["link", "lead", "operating", "advisory", "council"] as const;
+export type CircleLayer = (typeof CIRCLE_LAYERS)[number];
+export const LAYER_RANK: Readonly<Record<CircleLayer, number>> = {
+  link: 0,
+  lead: 1,
+  operating: 2,
+  advisory: 3,
+  council: 4,
+};
+const OPERATING_RANK = LAYER_RANK.operating;
+const isLayer = (v: unknown): v is CircleLayer => (CIRCLE_LAYERS as readonly unknown[]).includes(v);
+
+/** The band forming circles ride: its width, the font its names are sized
+ *  for, the room either end of a name, and the gap between two arcs. */
+export const BAND_WIDTH = 38;
+export const BAND_FONT = 11;
+const BAND_NAME_PAD = 22;
+const BAND_ARC_GAP = 6;
+/** The village draws no name inside its ring; its band still leaves the top
+ *  open for the word that says what the band is. */
+const VILLAGE_BAND_CROWN = 0.35;
 
 /**
  * The radius a circle needs to hold its NAME inside its seat ring.
@@ -169,20 +237,60 @@ interface PackedNode {
   dx: number;
   dy: number;
   children: PackedNode[];
+  /** This node's band, when some of its children ride one. */
+  band?: { inner: number; outer: number; crown: number; arcs: Map<string, { a0: number; a1: number }> };
+}
+
+const rankOf = (n: PackedNode): number => (isLayer(n.input.layer) ? LAYER_RANK[n.input.layer] : OPERATING_RANK);
+const bySize = (a: PackedNode, b: PackedNode): number =>
+  b.r - a.r || a.input.order - b.input.order || a.input.id.localeCompare(b.input.id);
+const byLayer = (a: PackedNode, b: PackedNode): number =>
+  rankOf(a) - rankOf(b) || a.input.order - b.input.order || a.input.id.localeCompare(b.input.id);
+
+/**
+ * Who holds the middle of a pack, and in what order the rest ring it.
+ *
+ * With no layer set anywhere in the pack this is the picture every village has
+ * always had: the biggest in the middle, the rest by size. Once a village sets
+ * layers, a link or lead circle takes the middle and the ring follows the
+ * layers, then sortOrder, so the order a village gives its circles is the order
+ * a member meets them, clockwise from twelve. A layered pack with no link or
+ * lead circle still puts its biggest in the middle, which is the tightest pack.
+ */
+function middleAndRing(children: PackedNode[]): [PackedNode, PackedNode[]] {
+  const layered = children.some((c) => !!c.input.layer);
+  if (!layered) {
+    const [biggest, ...rest] = [...children].sort(bySize);
+    return [biggest, rest];
+  }
+  const ranked = [...children].sort(byLayer);
+  const middle = rankOf(ranked[0]) < OPERATING_RANK ? ranked[0] : [...children].sort(bySize)[0];
+  return [middle, ranked.filter((c) => c !== middle)];
 }
 
 /**
- * Pack children inside a parent: the largest sits at the center, the rest on
- * one ring around it, spaced by their own sizes. With the handful of circles
- * a village has, the ring reads organic and stays deterministic; a physics
- * pack would jitter with every data change.
+ * Pack children inside a parent: one sits at the center, the rest on one ring
+ * around it, spaced by their own sizes. With the handful of circles a village
+ * has, the ring reads organic and stays deterministic; a physics pack would
+ * jitter with every data change. `middleAndRing` says which one is the middle.
  */
 function packChildren(children: PackedNode[]): number {
   if (children.length === 0) return 0;
-  const sorted = [...children].sort(
-    (a, b) => b.r - a.r || a.input.order - b.input.order || a.input.id.localeCompare(b.input.id),
-  );
-  const [biggest, ...rest] = sorted;
+  const [biggest, rest] = middleAndRing(children);
+  // TWO SIDE BY SIDE. One in the middle and the other orbiting it needs a
+  // radius of r1 + r2 + gap + r2; side by side, r1 + r2 + half a gap. On the
+  // live village that made a circle holding two small ones 280 across instead
+  // of about 200, and once that circle left the middle it widened the whole
+  // picture by a third. Same order as the ring would give them, left to right.
+  if (rest.length === 1) {
+    const [right] = rest;
+    const outer = biggest.r + right.r + PACK_GAP / 2;
+    biggest.dx = -(outer - biggest.r);
+    biggest.dy = 0;
+    right.dx = outer - right.r;
+    right.dy = 0;
+    return outer;
+  }
   biggest.dx = 0;
   biggest.dy = 0;
   if (rest.length === 0) return biggest.r;
@@ -246,6 +354,66 @@ function buildForest(sorted: NestedInput[], byId: Map<string, NestedInput>): Pac
   return roots;
 }
 
+// ── THE FORMING BAND ─────────────────────────────────────────────────────────
+//
+// A council a village has named and not yet started held a full circle of its
+// own, the same weight as a circle doing the work today, told apart only by
+// a fade. On the live village that was eight of the sixteen circles inside the
+// coordinating circle: two thirds of the picture was future and read as
+// present. Such a circle now rides a band just inside its container's role
+// ring, an arc with its name on it, so the work of today holds the middle and
+// what is still forming reads as a horizon.
+
+/** A forming circle with no roles and nothing inside it: a name for later. */
+function ridesBand(n: PackedNode): boolean {
+  return n.input.status === "forming" && n.input.roles.length === 0 && n.children.length === 0;
+}
+
+/** The arc a name on the band needs, in canvas units. */
+function bandArcLength(name: string | undefined): number {
+  return String(name ?? "").trim().length * BAND_FONT * CHAR_W + BAND_NAME_PAD;
+}
+
+/** How far either side of twelve o'clock a container's band stays open, so
+ *  the container's own name, drawn just inside its rim, never lands on it. */
+function nameCrown(name: string | undefined, depth: number, outer: number): number {
+  const half = (String(name ?? "").trim().length * labelBaseFont(depth) * CHAR_W) / 2 + 10;
+  return Math.min(1.1, Math.max(0.3, Math.atan2(half, outer)));
+}
+
+/**
+ * Size a band outside `contentR` and give each rider an arc, clockwise from
+ * the crown's right edge, in proportion to its name. The band grows outward
+ * until every name fits its arc. A wider band leaves a narrower crown, so the
+ * room only ever grows across the passes and the last pass is the one that fits.
+ */
+function sizeBand(
+  riders: PackedNode[],
+  contentR: number,
+  crownAt: (outer: number) => number,
+): NonNullable<PackedNode["band"]> {
+  const lengths = riders.map((n) => bandArcLength(n.input.name) + BAND_ARC_GAP);
+  const need = lengths.reduce((s, l) => s + l, 0);
+  let inner = contentR + PACK_GAP;
+  let crown = crownAt(inner + BAND_WIDTH);
+  for (let pass = 0; pass < 3; pass++) {
+    inner = Math.max(inner, need / (2 * Math.PI - 2 * crown) - BAND_WIDTH / 2);
+    crown = crownAt(inner + BAND_WIDTH);
+  }
+  inner = Math.max(inner, need / (2 * Math.PI - 2 * crown) - BAND_WIDTH / 2);
+
+  const span = 2 * Math.PI - 2 * crown;
+  const gap = (BAND_ARC_GAP / need) * span;
+  const arcs = new Map<string, { a0: number; a1: number }>();
+  let at = -Math.PI / 2 + crown;
+  riders.forEach((n, i) => {
+    const slice = (lengths[i] / need) * span;
+    arcs.set(n.input.id, { a0: at + gap / 2, a1: at + slice - gap / 2 });
+    at += slice;
+  });
+  return { inner, outer: inner + BAND_WIDTH, crown, arcs };
+}
+
 /** Nested layout: the village encloses its circles; sub-circles nest inside.
  *  Roles with no circle are the village's own seats and sit on its ring. */
 export function layoutNestedMap(
@@ -260,16 +428,27 @@ export function layoutNestedMap(
   const roots = buildForest(sorted, byId);
 
   // Radii bottom-up: a parent must hold its packed children AND its own
-  // role ring outside them.
-  const sizeNode = (node: PackedNode): void => {
-    node.children.forEach(sizeNode);
-    const contentR = packChildren(node.children);
-    node.r = Math.max(ownRadius(node.input), contentR + ROLE_RING_INSET + ROLE_DOT_R + 10);
+  // role ring outside them, and its band, when some of them ride one.
+  const sizeNode = (node: PackedNode, depth: number): void => {
+    node.children.forEach((child) => sizeNode(child, depth + 1));
+    const riders = node.children.filter(ridesBand);
+    if (!riders.length) {
+      const contentR = packChildren(node.children);
+      node.r = Math.max(ownRadius(node.input), contentR + ROLE_RING_INSET + ROLE_DOT_R + 10);
+      return;
+    }
+    const contentR = packChildren(node.children.filter((c) => !ridesBand(c)));
+    node.band = sizeBand(riders, contentR, (outer) => nameCrown(node.input.name, depth, outer));
+    node.r = Math.max(ownRadius(node.input), node.band.outer + ROLE_RING_INSET + ROLE_DOT_R + 10);
   };
-  roots.forEach(sizeNode);
+  roots.forEach((root) => sizeNode(root, 0));
 
   // The village is the root that packs every top-level circle.
-  const villageContentR = packChildren(roots);
+  const villageRiders = roots.filter(ridesBand);
+  const villageBand = villageRiders.length
+    ? sizeBand(villageRiders, packChildren(roots.filter((r) => !ridesBand(r))), () => VILLAGE_BAND_CROWN)
+    : undefined;
+  const villageContentR = villageBand ? villageBand.outer : packChildren(roots);
   const villageR = villageContentR + 30;
   // The canvas HUGS the village.
   //
@@ -306,9 +485,47 @@ export function layoutNestedMap(
       roles: rolePositions, questDots,
       questOverflow: Math.max(0, c.questCount - shownQuests),
     });
-    node.children.forEach((child) => place(child, x, y, depth + 1));
+    placeChildren(node.children, node.band, c.id, x, y, depth + 1);
   };
-  roots.forEach((root) => place(root, center.x, center.y, 0));
+  const bands: NestedBand[] = [];
+  const placeChildren = (
+    children: PackedNode[],
+    band: PackedNode["band"],
+    containerId: string | null,
+    x: number,
+    y: number,
+    depth: number,
+  ): void => {
+    if (band) {
+      bands.push({
+        containerId, x, y, inner: band.inner, outer: band.outer, crown: band.crown,
+        members: children.filter((c) => band.arcs.has(c.input.id)).map((c) => c.input.id),
+      });
+    }
+    for (const child of children) {
+      const arc = band?.arcs.get(child.input.id);
+      if (!arc || !band) {
+        place(child, x, y, depth);
+        continue;
+      }
+      // A rider's position is the middle of its arc, so everything that finds
+      // a circle by its centre (focus, search, the camera) finds it there.
+      const mid = (band.inner + band.outer) / 2;
+      const am = (arc.a0 + arc.a1) / 2;
+      out.push({
+        id: child.input.id,
+        x: x + mid * Math.cos(am),
+        y: y + mid * Math.sin(am),
+        r: BAND_WIDTH / 2,
+        depth,
+        roles: [],
+        questDots: [],
+        questOverflow: child.input.questCount,
+        band: { containerId, a0: arc.a0, a1: arc.a1, inner: band.inner, outer: band.outer },
+      });
+    }
+  };
+  placeChildren(roots, villageBand, null, center.x, center.y, 0);
 
   // Village-level seats ride the boundary ring itself, spread across the top
   // arc where no circle label competes, vacant last as everywhere else.
@@ -326,6 +543,8 @@ export function layoutNestedMap(
     height: canvas,
     village: { x: center.x, y: center.y, r: villageR, roles: villageSeatDots },
     circles: out,
+    // Only when there is one, so a village with no band keeps its exact bytes.
+    ...(bands.length ? { bands } : {}),
   };
 }
 
@@ -338,6 +557,11 @@ export interface WrappedLabel {
 const MAX_LABEL_LINES = 3;
 /** Below this a label is not worth rendering, so the word gets cut instead. */
 const MIN_FONT = 9;
+
+/** The size a name starts from at each depth, before it is fitted. */
+function labelBaseFont(depth: number): number {
+  return depth === 0 ? 17 : depth === 1 ? 14 : 12;
+}
 
 /**
  * Fit a circle's name inside the circle.
@@ -352,7 +576,7 @@ const MIN_FONT = 9;
  */
 export function wrapLabel(name: string, radius: number, depth: number): WrappedLabel {
   const words = String(name ?? "").trim().split(/\s+/).filter(Boolean);
-  const base = depth === 0 ? 17 : depth === 1 ? 14 : 12;
+  const base = labelBaseFont(depth);
   // The usable chord is the CLEAR interior, inside the seat ring. Measuring
   // against the full radius let a label run out under its own seat dots.
   const usable = clearChord(radius);
@@ -751,5 +975,6 @@ export function layoutForShape(
       roles: c.roles.map((s) => ({ ...s, x: s.x + pad, y: s.y + pad })),
       questDots: c.questDots.map((q) => ({ x: q.x + pad, y: q.y + pad })),
     })),
+    ...(base.bands ? { bands: base.bands.map((b) => ({ ...b, x: b.x + pad, y: b.y + pad })) } : {}),
   };
 }
