@@ -17321,7 +17321,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   // A member's own account record: read, update, and the contribution journal.
   // Registered at exactly the point those three routes used to sit.
-  registerProfileRoutes(app, { authedUser, members, publicUser });
+  registerProfileRoutes(app, { authedUser, members, publicUser, getPool });
 
   // Where the member stands on each path they walk. Beside the profile routes
   // because it answers only to the account behind the token, and derived from

@@ -40,6 +40,7 @@ import { numberVar, stringVar } from "./variables";
 import { tokenTypesPostedTo } from "../repos/tokenLedger";
 import { ownExitResolutions, setExitResolution } from "../repos/exitNotes";
 import { openRedemptionCount } from "./redemptionStore";
+import { liveSubscriptionsOf } from "../repos/productPurchases";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -292,7 +293,37 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     blocking: false,
   });
 
+  states.push(await subscriptionsState(pool, userId));
+
   return states;
+}
+
+const EVERY: Record<"month" | "year", string> = { month: "every month", year: "every year" };
+
+/**
+ * The member's recurring payments, as a NOTICE the erasure acts on (round 3,
+ * finding 5). The erasure's `product-subscriptions-after-tombstone` step
+ * cancels each one in Stripe (server/lib/erasure.ts), and this line is how the
+ * admin on the exit desk and the member before they confirm
+ * (`GET /api/profile/leaving-notices`, server/routes/profile.ts) hear that
+ * before the delete, in the same words.
+ *
+ * NEVER BLOCKING. Nothing in the app lets a member cancel a subscription
+ * themselves, so a block here would leave a member unable to leave until a
+ * steward found the subscription in Stripe. The erasure is the cancel.
+ */
+export async function subscriptionsState(pool: Pool, userId: string): Promise<ExitDomainState> {
+  const subs = await liveSubscriptionsOf(pool, userId);
+  const named = subs.map((s) => `${s.productName || "A product no longer listed"}${s.interval ? ` (${EVERY[s.interval]})` : ""}`);
+  return {
+    domain: "subscriptions",
+    count: subs.length,
+    description: subs.length
+      ? `${subs.length} recurring payment(s) still renewing through Stripe: ${named.join(", ")}. ` +
+        "Deleting the account cancels each one in Stripe, and nothing already paid is refunded"
+      : "no recurring payments",
+    blocking: false,
+  };
 }
 
 export function blockingStates(states: ExitDomainState[]): ExitDomainState[] {

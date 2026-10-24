@@ -19,6 +19,10 @@
  *   and a resume finishes it; and a member with no subscription needs no
  *   Stripe at all.
  *
+ *   THE NOTICE. `exitOpenState` names each live subscription as a notice the
+ *   erasure acts on, never as a block, and the member reads the same sentence
+ *   from `GET /api/profile/leaving-notices` before they confirm.
+ *
  * The renewal gate that refuses to pay a tombstone lives inside
  * `settleProductPurchase` in server/index.ts, so it is proved where it runs:
  * the S69 subscription block of server/loop.e2e.test.ts.
@@ -35,6 +39,8 @@ import { anonymizeMember, resumeErasure, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
 import { erasureRecord } from "../repos/memberErasure";
+import { blockingStates, exitOpenState } from "./exit";
+import { register as registerProfileRoutes } from "../routes/profile";
 import { loadSecrets } from "./secrets";
 
 const configured = testDbConfigured();
@@ -286,5 +292,63 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
 
     expect((await erasureRecord(pool, wren.id))?.finishedAt).not.toBeNull();
     expect(s.calls).toEqual([]);
+  });
+
+  describe("the notice before the delete", () => {
+    it("names each live subscription on the exit desk as a notice, never a block", async () => {
+      const kit = await member("subs-desk", "Kit Arden");
+      await purchase("pp-k1", kit.id, "prod-month", { status: "paid", sub: "sub_kit_month", at: "2026-06-01 10:00:00" });
+      await purchase("pp-k2", kit.id, "prod-year", { status: "reversed", sub: "sub_kit_year", at: "2026-06-02 10:00:00" });
+      await purchase("pp-k3", kit.id, "prod-once", { status: "paid", at: "2026-06-03 10:00:00" });
+
+      const states = await exitOpenState(pool, kit.id, []);
+      const subs = states.find((st) => st.domain === "subscriptions");
+      expect(subs).toEqual({
+        domain: "subscriptions",
+        count: 2,
+        description:
+          "2 recurring payment(s) still renewing through Stripe: Monthly membership (every month), Garden share (every year). " +
+          "Deleting the account cancels each one in Stripe, and nothing already paid is refunded",
+        blocking: false,
+      });
+      // Nothing in the app lets a member cancel one, so a block would trap them.
+      expect(blockingStates(states).map((st) => st.domain)).not.toContain("subscriptions");
+
+      const none = await member("subs-desk-none", "Lee Plain");
+      expect((await exitOpenState(pool, none.id, [])).find((st) => st.domain === "subscriptions")).toEqual({
+        domain: "subscriptions", count: 0, description: "no recurring payments", blocking: false,
+      });
+    });
+
+    it("tells the member the same sentence before they confirm, and nobody else's", async () => {
+      const kit = await member("subs-self", "Kit Self");
+      await purchase("pp-s1", kit.id, "prod-month", { status: "paid", sub: "sub_self", at: "2026-07-01 10:00:00" });
+      const handlers = new Map<string, (req: any, res: any) => Promise<unknown>>();
+      const app: any = { get: (p: string, h: any) => handlers.set(`GET ${p}`, h), put: () => undefined, post: () => undefined };
+      let signedIn: any = kit;
+      registerProfileRoutes(app, {
+        authedUser: async () => signedIn,
+        members: usersRepo(pool) as any,
+        publicUser: (u: any) => u,
+        getPool: () => pool,
+      } as any);
+      const call = async () => {
+        const out: { status: number; body: any } = { status: 200, body: undefined };
+        const res: any = { status(c: number) { out.status = c; return res; }, json(b: unknown) { out.body = b; return res; } };
+        await handlers.get("GET /api/profile/leaving-notices")!({ headers: {} }, res);
+        return out;
+      };
+
+      const mine = await call();
+      expect(mine.status).toBe(200);
+      const desk = (await exitOpenState(pool, kit.id, [])).find((st) => st.domain === "subscriptions");
+      expect(mine.body).toEqual({ notices: [desk] });
+
+      signedIn = await member("subs-self-other", "Other Plain");
+      expect((await call()).body, "a member with none is shown nothing").toEqual({ notices: [] });
+
+      signedIn = null;
+      expect((await call()).status).toBe(401);
+    });
   });
 });
