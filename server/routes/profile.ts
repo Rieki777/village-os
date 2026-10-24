@@ -4,6 +4,7 @@
  *   GET  /api/profile               the signed-in member's own record
  *   PUT  /api/profile               name, bio, avatar, handle, paths
  *   POST /api/profile/contribution  a journal entry the member writes
+ *   GET  /api/profile/leaving-notices  what deleting their account will cancel
  *
  * Lifted out of server/index.ts with the handlers unchanged apart from the
  * path validation named below. `HANDLE_RE` came with them: server/index.ts
@@ -44,10 +45,11 @@ import type { Express } from "express";
 import { claimPaths } from "../../shared/gameConfig";
 import type { AppDeps } from "../lib/appDeps";
 import { isTombstone } from "../lib/oauthAccounts";
+import { subscriptionsState } from "../lib/exit";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
 
-type Deps = Pick<AppDeps, "authedUser" | "members" | "publicUser">;
+type Deps = Pick<AppDeps, "authedUser" | "members" | "publicUser" | "getPool">;
 
 /** A handle is 3 to 30 characters: letters, numbers, dashes, underscores. */
 const HANDLE_RE = /^[a-z0-9][a-z0-9-_]{2,29}$/;
@@ -58,7 +60,7 @@ function sessionGone(row: any, authed: any): boolean {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, members, publicUser } = deps;
+  const { authedUser, members, publicUser, getPool } = deps;
 
   // Auth: Get Profile
   app.get("/api/profile", async (req, res) => {
@@ -135,5 +137,22 @@ export function register(app: Express, deps: Deps): void {
     if (gone) return res.status(401).json({ error: "auth_required" });
     if (!updated) return res.status(404).json({ error: "User not found" });
     res.json({ success: true, contribution });
+  });
+
+  /*
+   * What deleting the account will cancel, read before the member confirms
+   * (round 3, finding 5). Today that is their recurring payments: the erasure
+   * cancels each one in Stripe, nothing in the app lets a member cancel one
+   * themselves, and they should hear it before the delete and not on their
+   * next card statement. The sentence is the exit desk's own
+   * (`subscriptionsState`, server/lib/exit.ts), so the admin and the member
+   * read the same words. Only the member's own, and only notices that say
+   * something: a member with nothing to cancel gets an empty list.
+   */
+  app.get("/api/profile/leaving-notices", async (req, res) => {
+    const authed = await authedUser(req);
+    if (!authed) return res.status(401).json({ error: "auth_required" });
+    const subscriptions = await subscriptionsState(getPool(), String(authed.id));
+    res.json({ notices: subscriptions.count > 0 ? [subscriptions] : [] });
   });
 }
