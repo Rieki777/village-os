@@ -30,6 +30,8 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
+import { teamAlertNames } from "../lib/housing";
+import { requestNamesAt, type RequestNames } from "./housing";
 
 const VILLAGE = "local";
 
@@ -479,7 +481,19 @@ export type CommsForgetCounts = Record<string, number>;
  * attachments blanked and its contact unlinked. The subject goes too, because
  * a subject carries a first name the moment a template merges one. Where the
  * person was the SENDER of a relayed message, their address in `reply_to` goes,
- * and the subject with it (`forgetMailRepliedTo`, below).
+ * and the subject with it (`forgetMailRepliedTo`, below). A housing team alert
+ * at their address is read against the requests first, because a partner's
+ * own household request can carry their address and the partner's name
+ * (`forgetHousingAlertsOf`, below): their address goes from it, and the
+ * partner's request keeps its subject.
+ *
+ * AN EMAIL SENT TO SOMEBODY ELSE ABOUT ONE OF THEIR JOURNEYS goes blank too,
+ * before the journeys go: the day-21 hand-off asks a path's contact person to
+ * write to them by first name, and when that person has no account it goes
+ * to their inbox as essential mail. The row keeps its recipient, who is
+ * living; only the words about this person go (round 2, finding 12). The
+ * hand-off's bell row and its emailed copies are the erasure's to rewrite,
+ * by the key `enrollmentIdsOf` (below) gives it, before this runs.
  *
  * NO SUPPRESSION IS KEPT. A suppression is the address itself under another
  * name, so keeping an `erased` row would keep the very thing the person asked
@@ -501,7 +515,7 @@ export type CommsForgetCounts = Record<string, number>;
  */
 export async function forgetCommsPerson(
   pool: Pool,
-  who: { userId?: string | null; emailKeys?: string[] },
+  who: { userId?: string | null; emailKeys?: string[]; name?: string | null },
 ): Promise<CommsForgetCounts> {
   const k = await keysFor(pool, who);
   const counts: CommsForgetCounts = {};
@@ -551,10 +565,22 @@ export async function forgetCommsPerson(
       [ERASED_ADDRESS, ERASED_ADDRESS, ERASED_SUBJECT, VILLAGE, ...ledgerParams],
     );
   }
-  if (k.emailKeys.length) {
+  if (k.emailKeys.length && k.userId) {
+    // Their own addresses, so a request with no account at one of them is theirs, the scrub's rule.
+    const alerts = await forgetHousingAlertsOf(pool, { userId: k.userId, name: who.name ?? "", keys: k.emailKeys, ownKeys: k.emailKeys });
+    counts.emailsRepliedTo = (counts.emailsRepliedTo ?? 0) + alerts.blanked + alerts.unlinked;
+    counts.emailsRepliedTo += await forgetMailRepliedTo(pool, { emailKeys: k.emailKeys, exceptOrigins: [HOUSING_TEAM_ALERT] });
+  } else if (k.emailKeys.length) {
+    // Addresses with no account behind them, held by this person alone (`secondAddressesOf`), so every alert at one is theirs.
     counts.emailsRepliedTo = (counts.emailsRepliedTo ?? 0) + (await forgetMailRepliedTo(pool, { emailKeys: k.emailKeys }));
   }
   if (ids.length) {
+    await run(
+      "handedOff",
+      "UPDATE comms_messages SET subject = ?, body_html = NULL, body_text = NULL, headers = NULL, attachments = NULL, updated_at = CURRENT_TIMESTAMP " +
+        "WHERE village_id = ? AND enrollment_id IN (SELECT id FROM comms_enrollments WHERE village_id = ? AND contact_id IN (?))",
+      [ERASED_SUBJECT, VILLAGE, VILLAGE, ids],
+    );
     await run("journeys", "DELETE FROM comms_enrollments WHERE village_id = ? AND contact_id IN (?)", [VILLAGE, ids]);
     await run("permissions", "DELETE FROM comms_permissions WHERE contact_id IN (?)", [ids]);
     await run("guestRequests", "DELETE FROM event_guest_requests WHERE contact_id IN (?)", [ids]);
@@ -612,21 +638,136 @@ export async function forgetCommsPerson(
  * Both go out as essential mail, which never stores its words, so the bodies
  * are cleared only so a later producer that keeps them is covered too.
  *
- * `origins` narrows the match to the producers named, for an address read off
- * a record of the person's (a housing request) where the reply-to is the only
- * link back to them. One statement, and once `reply_to` is NULL a second run
- * matches nothing.
+ * `exceptOrigins` leaves the producers named to a reading of their own: the
+ * comms step hands the housing alerts to `forgetHousingAlertsOf`, because an
+ * alert at the person's address can be a partner's own request. One
+ * statement, and once `reply_to` is NULL a second run matches nothing.
  */
-export async function forgetMailRepliedTo(pool: Pool, who: { emailKeys: string[]; origins?: string[] }): Promise<number> {
+export async function forgetMailRepliedTo(pool: Pool, who: { emailKeys: string[]; exceptOrigins?: string[] }): Promise<number> {
   const keys = Array.from(new Set(who.emailKeys.map((k) => String(k ?? "").trim().toLowerCase()).filter(Boolean)));
   if (!keys.length) return 0;
-  const origins = who.origins?.length ? who.origins : null;
+  const except = who.exceptOrigins?.length ? who.exceptOrigins : null;
   const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the comms erasure step, keyed on this one person's addresses
     "UPDATE comms_messages SET reply_to = NULL, subject = ?, body_html = NULL, body_text = NULL, headers = NULL, attachments = NULL, " +
-      `updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND LOWER(reply_to) IN (?)${origins ? " AND origin IN (?)" : ""}`,
-    [ERASED_SUBJECT, VILLAGE, keys, ...(origins ? [origins] : [])],
+      `updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND LOWER(reply_to) IN (?)${except ? " AND origin NOT IN (?)" : ""}`,
+    [ERASED_SUBJECT, VILLAGE, keys, ...(except ? [except] : [])],
   );
   return Number(res.affectedRows ?? 0);
+}
+
+/** The origin the housing request route posts its team alert under (server/routes/housing.ts). */
+export const HOUSING_TEAM_ALERT = "housing.team_alert";
+
+/** Whose housing team alerts these are: the names on the requests at each address, and the member's own. */
+export interface AlertOwners extends RequestNames {
+  /** The member's own name as it was before the tombstone, which no living person's alert names. */
+  name: string;
+  /** The member's own addresses. An alert at one of them that is not theirs still loses the address. */
+  ownKeys: ReadonlySet<string>;
+}
+
+/**
+ * True when a housing team alert is the member's own: the record that THEY
+ * asked for a home, under its reply-to address `key`.
+ *
+ * Every alert is one request's, and its subject names whoever filed that
+ * request (`teamAlertSubject`, server/lib/housing.ts), so the subject and the
+ * requests at the address say whose it is:
+ *   - it names the member as they were: theirs;
+ *   - nobody else asked under this address: theirs, whatever name was typed;
+ *   - it names what somebody else typed on their own request here: not
+ *     theirs, even when the member typed the same name, because then it
+ *     carries a living person's own words;
+ *   - it names what the member typed here: theirs;
+ *   - it names nobody on any request here: theirs only at an address of
+ *     their own.
+ * The one case it cannot tell apart is two people typing the same name at
+ * the same address, which reads as the living person's.
+ */
+export function alertIsTheirs(alert: { key: string; subject: string }, owners: AlertOwners): boolean {
+  if (teamAlertNames(alert.subject, owners.name)) return true;
+  const others = owners.others.get(alert.key);
+  if (!others?.size) return true;
+  if (Array.from(others).some((n) => teamAlertNames(alert.subject, n))) return false;
+  if (Array.from(owners.mine.get(alert.key) ?? []).some((n) => teamAlertNames(alert.subject, n))) return true;
+  return owners.ownKeys.has(alert.key);
+}
+
+/**
+ * The housing team alerts at these reply-to addresses that are the member's
+ * own lose their subject, their words and their reply-to; one at an address
+ * of the member's own that is somebody else's request loses only the
+ * address. Everything else stays as it was.
+ *
+ * WHY IT READS THE REQUESTS (round 2, findings 3 and 16). Matched by address
+ * alone, this blanked a living partner's own alert ("Home reservation request
+ * from Ash Moreno") because the leaver had once typed Ash's address on a
+ * request of their own, and a stranger's because the leaver had typed the
+ * porch inbox the stranger's public request also used. A reply-to is the
+ * address typed on one request, and the subject names who filed it, so the
+ * requests at the address are what say whose an alert is (`alertIsTheirs`).
+ * They are read here, before the housing scrub writes the tombstone address
+ * over the member's own.
+ *
+ * Read first and written by bound ids, so a second run finds a blanked row's
+ * reply-to gone and a kept row the same as before. `ownKeys` are the member's
+ * own addresses: an account address, or a contact's linked to their account.
+ */
+export async function forgetHousingAlertsOf(
+  pool: Pool,
+  who: { userId: string; name: string; keys: string[]; ownKeys: string[] },
+): Promise<{ blanked: number; unlinked: number }> {
+  const keys = Array.from(new Set(who.keys.map((k) => String(k ?? "").trim().toLowerCase()).filter(Boolean)));
+  if (!keys.length || !who.userId) return { blanked: 0, unlinked: 0 };
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the comms erasure step, the housing alerts at this one person's addresses
+    "SELECT id, LOWER(TRIM(reply_to)) AS k, subject FROM comms_messages WHERE village_id = ? AND origin = ? AND LOWER(TRIM(reply_to)) IN (?)",
+    [VILLAGE, HOUSING_TEAM_ALERT, keys],
+  );
+  if (!rows.length) return { blanked: 0, unlinked: 0 };
+  const ownKeys = new Set(who.ownKeys.map((k) => String(k ?? "").trim().toLowerCase()).filter(Boolean));
+  const names = await requestNamesAt(pool, { userId: who.userId, keys, ownKeys: Array.from(ownKeys) });
+  const owners: AlertOwners = { ...names, name: String(who.name ?? "").trim(), ownKeys };
+  const theirs: string[] = [];
+  const unlink: string[] = [];
+  for (const r of rows) {
+    const alert = { key: String(r.k ?? ""), subject: String(r.subject ?? "") };
+    if (alertIsTheirs(alert, owners)) theirs.push(String(r.id));
+    else if (ownKeys.has(alert.key)) unlink.push(String(r.id));
+  }
+  let blanked = 0;
+  let unlinked = 0;
+  if (theirs.length) {
+    const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the comms erasure step, rows read above by id
+      "UPDATE comms_messages SET reply_to = NULL, subject = ?, body_html = NULL, body_text = NULL, headers = NULL, attachments = NULL, " +
+        "updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND id IN (?)",
+      [ERASED_SUBJECT, VILLAGE, theirs],
+    );
+    blanked = Number(res.affectedRows ?? 0);
+  }
+  if (unlink.length) {
+    const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the comms erasure step, rows read above by id
+      "UPDATE comms_messages SET reply_to = NULL, updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND id IN (?)",
+      [VILLAGE, unlink],
+    );
+    unlinked = Number(res.affectedRows ?? 0);
+  }
+  return { blanked, unlinked };
+}
+
+/**
+ * Every journey enrollment of this person's, by id, for the erasure to find
+ * what was written ABOUT a journey before the journeys go: the day-21
+ * hand-off is keyed on the walker's enrollment (server/lib/comms/notices.ts).
+ * Read-only.
+ */
+export async function enrollmentIdsOf(pool: Pool, who: { userId?: string | null; emailKeys?: string[] }): Promise<string[]> {
+  const k = await keysFor(pool, who);
+  if (!k.contactIds.length) return [];
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the comms erasure step, this one person's enrollments
+    "SELECT id FROM comms_enrollments WHERE village_id = ? AND contact_id IN (?) ORDER BY id",
+    [VILLAGE, k.contactIds],
+  );
+  return rows.map((r) => String(r.id));
 }
 
 /**

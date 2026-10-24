@@ -153,8 +153,10 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetProposer } from "../repos/questProposals";
-import { contactsForPerson, forgetCommsPerson, forgetMailRepliedTo, housingAddressesOf } from "../repos/commsPeople";
-import { forgetNoticesOf } from "../repos/noticesNaming";
+import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
+import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
+import { pathHandoffKey } from "./comms/notices";
+import { forgetBallotWordsOf } from "./ballotErasure";
 import { forgetMeetMeWindowsOf } from "./gatherings";
 import { forgetOwnExitNotes } from "./exit";
 import { forgetCheckinNotesOf } from "./economy";
@@ -322,6 +324,22 @@ export async function endPermissionHoldings(
       deps.loadRoleHolders().filter((h) => h.userId === userId).map((h) => String(h.id)),
     );
   });
+}
+
+/**
+ * A person's comms rows, with the day-21 hand-offs that named them first.
+ *
+ * The hand-off asks a path's contact person to write to somebody by first
+ * name, on that person's bell with no actor, keyed on the walker's journey
+ * enrollment, and emailed. The comms rows below delete the enrollment, the one
+ * record that ties those rows to the walker, so they are rewritten here while
+ * it stands (round 2, finding 12). Both callers need it: the comms step for the
+ * member, and the housing-contacts step for a second address they typed, which
+ * a ticked box walks onto the resident path too.
+ */
+async function forgetCommsAndHandOffs(pool: Pool, who: { userId?: string | null; emailKeys?: string[]; name?: string | null }): Promise<void> {
+  await forgetNoticesByKey(pool, (await enrollmentIdsOf(pool, who)).map(pathHandoffKey));
+  await forgetCommsPerson(pool, who);
 }
 
 /** One named, idempotent piece of the sweep. */
@@ -766,7 +784,11 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "comms",
       run: async () => {
         const email = String(target.email ?? "");
-        await forgetCommsPerson(pool, { userId: target.id, emailKeys: email && !isTombstone({ email }) ? [emailKeyOf(email)] : [] });
+        await forgetCommsAndHandOffs(pool, {
+          userId: target.id,
+          emailKeys: email && !isTombstone({ email }) ? [emailKeyOf(email)] : [],
+          name: String(target.name ?? ""),
+        });
       },
     },
     {
@@ -895,6 +917,23 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * The ballots that name them (round 2, finding 6). A vote to seat them
+       * or take a role back from them keeps its subject, its votes and its
+       * outcome, and its title, document and closer's note stop naming them;
+       * its public pulse lines go. A ballot they opened loses the name on its
+       * "Asked by" line. The notices those ballots rang went in the two steps
+       * above, found by the ballot's id. After the tombstone, because opening
+       * a ballot is something a signed-in member does, and directly after the
+       * notices step, so the words and the notices go together.
+       * server/lib/ballotErasure.ts says which spellings and why.
+       */
+      name: "ballot-words-after-tombstone",
+      run: async () => {
+        await forgetBallotWordsOf(pool, { id: target.id, name: target.name, handle: target.handle, email: target.email });
+      },
+    },
+    {
+      /*
        * The note a member wrote when they opened their own departure. The
        * exit record stays, with the lines the settle step wrote under it,
        * the split of record among them; a note a steward wrote on a departure
@@ -912,10 +951,24 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        * account's address (a relay, a housing alert); these are the housing
        * alerts sent under a different address they typed into a request of
        * their own, read off that request here, before anything scrubs it.
+       *
+       * ONLY THEIR OWN ALERTS (round 2, findings 3 and 16). An address they
+       * typed can be a partner's account address or a porch inbox a
+       * stranger's own public request also uses, and each of those people's
+       * requests sent its own alert under the same reply-to. So the requests
+       * at each address say whose each alert is, by the name its subject was
+       * written with (`forgetHousingAlertsOf`, server/repos/commsPeople.ts),
+       * and a living person's own alert keeps its subject and its reply-to.
        */
       name: "relayed-mail-after-tombstone",
       run: async () => {
-        await forgetMailRepliedTo(pool, { emailKeys: await housingAddressesOf(pool, target.id), origins: ["housing.team_alert"] });
+        const key = realEmailKey(target);
+        await forgetHousingAlertsOf(pool, {
+          userId: target.id,
+          name: String(target.name ?? ""),
+          keys: await housingAddressesOf(pool, target.id),
+          ownKeys: key ? [key] : [],
+        });
       },
     },
     {
@@ -1019,7 +1072,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         for (const contact of await contactsForPerson(pool, { emailKeys: keys })) {
           await releasePlacesOf(pool, guestPersonKey(contact.id));
         }
-        await forgetCommsPerson(pool, { emailKeys: keys });
+        await forgetCommsAndHandOffs(pool, { emailKeys: keys });
       },
     },
     {

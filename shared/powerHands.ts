@@ -363,3 +363,55 @@ export function powerHandSentence(data: Record<string, unknown>): string {
   const played = suits.length === 1 ? "which they play" : suits.length === 2 ? "both of which they play" : "all of which they play";
   return `${asks} It suits ${namesOf(suits)}, ${played}.`;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ *
+ * THE WORDS A SEAT VOTE OPENED FROM A HAND STARTS WITH.
+ *
+ * `POST /api/powers/hands/:id/put-to-village` (server/routes/powerHands.ts)
+ * opens a `role_seat` ballot, and `openSeatVote` puts this reason under the
+ * document's "## Why this person". It opens with who raised the hand, for
+ * what and when, then quotes the hand's note. Built here, and read back here,
+ * so the erasure (server/lib/ballotErasure.ts, round 3 finding 11) reads the
+ * door's own wording and the two cannot drift apart.
+ */
+
+/** The heading `openSeatVote` puts a seat vote's reason under. */
+export const SEAT_VOTE_REASON_HEADING = "## Why this person";
+
+/** The line that opens a hand's quoted note. The note follows after a blank line, every line of it after "> ". */
+export const HAND_NOTE_OPENS = "They wrote:";
+
+/** What the reason says of a hand raised with no note. */
+export const HAND_WROTE_NOTHING = "They wrote nothing with it.";
+
+/** The reason's first line, read back: who raised it, what they offered, and the day. */
+export const HAND_RAISED_LINE = /^(.+?) raised a hand (to .+|for the power \S+) on (\d{4}-\d{2}-\d{2})\.$/;
+
+/** What a hand offers, as the vote's reason and the village's pulse line both say it. */
+export function handOffered(hand: Pick<PublicHand, "powerLabel" | "capability">): string {
+  return hand.powerLabel ? `to ${asOffer(hand.powerLabel)}` : `for the power ${hand.capability}`;
+}
+
+/**
+ * The reason a seat vote opened from this hand gives: who raised it and when,
+ * their note, what the member putting it to the village said, and who that
+ * member is.
+ */
+export function handVoteReason(
+  hand: Pick<PublicHand, "userName" | "powerLabel" | "capability" | "submittedAt" | "note">,
+  said: string,
+  putBy: string,
+): string {
+  const quoted = hand.note.trim()
+    ? `${HAND_NOTE_OPENS}\n\n${hand.note.trim().split("\n").map((l) => `> ${l}`).join("\n")}`
+    : HAND_WROTE_NOTHING;
+  return [
+    `${hand.userName || "A member"} raised a hand ${handOffered(hand)} on ${hand.submittedAt.slice(0, 10)}.`,
+    quoted,
+    said,
+    `${putBy} put that hand to the village.`,
+  ]
+    .filter((part) => part.trim() !== "")
+    .join("\n\n");
+}
