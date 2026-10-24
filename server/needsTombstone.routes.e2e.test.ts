@@ -91,6 +91,8 @@ let bystander = { token: "", id: "" };
  * boot job is what finds it.
  */
 const GONE = "needstomb-gone-old";
+/** The handle that tombstone kept, `departed-` and the last eight of the id, which forum bylines print. */
+const GONE_HANDLE = `departed-${GONE.slice(-8)}`;
 /** Waiting for the seat the old erasure left them holding. */
 const WAITER = "needstomb-waiter";
 const SEATED = "needstomb-bread-night";
@@ -141,7 +143,12 @@ beforeAll(async () => {
   // steps ("needs" still ran before the tombstone then), the answer saved after
   // it, and a link nobody used.
   const seed = (sql: string, params: unknown[]) => pool.query(sql, params); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-  await seed("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?, 'A departed member', ?, '')", [GONE, `deleted-${GONE}@anonymized.invalid`]);
+  // The tombstone kept the handle releases before round 2 wrote (round 3, finding 13).
+  await seed("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `handle`) VALUES (?, 'A departed member', ?, '', ?)", [
+    GONE,
+    `deleted-${GONE}@anonymized.invalid`,
+    GONE_HANDLE,
+  ]);
   await seed("INSERT INTO `member_erasures` (`user_id`, `attempts`, `steps_done`, `finished_at`) VALUES (?, 1, ?, '2026-09-20 10:00:00')", [
     GONE,
     JSON.stringify(["needs", "tombstone", "audit", "external-stores"]),
@@ -218,6 +225,12 @@ describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", (
       expect.arrayContaining(["needs", "tombstone", "needs-after-tombstone", "invites-after-tombstone"]),
     );
     expect(records[0].finished, "and the finish did not move").toBe("2026-09-20 10:00:00");
+    // The handle it kept is gone, so the profile page a signed-out reader
+    // reached by it (join date, moons, token chips, gratitude) answers 404.
+    const page = await call("GET", `/api/profiles/${GONE_HANDLE}`, undefined, "");
+    expect(page.status, `no page answers to ${GONE_HANDLE}: ${page.text.slice(0, 200)}`).toBe(404);
+    const [handles] = await pool.query<any[]>("SELECT `handle` FROM `users` WHERE `id` = ?", [GONE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(handles[0]?.handle, "the old tombstone holds no handle").toBeNull();
     // The seat went to the person waiting, and they were told: the job runs once the promotion sink is wired.
     const [seats] = await pool.query<any[]>("SELECT `user_id`, `status` FROM `event_rsvps` WHERE `event_id` = ? ORDER BY `user_id`", [SEATED]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(seats.map((r) => ({ ...r }))).toEqual([{ user_id: WAITER, status: "going" }]);

@@ -35,6 +35,7 @@ import {
 } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
+import { userIdForHandle } from "./profile";
 import { agentRowsRemaining } from "../repos/memberAgent";
 import { erasureRecord } from "../repos/memberErasure";
 import { recordVouch, vouchesFor } from "../repos/vouches";
@@ -75,6 +76,7 @@ const FINISHED_ON_2026_10_20 = [
 
 /** What that record lacks and finds by user id, in the sweep's order. */
 const GIVEN_TO_IT = [
+  "handle-after-tombstone",
   "member-agent-after-tombstone",
   "guest-places-after-tombstone",
   "invites-after-tombstone",
@@ -110,11 +112,20 @@ async function q(sql: string, params: unknown[] = []): Promise<any[]> {
 /** Every notice the backfill hands the spine, in order. */
 let notices: any[] = [];
 
-/** The erasure's singletons with the real users repository, and the spine as a recorder (or one that refuses). */
+/**
+ * The erasure's singletons with the real users repository, and the spine as a
+ * recorder (or one that refuses). `update` passes its third argument through,
+ * as server/index.ts does: a step that writes a tombstone's identity says so
+ * with `erasure`, and a wrapper that dropped it would test a repository that
+ * refuses the write.
+ */
 function deps(opts: { notifyThrows?: boolean } = {}): ErasureDeps {
   const real = usersRepo(pool);
   return {
-    members: { byId: (id: string) => real.byId(id), update: (id: string, fn: (u: any) => void) => real.update(id, fn) },
+    members: {
+      byId: (id: string) => real.byId(id),
+      update: (id: string, fn: (u: any) => void, how?: { erasure?: boolean }) => real.update(id, fn, how),
+    },
     submissionsRepo: { all: () => [], replaceAll: async () => undefined },
     roleHoldersRepo: { remove: async () => undefined },
     withRoleHolderLock: (fn) => fn(),
@@ -140,12 +151,16 @@ async function member(id: string, name: string, credits = 0): Promise<any> {
   return usersRepo(pool).byId(id);
 }
 
-/** What the tombstone step wrote. */
-async function tombstone(id: string): Promise<void> {
+/**
+ * What the tombstone step wrote. Before round 2 it wrote the handle
+ * `departed-<last eight of the id>`, which is the default here; since, it
+ * writes none (`{ handle: null }`).
+ */
+async function tombstone(id: string, opts: { handle?: null } = {}): Promise<void> {
   await usersRepo(pool).update(id, (u: any) => {
     u.name = ANON;
     u.email = `deleted-${u.id}@anonymized.invalid`;
-    u.handle = `departed-${String(u.id).slice(-8)}`;
+    u.handle = opts.handle === null ? null : `departed-${String(u.id).slice(-8)}`;
     u.passwordHash = "";
     u.membershipGranted = false;
   });
@@ -434,6 +449,62 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     expect((await erasureRecord(pool, stuck.id))!.stepsDone).toEqual([...FINISHED_ON_2026_10_20, ...GIVEN_TO_IT]);
     expect(await q("SELECT delegate_id FROM delegations WHERE delegator_id = 'bf-fail-ash' AND revoked_at IS NULL")).toEqual([]);
     expect(notices.map((n) => n.userId)).toEqual(["bf-fail-ash"]);
+  });
+
+  /*
+   * Adversarial round 3, finding 13. A tombstone from before round 2 kept the
+   * handle `departed-<last eight of the id>`, which forum bylines print, and
+   * `GET /api/profiles/<handle>` needs no sign-in: it served the date they
+   * joined, their moons on the land, their token chips and their gratitude
+   * counts. The route and the gratitude form both find a member through
+   * `userIdForHandle`, so a handle it no longer finds is a 404 at both.
+   */
+  it("takes the handle off a tombstone an older release left with one, so no page answers to it, and leaves a tombstone with none as it was", async () => {
+    const old = await member("bf-handle-old", "Wren Halloway");
+    await tombstone(old.id);
+    await finishedRecord(old.id, FINISHED_ON_2026_10_20);
+    const handle = `departed-${old.id.slice(-8)}`;
+    expect((await q("SELECT handle FROM users WHERE id = ?", [old.id]))[0].handle, "the control: the old tombstone carries the handle").toBe(handle);
+    expect(await userIdForHandle(pool, handle), "and the profile page and the gratitude form both find it").toBe(old.id);
+
+    // A tombstone written since round 2 has no handle, so the step has nothing to do.
+    const fresh = await member("bf-handle-none", "Ash Moreno");
+    await tombstone(fresh.id, { handle: null });
+    await finishedRecord(fresh.id, FINISHED_ON_2026_10_20);
+    const freshRow = await q("SELECT * FROM users WHERE id = ?", [fresh.id]);
+    expect(freshRow[0].handle).toBeNull();
+
+    // Every write to a user row the backfill makes, by whose row it is.
+    const writes: string[] = [];
+    const real = deps();
+    const counted: ErasureDeps = {
+      ...real,
+      members: {
+        ...real.members,
+        update: (id, fn, how) => {
+          writes.push(id);
+          return real.members.update(id, fn, how);
+        },
+      },
+    };
+    expect((await backfillFinishedErasures(pool, counted, () => undefined)).stopped).toBe(0);
+    expect(writes.filter((id) => id === old.id), "one write takes the old handle off").toHaveLength(1);
+    expect(writes.filter((id) => id === fresh.id), "and a tombstone with no handle is not written at all").toEqual([]);
+
+    // Read back from the table: the users repository puts a tombstone's
+    // handle back after any writer that does not say `erasure`, so a step
+    // noted as done proves nothing about the row.
+    expect((await q("SELECT handle FROM users WHERE id = ?", [old.id]))[0].handle, "the old tombstone holds no handle any more").toBeNull();
+    expect(await userIdForHandle(pool, handle), "so GET /api/profiles/<that handle> answers 404, and the gratitude form finds nobody").toBeNull();
+    expect((await erasureRecord(pool, old.id))!.stepsDone).toContain("handle-after-tombstone");
+    expect((await usersRepo(pool).byId(old.id))!.name, "the rest of the tombstone is as the sweep left it").toBe(ANON);
+
+    expect(await q("SELECT * FROM users WHERE id = ?", [fresh.id]), "a tombstone with no handle is left exactly as it was").toEqual(freshRow);
+    expect((await erasureRecord(pool, fresh.id))!.stepsDone, "and is noted, so the next boot does not offer it again").toContain("handle-after-tombstone");
+
+    const before = await everything();
+    expect(await backfillFinishedErasures(pool, deps(), () => undefined)).toMatchObject({ given: 0, steps: 0 });
+    expect(await everything()).toEqual(before);
   });
 });
 

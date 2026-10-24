@@ -75,14 +75,20 @@ let submissions: any[] = [];
  */
 function deps(broken?: "role-holdings" | "tombstone", beforeTombstone?: () => Promise<void>): ErasureDeps {
   const real = usersRepo(pool);
+  let lived = true;
   return {
     members: {
       byId: (id: string) => real.byId(id),
       update: async (id: string, fn: (u: any) => void) => {
         if (broken === "tombstone") throw new Error("the member row would not take the tombstone");
-        // The last instant the member's sessions still live. A write here is
-        // one a signed-in request could make.
-        await beforeTombstone?.();
+        // The last instant the member's sessions still live, before the
+        // sweep's first write to the row (the tombstone). A write here is one
+        // a signed-in request could make; "handle-after-tombstone" writes the
+        // row again after they died, so this does not fire again.
+        if (lived) {
+          lived = false;
+          await beforeTombstone?.();
+        }
         return real.update(id, fn);
       },
     },
@@ -437,6 +443,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "character-sheet",
       "portraits",
       "tombstone",
+      "handle-after-tombstone",
       "member-agent-after-tombstone",
       "guest-places-after-tombstone",
       "comms",

@@ -194,7 +194,9 @@ export type ErasureDeps = {
    * is how the tombstone step says so: once a row is a tombstone, the
    * repository keeps its identity fixed against every other writer
    * (`server/repos/users.ts`), and this sweep is the one writer that may
-   * still change it.
+   * still change it. Two steps pass it: "tombstone", and
+   * "handle-after-tombstone", which takes the handle off a tombstone that
+   * still has one.
    */
   members: {
     byId(id: string): Promise<any>;
@@ -671,6 +673,39 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
           u.membershipGranted = false;
           u.walletAddress = null;
           u.walletVerifiedAt = null;
+        }, { erasure: true });
+      },
+    },
+    {
+      /*
+       * THE HANDLE A TOMBSTONE STILL CARRIES (adversarial round 3, finding 13).
+       *
+       * Before round 2 the tombstone wrote the handle `departed-<last eight of
+       * the id>`, and forum bylines print a handle through a live join, so
+       * anybody could find it. `GET /api/profiles/<handle>` needs no sign-in
+       * and read the tombstone like any member: the date they joined, their
+       * moons on the land and, because the tombstone never reset `privacy`,
+       * their token chips and gratitude counts. A typed @handle in the
+       * gratitude form found them too. Both look the handle up through
+       * `userIdForHandle`, so a tombstone with no handle has no page.
+       *
+       * The backfill never runs "tombstone" again, so this step is how an old
+       * tombstone loses the handle (it is in `BACKFILL_BY_ID`). It comes first
+       * after the tombstone so a member whose backfill keeps stopping at a
+       * later step still loses the page.
+       *
+       * `erasure`: the users repository puts a tombstone's handle back after
+       * any other writer (TOMBSTONE_FIXED, server/repos/users.ts), so without
+       * it this step would be noted as done and change nothing. A tombstone
+       * with no handle is not written at all, so a second run, and every
+       * tombstone written since round 2, changes nothing.
+       */
+      name: "handle-after-tombstone",
+      run: async () => {
+        const row = await members.byId(target.id);
+        if (row?.handle == null) return;
+        await members.update(target.id, (u: any) => {
+          u.handle = null;
         }, { erasure: true });
       },
     },
@@ -1433,6 +1468,7 @@ export async function resumeErasure(
  * decides the order they run in; this decides only which.
  */
 export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
+  "handle-after-tombstone",
   "member-agent-after-tombstone",
   "guest-places-after-tombstone",
   "comms",
