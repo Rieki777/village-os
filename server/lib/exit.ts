@@ -13,12 +13,14 @@
  *     orders resolve through the trio). Exit adds exactly ONE settlement
  *     move of its own: SPLITTING each POSITIVE balance into the share the
  *     leaver keeps and the share the village receives, idempotent per token.
- *     On the shipped dials the kept share is zero and the whole balance goes
- *     to sys:exit-settlement, which is the departure this platform has always
- *     had.
- *   - RESOLVE: refuses with the named blocking domains until clean, then
- *     the existing anonymize tombstone runs. Value rows are never deleted;
- *     conservation holds through every departure.
+ *     On the shipped dials (the founder's ruling of 2026-10-23, "members keep
+ *     their tokens") a leaver keeps every credit, Voice and equity balance,
+ *     and only recognition moves, to sys:exit-settlement.
+ *   - RESOLVE: refuses with the named blocking domains until clean. Then a
+ *     leaver still holding value stays on as a FORMER MEMBER, account and
+ *     balances intact, and anybody else meets the existing anonymize
+ *     tombstone (`resolveExit`, server/lib/exitResolve.ts). Value rows are
+ *     never deleted; conservation holds through every departure.
  *
  * The F12 hard rule, held as structure: a person is never the subject of a
  * consent decision in a general forum. Restorative content flows ONLY to
@@ -149,8 +151,13 @@ export async function createExit(
   return { ok: true, exit: (await exitById(pool, id))! };
 }
 
-/** A line the settle route appends to `exits.resolution`, as `sweepBalances` writes it. */
-const SETTLE_LINE = /^\[\d{4}-\d{2}-\d{2}\] (balances swept|exit policy applied|no balance moved): /;
+/**
+ * A line the village's own acts append to `exits.resolution`: the settle
+ * route's, as `sweepBalances` writes them, and resolve's, as `resolveExit`
+ * writes the one naming what a former member still holds. None of them names
+ * the person, which is why an erasure keeps them.
+ */
+const SETTLE_LINE = /^\[\d{4}-\d{2}-\d{2}\] (balances swept|exit policy applied|no balance moved|kept as a former member): /;
 
 /** What stands where a departed member's own note was. */
 export const REMOVED_EXIT_NOTE = "[removed at member's request]";
@@ -265,9 +272,11 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     count: positive.length,
     // DISPLAY, same reason as the debts line above. This is the number the
     // admin reads immediately before pressing Sweep, so it has to agree with
-    // the `swept` figure the toast reports afterwards; both are human.
+    // the `swept` figure the toast reports afterwards; both are human. The
+    // second sentence says what the two acts do with it now that a leaver
+    // keeps what they hold (the ruling of 2026-10-23).
     description: positive.length
-      ? `holds ${positive.map(([t, v]) => `${fromLedgerUnits(t, v)} ${t}`).join(", ")}. Swept to exit settlement by an explicit admin act`
+      ? `holds ${positive.map(([t, v]) => `${fromLedgerUnits(t, v)} ${t}`).join(", ")}. Settled by the village's exit shares in an explicit admin act; while anything besides recognition is still held at resolve, the account stays on as a former member`
       : "nothing held",
     blocking: false,
   });
@@ -356,18 +365,21 @@ export function blockingStates(states: ExitDomainState[]): ExitDomainState[] {
  * prints THAT and never the live dial: a panel reading the dial after a
  * settled sweep tells an admin a number that did not happen.
  *
- * WHAT IS UNCHANGED, and pinned by `server/lib/exitDefaults.test.ts` against
- * `origin/main`'s own postings: on the shipped defaults (every share 0,
- * remainder `settlement`, cooling 0, Voice forfeit) each positive balance
- * moves in full to `sys:exit-settlement` under `exit:<exitId>:sweep:<token>`
- * with source `exit_settlement` and the description "Balance settled at
- * departure". Negative balances are still never swept and still block resolve.
+ * WHAT THE SHIPPED DEFAULTS DO, pinned by `server/lib/exitDefaults.test.ts`.
+ * Since the founder's ruling of 2026-10-23 the credit, Voice and equity shares
+ * are 100 and Voice is kept, so those balances stay where they are and
+ * nothing posts for them; recognition's share is still 0, so a recognition
+ * balance moves in full to `sys:exit-settlement` under
+ * `exit:<exitId>:sweep:<token>` with source `exit_settlement` and the
+ * description "Balance settled at departure", which is the posting every
+ * balance made before. Negative balances are still never swept and still
+ * block resolve.
  */
 
 /** Where a remainder may go. The four choices of `exit.remainder_account`. */
 export type ExitRemainderAccount = "settlement" | "treasury" | "cycle-pool" | "burn";
 
-/** The three answers of `exit.voice_on_exit`. `keep` is refused at save time. */
+/** The three answers of `exit.voice_on_exit`. `keep` is the shipped default since 2026-10-23. */
 export type ExitVoiceDisposition = "forfeit" | "keep" | "convert";
 
 /** The five dials a settlement actually reads, resolved once per sweep. */
@@ -661,12 +673,12 @@ export async function sweepBalances(
     const share = Math.floor((held * keepPctFor(applied, kind)) / 100);
 
     // Voice is the one holding that is also standing in the village, so the
-    // share it keeps has a second dial deciding its fate. `forfeit` is today:
-    // the share goes with everything else, which is what the dial's own
-    // description promises. `keep` cannot arrive, because the write guard
-    // refuses it, and is honoured here anyway: a value that predates a guard
-    // is still what the village holds. `convert` pays the share out as
-    // credits below, so it leaves this account either way.
+    // share it keeps has a second dial deciding its fate. `keep`, the default
+    // since 2026-10-23, leaves the share in the account, and resolve then
+    // keeps that account as a former member. `forfeit` sends the share with
+    // everything else, which is what the dial's own description promises.
+    // `convert` pays the share out as credits below, so it leaves this
+    // account either way.
     const voice = kind === "voice";
     const forfeits = voice && applied.voiceOnExit === "forfeit";
     const converts = voice && applied.voiceOnExit === "convert" && share > 0;

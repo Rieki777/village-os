@@ -245,6 +245,75 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
   });
 
   /**
+   * WHAT A TOKEN MEANS, AND WHAT ALL OF THEM ARE CALLED TOGETHER (0283).
+   *
+   * Rye, 2026-10-23: "Village Tokens is the umbrella word, which should be
+   * able to be set in admin to name each type of token and for what categories
+   * it's issued and what it means." The meaning is the village's own words,
+   * kept on the token and read back on the member's wallet; the umbrella word
+   * is a brand setting the public config serves.
+   *
+   * Runs after the rename above, so SLUG is "Seeds" and Ora holds 25 of it.
+   */
+  it("keeps a token's meaning in the village's words, and the wallet shows it", async () => {
+    const meaning = "Thread for the village quilt.\nEvery square someone finishes.";
+    const described = await call("PUT", `/api/admin/tokens/${SLUG}`, { description: `  ${meaning}  ` }, founderToken);
+    expect(described.status, `describe: ${described.text.slice(0, 200)}`).toBe(200);
+    expect(described.json?.token?.description, "trimmed, line breaks kept").toBe(meaning);
+
+    const wallet = await call("GET", "/api/me/wallet", undefined, oraToken);
+    expect(wallet.status).toBe(200);
+    const row = (wallet.json?.rows ?? []).find((r: any) => r.token === SLUG);
+    expect(row?.description, "the member reads the village's words beside the token").toBe(meaning);
+
+    // A description too long is refused BEFORE anything is written, so the
+    // rename sent with it does not land either.
+    const tooLong = await call("PUT", `/api/admin/tokens/${SLUG}`, { name: "Thimble", description: "x".repeat(601) }, founderToken);
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.json?.error).toMatch(/at most 600 characters/);
+    const list = await call("GET", "/api/admin/tokens", undefined, founderToken);
+    const listed = (list.json?.tokens ?? []).find((t: any) => t.slug === SLUG);
+    expect(listed?.name, "the rename beside a refused description did not land").toBe("Seeds");
+    expect(listed?.description).toBe(meaning);
+
+    // Words only: a number is refused, and blank clears it to none.
+    expect((await call("PUT", `/api/admin/tokens/${SLUG}`, { description: 7 }, founderToken)).status).toBe(400);
+    const cleared = await call("PUT", `/api/admin/tokens/${SLUG}`, { description: "   " }, founderToken);
+    expect(cleared.status).toBe(200);
+    expect(cleared.json?.token?.description).toBeNull();
+    const after = await call("GET", "/api/me/wallet", undefined, oraToken);
+    expect((after.json?.rows ?? []).find((r: any) => r.token === SLUG)?.description).toBeNull();
+
+    // A Hypha mirror's NAME is a fact about Base, and stays refused. What it
+    // MEANS to this village is the village's to write.
+    const mirror = (list.json?.tokens ?? []).find((t: any) => t.governance !== "platform");
+    expect(mirror, "0006 seeds the Hypha mirrors").toBeTruthy();
+    expect((await call("PUT", `/api/admin/tokens/${mirror.slug}`, { name: "Ours" }, founderToken)).status).toBe(400);
+    const mirrorMeaning = await call("PUT", `/api/admin/tokens/${mirror.slug}`, { description: "What we hold together on Base." }, founderToken);
+    expect(mirrorMeaning.status, `mirror: ${mirrorMeaning.text.slice(0, 200)}`).toBe(200);
+    expect(mirrorMeaning.json?.token?.description).toBe("What we hold together on Base.");
+
+    // Members may not write it.
+    expect((await call("PUT", `/api/admin/tokens/${SLUG}`, { description: "mine now" }, oraToken)).status).toBe(401);
+  });
+
+  it("serves the umbrella word, Village Tokens until the village names its own", async () => {
+    const before = await call("GET", "/api/game/config");
+    expect(before.json?.currency?.collectiveName, "Rye's word is the platform default").toBe("Village Tokens");
+
+    const named = await call("PUT", "/api/admin/brand", { currency: { collectiveName: "Seed Bank" } }, founderToken);
+    expect(named.status, `brand: ${named.text.slice(0, 200)}`).toBe(200);
+    const after = await call("GET", "/api/game/config");
+    expect(after.json?.currency?.collectiveName).toBe("Seed Bank");
+    // The recognition token's own name is a different setting and did not move.
+    expect(after.json?.currency?.name).toBe(before.json?.currency?.name);
+
+    // Clearing it inherits the default again, never a blank word on a page.
+    await call("PUT", "/api/admin/brand", { currency: { collectiveName: "  " } }, founderToken);
+    expect((await call("GET", "/api/game/config")).json?.currency?.collectiveName).toBe("Village Tokens");
+  });
+
+  /**
    * A CREDIT TOKEN CREATED HERE IS BORN AT THE CURRENCY SCALE.
    *
    * 0202 moves every platform credit token that already exists to two

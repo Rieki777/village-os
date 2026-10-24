@@ -57,6 +57,7 @@ import {
 import type { VillageMoon } from "../../shared/villageMoon";
 import { GRATITUDE_NEVER_PAYS, GRATITUDE_ONLY_SENT, ceilingBinds, readValueTokens, type TokenAmount } from "../../shared/workValue";
 import { issuanceRefusal, readGameStart } from "./gameStart";
+import { oweRoleCycleCash } from "./cashOwed";
 import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gratitude-cycles";
 // The import runs both ways, the same shape `./exit` above already has: both
 // modules only reach each other from inside functions, so nothing is read at
@@ -110,10 +111,11 @@ export const VILLAGE_VOICE = "village-voice";
  * move it, which is what makes the on-chain figure trustworthy, so equity has
  * to accrue in a platform token before it can be claimed. This is that token.
  * Its kind is `equity`, so the exchange refuses to list it and the exit sweep
- * reads `exit.keep_pct.equity` for it. That share is held at 0 by a save-time
- * refusal written for the mirror (server/lib/exitPolicy.ts), so a leaver's
- * earned equity goes with the rest of the sweep until the founder rules
- * otherwise. Its display name is the village's to change; the slug never moves.
+ * reads `exit.keep_pct.equity` for it. The founder ruled on 2026-10-23 that
+ * members keep their tokens, so that share defaults to 100: a leaver keeps
+ * their earned equity, and an account still holding it stays on as a former
+ * member (server/lib/exitResolve.ts). Its display name is the village's to
+ * change; the slug never moves.
  */
 export const EARNED_EQUITY = "earned-equity";
 /**
@@ -2761,6 +2763,8 @@ export interface SettlementResult {
    * did not (no enabled rules). It is not a substitute for reading the dial.
    */
   decay: VoiceDecaySummary;
+  /** New rows of cash owed to role holders this run (0285). Zero on a rerun. */
+  cashOwed?: number;
 }
 
 /** What one cycle's waning did, in the token's own minor units. */
@@ -3141,6 +3145,16 @@ export async function runSettlement(
       cycleKey,
     },
   };
+
+  /*
+   * THE CASH ROLES PAY (0285), owed before anything below can return early.
+   * A village with no `role.cycle` rule, or none enabled, can still pay its
+   * roles in cash, so this asks only whether the Game has started: a seat
+   * held while a village is still setting up owes nothing, the same wait the
+   * ledger holds every token to. Keyed on the cycle, the seat and the member,
+   * so the hourly reruns write nothing new.
+   */
+  if (!(await issuanceRefusal(pool))) out.cashOwed = await oweRoleCycleCash(pool, cycleKey);
 
   const ready = await economyReady(pool);
   if (!ready.ready) return out;
