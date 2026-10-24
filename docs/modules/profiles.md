@@ -393,7 +393,10 @@ and what is owed, and deleting them would break the conservation proof.
 a Stripe subscription, so the sweep does: `product-subscriptions-after-tombstone`, just before the
 outside stores, cancels every subscription their purchases hold (`cancelSubscription` in
 `server/lib/payments.ts`, which reads first, so a second run cancels nothing). It never refunds and
-never moves a token. Stripe not connected, or failing, stops the sweep at that step for the retry.
+never moves a token. Stripe failing with the key present stops the sweep at that step for the retry.
+A village with no Stripe key cannot cancel from here, so the step asks every admin to cancel each one
+by hand in the Stripe dashboard, naming the count and the ids, records that on the audit trail, and
+counts itself done, and the notice tells the member the admins will cancel it.
 The delete panel and the departure page say so before the member confirms
 (`GET /api/profile/leaving-notices`), in the sentence the exit desk shows, and a charge that lands
 after the account is gone is banked, delivers nothing, sends no receipt and tells the admins.

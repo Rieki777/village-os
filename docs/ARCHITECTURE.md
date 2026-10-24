@@ -774,8 +774,13 @@ The retention sweep never deletes an unstamped row, at any age.
   `product-subscriptions-after-tombstone`, after the audit line and before
   the outside stores, cancels each subscription their purchases hold
   (`cancelSubscription`, `server/lib/payments.ts`: it reads first, so a
-  second run cancels nothing, and it never refunds). Stripe not connected or
-  failing stops the sweep there, loudly, for the retry. A charge that lands
+  second run cancels nothing, and it never refunds). Stripe failing with the
+  key present stops the sweep there, loudly, for the retry. With no Stripe
+  key the step cannot cancel, so it asks every admin to cancel each one by
+  hand in the Stripe dashboard (a `payments_alert` naming the count and the
+  ids), writes `member:subscriptions-cancel-by-hand:<n>:<ids>` to the audit
+  trail, and counts itself done; it used to hold such a sweep open at this
+  step for good, with the outside stores never asked. A charge that lands
   after the account is gone, a first period included, is banked and
   delivers nothing: `settleProductPurchase` refuses a buyer who has left,
   sends no receipt, and tells the admins.
