@@ -57,8 +57,15 @@ describe("every role card door turns away a visitor and a guest", () => {
     }
   });
 
-  it("reads with the word fields the shared format's tests read with", () => {
-    expect(ROLE_WORD_FIELDS.fields).toEqual(["name", "aim", "domain", "accountabilities", "whyItMatters", "cashMinor", "cashCurrency", "bringMe", "notMine", "runbook", "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment"]);
+  // THE GUARD ON A ROLE'S WORDS. The word list is DERIVED: every column a role
+  // carries, minus NOT_ROLE_WORDS in shared/roleProposals.ts. So a column a
+  // later release adds to roles becomes proposable by default, and money that
+  // way rides on the words where adoption never applies it (batch 51's cash
+  // pay did exactly that until it joined NOT_ROLE_WORDS). This pin turns the
+  // next new column into a red: decide whether it is a word a member may
+  // propose, and add it here, or a field that is not, and add it there.
+  it("reads with the word fields the shared format's tests read with, and every new role column is decided", () => {
+    expect(ROLE_WORD_FIELDS.fields).toEqual(["name", "aim", "domain", "accountabilities", "whyItMatters", "bringMe", "notMine", "runbook", "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment"]);
     expect(Array.from(ROLE_WORD_FIELDS.lists).sort()).toEqual(["accountabilities", "authorities", "bringMe", "notMine", "responsibilities"]);
   });
 });

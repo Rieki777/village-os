@@ -610,12 +610,12 @@ describe("what the member keeps", () => {
     ]);
   });
 
-  it("never lists or wipes a word the card does not carry, such as the runbook, why it matters or cash pay", () => {
+  it("never lists or wipes a word the card does not carry, such as the runbook or why it matters", () => {
     const held: ProposalBody = {
       ...emptyBody(),
       roles: [{
         roleId: "r-kitchen",
-        words: { domain: "The kitchen, its stores and the garden.", runbook: "https://example.org/kitchen", whyItMatters: "We eat.", cashMinor: "120000", cashCurrency: "USD" },
+        words: { domain: "The kitchen, its stores and the garden.", runbook: "https://example.org/kitchen", whyItMatters: "We eat." },
         reviewOn: null,
       }],
     };
@@ -623,7 +623,7 @@ describe("what the member keeps", () => {
     const changes = changesOf(read.proposalBody, held, () => "Kitchen keeper");
     expect(changes.map((c) => c.path)).toEqual(["roles.0.words.domain"]);
     const all = acceptOnly(read.proposalBody, new Set(changes.map((c) => c.path)), held);
-    expect(all.roles?.[0].words).toEqual({ domain: "The kitchen.", runbook: "https://example.org/kitchen", whyItMatters: "We eat.", cashMinor: "120000", cashCurrency: "USD" });
+    expect(all.roles?.[0].words).toEqual({ domain: "The kitchen.", runbook: "https://example.org/kitchen", whyItMatters: "We eat." });
   });
 
   it("sends only what is ticked, and leaves the rest as the draft holds it", () => {
