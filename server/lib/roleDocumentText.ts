@@ -89,6 +89,8 @@ export function tidyText(raw: string): string {
     .replace(/\r\n?/g, "\n")
     .replace(/[​-‍⁠]/g, "")
     .replace(/ /g, " ")
+    // A bullet drawn as a glyph (Word's PDFs draw it in the Symbol font, U+F0B7) is a "- " line.
+    .replace(/^[ \t]*[•●▪◦⁃‣][ \t]*/gm, "- ")
     .replace(/[ \t]+$/gm, "")
     .replace(/\n{4,}/g, "\n\n\n")
     .trim();
@@ -197,7 +199,8 @@ export function docxXmlText(xml: string): string {
     const style = /<w:pStyle\s+w:val="([^"]+)"/.exec(p)?.[1] ?? "";
     const level = /^heading\s*([1-6])$/i.exec(style)?.[1] ?? (/^title$/i.test(style) ? "1" : null);
     if (level && line.trim()) line = `${"#".repeat(Number(level))} ${line.trim()}`;
-    else if (/<w:numPr\b/.test(p) && line.trim()) line = `- ${line.trim()}`;
+    // A list by its own numbering, or by a list style ("List Bullet", "List Paragraph"), which carries the numbering itself.
+    else if ((/<w:numPr\b/.test(p) || /^list/i.test(style)) && line.trim()) line = `- ${line.trim()}`;
     out.push(line);
   }
   return out.join("\n");

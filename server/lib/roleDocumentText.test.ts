@@ -13,6 +13,7 @@ import {
   googleDocId,
   ROLE_DOCUMENT_MAX_BYTES,
   ROLE_DOCUMENT_TEXT_MAX,
+  tidyText,
   zipEntry,
 } from "./roleDocumentText";
 import { makeDocx, makePdf, makeZip, para } from "../testkit/roleDocuments";
@@ -84,6 +85,14 @@ describe("extracting a document's words", () => {
     const zip = makeZip({ "word/document.xml": "x".repeat(10_000) });
     expect(() => zipEntry(zip, "word/document.xml", 100)).toThrow();
     expect(zipEntry(zip, "word/document.xml", 20_000)!.length).toBe(10_000);
+  });
+
+  it("reads a list style as a list, as Word's List Bullet carries its numbering in the style", () => {
+    expect(docxXmlText([para("Bring me", { style: "Heading3" }), para("Recipes", { style: "ListBullet" }), para("Allergies", { style: "ListParagraph" })].join(""))).toBe("### Bring me\n- Recipes\n- Allergies");
+  });
+
+  it("reads a bullet glyph at a line's start as a list line, as Word's PDFs draw them", () => {
+    expect(tidyText("Bring me\n\tRecipes\n • Allergies")).toBe("Bring me\n- Recipes\n- Allergies");
   });
 
   it("reads a paragraph with no runs as an empty line, and a self-closed paragraph too", () => {
