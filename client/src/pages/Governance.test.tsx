@@ -10,6 +10,8 @@
  *     whatever the village had set;
  *   - the Hypha section follows whether the village has a Hypha space, where
  *     it used to describe one to every village.
+ * And the starter words: true of any village, so a new one is told no
+ * governance method, no conflict practice and no circle it does not have.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -53,8 +55,11 @@ const renderPage = () =>
     </Router>,
   );
 const headline = () => screen.findByRole("heading", { level: 1 });
+/** A field's default, read off the spec, so a reworded default moves its test with it. */
+const said = (sectionId: string, key = "heading") =>
+  GOVERNANCE_PAGE.sections.find((s) => s.id === sectionId)!.fields.find((f) => f.key === key)!.default;
 /** The steward section waits for the window, so it is found, never got. */
-const stewardsHeading = () => screen.findByRole("heading", { name: "Stewards, and Why They Are Temporary" });
+const stewardsHeading = () => screen.findByRole("heading", { name: said("stewards") });
 
 beforeEach(() => {
   gameConfig = { project: { name: "Willowbrook", commitmentName: "Village Pledge" }, currency: { name: "Thanks" }, brochurePages: true };
@@ -120,35 +125,46 @@ describe("every field in the How We Govern spec reaches the page", () => {
     await headline();
     await stewardsHeading();
 
-    expect(screen.queryByText("The Core Principles")).toBeNull();
-    expect(screen.queryByText("Circles and Their Domains")).toBeNull();
-    expect(screen.queryByText("Conflict Resolution")).toBeNull();
-    expect(screen.queryByText("The Hypha Platform")).toBeNull();
-    expect(screen.queryByText("Ready to help govern?")).toBeNull();
-    expect(screen.getByText("How a Decision Gets Made")).toBeInTheDocument();
-    expect(screen.getByText("How Rules Evolve")).toBeInTheDocument();
+    for (const hidden of ["principles", "circles", "conflict", "hypha", "cta"]) {
+      expect(screen.queryByText(said(hidden)), hidden).toBeNull();
+    }
+    expect(screen.getByText(said("decision"))).toBeInTheDocument();
+    expect(screen.getByText(said("rules"))).toBeInTheDocument();
   });
 
-  it("draws no card for a circle list the village emptied, and keeps the link to its real circles", async () => {
-    stored["page-governance"] = { circles: { items: [] } };
+  it("draws the circle cards a village writes, and none until it does", async () => {
     renderPage();
     await headline();
+    expect(screen.getByRole("link", { name: new RegExp(said("circles", "linkLabel")) })).toHaveAttribute("href", "/circles");
+    expect(screen.queryByText(/General Coordinating Circle|Development Circle|Community Circle/)).toBeNull();
 
-    expect(screen.queryByText("General Coordinating Circle")).toBeNull();
-    expect(screen.getByRole("link", { name: /See all circles in detail/ })).toHaveAttribute("href", "/circles");
+    stored["page-governance"] = { circles: { items: [{ name: "Water Circle", body: "Wells, tanks and the creek." }] } };
+    renderPage();
+    expect(await screen.findByText("Water Circle")).toBeInTheDocument();
+    expect(screen.getByText("Wells, tanks and the creek.")).toBeInTheDocument();
   });
 });
 
 describe("the page with nothing saved", () => {
-  it("keeps today's words, filled with the village's own name and commitment", async () => {
+  it("says the starter words, filled with the village's own name and commitment", async () => {
     renderPage();
 
-    expect(await headline()).toHaveTextContent("Power Belongs to the Circle, Not the Person");
-    expect(screen.getByText(/^Willowbrook uses sociocracy, a consent-based governance system/)).toBeInTheDocument();
-    expect(screen.getByText("Consent over consensus")).toBeInTheDocument();
-    expect(screen.getByText("If no one has a paramount objection, the proposal passes.")).toBeInTheDocument();
-    expect(screen.getByText("Finance & Business Circle")).toBeInTheDocument();
+    expect(await headline()).toHaveTextContent("How Willowbrook Decides");
+    expect(screen.getByText(/^Here is how a proposal becomes a decision in Willowbrook/)).toBeInTheDocument();
+    expect(screen.getByText("Anyone can propose")).toBeInTheDocument();
+    expect(screen.getByText("The village decides, in the way it agreed for that kind of decision.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign the Village Pledge" })).toHaveAttribute("href", "/love-letter");
+  });
+
+  it("states no governance method, conflict practice or circle as this village's fact", async () => {
+    renderPage();
+    await headline();
+    await stewardsHeading();
+    const text = document.body.textContent ?? "";
+
+    for (const claim of [/sociocra/i, /nonviolent communication/i, /consent/i, /paramount objection/i, /mediation/i, /General Coordinating/, /Development Circle/, /\bfive circles\b/i]) {
+      expect(text, String(claim)).not.toMatch(claim);
+    }
   });
 
   it("goes without its closing invitation while brochure pages are off", async () => {
@@ -156,8 +172,8 @@ describe("the page with nothing saved", () => {
     renderPage();
     await headline();
 
-    expect(screen.queryByText("Ready to help govern?")).toBeNull();
-    expect(screen.getByText("Circles and Their Domains")).toBeInTheDocument();
+    expect(screen.queryByText(said("cta"))).toBeNull();
+    expect(screen.getByText(said("circles"))).toBeInTheDocument();
   });
 });
 
@@ -253,9 +269,9 @@ describe("the Hypha section follows the village's Hypha space", () => {
     await headline();
     await stewardsHeading();
 
-    expect(screen.queryByText("The Hypha Platform")).toBeNull();
-    expect(screen.queryByText(/Governance is logged on Hypha/)).toBeNull();
-    expect(screen.queryByRole("link", { name: /Learn more in the Game Guide/ })).toBeNull();
+    expect(screen.queryByText(said("hypha"))).toBeNull();
+    expect(screen.queryByText(/has a space on Hypha/)).toBeNull();
+    expect(screen.queryByRole("link", { name: new RegExp(said("hypha", "linkLabel")) })).toBeNull();
   });
 
   it("is drawn, with its link to the guide, once the link is set", async () => {
@@ -263,8 +279,9 @@ describe("the Hypha section follows the village's Hypha space", () => {
     renderPage();
     await headline();
 
-    expect(screen.getByText("The Hypha Platform")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Learn more in the Game Guide/ })).toHaveAttribute("href", "/co-creators-guide");
+    expect(screen.getByText(said("hypha"))).toBeInTheDocument();
+    expect(screen.getByText("Willowbrook has a space on Hypha, an open-source platform for proposals and votes. What happens there can be read and traced.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: new RegExp(said("hypha", "linkLabel")) })).toHaveAttribute("href", "/co-creators-guide");
   });
 
   it("tells an admin, and only an admin, why it is missing", async () => {
