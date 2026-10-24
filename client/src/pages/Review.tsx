@@ -591,6 +591,7 @@ export default function Review() {
         reward: {
           valueMinor: body.valueMinor,
           valueTokens: body.valueTokens,
+          cashMinor: body.cashMinor,
           stayCreditReward: typed.stayCreditReward.trim() === "" ? null : Number(typed.stayCreditReward),
         },
         // The words as the steward left them: the one way a name typed into an idea comes out before the board.

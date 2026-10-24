@@ -1,11 +1,13 @@
 /**
- * `exits`: a home being started, with three statements in it.
+ * `exits`, for the erasure's exit step, for resolve and for the cancel: a home
+ * being started.
  *
  * server/lib/exit.ts still creates, reads and settles exits where it always
- * did, and the settle and resolve routes in server/index.ts still write
- * `resolution`. What lives here is the erasure's read and write of that column
- * (lane E2), called from `forgetOwnExitNotes` in exit.ts, which decides what
- * the note becomes, and the cancel's status write, called from `cancelExit`.
+ * did, and the settle route in server/index.ts still writes `resolution`. What
+ * lives here is the erasure's read and write of that column (lane E2), called
+ * from `forgetOwnExitNotes` in exit.ts, which decides what the note becomes;
+ * the terminal write of a resolve, called from `resolveExit`; and the cancel's
+ * status write, called from `cancelExit`.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
@@ -33,4 +35,28 @@ export async function cancelOpenExit(pool: Pool, exitId: string): Promise<boolea
     [exitId],
   );
   return Number((result as { affectedRows?: number }).affectedRows ?? 0) > 0;
+}
+
+/**
+ * The terminal write of a resolve, for `resolveExit` (server/lib/exitResolve.ts).
+ *
+ * `agreementRef` is a POINTER and never content, kept when none is given.
+ * `note` is appended to the resolution text when there is one; an empty note
+ * leaves the column exactly as it was, which is the erasure path's case: the
+ * erasure has just rewritten that column itself (`forgetOwnExitNotes`), and a
+ * resolve that wrote back an empty string would turn its NULL into ''.
+ */
+export async function markExitResolved(pool: Pool, exitId: string, agreementRef: string | null, note: string): Promise<void> {
+  if (note) {
+    await pool.query(
+      "UPDATE exits SET status = 'resolved', resolved_at = NOW(), agreement_ref = COALESCE(?, agreement_ref), " +
+        "resolution = CONCAT(COALESCE(resolution,''), ?) WHERE id = ?",
+      [agreementRef, note, exitId],
+    );
+    return;
+  }
+  await pool.query(
+    "UPDATE exits SET status = 'resolved', resolved_at = NOW(), agreement_ref = COALESCE(?, agreement_ref) WHERE id = ?",
+    [agreementRef, exitId],
+  );
 }
