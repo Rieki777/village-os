@@ -120,15 +120,14 @@ describe("the founder's card, round trip", () => {
     const x = ryeBody();
     const docCtx = { words: WORDS, roles: [], circles: CIRCLES, village: VILLAGE };
     const text = write(docFromBody(x, docCtx));
-    // The worked example, with each new role's id on a Role id line under its title.
-    const example = workedExample(VILLAGE);
-    expect(text).toBe(writeRoleCard({ ...example, roles: example.roles.map((r, i) => ({ ...r, id: x.newRoles[i].id })) }));
+    // The worked example exactly: a new role carries no id line, and is found again by its title.
+    expect(text).toBe(writeRoleCard(workedExample(VILLAGE)));
     expect(text.split("\n")[0]).toBe(`${VILLAGE} role card v1`);
-    expect(text).toContain("## Role title\nHuman Operations & Onboarding Lead Steward\nRole id: role-000000000001\n");
-    // Given the draft, the review date it holds comes back too.
+    expect(text).not.toContain("Role id:");
+    // Given the draft, its new roles' ids and the review date it holds come back too.
     expect(read(text, ctx({ current: x })).proposalBody).toEqual(x);
-    // Read cold, every word and every id; only the review date is the draft's to keep.
-    expect(read(text, ctx()).proposalBody).toEqual({ ...x, newRoles: x.newRoles.map((r) => ({ ...r, reviewOn: null })) });
+    // Read cold, every word, and ids for the server to give.
+    expect(read(text, ctx()).proposalBody).toEqual({ ...x, newRoles: x.newRoles.map(({ id: _id, ...r }) => ({ ...r, reviewOn: null })) });
     // Writing what was read changes nothing.
     expect(write(docFromBody({ ...x, ...read(text, ctx({ current: x })).proposalBody } as ProposalBody, docCtx))).toBe(text);
   });
@@ -439,6 +438,20 @@ describe("a role the village has", () => {
     expect(r.proposalBody.roles).toEqual([{ roleId: "r-kitchen", words: { name: "Food steward", timeCommitment: "Mornings" }, reviewOn: null }]);
     expect(r.proposalBody.newRoles).toEqual([{ id: "role-0000000000aa", circleId: "c-land", seats: 1, words: { name: "Honey keeper", aim: "Honey for all." }, reviewOn: "2026-12-01" }]);
     expect(r.sections.map((x) => x.path)).toEqual(["roles.0", "newRoles.0"]);
+  });
+
+  it("a role the village has is written with its Role id, and read back to the same body", () => {
+    const x: ProposalBody = {
+      ...emptyBody(),
+      roles: [{ roleId: "r-kitchen", words: { name: "Food steward", bringMe: ["Food allergies", "Recipes"] }, reviewOn: "2026-11-16" }],
+      newRoles: [{ id: "role-0000000000aa", circleId: "c-land", seats: 1, words: { name: "Bee keeper", aim: "Bees thrive." }, reviewOn: null }],
+    };
+    const text = write(docFromBody(x, { words: WORDS, roles: ctx().roles, circles: CIRCLES, village: "Riverbend" }));
+    expect(text).toContain("## Role title\nFood steward\nRole id: r-kitchen\n");
+    expect(text.match(/Role id:/g)).toHaveLength(1);
+    // No measures in the card, so the terms are left out of the body and the PUT keeps them.
+    const { settings: _terms, ...rest } = x;
+    expect(read(text, ctx({ current: x })).proposalBody).toEqual(rest);
   });
 
   it("an id nobody has is reported, and the role is read by its title", () => {

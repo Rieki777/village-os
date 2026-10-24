@@ -854,7 +854,7 @@ export function readRoleCard(text: string, ctx: RoleCardContext): RoleCardRead {
 /** One role as a card writes it. */
 export interface RoleCardRole {
   title: string;
-  /** The role's id: a role the village has, or a new role the draft holds. Written as a Role id line under the title. */
+  /** A role the village has: its id, written as a Role id line under the title. A new role has none and is found by its title. */
   id?: string | null;
   circle: string | null;
   /** By field name; a list one item per line. `name` is ignored here: the title is `title`. */
@@ -945,7 +945,8 @@ export function docFromProposal(p: ProposalPayloadLike, village?: string | null)
       }
       if ((CARD_WORDS_ONLY as readonly string[]).includes(f.field) && f.proposed !== null) words[f.field as RoleCardWordField] = f.proposed;
     }
-    return { title, id: r.roleId ?? r.id ?? null, circle: r.circle?.name ?? null, words };
+    // Only a role the village has carries its id: a new role is found again by its title.
+    return { title, id: r.roleId ?? null, circle: r.circle?.name ?? null, words };
   };
   const measures = (p.settings?.scoreboard?.measures ?? []).map((m) => m.measure).filter(Boolean);
   return { village: village ?? null, roles: [...p.roles.map(role), ...p.newRoles.map(role)], measures, season: p.season ?? null };

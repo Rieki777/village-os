@@ -77,7 +77,7 @@ export function docFromBody(body: ProposalBody, ctx: DocContext): RoleCardDoc {
     roles.push({ title, id: r.roleId, circle: circleName(posted?.circleId ?? null), words: wordsOf(posted?.posted ?? null, r.words, ctx.words) });
   }
   for (const r of body.newRoles) {
-    roles.push({ title: typeof r.words.name === "string" ? r.words.name : "", id: r.id, circle: circleName(r.circleId), words: wordsOf(null, r.words, ctx.words) });
+    roles.push({ title: typeof r.words.name === "string" ? r.words.name : "", circle: circleName(r.circleId), words: wordsOf(null, r.words, ctx.words) });
   }
   return { village: ctx.village ?? null, roles, measures: measuresOf(body.settings), season: body.season };
 }
