@@ -30,11 +30,31 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import { saveMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
 import { GeneKeysLines } from "@/components/geneKeys/GeneKeysLines";
+import GeneKeysReveal from "@/components/geneKeys/GeneKeysReveal";
 import { setMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
 import { countryName, loadPlaces, searchPlaces, zoneName, type Place } from "@/components/geneKeys/places";
 import { BTN_GOLD, BTN_LINK, BTN_PLAIN, EYEBROW, HINT, INPUT } from "@/components/geneKeys/ui";
 
 type Step = "form" | "choose" | "result" | "share" | "done";
+
+/**
+ * "Roughly when?" for a member who does not know their birth time. Asked BEFORE
+ * any windows are shown, so a whole day's seven windows become the one or two
+ * inside the part of the day they were born in. Minutes after local midnight;
+ * night wraps, so it is two spans of the same calendar day.
+ */
+export const PARTS = [
+  { id: "morning", label: "Morning", spans: [[300, 719]] },
+  { id: "afternoon", label: "Afternoon", spans: [[720, 1019]] },
+  { id: "evening", label: "Evening", spans: [[1020, 1259]] },
+  { id: "night", label: "Night", spans: [[0, 299], [1260, 1439]] },
+  { id: "unknown", label: "No idea", spans: [[0, 1439]] },
+] as const;
+type Part = (typeof PARTS)[number]["id"];
+
+/** The words a member sends to whoever was there, through their own phone's share sheet. Nothing reaches the village. */
+const ASK_WORDS =
+  "Hi! Do you remember roughly what time I was born? Morning, afternoon, evening or night is enough. I'm finding my Gene Keys and the time changes the result.";
 
 interface Picked {
   chart: Chart;
@@ -58,6 +78,8 @@ export default function GeneKeysPage() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [unknownTime, setUnknownTime] = useState(false);
+  const [part, setPart] = useState<Part>("unknown");
+  const [asked, setAsked] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [place, setPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[] | null>(null);
@@ -119,7 +141,10 @@ export default function GeneKeysPage() {
         const [year, month, day] = date.split("-").map(Number);
         let found: TimeWindow[];
         let at: number | null = null;
-        if (unknownTime) found = resultsAcross({ year, month, day }, place.zone, 0, 1439, 20);
+        if (unknownTime) {
+          const spans = PARTS.find((x) => x.id === part)?.spans ?? [[0, 1439]];
+          found = spans.flatMap(([from, to]) => resultsAcross({ year, month, day }, place.zone, from, to, 20));
+        }
         else {
           const [h, m] = time.split(":").map(Number);
           at = h * 60 + m;
@@ -179,6 +204,45 @@ export default function GeneKeysPage() {
                 <input type="checkbox" className="h-5 w-5 accent-notice" checked={unknownTime} onChange={(e) => setUnknownTime(e.target.checked)} />
                 I don't know my birth time
               </label>
+              {unknownTime ? (
+                <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
+                  <legend className="px-1 text-sm font-medium">Roughly when?</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {PARTS.map((x) => (
+                      <label
+                        key={x.id}
+                        className={`inline-flex min-h-11 cursor-pointer items-center rounded-full border px-4 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-notice ${
+                          part === x.id ? "border-notice bg-notice/15 text-notice" : "border-border text-foreground"
+                        }`}
+                      >
+                        <input type="radio" name="gk-part" className="sr-only" checked={part === x.id} onChange={() => setPart(x.id)} />
+                        {x.label}
+                      </label>
+                    ))}
+                  </div>
+                  <p className={HINT}>Even a rough answer narrows it down. Somebody who was there may know.</p>
+                  <button
+                    type="button"
+                    className={`${BTN_PLAIN} self-start`}
+                    onClick={async () => {
+                      try {
+                        if (navigator.share) {
+                          await navigator.share({ text: ASK_WORDS });
+                          setAsked("Sent from your phone. Come back when they answer.");
+                        } else {
+                          await navigator.clipboard.writeText(ASK_WORDS);
+                          setAsked("Copied. Paste it to whoever was there.");
+                        }
+                      } catch {
+                        // A share sheet the member closed is not an error.
+                      }
+                    }}
+                  >
+                    Ask someone who was there
+                  </button>
+                  {asked ? <p className={HINT}>{asked}</p> : null}
+                </fieldset>
+              ) : null}
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="gk-town" className="text-sm font-medium">
                   Birth town or city
@@ -291,17 +355,7 @@ export default function GeneKeysPage() {
           {step === "result" && picked ? (
             <section aria-labelledby="gk-result-h" className="flex flex-col gap-5">
               <p className={EYEBROW}>Step 2 of 2 · Your lines</p>
-              <div className="flex items-center gap-4">
-                <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-2 border-foreground bg-card font-display text-3xl">
-                  {picked.view.profile}
-                </span>
-                <div className="flex flex-col gap-1">
-                  <h1 id="gk-result-h" tabIndex={-1} className="font-display text-4xl focus:outline-none">
-                    {picked.view.names}
-                  </h1>
-                  <p className={HINT}>{picked.chosen ? "Chosen by you" : "Your Gene Keys profile"}</p>
-                </div>
-              </div>
+              <GeneKeysReveal view={picked.view} chosen={picked.chosen} headingId="gk-result-h" />
               <GeneKeysLines view={picked.view} whose={null} />
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={BTN_GOLD} onClick={() => setStep("share")}>

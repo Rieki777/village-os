@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
- * Gene Keys in the browser: the birth-town list, the seal, and a circle's six
- * lines. Every person is invented; every chart comes from an invented birth
+ * Gene Keys in the browser: the birth-town list, the part of the day, the
+ * reveal, the seal, and a circle's six lines. Every person is invented; every chart comes from an invented birth
  * through the same calculator the flow page runs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +13,10 @@ import { viewOf, type GeneKeysView } from "@shared/geneKeys";
 import { chartAt, zonedToUtc } from "@shared/geneKeysSky";
 
 const modules = vi.hoisted(() => ({ on: true }));
-vi.mock("@/modules/ModuleProvider", () => ({ useModuleOn: (id: string) => id === "gene-keys" && modules.on }));
+vi.mock("@/modules/ModuleProvider", () => ({
+  useModuleOn: (id: string) => id === "gene-keys" && modules.on,
+  useModule: (id: string) => (id === "gene-keys" && modules.on ? { id, lifecycle: "members" } : undefined),
+}));
 
 const api = vi.hoisted(() => ({ people: {} as Record<string, unknown>, asked: [] as string[][] }));
 vi.mock("@/lib/geneKeysApi", () => ({
@@ -30,6 +33,8 @@ vi.mock("@/lib/geneKeysApi", () => ({
 import { parsePlaces, searchPlaces } from "./places";
 import GeneKeysSeal from "./GeneKeysSeal";
 import CircleLines from "./CircleLines";
+import GeneKeysReveal from "./GeneKeysReveal";
+import { PARTS } from "@/pages/GeneKeys";
 
 const view = (zone: string, y: number, mo: number, d: number, h: number, mi: number): GeneKeysView =>
   viewOf(chartAt(zonedToUtc(y, mo, d, h, mi, zone)));
@@ -77,6 +82,41 @@ describe("the birth-town list", () => {
     expect(searchPlaces(places, "san jo").map((p) => p.name)).toEqual(["San José"]);
     expect(searchPlaces(places, "jose").map((p) => p.name)).toEqual(["San José"]);
     expect(searchPlaces(places, "b")).toEqual([]);
+  });
+});
+
+describe("roughly when", () => {
+  it("morning, afternoon, evening and night cover every minute of the day once, and no idea is the whole day", () => {
+    const named = PARTS.filter((p) => p.id !== "unknown").flatMap((p) => p.spans.map(([from, to]) => [from, to] as const));
+    const minutes = named.flatMap(([from, to]) => Array.from({ length: to - from + 1 }, (_, i) => from + i)).sort((a, b) => a - b);
+    expect(minutes).toEqual(Array.from({ length: 1440 }, (_, i) => i));
+    expect(PARTS.find((p) => p.id === "unknown")?.spans).toEqual([[0, 1439]]);
+  });
+});
+
+describe("the reveal", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("ends with the profile as the heading's neighbour, the names as the heading, and the two lines marked", () => {
+    // Reduced motion draws the finished state at once, which is the state this pins.
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("reduce"), addEventListener() {}, removeEventListener() {} }));
+    const { container } = inRouter(<GeneKeysReveal view={WREN} chosen={false} headingId="gk-result-h" />);
+    const h = screen.getByRole("heading", { level: 1 });
+    expect(h.id).toBe("gk-result-h");
+    expect(h.textContent).toBe("Dancer · Fixer");
+    expect(screen.getByText("2/5")).toBeTruthy();
+    expect(screen.getByText("Your Gene Keys profile")).toBeTruthy();
+    // Six bars, bottom-up in the DOM order 1..6: line 2 solid gold, line 5 a gold ring, the rest plain.
+    const bars = Array.from(container.querySelectorAll("[aria-hidden='true'] > span > span"));
+    expect(bars).toHaveLength(6);
+    const mark = (el: Element) => (el.className.includes("bg-notice") ? "solid" : el.className.includes("border-notice") ? "ring" : "plain");
+    expect(bars.map(mark)).toEqual(["plain", "solid", "plain", "plain", "ring", "plain"]);
+  });
+
+  it("says a chosen window was chosen", () => {
+    inRouter(<GeneKeysReveal view={KAI} chosen headingId="h" />);
+    expect(screen.getByText("Chosen by you")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(KAI.names);
   });
 });
 
