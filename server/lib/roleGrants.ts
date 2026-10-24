@@ -202,6 +202,47 @@ export function rolesCarryingCapability(
     .map((r) => ({ id: String(r.id), name: String(r.name ?? r.id) }));
 }
 
+/**
+ * WHAT TAKING ONE PERSON OUT OF ONE GROUP WOULD LEAVE WITH NOBODY.
+ *
+ * Rye, 2026-10-23, after removing himself from a power group with one click:
+ * the panel asks before anybody is taken out, and when the removal would leave
+ * a power the village has taken on with no holder at all, it says so first.
+ *
+ * Answered once for every holding, as `roleId -> userId -> capabilities`, so
+ * the panel reads the answer and never re-derives it. The counting rule is
+ * `liveHoldersOfCapability` above, run twice: once on the holdings as they
+ * are, once with that person's rows in that group taken out. Only a power held
+ * by exactly ONE person today can be emptied by one removal, so every other
+ * power is skipped before the second count. A power with nobody in it already
+ * is left out too: the removal is not what empties it.
+ *
+ * A key some stage unlocks is the caller's to leave out. This counter does not
+ * walk the stage plane, for the reason `liveHoldersOfCapability` gives, and a
+ * warning about a power every member at that stage still holds would be false.
+ */
+export function leftEmptyByRemoval(
+  holders: ReadonlyArray<Parameters<typeof holdingHasLapsed>[0] & { roleId: string; userId: string }>,
+  roles: ReadonlyArray<{ id: string; capabilities?: unknown }>,
+  capabilities: readonly string[],
+  now: Date = new Date(),
+  badges: Readonly<Record<string, { grants?: readonly string[]; denies?: readonly string[] }>> = {},
+): Record<string, Record<string, string[]>> {
+  const out: Record<string, Record<string, string[]>> = {};
+  for (const capability of Array.from(new Set(capabilities))) {
+    const before = liveHoldersOfCapability(holders, roles, capability, now, badges);
+    if (before.length !== 1) continue;
+    const only = before[0];
+    const theirGroups = Array.from(new Set(holders.filter((h) => String(h.userId) === only).map((h) => h.roleId)));
+    for (const roleId of theirGroups) {
+      const without = holders.filter((h) => !(h.roleId === roleId && String(h.userId) === only));
+      if (liveHoldersOfCapability(without, roles, capability, now, badges).length > 0) continue;
+      ((out[roleId] ??= {})[only] ??= []).push(capability);
+    }
+  }
+  return out;
+}
+
 /** A refusal a route can send straight back: a status and a body. */
 export interface RouteRefusal {
   status: number;
