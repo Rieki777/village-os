@@ -288,7 +288,7 @@ the modules that register their own token at boot:
 | `equity` | Village Equity | equity | Hypha, on Base | 0 | none, it is read from Base | no: it is governed on Base |
 | `voice` | Voice | voice | Hypha, on Base | 0 | none, it is read from Base | no: it is governed on Base |
 
-8 tokens in a fresh village: 6 minted here, 2 read from Base. The registry rows are seeded by 9 migration file(s) and by the modules that register their own token at boot.
+8 tokens in a fresh village: 6 minted here, 2 read from Base. The registry rows are seeded by 10 migration file(s) and by the modules that register their own token at boot.
 <!-- generated:tokens end -->
 
 `governance` splits the table in two and is the most important column in it.
@@ -297,6 +297,32 @@ means the real thing lives on Base and the row here is a **mirror**: a number
 this village read from a chain it does not control. Never write a hypha token as
 though minting it here creates anything. `postTransfer` refuses to move one at
 all, by name, and every boot refuses to start if a ledger row for one exists.
+
+**What a token is called, what it means, and what all of them are called
+together are the village's own words (0283).** Rye, 2026-10-23: "Village Tokens
+is the umbrella word, which should be able to be set in admin to name each type
+of token and for what categories it's issued and what it means." Four settings,
+all in Admin then Tokens:
+
+- the **name**, `tokens.name`, renamed through `PUT /api/admin/tokens/:slug`
+  (refused on a Hypha mirror, whose name is a fact about Base);
+- the **meaning**, `tokens.description` (varchar 600, NULL when nobody has
+  written one), through the same route. `tokenDescriptionProblem`
+  (`server/lib/tokenMeaning.ts`) judges it before the route writes anything, so a
+  refused description never leaves a rename half done beside it. A Hypha mirror
+  may take one, because what it means to this village is the village's to say.
+  Members read it on their wallet (`GET /api/me/wallet`, each row's
+  `description`);
+- the **jobs** a token is issued for, the token-jobs panel above the table;
+- the **umbrella word**, `currency.collectiveName` in the brand overlay, served
+  on `/api/game/config` and written `{tokens}` on pages. Its platform default is
+  Rye's word, `Village Tokens` (`GAME_CONFIG.currency.collectiveName`); a blank
+  setting inherits it.
+
+The platform writes no meaning for any token. Rye ruled on 2026-10-22 that
+shipped copy never says what a token does, so the per-token sentences the admin
+catalog used to carry (`describeToken`) are gone, and a token nobody has
+described says that nothing is written yet.
 
 The equity row is the one place a village's own name is correct. A fresh village
 gets `Village Equity`, because `drizzle/0124_the_equity_token_names_no_village.sql`

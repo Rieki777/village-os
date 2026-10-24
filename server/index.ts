@@ -370,7 +370,7 @@ const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.w
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
 import {
   allTokens,
-  tokenNameClash, slugFreezeRefusal,
+  tokenNameClash,
   RECOGNITION_FAUCET,
   balanceOf,
   balancesFor, PLATFORM_TOKEN, postPaymentReversalLeg,
@@ -628,6 +628,7 @@ import { recordAssistantUsage, type AssistantPath } from "./lib/assistantUsage";
 import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
+import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
@@ -1048,7 +1049,7 @@ const DEFAULT_INVESTOR_SUMMARY = SITE_CONTENT.investorSummary;
 // from the browser without a code deploy. Merged over GAME_CONFIG on read.
 const DEFAULT_BRAND = {
   project: { name: "", tagline: "", memberName: "", catalystName: "", roleName: "", seatName: "", commitmentName: "", location: "", country: "", fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "" },
-  currency: { name: "", nameLower: "" },
+  currency: { name: "", nameLower: "", collectiveName: "" },
   images: { hero: "", investorHero: "", residentHero: "", stewardHero: "", prosperityHero: "", masterPlanHero: "", logo: "", heartLogo: "", favicon: "" },
   // Setup Wizard progress — projects tick these off as they make the site theirs.
   setup: { identity: false, images: false, numbers: false, content: false, technical: false, map: false },
@@ -2796,6 +2797,7 @@ function mergedConfig() {
         // Derived, never stored. Two fields that must agree are two fields
         // that can drift, which is the bug this change exists to undo.
         nameLower: name ? String(name).toLowerCase() : pick(brand.currency.nameLower, c.nameLower),
+        collectiveName: String(pick(brand.currency.collectiveName, c.collectiveName)).trim().slice(0, 60) || c.collectiveName, // the umbrella word, `{tokens}` on pages (Admin then Tokens)
       };
     })(),
     images: {
@@ -16628,77 +16630,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json({ success: true, token: tokenDef(cleanSlug) });
   });
 
-  /**
-   * Rename a platform token. The SLUG is history's identity and never
-   * changes; the display NAME is the village's word for it, and renaming it
-   * here is how a fork names its value token ONCE and has every surface —
-   * wallet, exchange, and the public pages that read the config's value
-   * token — follow. Only the name column moves: routing this through
-   * registerToken's upsert would let a rename quietly rewrite
-   * kind/governance/transferable too.
-   */
-  app.put("/api/admin/tokens/:slug", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const slug = String(req.params.slug);
-    const def = tokenDef(slug);
-    if (!def) return res.status(404).json({ error: `unknown token "${slug}"` });
-    const frozen = slugFreezeRefusal(req.body?.slug, slug);
-    if (frozen) return res.status(409).json({ error: frozen });
-    if (def.governance !== "platform") return res.status(400).json({ error: `${slug} is a read-only Hypha mirror. Its name is a fact about Base, not a setting` });
-    // Renaming an example keeps its flag, so the admin's own word for the
-    // token would be deleted by the first real one they create.
-    if (def.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    // Either field alone is a valid edit: the panel sends a name when the admin
-    // finishes typing and an `active` when they flip the switch, and requiring
-    // both would make a toggle silently depend on the name field being intact.
-    const body = req.body ?? {};
-    const wantsName = Object.prototype.hasOwnProperty.call(body, "name");
-    const wantsActive = Object.prototype.hasOwnProperty.call(body, "active");
-    const wantsTransferable = Object.prototype.hasOwnProperty.call(body, "transferable");
-    if (!wantsName && !wantsActive && !wantsTransferable) {
-      return res.status(400).json({ error: "Send a name, an active flag, a sending flag, or any of them" });
-    }
-
-    if (wantsName) {
-      const name = String(body.name ?? "").trim().slice(0, 120);
-      if (!name) return res.status(400).json({ error: "A display name is required" });
-      const clash = tokenNameClash(name, slug);
-      if (clash) return res.status(409).json({ error: clash });
-      await getPool().query("UPDATE tokens SET name = ? WHERE slug = ?", [name, slug]);
-    }
-    if (wantsActive) {
-      // `active` is a MEMBER-VISIBILITY flag and nothing more (Rye, 2026-08-14).
-      // Balances, history and the double-entry ledger are untouched, so
-      // conservation still proves at boot and switching it back restores the
-      // surface exactly. It deliberately does NOT stop issuance: a token that
-      // pays a mint rule while hidden is a reporting problem, not a lost
-      // entry, and the reverse — silently freezing an economy from a display
-      // switch — is the one that cannot be undone.
-      await getPool().query("UPDATE tokens SET active = ? WHERE slug = ?", [body.active === true ? 1 : 0, slug]);
-    }
-    /*
-     * 0092: THE VILLAGE'S OWN SWITCH FOR MEMBER-TO-MEMBER SENDING.
-     *
-     * `transferable` was writable only at CREATE, from an unvalidated body
-     * field, and the rename route refused to touch it precisely so a rename
-     * could not rewrite policy by accident. Now that a surface reads the
-     * column, a village needs a way to close sending it opened, and a way to
-     * open it on a token created before there was a surface.
-     *
-     * `mayToggleTransferable` is the firewall and it refuses by KIND: only a
-     * credit token this platform governs can ever be flipped, so recognition
-     * cannot be opened here, by an admin, by a typo, or by a future caller
-     * that forgets to ask. The boot invariant proves the same thing from the
-     * data side every morning.
-     */
-    if (wantsTransferable) {
-      const blocked = mayToggleTransferable(def);
-      if (blocked) return res.status(409).json({ error: blocked });
-      await getPool().query("UPDATE tokens SET transferable = ? WHERE slug = ?", [body.transferable === true ? 1 : 0, slug]);
-    }
-    await loadTokenRegistry(getPool());
-    res.json({ success: true, token: tokenDef(slug) });
-  });
+  registerTokenEditRoutes(app, { isAdmin, getPool }); // PUT /api/admin/tokens/:slug, here because Express matches in order
 
   /**
    * Manual mint: an admin issues a platform token to a member, with a reason,
