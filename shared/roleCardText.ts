@@ -894,8 +894,8 @@ export function writeRoleCard(doc: RoleCardDoc): string {
   }
   const measures = doc.measures.map((m) => m.trim()).filter(Boolean);
   if (measures.length) out.push("", `## ${SPEC.get("measures")!.heading}`, ...measures.map((m) => `- ${m}`));
-  if (doc.season) {
-    const s = doc.season;
+  const s = doc.season;
+  if (s && ((s.aim && s.aim.trim()) || s.seasonalGoals.length || s.servesGoals.length)) {
     out.push("", `## ${SPEC.get("season")!.heading}`);
     if (s.aim && s.aim.trim()) out.push("", `### ${SPEC.get("seasonAim")!.heading}`, ...valueLines(s.aim, false));
     if (s.seasonalGoals.length) {

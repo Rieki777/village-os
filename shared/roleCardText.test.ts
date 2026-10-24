@@ -449,8 +449,8 @@ describe("a role the village has", () => {
     const text = write(docFromBody(x, { words: WORDS, roles: ctx().roles, circles: CIRCLES, village: "Riverbend" }));
     expect(text).toContain("## Role title\nFood steward\nRole id: r-kitchen\n");
     expect(text.match(/Role id:/g)).toHaveLength(1);
-    // No measures in the card, so the terms are left out of the body and the PUT keeps them.
-    const { settings: _terms, ...rest } = x;
+    // No measures and no season written, so the terms and the season are left out of the body and the PUT keeps them.
+    const { settings: _terms, season: _season, ...rest } = x;
     expect(read(text, ctx({ current: x })).proposalBody).toEqual(rest);
   });
 
