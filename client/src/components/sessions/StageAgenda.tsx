@@ -53,6 +53,7 @@ export default function StageAgenda({ view, now, actions }: StageProps) {
             <ConsentRound
               view={view}
               actions={actions}
+              now={now}
               target="agenda"
               ask={SESSION_COPY.agendaConsentAsk}
               readOnly={!view.me.joined || view.status !== "open"}

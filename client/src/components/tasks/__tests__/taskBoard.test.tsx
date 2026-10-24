@@ -191,6 +191,33 @@ describe("waiting on you", () => {
     expect(headings[0]).not.toMatch(/\d/);
   });
 
+  it("draws the circle's asks under Asked to consent: the roles, the circle, the day it closes, opening the proposal", async () => {
+    const toConsent = [
+      { proposalId: "rp-00000000000000c1", applicationId: "sa-00000000000000c1", href: "/role-applications/sa-00000000000000c1", roles: ["Kitchen keeper", "Seed saver"], circle: "Food circle", applicant: "Ana", closesOn: "2026-11-06" },
+    ];
+    waitingMock.mockImplementation(async () => reply(200, { applications: [], drafts: [], toConsent }));
+    fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
+    render(<TaskBoard />);
+    const group = await screen.findByRole("region", { name: WAITING_COPY.heading });
+    const asks = within(group).getByRole("list", { name: WAITING_COPY.consentHeading });
+    expect(within(group).getByRole("heading", { name: WAITING_COPY.consentHeading })).toBeInTheDocument();
+    const row = within(asks).getByText("Ana proposes to hold Kitchen keeper and Seed saver next season").closest("a");
+    expect(row?.getAttribute("href")).toBe("/role-applications/sa-00000000000000c1");
+    expect(within(asks).getByText("In Food circle · Closes on 6 November 2026")).toBeInTheDocument();
+    expect(within(asks).getByText(WAITING_COPY.consentAction)).toBeInTheDocument();
+    // Something waits, so the board is not called empty, and no heading carries a number.
+    await waitFor(() => expect(screen.queryByText(TASK_COPY.empty)).toBeNull());
+    for (const h of screen.getAllByRole("heading")) expect(h.textContent).not.toMatch(/\d/);
+  });
+
+  it("reads a server from before the consent group as no asks", async () => {
+    waitingMock.mockImplementation(async () => reply(200, { applications: WAITING.applications, drafts: [] }));
+    fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
+    render(<TaskBoard />);
+    await screen.findByRole("region", { name: WAITING_COPY.heading });
+    expect(screen.queryByRole("heading", { name: WAITING_COPY.consentHeading })).toBeNull();
+  });
+
   it("draws nothing when the read is closed, and the empty board still says so", async () => {
     fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
     render(<TaskBoard />);
