@@ -297,13 +297,12 @@ export async function openBackfillRecord(pool: Pool, userId: string): Promise<vo
  * a note here would let a resume of it skip a step on the strength of a run
  * that was not that sweep's.
  */
-export async function noteBackfilledStep(pool: Pool, userId: string, step: string): Promise<boolean> {
-  const [res] = await pool.query(
+export async function noteBackfilledStep(pool: Pool, userId: string, step: string): Promise<void> {
+  await pool.query(
     "UPDATE `member_erasures` SET `steps_done` = JSON_ARRAY_APPEND(COALESCE(`steps_done`, JSON_ARRAY()), '$', ?) " +
       "WHERE `user_id` = ? AND `finished_at` IS NOT NULL",
     [step, userId],
   );
-  return Number((res as { affectedRows?: number }).affectedRows ?? 0) === 1;
 }
 
 /** Which step stopped, and what it said. Clipped, never truncated by the engine. */

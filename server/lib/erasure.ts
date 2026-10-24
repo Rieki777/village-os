@@ -318,6 +318,10 @@ interface Step {
  * The NAMES are stored in `member_erasures.steps_done` and matched back by
  * string. Renaming one makes a resume re-run it, which is the safe direction;
  * reusing a name for different work is the unsafe one.
+ *
+ * A step added after the tombstone is also named in `BACKFILL_BY_ID` or
+ * `BACKFILL_LEAVES_OUT` (below `resumeErasure`), which decides whether an
+ * erasure that finished before the step existed is given it at boot.
  */
 function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: ErasureDeps): Step[] {
   const { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders } = deps;
@@ -1379,12 +1383,14 @@ export async function resumeErasure(
  * reads a row before another scrubs it (housing contacts before the housing
  * scrub) still reads it first.
  *
- * NO VALUE MOVES TWICE. Three of these give a fee back or seat somebody from a
- * queue: the places at gatherings, the guest-era places and the meet-me
- * windows. Each claims a held charge before it posts a refund leg under the
- * charge's own key, and deletes the answers it frees (`releasePlacesOf`,
- * `removeGatheringRows`), so a second run finds no answer to free and no held
- * charge to claim, and the ledger refuses the key a second time anyway.
+ * NO VALUE MOVES TWICE. Four of these give a fee back or seat somebody from a
+ * queue: the places at gatherings, the guest-era places, the guest places of
+ * a second housing address, and the meet-me windows. Each claims a held
+ * charge before it posts a refund leg under the charge's own key, and deletes
+ * the answers it frees (`releasePlacesOf`, `removeGatheringRows`), so a run
+ * after a lost note finds no answer to free and no held charge to claim, the
+ * ledger refuses the key a second time, and escrow cannot pay out what it no
+ * longer holds. The backfill test runs them twice over a neighbour's fee.
  *
  * WHAT IT RECORDS. Each step that lands is appended to `steps_done` on a record
  * that is still finished, and `finished_at` stays where the sweep put it
@@ -1393,11 +1399,14 @@ export async function resumeErasure(
  * from before 0195, and is given a finished record first, with no attempts on
  * it, so what ran is written down the same way and a second run reads it done.
  *
- * WHAT IT NEVER RUNS. Anything before the tombstone or the tombstone itself:
- * those were written for an account that still worked, and they ran when it
- * did. The audit line, which would say a second time that an erasure
- * happened. And the outside stores, which were asked when the sweep finished
- * and are the /review button's to ask again. An open record is the queue's.
+ * WHAT IT NEVER RUNS. Anything before the tombstone or the tombstone itself,
+ * which were written for an account that still worked. Four of those came
+ * after some records had finished ("quest-proposals", "org-drafts",
+ * "proposal-drafts", "alignment-party-left"), and whether a finished record is
+ * given them is Rye's to decide (raised 2026-10-24). The audit line, which
+ * would say a second time that an erasure happened. And the outside stores,
+ * which were asked when the sweep finished and are the /review button's to
+ * ask again. An open record is the queue's.
  */
 
 /**
