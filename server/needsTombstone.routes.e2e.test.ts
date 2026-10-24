@@ -84,6 +84,19 @@ let founderToken = "";
 let leaver = { token: "", id: "" };
 let bystander = { token: "", id: "" };
 
+/**
+ * A member erased on an older release, whose record finished before the needs
+ * deletion moved past the tombstone and before open links were withdrawn
+ * (adversarial round 2, finding 14). Written before the server boots, so the
+ * boot job is what finds it.
+ */
+const GONE = "needstomb-gone-old";
+/** The handle that tombstone kept, `departed-` and the last eight of the id, which forum bylines print. */
+const GONE_HANDLE = `departed-${GONE.slice(-8)}`;
+/** Waiting for the seat the old erasure left them holding. */
+const WAITER = "needstomb-waiter";
+const SEATED = "needstomb-bread-night";
+
 interface Answer { status: number; json: any; text: string }
 
 async function call(method: string, route: string, body?: unknown, token = founderToken): Promise<Answer> {
@@ -125,6 +138,33 @@ beforeAll(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-needstomb-"));
   testDb = await provisionTestDb();
   pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+
+  // The old erasure: a tombstone, a record that finished with that release's
+  // steps ("needs" still ran before the tombstone then), the answer saved after
+  // it, and a link nobody used.
+  const seed = (sql: string, params: unknown[]) => pool.query(sql, params); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  // The tombstone kept the handle releases before round 2 wrote (round 3, finding 13).
+  await seed("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `handle`) VALUES (?, 'A departed member', ?, '', ?)", [
+    GONE,
+    `deleted-${GONE}@anonymized.invalid`,
+    GONE_HANDLE,
+  ]);
+  await seed("INSERT INTO `member_erasures` (`user_id`, `attempts`, `steps_done`, `finished_at`) VALUES (?, 1, ?, '2026-09-20 10:00:00')", [
+    GONE,
+    JSON.stringify(["needs", "tombstone", "audit", "external-stores"]),
+  ]);
+  await seed("INSERT INTO `member_needs` (`id`, `user_id`, `need_key`, `depth`, `cycle_id`) VALUES (?, ?, 'vitality', 'unmet', 'cycle-old')", [`need-${GONE}`, GONE]);
+  await seed("INSERT INTO `member_invites` (`id`, `token_hash`, `inviter_user_id`, `expires_at`) VALUES (?, ?, ?, CURRENT_TIMESTAMP + INTERVAL 7 DAY)", [
+    `inv-${GONE}`,
+    "a".repeat(64),
+    GONE,
+  ]);
+  // And the one seat at a gathering ahead, with a living member waiting for it.
+  await seed("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?, 'Ida Fenn', ?, 'x')", [WAITER, `${WAITER}@example.test`]);
+  await seed("INSERT INTO `events` (`id`, `title`, `starts_at`, `status`, `kind`, `layer`, `capacity`) VALUES (?, 'Bread night', CURRENT_TIMESTAMP + INTERVAL 5 DAY, 'scheduled', 'gathering', 'village', 1)", [SEATED]);
+  await seed("INSERT INTO `event_rsvps` (`id`, `event_id`, `user_id`, `status`, `idempotency_key`) VALUES (?, ?, ?, 'going', ?)", [`rsvp-${GONE}`, SEATED, GONE, `seed:${GONE}`]);
+  await seed("INSERT INTO `event_waitlist` (`id`, `event_id`, `user_id`) VALUES (?, ?, ?)", [`wl-${WAITER}`, SEATED, WAITER]);
+  expect(await needRows(GONE), "the control: the old erasure left their answer").toBe(1);
 
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
@@ -173,6 +213,36 @@ afterAll(async () => {
 });
 
 describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", () => {
+  it("gives an erasure that finished on an older release the steps it predates, once, at boot", async () => {
+    expect(await needRows(GONE), "the answer the old erasure left is gone").toBe(0);
+    const [links] = await pool.query<any[]>("SELECT `revoked_at` FROM `member_invites` WHERE `id` = ?", [`inv-${GONE}`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(links[0]?.revoked_at, "their open link lets nobody in").not.toBeNull();
+    const [records] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT CAST(`steps_done` AS CHAR) AS steps, DATE_FORMAT(`finished_at`, '%Y-%m-%d %H:%i:%s') AS finished FROM `member_erasures` WHERE `user_id` = ?",
+      [GONE],
+    );
+    expect(JSON.parse(records[0].steps), "what ran is written on the record").toEqual(
+      expect.arrayContaining(["needs", "tombstone", "needs-after-tombstone", "invites-after-tombstone"]),
+    );
+    expect(records[0].finished, "and the finish did not move").toBe("2026-09-20 10:00:00");
+    // The handle it kept is gone, so the profile page a signed-out reader
+    // reached by it (join date, moons, token chips, gratitude) answers 404.
+    const page = await call("GET", `/api/profiles/${GONE_HANDLE}`, undefined, "");
+    expect(page.status, `no page answers to ${GONE_HANDLE}: ${page.text.slice(0, 200)}`).toBe(404);
+    const [handles] = await pool.query<any[]>("SELECT `handle` FROM `users` WHERE `id` = ?", [GONE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(handles[0]?.handle, "the old tombstone holds no handle").toBeNull();
+    // The seat went to the person waiting, and they were told: the job runs once the promotion sink is wired.
+    const [seats] = await pool.query<any[]>("SELECT `user_id`, `status` FROM `event_rsvps` WHERE `event_id` = ? ORDER BY `user_id`", [SEATED]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(seats.map((r) => ({ ...r }))).toEqual([{ user_id: WAITER, status: "going" }]);
+    const [told] = await pool.query<any[]>("SELECT `type` FROM `notifications` WHERE `user_id` = ? AND `dedupe_key` = ?", [WAITER, `waitlist:${SEATED}:${WAITER}`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(told.map((r) => r.type), "the member given the seat is told it is theirs").toEqual(["waitlist_promoted"]);
+    expect(logs.join("")).toMatch(/\[erasure\] finished-erasure backfill: 1 finished erasure\(s\) read, 1 given \d+ step\(s\) they predate, 0 stopped part way\./);
+    const [ledger] = await pool.query<any[]>("SELECT `value` FROM `app_config` WHERE `config_key` = 'data-migrations'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(JSON.stringify(ledger[0]?.value ?? ""), "recorded in the runOnce ledger, so the next boot does not run it again").toMatch(
+      /erasure-steps-backfill-[0-9a-f]{12}/,
+    );
+  });
+
   it("both members fill in the card, and the rows are really there", async () => {
     // The control the two assertions below depend on. Without it, a zero after
     // the tombstone would be indistinguishable from two saves that never
@@ -248,5 +318,79 @@ describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", (
     const after = await exitRecord();
     expect(after?.status, "the record of leaving stays").toBe("resolved");
     expect(String(after?.resolution ?? ""), "their words do not outlive them").not.toContain("Sam");
+  });
+
+  /*
+   * THE HANDLE THE BOOT JOB FREED STAYS FREE (round 3 leftover). The first case
+   * proved the old tombstone gave up departed-gone-old. Freed, it was the next
+   * living member's for the asking: a name that slugs to it at sign-up, or the
+   * handle field on the profile, and every old link to the departed member's
+   * page reached that living person.
+   */
+  it("no living member takes the handle the old tombstone gave up", async () => {
+    const namesake = await call("POST", "/api/auth/register", {
+      name: "Departed Gone Old", email: `namesake-${PORT}@example.test`, password: PASSWORD, paths: ["resident"],
+    }, "");
+    expect(namesake.status, `a member whose name slugs to it still joins: ${namesake.text}`).toBe(200);
+    expect(String(namesake.json?.user?.handle), "the handle their name gives does not start with departed-").not.toMatch(/^departed-/);
+    expect(String(namesake.json?.user?.handle), "and still comes from their name").toMatch(/^gone-old/);
+
+    const asked = await call("PUT", "/api/profile", { handle: GONE_HANDLE }, bystander.token);
+    expect(asked.status, `nobody living may choose it: ${asked.text}`).toBe(400);
+    expect(String(asked.json?.error), "the member is told why").toMatch(/"departed-".*members who have left/);
+    const page = await call("GET", `/api/profiles/${GONE_HANDLE}`, undefined, "");
+    expect(page.status, `an old link still reaches nobody: ${page.text.slice(0, 200)}`).toBe(404);
+
+    // The control: the same member, the same field, an ordinary handle.
+    const plain = await call("PUT", "/api/profile", { handle: `bay-${PORT}` }, bystander.token);
+    expect(plain.status, plain.text).toBe(200);
+  });
+
+  /*
+   * NOTHING MOVES TO THE OLD TOMBSTONE, by its address or by its id (round 3
+   * leftover). Three doors take a recipient a member names: tokens by address
+   * or id, Gratitude on the wall, and Hearts. Each is asked for the tombstone
+   * and for a living member, and the ledger is read for what reached it.
+   */
+  it("no door sends anything to a member who has left, by address or by id", async () => {
+    const address = `deleted-${GONE}@anonymized.invalid`;
+    const landed = async () => {
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) AS n FROM `token_ledger` l JOIN `ledger_accounts` a ON a.`id` = l.`to_account` WHERE a.`user_id` = ?",
+        [GONE],
+      );
+      const [gifts] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `gratitude_log` WHERE `to_id` = ?", [GONE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      return { legs: Number(rows[0]?.n ?? 0), gifts: Number(gifts[0]?.n ?? 0) };
+    };
+    const minted = await call("POST", "/api/admin/tokens/credits/mint", { toUserId: bystander.id, amount: 5, reason: "test float" });
+    expect(minted.status, `the sender holds credits: ${minted.text}`).toBe(200);
+    const sender = await register("Moss Kell", "moss");
+
+    // Tokens, by address and by id.
+    for (const [door, body] of [["address", { toEmail: address }], ["id", { to: GONE }]] as const) {
+      const sent = await call("POST", "/api/wallet/send", { ...body, tokenType: "credits", amount: 1, clientNonce: `gone-${door}` }, bystander.token);
+      expect(sent.status, `no credits to a tombstone by ${door}: ${sent.text}`).toBe(404);
+      expect(String(sent.json?.error)).toMatch(/left the village/);
+    }
+    const toLiving = await call("POST", "/api/wallet/send", { to: sender.id, tokenType: "credits", amount: 1, clientNonce: "living-1" }, bystander.token);
+    expect(toLiving.status, `the control: a living member is paid: ${toLiving.text}`).toBe(200);
+
+    // Gratitude on the wall, by address typed and passed, and Hearts by id.
+    for (const body of [{ toEmail: address }, { to: address }]) {
+      const thanked = await call("POST", "/api/game/gratitude/send", { ...body, amount: 1, message: "Thank you." }, bystander.token);
+      expect(thanked.status, `no Gratitude to a tombstone: ${thanked.text}`).toBe(404);
+      expect(String(thanked.json?.error)).toMatch(/left the village/);
+    }
+    const hearted = await call("POST", "/api/gratitude", { toId: GONE, amount: 1, note: "Thank you." }, bystander.token);
+    expect(hearted.status, `no Hearts to a tombstone: ${hearted.text}`).toBe(404);
+    expect(String(hearted.json?.error)).toMatch(/left the village/);
+    // The control for both: a living recipient is past the recipient checks and
+    // meets this village's own later refusal (it has not launched), or lands.
+    const thankedLiving = await call("POST", "/api/game/gratitude/send", { toEmail: `moss-${PORT}@example.test`, amount: 1, message: "Thank you." }, bystander.token);
+    expect(String(thankedLiving.json?.error ?? ""), thankedLiving.text).not.toMatch(/left the village|No member/);
+    const heartedLiving = await call("POST", "/api/gratitude", { toId: sender.id, amount: 1, note: "Thank you." }, bystander.token);
+    expect(String(heartedLiving.json?.error ?? ""), heartedLiving.text).not.toMatch(/left the village|No member/);
+
+    expect(await landed(), "no ledger leg and no acknowledgement reached the tombstone").toEqual({ legs: 0, gifts: 0 });
   });
 });

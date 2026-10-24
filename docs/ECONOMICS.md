@@ -3195,6 +3195,19 @@ each is the founder's call:
   nobody can sign in to spend or claim them, and no claim to Hypha can start
   from a tombstone. Whether that door should warn first is open.
 
+**Nothing new reaches a tombstone.** Its row keeps an address,
+`deleted-<id>@anonymized.invalid`, and the doors that pay a recipient a member
+names used to refuse only the standing examples, so that address, the tombstone's
+id or a heart on a departed member's old post issued Gratitude from the faucet,
+or moved credits, into an account nobody holds. `departedRecipient` in
+`server/lib/gratitude.ts` now refuses it on all three: `sendGratitude` (the wall
+and forum hearts), the Hearts give (`POST /api/gratitude`) and member sends
+(`POST /api/wallet/send`), with 404 and "That member has left the village, so
+nothing can be sent to them." before anything is written, so no allowance is
+spent and no ledger leg posts. A former member keeps their address and is not a
+tombstone, so they can still be paid. The admin hand-mint
+(`POST /api/admin/tokens/:slug/mint`) does not ask this question.
+
 ### What the village owes
 
 **Nothing is decided in code, and the code says so out loud rather than leaving

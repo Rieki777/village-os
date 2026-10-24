@@ -144,7 +144,7 @@
  * silent any more.
  */
 import type { Pool } from "mysql2/promise";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { forgetStewardActs } from "./stewardship";
@@ -202,10 +202,13 @@ import {
   beginErasure,
   erasedIdentity,
   erasureRecord,
+  finishedErasureSubjects,
+  noteBackfilledStep,
   noteErasureFailed,
   noteErasureFinished,
   noteResumeAttempt,
   noteStepDone,
+  openBackfillRecord,
   stayedSinceLastAttempt,
   type ErasedIdentity,
 } from "../repos/memberErasure";
@@ -216,7 +219,9 @@ export type ErasureDeps = {
    * is how the tombstone step says so: once a row is a tombstone, the
    * repository keeps its identity fixed against every other writer
    * (`server/repos/users.ts`), and this sweep is the one writer that may
-   * still change it.
+   * still change it. Two steps pass it: "tombstone", and
+   * "handle-after-tombstone", which takes the handle off a tombstone that
+   * still has one.
    */
   members: {
     byId(id: string): Promise<any>;
@@ -456,6 +461,10 @@ interface Step {
  * The NAMES are stored in `member_erasures.steps_done` and matched back by
  * string. Renaming one makes a resume re-run it, which is the safe direction;
  * reusing a name for different work is the unsafe one.
+ *
+ * A step added after the tombstone is also named in `BACKFILL_BY_ID` or
+ * `BACKFILL_LEAVES_OUT` (below `resumeErasure`), which decides whether an
+ * erasure that finished before the step existed is given it at boot.
  */
 function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: ErasureDeps): Step[] {
   const { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders } = deps;
@@ -816,6 +825,39 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "tombstone",
       run: async () => {
         await writeTombstone(members, target.id);
+      },
+    },
+    {
+      /*
+       * THE HANDLE A TOMBSTONE STILL CARRIES (adversarial round 3, finding 13).
+       *
+       * Before round 2 the tombstone wrote the handle `departed-<last eight of
+       * the id>`, and forum bylines print a handle through a live join, so
+       * anybody could find it. `GET /api/profiles/<handle>` needs no sign-in
+       * and read the tombstone like any member: the date they joined, their
+       * moons on the land and, because the tombstone never reset `privacy`,
+       * their token chips and gratitude counts. A typed @handle in the
+       * gratitude form found them too. Both look the handle up through
+       * `userIdForHandle`, so a tombstone with no handle has no page.
+       *
+       * The backfill never runs "tombstone" again, so this step is how an old
+       * tombstone loses the handle (it is in `BACKFILL_BY_ID`). It comes first
+       * after the tombstone so a member whose backfill keeps stopping at a
+       * later step still loses the page.
+       *
+       * `erasure`: the users repository puts a tombstone's handle back after
+       * any other writer (TOMBSTONE_FIXED, server/repos/users.ts), so without
+       * it this step would be noted as done and change nothing. A tombstone
+       * with no handle is not written at all, so a second run, and every
+       * tombstone written since round 2, changes nothing.
+       */
+      name: "handle-after-tombstone",
+      run: async () => {
+        const row = await members.byId(target.id);
+        if (row?.handle == null) return;
+        await members.update(target.id, (u: any) => {
+          u.handle = null;
+        }, { erasure: true });
       },
     },
     {
@@ -1808,4 +1850,224 @@ export async function resumeErasure(
   // finishing an obligation, and attributing it to whoever pressed the button
   // would put their name on an act somebody else began.
   return runSweep(pool, await asTheyWere(pool, target), null, deps, restart ? new Set() : done);
+}
+
+/*
+ * ══ A FINISHED ERASURE, GIVEN THE STEPS IT PREDATES ════════════════════════
+ *
+ * THE GAP. `resumeErasure` returns at `finishedAt`, and neither the queue nor
+ * the hourly job reads a finished record, so a step added to this list after
+ * a member's sweep finished never ran for them. A sweep that finished before
+ * "member-agent-after-tombstone" kept the agent tokens minted in the window
+ * before the tombstone; one that finished before "invites-after-tombstone"
+ * kept their open links letting people in; and so on down the list.
+ * `steps_done` survives the finish, so what a record lacks can be read off it.
+ *
+ * WHAT RUNS. Steps after the tombstone, the ones written for an account that
+ * can no longer act, and of those only the ones that find what they reach by
+ * the member's user id. A finished record holds no name or address any more
+ * (`noteErasureFinished` clears them, and the user row is the tombstone), so
+ * the target here is the tombstone and nothing else. A step that also matches
+ * by address (comms, the guest places, the housing scrub, the order address)
+ * finds what is keyed on the account and nothing by address, which is the
+ * limit a resume of a record from before 0282 already has. Those are named in
+ * `BACKFILL_BY_ID`; a step that finds nothing without the name is named in
+ * `BACKFILL_LEAVES_OUT` with why. The backfill test holds every step after the
+ * tombstone to exactly one of the two, so a step added later fails it until
+ * whoever adds the step decides which. Neither is a default.
+ *
+ * IN THE SWEEP'S ORDER, FROM THE SWEEP'S OWN LIST. The same closures run, so a
+ * backfilled step cannot drift from the step it stands for, and a step that
+ * reads a row before another scrubs it (housing contacts before the housing
+ * scrub) still reads it first.
+ *
+ * NO VALUE MOVES TWICE. Four of these give a fee back or seat somebody from a
+ * queue: the places at gatherings, the guest-era places, the guest places of
+ * a second housing address, and the meet-me windows. Each claims a held
+ * charge before it posts a refund leg under the charge's own key, and deletes
+ * the answers it frees (`releasePlacesOf`, `removeGatheringRows`), so a run
+ * after a lost note finds no answer to free and no held charge to claim, the
+ * ledger refuses the key a second time, and escrow cannot pay out what it no
+ * longer holds. The backfill test runs them twice over a neighbour's fee.
+ *
+ * WHAT IT RECORDS. Each step that lands is appended to `steps_done` on a record
+ * that is still finished, and `finished_at` stays where the sweep put it
+ * (`noteBackfilledStep`). A member given any step gets one audit line,
+ * `member:erasure-backfilled`. A tombstone with no record at all is an erasure
+ * from before 0195, and is given a finished record first, with no attempts on
+ * it, so what ran is written down the same way and a second run reads it done.
+ *
+ * WHAT IT NEVER RUNS. Anything before the tombstone or the tombstone itself,
+ * which were written for an account that still worked. Four of those came
+ * after some records had finished ("quest-proposals", "org-drafts",
+ * "proposal-drafts", "alignment-party-left"), and whether a finished record is
+ * given them is Rye's to decide (raised 2026-10-24). The audit line, which
+ * would say a second time that an erasure happened. And the outside stores,
+ * which were asked when the sweep finished and are the /review button's to
+ * ask again. An open record is the queue's.
+ */
+
+/**
+ * Steps after the tombstone a finished erasure is given when its record lacks
+ * them: each finds what it reaches by the member's user id. The sweep's list
+ * decides the order they run in; this decides only which.
+ */
+export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
+  "handle-after-tombstone",
+  "member-agent-after-tombstone",
+  "guest-places-after-tombstone",
+  "comms",
+  "needs-after-tombstone",
+  "journal-after-tombstone",
+  "invites-after-tombstone",
+  "saberra-bridge-after-tombstone",
+  "seat-application-words-after-tombstone",
+  "meet-me-windows-after-tombstone",
+  "notices-naming-after-tombstone",
+  "exit-notes-after-tombstone",
+  "relayed-mail-after-tombstone",
+  "checkin-notes-after-tombstone",
+  "season-plan-words-after-tombstone",
+  "role-tensions-after-tombstone",
+  "event-places-after-tombstone",
+  "housing-contacts-after-tombstone",
+  "housing-reservations-after-tombstone",
+  "vouches-after-tombstone",
+  "conversations-after-tombstone",
+  "delegations-after-tombstone",
+  "ventures-after-tombstone",
+  "investor-fact-words-after-tombstone",
+  "stay-notes-after-tombstone",
+  "purchase-emails-after-tombstone",
+  "role-proposals-after-tombstone",
+  "sessions-after-tombstone",
+  "gene-keys-after-tombstone",
+]);
+
+/** Steps after the tombstone a finished erasure is never given, and why. */
+export const BACKFILL_LEAVES_OUT: Readonly<Record<string, string>> = {
+  "alignment-names-after-tombstone":
+    "it finds the member in other people's words by the name and handle the tombstone took, and a finished record holds neither",
+  audit: "the sweep wrote its line when it finished, and a second would say the erasure happened twice",
+  [EXTERNAL_STEP]: "the outside stores were asked when the sweep finished, and asking them again is the /review button's job",
+};
+
+/** Every step name in the order the sweep runs them, the outside stores last. */
+export function sweepStepNames(): string[] {
+  return [...sweepSteps(null as unknown as Pool, { id: "" }, null, {} as ErasureDeps).map((s) => s.name), EXTERNAL_STEP];
+}
+
+/** The steps a finished erasure is given when its record lacks them, in sweep order. */
+export function backfillStepNames(): string[] {
+  const names = sweepSteps(null as unknown as Pool, { id: "" }, null, {} as ErasureDeps).map((s) => s.name);
+  return names.slice(names.indexOf("tombstone") + 1).filter((name) => BACKFILL_BY_ID.has(name));
+}
+
+/**
+ * The runOnce id the boot job is recorded under, one per list of steps it
+ * gives. A step added to that list later changes the id, so the next boot runs
+ * the job again and every finished record is given the new step too; one that
+ * already holds a step skips it, so a rerun costs a read per member.
+ */
+export function erasureBackfillJob(): string {
+  const digest = createHash("sha256").update([...backfillStepNames()].sort().join("\n")).digest("hex").slice(0, 12);
+  return `erasure-steps-backfill-${digest}`;
+}
+
+/**
+ * Give one finished erasure every step after the tombstone that its record
+ * lacks and that finds its rows by user id. Returns the steps it ran.
+ *
+ * Runs nothing for a member whose row is gone, is an example, or is not a
+ * tombstone, or whose record is open. A step that throws stops this member
+ * here, with every step before it already noted, and the error names it.
+ */
+export async function backfillFinishedErasure(pool: Pool, userId: string, deps: ErasureDeps): Promise<string[]> {
+  const target = await deps.members.byId(userId);
+  if (!target || isExampleUser(target) || !isTombstone({ email: String(target.email ?? "") })) return [];
+  let record = await erasureRecord(pool, userId);
+  if (!record) {
+    await openBackfillRecord(pool, userId);
+    record = await erasureRecord(pool, userId);
+  }
+  if (!record?.finishedAt) return [];
+
+  const done = new Set(record.stepsDone);
+  const wanted = new Set(backfillStepNames());
+  const ran: string[] = [];
+  try {
+    for (const step of sweepSteps(pool, target, null, deps)) {
+      if (!wanted.has(step.name) || done.has(step.name)) continue;
+      try {
+        await step.run();
+      } catch (err: any) {
+        throw new Error(`step "${step.name}": ${String(err?.message ?? err)}`);
+      }
+      await noteBackfilledStep(pool, userId, step.name);
+      ran.push(step.name);
+    }
+  } finally {
+    if (ran.length) {
+      await recordEvent(pool, {
+        kind: "audit",
+        text: "member:erasure-backfilled",
+        actorUserId: null,
+        entityType: "user",
+        entityRef: userId,
+        audience: "admin",
+      });
+    }
+  }
+  return ran;
+}
+
+/** What one run of the boot job did, counted. */
+export interface ErasureBackfillCounts {
+  /** Finished erasures read, tombstones with no record among them. */
+  read: number;
+  /** Members given at least one step. */
+  given: number;
+  /** Steps run, across every member. */
+  steps: number;
+  /** Members a step stopped part way, left for the next boot. */
+  stopped: number;
+}
+
+/**
+ * THE BOOT JOB: every finished erasure, given the steps it predates.
+ *
+ * Registered through `runOnce` in server/index.ts, LATE in boot, after the
+ * waitlist's promotion sink and the comms dispatcher are wired, because a seat
+ * this frees tells whoever it goes to the way any promotion does.
+ *
+ * One member's failure stops only that member. The rest still run, and then
+ * this throws, so `runOnce` leaves the job unrecorded and the next boot runs
+ * it again; what already landed is noted, so that run starts where this one
+ * stopped.
+ */
+export async function backfillFinishedErasures(
+  pool: Pool,
+  deps: ErasureDeps,
+  log: (line: string) => void = console.log,
+): Promise<ErasureBackfillCounts> {
+  const subjects = await finishedErasureSubjects(pool);
+  const counts: ErasureBackfillCounts = { read: subjects.length, given: 0, steps: 0, stopped: 0 };
+  for (const userId of subjects) {
+    try {
+      const ran = await backfillFinishedErasure(pool, userId, deps);
+      if (ran.length) {
+        counts.given += 1;
+        counts.steps += ran.length;
+      }
+    } catch (err: any) {
+      counts.stopped += 1;
+      console.error(`[erasure] the backfill stopped for ${userId} at ${String(err?.message ?? err)}. The next boot tries again.`);
+    }
+  }
+  log(
+    `[erasure] finished-erasure backfill: ${counts.read} finished erasure(s) read, ${counts.given} given ` +
+      `${counts.steps} step(s) they predate, ${counts.stopped} stopped part way.`,
+  );
+  if (counts.stopped) throw new Error(`${counts.stopped} finished erasure(s) stopped part way, so the job stays unrecorded for the next boot`);
+  return counts;
 }
