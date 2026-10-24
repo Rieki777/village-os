@@ -767,6 +767,18 @@ The retention sweep never deletes an unstamped row, at any age.
   says why each kept thing is kept, and
   `server/lib/erasure.ownedRows.resume.test.ts` stops each of these steps
   part way and resumes it.
+  **AND THEIR RECURRING PAYMENTS STOP** (round 3, finding 5). A recurring
+  product is a Stripe subscription, nothing in the app lets a member cancel
+  one, and a member who left kept being charged every period while each
+  renewal paid the product's tokens into the tombstone.
+  `product-subscriptions-after-tombstone`, after the audit line and before
+  the outside stores, cancels each subscription their purchases hold
+  (`cancelSubscription`, `server/lib/payments.ts`: it reads first, so a
+  second run cancels nothing, and it never refunds). Stripe not connected or
+  failing stops the sweep there, loudly, for the retry. A charge that lands
+  after the account is gone, a first period included, is banked and
+  delivers nothing: `settleProductPurchase` refuses a buyer who has left,
+  sends no receipt, and tells the admins.
   **AND IT RESUMES** (`member_erasures`, 0195). The sweep is a sequence of
   about twenty writes that cannot be one transaction: three participants
   are repositories on their own connections with their own caches, one
@@ -778,7 +790,9 @@ The retention sweep never deletes an unstamped row, at any age.
   while looking closed.
 - **Member exit** (`server/lib/exit.ts`, S52/F12): `openStateCheck`
   semantics applied to a person. ENUMERATE every domain's open state
-  (loans, stays, orders, debts block; balances, roles, warnings inform);
+  (loans, stays, orders, debts block; balances, roles, warnings and
+  recurring payments inform, the last because the erasure cancels them and
+  no door lets a member do it first);
   SETTLE through each domain's own terminals — exit adds exactly ONE move
   of its own, sweeping positive balances to `sys:exit-settlement`,
   idempotent per `(exit, token)`; RESOLVE refuses until clean, then the

@@ -3016,6 +3016,15 @@ forever. Re-running it moves nothing.
   disputed stay purchases, pending or disputed exchange orders, and any NEGATIVE
   balance. Resolution anonymises the member and vacates their roles. Value rows
   are never deleted, so conservation holds through every departure.
+- **A recurring payment informs and never blocks** (round 3, finding 5). The
+  enumeration's `subscriptions` domain (`subscriptionsState`) names each Stripe
+  subscription the member's purchases hold, and says the deletion cancels it in
+  Stripe and refunds nothing already paid. It cannot block, because no door lets
+  a member cancel one first. The erasure's `product-subscriptions-after-tombstone`
+  step does the cancelling and moves no token. A charge that lands after the
+  account is gone posts no `product_grant` from the treasury: `settleProductPurchase`
+  refuses a buyer who has left on every period, banks the money in `fiat_charges`
+  as it does for any refused renewal, and asks the admins to refund it.
 
 ### What the village owes
 
