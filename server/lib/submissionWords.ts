@@ -205,7 +205,7 @@ export function attachmentFilesOnlyTheyName(rows: readonly any[], theirs: readon
     const name = attachmentOf(s);
     if (name && !kept.has(name) && isProposalAttachment(name)) out.add(name);
   }
-  return [...out];
+  return Array.from(out);
 }
 
 /**
