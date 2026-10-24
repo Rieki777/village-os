@@ -37,6 +37,10 @@
  * each sweep before running it so a steward's press is never run twice at once,
  * and stops after ten.
  *
+ * One more write rides on that pass, and it reruns nothing: a FINISHED deletion
+ * still holding who it was for lets go of it (`clearFinishedIdentities`,
+ * server/repos/memberErasure.ts, says how one comes to hold it).
+ *
  * ── EVERY SENTENCE WAS CHECKED AGAINST THE CODE ─────────────────────────────
  *
  * Each `advice` tells a founder where to go and what will happen. Before this
@@ -125,7 +129,14 @@ import {
   type TroubledPeerRow,
 } from "../repos/failureSources";
 import { isReleaseFailure, stuckLandings, type StuckLanding } from "../repos/governanceExecutorPending";
-import { claimResume, countUnfinishedErasures, unfinishedErasuresWithAge } from "../repos/memberErasure";
+import {
+  claimResume,
+  clearFinishedIdentities,
+  countUnfinishedErasures,
+  // A sweep with no failing step whose last attempt began this recently may still be going.
+  MAY_STILL_BE_RUNNING_SECONDS,
+  unfinishedErasuresWithAge,
+} from "../repos/memberErasure";
 import { withNamedLock } from "../repos/namedLock";
 
 export const FAILED_ACTIONS_JOB = "failed-actions";
@@ -236,9 +247,6 @@ export interface ErasureRowForReport {
 
 export type ErasureStanding = "running" | "before-close" | "after-close" | "needs-a-person";
 
-/** A sweep with no failing step whose last attempt began this recently may still be going. */
-const MAY_STILL_BE_RUNNING_SECONDS = 10 * 60;
-
 /**
  * Where an unfinished deletion stands. The tombstone step is what closes the
  * account.
@@ -345,6 +353,11 @@ export function erasureFindings(rows: readonly ErasureRowForReport[], total: num
  * Only a row `mayResumeUnattended` allows, never an example account, and only
  * once `claimResume` has taken the row, so a sweep a steward pressed moments ago
  * is left to that press.
+ *
+ * FIRST, and on every run whether or not anything is left to resume, a finished
+ * record lets go of who it was for (`clearFinishedIdentities` says how one comes
+ * to hold it). That is a write, and it is the only one this job makes to a
+ * finished record: the row stays finished and keeps every step it names.
  */
 export async function resumeClosedErasures(
   pool: Pool,
@@ -352,6 +365,7 @@ export async function resumeClosedErasures(
   deadline: number,
   now: () => number = Date.now,
 ): Promise<string | null> {
+  await clearFinishedIdentities(pool);
   const rows = await unfinishedErasuresWithAge(pool, ERASURE_ROWS_READ);
   let resumed = 0;
   let finished = 0;

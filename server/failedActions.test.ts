@@ -967,6 +967,26 @@ describe.skipIf(!configured)("the failed-actions report, against a real database
       expect(await erasureRecord(pool, MEMBER)).toMatchObject({ attempts: 1, finishedAt: null });
     });
 
+    /*
+     * Round 2, finding 2. A release from before 0282 finishes sweeps without
+     * knowing `erased_identity` exists, so a village that rolled back and came
+     * forward again holds a departed member's name and address on a record
+     * that reads finished. Only another member's finished erasure used to take
+     * it, and a small village can go months without one.
+     */
+    it("lets go of who a finished deletion was for on its next run, with nothing to resume", async () => {
+      await q(
+        "INSERT INTO `member_erasures` (`user_id`, `finished_at`, `attempts`, `steps_done`, `erased_identity`) VALUES (?, CURRENT_TIMESTAMP, 1, JSON_ARRAY('tombstone'), ?)",
+        [MEMBER, JSON.stringify({ name: "Wren Halloway", email: "wren@examples.invalid", handle: null })],
+      );
+      const held = async () => ((await q("SELECT `erased_identity` AS v FROM `member_erasures` WHERE `user_id` = ?", [MEMBER]))[0] as any[])[0]?.v ?? null;
+      expect(await held(), "the fixture must hold an identity, or this is a different case").not.toBeNull();
+
+      expect(await resumeClosedErasures(pool, deps(), soon())).toBeNull();
+      expect(await held(), "a finished deletion still held the member's name and address").toBeNull();
+      expect((await erasureRecord(pool, MEMBER))!.finishedAt, "the record stays finished").toBeTruthy();
+    });
+
     it("claims a sweep before running it, so one somebody attempted moments ago is left to that attempt", async () => {
       await stalledAfterClose(3);
       // A steward presses Finish them between the job's snapshot and its claim.
