@@ -394,11 +394,8 @@ describe.skipIf(!configured)("what an erased member left behind after the sweep"
 
       const after = await journeys(windowId);
       expect(after.length, "the journey rows stay, as the record that the guest was on them").toBe(before.window.journeys.length);
-      for (const j of after) {
-        expect(j.f, "and forgets what it told them").not.toContain('"told"');
-        expect(j.f).not.toContain("Calle 3");
-        expect(j.state).toBe("stopped");
-      }
+      expect(after.map((j) => j.f).join(" "), "and they forget what they told the guest").not.toMatch(/"told"|Calle 3|Meet Wren/);
+      expect(after.map((j) => j.state), "and they stop, as a removed gathering's do").toEqual(after.map(() => "stopped"));
       const letters = await lettersAbout(windowId);
       expect(letters.map((m) => m.id).sort()).toEqual(before.window.letters.map((m) => m.id).sort());
       for (const m of letters) {
