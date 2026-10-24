@@ -131,6 +131,7 @@ describe("asking for advice", () => {
     fireEvent.change(screen.getByLabelText(ADVICE_COPY.decisionLabel), { target: { value: "Tuesdays it is." } });
     fireEvent.click(screen.getByRole("button", { name: ADVICE_COPY.recordDecision }));
     await waitFor(() => expect(calls.at(-1)).toEqual({ path: "/api/sessions/advice/requests/4/decide", method: "POST", body: { decision: "Tuesdays it is." } }));
+    expect(screen.getByText(ADVICE_COPY.youAsked("Garden circle"))).toBeInTheDocument();
     expect(await screen.findByText(ADVICE_COPY.decided(TODAY))).toBeInTheDocument();
     expect(screen.getByText("Tuesdays it is.")).toBeInTheDocument();
     // The forms are gone, so the focus goes to the card, and what landed is read out.

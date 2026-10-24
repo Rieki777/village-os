@@ -21,6 +21,7 @@ import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { INVITE_REFUSALS } from "./lib/invites";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -354,6 +355,61 @@ describe.skipIf(!DB_CONFIGURED)("a guest who is signed in asks to join", () => {
     const standing = await call("GET", `/api/members/${wrenId}/vouches`);
     expect(standing.json?.isMember, "accepting a request is not an admission").toBe(false);
     expect(standing.json?.state?.count, "and it is not a vouch either").toBe(1);
+  });
+});
+
+/*
+ * A LINK WHOSE MAKER HAS LEFT, read at the route a stranger holding it opens
+ * first. The erasure writes the tombstone and only later withdraws the links
+ * (`invites-after-tombstone`, server/lib/erasure.ts), and a sweep can stop
+ * between the two and wait for a retry with the row still reading open. The
+ * route answers from the same door the sign-up doors hold
+ * (server/lib/inviteDoor.ts), so it refuses the link as withdrawn and never
+ * reads the tombstone's name out. Its old body read the row and the maker
+ * itself and answered `valid: true, invitedBy: "A"`.
+ *
+ * The maker is a fresh account, so no earlier case's member is touched, and
+ * this sits after every case that counts the founder's links.
+ */
+describe.skipIf(!DB_CONFIGURED)("a link whose maker has left", () => {
+  it("is refused as withdrawn at the check and at sign-up, and never names them, while a link from somebody who stays still opens", async () => {
+    const fern = await signUp("Fern Departing", "fern", (await makeInvite()).token);
+    expect(fern.status, JSON.stringify(fern.json)).toBe(200);
+    const fernId = String(fern.json?.user?.id ?? "");
+    expect(fernId, "the maker's account").toBeTruthy();
+    // Fern is a guest and may not make a link, so two of the founder's are handed on:
+    // one to her, and one to an id with no account behind it.
+    const hers = await makeInvite();
+    const nobodys = await makeInvite();
+    await pool.query("UPDATE member_invites SET inviter_user_id = ? WHERE id = ?", [fernId, hers.id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("UPDATE member_invites SET inviter_user_id = 'inv-maker-never-was' WHERE id = ?", [nobodys.id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+
+    // While she stands, her link opens and names her by first name.
+    const before = await call("GET", `/api/invites/check?token=${hers.token}`, { token: null });
+    expect(before.json).toMatchObject({ inviteOnly: true, valid: true, invitedBy: "Fern" });
+
+    // What the tombstone step writes, with the sweep stopped before the links: the row still reads open.
+    await pool.query("UPDATE users SET name = 'A departed member', email = CONCAT('deleted-', id, '@anonymized.invalid') WHERE id = ?", [fernId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const [rows] = await pool.query<any[]>("SELECT used_at, revoked_at FROM member_invites WHERE id = ?", [hers.id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(rows[0], "the sweep has not reached the link").toEqual({ used_at: null, revoked_at: null });
+
+    for (const [label, token] of [["departed", hers.token], ["no-maker", nobodys.token]] as const) {
+      const check = await call("GET", `/api/invites/check?token=${token}`, { token: null });
+      expect(check.status, label).toBe(200);
+      expect(check.json, label).toEqual({ inviteOnly: true, valid: false, error: INVITE_REFUSALS.revoked });
+      expect(JSON.stringify(check.json), label).not.toContain("departed");
+      expect(JSON.stringify(check.json), label).not.toContain("Fern");
+
+      const tried = await signUp(`Someone ${label}`, `someone-late-${label}`, token);
+      expect(tried.status, label).toBe(403);
+      expect(tried.json?.error, label).toBe(INVITE_REFUSALS.revoked);
+      expect(await accountsFor(`someone-late-${label}`), label).toBe(0);
+    }
+
+    // THE CONTROL, in the same case: a link from the founder, who stays, still opens and names them.
+    const fresh = await makeInvite();
+    const check = await call("GET", `/api/invites/check?token=${fresh.token}`, { token: null });
+    expect(check.json).toMatchObject({ inviteOnly: true, valid: true, invitedBy: "Invitations" });
   });
 });
 

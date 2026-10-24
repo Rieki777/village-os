@@ -53,7 +53,14 @@ export function loadPayOptions(): Promise<PayOptions | null> {
   if (!optionsOnce) {
     optionsOnce = fetch("/api/quests/pay-options")
       .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
+      .catch(() => null)
+      .then((o) => {
+        // A failed read is not kept: the next editor to open asks again. Kept,
+        // one dropped request left every editor on the page with no tokens
+        // until a reload (it also made Review.questIdeas.test flaky).
+        if (!o) optionsOnce = null;
+        return o;
+      });
   }
   return optionsOnce;
 }

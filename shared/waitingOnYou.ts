@@ -27,7 +27,9 @@
  *   toConsent     role proposals the reader's circle is asked about, inside
  *                 the circle's 2 business days, that the reader has not
  *                 answered (shared/roleProposalConsent.ts). Answered, or the
- *                 window closed, and the row is gone.
+ *                 window closed, and the row is gone. The board draws them
+ *                 under their own heading, "Asked to consent" (PR D), each
+ *                 linking the application, where Consent and Object live.
  *
  * An application leaves the group the moment it leaves `awaiting-holder`:
  * adopted, put to the village or withdrawn. The read filters on the status,
@@ -159,6 +161,10 @@ export const WAITING_COPY = {
   consentLine: (applicant: string, roles: readonly string[]): string => `${applicant || "A member"} proposes to hold ${seatList(roles)} next season`,
   consentBy: (day: string): string => `Consent or object by ${civilDayWords(day)}`,
   consentAction: "Consent or object",
+  /** The group's own heading on the board (role proposals PR D). No count. */
+  consentHeading: "Asked to consent",
+  consentIn: (circle: string): string => (circle.trim() ? `In ${circle.trim()}` : ""),
+  consentCloses: (day: string): string => `Closes on ${civilDayWords(day)}`,
 } as const;
 
 /** What a draft would create, read off its changes. */

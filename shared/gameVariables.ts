@@ -2799,19 +2799,12 @@ export const VARIABLES: VariableDef[] = [
     default: "true",
   },
 
-  // ── Recognition issuance that used to hide in a content document ──────────
-  {
-    key: "gratitude.proposal_accept_award",
-    category: "Gratitude",
-    label: "Recognition for an accepted Work With Us proposal",
-    description:
-      "How much recognition is minted for a member whose Work With Us proposal is accepted. This used to live inside the Work With Us content settings with no bounds; it is issuance, so it belongs here with the other Gratitude dials.",
-    type: "integer",
-    default: "100",
-    min: 0,
-    max: 100000,
-    unit: "Gratitude",
-  },
+  // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude
+  // an accepted Work With Us proposal minted, 100 by default. Rye: "GRATITUDE is
+  // only sent from player to player using the send gratitude function, gratitude
+  // is not distributed in any other way!" An accepted proposal pays the Mint
+  // panel's `proposal.accepted` rules now (server/lib/proposalAward.ts). A stored
+  // override row for the key is never read.
 
   // ── Per-member daily activity caps that were hardcoded ────────────────────
   {

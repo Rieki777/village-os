@@ -15,6 +15,12 @@
  *                                Should the card fail to load, each role as its
  *                                live card, stacked, as before.
  *   IN THE MEMBER'S WORDS        what will be true at the season's end, and why them
+ *   THE CIRCLE'S ANSWER          for a role proposal (role proposals PR D): where
+ *                                the circle's consent stands, who was asked and
+ *                                answered by role title, and an asked holder's
+ *                                Consent or Object (CircleConsent.tsx). Once the
+ *                                circle has consented, the holder's adopt button
+ *                                reads "Record the adoption".
  *   WHERE IT STANDS              waiting for a seat holder, the village voting
  *                                (with a link to the vote), adopted, held
  *   WHAT YOU CAN DO              the holder's card: "Align for the village" and
@@ -56,6 +62,8 @@ import AlignButton from "@/components/alignment/AlignButton";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
 import { call as alignCall } from "@/components/alignment/alignmentsApi";
 import { ApplicantGeneKeys } from "@/components/geneKeys/ProfileGeneKeys";
+import CircleConsent from "@/components/roleProposal/CircleConsent";
+import { CONSENT_WORDS } from "@shared/roleProposalConsent";
 
 export const APPLICATION_WORDS = {
   membersOnly: "Members read role applications.",
@@ -67,6 +75,8 @@ export const APPLICATION_WORDS = {
   wordsRemoved: "These words were removed at the member's request.",
   holderHeading: "For the village",
   holderLine: "You hold the power that seats people. Adopt it for the village, or send it to the village to decide.",
+  /** A role proposal that changes roles never goes to a village vote (role proposals PR B). */
+  powerLine: "You hold the power that seats people. Adopt it for the village.",
   ownTerms: "Your own terms go to the village to adopt.",
   align: "Align for the village",
   putToVillage: "Put it to the village",
@@ -239,6 +249,9 @@ export default function SeatApplication() {
     return <ModuleGate moduleId="governance" name="Seat applications" behind={PAGE_GATE_LINES.propose} />;
   }
 
+  // "Record the adoption", once the circle has consented to a role proposal (role proposals PR D).
+  const record = app?.proposal?.consent?.record ?? null;
+
   const back = (
     <Link
       href="/decisions"
@@ -335,6 +348,17 @@ export default function SeatApplication() {
               )}
             </section>
 
+            {/* A role proposal: where the circle's consent stands, and an asked holder's Consent or Object (PR D). */}
+            {app.proposal?.consent && (
+              <CircleConsent
+                applicationId={app.id}
+                consent={app.proposal.consent}
+                decided={app.proposal.decided}
+                waiting={app.status === "awaiting-holder"}
+                onAnswered={() => void load()}
+              />
+            )}
+
             {app.status === "voting" && app.ballotId && (
               <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
                 <p className="text-stone-800">{app.carried ? `${app.statusWords}.` : APPLICATION_WORDS.votingLine}</p>
@@ -356,18 +380,23 @@ export default function SeatApplication() {
                 {app.you.isCandidate ? (
                   <p className="mt-1 text-stone-700">{APPLICATION_WORDS.ownTerms}</p>
                 ) : (
-                  <p className="mt-1 text-stone-700">{APPLICATION_WORDS.holderLine}</p>
+                  <p className="mt-1 text-stone-700">
+                    {record ? CONSENT_WORDS.recordLine : app.proposal?.changesRoles ? APPLICATION_WORDS.powerLine : APPLICATION_WORDS.holderLine}
+                  </p>
                 )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {app.you.mayAdopt && (
                     // The holder's adopt click IS the village's alignment. Money terms may ask the re-confirm first.
+                    // Once the circle has consented, the same click records the adoption (role proposals PR D).
                     <AlignButton
-                      label={ALIGN_WORDS.forTheVillage}
+                      label={record ?? ALIGN_WORDS.forTheVillage}
                       sentence={intentSentence(app.seats.map((x) => x.name), true)}
                       disabled={busy}
                       onAlign={() => alignCall<any>(`/api/governance/role-applications/${encodeURIComponent(app.id)}/adopt`, "POST")}
                       onDone={(data) => {
-                        setSaid({ ok: true, text: typeof data?.message === "string" ? data.message : "Adopted for the village." });
+                        // A role proposal answers with its decision record, which names a role, never a person.
+                        const text = typeof data?.decided === "string" ? data.decided : typeof data?.message === "string" ? data.message : "Adopted for the village.";
+                        setSaid({ ok: true, text });
                         void load();
                       }}
                     />

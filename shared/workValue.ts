@@ -85,24 +85,33 @@ export const VALUE_MINOR_MAX = 1_000_000_000_000;
 export const TOKEN_AMOUNT_MAX = 1_000_000_000;
 
 /**
- * THE TWO TRIGGERS THAT PAY WORK, AND NO CEILING BINDS EITHER (Rye, 2026-10-22:
+ * THE TRIGGERS THAT PAY WORK, AND NO CEILING BINDS ANY OF THEM (Rye, 2026-10-22:
  * "no caps here! Relatively most projects will have 1 token ~1USD (or their
  * local currency) so we definitely can't have caps on what things pay").
  *
- * A quest or a role pays what it names, or the rule's own amount when it names
- * nothing, in full. An enabled rule on a token still decides that the token
+ * A quest, a role or an accepted proposal pays what it names, or the rule's
+ * own amount when it names nothing, in full. An accepted Work With Us proposal
+ * is work like the others (Rye, 2026-10-23: "definitely a work token"). An enabled rule on a token still decides that the token
  * may pay that kind of work at all, and Gratitude never does.
  *
- * Every rule the engine pays today is on one of these two triggers, so no
+ * Every rule the engine pays today is on one of these triggers, so no
  * ceiling binds anything it pays. The column is still stored. `ceilingBinds`
  * keeps the old clamp for a rule on any other trigger, and nothing pays one.
  */
-export const WORK_PAY_TRIGGERS: readonly string[] = ["quest.completed", "role.cycle"];
+export const WORK_PAY_TRIGGERS: readonly string[] = ["quest.completed", "role.cycle", "proposal.accepted"];
 
 /** Whether a mint rule's ceiling binds what it pays. False for work. */
 export function ceilingBinds(trigger: string): boolean {
   return !WORK_PAY_TRIGGERS.includes(trigger);
 }
+
+/**
+ * The refusal wherever something other than a member's send tries to issue
+ * Gratitude (Rye, 2026-10-23: "GRATITUDE is only sent from player to player
+ * using the send gratitude function, gratitude is not distributed in any other
+ * way!"): a hand-mint, a circle treasury, a badge multiplier.
+ */
+export const GRATITUDE_ONLY_SENT = "Gratitude is only ever sent from one member to another, so it cannot be minted, granted or paid here.";
 
 /** The one token that never pays for work. */
 // The refusal states the rule and never what the token does (Rye, 2026-10-22).

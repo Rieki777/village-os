@@ -159,9 +159,13 @@ const claimStatus = async (id: string): Promise<string | null> => {
   return rows[0] ? String(rows[0].status) : null;
 };
 
-/** Ask the founder to hand-mint. The simplest issuance a route can be told to do. */
+/**
+ * Ask the founder to hand-mint. The simplest issuance a route can be told to do.
+ * In credits: Gratitude is refused by name before the launch is asked (Rye,
+ * 2026-10-23: it is only ever sent member to member).
+ */
 const tryToIssue = (reason: string) =>
-  call("POST", "/api/admin/tokens/gratitude/mint", {
+  call("POST", "/api/admin/tokens/credits/mint", {
     body: { toUserId: wrenId, amount: 5, reason },
   });
 
@@ -603,7 +607,8 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => 
     // And the thing the whole vote was about.
     const now = await tryToIssue("The village started its Game, so this can land");
     expect(now.status, JSON.stringify(now.json)).toBe(200);
-    expect(now.json?.toBalance).toBe(5);
+    // Five credits, in the ledger's minor units at credits' two decimals.
+    expect(now.json?.toBalance).toBe(500);
   });
 
   it("seats the founder who STOOD for it, with a term, and leaves the members where they were", async () => {

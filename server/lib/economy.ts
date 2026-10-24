@@ -55,7 +55,7 @@ import {
   type MintRuleField,
 } from "../../shared/mintRuleKeys";
 import type { VillageMoon } from "../../shared/villageMoon";
-import { GRATITUDE_NEVER_PAYS, ceilingBinds, readValueTokens, type TokenAmount } from "../../shared/workValue";
+import { GRATITUDE_NEVER_PAYS, GRATITUDE_ONLY_SENT, ceilingBinds, readValueTokens, type TokenAmount } from "../../shared/workValue";
 import { issuanceRefusal, readGameStart } from "./gameStart";
 import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gratitude-cycles";
 // The import runs both ways, the same shape `./exit` above already has: both
@@ -2276,6 +2276,12 @@ export interface OwedClaim {
    * price it the way they always did. See `quoteWorkPay`.
    */
   valueTokens?: TokenAmount[] | null;
+  /**
+   * The claimant's badge multipliers, token by token (Rye, 2026-10-23). The
+   * caller reads them, because which badges are awake depends on the season
+   * (`seasonallyDormantBadgeIds`). Absent multiplies nothing.
+   */
+  boost?: PayBoost;
 }
 
 /** One line a piece of work will be paid, in the ledger's own integer. */
@@ -2330,10 +2336,18 @@ export interface WorkPayQuote {
 /** What `quoteWorkPay` reads off a rule, and nothing more: the dry run hands it its own shape. */
 export type WorkPayRule = Pick<MintRule, "tokenSlug" | "amount">;
 
+/**
+ * A member's badge multipliers, token by token (`rewardMultipliersFor`,
+ * server/lib/seasonPatterns.ts). Applied where a member is PAID, never on a
+ * card: a card says what the work pays anybody.
+ */
+export type PayBoost = Readonly<Record<string, number>>;
+
 export function quoteWorkPay(
   rules: readonly WorkPayRule[],
   own: readonly TokenAmount[] | null | undefined,
-  work: "quest" | "seat",
+  work: "quest" | "seat" | "proposal",
+  boost?: PayBoost,
 ): WorkPayQuote {
   const source: WorkPayQuote["source"] = own ? "own" : "standard";
   const lines: WorkPayLine[] = [];
@@ -2374,7 +2388,11 @@ export function quoteWorkPay(
       unpayable.push({ token: r.tokenSlug, reason: `${asked} is smaller than the smallest amount this token can hold` });
       continue;
     }
-    lines.push({ token: r.tokenSlug, units, decimals });
+    // A holder's badge multiplier on this token (Rye, 2026-10-23), after the
+    // work's own figure is known, rounded the way a payment rounds.
+    const factor = Number(boost?.[r.tokenSlug] ?? 1);
+    const paid = Number.isFinite(factor) && factor > 0 && factor !== 1 ? Math.round(units * factor) : units;
+    lines.push({ token: r.tokenSlug, units: paid, decimals });
   }
   if (own) {
     for (const t of own) {
@@ -2387,7 +2405,7 @@ export function quoteWorkPay(
       unpayable.push({
         token: t.token,
         reason:
-          `this ${work} names ${name}, and the village has no enabled ${work === "quest" ? "quest" : "role"} rule on ` +
+          `this ${work} names ${name}, and the village has no enabled ${work === "seat" ? "role" : work} rule on ` +
           `${name}, so it cannot pay. Add a rule on the Mint panel or take ${name} off the ${work}`,
       });
     }
@@ -2481,12 +2499,12 @@ async function priceClaim(
   const unpayable: Array<{ token: string; reason: string }> = [];
   // Every rule the work answers to, priced by the one function the cards read
   // (`quoteWorkPay`). It holds what this loop used to hold inline: zero stays
-  // quiet, a rule the engine cannot honour is REPORTED and never skipped, the
-  // ceiling binds in minor units, and an amount below the token's resolution
-  // is a promise that cannot be kept and says so. A quest with its own list
-  // (0265) is priced from that list under the rules' ceilings and is never
-  // also paid the fixed amounts.
-  const quote = quoteWorkPay(rules, claim.valueTokens ?? null, "quest");
+  // quiet, a rule the engine cannot honour is REPORTED and never skipped, and
+  // an amount below the token's resolution is a promise that cannot be kept
+  // and says so. A quest with its own list (0265) is paid that list in full
+  // and is never also paid the fixed amounts. The claimant's badge
+  // multipliers apply here, at payment, and never on the card.
+  const quote = quoteWorkPay(rules, claim.valueTokens ?? null, "quest", claim.boost);
   unpayable.push(...quote.unpayable);
   for (const line of quote.lines) {
     owed.push({
@@ -2522,10 +2540,13 @@ async function priceClaim(
   const stayProblem = claim.stay && reward > 0 ? ruleCannotPay(QUEST_STAY_TOKEN) : null;
   if (stayProblem) unpayable.push({ token: QUEST_STAY_TOKEN, reason: stayProblem });
   if (claim.stay && reward > 0 && !stayProblem) {
+    // A badge that multiplies stay credits multiplies these too.
+    const stayFactor = Number(claim.boost?.[QUEST_STAY_TOKEN] ?? 1);
+    const stayUnits = toLedgerUnits(QUEST_STAY_TOKEN, reward);
     owed.push({
       toUserId: claim.userId,
       tokenSlug: QUEST_STAY_TOKEN,
-      units: toLedgerUnits(QUEST_STAY_TOKEN, reward),
+      units: Number.isFinite(stayFactor) && stayFactor > 1 ? Math.round(stayUnits * stayFactor) : stayUnits,
       decimals: decimalsFor(QUEST_STAY_TOKEN),
       from: faucetFor(QUEST_STAY_TOKEN)!,
       source: "quest_stay_reward",
@@ -2575,6 +2596,8 @@ async function owedPreflight(db: Pool | PoolConnection, row: OwedPosting): Promi
   if (def.governance !== "platform") {
     return refuse(`${row.tokenSlug} is governed on Hypha and is only mirrored here`);
   }
+  // No pricing writes an owed row in Gratitude. One that exists anyway is refused (Rye, 2026-10-23).
+  if (row.tokenSlug === HEARTS) return refuse(GRATITUDE_ONLY_SENT);
   if (!row.idempotencyKey) return refuse("an occurrence key is required");
   const tooLong = keyTooLong(row.idempotencyKey);
   if (tooLong) return refuse(tooLong);
@@ -3091,7 +3114,16 @@ export async function decayVoice(
  * number is in that number's unit. NO BEHAVIOUR CHANGED HERE in the decimals
  * sweep; this paragraph records why nothing had to.
  */
-export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<SettlementResult> {
+export async function runSettlement(
+  pool: Pool,
+  at: Date = new Date(),
+  /**
+   * Each holder's badge multipliers (Rye, 2026-10-23). The caller supplies
+   * them because which badges are awake depends on the season. Absent pays
+   * every seat its role's own figure.
+   */
+  opts: { boostFor?: (userId: string) => Promise<PayBoost> } = {},
+): Promise<SettlementResult> {
   const { key: cycleKey } = cycleWindow(at);
   const out: SettlementResult = {
     cycleKey,
@@ -3226,10 +3258,11 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
 
   // Each seat priced once, by the function the role cards read, so a card can
   // never promise a figure this loop would not post.
-  const quoted = seats.map((seat) => ({
-    seat,
-    quote: quoteWorkPay(payable, readValueTokens(seat.value_tokens), "seat"),
-  }));
+  const quoted: Array<{ seat: RowDataPacket; quote: WorkPayQuote }> = [];
+  for (const seat of seats) {
+    const boost = opts.boostFor ? await opts.boostFor(String(seat.user_id)) : undefined;
+    quoted.push({ seat, quote: quoteWorkPay(payable, readValueTokens(seat.value_tokens), "seat", boost) });
+  }
   if (seats.length > 0) {
     for (const r of payable) {
       if (r.amount !== null) continue;
@@ -3444,7 +3477,7 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
     }
     // Work is paid in full, with no ceiling (Rye, 2026-10-22): the rule's own
     // amount when the work names none, and the work's own amount when it does.
-    const work = trigger === "quest.completed" ? "quest" : "role";
+    const work = trigger === "quest.completed" ? "quest" : trigger === "proposal.accepted" ? "proposal" : "role";
     const ownUnits = amount === null ? 0 : unitsAtScale(amount, decimals);
     const own = forWork && amount !== null ? `; a ${work} that names its own amount is paid that` : "";
     const what = forWork
@@ -3464,6 +3497,7 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
       "quest.completed": "when a steward confirms finished work",
       "gratitude.given": "when a member thanks another",
       "role.cycle": "each moon, to everyone holding a role",
+      "proposal.accepted": "when the village accepts a member's proposal to work with it",
       "journey.stage_reached": "on reaching a stage of the journey",
       "welcome_aboard.quest": "on a welcome quest",
       "library.contributed": "on lending something to the library",
