@@ -228,7 +228,7 @@ export default function GeneKeysPage() {
                       try {
                         if (navigator.share) {
                           await navigator.share({ text: ASK_WORDS });
-                          setAsked("Sent from your phone. Come back when they answer.");
+                          setAsked("Sent. Come back when they answer.");
                         } else {
                           await navigator.clipboard.writeText(ASK_WORDS);
                           setAsked("Copied. Paste it to whoever was there.");
