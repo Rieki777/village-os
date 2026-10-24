@@ -51,6 +51,10 @@ import {
 // 0219: the governing purpose statement, its one writer, and its subject.
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 import { GPS_CHANGE } from "../shared/governingPurpose";
+import { pageContentProblem } from "../shared/pageContent";
+import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
+import { pageVarsFrom } from "../shared/pageContent/vars";
+import { workWithUsAckEmail } from "./lib/workWithUsAck";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
   NOT_YET_WIRED,
@@ -64,6 +68,7 @@ import { memberJoined } from "./lib/arrival";
 import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, type LadderStage } from "./lib/admission";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
+import { register as registerBrochurePagesRoutes } from "./routes/brochurePages";
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -124,6 +129,7 @@ import { type ConsentActor, register as registerQuestClaimRoutes } from "./route
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
+import { keepFirstPlanIfUsed } from "./lib/commandCentrePlanDefault";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
@@ -185,7 +191,7 @@ import {
   readSetPasswordToken,
   setPasswordLinkRefusal,
 } from "./lib/memberTokens";
-import { sanitizeFontName } from "./lib/themeCss";
+import { brandColour, sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, publicValueFields, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
 import { circleViews, loopedCirclesRefusal } from "../shared/circleView";
@@ -1080,7 +1086,7 @@ const DEFAULT_SETTINGS = {
     amount: "", // e.g. "250" — blank means "to be confirmed" and no figure is shown on the site
     period: "month",
     currency: "$",
-    note: "Village Dues cover utilities, maintenance, and community services. Contributions are recognised in Gratitude, and the value tokens the community pool distributes across Gratitude can help offset dues.",
+    note: "", // blank: the resident page then says its own dues words (token row 25, 2026-10-22)
   },
   /*
    * THE LAND AND MONEY FIGURES, and why every one of them ships blank.
@@ -1905,6 +1911,8 @@ async function ensureDataFiles() {
   await runOnce("accept-award-to-registry", migrateAcceptAwardToRegistry);
   await runOnce("retire-legacy-peg-copy", retireLegacyPegCopy);
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
+  await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
+  await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
@@ -2565,6 +2573,21 @@ async function retireLegacyPegCopy() {
       await settingsRepo.put(settings);
     }
   } catch { /* same */ }
+}
+
+/**
+ * Token row 25 (Rye, 2026-10-22): the dues note this platform seeded said what
+ * Gratitude does. The default is blank now, so the resident page says its own
+ * words; a stored copy of the seeded note, character for character, is cleared
+ * the same way. Anything a village wrote itself is left exactly as it is.
+ */
+async function blankSeededDuesNote() {
+  const seeded = "Village Dues cover utilities, maintenance, and community services. Contributions are recognised in Gratitude, and the value tokens the community pool distributes across Gratitude can help offset dues.";
+  const settings = settingsRepo.get();
+  if (settings?.villageDues?.note === seeded) {
+    settings.villageDues.note = "";
+    await settingsRepo.put(settings);
+  }
 }
 
 /**
@@ -7644,13 +7667,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       }
       // Acknowledge the submitter of a Work With Us proposal: one typed address, never a list (lib/publicAddress.ts)
       const ackTo = type === "work-with-us" ? singlePublicAddress((data as any)?.email) : null;
-      if (ackTo) {
-        await sendResendEmail({
-          to: [ackTo], origin: "forms.ack",
-          subject: "We've received your proposal",
-          html: `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb"><div style="background:#2D5A5A;color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">Your proposal is with us</div></div><div style="padding:22px 24px;line-height:1.6"><p>Hi ${escapeHtml(String(applicantName))},</p><p>Thank you for offering your gifts. We read every Work With Us proposal with care. Please allow up to a month for a thoughtful response, and room for conversation and revision.</p><p style="color:#6b7280;font-size:13px;margin-top:20px">The team</p></div></div></body></html>`,
-        });
-      }
+      // Its words are the village's own (Admin, Pages, Work With Us): lib/workWithUsAck.ts.
+      if (ackTo) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName)) });
     })();
 
     res.json({ success: true, id: entry.id, ...ideaReceipt(proposal, !!entry.userId) }); // whether a quest idea reached /review: lib/questIdeaReceipt.ts
@@ -7926,6 +7944,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // 0098: `story.tell`. What a village says about itself in public is the
     // clearest case in the set of a power that belongs to the village.
     if (!(await guardCapability(req, res, "story.tell"))) return;
+    const pageProblem = pageContentProblem(req.params.section, req.body);
+    if (pageProblem) return res.status(400).json({ error: pageProblem });
     const content = contentRepo.get();
     content[req.params.section] = req.body;
     await contentRepo.put(content);
@@ -17654,7 +17674,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 - timeToImplement (required): how long from approval to completion; phases, seasonality, dependencies
 - needsFromUs (required): information/access, decisions/approvals and by when, meeting time, site access/utilities/equipment/labor
 - maintenance (required): ongoing care, who's responsible, cost over time, expected lifespan and end-of-life
-- reciprocity (required, one or more of these EXACT values): ${recipValues}
+- reciprocity ${recipValues ? `(required, one or more of these EXACT values): ${recipValues}` : "(an empty list: this village lists no options, so the exchange goes in reciprocityDetail)"}
 - reciprocityDetail (optional): amounts, structure, percentages, or a blend they propose`;
     const shape = kind === "quest-proposal"
       ? `{"name","email","title","whatYouWantToDo","resourcesBringing","resourcesNeeded","compensation","timelineMilestones"}`
@@ -18291,9 +18311,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (await overLimit(`investor-docs:${clientIp(req)}`, Math.max(1, numberVar("abuse.investor_docs_per_ip_hourly")), 60 * 60 * 1000)) {
       return res.status(429).json({ error: "Too many requests. Please try again shortly." });
     }
-    const { name: rawName, email: rawEmail, accredited } = req.body ?? {};
+    const { name: rawName, email: rawEmail, accredited, investmentRange, message } = req.body ?? {};
     const name = typeof rawName === "string" ? rawName.trim().slice(0, 190) : "", email = singlePublicAddress(rawEmail);
-    if (!name || !email || typeof accredited !== "boolean") {
+    // `null` = the village switched its accreditation question off, so nobody was asked (Rye, 2026-10-22).
+    if (!name || !email || (typeof accredited !== "boolean" && accredited !== null)) {
       return res.status(400).json({ error: email || rawEmail == null ? "Missing required fields" : "That email address does not look right" });
     }
     /*
@@ -18342,7 +18363,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       data: {
         name,
         email,
-        accredited: accredited ? "yes" : "no",
+        accredited: accredited === null ? "not asked" : accredited ? "yes" : "no",
+        // The two boxes the form always asked for and never sent (Rye, 2026-10-22: "store them").
+        investmentRange: typeof investmentRange === "string" ? investmentRange.trim().slice(0, 120) : "",
+        message: typeof message === "string" ? message.trim().slice(0, 2000) : "",
         /*
          * WHAT THIS PERSON WAS ACTUALLY SENT, kept with the lead.
          *
@@ -18495,6 +18519,7 @@ ${inner}
   // â”€â”€ FAQs (NEW-1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   registerFaqRoutes(app, { isAdmin, guardCapability, faqsRepo });
+  registerBrochurePagesRoutes(app, { isAdmin, guardCapability });
 
   // â”€â”€ Milestones (NEW-3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -18834,6 +18859,7 @@ ${inner}
       stages: servedLadder(mergedConfig().project.commitmentName),
       season: seasonState(),
       brochurePages: brochurePagesOn(),
+      site: siteWords(contentRepo.get() ?? null, m),
     });
   });
 
@@ -26311,7 +26337,8 @@ ${inner}
       display: "standalone",
       orientation: "any",
       background_color: "#ffffff",
-      theme_color: "#2D5A5A",
+      // The village's own brand colour, derived the way theme.css derives it.
+      theme_color: brandColour(getBrand().theme),
       icons: [
         // One entry, `any` sized: the brand icon is an SVG on most forks and
         // a raster on some, and claiming sizes we have not measured would put
@@ -26537,65 +26564,41 @@ ${inner}
     const bare = indexShell();
     if (!bare) return next();
     const shell = shellWithTheme(bare, getBrand);
-    const village = mergedConfig().project.name;
+    const config = mergedConfig();
     const origin = requestOrigin(req);
-    const trim = (s: string, n = 200) =>
-      s.length > n ? `${s.slice(0, n - 1).trimEnd()}...` : s;
-
-    let title = `Quests at ${village}`;
-    let description = `The work the village is asking for, and what it gives back.`;
-    let image = "";
+    const meta = sitePageMeta(req.path, origin, config, contentRepo.get() ?? null);
+    meta.title = `Quests at ${config.project.name}`;
+    meta.description = `The work the village is asking for, and what it gives back.`;
+    meta.image = "";
+    meta.type = "article";
     if (req.params.id) {
       const quest = await questsRepo.byId(String(req.params.id));
       // A link to a retired quest falls through to the SPA, which says so far
       // better than a meta tag can.
       if (!quest) return next();
-      title = `${quest.title} at ${village}`;
-      description = trim(
-        String(quest.subtitle || quest.firstStep || quest.description || description),
-      );
-      image = origin ? `${origin}/api/og/quest/${encodeURIComponent(quest.id)}` : "";
+      meta.title = `${quest.title} at ${config.project.name}`;
+      meta.description = trimTo(String(quest.subtitle || quest.firstStep || quest.description || meta.description));
+      meta.image = origin ? `${origin}/api/og/quest/${encodeURIComponent(quest.id)}` : "";
+      meta.imageSize = { width: OG_WIDTH, height: OG_HEIGHT };
     }
-    const url = origin ? origin + req.path : "";
-    const tags = [
-      `<title>${escapeHtml(title)}</title>`,
-      `<meta name="description" content="${escapeHtml(description)}" />`,
-      `<meta property="og:type" content="article" />`,
-      `<meta property="og:site_name" content="${escapeHtml(village)}" />`,
-      `<meta property="og:title" content="${escapeHtml(title)}" />`,
-      `<meta property="og:description" content="${escapeHtml(description)}" />`,
-      url ? `<meta property="og:url" content="${escapeHtml(url)}" />` : "",
-      image ? `<meta property="og:image" content="${escapeHtml(image)}" />` : "",
-      image ? `<meta property="og:image:width" content="${OG_WIDTH}" />` : "",
-      image ? `<meta property="og:image:height" content="${OG_HEIGHT}" />` : "",
-      `<meta name="twitter:card" content="${image ? "summary_large_image" : "summary"}" />`,
-      url ? `<link rel="canonical" href="${escapeHtml(url)}" />` : "",
-    ]
-      .filter(Boolean)
-      .join("\n    ");
-
-    // The neutral tags come OUT before ours go in. Two og:title tags is not a
-    // richer card, it is a coin toss over which one a crawler believes.
-    const html = shell
-      .replace(/<title>[\s\S]*?<\/title>\s*/i, "")
-      .replace(/<meta\s+name="description"[^>]*>\s*/i, "")
-      .replace(/<meta\s+property="og:[^"]*"[^>]*>\s*/gi, "")
-      .replace("</head>", `  ${tags}\n  </head>`);
+    const html = spliceMeta(shell, meta);
     // index.html is never cached hard here: a member holding a stale shell
     // asks for a bundle hash that no longer exists, which is a white screen.
     res.type("html").set("Cache-Control", "no-cache").send(html);
   });
 
   // Every page, `/` included (express.static above serves no index), gets the
-  // shell with its stylesheet link versioned: server/routes/brandTheme.ts.
-  app.get("/{*splat}", (_req, res) => {
+  // shell with its stylesheet link versioned (server/routes/brandTheme.ts) and
+  // this village's own share card (server/lib/pageMeta.ts).
+  app.get("/{*splat}", (req, res) => {
     const shell = indexShell();
     if (!shell) {
       const indexPath = path.join(staticPath, "index.html");
       console.error(`[sendFile error] ${indexPath}: the shell is missing`);
       return res.status(500).send(`Server error: could not serve index.html from ${indexPath}`);
     }
-    res.type("html").set("Cache-Control", "no-cache").send(shellWithTheme(shell, getBrand));
+    const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null);
+    res.type("html").set("Cache-Control", "no-cache").send(spliceMeta(shellWithTheme(shell, getBrand), meta));
   });
 
   // Terminal error handler. Express 5 forwards a rejected handler promise

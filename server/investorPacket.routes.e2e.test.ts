@@ -233,6 +233,23 @@ describe.skipIf(!DB_CONFIGURED)("the investor packet only sends what a person ch
     expect(sent).toHaveLength(1);
   });
 
+  it("keeps what the form asked for: the range, the message, and whether anybody asked about accreditation", async () => {
+    // Rye, 2026-10-22: "store them". The form always asked and never sent.
+    const res = await call(
+      "POST",
+      "/api/investor-docs/request",
+      { name: "Range Asker", email: "range@example.test", accredited: null, investmentRange: "  $50K - $250K  ", message: "Tell me about phase two." },
+      "",
+    );
+    expect(res.status, res.text).toBe(200);
+    const lead = await newestLead();
+    expect(lead?.data?.email).toBe("range@example.test");
+    expect(lead?.data?.investmentRange).toBe("$50K - $250K");
+    expect(lead?.data?.message).toBe("Tell me about phase two.");
+    // A village that switched the question off: nobody was asked, which is not "no".
+    expect(lead?.data?.accredited).toBe("not asked");
+  });
+
   it("keeps the choice behind the admin gate", async () => {
     const res = await call("PATCH", `/api/admin/investor-docs/${withheldId}`, { inPacket: true }, "");
     expect(res.status, res.text).toBe(401);
