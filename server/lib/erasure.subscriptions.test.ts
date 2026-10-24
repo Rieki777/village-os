@@ -14,10 +14,15 @@
  *
  *   THE STEP. `product-subscriptions-after-tombstone` cancels exactly the
  *   leaver's live subscriptions, never a neighbour's, never refunds and never
- *   moves a token; a second run cancels nothing; a village with Stripe
- *   unconnected, or a Stripe that fails, stops the sweep loudly at that step
- *   and a resume finishes it; and a member with no subscription needs no
- *   Stripe at all.
+ *   moves a token; a second run cancels nothing; a Stripe that fails, with
+ *   the key present, stops the sweep loudly at that step and a resume
+ *   finishes it; and a member with no subscription needs no Stripe at all.
+ *
+ *   NO KEY. A village that holds subscription ids and has since removed its
+ *   Stripe key used to stop every such erasure at this step for good, which
+ *   held `external-stores` behind it unasked. The step now asks every admin
+ *   to cancel each one by hand in the Stripe dashboard, writes the count and
+ *   the ids to the audit trail, and counts itself done.
  *
  *   THE NOTICE. `exitOpenState` names each live subscription as a notice the
  *   erasure acts on, never as a block, and the member reads the same sentence
@@ -58,7 +63,7 @@ async function q(sql: string, params: unknown[] = []): Promise<any[]> {
 }
 
 /** The erasure's singletons with the real users repository. */
-function deps(): ErasureDeps {
+function deps(extra: Partial<ErasureDeps> = {}): ErasureDeps {
   const real = usersRepo(pool);
   return {
     members: { byId: (id: string) => real.byId(id), update: (id: string, fn: (u: any) => void, opts?: { erasure?: boolean }) => real.update(id, fn, opts) },
@@ -67,8 +72,26 @@ function deps(): ErasureDeps {
     withRoleHolderLock: (fn: () => Promise<any>) => fn(),
     loadRoleHolders: () => [],
     uploadsDir,
+    ...extra,
   } as ErasureDeps;
 }
+
+/** The admins' alarm when Stripe is not connected, word for word. */
+const byHandTitle = (n: number) =>
+  `Cancel ${n} recurring payment(s) by hand in the Stripe dashboard. A departed member's erasure could not cancel them, ` +
+  "because Stripe is not connected, and Stripe may keep charging them.";
+const byHandBody = (ids: string[]) =>
+  `Subscription ids to find in the Stripe dashboard: ${ids.join(", ")}. ` +
+  "Cancel each one still active, and refund any period charged after the account was deleted.";
+const byHandKey = (userId: string) => `erasure-subscriptions-by-hand:${userId}`;
+
+/** Every by-hand alarm about one leaver, on anybody's bell. */
+const byHandBell = (userId: string) =>
+  q("SELECT user_id, type, title, body, link, actor_user_id FROM notifications WHERE dedupe_key LIKE ? ORDER BY user_id", [`${byHandKey(userId)}:%`]);
+
+/** The audit lines the step wrote about one leaver. */
+const byHandAudit = (userId: string) =>
+  q("SELECT text, audience FROM health_events WHERE kind = 'audit' AND entity_ref = ? AND text LIKE 'member:subscriptions-cancel-by-hand:%'", [userId]);
 
 interface StripeCall { method: string; path: string; auth: string | null }
 
@@ -113,12 +136,14 @@ function fakeStripe(subs: Record<string, string>) {
     deletes: () => calls.filter((c) => c.method === "DELETE").map((c) => decodeURIComponent(c.path.split("/").pop()!)),
     /** The next call answers with this HTTP status and an error body. */
     failNext: (status: number) => failures.push(status),
+    /** The next read answers as normal and the cancel after it answers 500. */
+    failCancel: () => failures.push(0, 500),
     impl,
   };
 }
 
-async function member(id: string, name: string): Promise<any> {
-  await usersRepo(pool).add({ id, name, email: `${id}@example.test`, passwordHash: "x", paths: [] });
+async function member(id: string, name: string, role = "member"): Promise<any> {
+  await usersRepo(pool).add({ id, name, email: `${id}@example.test`, passwordHash: "x", paths: [], role } as any);
   return usersRepo(pool).byId(id);
 }
 
@@ -243,43 +268,95 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
     expect(s.calls).toEqual([]);
   });
 
-  it("stops loudly at the step when Stripe is not connected, and a resume once it is finishes the job", async () => {
-    delete process.env.STRIPE_SECRET_KEY;
-    const wren = await member("subs-nokey", "Wren Unconnected");
-    await purchase("pp-n1", wren.id, "prod-month", { status: "paid", sub: "sub_nokey", at: "2026-03-01 10:00:00" });
-    const s = useStripe({ sub_nokey: "active" });
+  describe("a village with no Stripe key", () => {
+    let ada: any;
+    let fen: any;
+    beforeAll(async () => {
+      // Two people who administer the village, one of each tier the admin alarm reaches.
+      ada = await member("subs-admin-ada", "Ada Steward", "admin");
+      fen = await member("subs-admin-fen", "Fen Founder", "founder");
+    });
 
-    await expect(anonymizeMember(pool, wren, "admin-1", deps())).rejects.toThrow(/Stripe is not connected/);
-    const stopped = await erasureRecord(pool, wren.id);
-    expect(stopped?.failedStep).toBe(STEP);
-    expect(stopped?.lastError).toContain("sub_nokey");
-    expect(stopped?.finishedAt).toBeNull();
-    // Past the tombstone: the account is closed, and the hourly job resumes a sweep stopped here.
-    expect(stopped?.stepsDone).toContain("tombstone");
-    expect((await usersRepo(pool).byId(wren.id))!.name).toBe("A departed member");
-    expect(s.calls, "no key, so nothing was sent anywhere").toEqual([]);
+    it("asks every admin to cancel each one by hand, records it, and counts the step done", async () => {
+      delete process.env.STRIPE_SECRET_KEY;
+      const wren = await member("subs-nokey", "Wren Unconnected");
+      await purchase("pp-n1", wren.id, "prod-month", { status: "paid", sub: "sub_nokey_month", at: "2026-03-01 10:00:00" });
+      await purchase("pp-n2", wren.id, "prod-year", { status: "reversed", sub: "sub_nokey_year", at: "2026-03-02 10:00:00" });
+      const s = useStripe({ sub_nokey_month: "active", sub_nokey_year: "active" });
 
-    process.env.STRIPE_SECRET_KEY = KEY;
-    const out = await resumeErasure(pool, wren.id, deps());
-    expect(out.finished).toBe(true);
-    expect(out.ran[0], "the resume starts at the step that stopped").toBe(STEP);
-    expect(s.deletes()).toEqual(["sub_nokey"]);
-    expect(s.subs.sub_nokey).toBe("canceled");
-  });
+      await anonymizeMember(pool, wren, "admin-1", deps());
 
-  it("stops loudly when Stripe fails, and the retry cancels it", async () => {
-    const wren = await member("subs-down", "Wren Unlucky");
-    await purchase("pp-d1", wren.id, "prod-month", { status: "paid", sub: "sub_down", at: "2026-04-01 10:00:00" });
-    const s = useStripe({ sub_down: "active" });
-    s.failNext(500);
+      // The sweep is no longer held open at this step, and the outside stores behind it were asked.
+      const record = await erasureRecord(pool, wren.id);
+      expect(record?.finishedAt, "the sweep finished").not.toBeNull();
+      expect(record?.failedStep).toBeNull();
+      expect(record?.stepsDone).toEqual(expect.arrayContaining([STEP, "external-stores"]));
+      expect(s.calls, "no key, so nothing was sent anywhere").toEqual([]);
 
-    await expect(anonymizeMember(pool, wren, "admin-1", deps())).rejects.toThrow(/Stripe could not read subscription sub_down/);
-    expect((await erasureRecord(pool, wren.id))?.failedStep).toBe(STEP);
-    expect(s.subs.sub_down).toBe("active");
+      // Every admin and founder hears once: the count, every id, and where to cancel. The leaver is not named.
+      const bell = await byHandBell(wren.id);
+      expect(bell).toEqual([ada, fen].map((a) => ({
+        user_id: a.id, type: "payments_alert", title: byHandTitle(2), body: byHandBody(["sub_nokey_month", "sub_nokey_year"]),
+        link: "/admin", actor_user_id: null,
+      })));
+      expect(bell.every((n) => !`${n.title} ${n.body}`.includes("Wren"))).toBe(true);
+      // The step's result is on the audit trail, for the admins only.
+      expect(await byHandAudit(wren.id)).toEqual([
+        { text: "member:subscriptions-cancel-by-hand:2:sub_nokey_month,sub_nokey_year", audience: "admin" },
+      ]);
 
-    const out = await resumeErasure(pool, wren.id, deps());
-    expect(out.finished).toBe(true);
-    expect(s.subs.sub_down).toBe("canceled");
+      // An erasure asked for again with the key still missing tells nobody twice.
+      await anonymizeMember(pool, await usersRepo(pool).byId(wren.id), "admin-1", deps());
+      expect((await byHandBell(wren.id)).length).toBe(2);
+      expect((await erasureRecord(pool, wren.id))?.finishedAt).not.toBeNull();
+      expect(s.calls).toEqual([]);
+    });
+
+    it("rings through the host's own notice spine when the host hands one over", async () => {
+      delete process.env.STRIPE_SECRET_KEY;
+      const wren = await member("subs-nokey-host", "Wren Hosted");
+      await purchase("pp-h1", wren.id, "prod-month", { status: "paid", sub: "sub_hosted", at: "2026-03-03 10:00:00" });
+      useStripe({ sub_hosted: "active" });
+      const sent: any[] = [];
+
+      await anonymizeMember(pool, wren, "admin-1", deps({ notify: async (input) => { sent.push(input); } }));
+
+      expect(sent.filter((n) => String(n.dedupeKey).startsWith(byHandKey(wren.id)))).toEqual([ada, fen].map((a) => ({
+        userId: a.id, type: "payments_alert", title: byHandTitle(1), body: byHandBody(["sub_hosted"]),
+        link: "/admin", dedupeKey: `${byHandKey(wren.id)}:${a.id}`,
+      })));
+      expect(await byHandBell(wren.id), "the host's spine wrote it, so the sweep wrote no bell row of its own").toEqual([]);
+      expect((await erasureRecord(pool, wren.id))?.finishedAt).not.toBeNull();
+    });
+
+    it("stops loudly when Stripe fails with the key present, rings nobody, and the retry cancels it", async () => {
+      const wren = await member("subs-down", "Wren Unlucky");
+      await purchase("pp-d1", wren.id, "prod-month", { status: "paid", sub: "sub_down", at: "2026-04-01 10:00:00" });
+      const s = useStripe({ sub_down: "active" });
+      s.failNext(500);
+
+      await expect(anonymizeMember(pool, wren, "admin-1", deps())).rejects.toThrow(/Stripe could not read subscription sub_down/);
+      const stopped = await erasureRecord(pool, wren.id);
+      expect(stopped?.failedStep).toBe(STEP);
+      expect(stopped?.finishedAt).toBeNull();
+      // Past the tombstone: the account is closed, and the hourly job resumes a sweep stopped here.
+      expect(stopped?.stepsDone).toContain("tombstone");
+      expect(s.subs.sub_down).toBe("active");
+      expect(await byHandBell(wren.id), "a failing Stripe is retried, never handed to a person").toEqual([]);
+      expect(await byHandAudit(wren.id)).toEqual([]);
+
+      // The read answers and the cancel fails: still loud, still open.
+      s.failCancel();
+      const again = await resumeErasure(pool, wren.id, deps()).then(() => null, (err: Error) => err);
+      expect(again?.message).toMatch(/Stripe could not cancel subscription sub_down/);
+      expect((await erasureRecord(pool, wren.id))?.failedStep).toBe(STEP);
+
+      const out = await resumeErasure(pool, wren.id, deps());
+      expect(out.finished).toBe(true);
+      expect(out.ran[0], "the resume starts at the step that stopped").toBe(STEP);
+      expect(s.subs.sub_down).toBe("canceled");
+      expect(await byHandBell(wren.id)).toEqual([]);
+    });
   });
 
   it("asks nothing of Stripe for a member with no subscription, even where Stripe was never connected", async () => {
@@ -313,6 +390,19 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       });
       // Nothing in the app lets a member cancel one, so a block would trap them.
       expect(blockingStates(states).map((st) => st.domain)).not.toContain("subscriptions");
+
+      // With no Stripe key the deletion cannot cancel them, and the notice says who will.
+      delete process.env.STRIPE_SECRET_KEY;
+      expect((await exitOpenState(pool, kit.id, [])).find((st) => st.domain === "subscriptions")).toEqual({
+        domain: "subscriptions",
+        count: 2,
+        description:
+          "2 recurring payment(s) still renewing through Stripe: Monthly membership (every month), Garden share (every year). " +
+          "Stripe is not connected to this village, so deleting the account asks the admins to cancel each one by hand in Stripe, " +
+          "and nothing already paid is refunded",
+        blocking: false,
+      });
+      process.env.STRIPE_SECRET_KEY = KEY;
 
       const none = await member("subs-desk-none", "Lee Plain");
       expect((await exitOpenState(pool, none.id, [])).find((st) => st.domain === "subscriptions")).toEqual({

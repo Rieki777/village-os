@@ -43,6 +43,7 @@ import { tokenTypesPostedTo } from "../repos/tokenLedger";
 import { ownExitResolutions, setExitResolution } from "../repos/exitNotes";
 import { openRedemptionCount } from "./redemptionStore";
 import { liveSubscriptionsOf } from "../repos/productPurchases";
+import { stripeConfigured } from "./payments";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -320,16 +321,24 @@ const EVERY: Record<"month" | "year", string> = { month: "every month", year: "e
  * NEVER BLOCKING. Nothing in the app lets a member cancel a subscription
  * themselves, so a block here would leave a member unable to leave until a
  * steward found the subscription in Stripe. The erasure is the cancel.
+ *
+ * WITH NO STRIPE KEY THE ERASURE CANNOT CANCEL, and the sentence says who
+ * will: the step asks the admins to cancel each one by hand in the Stripe
+ * dashboard and finishes. Promising an automatic cancel there would tell the
+ * member something this village cannot do.
  */
 export async function subscriptionsState(pool: Pool, userId: string): Promise<ExitDomainState> {
   const subs = await liveSubscriptionsOf(pool, userId);
   const named = subs.map((s) => `${s.productName || "A product no longer listed"}${s.interval ? ` (${EVERY[s.interval]})` : ""}`);
+  const cancel = stripeConfigured()
+    ? "Deleting the account cancels each one in Stripe"
+    : "Stripe is not connected to this village, so deleting the account asks the admins to cancel each one by hand in Stripe";
   return {
     domain: "subscriptions",
     count: subs.length,
     description: subs.length
       ? `${subs.length} recurring payment(s) still renewing through Stripe: ${named.join(", ")}. ` +
-        "Deleting the account cancels each one in Stripe, and nothing already paid is refunded"
+        `${cancel}, and nothing already paid is refunded`
       : "no recurring payments",
     blocking: false,
   };

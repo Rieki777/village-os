@@ -140,7 +140,9 @@ export type SubscriptionCancel = "cancelled" | "already-ended" | "missing";
  *
  * IT THROWS on anything else: Stripe not connected, an error, a timeout.
  * The erasure records the step as stopped and the sweep is resumed, so the
- * failure is loud and retried and never recorded as done.
+ * failure is loud and retried and never recorded as done. The step checks
+ * for a key before it calls this, and with none it hands the cancel to the
+ * admins and finishes, so the no-key throw here is for any other caller.
  */
 export async function cancelSubscription(subscriptionId: string): Promise<SubscriptionCancel> {
   const id = String(subscriptionId ?? "").trim();
