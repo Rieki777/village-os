@@ -138,6 +138,9 @@ export const NOT_ROLE_WORDS: ReadonlySet<string> = new Set([
   "valueMinor",
   "valueCurrency",
   "valueTokens",
+  // A role's cash pay (0285): money, so it rides on terms, never on the words.
+  "cashMinor",
+  "cashCurrency",
 ]);
 
 /** What the route knows about a village's roles: which fields are words, and which of those are lists. */

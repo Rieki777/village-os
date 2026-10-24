@@ -32,6 +32,9 @@ import {
 } from "./proposalApi";
 import { RP_WORDS } from "./proposalWords";
 import { FOCUS, INPUT, LEDE, PANEL, PRIMARY, QUIET, SECONDARY } from "./parts";
+import DownloadCardText from "./DownloadCardText";
+import { cardTextUrl } from "./roleCardApi";
+import { RC_WORDS } from "./roleCardWords";
 
 const absolute = (link: string) => (typeof window !== "undefined" ? `${window.location.origin}${link}` : link);
 
@@ -285,6 +288,12 @@ export default function StepShare({
   return (
     <div className="grid gap-4">
       <SharePanel proposal={proposal} onShare={onShare} />
+      <section aria-label={RC_WORDS.download} className={`${PANEL} grid gap-2`} data-card-text="">
+        <p className={LEDE}>{RC_WORDS.downloadLine}</p>
+        <div>
+          <DownloadCardText url={cardTextUrl(proposal.id)} className={SECONDARY} />
+        </div>
+      </section>
       <FeedbackList comments={comments} />
       <SubmitPanel proposal={proposal} beforeSubmit={beforeSubmit} onSubmitted={onSubmitted} />
     </div>

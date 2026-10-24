@@ -26,7 +26,7 @@ export interface PageVarSource {
     roleName?: unknown;
     catalystName?: unknown;
   } | null;
-  currency?: { name?: unknown; value?: { name?: unknown } | null } | null;
+  currency?: { name?: unknown; collectiveName?: unknown; value?: { name?: unknown } | null } | null;
 }
 
 export function pageVarsFrom(config: PageVarSource): PageVars {
@@ -47,5 +47,7 @@ export function pageVarsFrom(config: PageVarSource): PageVars {
     catalyst: word(project?.catalystName, "steward"),
     token: word(currency?.name, "recognition"),
     value: word(currency?.value?.name, "village tokens"),
+    // The umbrella word for every token together, set in Admin then Tokens.
+    tokens: word(currency?.collectiveName, "Village Tokens"),
   };
 }
