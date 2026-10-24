@@ -50,9 +50,10 @@ const STEWARDS = {
   name: "Steward Circle",
   minStage: "member",
   capabilities: ["org.seat", "proposal.decide"],
+  // GET /api/roles serves a holder by first name only; the tab names them from the roster.
   holders: [
-    { userId: "u-sam", name: "Sam Reed" },
-    { userId: "u-ana", name: "Ana Ortiz" },
+    { userId: "u-sam", name: "Sam" },
+    { userId: "u-ana", name: "Ana" },
   ],
 };
 const PLAYERS = [

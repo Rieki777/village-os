@@ -113,6 +113,8 @@ export default function GameRolesTab({ password }: { password: string }) {
 
   const stageName = (id: string) => config?.stages?.find((s) => s.id === id)?.name ?? id;
   const memberName = (id: string) => players.find((p) => p.id === id)?.name ?? "This member";
+  // `GET /api/roles` serves a holder by first name; the roster has the whole one, which is who the admin means.
+  const holderName = (h: { userId: string; name?: string }) => players.find((p) => p.id === h.userId)?.name ?? h.name ?? "This member";
 
   const closeFloor = (ok: boolean) => {
     floor?.done(ok);
@@ -211,12 +213,12 @@ export default function GameRolesTab({ password }: { password: string }) {
                 )}
                 {(r.holders ?? []).map((h: any) => (
                   <span key={h.userId} className="inline-flex items-center gap-0.5 text-xs bg-gray-100 text-gray-700 pl-2.5 py-1 rounded-full">
-                    {h.name}
+                    {holderName(h)}
                     <button
                       type="button"
                       onClick={() => setRemoving({ roleId: r.id, userId: h.userId })}
                       title="Remove from this group"
-                      aria-label={`Remove ${h.name} from ${r.name}`}
+                      aria-label={`Remove ${holderName(h)} from ${r.name}`}
                       className="group -my-2.5 inline-flex h-11 w-11 items-center justify-center rounded-full text-gray-500"
                     >
                       <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center rounded-full group-hover:bg-gray-300">×</span>
@@ -232,7 +234,7 @@ export default function GameRolesTab({ password }: { password: string }) {
 
       <RemoveHolderDialog
         open={!!removing}
-        memberName={removingHolder?.name ?? memberName(removing?.userId ?? "")}
+        memberName={removingHolder ? holderName(removingHolder) : memberName(removing?.userId ?? "")}
         groupName={removingRole?.name ?? "this group"}
         powers={((removingRole?.capabilities ?? []) as string[]).map(
           (c) => (CAPABILITY_CONSEQUENCE as Record<string, string | undefined>)[c] ?? c,
