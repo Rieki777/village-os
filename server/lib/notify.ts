@@ -47,6 +47,18 @@ export interface NotifyInput {
   dedupeKey: string;
 }
 
+/**
+ * Who a notice to the admins is about, when it is about a member.
+ *
+ * A producer whose title names a member passes them as the actor. The erasure
+ * sweep finds every row that names a departed member by its actor
+ * (server/repos/noticesNaming.ts), and a row written with none kept the
+ * member's full name on every admin's bell after they had gone.
+ */
+export interface NoticeAbout {
+  actorUserId?: string | null;
+}
+
 export interface NotifyPrefs {
   /** Global email kill switch. */
   emailsOff: boolean;

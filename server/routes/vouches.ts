@@ -50,7 +50,7 @@ import { GAME_CONFIG } from "../../shared/gameConfig";
 import { numberVar } from "../lib/variables";
 import { isTombstone } from "../lib/oauthAccounts";
 import { refuseVouch, vouchBar, vouchingOffRefusal, vouchSentence, vouchState } from "../lib/vouches";
-import { recordVouch, vouchesBy, vouchesFor } from "../repos/vouches";
+import { livingVouchesFor, recordVouch, vouchesBy, vouchesFor } from "../repos/vouches";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
 
@@ -196,8 +196,10 @@ export function register(app: Express, deps: Deps): void {
 
     // Re-read rather than appending to the list above: another voucher may
     // have landed between the two, and the count that decides membership must
-    // be the database's answer and never this handler's arithmetic.
-    const state = vouchState(await vouchesFor(pool, targetId), neededHere());
+    // be the database's answer and never this handler's arithmetic. Only the
+    // vouches of people still here count: a departed member's admits nobody
+    // (server/repos/vouches.ts says why it can still be on the table).
+    const state = vouchState(await livingVouchesFor(pool, targetId), neededHere());
     if (state.met && !target.membershipGranted) {
       await members.update(targetId, (m: any) => {
         m.membershipGranted = true;
@@ -295,7 +297,9 @@ export function register(app: Express, deps: Deps): void {
     const target = await findMember(String(req.params.id ?? ""));
     if (!target) return res.status(404).json({ error: "There is nobody here by that name." });
     const rows = await vouchesFor(getPool(), String(target.id));
-    const state = vouchState(rows, neededHere());
+    // Somebody still waiting reads the count that will decide it, which a departed member's vouch is not part of.
+    const counted = target.membershipGranted ? rows : await livingVouchesFor(getPool(), String(target.id));
+    const state = vouchState(counted, neededHere());
     res.json({
       vouches: rows.map((v) => ({ voucherUserId: v.voucherUserId, kind: v.kind, note: v.note })),
       state,
@@ -317,7 +321,8 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const pool = getPool();
     const received = await vouchesFor(pool, String(user.id));
-    const state = vouchState(received, neededHere());
+    // The same count the vouch route admits on, for somebody still waiting.
+    const state = vouchState(user.membershipGranted ? received : await livingVouchesFor(pool, String(user.id)), neededHere());
     const given = await vouchesBy(pool, String(user.id));
     res.json({
       state,
