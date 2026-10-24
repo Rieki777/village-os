@@ -12,11 +12,15 @@
  * member mints a token or sets an inbox, a steward presses retry, the resume
  * skips "member-agent" by name, and the rows stand for good.
  *
- * The inbox is the sharp one: `agent-week-ahead` selects
+ * The inbox is the sharp one: `agent-week-ahead` selected
  * `FROM agent_inboxes WHERE enabled = 1` with no join to `users`, so a departed
- * member's endpoint goes on receiving the village's payloads. A token is dead
+ * member's endpoint went on receiving the village's payloads. A token is dead
  * once its holder is a tombstone (`holderStands`), but the row keeps the label
  * the member gave it, which is the reason the sweep deletes tokens at all.
+ *
+ * A SECOND WINDOW comes after the whole sweep, for a request already past its
+ * session check when the erasure ran. The cases under "written by a request
+ * still in flight" let the sweep finish first and then make that write.
  *
  * ── WHAT THIS FILE ASSERTS ───────────────────────────────────────────────
  *
@@ -42,10 +46,14 @@ import { usersRepo } from "../repos/users";
 import { erasureRecord } from "../repos/memberErasure";
 import * as portraits from "../repos/characterPortraits";
 import { mintToken } from "./agentTokens";
-import { enqueueAgentDelivery } from "./agentInbox";
+import { drainDeliveries, enqueueAgentDelivery, queueWeekAhead, setInbox } from "./agentInbox";
+import { MEMBER_SECRETS_ENV, memberKeyView, storeMemberKey } from "./memberSecrets";
+import { isTombstone } from "./oauthAccounts";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
+/** A member-secrets key, so an inbox has a secret and a key can be sealed. */
+const SECRETS_ENV = { [MEMBER_SECRETS_ENV]: "ab".repeat(32) } as NodeJS.ProcessEnv;
 
 let db: TestDb;
 let pool: mysql.Pool;
@@ -214,5 +222,230 @@ describe.skipIf(!configured)("a member's agent written while an erasure is stopp
     expect(wrote, "the fixture must have written, or the zeros below prove nothing").toBe(true);
     expect(await agentRowsRemaining(pool, id), "an erasure left the member's agent standing").toEqual(NONE);
     expect((await erasureRecord(pool, id))!.finishedAt).not.toBeNull();
+  });
+
+  /*
+   * THE SECOND WINDOW, which no step of the sweep can close.
+   *
+   * A request checks its session once, at the start. `PUT /api/agent/inbox`
+   * then waits on a DNS lookup the member's own nameserver can stretch to
+   * seconds, and only then writes. If the sweep runs in that wait, the INSERT
+   * lands after "member-agent-after-tombstone" has already deleted, for a
+   * holder that is now a tombstone, and nothing sweeps again. So these cases
+   * let the whole erasure finish FIRST and then make the write that was in
+   * flight, and assert at the two ends that matter: the write refuses itself,
+   * and nothing downstream sends to an inbox nobody stands behind.
+   */
+  describe("written by a request still in flight when the sweep finished", () => {
+    beforeEach(async () => {
+      // Each case reads what the drain sends across the whole schema, so a row
+      // a case leaves behind must not show up as another case's post.
+      await q("DELETE FROM `agent_deliveries`");
+      await q("DELETE FROM `agent_inboxes`");
+    });
+
+    async function eraseFully(id: string): Promise<void> {
+      await anonymizeMember(pool, await seedMember(id), null, deps());
+      const record = await erasureRecord(pool, id);
+      expect(record!.finishedAt, "the sweep must have finished, or this is the first window again").not.toBeNull();
+      expect(record!.stepsDone).toContain("member-agent-after-tombstone");
+      expect(isTombstone({ email: String((await usersRepo(pool).byId(id))!.email) })).toBe(true);
+    }
+
+    async function seedLiving(id: string): Promise<void> {
+      await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [
+        id,
+        "Ash Morrow",
+        `${id}@examples.invalid`,
+      ]);
+    }
+
+    /** The INSERT a request in flight makes once its DNS answer comes back. */
+    async function lateInbox(userId: string, url: string): Promise<string> {
+      const inboxId = `inbox-${userId}`;
+      await q("INSERT INTO `agent_inboxes` (`id`, `user_id`, `url`, `enabled`) VALUES (?,?,?,1)", [inboxId, userId, url]);
+      return inboxId;
+    }
+
+    /** A delivery already queued for that inbox, so the drain has something to refuse. */
+    async function queued(inboxId: string, kind: string): Promise<void> {
+      await q(
+        "INSERT INTO `agent_deliveries` (`id`, `inbox_id`, `kind`, `payload`, `attempts`, `next_attempt_at`) " +
+          "VALUES (?,?,?,?,0,UTC_TIMESTAMP() - INTERVAL 1 MINUTE)",
+        [`dlv-${inboxId}`, inboxId, kind, JSON.stringify({ calendar: "the village's signed-in week" })],
+      );
+    }
+
+    /** The drain with a recording post: what would have gone out, and where. */
+    async function drainRecording(): Promise<{ posts: Array<{ url: string; kind: string }>; summary: Awaited<ReturnType<typeof drainDeliveries>> }> {
+      const posts: Array<{ url: string; kind: string }> = [];
+      const summary = await drainDeliveries(pool, {
+        post: async (url, body: any) => {
+          posts.push({ url, kind: String(body?.kind) });
+          return null;
+        },
+        notifyDisabled: async () => undefined,
+        env: SECRETS_ENV,
+        now: () => new Date(Date.now() + 60_000),
+      });
+      return { posts, summary };
+    }
+
+    it("the week-ahead job builds and queues nothing for an inbox that landed after the sweep, and still does for a living member", async () => {
+      const gone = "er-agent-late-week";
+      const alive = "er-agent-alive-week";
+      await eraseFully(gone);
+      await seedLiving(alive);
+      await lateInbox(gone, "https://gone.example.test/hook");
+      await lateInbox(alive, "https://alive.example.test/hook");
+
+      const asked: string[] = [];
+      const out = await queueWeekAhead(pool, {
+        timezone: "UTC",
+        build: async (userId) => {
+          asked.push(userId);
+          return [{ title: "Bread oven firing", location: "the commons" }];
+        },
+      });
+
+      expect(asked.sort(), "the erased member's week must never even be built").toEqual([alive]);
+      expect(out.queued).toBe(1);
+      expect(await agentRowsRemaining(pool, gone), "the late inbox must not outlive the job that found it").toEqual(NONE);
+
+      const { posts } = await drainRecording();
+      expect(posts, "only the living member's agent hears about the week").toEqual([
+        { url: "https://alive.example.test/hook", kind: "week_ahead" },
+      ]);
+    });
+
+    it("the drain sends nothing to an inbox whose holder was erased or has no member row, removes it, and still sends a living member's", async () => {
+      const gone = "er-agent-late-drain";
+      const ghost = "er-agent-ghost-drain";
+      const alive = "er-agent-alive-drain";
+      await eraseFully(gone);
+      await seedLiving(alive);
+      await queued(await lateInbox(gone, "https://gone.example.test/hook"), "weekly_digest");
+      await queued(await lateInbox(ghost, "https://ghost.example.test/hook"), "opportunity");
+      await queued(await lateInbox(alive, "https://alive.example.test/hook"), "weekly_digest");
+
+      const { posts, summary } = await drainRecording();
+
+      expect(posts, "a tombstone's endpoint, or one with no member behind it, must hear nothing").toEqual([
+        { url: "https://alive.example.test/hook", kind: "weekly_digest" },
+      ]);
+      expect(summary).toMatchObject({ sent: 1, dropped: 2 });
+      expect(await agentRowsRemaining(pool, gone), "what the drain refused, it removes").toEqual(NONE);
+      expect(await agentRowsRemaining(pool, ghost)).toEqual(NONE);
+      const [delivered] = await q("SELECT `delivered_at` FROM `agent_deliveries` WHERE `id` = ?", ["dlv-inbox-er-agent-alive-drain"]);
+      expect(delivered?.delivered_at, "the living member's delivery went out").toBeTruthy();
+    });
+
+    it("an enqueue for an erased member's late inbox answers no_inbox, for the digest and an opportunity alike", async () => {
+      const gone = "er-agent-late-enqueue";
+      const alive = "er-agent-alive-enqueue";
+      await eraseFully(gone);
+      await seedLiving(alive);
+      await lateInbox(gone, "https://gone.example.test/hook");
+      await lateInbox(alive, "https://alive.example.test/hook");
+
+      expect(await enqueueAgentDelivery(pool, gone, { kind: "weekly_digest", data: { brief: "this week" } })).toEqual({
+        ok: false,
+        reason: "no_inbox",
+      });
+      expect(await enqueueAgentDelivery(pool, gone, { kind: "opportunity", data: { intro: "meet Ash" } })).toEqual({
+        ok: false,
+        reason: "no_inbox",
+      });
+      expect(await agentRowsRemaining(pool, gone), "the enqueue that refused also removed the late inbox").toEqual(NONE);
+      expect((await enqueueAgentDelivery(pool, alive, { kind: "weekly_digest", data: { brief: "this week" } })).ok).toBe(true);
+    });
+
+    it("setInbox refuses a holder the sweep already made a tombstone, or one with no member row, and keeps no row", async () => {
+      const gone = "er-agent-late-set";
+      const ghost = "er-agent-ghost-set";
+      const alive = "er-agent-alive-set";
+      await eraseFully(gone);
+      await seedLiving(alive);
+      // An address literal, so the guard answers without a DNS lookup and the
+      // test never reaches the network. TEST-NET-1 passes the range check.
+      const url = "https://192.0.2.10/hook";
+
+      const late = await setInbox(pool, gone, url, SECRETS_ENV);
+      expect(late, "the write that landed after the sweep must refuse itself and hand back no secret").toMatchObject({
+        ok: false,
+        status: 403,
+      });
+      expect(await agentRowsRemaining(pool, gone)).toEqual(NONE);
+      expect((await setInbox(pool, ghost, url, SECRETS_ENV)).ok).toBe(false);
+      expect(await agentRowsRemaining(pool, ghost)).toEqual(NONE);
+
+      const living = await setInbox(pool, alive, url, SECRETS_ENV);
+      expect(living.ok, "a living member still sets an inbox").toBe(true);
+      expect((await agentRowsRemaining(pool, alive)).inboxes).toBe(1);
+    });
+
+    it("storeMemberKey refuses a holder the sweep already made a tombstone, and keeps no key", async () => {
+      const gone = "er-agent-late-key";
+      const alive = "er-agent-alive-key";
+      await eraseFully(gone);
+      await seedLiving(alive);
+      const input = { provider: "anthropic" as const, key: "sk-ant-example-0000" };
+
+      const late = await storeMemberKey(pool, gone, input, SECRETS_ENV);
+      expect(late.ok, "a third-party credential must not be stored for a tombstone").toBe(false);
+      expect(await memberKeyView(pool, gone)).toBeNull();
+      expect(await agentRowsRemaining(pool, gone)).toEqual(NONE);
+
+      expect((await storeMemberKey(pool, alive, input, SECRETS_ENV)).ok, "a living member still stores a key").toBe(true);
+      expect(await memberKeyView(pool, alive)).not.toBeNull();
+    });
+
+    /**
+     * A pool whose first INSERT into `table` waits for the whole sweep first.
+     * The request read whatever it read while the member was alive, and its
+     * write lands after the sweep's last delete: the order a write-time check
+     * has to survive. A check made before the write passes a living member and
+     * lets the row stand; only a check made after it sees the tombstone.
+     */
+    function sweepJustBefore(table: string, target: any): { pool: mysql.Pool; swept: () => boolean } {
+      let swept = false;
+      const racing = {
+        query: async (sql: string, params?: unknown[]) => {
+          if (!swept && new RegExp(`^INSERT INTO ${table}\\b`).test(sql)) {
+            swept = true;
+            await anonymizeMember(pool, target, null, deps());
+          }
+          return pool.query(sql, params); // module-review-ok: passes the code under test's own SQL through to this suite's scratch schema, and writes none of its own
+        },
+      } as unknown as mysql.Pool;
+      return { pool: racing, swept: () => swept };
+    }
+
+    it("setInbox reads its holder after the write, so a sweep that runs just before its INSERT still leaves no row", async () => {
+      const id = "er-agent-race-set";
+      const race = sweepJustBefore("agent_inboxes", await seedMember(id));
+
+      const out = await setInbox(race.pool, id, "https://192.0.2.10/hook", SECRETS_ENV);
+
+      expect(race.swept(), "the sweep must run inside the write, or this is the after-the-sweep case again").toBe(true);
+      expect((await erasureRecord(pool, id))!.finishedAt).not.toBeNull();
+      expect(out, "a write that lands after the sweep's last delete must still refuse itself").toMatchObject({
+        ok: false,
+        status: 403,
+      });
+      expect(await agentRowsRemaining(pool, id)).toEqual(NONE);
+    });
+
+    it("storeMemberKey reads its holder after the write, so a sweep that runs just before its INSERT still leaves no key", async () => {
+      const id = "er-agent-race-key";
+      const race = sweepJustBefore("member_llm_keys", await seedMember(id));
+
+      const out = await storeMemberKey(race.pool, id, { provider: "anthropic", key: "sk-ant-example-0000" }, SECRETS_ENV);
+
+      expect(race.swept(), "the sweep must run inside the write, or this is the after-the-sweep case again").toBe(true);
+      expect((await erasureRecord(pool, id))!.finishedAt).not.toBeNull();
+      expect(out.ok, "a key that lands after the sweep's last delete must still be taken back").toBe(false);
+      expect(await memberKeyView(pool, id)).toBeNull();
+    });
   });
 });

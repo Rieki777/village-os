@@ -119,6 +119,10 @@ describe.skipIf(!configured)("revokeAllTokens", () => {
 
 /** Everything a signed-in session can plant for an agent, written the way the routes write it where that needs only the database. */
 async function plantReach(userId: string): Promise<{ token: string; feed: string }> {
+  // A member the village still holds. The inbox and key writes refuse a holder
+  // with no row, the way they refuse a tombstone, so a fixture without one
+  // would plant nothing and the zeros below would prove nothing.
+  await q("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,'x') ON DUPLICATE KEY UPDATE name = VALUES(name)", [userId, `Member ${userId}`, `${userId}@examples.invalid`]);
   const { token } = await mint(userId, `${userId} agent`);
   const feed = await mintFeedToken(pool, userId);
   // A plain row: setInbox resolves the host over DNS, and a database test does not reach the network.
