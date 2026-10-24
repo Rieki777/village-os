@@ -18,6 +18,8 @@ export interface User {
     type: string;
     description: string;
     recognitionEarned: number;
+    /** What an accepted proposal paid, token by token (server/lib/proposalAward.ts). */
+    paid?: Array<{ token: string; name: string; amount: number }>;
     date: string;
   }>;
   quests: any[];

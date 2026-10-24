@@ -201,6 +201,10 @@ const SEED_RULES: readonly SeedRuleRow[] = [
   // Earned Equity, seeded off: a village decides what pays it. See economySeed.ts.
   { trigger: "quest.completed", token: EARNED_EQUITY, amountRaw: "1.0000", ceilingRaw: "1.0000", recipient: "claimant", enabled: false },
   { trigger: "role.cycle", token: EARNED_EQUITY, amountRaw: "1.0000", ceilingRaw: "1.0000", recipient: "holder", enabled: false },
+  // An accepted proposal is work (Rye, 2026-10-23), paid like a quest. See economySeed.ts.
+  { trigger: "proposal.accepted", token: VILLAGE_VOICE, amountRaw: "10.0000", ceilingRaw: "100.0000", recipient: "claimant", enabled: true },
+  { trigger: "proposal.accepted", token: CREDITS, amountRaw: "25.0000", ceilingRaw: "250.0000", recipient: "claimant", enabled: true },
+  { trigger: "proposal.accepted", token: EARNED_EQUITY, amountRaw: "1.0000", ceilingRaw: "1.0000", recipient: "claimant", enabled: false },
 ];
 
 // ── Reading one value at a time ─────────────────────────────────────────────

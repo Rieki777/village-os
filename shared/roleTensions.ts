@@ -25,9 +25,9 @@
  * tension raised with it has to reach whoever is.
  *
  * Statuses: `open` (nobody has picked it up), `taken` (a holder is on it),
- * `answered`, and `brought_to_circle` (answered by putting it in the role's
- * circle backlog, which is the one road that makes its words public to
- * members).
+ * `answered`, and `brought_to_circle` (answered by making it one of the role's
+ * circle's agenda items, shared/sessionLibrary.ts, which is the one road that
+ * makes its words public to members).
  */
 import { cleanLine, cleanText } from "./sessions";
 import { civilDayWords } from "./seasonPlans";
@@ -226,11 +226,11 @@ export const TENSION_COPY = {
   noteLabel: "Your answer",
   confirmAnswer: "Send the answer",
   confirmBring: "Bring it to the circle",
-  bringWarning: "Its words go into the circle's backlog, where every member can read them.",
+  bringWarning: "It becomes one of the circle's agenda items, and every member can read its words.",
   responded: {
     take: "Taken. It stays here until you answer it.",
     answer: "Answered. The role card shows it as a count.",
-    bring_to_circle: "Brought to the circle. It waits in the circle's backlog for the next session.",
+    bring_to_circle: "Brought to the circle. It waits with the circle's agenda items for its next session.",
   } satisfies Record<TensionAction, string>,
   respondFailed: "That did not save. Try again.",
 
@@ -257,8 +257,7 @@ export const TENSION_REFUSALS = {
   alreadyTaken: "A holder has already taken this tension.",
   alreadyAnswered: "This tension has already been answered.",
   respondsTooMany: "That is a lot of answers in an hour. Wait a little and try again.",
-  noCircle: "This role sits in no circle, so there is no backlog to bring it to.",
-  circleNotMet: "This role's circle has not met yet, so there is no backlog to bring it to. Answer it for now.",
-  sessionsOff: "Live Sessions is off in this village, so there is no circle backlog to bring it to.",
+  noCircle: "This role sits in no circle, so there are no agenda items to bring it to.",
+  sessionsOff: "Live Sessions is off in this village, so there are no agenda items to bring it to.",
   wordsCleared: "The words of this tension were cleared, so there is nothing to bring to the circle.",
 } as const;

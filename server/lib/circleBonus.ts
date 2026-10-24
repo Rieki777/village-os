@@ -63,6 +63,7 @@
 import type { Pool } from "mysql2/promise";
 import { vetoesFor } from "./stewardship";
 import { MINT_FAUCET, postTransfer } from "./ledger";
+import { GRATITUDE_ONLY_SENT } from "../../shared/workValue";
 import { mintCapGuard } from "./mintCap";
 import {
   circleTreasuryAccount,
@@ -233,6 +234,8 @@ export async function payCircleBonus(pool: Pool, input: PayBonusInput): Promise<
    * award's unit and the posting names the caller's slug, so a mismatch would
    * key one token's payment under another token's name and let both be paid.
    */
+  // Gratitude is only sent member to member (Rye, 2026-10-23), so no bonus mints it.
+  if (input.tokenSlug === "gratitude") return { ok: false, error: GRATITUDE_ONLY_SENT };
   if (treasuryTokenFor(input.award.unit) !== input.tokenSlug) {
     return {
       ok: false,

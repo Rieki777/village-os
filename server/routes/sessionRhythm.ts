@@ -3,9 +3,15 @@
  * door is the "Doors" list in shared/sessionRhythm.ts, the contract, and every
  * rule behind a door is server/lib/sessionRhythm.ts:
  *
- *   PUT  /api/sessions/circles/:circleId/rhythm        RhythmInput -> { row }
- *   POST /api/sessions/circles/:circleId/rhythm/skip   { key } -> { row }
- *   GET  /api/sessions/circles/:circleId/summary       CircleSessionsSummary
+ *   PUT    /api/sessions/circles/:circleId/rhythm        RhythmInput -> { row }
+ *   POST   /api/sessions/circles/:circleId/rhythm/skip   { key } -> { row }
+ *   GET    /api/sessions/circles/:circleId/summary       CircleSessionsSummary
+ *   PUT    /api/sessions/circles/:circleId/calendar      { url } -> { ownCalendar, read, row }
+ *   DELETE /api/sessions/circles/:circleId/calendar      -> { row }
+ *
+ * The last two attach and detach a circle's own calendar (the contract is
+ * shared/sessionCalendar.ts). Each attach is read at once from outside, so
+ * they share a daily bucket of their own.
  *
  * "Coming up" itself rides on `GET /api/sessions` (server/routes/liveSessions.ts),
  * the list the page already reads every half minute.
@@ -37,13 +43,16 @@ import { mirrorRhythms } from "../lib/sessionCalendar";
 import {
   COMING_UP_EVERY_MS,
   COMING_UP_JOB,
+  attachOwnCalendarFor,
   circleSummary,
+  detachOwnCalendarFor,
   runComingUpNotes,
   setRhythm,
   skipMeeting,
   type RhythmDeps,
 } from "../lib/sessionRhythm";
 import { CIRCLES_API, RHYTHM_LIMITS, RHYTHM_REFUSALS } from "../../shared/sessionRhythm";
+import { CALENDAR_LIMITS, OWN_CALENDAR_REFUSALS } from "../../shared/sessionCalendar";
 
 /**
  * What this module touches, and why. `circlesRepo` says which circles are
@@ -51,7 +60,10 @@ import { CIRCLES_API, RHYTHM_LIMITS, RHYTHM_REFUSALS } from "../../shared/sessio
  * run, for standing and for who hears the day before. `notify` carries that
  * notice. `overLimit` bounds the two doors that write.
  */
-type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "circlesRepo" | "notify" | "lapseContext">;
+type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "circlesRepo" | "notify" | "lapseContext"> & {
+  /** For a test: what reading a circle's own calendar returns. Absent: the guarded fetch. */
+  fetchCalendarText?: (url: string) => Promise<string>;
+};
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -65,7 +77,7 @@ export function liveCircles(circlesRepo: Deps["circlesRepo"]): { id: string; nam
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify } = deps;
-  const rhythm: RhythmDeps = { circles: () => liveCircles(circlesRepo), lapseContext: deps.lapseContext };
+  const rhythm: RhythmDeps = { circles: () => liveCircles(circlesRepo), lapseContext: deps.lapseContext, fetchCalendarText: deps.fetchCalendarText };
 
   registerJob(COMING_UP_JOB, COMING_UP_EVERY_MS, () => runComingUpNotes({ ...rhythm, getPool, notify }));
 
@@ -106,6 +118,29 @@ export function register(app: Express, deps: Deps): void {
     const who = await signedIn(req, res, true);
     if (!who) return;
     answer(res, await mirrored(await skipMeeting(getPool(), who, circleIdOf(req), req.body, rhythm)), (v) => ({ row: v.row }));
+  });
+
+  /** A signed-in member within the day's bucket for a circle's own calendar, or a 401 or 429 already sent. */
+  const ownCalendarAsker = async (req: Request, res: Response) => {
+    const who = await signedIn(req, res, false);
+    if (!who) return null;
+    if (await overLimit(`sessions-own-calendar:${who.userId}`, CALENDAR_LIMITS.ownCalendarWritesPerDay, 24 * HOUR_MS)) {
+      res.status(429).json({ error: OWN_CALENDAR_REFUSALS.slowDown });
+      return null;
+    }
+    return who;
+  };
+
+  app.put(`${CIRCLES_API}/:circleId/calendar`, async (req, res) => {
+    const who = await ownCalendarAsker(req, res);
+    if (!who) return;
+    answer(res, await attachOwnCalendarFor(getPool(), who, circleIdOf(req), req.body, rhythm), (v) => v);
+  });
+
+  app.delete(`${CIRCLES_API}/:circleId/calendar`, async (req, res) => {
+    const who = await ownCalendarAsker(req, res);
+    if (!who) return;
+    answer(res, await detachOwnCalendarFor(getPool(), who, circleIdOf(req), rhythm), (v) => v);
   });
 
   app.get(`${CIRCLES_API}/:circleId/summary`, async (req, res) => {

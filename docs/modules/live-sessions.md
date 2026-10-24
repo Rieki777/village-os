@@ -22,7 +22,8 @@ Provenance: platform
 > meetings on a calendar (below, "Circle meetings on a calendar") has its contract in `shared/sessionCalendar.ts`,
 > its doors in `server/routes/sessionCalendar.ts`, its rules in `server/lib/sessionCalendar.ts`, its statements in
 > `server/repos/sessionCalendar.ts` and its schema in
-> `drizzle/0275_a_member_follows_circles_on_their_calendar.sql`.
+> `drizzle/0275_a_member_follows_circles_on_their_calendar.sql`; a circle's own calendar adds
+> `server/lib/circleOwnCalendar.ts` and `drizzle/0277_a_circle_attaches_its_own_calendar.sql`.
 
 **A circle holds a working call together in real time. The facilitator moves the room through six
 stages: drop in, arrival, agenda, items, actions and close. Everyone sees the stage the room is on
@@ -170,12 +171,14 @@ every half minute while its tab is visible.
 
 ## What the record holds
 
-Fourteen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other thirteen holds that number. Three
-(0255) are the task layer, described under "After the call: tasks", two (0264) are the agenda library,
-described under "Before the call: the agenda library", one (0271) is a circle's rhythm, described under
-"When a circle meets: its rhythm", and the last two (0275) are who follows which circles on their own
-calendar, described under "Circle meetings on a calendar".
+Seventeen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other sixteen holds that number. Three
+(0255) are the task layer, described under "After the call: tasks", one (0280) is a decision's review
+date, described under "After the call: a circle's decisions and their reviews", two (0264) are the agenda
+library and one (0279) where its items came from, described under "Before the call: the agenda library",
+one (0271) is a circle's rhythm, described under "When a circle meets: its rhythm", two (0275) are who
+follows which circles on their own calendar, and the last (0277) is which circle keeps which calendar of
+its own, both described under "Circle meetings on a calendar".
 
 | Table | Holds |
 |---|---|
@@ -192,6 +195,9 @@ calendar, described under "Circle meetings on a calendar".
 | `live_session_rhythms` | One row per circle: how it meets (weekly, moon or once), the calendar's recurrence with any skipped dates, the village date of its first meeting and its wall-clock time, its length, and who set it last. |
 | `live_session_follows` | The circles a member follows on their own calendar, one row each, or one row `*` for every circle, the new ones too. |
 | `live_session_feed_keys` | One per member: the sha256 of their private calendar address's key, when it was made, and when a calendar app last read it. |
+| `live_session_circle_calendars` | One per circle that attached its own calendar: which of the village's external calendar subscriptions it is, and who attached it. |
+| `live_session_library_sources` | One per agenda item that came from a tension or a decision's review: which kind, which one, and the role's or the circle's name as it was then. One item per tension, and per review date. |
+| `live_session_decision_reviews` | One per decision with a review date: the village date, who set it, and the agenda item its review became once it was made. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
@@ -311,6 +317,64 @@ left, been anonymized or is no longer admitted; a gone member's key is stopped o
 | `DELETE /api/sessions/circles/following/key` | a signed-in member | none |
 | `GET /api/calendar/circles.ics?key=` | whoever holds the key | 30 an hour per address, 600 an hour per network address |
 
+**A circle's own calendar.** A circle that already keeps its meetings in Google Calendar, Apple or
+Outlook attaches that calendar's secret address under Coming up ("Attach a circle's own calendar"):
+the circle's members by the standing rule, and admins. It becomes one of the village's own external
+calendar subscriptions (`server/lib/externalCalendars.ts`, the same the Events page attaches): https
+or `webcal://` only, never a private address, sealed in the secrets store (so attaching is refused in
+words while the village has no `VILLAGE_SECRETS_KEY`), fetched through the outbound guard, and its
+events imported onto the calendar's `circle` layer every three hours by `calendar-external-poll`. It
+is read once the moment it is attached, so its meetings show at once; a first read that fails still
+attaches, and the panel says so. 0277 only says which subscription is whose. A member is told nothing the
+admins alone may read: an address the outbound guard turns away is "cannot be read from here", whatever it
+resolved to, and while the village has no secrets key the panel says to ask an admin. A circle that goes
+dormant or is removed has nobody left to detach its calendar, so the hourly `session-calendar-mirror` job
+detaches it; attach it again if the circle comes back.
+
+A meeting is a timed event no longer than the longest session (480 minutes). An all-day entry or a
+multi-day one stays on the village calendar and in a follower's feed as what it is, and never becomes the
+circle's next meeting, its start card or its day-before notice. Its meetings count as the circle's: a row's
+next meeting is the sooner of the rhythm's and the calendar's (`nextOf`, which Coming up, the circle's summary and the day-before notice all ask), shown
+with that meeting's own title, and a circle with a calendar and no rhythm gets a row of its own ("From
+the circle's own calendar"). A meeting from the calendar is skipped in that calendar; a skip always names the rhythm's own next meeting,
+and says which while the calendar's comes sooner ("Skip the rhythm's meeting on Friday 30 October at
+09:00"). A circle with a calendar and no rhythm is offered "Set a meeting rhythm", with nothing to stop.
+A follower's feed carries the circle's imported meetings with its rhythm. Only the circle's keepers
+see which calendar it is (where it points and its last four characters, never the address) and how
+its last read went, and they replace it, or detach it after one confirm. Replacing or detaching removes the old
+subscription whole, its sealed address and its imported meetings with it; an admin who removes the
+subscription on the Events page detaches it too.
+
+| Door | Who | Limit |
+|---|---|---|
+| `PUT /api/sessions/circles/:circleId/calendar` | the circle's members, admins | 10 a day |
+| `DELETE /api/sessions/circles/:circleId/calendar` | the circle's members, admins | the same bucket |
+
+## After the call: a circle's decisions and their reviews
+
+Every agreement is good until it is reviewed (Rye, 2026-10-22). **Decisions** on /sessions lists what a
+circle decided by consent, newest first: the `decision` entries its rooms marked decided, in its closed
+sessions. It is for the circle's members by standing (in its last meeting, or holding one of its roles now) and
+admins, one circle at a time, their own first: the same audience the circle's task cards on its earlier
+sessions already have. A decision's words are the circle's agreement; the session's title travels only
+to somebody who was in it, or an admin, and otherwise the card says only when it was decided.
+
+**A review date.** The same people set one ("In 3 months", "In 6 months", "In a year", or a date from
+tomorrow up to three years ahead), change it, or take it off. When the date comes, the hourly
+`session-decision-reviews` job (nothing before the module is open to members) makes "Review: <the
+decision>" an item waiting for the circle, added by nobody in particular so it stays the circle's
+(its card says "Added by the Garden circle"), its source the decision and that date (0279: "A decision
+the Garden circle set a date to review"). A long decision's words reach the item's note whole; the
+"Review:" opens only its title. The card then says when its review came and that it went to the agenda
+items. Each review date is its own cycle: a new date lets the last one go, and each date's review is made
+once. The job reads only live circles' reviews, so a dormant circle's never hold up anybody else's. The
+decision's record is never written to: 0280 keeps the date beside it.
+
+| Door | Who | Limit |
+|---|---|---|
+| `GET /api/sessions/circles/:circleId/decisions` | the circle's members, admins | none |
+| `PUT /api/sessions/circles/:circleId/decisions/:entryId/review` `{ reviewOn }` | the circle's members, admins | 60 an hour |
+
 ## Before the call: the agenda library
 
 Members bring what needs a circle's time before the circle meets, and the session that opens next
@@ -328,6 +392,29 @@ circles, or "No circle in particular" as a deliberate last choice. It is chosen 
 standing in exactly one circle. A member may bring something to a circle they are not in, the way a
 tension is raised with the circle that holds it, and they always see their own. Fifty waiting items
 per member at most.
+
+**Every tension becomes an agenda item** (Rye, 2026-10-22). A tension raised with a role, brought to the
+circle by one of the role's holders from the player card, becomes an item waiting for the role's circle
+(`server/lib/roleTensions.ts`), brought by that holder, with the tension's words: the whole of them as
+the title when they fit, otherwise the start as the title and every word in the note. It works for a
+circle that has never met, and it never writes into a closed session's record (the old road wrote a
+backlog entry into the circle's last session, and refused a circle that had not met). A tension named in
+a room is sent on from the room's backlog by whoever named it, the session's hosts or an admin, and from
+"From last time" by anybody who was in that session: "Send to a circle's agenda items", the room's own
+circle chosen first, any live circle or none, after a line saying who will read its words. The room then
+says where each one went (`sentTensions`) and "From last time" offers a sent one no more, while the closed
+record stays exactly as it was. Each such item says where it came from on its card ("From a tension
+raised with Water keeper", "From a tension named in a session of the Garden circle"), from 0279, which
+keeps the role's or circle's name as it was. The same tension never becomes two items: the unique key
+on the source refuses the second ("That tension has been sent to agenda items already."), decided before
+anything is written, and two sends at once leave one item. A withdrawn item takes its source with it, so
+the tension can be sent on again and the room offers it again. The warning before a send names who will
+read the words: the circle's members, or every member for no circle in particular. No waiting cap applies:
+bringing a tension on is answering it.
+
+| Door | Who | Limit |
+|---|---|---|
+| `POST /api/sessions/library/from-tension` `{ sessionId, entryId, circleId }` | whoever named it, the hosts and admins in an open room; anybody who was in a closed one | the add bucket, 60 an hour |
 
 **The list.** One list per circle, the member's own circles first, then the others, then no circle in
 particular, each oldest first, and every card says where it stands in one line: waiting (and "back for
@@ -625,7 +712,9 @@ last changed somebody else's words the item says nobody, and a note they wrote o
 goes, because those were their words. A note that became an entry in a room is an entry they wrote, so
 it goes with the rest. A circle's rhythm they set last says it was set by nobody: the rhythm is the
 circle's, and stays. The circles they followed and their calendar address go, so the address answers
-nothing from then on.
+nothing from then on. A circle's own calendar they attached says it was attached by nobody, and stays,
+and so does a decision's review date they set. A decision they wrote went with the rest of their words,
+so its review date goes too, with every "Review:" item made from it, since those carried the words.
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
@@ -636,5 +725,7 @@ items they brought in their own words, `libraryTakes`, the times they put an ite
 `libraryNotes`, the notes they wrote on items somebody else brought (the note and nothing else of the
 item); a session's id travels only where they may read that session. From a circle's rhythm it carries
 `rhythmsSet`, the circles whose rhythm they set last. From the calendar it carries `circlesFollowed`,
-the circles they follow (`*` for every circle) and since when, and `calendarAddress`, when their
-address was made and last read, never its key.
+the circles they follow (`*` for every circle) and since when, `calendarAddress`, when their
+address was made and last read, never its key, and `ownCalendarsAttached`, the circles whose own
+calendar they attached, never its address. From decisions it carries `reviewsSet`, the review dates they
+set last.

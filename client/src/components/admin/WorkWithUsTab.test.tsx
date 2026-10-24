@@ -18,12 +18,10 @@
  * The unminified message was read off a running dev server before this test
  * was written, so the diagnosis is not inferred from the error number alone.
  *
- * WHY THE ASSERTION IS ABOUT A RENDERED LABEL. `useGameConfig()` reads like a
- * getter and is a hook, which is precisely how this survived review. Asserting
- * only "did not throw" would pass against a version that deleted the label to
- * make the crash go away. So the test also requires the value that hook exists
- * to supply to reach the screen: the village's own recognition-currency name,
- * on the field it labels. Both halves have to hold.
+ * The field that hook labelled set the Gratitude an accepted proposal minted.
+ * It is gone (Rye, 2026-10-23: Gratitude is only sent member to member), and
+ * the hook with it, so the second case now asserts what replaced it: where an
+ * accepted proposal's pay is set, and no Gratitude field.
  *
  * THIS TEST WAS RED FIRST. Run against the inline call, it failed with
  * "Rendered more hooks than during the previous render" captured by the
@@ -69,7 +67,6 @@ const stubFetch = () => {
             intro: "",
             assistantName: "",
             assistantGreeting: "",
-            acceptGratitude: 0,
             reciprocityOptions: [],
           }),
         };
@@ -101,17 +98,10 @@ describe("the Work With Us tab opens", () => {
     expect(screen.getByText(/Guide's opening greeting/i)).toBeTruthy();
   });
 
-  it("still labels the field with the village's own recognition currency", async () => {
+  it("says where an accepted proposal's pay is set, and offers no Gratitude for it", async () => {
     render(<Boundary><WorkWithUsTab password="secret" /></Boundary>);
-
-    /*
-     * The hook has to keep doing its job from its new home at the top of the
-     * component. Deleting the call would also stop the crash, and would be a
-     * regression: the label would read "recognition" in a village that calls
-     * it something else.
-     */
-    await waitFor(() =>
-      expect(screen.getByText(new RegExp(`${CURRENCY} on accepted proposal`, "i"))).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/What an accepted proposal pays/i)).toBeTruthy());
+    expect(screen.getByText(/set on the Mint panel/i)).toBeTruthy();
+    expect(screen.queryByText(new RegExp(`${CURRENCY} on accepted proposal`, "i"))).toBeNull();
   });
 });
