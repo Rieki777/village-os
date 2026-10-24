@@ -355,6 +355,17 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} of your redemptions were not confirmed.",
     celebrate: false,
   },
+  /**
+   * The village marked cash it owed you as paid (0285, server/routes/cashOwed.ts).
+   * The body is the treasurer's own note on how it was paid. Not celebrated,
+   * for redemption's reason: the platform records the payment and never sees it.
+   */
+  cash_paid: {
+    group: "economy",
+    blurb: "The village marked cash it owed you as paid.",
+    many: "{n} cash payments were marked paid.",
+    celebrate: false,
+  },
   exchange: {
     group: "economy",
     blurb: "An exchange order settled, and what you bought is in your wallet.",

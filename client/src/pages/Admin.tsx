@@ -46,6 +46,8 @@ import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
+import { putSubmissionStatus } from "@/components/admin/submissionStatus";
+import ProposalAcceptCash from "@/components/admin/ProposalAcceptCash";
 import LandTab from "@/components/admin/LandTab";
 import GameRolesTab from "@/components/admin/GameRolesTab";
 import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
@@ -752,27 +754,8 @@ export function SubmissionsTab({ password }: { password: string }) {
     load();
   };
 
-  const setStatus = async (id: string, status: string, type = "") => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/submissions/${id}/status`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ status }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error();
-      if (data.rewarded) toast.success("Accepted. The member was welcomed into the game.");
-      else if (data.admitted) toast.success("Accepted. They hold membership now.");
-      // A stranger signed with no account, so the accept stands and admits nobody.
-      else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
-      // A yes to joining admits nobody, even from an account (a signing or vouches do), and names the next step:
-      // for an account, the doors that do admit; for a stranger's form, with no account to reach, an invitation.
-      else if (type === "membership-request" && status === "accepted") toast.success(data.notified ? "Accepted, and they have been told. A yes to a request admits nobody. Their signed letter, once accepted, or enough vouches will make them a member." : "Accepted. They have no account yet, so nobody was told. Make them a link under Invite somebody on your profile, and send it to the address on their request.", { duration: 12000 });
-      else if (data.notified) toast.success("Status updated. The person who sent it has been told.");
-      else toast.success("Status updated");
-      load();
-    } catch { toast.error("Could not update status"); }
-  };
+  // Moved to submissionStatus.ts, so the proposal cash control shares its sentences (0285).
+  const setStatus = async (id: string, status: string, type = "") => { if (await putSubmissionStatus(password, id, status, type)) load(); };
 
   return (
     <div>
@@ -871,6 +854,7 @@ export function SubmissionsTab({ password }: { password: string }) {
                       </span>
                     )}
                   </div>
+                  <ProposalAcceptCash password={password} submission={s} onDone={load} />
                   {s.type === "role-application" && <RaisedHandTerm data={s.data} />}
                   {s.type === "power-application" && <PowerHandNote data={s.data} />}
                   <table className="w-full text-sm">

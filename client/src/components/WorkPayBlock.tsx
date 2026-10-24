@@ -13,7 +13,7 @@
  */
 import { Coins, HandCoins } from "lucide-react";
 import type { WorkPay } from "@shared/workValue";
-import { cashWords, lineWords, linesWords, payHeadline, useDisplayRates, valueWords } from "@/lib/workPay";
+import { agreementCashWords, cashPayWords, lineWords, linesWords, payHeadline, useDisplayRates, valueWords } from "@/lib/workPay";
 
 export default function WorkPayBlock({
   pay,
@@ -27,7 +27,9 @@ export default function WorkPayBlock({
   if (!pay) return null;
   const headline = payHeadline(pay);
   const value = pay.value ? valueWords(pay.value, rates) : null;
-  const cash = cashWords(pay.cash);
+  const cash = agreementCashWords(pay);
+  // 0285: the cash the work itself pays, which the village owes and records.
+  const ownCash = cashPayWords(pay, rates);
   const every = pay.cadence === "cycle" ? " each cycle" : "";
 
   if (variant === "card") {
@@ -48,10 +50,10 @@ export default function WorkPayBlock({
             {value.converted && <span className="font-normal opacity-80"> ({value.converted})</span>}
           </span>
         )}
-        {pay.lines.length > 0 && (
+        {(pay.lines.length > 0 || ownCash) && (
           <span className={value ? "font-normal" : undefined}>
             {value ? "paid as " : ""}
-            {linesWords(pay.lines)}
+            {[ownCash?.own, pay.lines.length > 0 ? linesWords(pay.lines) : null].filter(Boolean).join(", ")}
             {every}
           </span>
         )}
@@ -76,12 +78,18 @@ export default function WorkPayBlock({
           ) : (
             <p className="text-muted-foreground">No value set yet. Inquire for the full payment details.</p>
           )}
-          {pay.lines.length > 0 ? (
+          {pay.lines.length > 0 || ownCash ? (
             <p className="text-foreground">
               Paid{every} as{" "}
+              {ownCash && (
+                <span className="font-semibold">
+                  {ownCash.own}
+                  {ownCash.converted && <span className="font-normal text-muted-foreground"> ({ownCash.converted})</span>}
+                </span>
+              )}
               {pay.lines.map((l, i) => (
                 <span key={l.token}>
-                  {i > 0 && ", "}
+                  {(i > 0 || ownCash) && ", "}
                   <span className="font-semibold">{lineWords(l)}</span>
                 </span>
               ))}
@@ -89,6 +97,9 @@ export default function WorkPayBlock({
             </p>
           ) : (
             value && <p className="text-muted-foreground">Paid in no tokens on this platform. Inquire for payment details.</p>
+          )}
+          {ownCash && (
+            <p className="text-xs text-muted-foreground">The village pays the cash itself, and keeps a record of what it owes you on your profile.</p>
           )}
           {pay.source === "standard" && pay.lines.length > 0 && (
             <p className="text-xs text-muted-foreground">These are the village&apos;s standard amounts.</p>

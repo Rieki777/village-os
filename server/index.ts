@@ -166,6 +166,7 @@ import { register as registerSessionDecisionRoutes } from "./routes/sessionDecis
 import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
+import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
@@ -399,7 +400,7 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
@@ -794,7 +795,8 @@ import {
   seasonallyDormantBadgeIds,
   type PatternKind,
 } from "./lib/seasonPatterns";
-import { payAcceptedProposal } from "./lib/proposalAward";
+import { applyAcceptReward } from "./lib/proposalAward";
+import { statedProposalCash } from "./lib/cashOwed"; // 0285: a proposal's cash, owed when it is accepted
 import { GRATITUDE_ONLY_SENT } from "../shared/workValue";
 import { buildRetrospective, proposeNextPattern } from "./lib/seasonRetrospective";
 import {
@@ -4628,82 +4630,7 @@ function getWorkWithUs() {
   return { ...DEFAULT_WORK_WITH_US, ...workWithUsRepo.get() };
 }
 
-/**
- * When a Work With Us proposal is accepted, fold it into the game for a
- * matching member: a logged contribution, the work tokens the village pays
- * for an accepted proposal, and a pulse. Idempotent.
- *
- * NEVER GRATITUDE (Rye, 2026-10-23): "GRATITUDE is only sent from player to
- * player using the send gratitude function, gratitude is not distributed in
- * any other way!" This minted `gratitude.proposal_accept_award` (100) from
- * the recognition faucet; it pays the `proposal.accepted` rules now
- * (server/lib/proposalAward.ts), with the member's badge multipliers.
- *
- * A STEWARD MAY NOT PAY THEMSELVES THROUGH THIS DOOR. `canConfirm` in
- * server/lib/economy.ts already states the rule for the whole build: "A
- * steward may not witness their own work. Confirming releases value, so it
- * must be structurally impossible to do it for yourself, admin included."
- * This path releases value and did not ask. Anyone holding `intake.moderate`
- * could send a Work With Us proposal in their own name, accept it, and pay
- * themselves. Once per submission, and nothing bounds how many submissions a
- * person sends.
- *
- * The acceptance itself still stands. Whether a steward may accept their own
- * proposal at all is a question for the village, and this is not the place to
- * answer it. What stops here is the payment, and the route says so, because a
- * refusal nobody is told about teaches nothing.
- */
-async function applyAcceptReward(
-  entry: any,
-  acceptedByUserId: string | null,
-): Promise<{ rewarded: boolean; refused?: string }> {
-  if (entry.rewarded) return { rewarded: false };
-  const email = String(entry.data?.email ?? "").toLowerCase();
-  const match =
-    (entry.userId ? await members.byId(entry.userId) : null) ??
-    (email ? await members.byEmail(email) : null);
-  if (!match) return { rewarded: false }; // not a registered member; nothing to fold in
-  // The same rule the mint already enforces, restated where this mint happens
-  // so a new caller cannot route around it.
-  //
-  // Called with no actor, this refuses too, and that is the point.
-  // `canConfirm` answers "a confirmation needs a named steward" for an empty
-  // one, so an unattributed accept withholds the payment. Every live path
-  // here has an actor: the route sits behind `guardCapability`, which cannot
-  // pass without a signed-in user. A future caller that loses the actor meets
-  // a refusal it has to read, and inventing a witness to get past it is the
-  // one thing that must stay hard.
-  const witness = canConfirm(match.id, acceptedByUserId ?? "");
-  if (!witness.ok) {
-    return {
-      rewarded: false,
-      refused:
-        "The proposal is accepted. The payment for it waits for another steward, " +
-        "because this proposal is yours.",
-    };
-  }
-  const paid = await payAcceptedProposal(getPool(), {
-    submissionId: String(entry.id),
-    userId: match.id,
-    boost: await rewardMultipliersFor(getPool(), match.id, await dormantBadgeIds()),
-  });
-  if (!paid.ok) return { rewarded: false };
-  const updated = await members.update(match.id, (u: any) => {
-    u.contributions = u.contributions ?? [];
-    u.contributions.push({
-      id: `contrib-${Date.now()}`,
-      type: "proposal",
-      description: `Work With Us proposal accepted: ${String(entry.data?.work ?? "your offering").slice(0, 120)}`,
-      // No Gratitude: what the acceptance paid, token by token.
-      recognitionEarned: 0,
-      paid: paid.paid,
-      date: new Date().toISOString(),
-    });
-  });
-  if (!updated) return { rewarded: false };
-  await addActivity("proposal", `${firstName(updated.name)}'s proposal was welcomed into the village`, { actorUserId: updated.id, entityType: "submission", entityRef: entry.id });
-  return { rewarded: true };
-}
+// The accept reward lives in server/lib/proposalAward.ts (`applyAcceptReward`), with its account.
 
 // â”€â”€ Abuse guards (S12: MySQL-backed — a redeploy is no longer an amnesty) â”€â”€
 
@@ -7686,7 +7613,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // and the guard then leaves the payment alone: an unattributed accept is
       // its own problem and inventing an actor here would hide it.
       const actorId = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
-      const outcome = await applyAcceptReward(submissions[idx], actorId);
+      const cash = statedProposalCash(req.body?.cashMinor, defaultDisplayCurrency(mergedConfig().project));
+      if (!cash.ok) return res.status(400).json({ error: cash.error });
+      const outcome = await applyAcceptReward(getPool(), { members, boostFor: async (u) => rewardMultipliersFor(getPool(), u, await dormantBadgeIds()), activity: (text, actor, ref) => addActivity("proposal", text, { actorUserId: actor, entityType: "submission", entityRef: ref }) }, submissions[idx], actorId, cash.cash);
       rewarded = outcome.rewarded;
       rewardRefused = outcome.refused ?? null;
       if (rewarded) submissions[idx].rewarded = true;
@@ -18433,6 +18362,7 @@ ${inner}
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
+  registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay") });
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

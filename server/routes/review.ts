@@ -768,6 +768,8 @@ export function register(app: Express, deps: Deps): void {
       valueMinor: typed.valueMinor ?? null,
       valueCurrency: defaultDisplayCurrency({ fiatCurrency: projectCurrency() }),
       valueTokens: typed.tokens ?? null,
+      // 0285: the cash it pays at consent, in the same currency. Null pays none.
+      cashMinor: typed.cashMinor ?? null,
       stayCreditReward: req.body?.reward?.stayCreditReward ?? null,
       minStage: req.body?.reward?.minStage ?? null,
       requiresRole: req.body?.reward?.requiresRole ?? null,

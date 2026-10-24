@@ -49,6 +49,9 @@ export interface ValuedWork {
   valueMinor?: number | null;
   valueCurrency?: string | null;
   valueTokens?: TokenAmount[] | null;
+  /** The cash it pays (0285), owed when it is paid and never paid by the platform. */
+  cashMinor?: number | null;
+  cashCurrency?: string | null;
 }
 
 /** The enabled rules each kind of work answers to, read once per request. */
@@ -72,6 +75,12 @@ function linesOf(work: ValuedWork, rules: readonly MintRule[], kind: "quest" | "
   };
 }
 
+/** The cash a piece of work states it pays, or null. Zero pays none. */
+function workCash(work: ValuedWork) {
+  const cash = readWorkValue(work.cashMinor, work.cashCurrency);
+  return cash && cash.minor > 0 ? cash : null;
+}
+
 /**
  * What a quest pays, for its card. The quest's stay credits are its own
  * payment, released by the same consent, so they are a line here too.
@@ -82,13 +91,13 @@ export function questPay(quest: ValuedWork & { stayCreditReward?: number | null 
   if (stay > 0 && !ruleCannotPay(STAY_TOKEN) && toLedgerUnits(STAY_TOKEN, stay) > 0) {
     lines.push({ token: STAY_TOKEN, name: tokenDef(STAY_TOKEN)?.name ?? STAY_TOKEN, amount: stay });
   }
-  return { value: readWorkValue(quest.valueMinor, quest.valueCurrency), lines, source, cadence: "once" };
+  return { value: readWorkValue(quest.valueMinor, quest.valueCurrency), lines, source, cadence: "once", cashPay: workCash(quest) };
 }
 
 /** What a role pays each seat every cycle, for its card, with the cash its terms state. */
 export function rolePay(role: ValuedWork, rules: readonly MintRule[], cash: StatedCash | null): WorkPay {
   const { lines, source } = linesOf(role, rules, "seat");
-  return { value: readWorkValue(role.valueMinor, role.valueCurrency), lines, source, cadence: "cycle", cash };
+  return { value: readWorkValue(role.valueMinor, role.valueCurrency), lines, source, cadence: "cycle", cash, cashPay: workCash(role) };
 }
 
 /**

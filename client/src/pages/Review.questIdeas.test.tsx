@@ -134,7 +134,8 @@ describe("a quest idea on /review says where it came from, and what the person a
     const accepted = () => fetchMock.mock.calls.find(([url]) => String(url) === "/api/review/quests/qp-1/accept");
     await waitFor(() => expect(accepted()).toBeTruthy());
     expect(JSON.parse(String(accepted()![1]?.body))).toEqual({
-      reward: { valueMinor: 2500000, valueTokens: [{ token: "credits", amount: 25 }], stayCreditReward: null },
+      // 0285: an empty cash box sends null, which stores no cash.
+      reward: { cashMinor: null, valueMinor: 2500000, valueTokens: [{ token: "credits", amount: 25 }], stayCreditReward: null },
       edits: { title: "Build a seed library shelf", description: "Turn the old bookcase into a seed library." },
     });
   });
