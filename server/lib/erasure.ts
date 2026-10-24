@@ -432,12 +432,15 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       // address, with the team alerts those set off blanked first, while the
       // rows still say what the alerts said. A quest idea's words and the
       // other values `KEPT_BY_TYPE` lists stay (server/lib/submissionWords.ts).
+      // Before any of that, a Work With Us file only their rows name comes off
+      // the volume through `unlink`, so a file that will not come off stops
+      // this step with the rows still naming it.
       // This pass ran first with seven contact keys and the account match
       // alone; a record that already holds this name gets the rest from
       // "submission-words-after-tombstone", which every record runs.
       name: "submissions",
       run: async () => {
-        await forgetSubmissionWords(pool, submissionsRepo, { userId: target.id, emailKey: realEmailKey(target), knownAs: knownAs(target) });
+        await forgetSubmissionWords(pool, submissionsRepo, { userId: target.id, emailKey: realEmailKey(target), knownAs: knownAs(target) }, (file) => unlink(deps.uploadsDir, file));
       },
     },
     {
@@ -967,11 +970,12 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        * Their submissions again, once nothing can file one: a hand raised,
        * a seat claimed or a form sent between the first pass and the
        * tombstone keeps its words otherwise, and a record that holds
-       * "submissions" from before that pass took words never ran it.
+       * "submissions" from before that pass took words never ran it. The
+       * files only their rows name come off the volume first, as above.
        */
       name: "submission-words-after-tombstone",
       run: async () => {
-        await forgetSubmissionWords(pool, submissionsRepo, { userId: target.id, emailKey: realEmailKey(target), knownAs: knownAs(target) });
+        await forgetSubmissionWords(pool, submissionsRepo, { userId: target.id, emailKey: realEmailKey(target), knownAs: knownAs(target) }, (file) => unlink(deps.uploadsDir, file));
       },
     },
     {

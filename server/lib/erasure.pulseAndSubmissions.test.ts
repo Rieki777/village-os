@@ -488,5 +488,71 @@ describe.skipIf(!configured)("what an erased member left on the pulse and in the
       expect(out.finished).toBe(true);
       expect(submissions[0].data).toEqual({ name: REMOVED, email: REMOVED, why: REMOVED });
     });
+
+    // Adversarial round 3, finding 10. A Work With Us attachment is served at
+    // /api/uploads/<name> with no sign-in, and the row's `attachment` is the
+    // only pointer the retention sweep deletes the file by. Scrubbing the
+    // pointer and leaving the file kept the applicant's CV readable for good.
+    const fileOn = (name: string) => fs.existsSync(path.join(uploadsDir, name));
+    const put = (name: string) => fs.writeFileSync(path.join(uploadsDir, name), `bytes of ${name}`);
+
+    it("takes their Work With Us files off the volume, and leaves a file somebody else's row names", async () => {
+      const wren = "r3-f-wren";
+      const email = "wren.files@example.test";
+      await person(wren, "Wren Files", email);
+      const now = new Date().toISOString();
+      const own = "proposal-1700000000000-abcd1.pdf"; // named only by their signed-in row
+      const signedOut = "proposal-1700000000003-mnop4.pdf"; // named only by a row sent signed out under their address
+      const shared = "proposal-1700000000001-efgh2.pdf"; // named by theirs and by a neighbour's
+      const brand = "brand-1700000000002-ijkl3.webp"; // another door's file, which their row names
+      const neighbours = "proposal-1700000000005-uvwx6.pdf"; // the neighbour's own
+      for (const f of [own, signedOut, shared, brand, neighbours]) put(f);
+      submissions = [
+        { id: "f-wwu-w", type: "work-with-us", status: "new", rewarded: false, submittedAt: now, userId: wren, userName: "Wren Files", data: { name: "Wren Files", email, attachment: own, attachmentName: "Wren-CV.pdf" } },
+        { id: "f-wwu-out", type: "work-with-us", status: "handled", rewarded: false, submittedAt: now, data: { name: "Wren Files", email, attachment: signedOut, attachmentName: "portfolio.pdf" } },
+        { id: "f-wwu-shared", type: "work-with-us", status: "new", rewarded: false, submittedAt: now, userId: wren, userName: "Wren Files", data: { name: "Wren Files", email, attachment: shared } },
+        { id: "f-wwu-brand", type: "work-with-us", status: "new", rewarded: false, submittedAt: now, userId: wren, userName: "Wren Files", data: { name: "Wren Files", email, attachment: brand } },
+        // The neighbour's rows: one naming the shared file (written another way, the same file), one their own.
+        { id: "f-wwu-b", type: "work-with-us", status: "new", rewarded: false, submittedAt: now, data: { name: "Bay Holt", email: "bay.files@example.test", attachment: `./${shared}` } },
+        { id: "f-wwu-b2", type: "work-with-us", status: "new", rewarded: false, submittedAt: now, data: { name: "Bay Holt", email: "bay.files@example.test", attachment: neighbours } },
+      ];
+      expect([own, signedOut, shared, brand, neighbours].every(fileOn), "the control: every file is on the volume today").toBe(true);
+
+      await erase(wren);
+
+      expect(fileOn(own), "their CV is off the volume").toBe(false);
+      expect(fileOn(signedOut), "the file they sent signed out is off the volume").toBe(false);
+      expect(fileOn(shared), "a file a neighbour's row names stays").toBe(true);
+      expect(fileOn(brand), "a file another door wrote stays").toBe(true);
+      expect(fileOn(neighbours), "the neighbour's own file stays").toBe(true);
+      const byId = (id: string) => submissions.find((s) => s.id === id);
+      expect(byId("f-wwu-w").data).toEqual({ name: REMOVED, email: REMOVED, attachment: REMOVED, attachmentName: REMOVED });
+      expect(byId("f-wwu-b").data.attachment, "the neighbour's row still names the shared file").toBe(`./${shared}`);
+      expect(byId("f-wwu-b2").data.attachment).toBe(neighbours);
+    });
+
+    it("takes the files off before the rows, so a file that will not come off stops the step with its row still naming it", async () => {
+      const wren = "r3-fs-wren";
+      await person(wren, "Wren Stuck", "wren.stuck@example.test");
+      const stuck = "proposal-1700000000007-stuck7.pdf";
+      // A directory where the file should be: unlink refuses it with something other than ENOENT.
+      fs.mkdirSync(path.join(uploadsDir, stuck));
+      submissions = [
+        { id: "fs-wwu", type: "work-with-us", status: "new", rewarded: false, submittedAt: new Date().toISOString(), userId: wren, userName: "Wren Stuck", data: { name: "Wren Stuck", attachment: stuck } },
+      ];
+      const target = await usersRepo(pool).byId(wren);
+
+      await expect(anonymizeMember(pool, target, "r2-admin", deps())).rejects.toThrow(/could not take/);
+      expect((await erasureRecord(pool, wren))?.failedStep).toBe("submissions");
+      expect(submissions[0].data.attachment, "the row still names the file, so a resume finds it").toBe(stuck);
+
+      fs.rmdirSync(path.join(uploadsDir, stuck));
+      put(stuck);
+      const out = await resumeErasure(pool, wren, deps());
+
+      expect(out.finished).toBe(true);
+      expect(fileOn(stuck)).toBe(false);
+      expect(submissions[0].data).toEqual({ name: REMOVED, attachment: REMOVED });
+    });
   });
 });

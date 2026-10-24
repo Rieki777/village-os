@@ -31,17 +31,21 @@
  * the reason for each is beside it. A list of what to KEEP is what holds when
  * a form grows a field: a list of what to clear missed every word above.
  *
- * ORDER INSIDE THE STEP IS LOAD-BEARING. The alerts go first, while the rows
- * still carry the names their subjects were built from. A death between the
- * two is resumed by a read that still finds both; a death after the rows are
- * written leaves nothing that needs a name.
+ * ORDER INSIDE THE STEP IS LOAD-BEARING. The files only their rows name come
+ * off the uploads volume first, while the rows still say which files those
+ * are (`attachmentFilesOnlyTheyName`). The alerts go next, while the rows
+ * still carry the names their subjects were built from. A death between any
+ * two is resumed by a read that still finds all three; a death after the rows
+ * are written leaves nothing that needs a name.
  */
+import path from "node:path";
 import type { Pool } from "mysql2/promise";
 import { COMMS_CHANGE } from "../../shared/comms/memberView";
 import { POWER_APPLICATION } from "../../shared/powerHands";
 import { QUEST_IDEA_FORM } from "../../shared/questIdeas";
 import { emailKeyOf } from "../../shared/comms/address";
 import { forgetTeamAlerts, type TeamAlertOf } from "../repos/commsPeople";
+import { isProposalAttachment } from "./uploadsSweep";
 
 /** What a removed value reads as, the same words the first pass always wrote. */
 export const REMOVED_WORDS = "[removed at member's request]";
@@ -170,23 +174,68 @@ export function teamAlertsOf(row: any, knownAs: readonly string[] = []): TeamAle
   }));
 }
 
+/** The file a row's `attachment` names, basenamed as the retention sweep reads it (server/index.ts). */
+const attachmentOf = (row: any): string => path.basename(String(row?.data?.attachment ?? "").trim());
+
 /**
- * The step: their rows found, their alerts blanked, then their words taken.
- * `submissionsRepo` is the server's one repository over the table, handed in
- * for the reason the erasure header gives. `knownAs` is their own name and
- * address (`teamAlertsOf` says what it is for).
+ * The files on the uploads volume that only the member's rows name.
+ *
+ * THE FILE, NOT ONLY ITS NAME (adversarial round 3, finding 10). A Work With
+ * Us proposal's attachment, a CV or a portfolio, is stored as
+ * `proposal-<stamp>-<rand>.<ext>` and served at `/api/uploads/<name>` with no
+ * sign-in to anybody holding the name, and the team alert mailed every
+ * recipient that name. The row's `attachment` is the only record of which
+ * file is whose, and the retention sweep deletes a file by it. Scrubbing the
+ * pointer and leaving the file kept the bytes readable and put them beyond
+ * the sweep for good.
+ *
+ * THE RETENTION SWEEP'S OWN GUARD, because the name came from a stranger:
+ * `POST /api/forms/submit` is public and stores `data` as sent, so a row can
+ * name any file. A name is taken only when it is one the proposal door
+ * minted (`isProposalAttachment`) and no row that is not the member's names
+ * it, both sides basenamed into one namespace. So a row sent under their
+ * address naming somebody else's file cannot take it, and another door's
+ * files are out of reach.
+ */
+export function attachmentFilesOnlyTheyName(rows: readonly any[], theirs: readonly any[]): string[] {
+  const mine = new Set(theirs);
+  const kept = new Set(rows.filter((r) => !mine.has(r)).map(attachmentOf).filter(Boolean));
+  const out = new Set<string>();
+  for (const s of theirs) {
+    const name = attachmentOf(s);
+    if (name && !kept.has(name) && isProposalAttachment(name)) out.add(name);
+  }
+  return [...out];
+}
+
+/**
+ * The step: their rows found, the files only they name taken off the volume,
+ * their alerts blanked, then their words taken. `submissionsRepo` is the
+ * server's one repository over the table, handed in for the reason the
+ * erasure header gives. `knownAs` is their own name and address
+ * (`teamAlertsOf` says what it is for).
+ *
+ * `takeFile` is the erasure's own unlink (server/lib/erasure.ts, `unlink`),
+ * bound to the uploads volume: ENOENT passes, and any other failure THROWS.
+ * The files go FIRST, the rule the portraits step keeps, so a file that will
+ * not come off stops the step with every row still naming it and a resume
+ * finds it again; a death after an unlink and before the rows are written
+ * resumes into ENOENT, which passes.
  */
 export async function forgetSubmissionWords(
   pool: Pool,
   submissionsRepo: { all(): unknown[]; replaceAll(rows: unknown[]): Promise<unknown> },
   who: { userId: string; emailKey: string; knownAs?: readonly string[] },
-): Promise<{ rows: number; alerts: number }> {
+  takeFile: (fileName: string) => void,
+): Promise<{ rows: number; alerts: number; files: number }> {
   const rows = submissionsRepo.all() as any[];
   const theirs = rows.filter((s) => isTheirSubmission(s, who));
-  if (!theirs.length) return { rows: 0, alerts: 0 };
+  if (!theirs.length) return { rows: 0, alerts: 0, files: 0 };
+  const files = attachmentFilesOnlyTheyName(rows, theirs);
+  for (const name of files) takeFile(name);
   const alerts = await forgetTeamAlerts(pool, theirs.flatMap((s) => teamAlertsOf(s, who.knownAs ?? [])));
   let changed = 0;
   for (const s of theirs) if (scrubSubmissionWords(s, { onTheirAccount: s.userId === who.userId })) changed += 1;
   if (changed) await submissionsRepo.replaceAll(rows);
-  return { rows: changed, alerts };
+  return { rows: changed, alerts, files: files.length };
 }
