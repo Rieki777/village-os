@@ -739,7 +739,7 @@ ul.pc-list li {
 .pc-ccos::before {
   content: "";
   position: absolute;
-  inset: -12px -4px;
+  inset: -14px -4px;
 }
 .pc-ccostip {
   position: absolute;
@@ -1008,6 +1008,8 @@ a.pc-app:hover {
   height: 44px;
   cursor: pointer;
   margin: -8px 0;
+  position: relative;
+  z-index: 1;
   display: block;
 }
 .pc-loadends {
@@ -1122,7 +1124,7 @@ a.pc-chip {
 a.pc-chip::before {
   content: "";
   position: absolute;
-  inset: -10px -2px;
+  inset: -11px -2px;
 }
 a.pc-chip:hover {
   border-color: var(--pc-gold);
