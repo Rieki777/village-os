@@ -628,6 +628,7 @@ import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
 import { revokeAllTokens } from "./lib/agentTokens"; // a new password and an admin's revoke end agent tokens too
+import { saveTokenDescription, tokenDescriptionProblem } from "./lib/tokenMeaning";
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
@@ -1044,7 +1045,7 @@ const DEFAULT_INVESTOR_SUMMARY = SITE_CONTENT.investorSummary;
 // from the browser without a code deploy. Merged over GAME_CONFIG on read.
 const DEFAULT_BRAND = {
   project: { name: "", tagline: "", memberName: "", catalystName: "", roleName: "", seatName: "", commitmentName: "", location: "", country: "", fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "" },
-  currency: { name: "", nameLower: "" },
+  currency: { name: "", nameLower: "", collectiveName: "" },
   images: { hero: "", investorHero: "", residentHero: "", stewardHero: "", prosperityHero: "", masterPlanHero: "", logo: "", heartLogo: "", favicon: "" },
   // Setup Wizard progress — projects tick these off as they make the site theirs.
   setup: { identity: false, images: false, numbers: false, content: false, technical: false, map: false },
@@ -2822,6 +2823,7 @@ function mergedConfig() {
         // Derived, never stored. Two fields that must agree are two fields
         // that can drift, which is the bug this change exists to undo.
         nameLower: name ? String(name).toLowerCase() : pick(brand.currency.nameLower, c.nameLower),
+        collectiveName: String(pick(brand.currency.collectiveName, c.collectiveName)).trim().slice(0, 60) || c.collectiveName, // the umbrella word, `{tokens}` on pages (Admin then Tokens)
       };
     })(),
     images: {
@@ -16689,7 +16691,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!def) return res.status(404).json({ error: `unknown token "${slug}"` });
     const frozen = slugFreezeRefusal(req.body?.slug, slug);
     if (frozen) return res.status(409).json({ error: frozen });
-    if (def.governance !== "platform") return res.status(400).json({ error: `${slug} is a read-only Hypha mirror. Its name is a fact about Base, not a setting` });
+    if (def.governance !== "platform" && ["name", "active", "transferable"].some((k) => Object.prototype.hasOwnProperty.call(req.body ?? {}, k))) return res.status(400).json({ error: `${slug} is a read-only Hypha mirror. Its name is a fact about Base, not a setting` }); // its description is the village's own words (0283), so that alone is allowed
     // Renaming an example keeps its flag, so the admin's own word for the
     // token would be deleted by the first real one they create.
     if (def.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
@@ -16700,9 +16702,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const wantsName = Object.prototype.hasOwnProperty.call(body, "name");
     const wantsActive = Object.prototype.hasOwnProperty.call(body, "active");
     const wantsTransferable = Object.prototype.hasOwnProperty.call(body, "transferable");
-    if (!wantsName && !wantsActive && !wantsTransferable) {
-      return res.status(400).json({ error: "Send a name, an active flag, a sending flag, or any of them" });
+    const wantsDescription = Object.prototype.hasOwnProperty.call(body, "description"); // 0283: what it means, server/lib/tokenMeaning.ts
+    if (!wantsName && !wantsActive && !wantsTransferable && !wantsDescription) {
+      return res.status(400).json({ error: "Send a name, a description, an active flag, a sending flag, or any of them" });
     }
+    const descriptionBad = wantsDescription ? tokenDescriptionProblem(body.description) : null; // judged before anything is written
+    if (descriptionBad) return res.status(400).json({ error: descriptionBad });
 
     if (wantsName) {
       const name = String(body.name ?? "").trim().slice(0, 120);
@@ -16711,6 +16716,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       if (clash) return res.status(409).json({ error: clash });
       await getPool().query("UPDATE tokens SET name = ? WHERE slug = ?", [name, slug]);
     }
+    if (wantsDescription) await saveTokenDescription(getPool(), slug, body.description);
     if (wantsActive) {
       // `active` is a MEMBER-VISIBILITY flag and nothing more (Rye, 2026-08-14).
       // Balances, history and the double-entry ledger are untouched, so

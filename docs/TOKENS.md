@@ -253,7 +253,7 @@ There is no setting for how far a balance may go below zero. Ruling 2 below desc
 
 ## The registry table
 
-The `tokens` table carries 13 columns. The running registry loads 8 of them: `slug`, `name`, `kind`, `governance`, `transferable`, `decimals`, `active`, `is_example`.
+The `tokens` table carries 14 columns. The running registry loads 9 of them: `slug`, `name`, `description`, `kind`, `governance`, `transferable`, `decimals`, `active`, `is_example`.
 
 The rest are not loaded into the registry: `sort_order`, `created_at`, `glyph`, `spendable`, `external_ref`. A column on that list can still be used directly in SQL (`sort_order` orders several listings). One that nothing reads anywhere is dead weight, and this is the list to look in for it.
 
@@ -608,6 +608,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
     "loaded": [
       "slug",
       "name",
+      "description",
       "kind",
       "governance",
       "transferable",
@@ -644,6 +645,6 @@ The generator reads these and fails loudly if any of them moves:
 
 It also walks every `.ts` file under `server/` looking for a token registered at first start. Each one has to sit inside a function named `ensure…Token`, and a call anywhere else stops the build asking which kind it is. That is what stops a new module registering a token the document never mentions.
 
-The seeded rows are produced by applying every token statement in `drizzle/` in migration order, rather than by reading the INSERTs alone. Two later migrations sweep the `transferable` column, and reading only the INSERTs would report recognition as sendable, which it has not been since `0092_token_sinks.sql`. The migrations that write the registry today: `drizzle/0006_token_registry.sql`, `drizzle/0007_village_credits_token.sql`, `drizzle/0047_example_market.sql`, `drizzle/0071_economy_core.sql`, `drizzle/0092_token_sinks.sql`, `drizzle/0124_the_equity_token_names_no_village.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql`, `drizzle/0266_a_village_earns_equity_it_can_claim_on_hypha.sql`.
+The seeded rows are produced by applying every token statement in `drizzle/` in migration order, rather than by reading the INSERTs alone. Two later migrations sweep the `transferable` column, and reading only the INSERTs would report recognition as sendable, which it has not been since `0092_token_sinks.sql`. The migrations that write the registry today: `drizzle/0006_token_registry.sql`, `drizzle/0007_village_credits_token.sql`, `drizzle/0047_example_market.sql`, `drizzle/0071_economy_core.sql`, `drizzle/0092_token_sinks.sql`, `drizzle/0124_the_equity_token_names_no_village.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql`, `drizzle/0266_a_village_earns_equity_it_can_claim_on_hypha.sql`, `drizzle/0283_a_token_says_what_it_means.sql`.
 
 `server/db/tokenDoc.test.ts` runs every migration against a real MySQL and asserts the rows this generator computed are the rows the database actually holds, and that the faucet, sink and sending answers here match what the server's own functions return. The generator being wrong is a red test, not a quiet paragraph.
