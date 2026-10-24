@@ -112,6 +112,15 @@ export type Capability =
   // decided it means, and there is no vacancy to detect, only a key nobody was
   // given.
   | "redemption.confirm" // agree that a member was paid, and destroy their tokens
+  // ── The cash key (0285, Rye 2026-10-23) ──────────────────────────────────
+  //
+  // "The Game wouldn't pay cash, but it would say what they are owed and they
+  // can claim it when they're paid out so that the treasurer has a record to
+  // check when sending or giving cash payments." This key is the treasurer's
+  // half of that sentence: reading what the village owes in cash, and saying
+  // that a payment went out. It moves nothing on the platform, because the
+  // platform never pays cash; it writes down that the village did.
+  | "cash.pay" // read the cash the village owes, and mark a payment made
   // ── The module switch (Rye, 2026-10-09) ──────────────────────────────────
   //
   // Before launch the founders turn modules on from the library. After launch
@@ -189,6 +198,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "dial.set",
   "quest.approve",
   "redemption.confirm",
+  "cash.pay",
   "module.switch",
   "steward.veto",
   "comms.manage",
@@ -250,6 +260,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "dial.set": "Turn the village's own dials",
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
+  "cash.pay": "Read the cash the village owes its members, and mark a payment made",
   "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",
   "comms.manage": "Run the village's email: its automations, their words, and letters",
@@ -429,6 +440,14 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // village hands to a named circle. Its two routes ask `guardCapability`, so
   // the escape hatch and the public record this column promises are both there.
   "redemption.confirm": true,
+  // HELD BACK, ON PURPOSE AND FOR NOW (0285). The treasurer's job, and its two
+  // routes ask `guardCapability`, so it could cross. Whether it joins the
+  // founding seat's handover set is Rye's word: his 2026-10-22 count ruling
+  // ("confirm 22 and 12") reads the set as "all steward powers", so a further
+  // transferable power moves that reading and needs him. Until he says, it
+  // keeps today's behaviour: an admin holds it, and a village can still grant
+  // it to a treasurer role. Its reason is in WIRED_BUT_HELD_BACK.
+  "cash.pay": false,
   // Turning a module on after launch. Its route counts live holders without
   // the admin short-circuit, so the escape hatch this column describes is the
   // village vote itself: with no holder, anybody may propose it.
@@ -582,9 +601,10 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
  * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 22 keys
- * today. The other 16 are not withheld from anybody: they are personal acts
- * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
- * carries the reasoning key by key.
+ * today. The other 17 are not withheld from anybody: they are personal acts
+ * and deployment plumbing that were never anyone's to hold, and one power
+ * waiting on the founder's word (`cash.pay`, below), which an admin holds
+ * meanwhile. `TRANSFERABLE` carries the reasoning key by key.
  *
  * Read this way, a launched village holds all 22 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
@@ -608,7 +628,8 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * `module.switch` (ruled 2026-10-09, landed 2026-10-21), which together moved
  * the pair to 22 and 16. A new key born transferable moves the first number
  * and leaves the second; a key RECLASSIFIED from withheld to transferable would
- * move both, in opposite directions.
+ * move both, in opposite directions. `cash.pay` (0285) was born held back, so
+ * it moved only the second, and the pair today is 22 and 17.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -803,6 +824,9 @@ export const DENIABLE: Record<Capability, boolean> = {
   // as a say in what the village decides, and nothing at all about their own
   // right to ask to redeem.
   "redemption.confirm": true,
+  // The same reasoning: a warning takes away signing off other people's cash,
+  // and nothing about their own right to claim what they are owed.
+  "cash.pay": true,
   // A job as well. Pausing it stops somebody switching modules on alone; the
   // village can still propose one, and the vote decides.
   "module.switch": true,
@@ -929,6 +953,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "dial.set": true,
   "quest.approve": true,
   "redemption.confirm": true,
+  "cash.pay": true,
   // An ordinary appointment, the same as `feed.announce`: a badge is an
   // honest way to hand the village's email to somebody.
   "comms.manage": true,

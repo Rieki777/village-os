@@ -10,6 +10,7 @@ import OnchainCard from "@/components/OnchainCard";
 import WalletCard from "@/components/WalletCard";
 import SendTokensCard from "@/components/SendTokensCard";
 import RedemptionPanel from "@/components/RedemptionPanel";
+import CashOwedPanel from "@/components/CashOwedPanel";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
@@ -753,7 +754,11 @@ export default function Profile() {
                                 frozen, so the amount takes the theme's own
                                 foreground and the amber stays on the icon. */}
                             <p className="text-lg font-semibold text-foreground">
-                              +{contrib.recognitionEarned}
+                              {contrib.paid?.length
+                                ? contrib.paid.map((p) => `+${p.amount} ${p.name}`).join(", ")
+                                : contrib.recognitionEarned > 0
+                                  ? `+${contrib.recognitionEarned}`
+                                  : null}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {new Date(contrib.date).toLocaleDateString()}
@@ -885,6 +890,7 @@ export default function Profile() {
                 * out; only the JSX is spared.
                 */}
               {user && redemptionModule && <RedemptionPanel />}
+              {user && <CashOwedPanel /> /* 0285: cash owed, and the books for whoever holds cash.pay */}
 
               {/* S47: on-chain holdings, renders nothing until the village
                   turns the economics section on */}

@@ -44,6 +44,9 @@
  * server now holds and never what this device hoped it would.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+/** How often a closed record with a round still outliving its call is asked for again. */
+const CLOSED_NIGHT_ASK_MS = 60_000;
 import { toast } from "sonner";
 import { gameFetch } from "@/lib/gameApi";
 import {
@@ -61,7 +64,7 @@ import {
   type SessionState,
   type SessionView,
 } from "@shared/sessions";
-import type { LibraryCard } from "@shared/sessionLibrary";
+import { LIBRARY_TENSION_API, type LibraryCard } from "@shared/sessionLibrary";
 
 export type RoomStatus = "loading" | "ready" | "signed-out" | "refused" | "missing" | "gone" | "failed";
 
@@ -117,7 +120,12 @@ export interface RoomActions {
   addEntry(input: EntryInput, opts?: WriteOptions): Promise<WriteResult<{ id?: number }>>;
   patchEntry(entryId: number, patch: EntryPatch, opts?: WriteOptions): Promise<WriteResult>;
   deleteEntry(entryId: number, opts?: WriteOptions): Promise<WriteResult>;
-  respond(target: ResponseTarget, value: string, text?: string | null, opts?: WriteOptions): Promise<WriteResult>;
+  /** `answerBy` (an ISO instant) goes with a night, `sleep`, and with nothing else. */
+  respond(target: ResponseTarget, value: string, text?: string | null, opts?: WriteOptions, answerBy?: string): Promise<WriteResult>;
+  /** On a closed record (0281): answer a round you slept on, by your time. */
+  answerNight(entryId: number, value: string, text: string | null, opts?: WriteOptions): Promise<WriteResult>;
+  /** On a closed record (0281): the facilitator marks a round that consented after the call decided. */
+  decideAfterNight(entryId: number, opts?: WriteOptions): Promise<WriteResult>;
   act(action: SessionAction, opts?: WriteOptions): Promise<WriteResult<{ state?: SessionState }>>;
   hosts(input: { facilitatorUserId?: number; secretaryUserId?: number | null }, opts?: WriteOptions): Promise<WriteResult>;
   close(opts?: WriteOptions): Promise<WriteResult & { unowned?: number[] }>;
@@ -132,6 +140,13 @@ export interface RoomActions {
   library(): Promise<LibraryCard[] | null>;
   /** Bring items from the agenda library onto this room's agenda, all or none. */
   bringFromLibrary(ids: number[], opts?: WriteOptions): Promise<WriteResult<{ ids?: number[] }>>;
+  /**
+   * Send one of this room's tensions, or one from "From last time" (`sessionId`
+   * is the session it was named in), to a circle's agenda items, or to none in
+   * particular. The door is the agenda library's own; the room is read again
+   * after it, as after every write, so it shows where the tension went.
+   */
+  sendTension(input: { sessionId: number; entryId: number; circleId: string | null }, opts?: WriteOptions): Promise<WriteResult<{ item?: LibraryCard }>>;
 }
 
 export interface SessionRoom {
@@ -180,6 +195,8 @@ export function useSessionRoom(
   const stopped = useRef(false);
   /** The room a poll is out asking for, so polls never stack; null when none is out. */
   const asking = useRef<number | null>(null);
+  /** When a closed record was last asked for, so one with a night still on it is asked again slowly. */
+  const closedAskedAt = useRef(0);
   const current = useRef<SessionView | null>(null);
   /** The shortest round trip the offset was measured on: the steadiest reading wins. */
   const bestTrip = useRef(Number.POSITIVE_INFINITY);
@@ -279,9 +296,17 @@ export function useSessionRoom(
   );
 
   const poll = useCallback(async () => {
-    // A closed session's record stays as it was, so there is nothing to ask for.
+    // A closed session's record stays as it was, so there is nothing to ask for,
+    // unless a round on it outlived the call (0281): then it is asked for once a
+    // minute, so a night that ends or an answer that lands shows without a reload.
     // A poll still out for an earlier room does not hold up this one.
-    if (stopped.current || asking.current === generation.current || !tabVisible() || current.current?.status === "closed") return;
+    if (stopped.current || asking.current === generation.current || !tabVisible()) return;
+    const record = current.current;
+    if (record?.status === "closed") {
+      const live = record.nights?.some((n) => n.open || n.canDecide);
+      if (!live || Date.now() - closedAskedAt.current < CLOSED_NIGHT_ASK_MS) return;
+      closedAskedAt.current = Date.now();
+    }
     const mine = generation.current;
     asking.current = mine;
     try {
@@ -339,11 +364,11 @@ export function useSessionRoom(
   const refresh = useCallback(() => ask(true), [ask]);
 
   const write = useCallback(
-    async <T,>(method: string, path: string, payload: unknown, opts?: WriteOptions): Promise<WriteResult<T>> => {
+    async <T,>(method: string, path: string, payload: unknown, opts?: WriteOptions, url?: string): Promise<WriteResult<T>> => {
       if (!base) return { ok: false, status: 0, error: ROOM_COPY.writeFailed, body: {}, room: null };
       let result: WriteResult<T>;
       try {
-        const res = await gameFetch(`${base}${path}`, {
+        const res = await gameFetch(url ?? `${base}${path}`, {
           method,
           ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
         });
@@ -371,7 +396,10 @@ export function useSessionRoom(
     addEntry: (input, opts) => write("POST", "/entries", input, opts),
     patchEntry: (entryId, patch, opts) => write("PATCH", `/entries/${entryId}`, patch, opts),
     deleteEntry: (entryId, opts) => write("DELETE", `/entries/${entryId}`, undefined, opts),
-    respond: (target, value, text, opts) => write("POST", "/respond", text ? { target, value, text } : { target, value }, opts),
+    respond: (target, value, text, opts, answerBy) =>
+      write("POST", "/respond", { target, value, ...(text ? { text } : {}), ...(answerBy ? { answerBy } : {}) }, opts),
+    answerNight: (entryId, value, text, opts) => write("POST", "/night", { entryId, value, ...(text ? { text } : {}) }, opts),
+    decideAfterNight: (entryId, opts) => write("POST", `/entries/${entryId}/decide`, {}, opts),
     act: (action, opts) => write<{ state?: SessionState }>("POST", "/act", { action }, opts),
     hosts: (input, opts) => write("POST", "/hosts", input, opts),
     close: async (opts) => {
@@ -394,6 +422,7 @@ export function useSessionRoom(
       }
     },
     bringFromLibrary: (ids, opts) => write<{ ids?: number[] }>("POST", "/library", { ids }, opts),
+    sendTension: (input, opts) => write<{ item?: LibraryCard }>("POST", "", input, opts, LIBRARY_TENSION_API),
   }), [write, base]);
 
   return { view, status, lagging, offset, refresh, actions };

@@ -1,4 +1,5 @@
 import { anonymizeMember } from "./lib/erasure";
+import { resolveExit } from "./lib/exitResolve";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
 import { joiningOf, pickNextAction } from "./lib/nextAction";
@@ -123,7 +124,7 @@ import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTer
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, rolesCarryingCapability, stewardSeatRefusal } from "./lib/roleGrants";
-import { liveHoldersNow, type HolderReads } from "./lib/holdersNow";
+import { leftEmptyByRemovalNow, liveHoldersNow, type HolderReads } from "./lib/holdersNow";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
@@ -145,6 +146,7 @@ import { register as registerPlayerCardRoutes } from "./routes/playerCard";
 import { register as registerCircleCardRoutes } from "./routes/circleCard";
 import { register as registerApplicationCardRoutes, orgRoleExtras } from "./routes/applicationCard";
 import { register as registerRoleProposalRoutes } from "./routes/roleProposals";
+import { register as registerRoleGuideRoutes } from "./routes/roleGuide";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
@@ -157,14 +159,17 @@ import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
 import { exportMemberGeneKeys, geneKeysForAssistant, register as registerGeneKeysRoutes } from "./routes/geneKeys";
+import { register as registerGuideChoiceRoutes } from "./routes/guideChoice";
 import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./routes/liveSessions";
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerSessionLibraryRoutes } from "./routes/sessionLibrary";
 import { register as registerSessionRhythmRoutes } from "./routes/sessionRhythm";
 import { register as registerSessionCalendarRoutes } from "./routes/sessionCalendar";
+import { register as registerSessionDecisionRoutes } from "./routes/sessionDecisions";
 import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
+import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
@@ -369,7 +374,7 @@ const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.w
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
 import {
   allTokens,
-  tokenNameClash, slugFreezeRefusal,
+  tokenNameClash,
   RECOGNITION_FAUCET,
   balanceOf,
   balancesFor, PLATFORM_TOKEN, postPaymentReversalLeg,
@@ -398,7 +403,7 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
@@ -627,6 +632,7 @@ import { recordAssistantUsage, type AssistantPath } from "./lib/assistantUsage";
 import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
+import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
@@ -634,8 +640,8 @@ import {
   holderStands, mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
 } from "./lib/agentTokens";
 import {
-  DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, removeInbox,
-  setInbox,
+  DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, queueWeekAhead,
+  removeInbox, setInbox,
 } from "./lib/agentInbox";
 import {
   MEMBER_KEY_PROVIDERS, NO_MEMBER_SECRETS_KEY_SENTENCE, memberKeyView, memberSecretsConfigured, removeMemberKey,
@@ -788,9 +794,13 @@ import {
   listPatterns,
   planRoll,
   removeMember as removePatternMember,
+  rewardMultipliersFor,
   seasonallyDormantBadgeIds,
   type PatternKind,
 } from "./lib/seasonPatterns";
+import { applyAcceptReward } from "./lib/proposalAward";
+import { statedProposalCash } from "./lib/cashOwed"; // 0285: a proposal's cash, owed when it is accepted
+import { GRATITUDE_ONLY_SENT } from "../shared/workValue";
 import { buildRetrospective, proposeNextPattern } from "./lib/seasonRetrospective";
 import {
   assertCanPurchase,
@@ -1044,7 +1054,7 @@ const DEFAULT_INVESTOR_SUMMARY = SITE_CONTENT.investorSummary;
 // from the browser without a code deploy. Merged over GAME_CONFIG on read.
 const DEFAULT_BRAND = {
   project: { name: "", tagline: "", memberName: "", catalystName: "", roleName: "", seatName: "", commitmentName: "", location: "", country: "", fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "" },
-  currency: { name: "", nameLower: "" },
+  currency: { name: "", nameLower: "", collectiveName: "" },
   images: { hero: "", investorHero: "", residentHero: "", stewardHero: "", prosperityHero: "", masterPlanHero: "", logo: "", heartLogo: "", favicon: "" },
   // Setup Wizard progress — projects tick these off as they make the site theirs.
   setup: { identity: false, images: false, numbers: false, content: false, technical: false, map: false },
@@ -1074,8 +1084,6 @@ const DEFAULT_WORK_WITH_US = {
     { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share. For example, 10% of revenue in exchange for rent or water infrastructure." },
     { value: "Memorandum of Understanding", title: "Memorandum of Understanding", desc: "A clear, living exchange of contribution. For example, you grow vegetables, share some harvest, and add to the beauty of the land." },
   ],
-  // Gratitude credited to a signed-in member when their proposal is accepted.
-  acceptGratitude: 100,
 };
 
 // Project settings: the plain numbers a non-technical admin should be able to
@@ -1908,7 +1916,6 @@ async function ensureDataFiles() {
   //   ledger-opening-balances — seeded the JSON ledger; the MySQL ledger
   //     carries those rows forward via the 0009 backfill.
   await runOnce("canonicalize-regen-units", canonicalizeRegenUnits);
-  await runOnce("accept-award-to-registry", migrateAcceptAwardToRegistry);
   await runOnce("retire-legacy-peg-copy", retireLegacyPegCopy);
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
@@ -2430,8 +2437,7 @@ async function runOnce(id: string, fn: () => void | Promise<void>) {
  * the seeded "Gratitude" the moment this deployed — the registry would simply
  * start winning an argument the brand field used to win alone.
  *
- * Same shape as migrateAcceptAwardToRegistry below, and for the same reason:
- * when a value moves house, the deploy that moves it must not change what
+ * When a value moves house, the deploy that moves it must not change what
  * anybody sees.
  *
  * Reads the table rather than the in-memory registry on purpose. This runs
@@ -2458,32 +2464,6 @@ async function migrateCurrencyNameIntoTokens() {
   console.log(`[MIGRATION] carried the village's currency name into the token registry: ${custom}`);
 }
 
-/**
- * gratitude.proposal_accept_award used to live as `acceptGratitude` inside
- * the Work With Us content document. It is recognition ISSUANCE, so it moved
- * to the variables registry (bounds, admin visibility, the mechanics page,
- * the amendment ledger). This one-shot carries a village's customized
- * document value into the registry so behaviour does not change on deploy;
- * an untouched document (default 100 = the registry default) writes nothing.
- */
-async function migrateAcceptAwardToRegistry() {
-  const stored = workWithUsRepo.get() as any;
-  const docValue = stored?.acceptGratitude;
-  if (docValue === undefined || docValue === null) return;
-  const n = Math.max(0, Math.floor(Number(docValue) || 0));
-  const def = VARIABLES_BY_KEY["gratitude.proposal_accept_award"];
-  if (!def || String(n) === def.default) return;
-  const r = await setVariable(getPool(), "gratitude.proposal_accept_award", String(n));
-  if (r.ok) {
-    await recordMechanicsChange(
-      "gratitude.proposal_accept_award", r, null, "platform", null,
-      "Migrated from the Work With Us content document into the variables registry",
-    );
-    console.log(`[MIGRATION] acceptGratitude ${n} moved from work-with-us doc to the registry`);
-  } else {
-    console.error(`[MIGRATION] acceptGratitude ${docValue} could not move to the registry: ${r.error}`);
-  }
-}
 
 /**
  * The regen entry unit is written from the registry now, but rows recorded
@@ -2704,7 +2684,7 @@ async function authedUser(req: express.Request): Promise<any | null> {
   const decoded = decodeToken(AUTH_TOKEN_SECRET, header.slice(7));
   if (!decoded) return null;
   const user = await members.byId(decoded.userId);
-  if (!user) return null;
+  if (!holderStands(user)) return null; // a tombstone holds no session, whatever version one was signed at
   // Session revocation (S1): a token minted before the member's tokenVersion
   // was bumped is dead. Tokens from before this field existed carry no `v` and
   // are accepted while the member's version is still 0, so shipping this did
@@ -2822,6 +2802,7 @@ function mergedConfig() {
         // Derived, never stored. Two fields that must agree are two fields
         // that can drift, which is the bug this change exists to undo.
         nameLower: name ? String(name).toLowerCase() : pick(brand.currency.nameLower, c.nameLower),
+        collectiveName: String(pick(brand.currency.collectiveName, c.collectiveName)).trim().slice(0, 60) || c.collectiveName, // the umbrella word, `{tokens}` on pages (Admin then Tokens)
       };
     })(),
     images: {
@@ -4169,14 +4150,15 @@ function stayPostingHooks() {
       // village's own word for it, which is the only word the guest has seen.
       const payName = tokenDef(stay.rateSnapshotToken ?? STAY_CREDIT)?.name ?? "stay credits";
       // S5 (Wave 1): the nudge names actual doors, not a category of door.
-      // "Pick up a quest" is advice; "Fix the pump house (30 gratitude)" is
-      // a plan for tomorrow morning.
+      // "Pick up a quest" is advice; "Fix the pump house" is a plan for
+      // tomorrow morning. It printed each quest's old Gratitude range, which
+      // no quest pays (Rye, 2026-10-23), so it names the quest alone.
       let questLines = "";
       try {
         const open = (await questsRepo.all())
           .filter((q: any) => q.status === "open")
           .slice(0, 3)
-          .map((q: any) => `• ${q.title}${q.gratitude ? ` (${q.gratitude})` : ""}`);
+          .map((q: any) => `• ${q.title}`);
         if (open.length) questLines = `\n\nOpen quests right now:\n${open.join("\n")}`;
       } catch {
         /* the nudge still lands without suggestions */
@@ -4651,100 +4633,7 @@ function getWorkWithUs() {
   return { ...DEFAULT_WORK_WITH_US, ...workWithUsRepo.get() };
 }
 
-/**
- * When a Work With Us proposal is accepted, fold it into the game for a
- * matching member: a logged contribution, Gratitude credit, and a pulse.
- * Idempotent.
- *
- * A STEWARD MAY NOT PAY THEMSELVES THROUGH THIS DOOR. `canConfirm` in
- * server/lib/economy.ts already states the rule for the whole build: "A
- * steward may not witness their own work. Confirming releases value, so it
- * must be structurally impossible to do it for yourself, admin included."
- * This path releases value and did not ask. Anyone holding `intake.moderate`
- * could send a Work With Us proposal in their own name, accept it, and mint
- * themselves `gratitude.proposal_accept_award`, which defaults to 100. Once
- * per submission, and nothing bounds how many submissions a person sends.
- *
- * That token is the DEFAULT `governance.weight_token`, so in a village
- * running `governance.weight_mode = token` the amount minted here is voting
- * weight. The admin mint cap does not reach it either: `mintCapGuard` counts
- * `from_account = 'sys:mint'` and this issues from the recognition faucet.
- *
- * The acceptance itself still stands. Whether a steward may accept their own
- * proposal at all is a question for the village, and this is not the place to
- * answer it. What stops here is the payment, and the route says so, because a
- * refusal nobody is told about teaches nothing.
- */
-async function applyAcceptReward(
-  entry: any,
-  acceptedByUserId: string | null,
-): Promise<{ rewarded: boolean; refused?: string }> {
-  if (entry.rewarded) return { rewarded: false };
-  const email = String(entry.data?.email ?? "").toLowerCase();
-  const match =
-    (entry.userId ? await members.byId(entry.userId) : null) ??
-    (email ? await members.byEmail(email) : null);
-  if (!match) return { rewarded: false }; // not a registered member; nothing to fold in
-  // The same rule the mint already enforces, restated where this mint happens
-  // so a new caller cannot route around it.
-  //
-  // Called with no actor, this refuses too, and that is the point.
-  // `canConfirm` answers "a confirmation needs a named steward" for an empty
-  // one, so an unattributed accept withholds the payment. Every live path
-  // here has an actor: the route sits behind `guardCapability`, which cannot
-  // pass without a signed-in user. A future caller that loses the actor meets
-  // a refusal it has to read, and inventing a witness to get past it is the
-  // one thing that must stay hard.
-  const witness = canConfirm(match.id, acceptedByUserId ?? "");
-  if (!witness.ok) {
-    return {
-      rewarded: false,
-      refused:
-        "The proposal is accepted. The recognition for it waits for another steward, " +
-        "because this proposal is yours.",
-    };
-  }
-  // Registry, not the content document: this is recognition ISSUANCE, and it
-  // sat in Work With Us page copy with no bounds and no mechanics visibility.
-  // A runOnce migrated any customized document value into the variable.
-  const amount = Math.max(0, numberVar("gratitude.proposal_accept_award"));
-  // Through the ledger, never `+=`: this was the one recognition credit in
-  // the repo that assigned the cache without a post, so the balance it
-  // granted was phantom — invisible to /api/game/ledger and wiped by the
-  // next recompute. The entry id keys the post, so a re-accept credits once.
-  // amount 0 still logs the contribution (postTransfer refuses zero legs).
-  let newBalance: number | null = null;
-  if (amount > 0) {
-    const credit = await postTransfer(getPool(), {
-      from: RECOGNITION_FAUCET,
-      to: memberAccount(match.id),
-      amount: toLedgerUnits(PLATFORM_TOKEN, amount),
-      source: "proposal_accepted",
-      sourceRef: entry.id,
-      description: "Work With Us proposal accepted",
-      idempotencyKey: `proposal_accepted:${entry.id}`,
-    });
-    if (!credit.ok) {
-      console.error(`[submissions] accept credit failed for submission ${entry.id}: ${credit.error}`);
-      return { rewarded: false };
-    }
-    newBalance = credit.toBalance;
-  }
-  const updated = await members.update(match.id, (u: any) => {
-    u.contributions = u.contributions ?? [];
-    u.contributions.push({
-      id: `contrib-${Date.now()}`,
-      type: "proposal",
-      description: `Work With Us proposal accepted: ${String(entry.data?.work ?? "your offering").slice(0, 120)}`,
-      recognitionEarned: amount,
-      date: new Date().toISOString(),
-    });
-    if (newBalance != null) u.recognitionBalance = newBalance;
-  });
-  if (!updated) return { rewarded: false };
-  await addActivity("proposal", `${firstName(updated.name)}'s proposal was welcomed into the village`, { actorUserId: updated.id, entityType: "submission", entityRef: entry.id });
-  return { rewarded: true };
-}
+// The accept reward lives in server/lib/proposalAward.ts (`applyAcceptReward`), with its account.
 
 // â”€â”€ Abuse guards (S12: MySQL-backed — a redeploy is no longer an amnesty) â”€â”€
 
@@ -5478,7 +5367,7 @@ async function startServer() {
    */
   registerJob("moon-settlement", 60 * 60 * 1000, async () => {
     try {
-      const result = await runSettlement(getPool());
+      const result = await runSettlement(getPool(), new Date(), { boostFor: async (u) => rewardMultipliersFor(getPool(), u, await dormantBadgeIds()) });
       if (!result.alreadyRun && result.stewardsThanked > 0) {
         console.log(
           `[economy] ${result.cycleKey}: ${result.stewardsThanked} steward(s) thanked`,
@@ -7259,13 +7148,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // payload never carries a row the member could not see themselves.
     registerJob("agent-week-ahead", 24 * 60 * 60 * 1000, async () => {
       if (effectiveLifecycle("events") === "off") return "events off";
-      const [inboxes] = await getPool().query<any[]>("SELECT user_id FROM agent_inboxes WHERE enabled = 1");
-      let queued = 0;
-      for (const r of inboxes) {
-        const items = await weekAhead(getPool(), { userId: String(r.user_id), isAdmin: false });
-        const q = await enqueueAgentDelivery(getPool(), String(r.user_id), { kind: "week_ahead", data: { timezone: getSeasonConfig().timezone, items } });
-        if (q.ok) queued += 1;
-      }
+      const { queued } = await queueWeekAhead(getPool(), {
+        timezone: getSeasonConfig().timezone,
+        build: (userId) => weekAhead(getPool(), { userId, isAdmin: false }),
+      });
       return `queued ${queued}`;
     });
     // Drafts nobody answered in seven days expire, so the panel does not fill
@@ -7730,7 +7616,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // and the guard then leaves the payment alone: an unattributed accept is
       // its own problem and inventing an actor here would hide it.
       const actorId = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
-      const outcome = await applyAcceptReward(submissions[idx], actorId);
+      const cash = statedProposalCash(req.body?.cashMinor, defaultDisplayCurrency(mergedConfig().project));
+      if (!cash.ok) return res.status(400).json({ error: cash.error });
+      const outcome = await applyAcceptReward(getPool(), { members, boostFor: async (u) => rewardMultipliersFor(getPool(), u, await dormantBadgeIds()), activity: (text, actor, ref) => addActivity("proposal", text, { actorUserId: actor, entityType: "submission", entityRef: ref }) }, submissions[idx], actorId, cash.cash);
       rewarded = outcome.rewarded;
       rewardRefused = outcome.refused ?? null;
       if (rewarded) submissions[idx].rewarded = true;
@@ -13190,7 +13078,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       roles: rolesRepo.all().map((r: any) => ({
         id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadRoleHolders(), r.id),
       })),
-      notYetWired: NOT_YET_WIRED,
+      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()), // Power groups: the removal warning
     });
   });
 
@@ -14477,8 +14365,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   /**
    * The terminal act: refuses with the NAMED blocking domains until the
-   * member's open state is clean, then runs the existing tombstone. Exit
-   * never invents a settle path — 2.2 #8 stands.
+   * member's open state is clean. Then a leaver still holding value stays on
+   * as a former member and anybody else meets the existing tombstone (Rye,
+   * 2026-10-23; `resolveExit`). Exit never invents a settle path: 2.2 #8 stands.
    */
   app.post("/api/admin/exits/:id/resolve", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
@@ -14497,17 +14386,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
         blocking,
       });
     }
-    const { agreementRef } = req.body ?? {};
-    await anonymizeMember(getPool(), target, adminActor(req)?.id ?? null, erasureDeps);
-    await getPool().query(
-      "UPDATE exits SET status = 'resolved', resolved_at = NOW(), agreement_ref = COALESCE(?, agreement_ref) WHERE id = ?",
-      [agreementRef ? String(agreementRef).slice(0, 255) : null, exit.id],
-    );
-    // Seats vacate at the tombstone; the stewards hear which ones.
+    const out = await resolveExit(getPool(), { exitId: exit.id, target, actorId: adminActor(req)?.id ?? null, agreementRef: req.body?.agreementRef, deps: erasureDeps });
+    // Seats vacate at resolve, whichever way it went; the stewards hear which ones.
     for (const roleId of roleIds) {
       await notifyAdmins("exit_opened", `An opening in ${roleId} (departure resolved)`, `exit:${exit.id}:vacancy:${roleId}`);
     }
-    res.json({ success: true, vacatedRoles: roleIds });
+    res.json({ success: true, outcome: out.outcome, held: out.held, vacatedRoles: roleIds });
   });
 
   /** A person who stays: the exit closes without a tombstone. */
@@ -16674,77 +16558,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json({ success: true, token: tokenDef(cleanSlug) });
   });
 
-  /**
-   * Rename a platform token. The SLUG is history's identity and never
-   * changes; the display NAME is the village's word for it, and renaming it
-   * here is how a fork names its value token ONCE and has every surface —
-   * wallet, exchange, and the public pages that read the config's value
-   * token — follow. Only the name column moves: routing this through
-   * registerToken's upsert would let a rename quietly rewrite
-   * kind/governance/transferable too.
-   */
-  app.put("/api/admin/tokens/:slug", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const slug = String(req.params.slug);
-    const def = tokenDef(slug);
-    if (!def) return res.status(404).json({ error: `unknown token "${slug}"` });
-    const frozen = slugFreezeRefusal(req.body?.slug, slug);
-    if (frozen) return res.status(409).json({ error: frozen });
-    if (def.governance !== "platform") return res.status(400).json({ error: `${slug} is a read-only Hypha mirror. Its name is a fact about Base, not a setting` });
-    // Renaming an example keeps its flag, so the admin's own word for the
-    // token would be deleted by the first real one they create.
-    if (def.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    // Either field alone is a valid edit: the panel sends a name when the admin
-    // finishes typing and an `active` when they flip the switch, and requiring
-    // both would make a toggle silently depend on the name field being intact.
-    const body = req.body ?? {};
-    const wantsName = Object.prototype.hasOwnProperty.call(body, "name");
-    const wantsActive = Object.prototype.hasOwnProperty.call(body, "active");
-    const wantsTransferable = Object.prototype.hasOwnProperty.call(body, "transferable");
-    if (!wantsName && !wantsActive && !wantsTransferable) {
-      return res.status(400).json({ error: "Send a name, an active flag, a sending flag, or any of them" });
-    }
-
-    if (wantsName) {
-      const name = String(body.name ?? "").trim().slice(0, 120);
-      if (!name) return res.status(400).json({ error: "A display name is required" });
-      const clash = tokenNameClash(name, slug);
-      if (clash) return res.status(409).json({ error: clash });
-      await getPool().query("UPDATE tokens SET name = ? WHERE slug = ?", [name, slug]);
-    }
-    if (wantsActive) {
-      // `active` is a MEMBER-VISIBILITY flag and nothing more (Rye, 2026-08-14).
-      // Balances, history and the double-entry ledger are untouched, so
-      // conservation still proves at boot and switching it back restores the
-      // surface exactly. It deliberately does NOT stop issuance: a token that
-      // pays a mint rule while hidden is a reporting problem, not a lost
-      // entry, and the reverse — silently freezing an economy from a display
-      // switch — is the one that cannot be undone.
-      await getPool().query("UPDATE tokens SET active = ? WHERE slug = ?", [body.active === true ? 1 : 0, slug]);
-    }
-    /*
-     * 0092: THE VILLAGE'S OWN SWITCH FOR MEMBER-TO-MEMBER SENDING.
-     *
-     * `transferable` was writable only at CREATE, from an unvalidated body
-     * field, and the rename route refused to touch it precisely so a rename
-     * could not rewrite policy by accident. Now that a surface reads the
-     * column, a village needs a way to close sending it opened, and a way to
-     * open it on a token created before there was a surface.
-     *
-     * `mayToggleTransferable` is the firewall and it refuses by KIND: only a
-     * credit token this platform governs can ever be flipped, so recognition
-     * cannot be opened here, by an admin, by a typo, or by a future caller
-     * that forgets to ask. The boot invariant proves the same thing from the
-     * data side every morning.
-     */
-    if (wantsTransferable) {
-      const blocked = mayToggleTransferable(def);
-      if (blocked) return res.status(409).json({ error: blocked });
-      await getPool().query("UPDATE tokens SET transferable = ? WHERE slug = ?", [body.transferable === true ? 1 : 0, slug]);
-    }
-    await loadTokenRegistry(getPool());
-    res.json({ success: true, token: tokenDef(slug) });
-  });
+  registerTokenEditRoutes(app, { isAdmin, getPool }); // PUT /api/admin/tokens/:slug, here because Express matches in order
 
   /**
    * Manual mint: an admin issues a platform token to a member, with a reason,
@@ -16768,6 +16582,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (def.governance !== "platform") {
       return res.status(400).json({ error: `${slug} is issued on Hypha and cannot be minted here` });
     }
+    // Rye, 2026-10-23: Gratitude is only sent member to member.
+    if (slug === HEARTS) return res.status(400).json({ error: GRATITUDE_ONLY_SENT });
     if (!toUserId || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "toUserId and a positive amount are required" });
     if (finerThanScale(amt, def.decimals)) return res.status(400).json({ error: `${def.name} ${def.decimals > 0 ? `goes to ${def.decimals} decimal places` : "is minted in whole amounts"}, so ${amt} cannot be minted exactly. Nothing was minted` });
     if (!String(reason ?? "").trim()) {
@@ -16984,6 +16800,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (def.governance !== "platform") {
       return res.status(400).json({ error: `${request.tokenSlug} is issued on Hypha and cannot be minted here` });
     }
+    // A grant queued before Gratitude stopped being mintable is refused at the second door too.
+    if (request.tokenSlug === HEARTS) return res.status(400).json({ error: GRATITUDE_ONLY_SENT });
     const target = await members.byId(request.toUserId);
     if (!target) return res.status(404).json({ error: "Member not found" });
     // The rule that has no exception, re-read at the second door: the person
@@ -17742,17 +17560,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.put("/api/admin/work-with-us-config", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    // acceptGratitude moved to the variables registry (it is recognition
-    // issuance, not page copy). An old client still sending it gets routed
-    // there — through validation and the mechanics ledger — never stored in
-    // the document where nothing reads it anymore.
-    const { acceptGratitude, ...rest } = req.body as any;
-    if (acceptGratitude !== undefined) {
-      const r = await setVariable(getPool(), "gratitude.proposal_accept_award", String(acceptGratitude));
-      if (!r.ok) return res.status(400).json({ error: r.error });
-      await recordMechanicsChange("gratitude.proposal_accept_award", r, (await authedUser(req))?.id ?? adminActor(req)?.id ?? null, "admin");
-    }
-    await workWithUsRepo.put({ ...getWorkWithUs(), ...rest });
+    // `acceptGratitude` is retired with its dial: an accepted proposal pays
+    // work tokens from the Mint panel's rules (server/lib/proposalAward.ts),
+    // never Gratitude. A stored or posted copy is dropped, never read.
+    const { acceptGratitude: _retired, ...rest } = req.body as any;
+    const { acceptGratitude: _stored, ...current } = getWorkWithUs() as any;
+    await workWithUsRepo.put({ ...current, ...rest });
     res.json({ success: true });
   });
 
@@ -18529,11 +18342,13 @@ ${inner}
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit });
+  registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
   registerSessionRhythmRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify, lapseContext });
   registerSessionCalendarRoutes(app, { authedUser, getPool, overLimit, members, circlesRepo, clientIp, deploymentOrigin, projectName: notifyDeps.projectName });
+  registerSessionDecisionRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, lapseContext, members, notify });
   registerRoleTensionRoutes(app, { authedUser, isAdmin, getPool, overLimit, notify, seasonState });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
   /**
@@ -18547,6 +18362,7 @@ ${inner}
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
+  registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay") });
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -24933,6 +24749,7 @@ ${inner}
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
+  registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
 

@@ -56,6 +56,9 @@ const row = (over: Partial<ComingUpRow> = {}): ComingUpRow => ({
   circleName: "Garden",
   rhythmWords: "Every Thursday at 18:00",
   next: { at: "2026-10-29T18:00:00.000Z", endsAt: "2026-10-29T19:00:00.000Z", key: "2026-10-29" },
+  nextFrom: "rhythm",
+  nextTitle: null,
+  rhythmNext: { at: "2026-10-29T18:00:00.000Z", endsAt: "2026-10-29T19:00:00.000Z", key: "2026-10-29", words: "Thursday 29 October at 18:00" },
   words: "Thursday 29 October at 18:00",
   durationMin: 60,
   waiting: 2,
@@ -65,7 +68,13 @@ const row = (over: Partial<ComingUpRow> = {}): ComingUpRow => ({
   rhythm: { kind: "weekly", weekday: 4, everyWeeks: 1, time: "18:00", durationMin: 60 },
   ...over,
 });
-const payload = (rows: ComingUpRow[], keepCircleIds: string[] = ["garden"]): ComingUpPayload => ({ rows, zone: "UTC", keepCircleIds });
+const payload = (rows: ComingUpRow[], keepCircleIds: string[] = ["garden"], ownCalendars: ComingUpPayload["ownCalendars"] = {}): ComingUpPayload => ({
+  rows,
+  zone: "UTC",
+  keepCircleIds,
+  ownCalendars,
+  ownCalendarsAvailable: true,
+});
 const circles = [
   { id: "garden", name: "Garden" },
   { id: "kitchen", name: "Kitchen" },

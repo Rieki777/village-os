@@ -55,9 +55,24 @@ import {
   postTransfer,
   registerToken,
 } from "./ledger";
-import { blockingStates, createExit, EXIT_SETTLEMENT, exitOpenState, sweepBalances } from "./exit";
+import { blockingStates, createExit, EXIT_SETTLEMENT, exitOpenState, sweepBalances, type ExitSplitPolicy } from "./exit";
 
 const configured = testDbConfigured();
+
+/**
+ * The sweeps below MOVE every balance, because what they measure is the units
+ * of a posting, and a posting needs something to move. Since the founder's
+ * ruling of 2026-10-23 the shipped dials keep credits, Voice and equity, so a
+ * sweep on them posts nothing; this policy is passed explicitly so the file
+ * keeps measuring what it always did. `exitDefaults.test.ts` owns the defaults.
+ */
+const KEEP_NOTHING: ExitSplitPolicy = {
+  keepPct: { credit: 0, voice: 0, recognition: 0, equity: 0 },
+  remainderAccount: "settlement",
+  coolingDays: 0,
+  voiceOnExit: "forfeit",
+  voiceConvertRate: "0",
+};
 
 /**
  * Registered by 0007, and PINNED to 0 in the setup below.
@@ -232,7 +247,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     for (const token of TOKENS) before.set(token, await balanceOf(pool, EXIT_SETTLEMENT, token));
 
     const exitId = await openExit(u);
-    const result = await sweepBalances(pool, { exitId, userId: u });
+    const result = await sweepBalances(pool, { exitId, userId: u, policy: KEEP_NOTHING });
     expect(result.errors).toEqual([]);
 
     for (const token of TOKENS) {
@@ -262,7 +277,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     const exitId = await openExit(u);
     const before = await balanceOf(pool, EXIT_SETTLEMENT, VOICE);
 
-    const first = await sweepBalances(pool, { exitId, userId: u });
+    const first = await sweepBalances(pool, { exitId, userId: u, policy: KEEP_NOTHING });
     expect(first.swept[VOICE]).toBe(fromLedgerUnits(VOICE, MINOR));
     expect((await balanceOf(pool, EXIT_SETTLEMENT, VOICE)) - before).toBe(MINOR);
 
@@ -270,7 +285,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     // key is ABSENT, which is a different fact from a swept amount of zero: an
     // admin reading "village-voice: 0" would think a sweep that should have
     // moved something moved nothing, and this says nothing was there to move.
-    const again = await sweepBalances(pool, { exitId, userId: u });
+    const again = await sweepBalances(pool, { exitId, userId: u, policy: KEEP_NOTHING });
     expect(again.errors).toEqual([]);
     expect(VOICE in again.swept).toBe(false);
     expect((await balanceOf(pool, EXIT_SETTLEMENT, VOICE)) - before).toBe(MINOR);
@@ -286,7 +301,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(-40);
 
     const exitId = await openExit(u);
-    const result = await sweepBalances(pool, { exitId, userId: u });
+    const result = await sweepBalances(pool, { exitId, userId: u, policy: KEEP_NOTHING });
 
     // The positive balance goes; the debt is untouched and unmentioned. Again
     // an absence, not a zero: a debt reported as "swept 0" reads as settled.

@@ -64,6 +64,9 @@ import { LIST_UI, OpenSessions, RecentSessions, type JoinState } from "@/compone
 import ComingUp from "@/components/sessions/ComingUp";
 import StartChecklist from "@/components/sessions/StartChecklist";
 import WaitingForCircle from "@/components/sessions/WaitingForCircle";
+import CircleDecisions from "@/components/sessions/CircleDecisions";
+import AdviceProcess from "@/components/sessions/AdviceProcess";
+import CirclePulse from "@/components/sessions/CirclePulse";
 import { clearRoomGone, peekRoomGone } from "@/components/sessions/roomGone";
 import { STAGE_LEDE, STAGE_TITLE } from "@/components/sessions/roomUi";
 import { useAuth } from "@/contexts/AuthContext";
@@ -127,6 +130,8 @@ function readPayload(body: unknown): ListPayload {
     rows: Array.isArray(cu.rows) ? (cu.rows as ComingUpRow[]).filter((r) => r && typeof r.circleId === "string" && r.next && typeof r.next.at === "string") : [],
     zone: typeof cu.zone === "string" ? cu.zone : "UTC",
     keepCircleIds: Array.isArray(cu.keepCircleIds) ? (cu.keepCircleIds as unknown[]).filter((id): id is string => typeof id === "string") : [],
+    ownCalendars: cu.ownCalendars && typeof cu.ownCalendars === "object" ? (cu.ownCalendars as ComingUpPayload["ownCalendars"]) : {},
+    ownCalendarsAvailable: cu.ownCalendarsAvailable === true,
   };
   return { open: rows(b.open), recent: rows(b.recent), circles, defaultMinutes: dm, library, comingUp };
 }
@@ -406,6 +411,9 @@ export default function Sessions() {
                   onChanged={fetchList}
                 />
                 <WaitingForCircle library={load.data.library} circles={load.data.circles} onChanged={fetchList} />
+                <CircleDecisions circles={load.data.circles} keepCircleIds={load.data.comingUp.keepCircleIds} myCircleIds={load.data.library.myCircleIds} />
+                <AdviceProcess />
+                <CirclePulse circles={load.data.circles} keepCircleIds={load.data.comingUp.keepCircleIds} myCircleIds={load.data.library.myCircleIds} />
                 <RecentSessions rows={load.data.recent} />
               </>
             )}

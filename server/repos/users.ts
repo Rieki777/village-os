@@ -24,6 +24,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { getPool } from "../db/pool";
+import { isTombstone } from "../lib/oauthAccounts";
 
 /** Loose on purpose: the record's shape is still owned by server/index.ts. */
 export type MemberRecord = Record<string, any> & { id: string; email: string };
@@ -39,8 +40,16 @@ export interface UsersRepo {
    * Read, mutate, write, as one transaction with the row locked. Returns the
    * updated record, or null if the member is gone. The mutator receives the
    * record and may change it in place; returning a value is unnecessary.
+   *
+   * A row that is ALREADY a tombstone keeps every field in
+   * `TOMBSTONE_FIXED` whatever the mutator does, unless the caller is the
+   * erasure (`erasure: true`). See that list for why.
    */
-  update(id: string, mutate: (member: MemberRecord) => void): Promise<MemberRecord | null>;
+  update(
+    id: string,
+    mutate: (member: MemberRecord) => void,
+    opts?: { erasure?: boolean },
+  ): Promise<MemberRecord | null>;
   remove(id: string): Promise<MemberRecord | null>;
 }
 
@@ -72,6 +81,48 @@ const COLUMNS = [
   // since long before it existed as a column, so every write landed on the
   // in-memory record and the UPDATE below dropped it.
   "membership_granted",
+] as const;
+
+/**
+ * WHAT A TOMBSTONE KEEPS FOR GOOD: every field the erasure's tombstone step
+ * writes (server/lib/erasure.ts), plus `contactable`. Who the member was,
+ * how to reach them, what they wrote about themselves, and what they held.
+ *
+ * WHY THE REPOSITORY HOLDS IT. Every session-driven write reads the session
+ * once and then writes under this row's lock, so a request already past its
+ * check when the tombstone landed took the lock after it and wrote onto the
+ * tombstone: `PUT /api/profile` put the real name and handle back, the
+ * wallet check put the address back, the Google link put a link there that
+ * refused that Google account forever. Every surface that de-attributes
+ * through the join then printed the name again, and nothing in the sweep runs
+ * the tombstone twice. A recheck at each route is the first defence and the
+ * profile routes have one; this is the one that holds for a route nobody has
+ * written yet.
+ *
+ * WHY THESE FIELDS AND NOT THE WHOLE ROW. A tombstone is still an account the
+ * village's records point at, and the system writes some of it on purpose: a
+ * thank-you settled to a departed member moves `recognitionBalance`, and
+ * revoking sessions moves `tokenVersion`. Refusing every write would break
+ * those. Pinning the identity breaks nothing a living member does, because a
+ * living member is never a tombstone.
+ */
+const TOMBSTONE_FIXED = [
+  "name",
+  "email",
+  "handle",
+  "passwordHash",
+  "bio",
+  "avatar",
+  "paths",
+  "journeys",
+  "prefs",
+  "contributions",
+  "contactable",
+  "role",
+  "stageGranted",
+  "membershipGranted",
+  "walletAddress",
+  "walletVerifiedAt",
 ] as const;
 
 function toIso(v: unknown): string | null {
@@ -217,7 +268,7 @@ export function usersRepo(pool: Pool = getPool()): UsersRepo {
       return member;
     },
 
-    async update(id, mutate) {
+    async update(id, mutate, opts) {
       const conn: PoolConnection = await pool.getConnection();
       try {
         await conn.beginTransaction();
@@ -227,7 +278,14 @@ export function usersRepo(pool: Pool = getPool()): UsersRepo {
           return null;
         }
         const member = rowToMember(r[0]);
+        // Copied before the mutator runs, deeply: it may change `prefs` or
+        // `contributions` in place, and the row hands those over by reference.
+        const fixed =
+          !opts?.erasure && isTombstone({ email: String(member.email ?? "") })
+            ? structuredClone(Object.fromEntries(TOMBSTONE_FIXED.map((k) => [k, member[k]])))
+            : null;
         mutate(member);
+        if (fixed) Object.assign(member, fixed);
         const params = memberToParams(member);
         await conn.query(
           `UPDATE users SET ${COLUMNS.slice(1)
@@ -345,6 +403,30 @@ export async function lockUserRowForUpdate(conn: PoolConnection, id: string): Pr
     id,
   ]);
   return who;
+}
+
+/**
+ * Whether an account other than `userId` holds this address, and this handle, now.
+ *
+ * For an erasure resumed after its tombstone (`asTheyWere`, server/lib/erasure.ts).
+ * The tombstone frees both, so sign-up can give them to somebody new while the
+ * sweep waits for its retry, and matching by them then finds a living member.
+ * The address is matched trimmed and lower-cased, the way the sweep matches it,
+ * and the handle lower-cased. An empty key is held by nobody.
+ */
+export async function heldByAnotherAccount(
+  pool: Pool,
+  userId: string,
+  who: { emailKey: string; handle: string | null },
+): Promise<{ email: boolean; handle: boolean }> {
+  const emailKey = String(who.emailKey ?? "");
+  const handle = String(who.handle ?? "").trim().toLowerCase();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT EXISTS(SELECT 1 FROM users WHERE id <> ? AND ? <> '' AND LOWER(TRIM(email)) = ?) AS email_held, " +
+      "EXISTS(SELECT 1 FROM users WHERE id <> ? AND ? <> '' AND LOWER(handle) = ?) AS handle_held",
+    [userId, emailKey, emailKey, userId, handle, handle],
+  );
+  return { email: Number(rows[0]?.email_held ?? 0) === 1, handle: Number(rows[0]?.handle_held ?? 0) === 1 };
 }
 
 /**

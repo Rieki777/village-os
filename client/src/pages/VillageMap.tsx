@@ -22,8 +22,8 @@ import { layoutForShape, type NestedInput } from "@shared/mapLayout";
 import { cssColourForCircle } from "@shared/circleView";
 import { authToken } from "@/lib/gameApi";
 import { rememberMapAvailable } from "@/lib/landing";
-import { ChevronDown, Download, Link2, List, Map as MapIcon, X } from "lucide-react";
-import { ExampleChip, ExamplesBanner, useExampleModules } from "@/components/ExamplesBanner";
+import { Download, Link2, List, Map as MapIcon, X } from "lucide-react";
+import { ExamplesBanner, useExampleModules } from "@/components/ExamplesBanner";
 import { FirstWalkInvite } from "@/pages/FirstWalk";
 import PowerMap from "@/components/power/PowerMap";
 import Breadcrumb from "@/components/power/Breadcrumb";
@@ -41,6 +41,8 @@ import CurrencyPicker from "@/components/power/CurrencyPicker";
 import DecideLens from "@/components/power/DecideLens";
 import LensRow from "@/components/power/LensRow";
 import MapToolStrip from "@/components/power/MapToolStrip";
+import CircleWall from "@/components/power/CircleWall";
+import { headlineFor, villageCounts } from "@/components/power/villageCounts";
 // Lane L3: the resources lens rides PowerMap's `lenses` seam and the
 // layout's pad argument; these two imports and the wiring below are its
 // whole footprint in this file.
@@ -54,7 +56,6 @@ import { withMoves } from "@/components/power/arrange";
 import { useVision, VisionGhosts, VisionPanel } from "@/components/power/VisionLayer";
 import {
   NO_FILTERS,
-  seatPassesFilters,
   type Filters,
   type PowerData,
   type PowerSeat,
@@ -264,10 +265,22 @@ export default function VillageMap() {
    */
   const [namedId, setNamedId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // A card on the circle wall opens its circle AND its card in one tap: the
+  // reader chose the circle from a list, so there is no map step to see first.
+  const sheetOnFocus = useRef<string | null>(null);
   useEffect(() => {
     setNamedId(null);
-    setSheetOpen(false);
+    setSheetOpen(sheetOnFocus.current !== null && sheetOnFocus.current === focusId);
+    sheetOnFocus.current = null;
   }, [focusId]);
+  const openFromWall = (id: string) => {
+    if (id === focusId) {
+      setSheetOpen(true);
+      return;
+    }
+    sheetOnFocus.current = id;
+    focusTo(id);
+  };
   const phoneKeys = useMemo(() => {
     if (!layout || !data) return [];
     const parent = new Map(data.circles.map((c) => [c.id, (c.parentCircleId as string | null) ?? null]));
@@ -379,6 +392,14 @@ export default function VillageMap() {
           )}
           {data && layout && (
             <>
+              {/* THE WHOLE MAP IN ONE LINE (2026-10-23). For most visitors this
+                  sentence is the answer: how much is at work, how much is
+                  still forming, and how many places are waiting for someone.
+                  Every width, above the picture it summarises. */}
+              <p data-power-headline className="text-center text-sm sm:text-base text-foreground mb-4">
+                {headlineFor(villageCounts(data))}
+              </p>
+
               {/* THE MAP COMES FIRST ON A PHONE.
                   It used to sit under the search box, the breadcrumb, the
                   lens row and three rows of filter chips: measured on a
@@ -619,11 +640,15 @@ export default function VillageMap() {
                 </div>
               )}
 
-              {/* Desktop and tablet: the canvas, the legend riding its corner,
-                  the card standing beside it. Below sm (spec 12's 480): the
-                  accordion IS the page, with the card as a bottom sheet. */}
-              {!listMode && (
-                <div className="hidden sm:flex gap-6 items-start">
+              {/* Desktop and tablet: the canvas, or the circle wall when List is
+                  on, with the card standing beside either. Below sm the small
+                  map and the wall under it are the page, with the card as a
+                  bottom sheet. */}
+              <div className="hidden sm:flex gap-6 items-start">
+                {listMode ? (
+                  <CircleWall data={data} onOpen={openFromWall} className="flex-1 min-w-0" />
+                ) : (
+                  <>
                   {/* The stage is HEIGHT-driven and the drawing is a disc, so
                       this number is the one that decides how big the picture
                       renders. At 74vh on a 720px screen the canvas was 533px
@@ -654,6 +679,8 @@ export default function VillageMap() {
                       arrangeHint={arranging && !publishing ? "press M to pick it up and move it" : undefined}
                     />
                   </div>
+                  </>
+                )}
                   <aside data-scroll-contain className={`w-80 shrink-0 bg-card border border-border rounded-2xl ${selectedSeat ? "p-3" : "p-5"} sticky top-24 max-h-[80vh] overflow-y-auto hidden md:block`}>
                     {/* Arranging rides the top of this card, so the canvas never moves when it turns on. */}
                     {arranging && (
@@ -717,16 +744,20 @@ export default function VillageMap() {
                       <Legend seats={data.roles} power={data.power} footer={<CurrencyPicker />} />
                     </div>
                   </aside>
-                </div>
-              )}
+              </div>
 
-              {/* The list: the phone's whole page, the tablet's under-map
-                  companion, and the desktop's choice (spec 12). */}
-              <div className={`${listMode ? "" : "sm:hidden"} space-y-4 mt-2`}>
-                <div className="sm:max-w-xl">
-                  <Legend seats={data.roles} power={data.power} footer={<CurrencyPicker />} />
-                </div>
-                <CircleAccordion data={data} filters={filters} viewerUserId={viewerUserId} onSelect={setSelected} onFocus={focusTo} />
+              {/* THE KEY BETWEEN sm AND md. The standing panel that carries the
+                  legend is md and up, and the phone's list is below sm, so a
+                  640 to 767px screen showed no key at all. */}
+              <div className="hidden sm:block md:hidden mt-4 max-w-xl">
+                <Legend seats={data.roles} power={data.power} footer={<CurrencyPicker />} />
+              </div>
+
+              {/* The phone's page under the small map: the key, then every
+                  circle as a card (Rye, 2026-10-23: "map, then circle cards"). */}
+              <div className="sm:hidden space-y-4 mt-2">
+                <Legend seats={data.roles} power={data.power} footer={<CurrencyPicker />} />
+                <CircleWall data={data} onOpen={openFromWall} />
               </div>
 
               {/* The card as a bottom sheet wherever the standing panel is
@@ -796,16 +827,17 @@ function VillageSummary({
   onPreview: (s: string | null) => void;
   onSaved: (p: { shape: string; shapeGloss?: string | null; decidesBy: string; decidesByGloss?: string | null }) => void;
 }) {
-  const filled = data.roles.reduce((n, r) => n + r.holderCount, 0);
-  const seats = data.roles.reduce((n, r) => n + r.seats, 0);
-  const open = data.roles.filter((r) => r.vacant).length;
+  // The same counts as the headline and the legend: the village's own, or its
+  // examples while it has nothing of its own (villageCounts).
+  const counts = villageCounts(data);
+  const open = counts.openRoles;
   return (
     <div className="space-y-4">
       <div>
         <h2 className="font-display text-lg font-bold text-foreground mb-1">The whole village</h2>
         <p className="text-xs text-muted-foreground">
-          {data.circles.length} circle{data.circles.length === 1 ? "" : "s"} · {data.roles.length} role
-          {data.roles.length === 1 ? "" : "s"} · {filled} of {seats} held
+          {counts.circles} circle{counts.circles === 1 ? "" : "s"} · {counts.roles} role
+          {counts.roles === 1 ? "" : "s"} · {counts.held} of {counts.places} held
         </p>
         {open > 0 && (
           <p className="text-xs text-amber-700 bg-amber/10 rounded-lg px-3 py-2 mt-3">
@@ -829,112 +861,6 @@ function VillageSummary({
       {mayDeclareVillage && (
         <ShapePicker power={data.power} preview={shapePreview} onPreview={onPreview} onSaved={onSaved} />
       )}
-    </div>
-  );
-}
-
-/** The same data as a list you can act from: every seat reachable by
- *  scrolling, no pinching, and the same filters dimming the same rows. */
-function CircleAccordion({
-  data,
-  filters,
-  viewerUserId,
-  onSelect,
-  onFocus,
-}: {
-  data: PowerData;
-  filters: Filters;
-  viewerUserId: string | null;
-  onSelect: (s: Selection) => void;
-  /** Opening a circle also flies the map to it. On a phone the map sits
-   *  directly above this list now, so the two move together. */
-  onFocus: (id: string | null) => void;
-}) {
-  const [open, setOpen] = useState<string>("");
-  const decideLabel = (id: string | null | undefined) =>
-    data.power.glossary.decidesBy.find((d) => d.id === id)?.label ?? null;
-  return (
-    <div className="space-y-3" data-power-accordion>
-      {data.circles.map((c) => {
-        const roles = data.roles.filter((r) => r.circleId === c.id);
-        const quests = data.quests.filter((q) => q.circleId === c.id);
-        const isOpen = open === c.id;
-        const method = decideLabel(c.decidesBy) ?? decideLabel(data.power.decidesBy);
-        return (
-          // A forming circle reads quieter by its dashed edge and its "(forming)"
-          // word. It was faded whole, text included, which put "(forming)" at
-          // 3.12:1 and its decision badge at 3.32:1 (measured 2026-09-21).
-          <div key={c.id} className={`bg-card border border-border rounded-xl ${c.status === "forming" ? "border-dashed" : ""}`}>
-            <button type="button" className="w-full flex items-center justify-between px-4 py-3" onClick={() => {
-              const next = isOpen ? "" : c.id;
-              setOpen(next);
-              onFocus(next || null);
-            }} aria-expanded={isOpen}>
-              <span className="font-semibold text-foreground text-sm text-left flex items-center gap-2 min-w-0">
-                {/* THE KEY BETWEEN THE PICTURE AND THE NAMES.
-                    On a phone the map draws colour and almost no text: at
-                    358px only one circle is big enough to hold a name, and
-                    the rest are 18 to 30px across. That is honest for the
-                    space and it left the picture unreadable as a legend,
-                    because nothing said which colour was which circle.
-                    Same hue, same resolver (shared/circleView.ts), so this
-                    row IS the map's key and cannot drift from it. */}
-                <span
-                  aria-hidden="true"
-                  className="w-2.5 h-2.5 rounded-full shrink-0 border"
-                  style={{
-                    background: cssColourForCircle({ id: c.id, color: c.color ?? null }),
-                    borderColor: cssColourForCircle({ id: c.id, color: c.color ?? null }),
-                  }}
-                />
-                <span className="min-w-0">
-                {c.name}
-                {c.status === "forming" && <span className="ml-2 text-xs text-muted-foreground">(forming)</span>}
-                {c.isExample && <ExampleChip className="ml-2 align-middle" />}
-                {method && <span className="ml-2 text-[10px] bg-teal-deep/10 text-teal-deep px-1.5 py-0.5 rounded-full">{method}</span>}
-                </span>
-              </span>
-              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" />
-            </button>
-            {isOpen && (
-              <div className="px-4 pb-4 space-y-2">
-                {c.purpose && <p className="text-xs text-muted-foreground">{c.purpose}</p>}
-                {roles.map((r) => {
-                  const dim = !seatPassesFilters(r, filters, viewerUserId) && (filters.open || filters.mine || filters.expiring || !!filters.circle || !!filters.person);
-                  return (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onClick={() => onSelect({ kind: "role", id: r.id })}
-                      className={`w-full flex items-center justify-between text-left text-sm px-3 py-2 rounded-lg bg-muted/40 hover:bg-muted ${dim ? "opacity-30" : ""}`}
-                    >
-                      <span>
-                        {r.name}
-                        {r.isExample && <ExampleChip className="ml-1.5 align-middle" />}
-                      </span>
-                      {r.vacant ? (
-                        <span className="text-[10px] bg-amber/20 text-amber-700 px-1.5 py-0.5 rounded-full">open call</span>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">
-                          {r.holderCount}/{r.seats}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-                {quests.length > 0 && (
-                  <p className="text-xs text-muted-foreground pt-1">
-                    {quests.length} open Quest{quests.length === 1 ? "" : "s"}, see the{" "}
-                    <a href="/quests" className="text-teal-deep font-medium">
-                      Quest board
-                    </a>
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }

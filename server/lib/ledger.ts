@@ -49,6 +49,12 @@ export type TokenType = string;
 export interface TokenDef {
   slug: string;
   name: string;
+  /**
+   * What this token means, in the village's own words (0283, Rye 2026-10-23),
+   * written in Admin, Tokens. null when nobody has written one. Platform copy
+   * never says what a token does (2026-10-22), so this is the only such text.
+   */
+  description?: string | null;
   /** Levers-spec taxonomy: recognition | equity | voice | credit. */
   kind: string;
   /** 'platform' = this ledger mints and moves it; 'hypha' = read-only mirror. */
@@ -94,13 +100,14 @@ const registry = new Map<string, TokenDef>();
  */
 export async function loadTokenRegistry(pool: Pool): Promise<void> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT slug, name, kind, governance, transferable, decimals, active, is_example FROM tokens",
+    "SELECT slug, name, description, kind, governance, transferable, decimals, active, is_example FROM tokens",
   );
   registry.clear();
   for (const r of rows) {
     registry.set(String(r.slug), {
       slug: String(r.slug),
       name: String(r.name),
+      description: r.description == null || String(r.description).trim() === "" ? null : String(r.description),
       kind: String(r.kind),
       governance: r.governance === "hypha" ? "hypha" : "platform",
       transferable: !!r.transferable,

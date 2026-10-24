@@ -100,6 +100,10 @@ export interface PowerCircle {
   status?: string;
   order?: number;
   color?: string | null;
+  /** The lucide icon name the circle stores; `iconFor` in lib/circleIcons draws it. */
+  icon?: string | null;
+  /** The circle's governance layer (link, lead, operating, advisory, council), once a village sets one. */
+  layer?: string | null;
   isExample?: boolean;
   decidesBy?: string | null;
   decidesByGloss?: string | null;

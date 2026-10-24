@@ -34,7 +34,7 @@ import { clearMemberDrivers } from "./memberDrivers";
 import { makeInviteDoor } from "./inviteDoor";
 import { INVITE_REFUSALS, hashInviteToken, inviteStanding, mintInviteToken } from "./invites";
 import { usersRepo } from "../repos/users";
-import { claimInvite, createInvite, inviteByHash } from "../repos/memberInvites";
+import { claimInvite, createInvite, inviteByHash, revokeOpenInvitesOf } from "../repos/memberInvites";
 import { erasureRecord } from "../repos/memberErasure";
 import { vouchesFor } from "../repos/vouches";
 
@@ -165,12 +165,72 @@ describe.skipIf(!configured)("an erased member's invitation links", () => {
     const leaver = await member("inv-er-twice", "Rowan Ise");
     const open = await link(leaver.id);
     await anonymizeMember(pool, leaver, null, deps());
+    expect((await row(open.id)).revoked_at).not.toBeNull();
+
+    // The step's own statement, asked again at once, matches nothing. mysql2 counts
+    // MATCHED rows (it sets FOUND_ROWS), so a statement that rewrote a withdrawn
+    // link would count it here even inside the same second.
+    expect(await revokeOpenInvitesOf(pool, leaver.id), "a second run withdrew a link again").toBe(0);
+
+    // `revoked_at` holds whole seconds, so a rewrite inside the same second would
+    // read the same. Move the withdrawal to a moment no second run can land in.
+    await q("UPDATE member_invites SET revoked_at = '2026-01-02 03:04:05' WHERE id = ?", [open.id]); // module-review-ok: backdating a row in the scratch schema this suite provisioned, which is the assertion
     const first = await row(open.id);
-    expect(first.revoked_at).not.toBeNull();
 
     // An erasure asked for again runs every step again, over the tombstone.
     await anonymizeMember(pool, await usersRepo(pool).byId(leaver.id), null, deps());
     expect(await row(open.id)).toEqual(first);
+    const [kept] = await q("SELECT DATE_FORMAT(revoked_at, '%Y-%m-%d %H:%i:%s') AS at FROM member_invites WHERE id = ?", [open.id]); // module-review-ok: reading back the scratch schema this suite provisioned, which is the assertion
+    expect(kept.at, "a second erasure rewrote an earlier withdrawal").toBe("2026-01-02 03:04:05");
+  });
+
+  it("will not hand a link to a new account once its maker has left, withdraws it, and still hands over a live member's link", async () => {
+    // A Google sign-in asks the door at /start, while the maker stands, and
+    // carries only the link's id to the callback, up to fifteen minutes later.
+    const gone = await member("inv-er-claim-gone", "Ash Roe");
+    const taken = await link(gone.id);
+    expect(await door().resolve(taken.token)).toMatchObject({ ok: true, id: taken.id });
+    // In between, the sweep wrote the tombstone and stopped before the links.
+    await tombstoneOnly(gone.id);
+    expect(inviteStanding((await inviteByHash(pool, hashInviteToken(taken.token)))!)).toBe("open");
+
+    expect(await door().claim(taken.id, "inv-er-claim-new-1"), "a tombstone's link was claimed").toBeNull();
+    const after = await row(taken.id);
+    expect(after.used_by_user_id, "the link was spent on an account made in a tombstone's name").toBeNull();
+    expect(after.used_at).toBeNull();
+    expect(after.revoked_at, "the refused link is withdrawn, as the sweep withdraws it").not.toBeNull();
+    // So a sweep that resumes later has nothing left to withdraw, and the link stays shut.
+    expect(await revokeOpenInvitesOf(pool, gone.id)).toBe(0);
+    expect(await door().resolve(taken.token)).toEqual({ ok: false, error: INVITE_REFUSALS.revoked });
+
+    // A maker with no user row at all is refused the same way.
+    const orphan = await link("inv-er-claim-nobody");
+    expect(await door().claim(orphan.id, "inv-er-claim-new-2")).toBeNull();
+    expect((await row(orphan.id)).used_by_user_id).toBeNull();
+
+    // THE CONTROL, in the same case: a link from somebody who stays is taken for the account, and names them.
+    await member("inv-er-claim-live", "Moss Ide");
+    const theirs = await link("inv-er-claim-live");
+    expect(await door().claim(theirs.id, "inv-er-claim-new-3")).toBe("inv-er-claim-live");
+    expect((await row(theirs.id)).used_by_user_id).toBe("inv-er-claim-new-3");
+  });
+
+  it("gives a claimed link back when the maker cannot be read, so no account that was never made holds it", async () => {
+    await member("inv-er-claim-unread", "Teal Oran");
+    const held = await link("inv-er-claim-unread");
+    const failing = makeInviteDoor({
+      getPool: () => pool,
+      members: {
+        byId: async () => {
+          throw new Error("the members table did not answer");
+        },
+        update: async () => null,
+      },
+    });
+    await expect(failing.claim(held.id, "inv-er-claim-new-4")).rejects.toThrow("did not answer");
+    expect(await row(held.id)).toEqual({ used_at: null, used_by_user_id: null, revoked_at: null });
+    // The link was given back open, so the next try, with the members table answering, takes it.
+    expect(await door().claim(held.id, "inv-er-claim-new-5")).toBe("inv-er-claim-unread");
   });
 
   it("refuses a link whose maker is a tombstone or gone, before the sweep reaches the row, and never names them", async () => {

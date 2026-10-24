@@ -22,26 +22,26 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 190 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 189 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 208 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 207 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-235 dials in 35 categories. 140 carry a minimum and a maximum. By type: 104 integer, 19 decimal, 18 percentage, 27 boolean, 29 choice, 37 text, 1 longtext.
+234 dials in 35 categories. 139 carry a minimum and a maximum. By type: 103 integer, 19 decimal, 18 percentage, 27 boolean, 29 choice, 37 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 3 | 3 | 0 |
-| Gratitude | 11 | 11 | 0 |
+| Gratitude | 10 | 10 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
 | Progression | 29 | 29 | 0 |
@@ -95,7 +95,6 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How long the village has to answer a settlement | `cycle.settlement_vote_days` | Gratitude | integer | `3` | the whole village |
 | Gratitude each heart sends | `feed.heart_amount` | Gratitude | integer | `1` | the whole village |
 | Hearts one member can tap for another per cycle | `feed.max_hearts_per_recipient_per_cycle` | Gratitude | integer | `5` | the whole village |
-| Recognition for an accepted Work With Us proposal | `gratitude.proposal_accept_award` | Gratitude | integer | `100` | the whole village |
 | Issuance cap per lunar cycle | `ledger.admin_mint_cycle_cap` | Ledger | integer | `10000` | the whole village |
 | Second steward needed above | `ledger.admin_mint_cosign_over` | Ledger | integer | `100` | the whole village |
 | Bonus for a circle that finished under its cap | `resources.circle_cap_bonus_pct` | Ledger | percentage | `10` | the whole village |
@@ -299,13 +298,13 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Match score floor | `introductions.match_floor` | Introductions | integer | `3` | the whole village |
 | Days an introduction stays open | `introductions.opportunity_days` | Introductions | integer | `10` | the whole village |
 | Keep match reasoning for | `introductions.retention_days` | Introductions | integer | `90` | the whole village |
-| Share of credits a leaver keeps | `exit.keep_pct.credit` | Exit | percentage | `0` | the whole village |
-| Share of Voice a leaver keeps | `exit.keep_pct.voice` | Exit | percentage | `0` | the whole village |
+| Share of credits a leaver keeps | `exit.keep_pct.credit` | Exit | percentage | `100` | the whole village |
+| Share of Voice a leaver keeps | `exit.keep_pct.voice` | Exit | percentage | `100` | the whole village |
 | Share of recognition a leaver keeps | `exit.keep_pct.recognition` | Exit | percentage | `0` | the whole village |
-| Share of equity a leaver keeps | `exit.keep_pct.equity` | Exit | percentage | `0` | the whole village |
+| Share of equity a leaver keeps | `exit.keep_pct.equity` | Exit | percentage | `100` | the whole village |
 | Where the rest of a settled balance goes | `exit.remainder_account` | Exit | choice | `settlement` | the whole village |
 | Days of cooling before a balance settles | `exit.cooling_days` | Exit | integer | `0` | the whole village |
-| What happens to Voice at a departure | `exit.voice_on_exit` | Exit | choice | `forfeit` | the whole village |
+| What happens to Voice at a departure | `exit.voice_on_exit` | Exit | choice | `keep` | the whole village |
 | Credits per Voice when converting | `exit.voice_convert_rate` | Exit | decimal | `0` | the whole village |
 | Value above which a departure needs the village to agree | `exit.vote_over` | Exit | integer | `0` | the whole village |
 | A leaver may sell kept credits back to the village | `exit.sellback_enabled` | Exit | boolean | `false` | the whole village |
@@ -367,7 +366,7 @@ The role whose holders are told the moment somebody joins. Greeting belongs to a
 
 ## Gratitude
 
-11 dials. 11 for the whole village.
+10 dials. 10 for the whole village.
 
 ### Base sending allowance per cycle
 
@@ -522,21 +521,6 @@ How many separate taps of appreciation one member can leave for another in a cyc
 | Counted in | hearts |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
-| What it costs to change | a routine vote |
-
-### Recognition for an accepted Work With Us proposal
-
-How much recognition is minted for a member whose Work With Us proposal is accepted. This used to live inside the Work With Us content settings with no bounds; it is issuance, so it belongs here with the other Gratitude dials.
-
-| Fact | Value |
-| --- | --- |
-| Key | `gratitude.proposal_accept_award` |
-| Type | integer, a whole number |
-| Default | `100` |
-| Range | 0 to 100000 |
-| Counted in | Gratitude |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
 ## Ledger
@@ -3897,13 +3881,13 @@ The sweep blanks an introduction's reasoning sentences, and the words of expired
 
 ### Share of credits a leaver keeps
 
-The share of each credit token a departing member keeps when their balance is settled. At 0, where this starts, the whole balance moves to the account named in 'Where the rest of a settled balance goes'. At 40 they keep forty percent of every credit token they hold and the village receives the other sixty. This counts by KIND and never by token name, so a village that mints its own credits gets the same answer as one running the platform's. The share is worked out in the token's smallest unit and rounded DOWN, so what a leaver keeps plus what the village receives is exactly what they held, to the last unit. Works with: 'Where the rest of a settled balance goes' and 'Days of cooling before a balance settles'. The settle act records the shares it actually applied onto the exit, so a dial moved afterwards never rewrites what happened.
+The share of each credit token a departing member keeps when their balance is settled. At 100, where this starts, they keep all of it, by the founder's ruling that members keep their tokens, and a member still holding any stays on as a former member when their exit resolves. At 0 the whole balance moves to the account named in 'Where the rest of a settled balance goes'. At 40 they keep forty percent of every credit token they hold and the village receives the other sixty. This counts by KIND and never by token name, so a village that mints its own credits gets the same answer as one running the platform's. The share is worked out in the token's smallest unit and rounded DOWN, so what a leaver keeps plus what the village receives is exactly what they held, to the last unit. Works with: 'Where the rest of a settled balance goes' and 'Days of cooling before a balance settles'. The settle act records the shares it actually applied onto the exit, so a dial moved afterwards never rewrites what happened.
 
 | Fact | Value |
 | --- | --- |
 | Key | `exit.keep_pct.credit` |
 | Type | percentage, a percentage |
-| Default | `0` |
+| Default | `100` |
 | Range | 0 to 100 |
 | Counted in | % kept |
 | Who may change it | the whole village |
@@ -3912,13 +3896,13 @@ The share of each credit token a departing member keeps when their balance is se
 
 ### Share of Voice a leaver keeps
 
-The share of a departing member's Voice that 'What happens to Voice at a departure' is applied to. At 0 the whole holding settles the way it does today. Above 0, the shape of what happens to that share is the other dial's answer: forfeit sends it with everything else, keep leaves it where it is, convert turns it into credits at the rate below. Voice that was earned and Voice that was bought are treated alike, because the ledger holds one balance for both. At forfeit, which is where this starts, the whole holding moves whatever share you set here, so this dial only changes a departure once the other one does.
+The share of a departing member's Voice that 'What happens to Voice at a departure' is applied to. At 100, where this starts, that is the whole holding, and with keep chosen there, which is where that dial starts, the member keeps all of it. At 0 the whole holding settles to the account named in 'Where the rest of a settled balance goes'. Above 0, the shape of what happens to that share is the other dial's answer: forfeit sends it with everything else, keep leaves it where it is, convert turns it into credits at the rate below. Voice that was earned and Voice that was bought are treated alike, because the ledger holds one balance for both. At forfeit the whole holding moves whatever share you set here.
 
 | Fact | Value |
 | --- | --- |
 | Key | `exit.keep_pct.voice` |
 | Type | percentage, a percentage |
-| Default | `0` |
+| Default | `100` |
 | Range | 0 to 100 |
 | Counted in | % kept |
 | Who may change it | the whole village |
@@ -3942,13 +3926,13 @@ Here so all four kinds of token are visible in one place. Any value above 0 is r
 
 ### Share of equity a leaver keeps
 
-Here so all four kinds of token are visible in one place. Any value above 0 is refused when you save it: equity is governed on Base under Hypha, this platform never moves it, and a boot invariant requires zero equity rows in this ledger. What happens to equity when somebody leaves is decided where it lives. Leave it at 0.
+The share of each equity token this ledger holds, Earned Equity among them, that a departing member keeps when their balance is settled. At 100, where this starts, they keep all of it, by the founder's ruling that members keep their tokens, and a member still holding any stays on as a former member when their exit resolves. At 0 the whole balance moves to the account named in 'Where the rest of a settled balance goes'. The village's equity on Base under Hypha is outside this dial: this ledger holds no rows of it, so there is nothing of it here to settle.
 
 | Fact | Value |
 | --- | --- |
 | Key | `exit.keep_pct.equity` |
 | Type | percentage, a percentage |
-| Default | `0` |
+| Default | `100` |
 | Range | 0 to 100 |
 | Counted in | % kept |
 | Who may change it | the whole village |
@@ -3993,13 +3977,13 @@ How long after a member opens their exit before an admin may settle their balanc
 
 ### What happens to Voice at a departure
 
-Voice is the one holding that is also standing in the village, so it gets its own answer. Forfeit is what happens today. Keep is refused while a resolved exit turns the account into a tombstone, and the refusal says when it becomes available. Convert needs a rate under it and a share of Voice the leaver keeps, because only that share converts, so convert with a rate of 0 or a share of 0 is refused as well. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.
+Voice is the one holding that is also standing in the village, so it gets its own answer. Keep is where this starts, by the founder's ruling of 2026-10-23: the member keeps the share set under 'Share of Voice a leaver keeps', and while they hold any of it their exit resolves with the account kept, as a former member. Forfeit sends the share with everything else, which is what a departure did before that ruling. Convert needs a rate under it and a share of Voice the leaver keeps, because only that share converts, so convert with a rate of 0 or a share of 0 is refused. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.
 
 | Fact | Value |
 | --- | --- |
 | Key | `exit.voice_on_exit` |
 | Type | choice, one of a fixed list |
-| Default | `forfeit` |
+| Default | `keep` |
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
@@ -4007,8 +3991,8 @@ Voice is the one holding that is also standing in the village, so it gets its ow
 
 What it may be set to:
 
-- `forfeit` It goes with everything else. The share settles to the account above, which is what a departure does today.
-- `keep` The member keeps it. Refused for now. A resolved exit anonymizes the account, and a tombstone cannot hold voting weight, so this opens once a village can record a departure without one.
+- `forfeit` It goes with everything else. The share settles to the account above, which is what a departure did before the ruling of 2026-10-23.
+- `keep` The member keeps it. Where this starts. The Voice stays in their account, and the account stays on as a former member while it holds anything of value.
 - `convert` It becomes credits. Posted as one pair, so a half-finished conversion cannot leave somebody holding neither. The credits come out of the treasury, which has to hold enough of them or the conversion is refused whole. Set the rate below it.
 
 ### Credits per Voice when converting

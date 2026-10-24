@@ -92,6 +92,8 @@ export interface WalletClaim {
 export interface WalletRow {
   token: string;
   name: string;
+  /** What the token means, in the village's own words (0283), or null when it has written none. Never a platform sentence. */
+  description: string | null;
   kind: string;
   role: WalletRole;
   decimals: number;
@@ -255,6 +257,7 @@ export function assembleWallet(inputs: WalletInputs): Wallet {
     rows.push({
       token: def.slug,
       name: def.name?.trim() || def.slug,
+      description: def.description?.trim() || null,
       kind: def.kind,
       role,
       decimals: Number(holding?.decimals ?? def.decimals ?? 0),

@@ -73,6 +73,13 @@ export interface WorkPay {
   cadence: "once" | "cycle";
   /** Roles only, and only for a reader allowed to read the role's terms. */
   cash?: StatedCash | null;
+  /**
+   * The cash the work itself pays (0285), stated on the quest or the role and
+   * public like its tokens. The platform never pays it: the village owes it
+   * from the moment the work is paid, and records that (`cash_owed`). Per
+   * `cadence`, like the token lines. Null or absent pays no cash.
+   */
+  cashPay?: WorkValue | null;
 }
 
 /** The most token lines one piece of work may name. */
@@ -85,24 +92,33 @@ export const VALUE_MINOR_MAX = 1_000_000_000_000;
 export const TOKEN_AMOUNT_MAX = 1_000_000_000;
 
 /**
- * THE TWO TRIGGERS THAT PAY WORK, AND NO CEILING BINDS EITHER (Rye, 2026-10-22:
+ * THE TRIGGERS THAT PAY WORK, AND NO CEILING BINDS ANY OF THEM (Rye, 2026-10-22:
  * "no caps here! Relatively most projects will have 1 token ~1USD (or their
  * local currency) so we definitely can't have caps on what things pay").
  *
- * A quest or a role pays what it names, or the rule's own amount when it names
- * nothing, in full. An enabled rule on a token still decides that the token
+ * A quest, a role or an accepted proposal pays what it names, or the rule's
+ * own amount when it names nothing, in full. An accepted Work With Us proposal
+ * is work like the others (Rye, 2026-10-23: "definitely a work token"). An enabled rule on a token still decides that the token
  * may pay that kind of work at all, and Gratitude never does.
  *
- * Every rule the engine pays today is on one of these two triggers, so no
+ * Every rule the engine pays today is on one of these triggers, so no
  * ceiling binds anything it pays. The column is still stored. `ceilingBinds`
  * keeps the old clamp for a rule on any other trigger, and nothing pays one.
  */
-export const WORK_PAY_TRIGGERS: readonly string[] = ["quest.completed", "role.cycle"];
+export const WORK_PAY_TRIGGERS: readonly string[] = ["quest.completed", "role.cycle", "proposal.accepted"];
 
 /** Whether a mint rule's ceiling binds what it pays. False for work. */
 export function ceilingBinds(trigger: string): boolean {
   return !WORK_PAY_TRIGGERS.includes(trigger);
 }
+
+/**
+ * The refusal wherever something other than a member's send tries to issue
+ * Gratitude (Rye, 2026-10-23: "GRATITUDE is only sent from player to player
+ * using the send gratitude function, gratitude is not distributed in any other
+ * way!"): a hand-mint, a circle treasury, a badge multiplier.
+ */
+export const GRATITUDE_ONLY_SENT = "Gratitude is only ever sent from one member to another, so it cannot be minted, granted or paid here.";
 
 /** The one token that never pays for work. */
 // The refusal states the rule and never what the token does (Rye, 2026-10-22).
@@ -148,7 +164,7 @@ export function readWorkValue(minor: unknown, currency: unknown): WorkValue | nu
  * alone; `null` clears it on purpose.
  */
 export type WorkValueInput =
-  | { ok: true; valueMinor: number | null | undefined; tokens: TokenAmount[] | null | undefined }
+  | { ok: true; valueMinor: number | null | undefined; tokens: TokenAmount[] | null | undefined; cashMinor: number | null | undefined }
   | { ok: false; error: string };
 
 /**
@@ -158,6 +174,10 @@ export type WorkValueInput =
  * a save that edits a quest's title leaves its value alone. `valueMinor: null`
  * clears the value on purpose. The currency is never read from the body: the
  * server stamps the village's own currency at the moment of the save.
+ *
+ * `cashMinor` is the cash the work pays (0285), read the same way and stamped
+ * with the same currency. Zero and null both mean it pays no cash, so both
+ * store nothing: unlike a value, there is no "inquire" state for cash.
  *
  * `isPayable` is the server's question about a slug (a platform token the
  * engine can issue). Gratitude is refused by name before it is asked.
@@ -170,7 +190,17 @@ export function readWorkValueInput(
   // A key holding `undefined` is a key JSON would never have carried, so it is absent.
   const hasValue = bag.valueMinor !== undefined;
   const hasTokens = bag.valueTokens !== undefined;
-  if (!hasValue && !hasTokens) return { ok: true, valueMinor: undefined, tokens: undefined };
+  const hasCash = bag.cashMinor !== undefined;
+  if (!hasValue && !hasTokens && !hasCash) return { ok: true, valueMinor: undefined, tokens: undefined, cashMinor: undefined };
+
+  let cashMinor: number | null = null;
+  if (hasCash && bag.cashMinor !== null && bag.cashMinor !== "") {
+    const n = Number(bag.cashMinor);
+    if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, error: "Cash is a whole number of the currency's smallest unit." };
+    if (n < 0) return { ok: false, error: "Cash is zero or more." };
+    if (n > VALUE_MINOR_MAX) return { ok: false, error: "That cash amount is larger than this platform records." };
+    cashMinor = n === 0 ? null : n;
+  }
 
   let valueMinor: number | null = null;
   if (hasValue && bag.valueMinor !== null && bag.valueMinor !== "") {
@@ -208,6 +238,7 @@ export function readWorkValueInput(
     ok: true,
     valueMinor: hasValue ? valueMinor : undefined,
     tokens: hasTokens ? tokens : undefined,
+    cashMinor: hasCash ? cashMinor : undefined,
   };
 }
 

@@ -253,6 +253,9 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
   it("carries every seeded rule, disabled ones included, in minor units and in the column's own text", async () => {
     const snapshot = await read();
     expect(snapshot.mintRules.map((r) => r.id).sort()).toEqual([
+      "rule-proposal.accepted-credits",
+      "rule-proposal.accepted-earned-equity",
+      "rule-proposal.accepted-village-voice",
       "rule-quest.completed-credits",
       "rule-quest.completed-earned-equity",
       "rule-quest.completed-village-voice",
@@ -321,7 +324,7 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
       const provenance = await economyProvenance(conn);
       await conn.query("COMMIT"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       expect(snapshot.tokens.length).toBe(6);
-      expect(snapshot.mintRules.length).toBe(7);
+      expect(snapshot.mintRules.length).toBe(10);
       expect(provenance.anySeeded).toBe(false);
     } finally {
       conn.release();
@@ -365,13 +368,13 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
     expect(provenance.tokens.source).toBe("live");
     expect(provenance.tokens.rows).toBe(6);
     expect(provenance.mintRules.source).toBe("live");
-    expect(provenance.mintRules.rows).toBe(7);
+    expect(provenance.mintRules.rows).toBe(10);
     expect(provenance.balances.source).toBe("live");
     expect(provenance.balances.rows).toBe(2);
     expect(provenance.variables.rows).toBe(1);
     expect(provenance.anySeeded).toBe(false);
     expect(provenance.sentence).toBe(
-      `tokens: live (6 rows), mint rules: live (7 rows), balances: live (2 rows), ` +
+      `tokens: live (6 rows), mint rules: live (10 rows), balances: live (2 rows), ` +
         `variables: live (1 stored, ${VARIABLES.length} platform defaults)`,
     );
   });
@@ -608,6 +611,9 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
   it("an empty rules table yields the seed's rules, scaled against the seed's tokens", async () => {
     const { snapshot, provenance } = await readBoth();
     expect(snapshot.mintRules.map((r) => r.id).sort()).toEqual([
+      "rule-proposal.accepted-credits",
+      "rule-proposal.accepted-earned-equity",
+      "rule-proposal.accepted-village-voice",
       "rule-quest.completed-credits",
       "rule-quest.completed-earned-equity",
       "rule-quest.completed-village-voice",
@@ -621,7 +627,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     expect(voice.amountRaw).toBe("50.0000");
     expect(voice.ceiling).toBe(BigInt(200 * 10 ** VOICE_DECIMALS));
     expect(provenance.mintRules.source).toBe("seed");
-    expect(provenance.mintRules.clause).toBe("mint rules: seed defaults (7 rows)");
+    expect(provenance.mintRules.clause).toBe("mint rules: seed defaults (10 rows)");
   });
 
   it("balances and variables stay live and say zero, because zero is a measurement", async () => {

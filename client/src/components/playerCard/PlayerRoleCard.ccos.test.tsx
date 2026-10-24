@@ -87,7 +87,8 @@ describe("a role with every CCOS word written", () => {
     expect(within(box as HTMLElement).getByText("What I look after")).toBeTruthy();
     expect(box.querySelector('[data-role-section="authorities"]')).not.toBeNull();
     const exists = article().querySelector('[data-role-section="existsWhile"]')!;
-    expect(exists.closest(".border-l-notice")).not.toBeNull();
+    // Inside the design's highlighted gold Purpose block.
+    expect(exists.closest(".pc-why")).not.toBeNull();
     expect(article().querySelector('[data-role-chip="time"]')!.textContent).toBe("Part of a full-time season");
     expect(screen.getByRole("list", { name: "About this role" }).textContent).toContain("Review week of 16 Nov");
   });

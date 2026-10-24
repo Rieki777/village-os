@@ -119,6 +119,7 @@ const TRIGGER_WORDS: Record<string, string> = {
   "quest.completed": "A steward confirms finished work",
   "gratitude.given": "A member thanks another",
   "role.cycle": "Each moon, to everyone holding a role",
+  "proposal.accepted": "The village accepts a member's proposal to work with it",
   "journey.stage_reached": "Reaching a stage of the journey",
   "welcome_aboard.quest": "A welcome quest",
   "library.contributed": "Lending something to the library",

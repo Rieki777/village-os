@@ -31,7 +31,9 @@
  * calendar's own writer (`buildIcs`, server/lib/icsFeed.ts), so a weekly
  * rhythm leaves as one RRULE that keeps its wall-clock time and a moon rhythm
  * as its meetings one by one. A row's id is the mirrored row's id, so a
- * meeting keeps one UID wherever it is read.
+ * meeting keeps one UID wherever it is read. The meetings of a followed
+ * circle's own calendar travel with it, as the village calendar imported them
+ * (server/lib/circleOwnCalendar.ts).
  */
 import { createHash, randomBytes } from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
@@ -40,6 +42,7 @@ import * as rhythms from "../repos/sessionRhythm";
 import * as room from "../repos/liveSessions";
 import { ensureMemberNo, memberNo, type Outcome, type Refusal } from "./liveSessions";
 import { mapRhythm } from "./sessionRhythm";
+import { exportOwnCalendarsFor, importedRowsFor, ownCalendars, retireGoneCircleCalendars } from "./circleOwnCalendar";
 import { calendarIdFor, calendarRemoveMissing, calendarUpsert, type CalendarRow, type CalendarUpsertInput } from "./calendar";
 import { buildIcs } from "./icsFeed";
 import { listMonthNames, namesForHemisphere } from "./lunarTable";
@@ -204,6 +207,8 @@ export function mirrorRhythms(pool: Pool, deps: CalendarDeps): Promise<{ written
 }
 
 async function mirrorOnce(pool: Pool, deps: CalendarDeps): Promise<{ written: number; retired: number }> {
+  // A circle no longer live keeps no calendar of its own: nobody is left to detach it.
+  await retireGoneCircleCalendars(pool, new Set(deps.circles().map((c) => c.id)));
   if (!openToMembers(deps)) return { written: 0, retired: await calendarRemoveMissing(pool, MIRROR_SOURCE, []) };
   const zone = villageTimezone();
   const live = new Map(deps.circles().map((c) => [c.id, c]));
@@ -307,6 +312,10 @@ export async function feedFor(pool: Pool, rawKey: unknown, deps: FeedDeps, now =
     if (!circle || !(all || ids.has(r.circleId))) continue;
     rows.push(calendarRowFor(r, circle.name, zone, row.updated_at instanceof Date ? row.updated_at : new Date(String(row.updated_at))));
   }
+  const followed = all ? new Set(live.keys()) : new Set(Array.from(ids).filter((id) => live.has(id)));
+  const from = new Date(now.getTime() - 60 * DAY_MS);
+  const to = new Date(now.getTime() + 400 * DAY_MS);
+  rows.push(...(await importedRowsFor(pool, await ownCalendars(pool), followed, from, to)));
   const hemisphere = stringVar("calendar.hemisphere") === "south" ? "south" : "north";
   const origin = deps.origin().replace(/\/$/, "");
   return buildIcs(rows, {
@@ -324,19 +333,22 @@ export async function feedFor(pool: Pool, rawKey: unknown, deps: FeedDeps, now =
       }
     })(),
     siteUrl: origin || null,
-    from: new Date(now.getTime() - 60 * DAY_MS),
-    to: new Date(now.getTime() + 400 * DAY_MS),
+    from,
+    to,
     now,
   });
 }
 
 // ── The member's own ────────────────────────────────────────────────────────
 
-/** What a member follows, and their address without its key, for the export. */
-export async function exportFollowsFor(pool: Pool, no: number): Promise<{ circlesFollowed: Record<string, unknown>[]; calendarAddress: Record<string, unknown>[] }> {
+/** What a member follows, their address without its key, and the circles whose own calendar they attached, for the export. */
+export async function exportFollowsFor(
+  pool: Pool,
+  no: number,
+): Promise<{ circlesFollowed: Record<string, unknown>[]; calendarAddress: Record<string, unknown>[]; ownCalendarsAttached: Record<string, unknown>[] }> {
   const circlesFollowed = (await store.followRows(pool, no)).map((r) => ({ circleId: String(r.circle_id), since: toIso(r.created_at) }));
   const calendarAddress = (await store.keyRow(pool, no)).map((r) => ({ madeAt: toIso(r.created_at), lastReadAt: toIso(r.last_used_at) }));
-  return { circlesFollowed, calendarAddress };
+  return { circlesFollowed, calendarAddress, ownCalendarsAttached: await exportOwnCalendarsFor(pool, no) };
 }
 
 /** The member leaves, inside the erasure's transaction. */

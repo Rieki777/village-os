@@ -36,6 +36,9 @@ const DOORS = [
   "POST /api/sessions/:id/act",
   "POST /api/sessions/:id/hosts",
   "POST /api/sessions/:id/close",
+  // A round that outlived its call (0281): the sleeper's answer, and the facilitator's decision, from the record.
+  "POST /api/sessions/:id/night",
+  "POST /api/sessions/:id/entries/:entryId/decide",
   "POST /api/sessions/:id/tool-feedback",
   "GET /api/sessions/:id/minutes.md",
 ];
@@ -476,7 +479,7 @@ describe("the room's view", () => {
       [1, 8, "more sleep", true],
       [2, 4, "a quiet morning", true],
     ]);
-    expect(heard.body.responses).toEqual([{ target: "word", userId: 2, value: "grateful", text: null }]);
+    expect(heard.body.responses).toEqual([{ target: "word", userId: 2, value: "grateful", text: null, answerBy: null }]);
 
     // The founder is an admin and is not in this room.
     const outside = collect();

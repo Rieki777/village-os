@@ -355,6 +355,17 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} of your redemptions were not confirmed.",
     celebrate: false,
   },
+  /**
+   * The village marked cash it owed you as paid (0285, server/routes/cashOwed.ts).
+   * The body is the treasurer's own note on how it was paid. Not celebrated,
+   * for redemption's reason: the platform records the payment and never sees it.
+   */
+  cash_paid: {
+    group: "economy",
+    blurb: "The village marked cash it owed you as paid.",
+    many: "{n} cash payments were marked paid.",
+    celebrate: false,
+  },
   exchange: {
     group: "economy",
     blurb: "An exchange order settled, and what you bought is in your wallet.",
@@ -499,6 +510,41 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "work",
     blurb: "A circle you are part of meets soon. The notice says when, and what is on the agenda.",
     many: "{n} of your circles meet soon.",
+    celebrate: false,
+  },
+  // The advice process (shared/sessionAdvice.ts): somebody asks a circle you
+  // are part of for advice, the asker hears each new piece of advice, and the
+  // people asked hear what was decided.
+  session_advice_asked: {
+    group: "work",
+    blurb: "Somebody asks a circle you are part of for advice before they decide. The notice says what they mean to decide.",
+    many: "{n} requests for your advice.",
+    celebrate: false,
+  },
+  session_advice_given: {
+    group: "work",
+    blurb: "Somebody you asked for advice gave it.",
+    many: "{n} people gave advice on what you mean to decide.",
+    celebrate: false,
+  },
+  session_advice_decided: {
+    group: "work",
+    blurb: "Somebody who asked for your advice decided. The notice says what they decided.",
+    many: "{n} decisions made after asking for your advice.",
+    celebrate: false,
+  },
+  // A night on a proposal (0281): whoever asked for one hears where to answer
+  // once the call has closed, and the facilitator hears when no night lasts.
+  session_night_open: {
+    group: "work",
+    blurb: "You asked for a night on a proposal and the call has closed. The notice says where to answer, and by when.",
+    many: "{n} proposals wait for your answer after a night.",
+    celebrate: false,
+  },
+  session_night_settled: {
+    group: "work",
+    blurb: "A proposal from a session you facilitated waited for a night, and the night is over. The notice says how the round went.",
+    many: "{n} rounds you facilitated are settled after a night.",
     celebrate: false,
   },
   session_item_settled: {

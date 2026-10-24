@@ -1413,7 +1413,9 @@ export function render(f) {
       `- **Claiming across to Base.** An open claim holds the amount in \`${f.accounts.voiceBridge}\`, which is not a ` +
       "faucet: it can only ever hold what a member put in it, which is what makes a cancelled claim provably " +
       "refundable.\n" +
-      `- **Leaving.** A departing member's balances settle to \`${f.accounts.exitSettlement}\`.`,
+      `- **Leaving.** What a departing member does not keep under the village's exit shares settles to \`${f.accounts.exitSettlement}\` ` +
+      "unless the village names another account. On the platform's defaults a leaver keeps every credit, Voice and equity " +
+      "balance, and a leaver still holding any stays on as a former member.",
   );
   p();
   p(

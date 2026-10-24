@@ -43,6 +43,9 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { markAdminGate } from "../lib/adminGate";
 import { humanAtScale, owedForClaim } from "../lib/economy";
+import { oweQuestCash } from "../lib/cashOwed";
+import { readWorkValue } from "../../shared/workValue";
+import { rewardMultipliersFor } from "../lib/seasonPatterns";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { issuanceRefusal } from "../lib/gameStart";
@@ -98,7 +101,7 @@ type Deps = Pick<
   ): Promise<void>;
   /**
    * The seasonal badges whose season is not running, cached for a few seconds
-   * in server/index.ts. The reward multiplier below asks it so a badge that is
+   * in server/index.ts. The badge multipliers below ask it so a badge that is
    * asleep does not multiply anybody's consent.
    */
   dormantBadgeIds(): Promise<string[]>;
@@ -539,6 +542,9 @@ export function register(app: Express, deps: Deps): void {
     // equal and the advancement event would never fire.
     const claimant = await members.byId(claim.userId);
     const stageBefore = claimant ? await stageOf(claimant) : null;
+    // The claimant's badge multipliers, token by token (Rye, 2026-10-23), read
+    // before the transaction: which badges are awake depends on the season.
+    const boost = claimant ? await rewardMultipliersFor(getPool(), claim.userId, await deps.dormantBadgeIds()) : undefined;
 
     // One commit: the status check, the flip and what the consent owes, or
     // none of them. The account of why is on `consentOnce` in server/repos/quests.ts.
@@ -574,9 +580,19 @@ export function register(app: Express, deps: Deps): void {
           userId: c.userId,
           stay: stayReward > 0 ? { reward: stayReward, questTitle: c.questTitle } : undefined,
           valueTokens: consentedQuest?.valueTokens ?? null,
+          boost,
         });
         if (priced.skipped) console.log(`[economy] claim ${c.id}: no rule priced (${priced.skipped})`);
         await recordOwed(conn, c.id, priced.owed);
+        // THE CASH IT PAYS (0285), owed in this same commit. The platform never
+        // pays it; the village now owes it, and the treasurer reads it there.
+        await oweQuestCash(conn, {
+          claimId: c.id,
+          userId: c.userId,
+          questId: c.questId,
+          questTitle: c.questTitle,
+          cash: readWorkValue(consentedQuest?.cashMinor, consentedQuest?.cashCurrency),
+        });
         return { ok: true as const };
       },
     );
