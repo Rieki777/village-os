@@ -222,10 +222,8 @@ export async function noteStepDone(pool: Pool, userId: string, step: string): Pr
  * The local sweep completed. The failure fields go with it, and so does who it
  * was for: in the same statement, so no finished record ever holds a name.
  *
- * The second statement clears any OTHER finished record still holding one.
- * Nothing in this release leaves one, but an image from before 0282 put back
- * over a migrated database finishes sweeps without knowing the column exists,
- * and this is where the first finish after it comes forward takes them.
+ * It then clears any OTHER finished record still holding one
+ * (`clearFinishedIdentities`, which says where those come from).
  */
 export async function noteErasureFinished(pool: Pool, userId: string): Promise<void> {
   await pool.query(
@@ -233,9 +231,34 @@ export async function noteErasureFinished(pool: Pool, userId: string): Promise<v
       "`erased_identity` = NULL WHERE `user_id` = ?",
     [userId],
   );
-  await pool.query(
+  await clearFinishedIdentities(pool);
+}
+
+/**
+ * Let go of who every FINISHED erasure was for, and say how many held one.
+ *
+ * Nothing in this release leaves a name on a finished record. An image from
+ * before 0282 put back over a migrated database does: it finishes sweeps
+ * without knowing the column exists, so a sweep this release opened and that
+ * one finished keeps the departed member's name, address and handle on a row
+ * that reads finished, and every nightly dump copies them.
+ *
+ * WHO CALLS IT. Every finish, and the hourly failed-actions pass
+ * (`resumeClosedErasures`), which runs whether or not anything is left to
+ * resume. The finish alone used to be the only clear, so a leftover waited for
+ * some other member's erasure, and a small village can go months without one
+ * (round 2, finding 2). Now it goes within an hour of the image coming forward.
+ * A village with the scheduler switched off still clears at its next finish.
+ *
+ * SAFE BESIDE AN OPEN SWEEP. It touches finished rows only, and `beginErasure`
+ * reopens a record and writes its identity in one statement, so a re-erasure
+ * never loses an identity it needs to this.
+ */
+export async function clearFinishedIdentities(pool: Pool): Promise<number> {
+  const [result] = await pool.query(
     "UPDATE `member_erasures` SET `erased_identity` = NULL WHERE `finished_at` IS NOT NULL AND `erased_identity` IS NOT NULL",
   );
+  return Number((result as { affectedRows?: number }).affectedRows ?? 0);
 }
 
 /** Which step stopped, and what it said. Clipped, never truncated by the engine. */
