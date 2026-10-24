@@ -121,6 +121,7 @@ import { readApplications } from "../repos/seatApplications";
 import { insertPlanVersion, latestCardWords, planToStore, planVersions, plansOfMember } from "../repos/seasonPlans";
 import { cardContext, cardSeatTier, type CardDeps } from "./playerCard";
 import { roleApplicationDoor } from "./seatApplications";
+import { registerRoleCardRoutes } from "./roleCardImport";
 
 type Deps = CardDeps &
   Pick<AppDeps, "guardCapability" | "overLimit" | "notify" | "members" | "isPresent"> & {
@@ -652,6 +653,23 @@ export function register(app: Express, deps: Deps): void {
     const names = namesOf(p.body, await known(getPool()));
     const words = seatTermsWords(names, p.body.settings);
     res.json({ title: words.title, body: words.body, money: carriesMoney(p.body.settings), intent: intentSentence(names) });
+  });
+
+  // ── The card as text, and bringing a description in (server/routes/roleCardImport.ts) ──
+  registerRoleCardRoutes(app, {
+    getPool,
+    member,
+    owned,
+    known,
+    targetFor,
+    nextSeason,
+    prefilled,
+    limited,
+    draftOf: store.draftOf,
+    villageName: () => deps.villageName(),
+    members: deps.members,
+    lapse: () => deps.lapse(),
+    now,
   });
 
   // ── The share link ────────────────────────────────────────────────────────
