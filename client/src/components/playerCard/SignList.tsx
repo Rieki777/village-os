@@ -42,7 +42,8 @@ function TrendLine({ sign }: { sign: SignOut }) {
 function SignBody({ sign }: { sign: SignOut }) {
   return (
     <>
-      <span className="pc-num">{sign.value}</span>
+      {/* A count in the design's large gold; a sign not counted yet says so quietly, never as a number. */}
+      <span className={sign.reading.kind === "counted" ? "pc-num" : "pc-num pc-notyet"}>{sign.value}</span>
       <span className="pc-meter" aria-hidden="true">
         <i style={{ width: `${meterOf(sign)}%` }} />
       </span>

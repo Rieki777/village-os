@@ -18,7 +18,7 @@
  * utility a shared control inside the card carries (the raise-a-tension form,
  * the decide doors): those are resolved by tokenContrast's own reader.
  *
- * WHAT IT SEES. The narrowest viewport: every `max-width` media block applies.
+ * WHAT IT SEES. The narrowest card: every `max-width` media or container block applies.
  * No state: rules naming `:hover`, `:focus`, `:target` or a pseudo-element are
  * left out. Floors: 4.5 for body text, 3 for large text (24px, or 18.66px at
  * 700 or heavier).
@@ -107,7 +107,7 @@ export function cardSheet(): Sheet {
         j++;
       }
       const body = text.slice(open + 1, j - 1);
-      if (head.startsWith("@media")) {
+      if (head.startsWith("@media") || head.startsWith("@container")) {
         if (/max-width/.test(head) && !/prefers-/.test(head)) walk(body);
       } else if (!head.startsWith("@")) {
         const decls = declarations(body);
