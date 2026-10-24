@@ -239,7 +239,7 @@ Three other things move a token, and none of them is one member handing it to an
 
 - **Spending.** A member pays a village surface and the amount lands in the account above.
 - **Claiming across to Base.** An open claim holds the amount in `sys:voice-bridge`, which is not a faucet: it can only ever hold what a member put in it, which is what makes a cancelled claim provably refundable.
-- **Leaving.** A departing member's balances settle to `sys:exit-settlement`.
+- **Leaving.** What a departing member does not keep under the village's exit shares settles to `sys:exit-settlement` unless the village names another account. On the platform's defaults a leaver keeps every credit, Voice and equity balance, and a leaver still holding any stays on as a former member.
 
 One more way value enters, outside the rule engine: an administrator can stock the treasury by hand out of `sys:mint`, capped at `ledger.admin_mint_cycle_cap` per token per moon (default `10000`, and 0 switches hand-minting off). The exchange's own rules decide which tokens that route will accept.
 
