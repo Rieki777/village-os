@@ -333,6 +333,17 @@ existed since `drizzle/0003_variables_and_stage_events.sql`, and `drizzle/0070_p
 released any empty-string handles to NULL, because an empty string occupies a unique index once and
 then refuses every later member who saves a blank one.
 
+**No living member takes a `departed-` handle.** That prefix is what tombstones wore before round 2,
+and `handle-after-tombstone` frees each one, so a living member holding `departed-xxxxxxxx` would be
+who every old link to the departed member's page reached. `PUT /api/profile` refuses a new handle
+starting with `departed-` in `DEPARTED_HANDLE_REFUSAL`'s words (`server/lib/profile.ts`); a member
+already wearing one from before the rule keeps saving their profile with it. A handle a NAME gives
+(sign-up, Google sign-up, the founder's bootstrap and the boot backfill below, all through
+`slugifyHandle`) drops the prefix through `livingHandle`, so "Departed Fern" joins as `fern`. No admin
+route edits a handle. Pinned by `server/routes/profile.handle.test.ts`, the sign-up case in
+`server/needsTombstone.routes.e2e.test.ts` and the Google case in
+`server/authGoogle.routes.e2e.test.ts`.
+
 **There is a third handle-assignment path and it runs at boot.** `startServer` calls
 `runOnce("backfill-member-handles", backfillMemberHandles)`, which loads the whole roster and mints a
 handle from `u.name` for every member without one. For a fork that imports an existing membership
