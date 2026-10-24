@@ -23,7 +23,8 @@
  */
 import { revokeLiveTokensOf } from "../repos/agentTokens";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import { lockSessionFieldsForUpdate } from "../repos/users";
 import { removeInbox } from "./agentInbox";
 import { recordEvent } from "./events";
 import { revokeFeedTokens } from "./icsFeed";
@@ -112,6 +113,63 @@ function toRow(r: RowDataPacket): AgentTokenRow {
  */
 export function holderStands<T extends { email?: unknown }>(user: T | null | undefined): user is T {
   return !!user && !isTombstone({ email: String(user.email ?? "") });
+}
+
+/**
+ * Why `whileSessionHolds` wrote nothing. `holder_gone`: no member row, or an
+ * erasure's tombstone. `session_ended`: the member stands, and the session
+ * that asked was signed at a tokenVersion the row no longer has.
+ */
+export type SessionHoldRefusal = "holder_gone" | "session_ended";
+
+/**
+ * Run `write` on one connection, in a transaction that holds the member's row
+ * FOR UPDATE, and only while that row is still the session's: it stands
+ * (`holderStands`) and its tokenVersion is `sessionVersion`, the one the
+ * request's session was checked at (adversarial round 2, finding 15).
+ *
+ * WHY UNDER THE LOCK. A request checks its session once, at the start, and the
+ * inbox and key writes then wait on a DNS lookup whose length the member's
+ * own nameserver sets. A new password, an admin's revoke sessions, signing out
+ * and the erasure's tombstone all change this row, and each of those waits
+ * for the lock or has committed before it is taken. So either the write lands
+ * first, and the end that follows the bump (`withAgentReachEnded`, or the
+ * revoke's `endAgentReach`) or the erasure's sweep after the tombstone removes
+ * it; or the change landed first, and this refuses before anything is
+ * written. A refusal touches nothing, so a session that ended cannot replace
+ * what the member set since with the session that replaced it.
+ *
+ * Profile saves ask the same question under the same lock
+ * (`sessionGone`, server/routes/profile.ts).
+ */
+export async function whileSessionHolds<T>(
+  pool: Pool,
+  userId: string,
+  sessionVersion: number,
+  write: (conn: PoolConnection) => Promise<T>,
+): Promise<{ ok: true; value: T } | { ok: false; refusal: SessionHoldRefusal }> {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const row = await lockSessionFieldsForUpdate(conn, userId);
+    const refusal: SessionHoldRefusal | null = !holderStands(row)
+      ? "holder_gone"
+      : row.tokenVersion !== sessionVersion
+        ? "session_ended"
+        : null;
+    if (refusal) {
+      await conn.rollback();
+      return { ok: false, refusal };
+    }
+    const value = await write(conn);
+    await conn.commit();
+    return { ok: true, value };
+  } catch (err) {
+    await conn.rollback().catch(() => undefined);
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 export function isLive(row: AgentTokenRow, now = new Date()): boolean {
@@ -340,8 +398,13 @@ function addEnded(a: AgentReachEnded, b: AgentReachEnded): AgentReachEnded {
  * session. It is tried twice, and a second failure is logged and recorded for
  * an admin by name.
  *
- * The one window left is a request already past its session check when the
- * bump lands, which can still write after the second end returns.
+ * A request already past its session check when the bump lands can still
+ * reach its write after the second end returns. The inbox and the model key
+ * close that themselves: they write under the member's row lock only while
+ * the session's tokenVersion is still the row's (`whileSessionHolds`), so
+ * such a write either lands before the bump, and the second end removes it,
+ * or is refused. A `vat_` token or a calendar feed minted in that window is
+ * not covered by this (adversarial round 2, finding 15).
  */
 export async function withAgentReachEnded<T>(
   pool: Pool,
