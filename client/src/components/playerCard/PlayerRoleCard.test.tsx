@@ -27,9 +27,14 @@ describe("the player card, live", () => {
     render(<PlayerRoleCardView data={fixturePayload(1)} />);
     const tile = screen.getByRole("link", { name: new RegExp(FIXTURE_ROLE_TITLE(1)) });
     expect(tile.getAttribute("href")).toBe("#role-r1");
-    expect(within(tile).getByText("Within term, to 31 Dec 2026")).toBeTruthy();
-    expect(within(tile).getByText("Signs on track")).toBeTruthy();
+    // The tile is the design's: the role's line icon and its title, with its health dot in words.
+    expect(tile.querySelector("svg[data-role-icon]")).not.toBeNull();
+    expect(within(tile).getByText("Steady")).toBeTruthy();
     const article = document.getElementById("role-r1")!;
+    // The three facts behind the dot are drawn with the role in full.
+    const health = article.querySelector("[data-role-health]")!;
+    expect(health.textContent).toContain("Within term, to 31 Dec 2026");
+    expect(health.textContent).toContain("Signs on track");
     const text = article.textContent ?? "";
     expect(text.indexOf(FIXTURE_ROLE_TITLE(1))).toBeLessThan(text.indexOf("Purpose"));
     expect(text).toContain("2 of 4 ready");
@@ -110,7 +115,7 @@ describe("the player card, live", () => {
   it("draws the sections in the design's order, with agreements closed at the bottom", () => {
     render(<PlayerRoleCardView data={fixturePayload(1)} />);
     const all = root().textContent ?? "";
-    const order = ["My roles", "Across my role", "Purpose", "My moon cycle", "My agreements"].map((s) => all.indexOf(s));
+    const order = ["Lena Ortiz", FIXTURE_ROLE_TITLE(1), "Across my role", "Purpose", "My moon cycle", "My agreements"].map((s) => all.indexOf(s));
     expect(order.every((n) => n >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     const details = document.querySelector("details")!;
