@@ -474,11 +474,17 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
      * recognition would have cleared a bar set at a hundred.
      */
     await setVar("governance.hypha_threshold", "100");
+    // Kept for the cases after this one, which hand-mint credits with no co-signer.
     await setVar("ledger.admin_mint_cosign_over", "0");
     await setVar("ledger.admin_mint_cycle_cap", "10000");
+    // Gratitude reaches Anna the only way it reaches anybody, a member's send
+    // (Rye, 2026-10-23). This hand-minted it until the mint refused Gratitude.
+    // A large allowance and one full send let a single send cross the bar.
+    await setVar("gratitude.base_budget", "1000");
+    await setVar("gratitude.full_sends_per_cycle", "1");
 
-    const one = await call("POST", `/api/admin/tokens/${GRATITUDE}/mint`, {
-      body: { toUserId: annaId, amount: 1, reason: "one whole recognition" },
+    const one = await call("POST", "/api/game/gratitude/send", {
+      body: { toEmail: annaEmail(), amount: 1, message: "one whole recognition" },
     });
     expect(one.status, JSON.stringify(one.json)).toBe(200);
     // The cache and the ledger agree, and both are minor.
@@ -493,8 +499,8 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
 
     // And the bar is a real bar rather than an unreachable one: cross it and
     // the number the gate reads crosses with it.
-    const more = await call("POST", `/api/admin/tokens/${GRATITUDE}/mint`, {
-      body: { toUserId: annaId, amount: 120, reason: "over the bar" },
+    const more = await call("POST", "/api/game/gratitude/send", {
+      body: { toEmail: annaEmail(), amount: 120, message: "over the bar" },
     });
     expect(more.status, JSON.stringify(more.json)).toBe(200);
     const open = await call("GET", "/api/game/mechanics/standing", { token: annaToken });

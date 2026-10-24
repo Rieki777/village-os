@@ -811,6 +811,13 @@ export interface SessionView {
    */
   carried: { sessionId: number; title: string; actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } | null;
   /**
+   * This room's tensions already sent to a circle's agenda items, by entry id:
+   * the circle's name, or null for no circle in particular (shared/sessionLibrary.ts).
+   */
+  sentTensions: Record<string, { circleName: string | null }>;
+  /** The village's live circles, for choosing which circle's agenda items a tension goes to. Empty for somebody not in the room. */
+  circleOptions: { id: string; name: string }[];
+  /**
    * Every task from this circle's earlier sessions that is still open, or that
    * was answered since the circle last met, with its latest answer, as this
    * viewer may see it (shared/sessionTasks.ts). Always present; empty when the

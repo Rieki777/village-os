@@ -12,6 +12,15 @@
  *   circleSummary      one circle's sessions, for its home page
  *   runComingUpNotes   the day-before notice, from the hourly job
  *   circleMemberUserIds  who a circle's members are, for that notice
+ *   attachOwnCalendarFor / detachOwnCalendarFor  a circle's own calendar
+ *
+ * ── A CIRCLE'S NEXT MEETING ──────────────────────────────────────────────
+ *
+ * The sooner of its rhythm's next meeting and the next one on its own
+ * calendar, when it has attached one (server/lib/circleOwnCalendar.ts). Coming
+ * up, the circle's summary and the day-before notice all ask `nextOf`, so the
+ * three never disagree. A skip names a rhythm's meeting only; a meeting from
+ * the circle's own calendar is skipped in that calendar.
  *
  * ── WHO KEEPS IT ─────────────────────────────────────────────────────────
  *
@@ -34,6 +43,9 @@ import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart"
 import { ensureMemberNo, memberNo, type Outcome, type Refusal } from "./liveSessions";
 import { keptSeat, standingIn } from "./circleStanding";
 import { libraryViewer, mapLibrary } from "./sessionLibrary";
+import { attachOwnCalendar, detachOwnCalendar, importedNext, ownCalendars, ownCalendarsAvailable, type ImportedMeeting, type OwnCalendar } from "./circleOwnCalendar";
+import { civilParts } from "../../shared/lunar";
+import { OWN_CALENDAR_COPY, OWN_CALENDAR_REFUSALS, type OwnCalendarView } from "../../shared/sessionCalendar";
 import { villageTimezone } from "./villageReaders";
 import { effectiveLifecycle } from "./modules";
 import { LIFECYCLE_RANK, type ModuleLifecycle } from "../../shared/modules";
@@ -59,6 +71,7 @@ import {
   type CircleSessionsSummary,
   type ComingUpPayload,
   type ComingUpRow,
+  type Meeting,
   type RhythmKind,
   type StoredRhythm,
 } from "../../shared/sessionRhythm";
@@ -78,6 +91,8 @@ const toIso = (v: unknown): string | null => {
 export interface RhythmDeps {
   circles: () => { id: string; name: string }[];
   lapseContext?: () => LapseContext;
+  /** For a test: what reading a circle's own calendar returns. Absent: the guarded fetch. */
+  fetchCalendarText?: (url: string) => Promise<string>;
 }
 
 export interface RhythmNoticeDeps extends RhythmDeps {
@@ -152,30 +167,67 @@ async function openRooms(pool: Pool): Promise<Map<string, { id: number; title: s
   return out;
 }
 
+/**
+ * A circle's next meeting: the sooner of its rhythm's and its own calendar's,
+ * with where it came from. `fromRhythm` is the rhythm's own next meeting,
+ * which the Change form starts from whichever came first.
+ */
+export function nextOf(
+  r: StoredRhythm | null,
+  imported: ImportedMeeting | null,
+  now: Date,
+  zone: string,
+): { next: Meeting; from: "rhythm" | "calendar"; title: string | null; durationMin: number; fromRhythm: Meeting | null } | null {
+  const fromRhythm = r ? (nextMeetings(r, now, zone, 1)[0] ?? null) : null;
+  if (imported && (!fromRhythm || Date.parse(imported.meeting.at) < Date.parse(fromRhythm.at))) {
+    return { next: imported.meeting, from: "calendar", title: imported.title, durationMin: imported.durationMin, fromRhythm };
+  }
+  return fromRhythm && r ? { next: fromRhythm, from: "rhythm", title: null, durationMin: r.durationMin, fromRhythm } : null;
+}
+
+/** "18:00": a meeting's time of day in the village's zone, for a notice's key. */
+const timeOfDay = (at: string, zone: string): string => {
+  const p = civilParts(new Date(at), zone);
+  return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+};
+
 function rowFor(
-  r: StoredRhythm,
+  r: StoredRhythm | null,
+  imported: ImportedMeeting | null,
   circle: { id: string; name: string },
   now: Date,
   zone: string,
   ctx: { waiting: Map<string, number>; rooms: Map<string, { id: number; title: string }>; lib: LibraryViewer; own: Set<string> },
 ): ComingUpRow | null {
-  const [next] = nextMeetings(r, now, zone, 1);
-  if (!next) return null;
+  const n = nextOf(r, imported, now, zone);
+  if (!n) return null;
   // An admin is no circle's member by being an admin: their own circles come first only through standing.
   const mine = ctx.own.has(circle.id);
+  // A rhythm with nothing coming (a single meeting already past) says nothing about this row.
+  const live = r && n.fromRhythm ? r : null;
   return {
     circleId: circle.id,
     circleName: circle.name,
-    rhythmWords: rhythmWords(r, now, zone),
-    next,
-    words: meetingWords(new Date(next.at), now, zone),
-    durationMin: r.durationMin,
+    rhythmWords: live ? rhythmWords(live, now, zone) : OWN_CALENDAR_COPY.fromOwnCalendar,
+    next: n.next,
+    nextFrom: n.from,
+    nextTitle: n.title,
+    rhythmNext: n.fromRhythm ? { ...n.fromRhythm, words: meetingWords(new Date(n.fromRhythm.at), now, zone) } : null,
+    words: meetingWords(new Date(n.next.at), now, zone),
+    durationMin: n.durationMin,
     waiting: ctx.waiting.get(circle.id) ?? 0,
     openRoom: ctx.rooms.get(circle.id) ?? null,
     mine,
     canKeep: mayKeepRhythm(circle.id, ctx.lib),
-    rhythm: rhythmAsInput(r, next.key),
+    rhythm: live ? rhythmAsInput(live, n.fromRhythm?.key) : { kind: "none" },
   };
+}
+
+/** The meetings from each circle's own calendar, read once for a whole list. */
+async function ownMeetings(pool: Pool, now: Date, zone: string, only?: string): Promise<{ owned: Map<string, OwnCalendar>; imported: Map<string, ImportedMeeting> }> {
+  const all = await ownCalendars(pool);
+  const owned = only ? new Map(all.has(only) ? [[only, all.get(only)!]] : []) : all;
+  return { owned, imported: await importedNext(pool, owned, now, zone) };
 }
 
 // ── Coming up ───────────────────────────────────────────────────────────────
@@ -190,23 +242,68 @@ export async function comingUpFor(pool: Pool, who: RhythmAsker, deps: RhythmDeps
   const circles = new Map(deps.circles().map((c) => [c.id, c]));
   const v = await viewerOf(pool, who, deps);
   const keepCircleIds = Array.from(circles.keys()).filter((id) => mayKeepRhythm(id, v.lib));
-  const rhythms = (await store.rhythmRows(pool)).map(mapRhythm).filter((r) => circles.has(r.circleId));
-  if (!rhythms.length) return { rows: [], zone, keepCircleIds };
+  const rhythms = new Map((await store.rhythmRows(pool)).map(mapRhythm).filter((r) => circles.has(r.circleId)).map((r) => [r.circleId, r] as const));
+  const { owned, imported } = await ownMeetings(pool, now, zone);
+  // A circle's own calendar shows only to those who may keep it: its address is the circle's business.
+  const ownCalendarViews: Record<string, OwnCalendarView> = {};
+  for (const o of Array.from(owned.values())) if (keepCircleIds.includes(o.circleId)) ownCalendarViews[o.circleId] = o.view;
+  const ids = Array.from(circles.keys()).filter((id) => rhythms.has(id) || imported.has(id));
+  const available = ownCalendarsAvailable();
+  if (!ids.length) return { rows: [], zone, keepCircleIds, ownCalendars: ownCalendarViews, ownCalendarsAvailable: available };
   const ctx = { waiting: await waitingByCircle(pool, v), rooms: await openRooms(pool), lib: v.lib, own: v.own };
-  const rows = rhythms
-    .map((r) => rowFor(r, circles.get(r.circleId)!, now, zone, ctx))
+  const rows = ids
+    .map((id) => rowFor(rhythms.get(id) ?? null, imported.get(id) ?? null, circles.get(id)!, now, zone, ctx))
     .filter((r): r is ComingUpRow => r != null)
     .sort((a, b) => Number(b.mine) - Number(a.mine) || Date.parse(a.next.at) - Date.parse(b.next.at));
-  return { rows, zone, keepCircleIds };
+  return { rows, zone, keepCircleIds, ownCalendars: ownCalendarViews, ownCalendarsAvailable: available };
 }
 
 /** One circle's row as "Coming up" shows it, or null when nothing is coming. */
 async function oneRow(pool: Pool, circleId: string, who: RhythmAsker, deps: RhythmDeps, now: Date): Promise<ComingUpRow | null> {
   const circle = deps.circles().find((c) => c.id === circleId);
+  const zone = villageTimezone();
   const [row] = await store.rhythmRow(pool, circleId);
-  if (!circle || !row) return null;
+  const { imported } = await ownMeetings(pool, now, zone, circleId);
+  if (!circle || (!row && !imported.has(circleId))) return null;
   const v = await viewerOf(pool, who, deps);
-  return rowFor(mapRhythm(row), circle, now, villageTimezone(), { waiting: await waitingByCircle(pool, v), rooms: await openRooms(pool), lib: v.lib, own: v.own });
+  const ctx = { waiting: await waitingByCircle(pool, v), rooms: await openRooms(pool), lib: v.lib, own: v.own };
+  return rowFor(row ? mapRhythm(row) : null, imported.get(circleId) ?? null, circle, now, zone, ctx);
+}
+
+// ── A circle's own calendar ─────────────────────────────────────────────────
+
+/**
+ * Attach a circle's own calendar, or a different one in its place: the
+ * circle's members and admins. Refused in this order: a circle that is not a
+ * live one (400), a viewer who may not keep it (403), then whatever the
+ * subscription says of the address (400). Read at once.
+ */
+export async function attachOwnCalendarFor(
+  pool: Pool,
+  who: RhythmAsker,
+  circleId: string,
+  raw: unknown,
+  deps: RhythmDeps,
+  now = new Date(),
+): Promise<Outcome<{ ownCalendar: OwnCalendarView; read: boolean; row: ComingUpRow | null }>> {
+  const circle = deps.circles().find((c) => c.id === circleId);
+  if (!circle) return refuse(400, RHYTHM_REFUSALS.circleUnknown);
+  const v = await viewerOf(pool, who, deps);
+  if (!mayKeepRhythm(circleId, v.lib)) return refuse(403, OWN_CALENDAR_REFUSALS.notYours);
+  const setByNo = v.no ?? (await ensureMemberNo(pool, who.userId, now));
+  const out = await attachOwnCalendar(pool, { circleId, circleName: circle.name, raw, userId: who.userId, setByNo, zone: villageTimezone(), now, fetchText: deps.fetchCalendarText });
+  if (!out.ok) return out;
+  return done({ ownCalendar: out.value.view, read: out.value.read, row: await oneRow(pool, circleId, who, deps, now) });
+}
+
+/** Detach a circle's own calendar: the circle's members and admins. */
+export async function detachOwnCalendarFor(pool: Pool, who: RhythmAsker, circleId: string, deps: RhythmDeps, now = new Date()): Promise<Outcome<{ row: ComingUpRow | null }>> {
+  if (!deps.circles().some((c) => c.id === circleId)) return refuse(400, RHYTHM_REFUSALS.circleUnknown);
+  const v = await viewerOf(pool, who, deps);
+  if (!mayKeepRhythm(circleId, v.lib)) return refuse(403, OWN_CALENDAR_REFUSALS.notYours);
+  const out = await detachOwnCalendar(pool, circleId, who.userId);
+  if (!out.ok) return out;
+  return done({ row: await oneRow(pool, circleId, who, deps, now) });
 }
 
 // ── Setting and skipping ────────────────────────────────────────────────────
@@ -317,7 +414,8 @@ export async function circleSummary(pool: Pool, circleId: string, who: RhythmAsk
   const v = await viewerOf(pool, who, deps);
   const [row] = await store.rhythmRow(pool, circleId);
   const r = row ? mapRhythm(row) : null;
-  const [next] = r ? nextMeetings(r, now, zone, 1) : [];
+  const { imported } = await ownMeetings(pool, now, zone, circleId);
+  const next = nextOf(r, imported.get(circleId) ?? null, now, zone)?.next;
   const [last] = await room.lastMeetingPerCircle(pool, { circleIds: [circleId] });
   const [closed] = last ? await store.closedAtRows(pool, [Number(last.id)]) : [];
   return {
@@ -376,33 +474,33 @@ export async function runComingUpNotes(deps: RhythmNoticeDeps, now = new Date())
   if (nextInWindow(now, zone, hours.start, hours.end).getTime() !== now.getTime()) return "outside the village's daytime window";
   const pool = deps.getPool();
   const circles = new Map(deps.circles().map((c) => [c.id, c]));
-  const soon = (await store.rhythmRows(pool))
-    .map(mapRhythm)
-    .filter((r) => circles.has(r.circleId))
-    .map((r) => ({ r, next: nextMeetings(r, now, zone, 1)[0] }))
-    .filter((x) => x.next && Date.parse(x.next.at) > now.getTime() && Date.parse(x.next.at) - now.getTime() <= RHYTHM_LIMITS.remindHours * 3_600_000);
+  const rhythms = new Map((await store.rhythmRows(pool)).map(mapRhythm).filter((r) => circles.has(r.circleId)).map((r) => [r.circleId, r] as const));
+  const { imported } = await ownMeetings(pool, now, zone);
+  const soon = Array.from(circles.keys())
+    .map((circleId) => ({ circleId, next: nextOf(rhythms.get(circleId) ?? null, imported.get(circleId) ?? null, now, zone)?.next }))
+    .filter((x): x is { circleId: string; next: Meeting } => !!x.next && Date.parse(x.next.at) > now.getTime() && Date.parse(x.next.at) - now.getTime() <= RHYTHM_LIMITS.remindHours * 3_600_000);
   if (!soon.length) return "no circle meets in the next day";
   // Everything waiting, read once: a circle's members may read its own items and those for no circle.
   const waiting = (await library.liveRows(pool, { admin: true, no: null, standing: [], limit: 500 })).map(mapLibrary).filter((r) => r.status === "waiting");
   let sent = 0;
-  for (const { r, next } of soon) {
-    const circle = circles.get(r.circleId)!;
-    const titles = waiting.filter((i) => i.circleId === r.circleId).map((i) => i.title);
-    const title = RHYTHM_NOTICES.comingUp(circle.name, meetingPhrase(new Date(next!.at), now, zone));
+  for (const { circleId, next } of soon) {
+    const circle = circles.get(circleId)!;
+    const titles = waiting.filter((i) => i.circleId === circleId).map((i) => i.title);
+    const title = RHYTHM_NOTICES.comingUp(circle.name, meetingPhrase(new Date(next.at), now, zone));
     const body = RHYTHM_NOTICES.agenda(titles.slice(0, 3), Math.max(0, titles.length - 3));
-    for (const userId of await circleMemberUserIds(pool, r.circleId, deps.lapseContext)) {
+    for (const userId of await circleMemberUserIds(pool, circleId, deps.lapseContext)) {
       try {
         const fresh = await deps.notify({
           userId,
           type: "session_coming_up",
           title,
           body,
-          link: comingLink(r.circleId),
-          dedupeKey: `session-coming:${r.circleId}:${next!.key}T${r.time}:${userId}`,
+          link: comingLink(circleId),
+          dedupeKey: `session-coming:${circleId}:${next.key}T${timeOfDay(next.at, zone)}:${userId}`,
         });
         if ((fresh as { fresh?: boolean } | null)?.fresh !== false) sent += 1;
       } catch (e) {
-        console.error(`[sessions] a coming-up notice for ${r.circleId} did not go`, e);
+        console.error(`[sessions] a coming-up notice for ${circleId} did not go`, e);
       }
     }
   }

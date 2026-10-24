@@ -128,7 +128,9 @@ describe("TokensTab", () => {
       .find((el) => within(el).queryByText("Token…"))!;
     const options = within(picker).getAllByRole("option").map((o) => o.textContent);
     expect(options).not.toContain("Stay Credits");
-    expect(options).toContain("Gratitude");
+    // Gratitude is never minted by hand: it is only sent member to member (Rye,
+    // 2026-10-23), and the route refuses it, so the picker does not offer it.
+    expect(options).not.toContain("Gratitude");
     // Library credits are held by somebody, so they stay listed and stay
     // mintable: the row is still real and a steward may still need to grant.
     expect(options).toContain("Library Credits");

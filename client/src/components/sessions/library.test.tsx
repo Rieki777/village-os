@@ -50,6 +50,7 @@ const card = (over: Partial<LibraryCard>): LibraryCard => ({
   canMoveCircle: false,
   canWithdraw: false,
   canBringAgain: false,
+  source: null,
   ...over,
 });
 
@@ -95,6 +96,7 @@ function doors(): RoomActions {
     discard: (...a) => ok("discard", ...a),
     library: async () => offered,
     bringFromLibrary: (...a) => ok("bringFromLibrary", ...a),
+    sendTension: (...a) => ok("sendTension", ...a),
   };
 }
 
