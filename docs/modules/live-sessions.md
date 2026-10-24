@@ -354,7 +354,7 @@ subscription on the Events page detaches it too.
 
 Every agreement is good until it is reviewed (Rye, 2026-10-22). **Decisions** on /sessions lists what a
 circle decided by consent, newest first: the `decision` entries its rooms marked decided, in its closed
-sessions. It is for the circle's members by standing (in its last meeting, or one of its seats now) and
+sessions. It is for the circle's members by standing (in its last meeting, or holding one of its roles now) and
 admins, one circle at a time, their own first: the same audience the circle's task cards on its earlier
 sessions already have. A decision's words are the circle's agreement; the session's title travels only
 to somebody who was in it, or an admin, and otherwise the card says only when it was decided.
