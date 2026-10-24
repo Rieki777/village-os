@@ -331,6 +331,73 @@ export async function stayedSinceLastAttempt(pool: Pool, userId: string): Promis
   return Number(rows[0]?.stayed ?? 0) === 1;
 }
 
+/**
+ * Every member a FINISHED erasure was for, for the backfill that gives a
+ * finished record the steps it predates (`backfillFinishedErasure`,
+ * server/lib/erasure.ts).
+ *
+ * Two kinds: a record whose sweep finished, and a tombstone with no record at
+ * all, which is an erasure from before this table (0195). An open record is
+ * left out on purpose: the queue and the hourly job finish those, and a resume
+ * already runs every step a record lacks. Example rows are left out too. Ids
+ * only, finished records first and oldest first; the sweep reads each member
+ * itself.
+ *
+ * Three reads joined here, never one statement across the two tables: their
+ * id columns are not promised one collation on every village's database
+ * (server/db/collation.ts), and comparing them in SQL is how a fork's boot
+ * would learn that.
+ */
+export async function finishedErasureSubjects(pool: Pool): Promise<string[]> {
+  const [finished] = await pool.query<RowDataPacket[]>(
+    "SELECT `user_id` FROM `member_erasures` WHERE `finished_at` IS NOT NULL ORDER BY `finished_at`, `user_id`",
+  );
+  const [recorded] = await pool.query<RowDataPacket[]>("SELECT `user_id` FROM `member_erasures`");
+  const [tombstones] = await pool.query<RowDataPacket[]>(
+    "SELECT `id` FROM `users` WHERE LOWER(`email`) LIKE '%@anonymized.invalid' AND COALESCE(`is_example`, 0) = 0 ORDER BY `id`",
+  );
+  const hasRecord = new Set(recorded.map((r) => String(r.user_id)));
+  return [
+    ...finished.map((r) => String(r.user_id)),
+    ...tombstones.map((r) => String(r.id)).filter((id) => !hasRecord.has(id)),
+  ];
+}
+
+/**
+ * Give a tombstone that has no record a FINISHED one, so the backfill can
+ * write down what it ran the way every other erasure does, and a second run
+ * reads it as done.
+ *
+ * No attempts and no attempt time: no sweep of this table's ever ran for the
+ * member, and the record says so. `started_at` takes the moment it was
+ * written, because the column cannot be empty and the first attempt's date is
+ * not known. `INSERT IGNORE`, so a record that exists already is never touched.
+ */
+export async function openBackfillRecord(pool: Pool, userId: string): Promise<void> {
+  await pool.query(
+    "INSERT IGNORE INTO `member_erasures` (`user_id`, `attempts`, `last_attempt_at`, `steps_done`, `finished_at`) " +
+      "VALUES (?, 0, NULL, JSON_ARRAY(), CURRENT_TIMESTAMP)",
+    [userId],
+  );
+}
+
+/**
+ * Record one step the backfill ran, on a record that is STILL finished.
+ *
+ * `finished_at` is not touched: the sweep finished when it did, and a step
+ * given afterwards does not move that. A record a new erasure opened in the
+ * meantime takes no note, because the fresh sweep runs every step itself and
+ * a note here would let a resume of it skip a step on the strength of a run
+ * that was not that sweep's.
+ */
+export async function noteBackfilledStep(pool: Pool, userId: string, step: string): Promise<void> {
+  await pool.query(
+    "UPDATE `member_erasures` SET `steps_done` = JSON_ARRAY_APPEND(COALESCE(`steps_done`, JSON_ARRAY()), '$', ?) " +
+      "WHERE `user_id` = ? AND `finished_at` IS NOT NULL",
+    [step, userId],
+  );
+}
+
 /** Which step stopped, and what it said. Clipped, never truncated by the engine. */
 export async function noteErasureFailed(
   pool: Pool,
