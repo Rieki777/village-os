@@ -2835,7 +2835,7 @@ function PlayersTab({ password }: { password: string }) {
   };
 
   const revokeSessions = async (id: string, name: string) => {
-    if (!confirm(`Sign ${name} out everywhere? They keep their account and password; every active session dies.`)) return;
+    if (!confirm(`Sign ${name} out everywhere? They keep their account and password. Every active session ends, and so do their agent tokens, agent inbox, own model key and private calendar address.`)) return;
     try {
       const res = await fetch(`${API_BASE}/admin/users/${id}/revoke-sessions`, {
         method: "POST",

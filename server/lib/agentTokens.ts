@@ -24,7 +24,10 @@
 import { revokeLiveTokensOf } from "../repos/agentTokens";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { removeInbox } from "./agentInbox";
 import { recordEvent } from "./events";
+import { revokeFeedTokens } from "./icsFeed";
+import { removeMemberKey } from "./memberSecrets";
 import { isTombstone } from "./oauthAccounts";
 
 export const TOKEN_PREFIX = "vat_";
@@ -215,16 +218,12 @@ async function recordRevoke(pool: Pool, userId: string, id: string): Promise<voi
  * End every live token a member holds, and say how many.
  *
  * Setting a password (the first claim, a reset, a change) and an admin's
- * "revoke sessions" call this once the credential has changed. Both bump
- * tokenVersion, which ends every session, and an agent token is not a session:
- * the agent resolver (server/index.ts) mints one from the holder's CURRENT
- * tokenVersion on every call, so the bump alone never reached a token. Somebody
- * holding a stolen password could mint one for a year and keep it past the
- * reset that answered the theft.
- *
- * Call it AFTER the bump, never before: the bump is what stops an old session
- * minting a replacement. The one window left is a mint request already past its
- * session check when the bump lands, which can still insert after this returns.
+ * "revoke sessions" reach this through `endAgentReach` (set-password inside
+ * `withAgentReachEnded`). Both bump tokenVersion, which ends every session, and
+ * an agent token is not a session: the agent resolver (server/index.ts) mints
+ * one from the holder's CURRENT tokenVersion on every call, so the bump alone
+ * never reached a token. Somebody holding a stolen password could mint one for
+ * a year and keep it past the reset that answered the theft.
  *
  * One audit line per token, the line `revokeToken` writes.
  */
@@ -232,6 +231,145 @@ export async function revokeAllTokens(pool: Pool, userId: string): Promise<numbe
   const ids = await revokeLiveTokensOf(pool, userId);
   for (const id of ids) await recordRevoke(pool, userId, id);
   return ids.length;
+}
+
+/** What `endAgentReach` ended, part by part. */
+export interface AgentReachEnded {
+  /** `vat_` tokens revoked. */
+  agentTokens: number;
+  /** Private calendar feed addresses revoked. */
+  feeds: number;
+  /** The agent inbox removed, with every delivery still queued for it. */
+  inbox: boolean;
+  /** The member's own model key removed. */
+  key: boolean;
+}
+
+const NOTHING_ENDED: AgentReachEnded = { agentTokens: 0, feeds: 0, inbox: false, key: false };
+
+/** What the audit lines say ended the feed, the inbox and the key. */
+const ENDED_BY = "a new password or a session revoke ended it";
+
+/** Thrown once every part was tried and one or more could not be ended. */
+export class AgentReachNotEnded extends Error {
+  readonly parts: string[];
+  readonly ended: AgentReachEnded;
+  constructor(parts: string[], ended: AgentReachEnded, cause: unknown) {
+    super(`could not end the member's ${parts.join(", ")}`, { cause });
+    this.name = "AgentReachNotEnded";
+    this.parts = parts;
+    this.ended = ended;
+  }
+}
+
+/**
+ * End everything a signed-in session can leave standing for an agent, and say
+ * what ended (adversarial round 1, findings 0 and 33).
+ *
+ * A token is one of four. A stolen session can also mint a private calendar
+ * feed address, which never expires and serves the member's own layers; point
+ * the agent inbox at a host it owns, so the week ahead, the weekly digest and
+ * every introduction keep arriving there signed; and store a model key on an
+ * endpoint it owns, so every question the member asks the assistant sends its
+ * prompt, the member's own note among it, to that host. All four stood past
+ * the reset that answered the theft until this ended them.
+ *
+ * It only calls the functions that already end each one, so this file grows
+ * no SQL: `revokeAllTokens`, `revokeFeedTokens` (lib/icsFeed.ts),
+ * `removeInbox` (lib/agentInbox.ts, which also drops the queue) and
+ * `removeMemberKey` (lib/memberSecrets.ts). The member's own notes, drafts and
+ * agent profile stay: a reset ends access, never what the member wrote.
+ *
+ * Every part is tried even when an earlier one throws, so one bad table never
+ * leaves the other three standing. Then, if any failed, it throws
+ * `AgentReachNotEnded` naming them. Idempotent: a second run ends nothing.
+ */
+export async function endAgentReach(pool: Pool, userId: string): Promise<AgentReachEnded> {
+  const failed: string[] = [];
+  let cause: unknown;
+  async function part<T>(name: string, end: () => Promise<T>, none: T): Promise<T> {
+    try {
+      return await end();
+    } catch (err) {
+      failed.push(name);
+      cause ??= err;
+      return none;
+    }
+  }
+  const ended: AgentReachEnded = {
+    agentTokens: await part("agent tokens", () => revokeAllTokens(pool, userId), 0),
+    feeds: await part("calendar feed", () => revokeFeedTokens(pool, userId), 0),
+    inbox: await part("agent inbox", () => removeInbox(pool, userId, ENDED_BY), false),
+    key: await part("model key", () => removeMemberKey(pool, userId), false),
+  };
+  const line = { actorUserId: userId, actorKind: "system" as const, audience: "admin" as const };
+  if (ended.feeds) {
+    await recordEvent(pool, { ...line, kind: "calendar_feed_revoked", text: `private calendar feed address revoked: ${ENDED_BY}`, entityType: "calendar", entityRef: "feed" });
+  }
+  if (ended.key) {
+    await recordEvent(pool, { ...line, kind: "agent_key", text: `own assistant key removed: ${ENDED_BY}`, entityType: "member_key", entityRef: userId });
+  }
+  if (failed.length) throw new AgentReachNotEnded(failed, ended, cause);
+  return ended;
+}
+
+function addEnded(a: AgentReachEnded, b: AgentReachEnded): AgentReachEnded {
+  return { agentTokens: a.agentTokens + b.agentTokens, feeds: a.feeds + b.feeds, inbox: a.inbox || b.inbox, key: a.key || b.key };
+}
+
+/**
+ * Change a member's password with their agent's reach ended on BOTH sides of
+ * the change (adversarial round 1, finding 28). set-password runs its
+ * tokenVersion bump through this.
+ *
+ * An admin's revoke sessions does NOT. It has no link to keep unspent, and
+ * ending the sessions must never wait on anything else, because that revoke is
+ * the lever for a compromise. So it bumps first, then calls `endAgentReach`,
+ * whose failure answers 500 by name; pressing again finishes it.
+ *
+ * BEFORE the change, and a failure here throws: `change` never runs, so the
+ * password and tokenVersion are as they were and a set-password link is still
+ * unspent. "Try again" then really finishes the reset. The reset used to bump
+ * first, which spends the link, so a failure after it left every token
+ * standing and refused the retry as a used link.
+ *
+ * AFTER the change, because the bump is what stops an old session planting a
+ * replacement: anything planted between the two calls ends here. This end
+ * never throws. The change has landed (the link is spent), everything that
+ * stood before it is already ended, and a 500 now would only withhold the new
+ * session. It is tried twice, and a second failure is logged and recorded for
+ * an admin by name.
+ *
+ * The one window left is a request already past its session check when the
+ * bump lands, which can still write after the second end returns.
+ */
+export async function withAgentReachEnded<T>(
+  pool: Pool,
+  userId: string,
+  change: () => Promise<T>,
+  deps: { end?: (pool: Pool, userId: string) => Promise<AgentReachEnded>; log?: (message: string, err: unknown) => void } = {},
+): Promise<{ changed: T; ended: AgentReachEnded }> {
+  const end = deps.end ?? endAgentReach;
+  const log = deps.log ?? ((message: string, err: unknown) => console.error(message, err));
+  const before = await end(pool, userId);
+  const changed = await change();
+  let after = NOTHING_ENDED;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      after = addEnded(after, await end(pool, userId));
+      break;
+    } catch (err) {
+      if (err instanceof AgentReachNotEnded) after = addEnded(after, err.ended);
+      if (attempt < 2) continue;
+      log(`[agent] the agent reach planted during a credential change for ${userId} was NOT ended`, err);
+      await recordEvent(pool, {
+        kind: "agent_reach",
+        text: "could not end the agent reach planted while a password changed or sessions ended; revoke sessions again",
+        actorUserId: userId, actorKind: "system", entityType: "user", entityRef: userId, audience: "admin",
+      });
+    }
+  }
+  return { changed, ended: addEnded(before, after) };
 }
 
 export type VerifyResult =

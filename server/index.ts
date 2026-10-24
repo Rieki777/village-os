@@ -627,7 +627,7 @@ import { recordAssistantUsage, type AssistantPath } from "./lib/assistantUsage";
 import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
-import { revokeAllTokens } from "./lib/agentTokens"; // a new password and an admin's revoke end agent tokens too
+import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
@@ -8237,14 +8237,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // session and every set-password link that existed before it. Recovery
     // needs that: a stolen password must not survive the reset that answers it.
     const lost = { refusal: null as string | null }; // asked again under the row lock: two clicks, one landing
-    const fresh = await members.update(user.id, (u: any) => {
+    // The agent's reach ends before the bump too, so a failure there leaves this link unspent (withAgentReachEnded).
+    const { changed: fresh } = await withAgentReachEnded(getPool(), user.id, () => members.update(user.id, (u: any) => {
       if ((lost.refusal = setPasswordLinkRefusal(claim, u.tokenVersion))) return;
       u.passwordHash = hash;
       u.tokenVersion = (u.tokenVersion ?? 0) + 1;
-    });
+    }));
     if (lost.refusal) return res.status(401).json({ error: lost.refusal });
     if (!fresh) return res.status(404).json({ error: "Account not found" });
-    await revokeAllTokens(getPool(), fresh.id); // the agent resolver re-mints a session from the new tokenVersion
     const authTokenStr = encodeToken(AUTH_TOKEN_SECRET, fresh.id, fresh.email, fresh.tokenVersion ?? 0);
     res.json({ success: true, token: authTokenStr, user: publicUser(fresh) });
   });
@@ -8306,13 +8306,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.json({ success: true, emailed });
   });
 
-  /** Revoke every session (S1's tokenVersion lever) and every agent token a member holds. */
+  /** Revoke every session (S1's tokenVersion lever) and all the member's agent holds: tokens, private calendar feed, inbox, own model key. */
   app.post("/api/admin/users/:id/revoke-sessions", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const target = await members.byId(req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
-    await members.update(target.id, (u: any) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; });
-    res.json({ success: true, agentTokensRevoked: await revokeAllTokens(getPool(), target.id) });
+    await members.update(target.id, (u: any) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; }); // sessions end first, whatever happens next
+    const ended = await endAgentReach(getPool(), target.id); // a failure answers 500 by name, and pressing again finishes it
+    res.json({ success: true, agentTokensRevoked: ended.agentTokens, agentReachEnded: ended });
   });
 
   /**
