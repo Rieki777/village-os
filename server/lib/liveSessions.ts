@@ -101,6 +101,8 @@ import { orderParcels } from "../../shared/land";
 import { isTropicalLatitude, parseVillageSeasons, villageSeasonOn } from "../../shared/villageSeasons";
 import { villageLandRows } from "../repos/villageLand";
 import { villageTimezone } from "./villageReaders";
+import { effectiveLifecycle } from "./modules";
+import { LIFECYCLE_RANK, type ModuleLifecycle } from "../../shared/modules";
 import {
   CLOSE_REFUSAL,
   ENTRY_STATUSES,
@@ -118,6 +120,7 @@ import {
   arrivalSummary,
   buildMinutes,
   cleanDueOn,
+  cleanAnswerBy,
   cleanLine,
   cleanText,
   consentNeedsWords,
@@ -128,11 +131,16 @@ import {
   isConsentValue,
   isEntryKind,
   isItemAim,
+  nightAtWords,
+  nightLasts,
+  nightRoundState,
   normalizeSessionState,
   parseResponseTarget,
   unownedActions,
   type ArrivalSummary,
   type ConsentTally,
+  type ConsentAnswer,
+  type ResponseTarget,
   type ConsentValue,
   type ConsentWaiting,
   type EntryKind,
@@ -141,6 +149,7 @@ import {
   type ItemAim,
   type ItemStatus,
   type MinutesAudience,
+  type NightRound,
   type SeatOption,
   type SessionAction,
   type SessionEntry,
@@ -199,6 +208,12 @@ export interface StoredSummary {
   tallies: Record<number, ConsentTally>;
   circleName: string | null;
   counts: { people: number; items: number; entries: number; actions: number; decisions: number };
+  /**
+   * The proposals whose round outlived the call (0281): open at the close with
+   * somebody sleeping on it. `waiting` is how many people at the close had not
+   * answered; `settled` is set once no night lasts, so the job reads it once.
+   */
+  nights?: Record<number, { waiting: number; settled: boolean }>;
 }
 
 export interface SessionRec {
@@ -255,6 +270,7 @@ function readSummary(raw: unknown): StoredSummary | null {
       high: typeof arrival?.high === "number" ? arrival.high : null,
     },
     tallies: s.tallies && typeof s.tallies === "object" ? s.tallies : {},
+    nights: s.nights && typeof s.nights === "object" ? s.nights : {},
     circleName: typeof s.circleName === "string" ? s.circleName : null,
     counts: {
       people: Number(s.counts?.people ?? 0) || 0,
@@ -364,6 +380,8 @@ interface ResponseRec {
   no: number;
   value: string;
   text: string | null;
+  /** A night's answer-by time in ms (0281), null on every other answer. */
+  answerBy: number | null;
 }
 
 const mapResponse = (r: any): ResponseRec => ({
@@ -371,7 +389,11 @@ const mapResponse = (r: any): ResponseRec => ({
   no: Number(r.member_no),
   value: String(r.value),
   text: r.text == null ? null : String(r.text),
+  answerBy: r.answer_by_s == null ? null : Math.round(Number(r.answer_by_s) * 1000),
 });
+
+/** One consent answer of a round, from a response row. */
+const asAnswer = (r: ResponseRec): ConsentAnswer => ({ who: r.no, value: r.value as ConsentValue, answerBy: r.answerBy });
 
 // ── A member's number, and names for numbers ────────────────────────────────
 
@@ -1195,8 +1217,8 @@ async function decisionTally(conn: PoolConnection, sessionId: number, entryId: n
   const answers = (await repo.responseRows(conn, sessionId))
     .map(mapResponse)
     .filter((r) => r.target === target && isConsentValue(r.value))
-    .map((r) => ({ who: r.no, value: r.value as ConsentValue }));
-  return consentTally(answers, here);
+    .map(asAnswer);
+  return consentTally(answers, here, now);
 }
 
 export async function patchEntry(
@@ -1302,12 +1324,19 @@ export async function respond(pool: Pool, sessionId: number, actor: Actor, raw: 
   if (!target) return refuse(400, R.targetUnknown);
   let value: string;
   let text: string | null = null;
+  let answerBy: Date | null = null;
   if (target === "agenda" || target.startsWith("decision:")) {
     if (!isConsentValue(b.value)) return refuse(400, R.consentValue);
     value = b.value;
     if (consentNeedsWords(b.value)) {
       text = cleanLine(b.text, SESSION_LIMITS.text);
       if (!text) return refuse(400, R.consentWords);
+    }
+    // A night names when it ends (Rye, 2026-10-23): no time, no night.
+    if (b.value === "sleep") {
+      const by = cleanAnswerBy(b.answerBy, now.getTime());
+      if (!by.ok) return refuse(400, by.error);
+      answerBy = new Date(by.value);
     }
   } else if (target === "word") {
     const w = cleanLine(b.value, SESSION_LIMITS.word);
@@ -1325,7 +1354,7 @@ export async function respond(pool: Pool, sessionId: number, actor: Actor, raw: 
       if (!e || e.kind !== "decision") return refuse(404, R.entryUnknown);
       if (e.status !== "open") return refuse(409, R.decisionClosed);
     }
-    await repo.upsertResponse(conn, { sessionId, target, memberNo: actor.no, value, text, now });
+    await repo.upsertResponse(conn, { sessionId, target, memberNo: actor.no, value, text, answerBy, now });
     return done(null);
   });
 }
@@ -1378,7 +1407,7 @@ async function composeMinutes(q: Pool | PoolConnection, p: RecordParts, lookup: 
 export function closePlan(
   entries: readonly { id: number; kind: EntryKind; status: EntryStatus; ownerNo: number | null; ownerSeatId: string | null }[],
   people: readonly { no: number; arrival: number | null; lastSeenMs: number | null }[],
-  responses: readonly { no: number; target: string; value: string }[],
+  responses: readonly { no: number; target: string; value: string; answerBy?: number | null }[],
   now: number,
 ): { unowned: number[]; arrival: ArrivalSummary; present: number; tallies: Record<number, ConsentTally> } {
   const unowned = unownedActions(entries.map((e) => ({ id: e.id, kind: e.kind, status: e.status, ownerUserId: e.ownerNo, ownerSeatId: e.ownerSeatId })));
@@ -1389,8 +1418,8 @@ export function closePlan(
   for (const d of entries.filter((e) => e.kind === "decision")) {
     const answers = responses
       .filter((r) => r.target === `decision:${d.id}` && isConsentValue(r.value))
-      .map((r) => ({ who: r.no, value: r.value as ConsentValue }));
-    tallies[d.id] = consentTally(answers, here);
+      .map((r) => ({ who: r.no, value: r.value as ConsentValue, answerBy: r.answerBy ?? null }));
+    tallies[d.id] = consentTally(answers, here, now);
   }
   return { unowned, arrival, present, tallies };
 }
@@ -1405,6 +1434,8 @@ export interface ClosedRecord {
   brought?: SettledRecord[];
   /** Everybody who was in the room, so a notice skips whoever saw it happen. */
   peopleNos?: number[];
+  /** The nights that outlive the call, each told to whoever asked for it (0281). */
+  nights?: { entryId: number; text: string; sleeperNo: number; answerBy: number }[];
 }
 
 /**
@@ -1451,9 +1482,16 @@ async function closeLocked(conn: PoolConnection, s: SessionRec, ctx: RoomContext
     { s: closed, items, entries, peopleNos: people.map((p) => p.no), tallies, arrival, circleName },
     ctx.lookup,
   );
+  // A proposal still open with somebody sleeping on it keeps its round after the call (0281).
+  const nights: Record<number, { waiting: number; settled: boolean }> = {};
+  for (const e of entries) {
+    const t = tallies[e.id];
+    if (e.kind === "decision" && e.status === "open" && t && t.sleeping > 0) nights[e.id] = { waiting: t.waiting, settled: false };
+  }
   const summary: StoredSummary = {
     arrival,
     tallies,
+    nights,
     circleName,
     counts: {
       people: people.length,
@@ -1485,6 +1523,13 @@ async function closeLocked(conn: PoolConnection, s: SessionRec, ctx: RoomContext
       .map((e) => ({ entryId: e.id, text: e.text, dueOn: e.dueOn, ownerNo: e.ownerNo, ownerSeatId: e.ownerSeatId })),
     brought,
     peopleNos: people.map((p) => p.no),
+    nights: responses
+      .filter((r) => r.target.startsWith("decision:") && nights[Number(r.target.slice("decision:".length))] != null)
+      .filter((r) => nightLasts({ value: r.value as ConsentValue, answerBy: r.answerBy }, nowMs))
+      .map((r) => {
+        const entryId = Number(r.target.slice("decision:".length));
+        return { entryId, text: entries.find((e) => e.id === entryId)?.text ?? "", sleeperNo: r.no, answerBy: r.answerBy! };
+      }),
   });
 }
 
@@ -1494,6 +1539,266 @@ export async function closeSession(pool: Pool, sessionId: number, actor: Actor, 
     if (!roles.runs) return refuse(403, R.facilitatorOnly);
     return closeLocked(conn, s, ctx, now);
   });
+}
+
+// ── A round that outlives its call (0281) ───────────────────────────────────
+//
+// Rye, 2026-10-23: somebody who sleeps on a proposal names a time to answer
+// by, and a night left unanswered by then counts as no objection. A session
+// usually closes before the night ends, and Rye chose that the round outlives
+// the call: whoever asked for a night answers from the record until their
+// time; once no night lasts, the facilitator hears how the round went, and
+// marking a consented proposal decided stays their act. The rule is
+// shared/sessions.ts `nightRoundState`.
+
+/** The answers on one proposal's round. */
+function roundAnswers(responses: readonly ResponseRec[], entryId: number): ConsentAnswer[] {
+  const target = `decision:${entryId}`;
+  return responses.filter((r) => r.target === target && isConsentValue(r.value)).map(asAnswer);
+}
+
+/** Where each round that outlived the call stands, for one viewer of the record. */
+function nightRoundsFor(s: SessionRec, entries: readonly EntryRec[], responses: readonly ResponseRec[], viewer: Viewer, now: number): NightRound[] {
+  if (s.status !== "closed") return [];
+  const runs = rolesIn(s, viewer).runs;
+  const out: NightRound[] = [];
+  for (const e of entries) {
+    const night = s.summary?.nights?.[e.id];
+    if (e.kind !== "decision" || e.status !== "open" || !night) continue;
+    const answers = roundAnswers(responses, e.id);
+    const st = nightRoundState(night, answers, now);
+    const mine = viewer.no != null ? answers.find((a) => a.who === viewer.no) : undefined;
+    out.push({ entryId: e.id, open: st.open, consented: st.consented, canAnswer: !!mine && nightLasts(mine, now), canDecide: st.consented && runs });
+  }
+  return out;
+}
+
+/**
+ * Write some rounds of a closed record again, in one write, inside the
+ * caller's transaction that holds the session row: each one's tally now, the
+ * minutes from them, and, once no night lasts on a round, that it is settled.
+ * Hands back where each round stands.
+ */
+async function rewriteRounds(
+  conn: PoolConnection,
+  s: SessionRec,
+  entryIds: readonly number[],
+  lookup: MemberLookup,
+  now: number,
+): Promise<Map<number, ReturnType<typeof nightRoundState>>> {
+  const responses = (await repo.responseRows(conn, s.id)).map(mapResponse);
+  const base = s.summary ?? readSummary("{}")!;
+  const tallies = { ...base.tallies };
+  const nights = { ...(base.nights ?? {}) };
+  const states = new Map<number, ReturnType<typeof nightRoundState>>();
+  for (const entryId of entryIds) {
+    const night = base.nights?.[entryId];
+    const st = nightRoundState(night, roundAnswers(responses, entryId), now);
+    states.set(entryId, st);
+    tallies[entryId] = st.tally;
+    if (night) nights[entryId] = { waiting: night.waiting, settled: night.settled || !st.open };
+  }
+  const summary: StoredSummary = { ...base, tallies, nights };
+  await repo.writeSummary(conn, s.id, JSON.stringify(summary));
+  const minutes = await composeMinutes(
+    conn,
+    {
+      s,
+      items: (await repo.itemRows(conn, s.id)).map(mapItem),
+      entries: (await repo.entryRows(conn, s.id)).map(mapEntry),
+      peopleNos: (await repo.peopleRows(conn, s.id)).map((r) => Number(r.member_no)),
+      tallies: summary.tallies,
+      arrival: summary.arrival,
+      circleName: summary.circleName,
+    },
+    lookup,
+  );
+  await repo.writeMinutes(conn, s.id, minutes.people, minutes.shareable);
+  return states;
+}
+
+/** One round of a closed record, written again. */
+async function rewriteRound(conn: PoolConnection, s: SessionRec, entryId: number, lookup: MemberLookup, now: number): Promise<ReturnType<typeof nightRoundState>> {
+  return (await rewriteRounds(conn, s, [entryId], lookup, now)).get(entryId)!;
+}
+
+/** A round no night holds any more, for the facilitator's notice. */
+export interface SettledNight {
+  sessionId: number;
+  title: string;
+  entryId: number;
+  text: string;
+  facilitatorNo: number;
+  consented: boolean;
+}
+
+/**
+ * The closed record's row and one of its open proposals that kept its round,
+ * inside a transaction. Somebody who may not read the record hears what the
+ * record's own door says, before anything about what is in it; a door only
+ * the facilitator may use (`needRuns`) refuses anybody else before that too.
+ * `who` is null for the job.
+ */
+async function recordRound(
+  conn: PoolConnection,
+  sessionId: number,
+  entryId: number,
+  who: Actor | null,
+  needRuns = false,
+): Promise<Outcome<{ s: SessionRec; e: EntryRec }>> {
+  const rows = await repo.sessionRow(conn, sessionId, true);
+  if (!rows.length) return refuse(404, R.notFound);
+  const s = mapSession(rows[0]);
+  if (who) {
+    const joined = (await repo.personRow(conn, sessionId, who.no)).length > 0;
+    if (!maySee(s, joined, who.admin)) return refuse(403, SESSION_COPY.closedNoAccess);
+  }
+  if (s.status === "open") return refuse(409, R.nightInRoom);
+  if (who && needRuns && !rolesIn(s, who).runs) return refuse(403, R.facilitatorOnly);
+  const [row] = Number.isInteger(entryId) && entryId > 0 ? await repo.entryRow(conn, sessionId, entryId) : [];
+  const e = row ? mapEntry(row) : null;
+  if (!e || e.kind !== "decision") return refuse(404, R.entryUnknown);
+  if (e.status !== "open") return refuse(409, R.decisionFinal);
+  if (!s.summary?.nights?.[entryId]) return refuse(409, R.noNight);
+  return done({ s, e });
+}
+
+/**
+ * Somebody who asked for a night answers the round from the closed record, by
+ * their time: I consent, a concern or an objection (each of the last two in
+ * one sentence). Refused in this order: a body that does not read (400), no
+ * such record (404), an asker who may not read it (403), a session still open
+ * (409), no such proposal (404), a proposal decided already or that kept no
+ * round (409), an asker who asked for no night on it (403), and a night that
+ * has ended (409).
+ */
+export async function answerAfterNight(
+  pool: Pool,
+  sessionId: number,
+  actor: Actor,
+  raw: unknown,
+  lookup: MemberLookup,
+  now = new Date(),
+): Promise<Outcome<{ settled: SettledNight | null }>> {
+  const b = bodyOf(raw);
+  const entryId = Number(b.entryId);
+  if (!isConsentValue(b.value) || b.value === "sleep") return refuse(400, R.nightValue);
+  const value = b.value;
+  let text: string | null = null;
+  if (consentNeedsWords(value)) {
+    text = cleanLine(b.text, SESSION_LIMITS.text);
+    if (!text) return refuse(400, R.consentWords);
+  }
+  return repo.inTransaction(pool, async (conn) => {
+    const found = await recordRound(conn, sessionId, entryId, actor);
+    if (!found.ok) return found;
+    const { s, e } = found.value;
+    const target = `decision:${entryId}`;
+    const mine = (await repo.responseRows(conn, sessionId)).map(mapResponse).find((r) => r.target === target && r.no === actor.no);
+    if (!mine || mine.value !== "sleep") return refuse(403, R.nightNotYours);
+    if (!nightLasts(asAnswer(mine), now.getTime())) return refuse(409, R.nightOver);
+    await repo.upsertResponse(conn, { sessionId, target, memberNo: actor.no, value, text, answerBy: null, now });
+    const st = await rewriteRound(conn, s, entryId, lookup, now.getTime());
+    await repo.bumpVersion(conn, sessionId);
+    return done({
+      settled: st.open ? null : { sessionId, title: s.title, entryId, text: e.text, facilitatorNo: s.facilitatorNo, consented: st.consented },
+    });
+  });
+}
+
+/**
+ * The facilitator, or an admin, marks a round that consented after the call
+ * decided, from the record. Refused in this order: no such record (404), an
+ * asker who may not read it (403), a session still open (409), an asker who
+ * does not run the session (403), no such proposal (404), a proposal decided
+ * already or that kept no round (409), and a round that has not consented
+ * (409).
+ */
+export async function decideAfterNight(pool: Pool, sessionId: number, entryId: number, actor: Actor, lookup: MemberLookup, now = new Date()): Promise<Outcome<null>> {
+  return repo.inTransaction(pool, async (conn) => {
+    const found = await recordRound(conn, sessionId, entryId, actor, true);
+    if (!found.ok) return found;
+    const { s, e } = found.value;
+    const responses = (await repo.responseRows(conn, sessionId)).map(mapResponse);
+    if (!nightRoundState(s.summary?.nights?.[entryId], roundAnswers(responses, entryId), now.getTime()).consented) return refuse(409, R.decisionNotConsented);
+    await repo.writeEntry(conn, e.id, { text: e.text, status: "done", ownerNo: e.ownerNo, ownerSeatId: e.ownerSeatId, dueOn: e.dueOn, claimedAt: e.claimedAt ? new Date(e.claimedAt) : null });
+    await rewriteRound(conn, s, entryId, lookup, now.getTime());
+    await repo.bumpVersion(conn, sessionId);
+    return done(null);
+  });
+}
+
+/** The job's name and pace: a quarter of an hour, so a night that ended is heard about soon after. */
+export const NIGHT_JOB = "session-nights";
+export const NIGHT_EVERY_MS = 15 * 60 * 1000;
+const NIGHT_LOOKBACK_MS = 30 * 86_400_000;
+
+/**
+ * Every round on a closed record whose nights have all ended, and that nobody
+ * answered into settling, is settled now: its tally and minutes written again,
+ * and its facilitator told. Nothing runs before the module is open to members.
+ */
+export async function settleNights(
+  pool: Pool,
+  lookup: MemberLookup,
+  deps: Pick<NoticeDeps, "notify"> & { lifecycle?: () => string },
+  now = new Date(),
+): Promise<string> {
+  const lifecycle = deps.lifecycle ?? (() => effectiveLifecycle("sessions"));
+  if ((LIFECYCLE_RANK[lifecycle() as ModuleLifecycle] ?? 0) < LIFECYCLE_RANK.members) return "the sessions module is not open to members";
+  let settled = 0;
+  for (const row of await repo.endedNightRows(pool, now, new Date(now.getTime() - NIGHT_LOOKBACK_MS))) {
+    const target = String(row.target);
+    if (!target.startsWith("decision:")) continue;
+    const sessionId = Number(row.session_id);
+    const entryId = Number(target.slice("decision:".length));
+    // Each round on its own, its notice after its own commit, so one record
+    // that fails never holds up the rest or loses a notice already earned.
+    try {
+      const out = await repo.inTransaction(pool, async (conn): Promise<Outcome<SettledNight | null>> => {
+        const found = await recordRound(conn, sessionId, entryId, null);
+        if (!found.ok) return done(null);
+        const { s, e } = found.value;
+        const night = s.summary?.nights?.[entryId];
+        if (!night || night.settled) return done(null);
+        const responses = (await repo.responseRows(conn, sessionId)).map(mapResponse);
+        // Another night on it still lasts: its own end brings the job back.
+        if (nightRoundState(night, roundAnswers(responses, entryId), now.getTime()).open) return done(null);
+        const st = await rewriteRound(conn, s, entryId, lookup, now.getTime());
+        await repo.bumpVersion(conn, sessionId);
+        return done({ sessionId, title: s.title, entryId, text: e.text, facilitatorNo: s.facilitatorNo, consented: st.consented });
+      });
+      if (out.ok && out.value) {
+        settled += 1;
+        await noticesAfterNights(pool, [out.value], deps);
+      }
+    } catch (err) {
+      console.error(`[sessions] the round on proposal ${entryId} of session ${sessionId} did not settle; the next run tries again`, err);
+    }
+  }
+  return `${settled} round(s) settled after a night`;
+}
+
+/** Each settled round's facilitator hears how it went, once. Never fails the write it follows. */
+export async function noticesAfterNights(pool: Pool, settled: readonly SettledNight[], deps: Pick<NoticeDeps, "notify">): Promise<void> {
+  if (!settled.length) return;
+  try {
+    const userOf = new Map((await repo.memberUserIdRows(pool, settled.map((n) => n.facilitatorNo))).map((r) => [Number(r.no), String(r.user_id)]));
+    for (const n of settled) {
+      const userId = userOf.get(n.facilitatorNo);
+      if (!userId) continue;
+      await deps.notify({
+        userId,
+        type: "session_night_settled",
+        title: SESSION_NOTICES.nightSettled(n.title, n.consented),
+        body: n.text,
+        link: `/sessions/${n.sessionId}`,
+        dedupeKey: `session-night:${n.sessionId}:${n.entryId}:${userId}`,
+      });
+    }
+  } catch (e) {
+    console.error("[sessions] a facilitator was not told a night is over", e);
+  }
 }
 
 // ── Discarding a session, deleting a record ─────────────────────────────────
@@ -1681,6 +1986,26 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
   }
   // Whoever brought an item the session took, and was not in the room, hears how it left.
   await noticesAfterSettle(pool, deps, { settled: closed.brought ?? [], inRoom: new Set(closed.peopleNos ?? []) });
+  // Whoever asked for a night that outlives the call hears where to answer, and by when (0281).
+  try {
+    const nights = closed.nights ?? [];
+    const userOf = new Map((await repo.memberUserIdRows(pool, nights.map((n) => n.sleeperNo))).map((r) => [Number(r.no), String(r.user_id)]));
+    const zone = villageTimezone();
+    for (const n of nights) {
+      const userId = userOf.get(n.sleeperNo);
+      if (!userId) continue;
+      await deps.notify({
+        userId,
+        type: "session_night_open",
+        title: SESSION_NOTICES.nightOpen(closed.title),
+        body: SESSION_NOTICES.nightOpenBody(n.text, nightAtWords(n.answerBy, zone)),
+        link: `/sessions/${closed.id}`,
+        dedupeKey: `session-night-open:${closed.id}:${n.entryId}:${userId}`,
+      });
+    }
+  } catch (e) {
+    console.error("[sessions] somebody sleeping on a proposal was not told where to answer", e);
+  }
   try {
     deps.closeMail?.(closed.id);
   } catch (e) {
@@ -1830,7 +2155,13 @@ export async function buildView(
     wish: open && joined ? p.wish : null,
   }));
   const responsesOut: SessionResponse[] = responses
-    .map((r) => ({ target: parseResponseTarget(r.target), userId: r.no, value: r.value, text: r.text }))
+    .map((r): Omit<SessionResponse, "target"> & { target: ResponseTarget | null } => ({
+      target: parseResponseTarget(r.target),
+      userId: r.no,
+      value: r.value,
+      text: r.text,
+      answerBy: r.answerBy == null ? null : new Date(r.answerBy).toISOString(),
+    }))
     .filter((r): r is SessionResponse => r.target != null && r.target !== "facilitation");
   // Who each open consent question is still waiting on, named the way the
   // room names people. Only for a viewer who sees the answers: anyone else
@@ -1882,6 +2213,7 @@ export async function buildView(
     }),
     entries: entries.map((e) => entryOut(e, names, seats)),
     responses: responsesOut,
+    nights: nightRoundsFor(s, entries, responses, viewer, now),
     facilitation,
     waiting,
     seats: seats.options,
@@ -2004,6 +2336,7 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
     target: String(r.target),
     value: String(r.value),
     text: r.text == null ? null : String(r.text),
+    answerBy: r.answer_by_s == null ? null : new Date(Math.round(Number(r.answer_by_s) * 1000)).toISOString(),
     at: toIso(r.updated_at),
   }));
   const taskRows = await exportTaskRowsFor(pool, no);
@@ -2096,6 +2429,17 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
         lookup,
       );
       await repo.writeMinutes(conn, sid, minutes.people, minutes.shareable);
+      // A round that outlived its call (0281) and that the leaver's night held
+      // open is written again from the answers left: its tally, its minutes,
+      // and settled once no night lasts. No notice goes from an erasure; the
+      // facilitator finds the round settled on the record.
+      const held = Object.entries(s.summary?.nights ?? {})
+        .filter(([id, n]) => !n.settled && entries.some((e) => e.id === Number(id) && e.kind === "decision" && e.status === "open"))
+        .map(([id]) => Number(id));
+      if (held.length) {
+        const [fresh] = await repo.sessionRow(conn, sid, true);
+        if (fresh) await rewriteRounds(conn, mapSession(fresh), held, lookup, Date.now());
+      }
     }
     // The agenda library (0264) last, after every session row above is held,
     // the order every other writer takes them in: the items they brought go

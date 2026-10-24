@@ -23,7 +23,7 @@
  */
 import { authToken } from "@/lib/gameApi";
 import type { PlayerCardPayload } from "@shared/playerCardPayload";
-import type { ConsentState } from "@shared/roleProposalConsent";
+import type { ConsentAnswer, ConsentState } from "@shared/roleProposalConsent";
 import type { ProposalStatus, ShareAudience, WordValue } from "@shared/roleProposals";
 import type { SeatSettings } from "@shared/seatSettings";
 
@@ -97,8 +97,18 @@ export interface ConsentOut {
   consented: number;
   objected: number;
   objections: string[];
+  /** The titles of the roles the asked hold in the circle, for the tally (PR D). Absent from an older server. */
+  roles?: { asked: string[]; consented: string[]; objected: string[] };
   record: string | null;
   you: { asked: boolean; answer: string | null; mayAnswer: boolean };
+}
+
+/** `POST /api/governance/role-applications/:id/consent`, what an asked holder's answer returns (PR B). */
+export interface ConsentAnswerOut {
+  answer: ConsentAnswer;
+  carried: boolean;
+  carriedWords: string | null;
+  consent: ConsentOut;
 }
 
 export interface ShareOut {
@@ -189,6 +199,11 @@ export const submitProposal = (id: string, alignedWords?: string) =>
 export const fetchShared = (token: string) => call<SharedOut>(sharedPath(token));
 export const fetchSharedComments = (token: string) => call<{ comments: CommentOut[] }>(`${sharedPath(token)}/comments`);
 export const postSharedComment = (token: string, text: string) => call<{ comments: CommentOut[] }>(`${sharedPath(token)}/comments`, "POST", { text });
+
+/** An asked holder consents or objects, keyed by the application their bell notice links (PR D). */
+export const consentUrl = (applicationId: string) => `/api/governance/role-applications/${encodeURIComponent(applicationId)}/consent`;
+export const answerConsent = (applicationId: string, answer: ConsentAnswer, reason?: string) =>
+  call<ConsentAnswerOut>(consentUrl(applicationId), "POST", answer === "object" ? { answer, reason } : { answer });
 
 // ── What the pick step reads beside the proposal ────────────────────────────
 

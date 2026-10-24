@@ -77,9 +77,10 @@ export async function reservationsForMember(
  * their address with NO account on it (the public form needs no sign-in, so a
  * request made before joining carries no `user_id`). The address is matched
  * the way the path facts match it (server/repos/commsPathFacts.ts), trimmed and
- * lower-cased. `emailKey` is empty on a resume that reads the tombstone and
- * no longer knows the old address, and then only the account's rows are found,
- * the same limit the comms step states.
+ * lower-cased. A resume past the tombstone still has the old address, held in
+ * `member_erasures` (0282). `emailKey` is empty only for a record from before
+ * that, and then only the account's rows are found, the same limit the comms
+ * step states.
  *
  * A ROW ANOTHER ACCOUNT OWNS IS THAT MEMBER'S, even when the contact address
  * typed on it is the leaver's: a household where one partner filed for both

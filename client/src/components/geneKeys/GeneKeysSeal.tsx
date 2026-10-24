@@ -41,11 +41,13 @@ export default function GeneKeysSeal({ view, whose, mine = null, className = "ab
   const [wide, setWide] = useState(wideScreen);
   const label = `Gene Keys lines ${view.lines[0]} and ${view.lines[1]}, ${view.names.replace(" · ", " and ")}. Open the lines card.`;
 
+  // `shrink-0`: the dialog and the sheet are scrolling flex columns, and without it they
+  // squeeze this body below its own height on a phone, so text spilled out of its boxes.
   const body = (
-    <>
+    <div className="flex shrink-0 flex-col gap-4">
       <GeneKeysLines view={view} whose={whose} />
       {mine ? <GeneKeysOwnerControls mine={mine} /> : null}
-    </>
+    </div>
   );
 
   return (
