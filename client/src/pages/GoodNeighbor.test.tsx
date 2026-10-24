@@ -23,7 +23,20 @@ import { render, screen } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 import { GOOD_NEIGHBOR_PAGE } from "@shared/pageContent/goodNeighbor";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { GOOD_NEIGHBOR_NAME_DEFAULT } from "@shared/pageContent/goodNeighborName";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
+import { pageVarsFrom } from "@shared/pageContent/vars";
+
+/*
+ * A village that saved nothing reads the spec's defaults, neutral starter
+ * text since 2026-10-23. These read them from the spec rather than typing
+ * them again, so a later wording change moves no test.
+ */
+const section = (id: string) => GOOD_NEIGHBOR_PAGE.sections.find((s) => s.id === id)!;
+const fieldDefault = (id: string, key: string) => section(id).fields.find((f) => f.key === key)!.default;
+const listDefault = (id: string, key: string) => section(id).lists!.find((l) => l.key === key)!.default;
+const filled = (text: string) =>
+  fillVars(text, { ...pageVarsFrom(gameConfig ?? {}), "good-neighbor": GOOD_NEIGHBOR_NAME_DEFAULT });
 
 let gameConfig: { project: Record<string, string>; currency: { name: string } } | null;
 let eventsUrl: string;
@@ -85,9 +98,9 @@ describe("every field in the Good Neighbor spec reaches the page", () => {
     renderPage();
     await headline();
 
-    expect(screen.queryByText("What Willowbrook Values, and Why It Matters")).toBeNull();
-    expect(screen.queryByText("Clear Dealbreakers")).toBeNull();
-    expect(screen.queryByText("The Conversation, Not Just the Criteria")).toBeNull();
+    expect(screen.queryByText(filled(fieldDefault("values", "heading")))).toBeNull();
+    expect(screen.queryByText(fieldDefault("dealbreakers", "heading"))).toBeNull();
+    expect(screen.queryByText(fieldDefault("process", "heading"))).toBeNull();
     expect(screen.getByText("The Good Neighbor Criteria")).toBeInTheDocument();
   });
 
@@ -100,19 +113,32 @@ describe("every field in the Good Neighbor spec reaches the page", () => {
 
     expect(screen.getByText("Tend the Commons")).toBeInTheDocument();
     expect(screen.getByText("Bring a rake.")).toBeInTheDocument();
-    expect(screen.queryByText("Core Values Alignment")).toBeNull();
+    expect(screen.queryByText(listDefault("criteria", "items")[0].title)).toBeNull();
   });
 });
 
 describe("the Good Neighbor page with nothing saved", () => {
-  it("reads as it did before it had a spec, with the village's own name filled in", async () => {
+  it("draws the spec's starter words, with the village's own name filled in", async () => {
     renderPage();
 
     expect(await headline()).toHaveTextContent("Good Neighbor Criteria");
-    expect(screen.getByText("Our Living Covenant")).toBeInTheDocument();
-    expect(screen.getByText("What Willowbrook Values, and Why It Matters")).toBeInTheDocument();
-    expect(screen.getByText("Protect your investment and provide stability (30-99 year land leases with renewal options)")).toBeInTheDocument();
+    expect(screen.getByText(fieldDefault("hero", "eyebrow"))).toBeInTheDocument();
+    expect(screen.getByText(filled(fieldDefault("values", "heading")))).toBeInTheDocument();
+    expect(screen.getByText(filled(listDefault("commitments", "items")[0].text))).toBeInTheDocument();
     expect(screen.getByText(/If you commit to the Good Neighbor Criteria, Willowbrook commits to you:/)).toBeInTheDocument();
+  });
+
+  it("states none of the founding village's own practices or facts as every village's (2026-10-23)", async () => {
+    renderPage();
+    await headline();
+    const said = document.body.textContent ?? "";
+
+    expect(said).not.toMatch(/Nonviolent Communication|\bNVC\b|R-Ikigai|Resident Circle|Children's Play Day|school pilot/);
+    expect(said).not.toMatch(/30%|3-5 years|30-99 year|HOA/);
+    expect(said).not.toMatch(/Buckminster Fuller/);
+    // The work's pay is on its cards (Rye, 2026-10-23).
+    expect(said).not.toMatch(/pay what their cards say/);
+    expect(said).toContain("You propose contributions and take on quests and roles.");
   });
 
   it("asks a visitor to sign the village's own commitment, by its own name", async () => {
@@ -136,7 +162,17 @@ describe("the Good Neighbor page with nothing saved", () => {
     renderPage();
     await headline();
 
-    expect(screen.queryByText("Attend a Community Call")).toBeNull();
+    expect(screen.queryByText(fieldDefault("closing", "eventsLabel"))).toBeNull();
+  });
+
+  it("draws the events button while the village has an events page", async () => {
+    renderPage();
+    await headline();
+
+    expect(screen.getByRole("link", { name: new RegExp(fieldDefault("closing", "eventsLabel")) })).toHaveAttribute(
+      "href",
+      "https://example.org/events",
+    );
   });
 });
 

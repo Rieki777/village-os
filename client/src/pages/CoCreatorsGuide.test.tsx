@@ -28,9 +28,22 @@ import { render, screen, within } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 import { CO_CREATORS_GUIDE_PAGE } from "@shared/pageContent/coCreatorsGuide";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
+import { pageVarsFrom } from "@shared/pageContent/vars";
 
 const DHO = "https://dho.example.org/willowbrook";
+
+/*
+ * The words a village that saved nothing sees are the spec's defaults, which
+ * are neutral starter text since 2026-10-23. These read them from the spec
+ * rather than typing them again, so a later wording change moves no test; the
+ * few words a ruling fixes are pinned as such, below.
+ */
+const section = (id: string) => CO_CREATORS_GUIDE_PAGE.sections.find((s) => s.id === id)!;
+const fieldDefault = (id: string, key: string) => section(id).fields.find((f) => f.key === key)!.default;
+const listDefault = (id: string, key: string) => section(id).lists!.find((l) => l.key === key)!.default;
+/** A default as this test's village reads it. */
+const filled = (text: string) => fillVars(text, pageVarsFrom(gameConfig ?? {}));
 
 let gameConfig: { project: Record<string, string>; currency: { name: string; value?: { name: string } } } | null;
 let eventsUrl: string;
@@ -103,11 +116,11 @@ describe("every field in the Co-Creators Guide spec reaches the page", () => {
     renderPage();
     await headline();
 
-    expect(screen.queryByText("Your R-Ikigai")).toBeNull();
-    expect(screen.queryByRole("button", { name: "R-Ikigai" })).toBeNull();
-    expect(screen.queryByText("The Four Spaces")).toBeNull();
-    expect(screen.queryByText(/Infinite Game/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Voice & Governance" })).toBeInTheDocument();
+    expect(screen.queryByText(fieldDefault("ikigai", "heading"))).toBeNull();
+    expect(screen.queryByRole("button", { name: fieldDefault("ikigai", "navLabel") })).toBeNull();
+    expect(screen.queryByText(fieldDefault("spaces", "heading"))).toBeNull();
+    expect(document.body.textContent).not.toContain(filled(fieldDefault("closing", "quote")));
+    expect(screen.getByRole("button", { name: fieldDefault("voice", "navLabel") })).toBeInTheDocument();
   });
 });
 
@@ -117,8 +130,8 @@ describe("the Hypha section", () => {
     await headline();
 
     expect(document.getElementById("hypha")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Hypha Platform" })).toBeNull();
-    expect(screen.queryByText("Open Hypha Platform")).toBeNull();
+    expect(screen.queryByRole("button", { name: fieldDefault("hypha", "navLabel") })).toBeNull();
+    expect(screen.queryByText(fieldDefault("hypha", "openLabel"))).toBeNull();
   });
 
   it("opens the village's own Hypha space, never a shared address", async () => {
@@ -126,7 +139,7 @@ describe("the Hypha section", () => {
     renderPage();
     await headline();
 
-    const open = screen.getByRole("link", { name: /Open Hypha Platform/ });
+    const open = screen.getByRole("link", { name: new RegExp(fieldDefault("hypha", "openLabel")) });
     expect(open).toHaveAttribute("href", DHO);
     expect(document.body.innerHTML).not.toContain("app.hypha.earth");
     expect(screen.getByRole("link", { name: /Create Agreement/ })).toHaveAttribute("href", `${DHO}/agreements/create`);
@@ -167,8 +180,9 @@ describe("the token section (Rye, 2026-10-22)", () => {
     ).toBeInTheDocument();
     expect(within(section).getByRole("link", { name: /See how they work here/ })).toHaveAttribute("href", "/game-mechanics");
     expect(screen.getByRole("button", { name: "Thanks" })).toBeInTheDocument();
-    // The live card of what work is worth stays.
-    expect(within(section).getByText("Get paid for your work")).toBeInTheDocument();
+    // The live card of the open work stays, under its 2026-10-23 title.
+    expect(within(section).getByText(fieldDefault("recognition", "cardTitle"))).toBeInTheDocument();
+    expect(section.textContent).not.toMatch(/get paid/i);
   });
 
   it("says nothing about what a token does", async () => {
@@ -185,7 +199,32 @@ describe("the token section (Rye, 2026-10-22)", () => {
     expect(said).not.toMatch(/claim Thanks/);
     expect(said).not.toMatch(/level of Thanks/);
     expect(said).toContain("Do the work. Document it. Share what you created with the community.");
-    expect(said).toContain("Manages business interests and shared enterprise");
+    expect(said).toContain(filled(listDefault("spaces", "items")[2].description));
+  });
+});
+
+describe("the pay ruling (Rye, 2026-10-23): the cards say what work pays, so no sentence here does", () => {
+  it("draws the words the ruling set, word for word", async () => {
+    hyphaConfigured = true;
+    renderPage();
+    await headline();
+
+    expect(screen.getByText("Open quests and roles")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Claim Your Contribution" })).toBeInTheDocument();
+    expect(screen.getByText("After completing a task or season")).toBeInTheDocument();
+    expect(document.body.textContent).toContain(
+      "Detail what you delivered and what Willowbrook gained. This is how the value you create becomes visible.",
+    );
+    expect(screen.getByText("The roles and quests Willowbrook needs, each on its own card.")).toBeInTheDocument();
+  });
+
+  it("says nowhere that work is paid", async () => {
+    hyphaConfigured = true;
+    renderPage();
+    await headline();
+    const said = document.body.textContent ?? "";
+
+    expect(said).not.toMatch(/get paid|What PAYS|claim the tokens|pays what its card says|Claim Your Tokens/i);
   });
 });
 
@@ -193,7 +232,9 @@ describe("words the village owns", () => {
   it("keeps the closing words as an editable default, and draws the village's own instead", async () => {
     renderPage();
     await headline();
-    expect(screen.getByText(/We co-become the most beautiful village, where all beings belong and thrive\./)).toBeInTheDocument();
+    expect(document.body.textContent).toContain(filled(fieldDefault("closing", "quote")));
+    // The founding village's slogan is its own words now, never a default.
+    expect(document.body.textContent).not.toMatch(/co-become|Infinite Game/);
   });
 
   it("draws the village's own closing words", async () => {
@@ -202,15 +243,18 @@ describe("words the village owns", () => {
     await headline();
 
     expect(screen.getByText(/We keep the river clean\./)).toBeInTheDocument();
-    expect(screen.queryByText(/co-become/)).toBeNull();
+    expect(document.body.textContent).not.toContain(filled(fieldDefault("closing", "quote")));
   });
 
   it("calls the commitment by the village's own name", async () => {
     renderPage();
     await headline();
 
-    expect(screen.getByText("Love Letter Values")).toBeInTheDocument();
-    expect(screen.getByText("The Love Letter")).toBeInTheDocument();
+    const card = filled(listDefault("cta", "cards")[0].title);
+    expect(card).toContain("Love Letter");
+    expect(screen.getByText(card)).toBeInTheDocument();
+    // The platform's own word for it never shows beside the village's.
+    expect(document.body.textContent).not.toMatch(/membership agreement/);
   });
 
   it("names the criteria with the name the Good Neighbor page gives them", async () => {

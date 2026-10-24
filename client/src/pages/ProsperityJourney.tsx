@@ -34,6 +34,9 @@ import {
  * icons and tier colours, handed out by position.
  */
 
+/** What a visitor calls a guide the village has not named. */
+const UNNAMED_GUIDE = "the village guide";
+
 /** Icons for the steps, in order; a longer list starts again from the top. */
 const STEP_ICONS = [Calendar, Download, FileText, Heart, Vote, PartyPopper, TrendingUp];
 
@@ -52,8 +55,11 @@ const TIER_COLORS = [
 export default function ProsperityJourney() {
   const valueName = useValueTokenName();
   const villageName = useVillageName();
-  // LANE Q: the guide's name is per-deployment config, never a constant.
-  const [assistantName, setAssistantName] = useState("Maia");
+  // LANE Q: the guide's name is per-deployment config, never a constant. Until
+  // it arrives, or if it never does, the public reads "the village guide"
+  // (Rye's ruling: every village names its own guide, and the name this used
+  // to fall back to belongs to one village's agent).
+  const [assistantName, setAssistantName] = useState(UNNAMED_GUIDE);
   const page = useJourneyContent(PROSPERITY_JOURNEY, (resolved) => ({
     guide: assistantName,
     acronym: resolved.tiers.fields.acronym,
