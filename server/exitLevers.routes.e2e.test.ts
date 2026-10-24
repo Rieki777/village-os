@@ -1,5 +1,12 @@
 /**
- * THE SIX REFUSALS, DRIVEN THROUGH THE DOOR A FOUNDER ACTUALLY USES (R4).
+ * THE FIVE REFUSALS, DRIVEN THROUGH THE DOOR A FOUNDER ACTUALLY USES (R4),
+ * AND WHAT RESOLVE DOES ON THE SHIPPED DIALS (the ruling of 2026-10-23).
+ *
+ * There were seven refusals until the founder ruled that members keep their
+ * tokens. A share of equity and keeping Voice were lifted that day, and the
+ * cases for them below now assert that each SAVES. The last describe drives
+ * the departure itself: a leaver still holding tokens is kept as a former
+ * member, and an empty account is erased as before.
  *
  * `server/lib/exitPolicy.test.ts` proves `exitLeverProblem` in isolation, with
  * every fact injected. That is a claim about a function. This file is the claim
@@ -186,12 +193,14 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
     expect(await storedValue("exit.keep_pct.recognition")).toBeNull();
   });
 
-  it("a share of EQUITY is refused, and nothing is written", async () => {
+  it("a share of EQUITY saves since the ruling of 2026-10-23, and the shipped 100 is the inherited default", async () => {
+    // Refused until that day, when the only equity token was the Hypha mirror.
+    // Earned Equity is a platform token, and members keep their tokens.
     const r = await setDial("exit.keep_pct.equity", "10");
-    expect(r.status).toBe(400);
-    expect(r.json?.error).toBe(
-      "Equity is governed on Base under Hypha and this platform never moves it. What happens to it on departure is decided there.",
-    );
+    expect(r.status, `equity share: ${JSON.stringify(r.json)}`).toBe(200);
+    expect(await storedValue("exit.keep_pct.equity")).toBe("10");
+    // Back to the platform default, which removes the row.
+    expect((await setDial("exit.keep_pct.equity", "100")).status).toBe(200);
     expect(await storedValue("exit.keep_pct.equity")).toBeNull();
   });
 
@@ -235,6 +244,8 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
 
   it("CONVERT with a rate but a Voice share of zero is refused, because nothing would convert", async () => {
     expect((await setDial("exit.voice_convert_rate", "2.5")).status).toBe(200);
+    // The share is 100 by default since 2026-10-23, so the village sets it to 0.
+    expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(200);
     const r = await setDial("exit.voice_on_exit", "convert");
     expect(r.status).toBe(400);
     expect(r.json?.error).toBe(
@@ -251,18 +262,23 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
     // The share cannot be taken back to zero underneath a standing conversion.
     expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(400);
     expect(await storedValue("exit.keep_pct.voice")).toBe("50");
-    // And back, so the rest of the suite runs on the shipped answers.
-    expect((await setDial("exit.voice_on_exit", "forfeit")).status).toBe(200);
+    // And back, so the rest of the suite runs on the shipped answers, each of
+    // which removes its row.
+    expect((await setDial("exit.voice_on_exit", "keep")).status).toBe(200);
     expect((await setDial("exit.voice_convert_rate", "0")).status).toBe(200);
-    expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(200);
+    expect((await setDial("exit.keep_pct.voice", "100")).status).toBe(200);
+    for (const key of ["exit.voice_on_exit", "exit.voice_convert_rate", "exit.keep_pct.voice"]) {
+      expect(await storedValue(key), key).toBeNull();
+    }
   });
 
-  it("KEEPING Voice is refused while a resolved exit anonymizes the account", async () => {
+  it("KEEPING Voice saves, and it is the shipped answer, because a leaver who holds it stays on", async () => {
+    // Refused until 2026-10-23, while a resolved exit always made the account a
+    // tombstone. The last describe in this file drives the former-member resolve.
+    expect((await setDial("exit.voice_on_exit", "forfeit")).status).toBe(200);
+    expect(await storedValue("exit.voice_on_exit")).toBe("forfeit");
     const r = await setDial("exit.voice_on_exit", "keep");
-    expect(r.status).toBe(400);
-    expect(r.json?.error).toBe(
-      "Keeping Voice needs an account that still exists after the departure, and a resolved exit makes the account a tombstone. This becomes available when a village can record a departure without one.",
-    );
+    expect(r.status, `keep: ${JSON.stringify(r.json)}`).toBe(200);
     expect(await storedValue("exit.voice_on_exit")).toBeNull();
   });
 
@@ -309,14 +325,19 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
      * A full credit keep with no vote over any amount. On a token somebody can
      * buy this is a withdrawal window wearing an exit, and it is still the
      * village's call, so the route answers 200 and stores it. The sentence
-     * about it is the test run's to print.
+     * about it is the test run's to print. Since 2026-10-23 a full keep is the
+     * shipped default, so the case moves away from it and back.
      */
+    const away = await setDial("exit.keep_pct.credit", "40");
+    expect(away.status).toBe(200);
+    expect(await storedValue("exit.keep_pct.credit")).toBe("40");
     const r = await setDial("exit.keep_pct.credit", "100");
     expect(r.status).toBe(200);
     expect(r.json?.error).toBeUndefined();
-    expect(await storedValue("exit.keep_pct.credit")).toBe("100");
+    // The inherited default again: no row, which every village that never
+    // touched the dial is reading.
+    expect(await storedValue("exit.keep_pct.credit")).toBeNull();
     expect(await storedValue("exit.vote_over")).toBeNull(); // 0 by default: no departure asks anybody
-    expect((await setDial("exit.keep_pct.credit", "0")).status).toBe(200);
   });
 
   it("A PASSED PROPOSAL cannot land what an admin is refused, and the apply names the element", async () => {
@@ -427,7 +448,8 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
 
     // Back to the shipped answers for the rest of the file. A no-op when the
     // element never landed, which is why it belongs here and not below.
-    expect((await setDial("exit.keep_pct.voice", "0")).status).toBe(200);
+    expect((await setDial("exit.keep_pct.voice", "100")).status).toBe(200);
+    expect(await storedValue("exit.keep_pct.voice")).toBeNull();
   });
 
   it("a dial outside the Exit category is untouched by any of this", async () => {
