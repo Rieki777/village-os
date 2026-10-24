@@ -18,15 +18,16 @@
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import {
   SLOT_KINDS,
-  daysUntilInZone,
   isFull,
   type EventSlot,
   type SlotKind,
 } from "../../shared/gatherings";
 import { cleanRecurrence, iso } from "./calendar";
-import { chargeForPlace, refundPlace } from "./eventSeats";
+import { chargeForPlace, keysFor, refundPlace } from "./eventSeats";
+import { ledgerEntryExists } from "./ledger";
+import { civilDateKey } from "../../shared/lunar";
 import { villageTimezone } from "./villageReaders";
-import { answersOf, dropAnswer, dropQueuePlacesOf, dropSlotSignupsOf, heldChargesOf, lockGathering } from "../repos/eventPlaces";
+import { answersOf, dropAnswer, dropQueuePlacesOf, dropSlotSignupsOf, lockGathering, openChargesOf } from "../repos/eventPlaces";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "./commsSink";
 import { isGuestKey } from "../../shared/comms/kinds";
@@ -89,8 +90,14 @@ export async function firePromotionSink(promoted: PromotedEntry[]): Promise<void
  * it, and a sweep can stop after the tombstone and wait for a retry. Seating
  * that row would hand a real seat to nobody and tell the next living person in
  * line nothing, so the queue read skips any member row carrying the tombstone
- * address, and the seat goes to whoever is next. A guest key has no member row
- * and is never skipped.
+ * address, and the seat goes to whoever is next.
+ *
+ * A GUEST KEY IS PASSED OVER ON THE SAME RULE when its contact is linked to a
+ * tombstone: that is the seat somebody held as a guest before they joined,
+ * which the erasure's `guest-places-after-tombstone` step gives up. Until it
+ * runs, the contact still stands and still reads the person's real address,
+ * so seating the key would also mail "you're in" to somebody gone. Any other
+ * guest key is a guest and is seated as one.
  */
 export async function promoteWaitlist(
   conn: PoolConnection,
@@ -121,6 +128,8 @@ export async function promoteWaitlist(
         "WHERE event_id = ? AND occurrence_key = ? AND promoted_at IS NULL AND left_at IS NULL " +
         // The tombstone rule in the header. The subquery takes no lock: FOR UPDATE reaches the outer table only.
         "AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = event_waitlist.user_id AND u.email LIKE '%@anonymized.invalid') " +
+        "AND NOT (event_waitlist.user_id LIKE 'guest:%' AND EXISTS (SELECT 1 FROM comms_contacts c JOIN users u ON u.id = c.user_id " +
+        "WHERE c.id = SUBSTRING(event_waitlist.user_id, 7) AND u.email LIKE '%@anonymized.invalid')) " +
         "ORDER BY created_at ASC, id ASC LIMIT 1 FOR UPDATE",
       [eventId, occurrenceKey],
     );
@@ -340,8 +349,14 @@ export async function leaveWaitlist(pool: Pool, eventId: string, userId: string,
  *
  * A one-off is ahead until it ends (its start, when nobody set an end). A
  * recurring gathering's evening is named by its village date, so it is ahead
- * through the whole of that day in the village's zone. Pure, so the rule can
- * be read without a database.
+ * through the whole of that day in the village's zone, and the test is the
+ * village's date today against that name. Both are zero-padded YYYY-MM-DD, so
+ * they compare as strings. Pure, so the rule can be read without a database.
+ *
+ * It used to format noon UTC on the named date in the village's zone, which is
+ * already the NEXT day at UTC+12 and beyond: an evening in Auckland, Fiji or
+ * Tonga read as ahead for the whole of the following day, so a freed seat was
+ * handed to somebody for a night that was over.
  */
 export function eveningAhead(
   gathering: { startsAt: Date | null; endsAt: Date | null; recurrence: unknown },
@@ -350,38 +365,52 @@ export function eveningAhead(
   timeZone: string,
 ): boolean {
   if (cleanRecurrence(gathering.recurrence) && /^\d{4}-\d{2}-\d{2}$/.test(occurrenceKey)) {
-    return daysUntilInZone(`${occurrenceKey}T12:00:00Z`, timeZone, now) >= 0;
+    return occurrenceKey >= civilDateKey(now, timeZone);
   }
   const end = gathering.endsAt ?? gathering.startsAt;
   return !!end && end.getTime() > now.getTime();
 }
 
 /**
- * Give up every place one member holds, for the erasure's
- * `event-places-after-tombstone` step (server/lib/erasure.ts).
+ * Give up every place one person holds, for the erasure's
+ * `event-places-after-tombstone` step (server/lib/erasure.ts), and for its
+ * `guest-places-after-tombstone` step, which hands this the `guest:<contactId>`
+ * key of each seat they held as a guest before they joined.
  *
  * THE SAME RULES AS EVERY OTHER EXIT, applied to all of them at once:
  *
+ *   A FEE STILL IN ESCROW on an evening ahead comes back, which is the seat
+ *   module's own rule ("every exit refunds", server/lib/eventSeats.ts). A fee
+ *   on an evening already held stays for the settle job, because that place
+ *   was used.
  *   AN ANSWER goes under the gathering's row lock, the order `withdrawRsvp`
  *   takes. A `going` on an evening still ahead frees a seat, and the queue is
  *   served in the same transaction, so the person waiting for that seat gets
  *   it. An evening that has passed seats nobody: promoting into it would tell
  *   somebody they are in for a night that is over.
  *   QUEUE PLACES AND SLOTS go whole, the slot's note with it.
- *   A FEE STILL IN ESCROW on an evening ahead comes back, which is the seat
- *   module's own rule ("every exit refunds", server/lib/eventSeats.ts). A fee
- *   on an evening already held stays for the settle job, because that place
- *   was used.
  *
  * Nothing about the leaver is told to comms: its step has already run, and an
  * `rsvp_changed` for them now would write a fresh row about somebody gone. The
  * people promoted are told, as any promotion tells them.
  *
- * IDEMPOTENT. Each write is a DELETE keyed on the member, and the refunds run
- * LAST and through `refundPlace`, which settles a place once. A death part way
- * leaves the step unrecorded, and the resume finds whatever is left: an answer
- * already deleted is gone from the read, and a fee whose answer went before
- * the death is still found by its charge row and still refunded.
+ * SAFE TO STOP ANYWHERE, AND WHY THE FEES GO FIRST. A death part way leaves the
+ * step unrecorded, and the resume finds whatever is left: an answer already
+ * deleted is gone from the read, and a deletion matches nothing twice. The
+ * money is the part that needs more than that:
+ *
+ *   A REFUND HALF DONE IS FINISHED, ONCE. `refundPlace` claims the charge row
+ *   (held to released) and then posts the keyed leg, two statements. A death
+ *   between them leaves a row that says released over a fee still in escrow.
+ *   So a released row is read back too, and when the ledger holds no leg under
+ *   its refund key it goes to `refundPlace` again, with no "is it ahead"
+ *   question: that was decided when it was claimed. The keyed leg lands once
+ *   whatever happens, because the ledger refuses the key a second time.
+ *   ONE CLOCK FOR THE SEAT AND ITS FEE. The fees are judged before any seat is
+ *   given up. Judged last, a death after a seat had been handed on left its fee
+ *   to a resume hours later, by which time the evening could be over, and the
+ *   fee for a place somebody else now held went to the treasury. Judged first,
+ *   every place this run gives up was judged on the clock its fee was.
  */
 export async function releasePlacesOf(
   pool: Pool,
@@ -390,6 +419,17 @@ export async function releasePlacesOf(
 ): Promise<{ answers: number; promoted: number; refunded: number }> {
   const now = opts.now ?? new Date();
   const zone = opts.timeZone ?? villageTimezone();
+  let refunded = 0;
+  for (const charge of await openChargesOf(pool, userId)) {
+    if (charge.status === "released") {
+      // Claimed by an earlier attempt. Finish it only if its leg never landed.
+      if (await ledgerEntryExists(pool, keysFor(charge).refund)) continue;
+    } else if (!eveningAhead(charge, charge.occurrenceKey, now, zone)) {
+      continue;
+    }
+    const r = await refundPlace(pool, charge.eventId, userId, charge.occurrenceKey, "Place given up on leaving the village");
+    if (r.refunded > 0) refunded += 1;
+  }
   let answers = 0;
   let seated = 0;
   for (const held of await answersOf(pool, userId)) {
@@ -415,12 +455,6 @@ export async function releasePlacesOf(
   }
   await dropQueuePlacesOf(pool, userId);
   await dropSlotSignupsOf(pool, userId);
-  let refunded = 0;
-  for (const charge of await heldChargesOf(pool, userId)) {
-    if (!eveningAhead(charge, charge.occurrenceKey, now, zone)) continue;
-    const r = await refundPlace(pool, charge.eventId, userId, charge.occurrenceKey, "Place given up on leaving the village");
-    if (r.refunded > 0) refunded += 1;
-  }
   return { answers, promoted: seated, refunded };
 }
 
@@ -721,7 +755,12 @@ export async function createMeetMe(
   return { ok: true, id };
 }
 
-/** The owner closes their window. Nobody else can. */
+/**
+ * The owner closes their window. Nobody else can. When the owner leaves the
+ * village, the erasure closes every window they ever opened through
+ * `forgetMeetMeWindowsOf` (server/lib/gatherings.ts), which frees the answers
+ * other members gave each one; this door deletes the window row alone.
+ */
 export async function cancelMeetMe(pool: Pool, id: string, userId: string): Promise<boolean> {
   const [res] = await pool.query<any>(
     "DELETE FROM events WHERE id = ? AND kind = 'meet-me' AND (created_by = ? OR owner_user_id = ?)",

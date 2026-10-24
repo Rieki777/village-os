@@ -164,7 +164,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `pp:<purchaseId>:reversal:inv_<String(invoiceId)>` | `server/index.ts` |
 | `pp:<purchaseId>:reversal:manual` | `server/index.ts` |
 | `pp:<purchaseId>:reversal:pi_<payment_intent>` | `server/index.ts` |
-| `proposal_accepted:<id>` | `server/index.ts` |
+| `proposal_accepted:<submissionId>:<token>` | `server/lib/proposalAward.ts` |
 | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
 | `queststay:<id>` | `server/lib/economy.ts` |
 | `redemption:<esc(v)>:<esc(redemptionId)>:hold` | `server/lib/redemptionStore.ts` |
@@ -373,6 +373,9 @@ The mint rules a fresh village is seeded with:
 | `role.cycle` | `village-voice` | 50 | 200 | holder | yes |
 | `role.cycle` | `credits` | 25 | 250 | holder | yes |
 | `role.cycle` | `gratitude` | 20 | 100 | holder | **no** |
+| `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
+| `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
+| `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | **no** |
 | `quest.completed` | `earned-equity` | 1 | 1 | claimant | **no** |
 | `role.cycle` | `earned-equity` | 1 | 1 | holder | **no** |
 
@@ -472,6 +475,23 @@ what the platform records: `TOKEN_AMOUNT_MAX`, a billion of a token on one line.
 rule stayed on would have paid 65 for one piece of work. Under `quoteWorkPay` a list
 replaces the flat amounts for that piece of work, so turning values on needs no flag day
 and no rule change: the flat rules go on paying the quests nobody has valued yet.
+
+**An accepted proposal is work (Rye, 2026-10-23: "definitely a work token").** An accepted
+Work With Us proposal is priced like a quest, from the `proposal.accepted` rules (seeded at 10
+Village Voice and 25 Village Credits, Earned Equity off), through `quoteWorkPay`, by
+`payAcceptedProposal` in `server/lib/proposalAward.ts`. It used to mint 100 Gratitude from the
+recognition faucet; `gratitude.proposal_accept_award` is retired, and Gratitude is only ever
+sent from one member to another (`GRATITUDE_ONLY_SENT`). The admin hand-mint and circle
+treasuries refuse it too.
+
+**A badge multiplies the token it names (0278, Rye, 2026-10-23: "the multiplier is attached to a
+token, so voice, credits, etc").** `badges.multipliers` maps a token to a factor from 1 to 3.
+`rewardMultipliersFor` (`server/lib/seasonPatterns.ts`) compounds every awake badge a member
+holds, per token, held at `MAX_REWARD_MULTIPLIER` (3), and skips self and hypha badges and any
+badge asleep for the season. It is applied where the member is PAID, never on a card: the
+consent (`OwedClaim.boost`), each seat at settlement (`runSettlement`'s `boostFor`) and an
+accepted proposal, all through `quoteWorkPay`'s `boost`. The old single `badges.multiplier`
+names no token and multiplies nothing.
 
 **Who the pool follows.** Before 2026-10-21 a member who finished many quests earned
 Gratitude for each, and so a share of the cycle pool. Now the pool follows peer thanks
@@ -2274,7 +2294,9 @@ Satisfied answers counted as having met its target.
 as a word: five stay requests, ten reservations. Vote either cap down and the member was refused
 at the new number while being told the old one. Both refusals now take a single read of the dial
 and use it for the limit and for the sentence, in the shape the gratitude refusal has always
-used, down to the singular when a village votes a cap of one.
+used, down to the singular when a village votes a cap of one. A stay request still rings the
+admins with the member's name; the row now records the member as its actor, so the erasure
+finds it and rewrites it once they have gone. No price, cap or posting changed with that.
 
 **The exchange names the rung this village voted.** `progression.unlock.exchange.buy` is an
 open-ring dial whose default is the platform's own stage-unlock entry, and a village may move it
@@ -2774,6 +2796,19 @@ pay out what somebody paid in, which is what makes a refund provably funded. A
 cancelled seat is refunded from escrow (`event_seat_refund`), and only a gathering
 that actually happened moves the fee on to the treasury (`event_seat_kept`).
 
+**On a gathering that repeats, "happened" is read one evening at a time.** Each
+evening's fee is held under that evening's village-time date, the
+`<occurrenceKey>` in its key, and `settleFinishedSeats` keeps it only once THAT
+evening ended more than the grace ago, read through the calendar's own expansion
+(`occurrenceOf`, `server/lib/calendar.ts`) in the village's zone with any move the
+host made applied. The row's own `starts_at` and `ends_at` are only the series'
+first evening and decide nothing for the others. An evening the host called off or
+took out of the series never happened, so its fee stays in escrow, where giving the
+place back still refunds it. Until 2026-10-23 the settle read the row's own times,
+so a weekly gathering's fees for evenings still ahead went to the treasury a day
+after its first evening, and a member who then gave their place back was refunded
+nothing. `server/lib/eventSeats.recurring.test.ts` holds the per-evening rule.
+
 **`spendSinkFor` has exactly one POSTING user, and it is no longer the only
 caller.** It had one when this was written and the line number has moved twice
 since; measured again on `wt/econ-small` by grepping the whole tree, there are
@@ -2798,6 +2833,9 @@ is in practice routed by its own caller.
   pool pays a different token entirely.
 - **Attendance pays nothing.** `checkIn` mints no currency at all, deliberately:
   counting an RSVP as attendance hands a badge to anyone willing to tap a button.
+  It also refuses a departed member ("That member has left the village."), and the
+  erasure clears a steward's note on a departed member's check-ins while the
+  check-in itself stays as the record of who was there. Neither moves any value.
 - **Nothing is ever sold for fiat.** The exchange is buy-only; fiat flows in and
   tokens never flow out for money.
 
@@ -3116,6 +3154,13 @@ reading the live dial after a settled sweep would be printing a number that did
 not happen. A second settle also never sweeps back what the same exit PAID the
 member, which is how a converted Voice share stays converted.
 
+**The erasure keeps every one of those lines.** When a member who opened their
+own departure is erased, the note they typed at the top of `exits.resolution`
+is replaced by one constant line, and every dated line the settle route wrote
+stays exactly as it was, so `capturedSplit` reads the same split of record
+afterwards (`forgetOwnExitNotes`). A note a steward wrote on a departure the
+steward opened is the village's record and is left alone.
+
 Negative balances are still never swept and still block resolve. No policy
 touches that.
 
@@ -3377,7 +3422,9 @@ decided rather than re-splitting a pool that is already partly out the door.
 | 2a | the gathering is held | `sys:event-escrow` | `sys:treasury` | `credits` | **10** (10) | `event_seat_kept` | `seat:<eventId>:-:<wren>:1:keep` |
 | 2b | or it is cancelled | `sys:event-escrow` | `mem:<wren>` | `credits` | **10** (10) | `event_seat_refund` | `seat:<eventId>:-:<wren>:1:refund` |
 
-`<occurrenceKey>` is `-` for a gathering that does not repeat, and `chargeSeq`
+`<occurrenceKey>` is `-` for a gathering that does not repeat, and the evening's
+village-time date for one that does, whose row 2a waits for that evening and not
+for the series' first (section 12). `chargeSeq`
 starts at 1 so a member who leaves and retakes a seat gets a distinct key rather
 than a silent duplicate.
 

@@ -173,6 +173,17 @@ describe("bring in a description of your role", () => {
     expect((screen.getByLabelText("Bring me") as HTMLTextAreaElement).value).toBe("Food allergies\nRecipes");
   });
 
+  it("stays open once the draft it filled holds a role, so the member reads that it is filled", async () => {
+    draw({ roles: [] });
+    await screen.findByText(RC_WORDS.bringIn);
+    expect(panel().hasAttribute("open")).toBe(true);
+    await paste("Riverbend role card v1\n## Role title\nBee keeper\n### Circle\nLand circle\n### Purpose\nBees thrive.");
+    fireEvent.click(screen.getByRole("button", { name: RC_WORDS.fill }));
+    expect(await screen.findByText(RC_WORDS.filled)).toBeTruthy();
+    await waitFor(() => expect(server.puts()).toHaveLength(1));
+    expect(panel().hasAttribute("open")).toBe(true);
+  });
+
   it("holds back a new role whose circle the card did not match until a circle is picked", async () => {
     draw({ roles: [{ roleId: "r1" }] });
     await screen.findByLabelText("Purpose");

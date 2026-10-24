@@ -388,7 +388,8 @@ describe.skipIf(!DB_CONFIGURED)("everybody carries weight, and skew is left alon
     });
     expect(closed.json?.outcome).toBe("passed");
     expect((await gameStartRow())?.ballotId).toBe(running.id);
-    const mint = await call("POST", "/api/admin/tokens/gratitude/mint", {
+    // Credits: Gratitude is never minted by hand (Rye, 2026-10-23).
+    const mint = await call("POST", "/api/admin/tokens/credits/mint", {
       body: { toUserId: wrenId, amount: 5, reason: "The village started its Game." },
     });
     expect(mint.status, JSON.stringify(mint.json)).toBe(200);

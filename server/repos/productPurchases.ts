@@ -18,8 +18,9 @@ import type { Pool } from "mysql2/promise";
  *
  * WHICH ORDERS ARE THEIRS. Every order on their account, and every order paid
  * under their address before they had one, matched trimmed and lower-cased.
- * `emailKey` is empty on a resume that reads the tombstone and no longer knows
- * the old address, and then only the account's orders are found.
+ * A resume past the tombstone still has the old address, held in
+ * `member_erasures` (0282). `emailKey` is empty only for a record from before
+ * that, and then only the account's orders are found.
  *
  * Idempotent: an UPDATE writing NULL.
  */

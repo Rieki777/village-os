@@ -47,6 +47,18 @@ export interface NotifyInput {
   dedupeKey: string;
 }
 
+/**
+ * Who a notice to the admins is about, when it is about a member.
+ *
+ * A producer whose title names a member passes them as the actor. The erasure
+ * sweep finds every row that names a departed member by its actor
+ * (server/repos/noticesNaming.ts), and a row written with none kept the
+ * member's full name on every admin's bell after they had gone.
+ */
+export interface NoticeAbout {
+  actorUserId?: string | null;
+}
+
 export interface NotifyPrefs {
   /** Global email kill switch. */
   emailsOff: boolean;
@@ -295,6 +307,9 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // A circle meeting tomorrow: the bell, for the same reason. No preference covers a
     // meeting reminder yet.
     case "session_coming_up":
+    // A night on a proposal after the call (0281): the bell, for the same reason.
+    case "session_night_open":
+    case "session_night_settled":
       return "off";
     // A decision on something the member applied for, offered, or raised a
     // hand for. Immediate on purpose: this is the answer they have been

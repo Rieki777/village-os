@@ -57,16 +57,18 @@ export function makeDocx(paragraphs: string[]): Buffer {
   return makeZip({ "[Content_Types].xml": "<Types/>", "word/document.xml": xml });
 }
 
-/** A one-page PDF, each line drawn on its own line in Helvetica. */
-export function makePdf(lines: string[]): Buffer {
+/** A PDF of `pages` pages (one by default), each drawing the lines on their own lines in Helvetica. */
+export function makePdf(lines: string[], pages = 1): Buffer {
   const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
   const stream = `BT /F1 12 Tf 72 720 Td 14 TL ${lines.map((l) => `(${esc(l)}) Tj T*`).join(" ")} ET`;
+  // Objects 1 to 4 are shared; every page is its own object from 5 on, all drawing the one stream.
+  const pageIds = Array.from({ length: pages }, (_, i) => i + 5);
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+    ...pageIds.map(() => "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>"),
   ];
   let out = "%PDF-1.4\n";
   const offsets: number[] = [];

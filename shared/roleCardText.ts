@@ -31,7 +31,7 @@
  *   <words>, or one "- " line per item for a list
  *   ## How we'll know it's working   once, after the roles
  *   ## My season
- *   ### My aim this season / My seasonal goals / Village goals I serve
+ *   ### My aim this season / My seasonal goals / Village goals it serves
  *   - <title>
  *     Done when: <when it is done>   (How it helps: for a goal served)
  *
@@ -159,7 +159,7 @@ export const ROLE_CARD_FIELDS: readonly RoleCardFieldSpec[] = [
   { key: "season", heading: "My season", list: false, aliases: ["your season", "season"], limit: "" },
   { key: "seasonAim", heading: CARD_WORDS.aim, list: false, aliases: ["aim", "my aim", "season aim", "aim for the season", "my aim for the season"], limit: `What will be true at the end of the season because of you, up to ${AIM_MAX} characters.` },
   { key: "seasonalGoals", heading: CARD_WORDS.seasonalGoals(2), list: true, aliases: ["my seasonal goal", "seasonal goals", "seasonal goal"], limit: "1 to 3 bigger goals for the season. Each is a title (up to 120 characters) and a Done when: line (up to 300 characters)." },
-  { key: "servesGoals", heading: CARD_WORDS.goals, list: true, aliases: ["village goals it serves", "goals i serve", "village goals they serve", "org goals i serve", "goals it serves", "which village goals they serve"], limit: "Only goals from the village's own list for that season, each with a How it helps: line (up to 200 characters)." },
+  { key: "servesGoals", heading: CARD_WORDS.goals, list: true, aliases: ["village goals it serves", "village goals i serve", "goals i serve", "village goals they serve", "org goals i serve", "goals it serves", "which village goals they serve"], limit: "Only goals from the village's own list for that season, each with a How it helps: line (up to 200 characters)." },
 ];
 
 const SPEC = new Map<SectionKey, RoleCardFieldSpec>(ROLE_CARD_FIELDS.map((f) => [f.key, f]));

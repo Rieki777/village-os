@@ -29,10 +29,21 @@
  * 400 for anything the village does not offer. That route is the only door a
  * member can open onto their own paths, and until the profile grew a claim
  * control nothing in the client had ever sent the field.
+ *
+ * THE SESSION IS ASKED AGAIN UNDER THE LOCK. Both writes check the session
+ * once, then wait for the row lock, and the handle check reads every member in
+ * between. A save already past its check when the member was erased, or when
+ * their password was reset or their sessions revoked, took the lock after
+ * that and wrote anyway: onto a tombstone, the real name and handle came back
+ * and every surface that de-attributes through the join printed them again.
+ * So the mutator refuses a row that is a tombstone or whose session version
+ * moved, and the route answers 401, the way set-password already rechecks.
+ * `server/repos/users.ts` pins a tombstone's identity for every other writer.
  */
 import type { Express } from "express";
 import { claimPaths } from "../../shared/gameConfig";
 import type { AppDeps } from "../lib/appDeps";
+import { isTombstone } from "../lib/oauthAccounts";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
 
@@ -40,6 +51,11 @@ type Deps = Pick<AppDeps, "authedUser" | "members" | "publicUser">;
 
 /** A handle is 3 to 30 characters: letters, numbers, dashes, underscores. */
 const HANDLE_RE = /^[a-z0-9][a-z0-9-_]{2,29}$/;
+
+/** The row under the lock is no longer the session's: erased, or its sessions ended since the check. */
+function sessionGone(row: any, authed: any): boolean {
+  return isTombstone({ email: String(row.email ?? "") }) || Number(row.tokenVersion ?? 0) !== Number(authed.tokenVersion ?? 0);
+}
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, members, publicUser } = deps;
@@ -73,13 +89,16 @@ export function register(app: Express, deps: Deps): void {
     if (!claimed.ok) return res.status(400).json({ error: claimed.error });
     // Copied BEFORE the update: the cached record can be the very object it mutates.
     const pathsBefore = new Set<string>(Array.isArray(authed.paths) ? authed.paths : []);
+    let gone = false;
     const updated = await members.update(authed.id, (u: any) => {
+      if ((gone = sessionGone(u, authed))) return;
       if (name) u.name = name;
       if (bio !== undefined) u.bio = bio;
       if (avatar !== undefined) u.avatar = avatar;
       if (claimed.paths !== undefined) u.paths = claimed.paths;
       if (wanted !== undefined) u.handle = wanted;
     });
+    if (gone) return res.status(401).json({ error: "auth_required" });
     if (!updated) return res.status(404).json({ error: "User not found" });
     const pathsAfter = new Set<string>(Array.isArray(updated.paths) ? updated.paths : []);
     for (const pathId of Array.from(pathsAfter)) if (!pathsBefore.has(pathId)) commsSink.fire({ type: "path_joined", personKey: authed.id, userId: authed.id, pathId, source: "profile" });
@@ -107,10 +126,13 @@ export function register(app: Express, deps: Deps): void {
       description: String(description).slice(0, 2000),
       date: new Date().toISOString(),
     };
+    let gone = false;
     const updated = await members.update(authed.id, (u: any) => {
+      if ((gone = sessionGone(u, authed))) return;
       u.contributions = u.contributions ?? [];
       u.contributions.push(contribution);
     });
+    if (gone) return res.status(401).json({ error: "auth_required" });
     if (!updated) return res.status(404).json({ error: "User not found" });
     res.json({ success: true, contribution });
   });

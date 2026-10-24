@@ -101,7 +101,18 @@ import type { AppDeps } from "../lib/appDeps";
 import { seatTermsWords } from "../lib/alignmentSubjects";
 import { effectiveLifecycle } from "../lib/modules";
 import { listOrgAssignments, listOrgRoles, type OrgRole } from "../lib/orgChart";
-import { answerConsent, circleAsksFor, consentView, NUDGE_EVERY_MS, NUDGE_JOB, nudgesFor, ROLE_WORD_FIELDS, runProposalNudges } from "../lib/roleProposals";
+import {
+  answerConsent,
+  askRolesFor,
+  circleAsksFor,
+  consentView,
+  NUDGE_EVERY_MS,
+  NUDGE_JOB,
+  nudgesFor,
+  ROLE_WORD_FIELDS,
+  runProposalNudges,
+  type AskRoles,
+} from "../lib/roleProposals";
 import { registerJob } from "../lib/scheduler";
 import { villageClock } from "../lib/stewardship";
 import { buildPlayerCards, type CardLevel, type CardProposal } from "../lib/playerCardData";
@@ -225,7 +236,15 @@ export function register(app: Express, deps: Deps): void {
   type Reader = "owner" | "member" | "anyone";
 
   /** A proposal as one reader may read it. Terms, season words and review dates are for members and the owner only. */
-  function proposalOut(p: store.StoredProposal, target: Target | null, k: Known, reader: Reader, asks: store.StoredAsk[] = [], viewerId: string | null = null) {
+  function proposalOut(
+    p: store.StoredProposal,
+    target: Target | null,
+    k: Known,
+    reader: Reader,
+    asks: store.StoredAsk[] = [],
+    viewerId: string | null = null,
+    askRoles?: AskRoles,
+  ) {
     const membersUp = reader !== "anyone";
     const body = p.body;
     const circleOf = (id: string | null) => (id ? { id, name: k.circles.get(id) ?? "" } : null);
@@ -286,7 +305,7 @@ export function register(app: Express, deps: Deps): void {
         : {}),
       application: p.applicationId ? { id: p.applicationId, href: applicationHref(p.applicationId) } : null,
       // Where the circle's consent stands, and the decision in words once adopted (PR B).
-      consent: p.status === "submitted" && membersUp ? consentView(asks, now(), tz(), viewerId) : null,
+      consent: p.status === "submitted" && membersUp ? consentView(asks, now(), tz(), viewerId, askRoles) : null,
       decided: p.decidedWords,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
@@ -427,7 +446,8 @@ export function register(app: Express, deps: Deps): void {
     const next = nextSeason();
     const out = [];
     const asks = await store.asksFor(pool, list.filter((p) => p.status === "submitted").map((p) => p.id));
-    for (const p of list) out.push(proposalOut(p, p.status === "draft" ? await targetFor(p) : seasonById(p.targetSeasonId), k, "owner", asks.get(p.id) ?? [], String(user.id)));
+    const askRoles = await askRolesFor(pool, Array.from(asks.values()).flat());
+    for (const p of list) out.push(proposalOut(p, p.status === "draft" ? await targetFor(p) : seasonById(p.targetSeasonId), k, "owner", asks.get(p.id) ?? [], String(user.id), askRoles));
     res.set("Cache-Control", "no-store").json({
       nextSeason: next ? { seasonId: next.id, name: next.name, startsOn: next.startsOn, endsOn: next.endsOn, goals: next.goals } : null,
       nextSeasonWords: next ? null : PROPOSAL_WORDS.noTarget,
@@ -505,8 +525,11 @@ export function register(app: Express, deps: Deps): void {
     const k = await known(getPool());
     const target = seasonById(p.targetSeasonId);
     const reader: Reader = isOwner ? "owner" : isMember ? "member" : "anyone";
+    // The circle's asks, so a member reading a submitted proposal by its link reads where it stands
+    // (role proposals PR D). Without them the state read as a circle nobody else holds a role in.
+    const asks = reader !== "anyone" && p.status === "submitted" ? ((await store.asksFor(getPool(), [p.id])).get(p.id) ?? []) : [];
     res.set("Cache-Control", "no-store").json({
-      proposal: proposalOut(p, target, k, reader === "owner" ? "member" : reader),
+      proposal: proposalOut(p, target, k, reader === "owner" ? "member" : reader, asks, viewer ? String(viewer.id) : null, await askRolesFor(getPool(), asks)),
       card: await cardOf(req, viewer, p, k, level),
       you: { isOwner, mayComment: isMember && p.status === "draft", tier: reader === "anyone" ? "public" : "member" },
     });
@@ -570,7 +593,7 @@ export function register(app: Express, deps: Deps): void {
     if (!p) return;
     const k = await known(getPool());
     const asks = (await store.asksFor(getPool(), [p.id])).get(p.id) ?? [];
-    res.set("Cache-Control", "no-store").json({ proposal: proposalOut(p, await targetFor(p), k, "owner", asks, String(user.id)) });
+    res.set("Cache-Control", "no-store").json({ proposal: proposalOut(p, await targetFor(p), k, "owner", asks, String(user.id), await askRolesFor(getPool(), asks)) });
   });
 
   app.put(`${BASE}/:id`, async (req, res) => {
@@ -817,9 +840,10 @@ export function register(app: Express, deps: Deps): void {
       console.error("[role-proposals] the season words could not be saved as a plan", e);
     }
     const fresh = await store.readProposal(pool, p.id);
+    const freshAsks = fresh ? ((await store.asksFor(pool, [p.id])).get(p.id) ?? []) : [];
     res.status(201).json({
       ...out.body,
-      proposal: fresh ? proposalOut(fresh, target, k, "owner", (await store.asksFor(pool, [p.id])).get(p.id) ?? [], userId) : null,
+      proposal: fresh ? proposalOut(fresh, target, k, "owner", freshAsks, userId, await askRolesFor(pool, freshAsks)) : null,
       seasonPlanSaved,
     });
   });
@@ -850,7 +874,7 @@ export function register(app: Express, deps: Deps): void {
     );
     if (!out.ok) return res.status(out.status).json({ error: out.error, ...(out.field ? { field: out.field } : {}) });
     const asks = (await store.asksFor(pool, [p.id])).get(p.id) ?? [];
-    res.json({ answer: out.answer, carried: out.carried, carriedWords: out.carriedWords, consent: consentView(asks, now(), tz(), userId) });
+    res.json({ answer: out.answer, carried: out.carried, carriedWords: out.carriedWords, consent: consentView(asks, now(), tz(), userId, await askRolesFor(pool, asks)) });
   });
 
   // ── The nudges (PR B) ─────────────────────────────────────────────────────

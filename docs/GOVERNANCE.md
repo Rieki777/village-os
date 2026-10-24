@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `f83d7b8670af4441`, which regenerating reproduces.
+It describes the sources at fingerprint `63cae5d35a147a9d`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -510,7 +510,6 @@ What a village publishes, read from the route registrations. The door on each ro
 | POST | `/api/governance/role-applications/:id/withdraw` | signed in | none |
 | POST | `/api/governance/role-applications/words` | signed in | none |
 | POST | `/api/governance/role-declarations` | signed in | none |
-| POST | `/api/governance/role-proposals/:id/guide` | signed in | none |
 | POST | `/api/governance/role-seats` | signed in | none |
 | POST | `/api/governance/role-unseats` | signed in | none |
 | GET | `/api/governance/standing` | signed in | none |
@@ -519,7 +518,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-64 routes: 50 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+63 routes: 49 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle they serve the ballot list, one decision in full and the objection lineage to anybody on the internet, which includes each voter's first name, their choice and their frozen weight. Ruling 22 changes that and is staged.
 
@@ -1056,7 +1055,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "f83d7b8670af4441",
+  "commit": "63cae5d35a147a9d",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -2228,13 +2227,6 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "method": "POST",
-      "path": "/api/governance/role-proposals/:id/guide",
-      "door": "signed in",
-      "capability": null,
-      "file": "server/routes/roleGuide.ts"
-    },
-    {
-      "method": "POST",
       "path": "/api/governance/role-seats",
       "door": "signed in",
       "capability": null,
@@ -2866,7 +2858,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 192 migration files in `drizzle/`.
+Checked against the 198 migration files in `drizzle/`.
 
 ## What this file is made from
 

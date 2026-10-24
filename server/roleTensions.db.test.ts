@@ -12,9 +12,10 @@
  *     the holder read them; the same through `tensionsForRoles`, the player
  *     card's feed, where a guest reads nothing at all;
  *   - an answer keeps the words private and shows a count;
- *   - bring_to_circle writes a `tension` entry into the circle's last session,
- *     the next room offers it under "From last time", and every member reads
- *     the words from then on; a circle that has not met refuses with a sentence;
+ *   - bring_to_circle makes it one of the circle's agenda items (0279: the
+ *     item remembers the tension and the role's name), never writing into a
+ *     closed session, and every member reads the words from then on; a circle
+ *     that has never met gets it as its first agenda item;
  *   - the holder's own read (GET mine) carries open ones only;
  *   - the reminder after 2 business days, once, on the real notification spine;
  *   - erasure: the raiser comes off, unanswered words are cleared, answered
@@ -264,13 +265,26 @@ describe.skipIf(!configured)("raise a tension with a role, on a real schema", ()
     expect((await as("m-cai", `GET ${MY_TENSIONS_URL}`)).body.tensions).toEqual([]);
   });
 
-  it("brings it to the circle: a backlog entry the next room offers, and the words public to members", async () => {
+  /** The agenda item a tension became, with where it came from. */
+  const itemFrom = async (tensionId: string) =>
+    q(
+      "SELECT l.`circle_id`, l.`title`, l.`note`, l.`status`, s.`kind`, s.`label` FROM `live_session_library` l " +
+        "JOIN `live_session_library_sources` s ON s.`library_id` = l.`id` WHERE s.`kind` = 'role_tension' AND s.`ref` = ?",
+      [tensionId],
+    );
+
+  it("brings it to the circle: one of its agenda items, never a closed session's record, and the words public to members", async () => {
+    const before = await q("SELECT COUNT(*) AS n FROM `live_session_entries` WHERE `session_id` = ?", [closed]);
     const out = await respond("m-cai", raised, { action: "bring_to_circle" });
     expect(out.status, JSON.stringify(out.body)).toBe(200);
     expect(out.body.tension.status).toBe("brought_to_circle");
-    const [row] = await q("SELECT `circle_entry_id` FROM `role_tensions` WHERE `id` = ?", [raised]);
-    const entries = await q("SELECT `session_id`, `kind`, `status`, `text` FROM `live_session_entries` WHERE `id` = ?", [row.circle_entry_id]);
-    expect(entries).toEqual([{ session_id: closed, kind: "tension", status: "open", text: "The water rota leaves Sundays to whoever notices." }]);
+    const [{ name: role }] = await q("SELECT `name` FROM `org_roles` WHERE `id` = 'seat-water'");
+    expect(await itemFrom(raised)).toEqual([
+      { circle_id: "c-garden", title: "The water rota leaves Sundays to whoever notices.", note: null, status: "waiting", kind: "role_tension", label: role },
+    ]);
+    // The closed session keeps its record as it was.
+    expect(await q("SELECT COUNT(*) AS n FROM `live_session_entries` WHERE `session_id` = ?", [closed])).toEqual(before);
+    expect((await q("SELECT `circle_entry_id` FROM `role_tensions` WHERE `id` = ?", [raised]))[0].circle_entry_id).toBeNull();
     // Brought once: a second bring is refused.
     expect(await respond("m-gil", raised, { action: "bring_to_circle" })).toEqual({ status: 409, body: { error: TENSION_REFUSALS.alreadyAnswered } });
 
@@ -284,19 +298,21 @@ describe.skipIf(!configured)("raise a tension with a role, on a real schema", ()
     });
     expect((await read("g-gus", "seat-water")).tensions).toEqual([]);
 
-    // The circle's next session carries it, under "From last time".
-    const next = await as("m-ana", "POST /api/sessions", { body: { title: "Garden circle, week 2", circleId: "c-garden", durationMin: 45 } });
-    expect(next.status, JSON.stringify(next.body)).toBeLessThan(300);
-    const view = await as("m-ana", "GET /api/sessions/:id", { params: { id: String(next.body.id) } });
-    expect(view.status, JSON.stringify(view.body)).toBe(200);
-    expect(view.body.carried?.backlog?.map((e: any) => [e.kind, e.text])).toContainEqual(["tension", "The water rota leaves Sundays to whoever notices."]);
+    // The circle's members find it with the rest of its agenda items, saying where it came from.
+    const list = await as("m-ana", "GET /api/sessions");
+    expect(list.status, JSON.stringify(list.body)).toBe(200);
+    expect(list.body.library.items).toContainEqual(
+      expect.objectContaining({ title: "The water rota leaves Sundays to whoever notices.", circleId: "c-garden", status: "waiting", source: { kind: "role_tension", label: role } }),
+    );
   });
 
-  it("refuses a bring to a circle that has never met, with a sentence", async () => {
+  it("makes a bring to a circle that has never met its first agenda item", async () => {
     const out = await raise("m-ana", "seat-compost", "The compost bays smell by the kitchen.");
     expect(out.status).toBe(201);
-    expect(await respond("m-gil", out.body.tension.id, { action: "bring_to_circle" })).toEqual({ status: 409, body: { error: TENSION_REFUSALS.circleNotMet } });
-    expect((await q("SELECT `status` FROM `role_tensions` WHERE `id` = ?", [out.body.tension.id]))[0].status).toBe("open");
+    const brought = await respond("m-gil", out.body.tension.id, { action: "bring_to_circle" });
+    expect(brought.status, JSON.stringify(brought.body)).toBe(200);
+    const [{ circle_id: compostCircle }] = await q("SELECT `circle_id` FROM `org_roles` WHERE `id` = 'seat-compost'");
+    expect(await itemFrom(out.body.tension.id)).toEqual([expect.objectContaining({ circle_id: compostCircle, status: "waiting", kind: "role_tension" })]);
   });
 
   it("reminds each holder once after 2 business days, never before, never twice", async () => {

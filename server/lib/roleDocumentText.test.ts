@@ -11,8 +11,10 @@ import {
   extractRoleDocumentText,
   fetchGoogleDocText,
   googleDocId,
+  PDF_MAX_PAGES,
   ROLE_DOCUMENT_MAX_BYTES,
   ROLE_DOCUMENT_TEXT_MAX,
+  tidyText,
   zipEntry,
 } from "./roleDocumentText";
 import { makeDocx, makePdf, makeZip, para } from "../testkit/roleDocuments";
@@ -58,6 +60,26 @@ describe("extracting a document's words", () => {
     expect(await extractRoleDocumentText({ bytes: le, filename: "x.txt" })).toEqual({ ok: true, kind: "txt", text: "Gate keeper" });
   });
 
+  it("refuses a PDF past the page cap before reading any page, and reads one at the cap", async () => {
+    const over = await extractRoleDocumentText({ bytes: makePdf(["Gate keeper"], PDF_MAX_PAGES + 1), filename: "long.pdf" });
+    expect(over).toEqual({ ok: false, status: 413, error: DOCUMENT_WORDS.longPdf });
+    const at = await extractRoleDocumentText({ bytes: makePdf(["Gate keeper"], PDF_MAX_PAGES), filename: "ok.pdf" });
+    expect(at.ok && at.kind).toBe("pdf");
+  });
+
+  it("abandons a PDF read that runs past the timeout", async () => {
+    vi.resetModules();
+    // A PDF.js that never answers, as a crafted file might.
+    vi.doMock("unpdf", () => ({ getDocumentProxy: () => new Promise(() => undefined) }));
+    try {
+      const fresh = await import("./roleDocumentText");
+      expect(await fresh.readPdf(makePdf(["Gate keeper"]), 20)).toEqual({ ok: false, status: 422, error: DOCUMENT_WORDS.slowPdf });
+    } finally {
+      vi.doUnmock("unpdf");
+      vi.resetModules();
+    }
+  });
+
   it("reads the bytes, never the name: a PDF called .txt is read as a PDF", async () => {
     const r = await extractRoleDocumentText({ bytes: makePdf(["Gate keeper"]), filename: "notes.txt" });
     expect(r.ok && r.kind).toBe("pdf");
@@ -84,6 +106,14 @@ describe("extracting a document's words", () => {
     const zip = makeZip({ "word/document.xml": "x".repeat(10_000) });
     expect(() => zipEntry(zip, "word/document.xml", 100)).toThrow();
     expect(zipEntry(zip, "word/document.xml", 20_000)!.length).toBe(10_000);
+  });
+
+  it("reads a list style as a list, as Word's List Bullet carries its numbering in the style", () => {
+    expect(docxXmlText([para("Bring me", { style: "Heading3" }), para("Recipes", { style: "ListBullet" }), para("Allergies", { style: "ListParagraph" })].join(""))).toBe("### Bring me\n- Recipes\n- Allergies");
+  });
+
+  it("reads a bullet glyph at a line's start as a list line, as Word's PDFs draw them", () => {
+    expect(tidyText("Bring me\n\tRecipes\n • Allergies")).toBe("Bring me\n- Recipes\n- Allergies");
   });
 
   it("reads a paragraph with no runs as an empty line, and a self-closed paragraph too", () => {
