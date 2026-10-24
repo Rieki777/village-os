@@ -21,7 +21,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AIM_DEFS, ROOM_COPY } from "@shared/sessions";
-import { LIBRARY_COPY, LIBRARY_MINUTES, agendaAimFor, broughtFor, type LibraryCard } from "@shared/sessionLibrary";
+import { LIBRARY_COPY, LIBRARY_MINUTES, LIBRARY_SOURCE_LINE, agendaAimFor, broughtFor, type LibraryCard } from "@shared/sessionLibrary";
 import ClampedNote from "./ClampedNote";
 import { BTN_SECONDARY, CARD, CHIP, H3, HINT, type StageProps } from "./roomUi";
 
@@ -58,6 +58,7 @@ function BroughtRow({
             {noCircleTag && <span className={CHIP}>{LIBRARY_COPY.roomNoCircle}</span>}
             <span>{card.mine ? LIBRARY_COPY.broughtByYou(when) : LIBRARY_COPY.broughtBy(card.broughtBy, when)}</span>
           </p>
+          {card.source && <p className="mt-1 text-sm text-muted-foreground">{LIBRARY_SOURCE_LINE[card.source.kind](card.source.label)}</p>}
         </div>
         {canAdd && (
           <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={onAdd}>
@@ -79,7 +80,9 @@ export default function RoomBrought({ view, actions }: Omit<StageProps, "now">) 
   doors.current = actions;
   const heading = useRef<HTMLHeadingElement>(null);
 
-  // Read when the stage shows, and again whenever the room moved.
+  // Read when the stage shows, again whenever the room moved, and when one of its tensions became an agenda item (that bumps no version).
+  const sentCount = Object.keys(view.sentTensions).length;
+  const carriedCount = view.carried?.backlog.length ?? 0;
   useEffect(() => {
     if (!open) return;
     let alive = true;
@@ -89,7 +92,7 @@ export default function RoomBrought({ view, actions }: Omit<StageProps, "now">) 
     return () => {
       alive = false;
     };
-  }, [open, view.id, view.version]);
+  }, [open, view.id, view.version, sentCount, carriedCount]);
 
   const onAgenda = useMemo(() => new Set(view.items.map((i) => i.libraryId).filter((id): id is number => typeof id === "number")), [view.items]);
   const shown = (cards ?? []).filter((c) => c.status === "waiting" && !onAgenda.has(c.id));

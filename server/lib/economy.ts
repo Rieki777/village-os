@@ -64,6 +64,8 @@ import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gr
 // module-init time and the cycle resolves.
 import { applyPendingModes } from "./circleTreasury";
 import { openExitFor } from "./exit";
+import { isTombstone } from "./oauthAccounts";
+import { attendeeEmail, clearCheckinNotes } from "../repos/eventCheckins";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { numberVar, stringVar } from "./variables";
 import {
@@ -2675,6 +2677,13 @@ export async function checkIn(
   if (!witness.ok) {
     return { ok: false, error: "Someone else checks you in. Ask a steward." };
   }
+  // A departed member is checked in to nothing: the erasure clears the notes on
+  // their check-ins once, after the tombstone, and a row written later would
+  // keep a steward's words about them for good.
+  const attendee = await attendeeEmail(pool, input.userId);
+  if (attendee != null && isTombstone({ email: attendee })) {
+    return { ok: false, error: "That member has left the village." };
+  }
   const key = `event.checkin:${villageId()}:${input.eventId}:${input.userId}`;
   const id = `chk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   try {
@@ -2690,6 +2699,19 @@ export async function checkIn(
   } catch (err: any) {
     return { ok: false, error: String(err?.message ?? err) };
   }
+}
+
+/**
+ * The erasure's check-in step (server/lib/erasure.ts, "checkin-notes-after-tombstone"):
+ * the note a steward wrote on a departed member's check-in goes, and the
+ * check-in stays as the village's record of who was there. A note the member
+ * wrote as the steward, on somebody else's check-in, is about that person and
+ * stays. One UPDATE writing NULL keyed on the member, so a second run matches
+ * nothing.
+ */
+export async function forgetCheckinNotesOf(pool: Pool, userId: string): Promise<number> {
+  if (!userId) return 0;
+  return clearCheckinNotes(pool, villageId(), userId);
 }
 
 /** How many confirmed check-ins this member has, which is what badges count. */

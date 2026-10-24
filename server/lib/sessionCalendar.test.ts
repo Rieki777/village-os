@@ -85,6 +85,8 @@ describe("the mirror", () => {
     let reads = 0;
     const pool = {
       query: async (sql: string) => {
+        // The circles' own calendars are read first (none here), and are no part of the order this case watches.
+        if (/FROM `live_session_circle_calendars`/.test(sql)) return [[]];
         if (/FROM `live_session_rhythms`/.test(sql)) {
           const n = ++reads;
           order.push(`read ${n}`);

@@ -711,6 +711,8 @@ export function register(app: Express, deps: Deps): void {
       `${firstName(user.name)} asks to be confirmed as ${seatName}`,
       `seat-claim:${req.params.id}:${user.id}`,
       "/admin?tab=org-chart",
+      [],
+      { actorUserId: user.id },
     );
     res.json({
       success: true,

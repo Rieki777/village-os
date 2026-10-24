@@ -84,6 +84,16 @@ import { circleWords } from "./sessionTasks";
  *   GET    /api/sessions/:id/library          { items: LibraryCard[] }, what this viewer may bring into this open room
  *   POST   /api/sessions/:id/library          { ids: number[] } -> { ids: number[] }, onto this room's agenda
  *
+ *   POST   /api/sessions/library/from-tension     { sessionId, entryId, circleId } -> { item }, a room's tension sent on
+ *
+ * EVERY TENSION BECOMES AN AGENDA ITEM (feature 2, Rye 2026-10-22). A tension
+ * raised with a role and brought to its circle by one of the role's holders
+ * (server/lib/roleTensions.ts) becomes an item waiting for that circle, which
+ * works for a circle that has never met. A tension named in a room is sent to
+ * a circle's agenda items from the room's backlog, or from "From last time".
+ * Each item remembers where it came from (`source`, 0279), the same tension is
+ * never sent twice, and a closed session's record is never written to.
+ *
  * The list is not a door of its own: `GET /api/sessions/library` would be
  * read as the room numbered "library" by `GET /api/sessions/:id`, and the
  * page asks for the list every half minute anyway.
@@ -96,6 +106,62 @@ export function libraryItemUrl(id: number): string {
 
 export function libraryAgainUrl(id: number): string {
   return `${LIBRARY_API}/${id}/again`;
+}
+
+/** Four segments, so it is never read as an item's own door (`/library/:id` takes no POST). */
+export const LIBRARY_TENSION_API = `${LIBRARY_API}/from-tension`;
+
+// ── Where an item came from ──────────────────────────────────────────────────
+
+export const LIBRARY_SOURCE_KINDS = ["role_tension", "room_tension", "decision_review"] as const;
+export type LibrarySourceKind = (typeof LIBRARY_SOURCE_KINDS)[number];
+
+/** Where an item came from: a tension raised with a role (its name), one named in a room (its circle's name, or ""), or a decision's review (its circle's name, shared/sessionDecisions.ts). */
+export interface LibrarySource {
+  kind: LibrarySourceKind;
+  label: string;
+}
+
+/**
+ * A tension's words as an agenda item: the whole of it as the title when it
+ * fits, and otherwise the start of it as the title, with every word in the
+ * note, so nothing the tension said is lost.
+ */
+export function tensionAsItem(text: string, lead = ""): { title: string; note: string | null } {
+  // A lead ("Review: ") opens the title only, so the note keeps the words themselves whole.
+  const line = `${lead}${text.replace(/\s+/g, " ").trim()}`;
+  if (line.length <= LIBRARY_LIMITS.title) return { title: line, note: null };
+  const cut = line.slice(0, LIBRARY_LIMITS.title - 3);
+  const atWord = cut.lastIndexOf(" ") > LIBRARY_LIMITS.title / 2 ? cut.slice(0, cut.lastIndexOf(" ")) : cut;
+  return { title: `${atWord.trimEnd()}...`, note: text.trim().slice(0, LIBRARY_LIMITS.note) };
+}
+
+/** What sending a room's tension asks for, from a body. `circleId` null is no circle in particular. */
+export function cleanTensionSend(raw: unknown, liveCircleIds: ReadonlySet<string>): { ok: true; value: { sessionId: number; entryId: number; circleId: string | null } } | { ok: false; error: string } {
+  const b = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const sessionId = Number(b.sessionId);
+  const entryId = Number(b.entryId);
+  if (!Number.isInteger(sessionId) || sessionId <= 0 || !Number.isInteger(entryId) || entryId <= 0) return { ok: false, error: LIBRARY_REFUSALS.tensionNotFound };
+  const circleId = b.circleId == null || b.circleId === "" ? null : String(b.circleId);
+  if (circleId != null && !liveCircleIds.has(circleId)) return { ok: false, error: LIBRARY_REFUSALS.circleGone };
+  return { ok: true, value: { sessionId, entryId, circleId } };
+}
+
+/**
+ * May this person send a room's tension on. In an open room: whoever named it,
+ * the session's facilitator or secretary, and admins. From a closed session:
+ * anybody who was in it, since "From last time" offers it to them, and admins.
+ */
+export function maySendTension(
+  entry: { authorNo: number },
+  session: { open: boolean; facilitatorNo: number; secretaryNo: number | null },
+  viewer: { no: number | null; admin: boolean; wasThere: boolean },
+): boolean {
+  if (viewer.admin) return true;
+  const no = viewer.no != null && viewer.no > 0 ? viewer.no : null;
+  if (no == null) return false;
+  if (!session.open) return viewer.wasThere;
+  return entry.authorNo === no || session.facilitatorNo === no || session.secretaryNo === no;
 }
 
 /** One open room's own list, and the door that brings items onto its agenda. */
@@ -198,6 +264,8 @@ export interface LibraryCard {
   canMoveCircle: boolean;
   canWithdraw: boolean;
   canBringAgain: boolean;
+  /** Where it came from, when it was a tension: a role's, or a room's. */
+  source: LibrarySource | null;
 }
 
 export interface LibraryPayload {
@@ -498,6 +566,36 @@ export const LIBRARY_COPY = {
   failed: "That did not go through. Try again in a moment.",
 } as const;
 
+/** The line a card says about where it came from, keyed by the source union. */
+/**
+ * Who an item says added it when nobody in particular did (`brought_by_no` 0):
+ * a decision's review is the circle's own. Null for anything else, which keeps
+ * the name the library would give it.
+ */
+export function addedByCircle(kind: string, label: string): string | null {
+  return kind === "decision_review" && label.trim() ? `the ${circleWords(label)}` : null;
+}
+
+export const LIBRARY_SOURCE_LINE: Record<LibrarySourceKind, (label: string) => string> = {
+  role_tension: (role) => `From a tension raised with ${role}`,
+  room_tension: (circle) => (circle ? `From a tension named in a session of the ${circleWords(circle)}` : "From a tension named in a session"),
+  decision_review: (circle) => (circle ? `A decision the ${circleWords(circle)} set a date to review` : "A decision set a date to review"),
+};
+
+/** Sending a room's tension on, from the room's backlog or from "From last time". */
+export const TENSION_SEND_COPY = {
+  send: "Send to a circle's agenda items",
+  circleLabel: "Which circle's agenda items?",
+  noCircle: SESSION_COPY.noCircle,
+  warning: "Its words go to that circle's agenda items, where the circle's members can read them.",
+  /** For "No circle in particular": an item for no circle is read by every member. */
+  warningNoCircle: "Its words go to the agenda items for any circle, where every member of the village can read them.",
+  sendYes: "Send it",
+  sending: "Sending...",
+  cancel: ROOM_COPY.cancel,
+  sent: (circleName: string | null): string => (circleName ? `Sent to the ${circleWords(circleName)} agenda items.` : "Sent to the agenda items for any circle."),
+} as const;
+
 /**
  * The one line a card says about where it stands, keyed by the status union so
  * a status added there cannot leave a card with nothing to say. `date` is in
@@ -523,6 +621,10 @@ export const LIBRARY_REFUSALS = {
   tooManyWaiting: `You have ${LIBRARY_LIMITS.waitingPerMember} items waiting. Remove one, or let a circle take some up first.`,
   idsNeeded: `Choose up to ${SESSION_LIMITS.maxAgenda} items.`,
   slowDown: SESSION_REFUSALS.slowDown,
+  tensionNotFound: "That tension isn't here.",
+  tensionNotYours: "Only whoever named it, the session's facilitator or secretary, or an admin can send it on.",
+  alreadySent: "That tension has been sent to agenda items already.",
+  circleGone: "That circle isn't one of the village's circles now. Choose again.",
 } as const;
 
 /** The words on the notices the person who added an item receives. In the bell only. */

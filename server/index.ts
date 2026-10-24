@@ -123,7 +123,7 @@ import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTer
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, rolesCarryingCapability, stewardSeatRefusal } from "./lib/roleGrants";
-import { liveHoldersNow, type HolderReads } from "./lib/holdersNow";
+import { leftEmptyByRemovalNow, liveHoldersNow, type HolderReads } from "./lib/holdersNow";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
@@ -162,6 +162,7 @@ import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerSessionLibraryRoutes } from "./routes/sessionLibrary";
 import { register as registerSessionRhythmRoutes } from "./routes/sessionRhythm";
 import { register as registerSessionCalendarRoutes } from "./routes/sessionCalendar";
+import { register as registerSessionDecisionRoutes } from "./routes/sessionDecisions";
 import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
@@ -540,7 +541,7 @@ import {
   resolveNotifyPrefs,
   runNotificationDigest,
   runWeeklyBrief,
-  type NotifyDeps,
+  type NotifyDeps, type NoticeAbout,
 } from "./lib/notify";
 import { registerJob, registeredJobs, startScheduler } from "./lib/scheduler";
 import { cyclePoolProblem } from "./lib/cyclePool";
@@ -628,15 +629,15 @@ import { recordAssistantUsage, type AssistantPath } from "./lib/assistantUsage";
 import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
-import { revokeAllTokens } from "./lib/agentTokens"; // a new password and an admin's revoke end agent tokens too
+import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
   holderStands, mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
 } from "./lib/agentTokens";
 import {
-  DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, removeInbox,
-  setInbox,
+  DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, queueWeekAhead,
+  removeInbox, setInbox,
 } from "./lib/agentInbox";
 import {
   MEMBER_KEY_PROVIDERS, NO_MEMBER_SECRETS_KEY_SENTENCE, memberKeyView, memberSecretsConfigured, removeMemberKey,
@@ -2679,7 +2680,7 @@ async function authedUser(req: express.Request): Promise<any | null> {
   const decoded = decodeToken(AUTH_TOKEN_SECRET, header.slice(7));
   if (!decoded) return null;
   const user = await members.byId(decoded.userId);
-  if (!user) return null;
+  if (!holderStands(user)) return null; // a tombstone holds no session, whatever version one was signed at
   // Session revocation (S1): a token minted before the member's tokenVersion
   // was bumped is dead. Tokens from before this field existed carry no `v` and
   // are accepted while the member's version is still 0, so shipping this did
@@ -4058,10 +4059,10 @@ async function departureStrandingRefusal(target: any, self: boolean): Promise<st
  * suffixed per recipient so "each admin hears it once" and "the event fires
  * once" stay separate concerns.
  */
-async function notifyAdmins(type: string, title: string, dedupeKey: string, link = "/admin", except: readonly string[] = []): Promise<void> {
+async function notifyAdmins(type: string, title: string, dedupeKey: string, link = "/admin", except: readonly string[] = [], about: NoticeAbout = {}): Promise<void> {
   const admins = (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && !except.includes(String(u.id)));
   for (const a of admins) {
-    await notify({ userId: a.id, type, title, link, dedupeKey: `${dedupeKey}:${a.id}` });
+    await notify({ userId: a.id, type, title, link, dedupeKey: `${dedupeKey}:${a.id}`, actorUserId: about.actorUserId ?? null });
   }
 }
 
@@ -7142,13 +7143,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // payload never carries a row the member could not see themselves.
     registerJob("agent-week-ahead", 24 * 60 * 60 * 1000, async () => {
       if (effectiveLifecycle("events") === "off") return "events off";
-      const [inboxes] = await getPool().query<any[]>("SELECT user_id FROM agent_inboxes WHERE enabled = 1");
-      let queued = 0;
-      for (const r of inboxes) {
-        const items = await weekAhead(getPool(), { userId: String(r.user_id), isAdmin: false });
-        const q = await enqueueAgentDelivery(getPool(), String(r.user_id), { kind: "week_ahead", data: { timezone: getSeasonConfig().timezone, items } });
-        if (q.ok) queued += 1;
-      }
+      const { queued } = await queueWeekAhead(getPool(), {
+        timezone: getSeasonConfig().timezone,
+        build: (userId) => weekAhead(getPool(), { userId, isAdmin: false }),
+      });
       return `queued ${queued}`;
     });
     // Drafts nobody answered in seven days expire, so the panel does not fill
@@ -8122,14 +8120,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // session and every set-password link that existed before it. Recovery
     // needs that: a stolen password must not survive the reset that answers it.
     const lost = { refusal: null as string | null }; // asked again under the row lock: two clicks, one landing
-    const fresh = await members.update(user.id, (u: any) => {
+    // The agent's reach ends before the bump too, so a failure there leaves this link unspent (withAgentReachEnded).
+    const { changed: fresh } = await withAgentReachEnded(getPool(), user.id, () => members.update(user.id, (u: any) => {
       if ((lost.refusal = setPasswordLinkRefusal(claim, u.tokenVersion))) return;
       u.passwordHash = hash;
       u.tokenVersion = (u.tokenVersion ?? 0) + 1;
-    });
+    }));
     if (lost.refusal) return res.status(401).json({ error: lost.refusal });
     if (!fresh) return res.status(404).json({ error: "Account not found" });
-    await revokeAllTokens(getPool(), fresh.id); // the agent resolver re-mints a session from the new tokenVersion
     const authTokenStr = encodeToken(AUTH_TOKEN_SECRET, fresh.id, fresh.email, fresh.tokenVersion ?? 0);
     res.json({ success: true, token: authTokenStr, user: publicUser(fresh) });
   });
@@ -8191,13 +8189,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.json({ success: true, emailed });
   });
 
-  /** Revoke every session (S1's tokenVersion lever) and every agent token a member holds. */
+  /** Revoke every session (S1's tokenVersion lever) and all the member's agent holds: tokens, private calendar feed, inbox, own model key. */
   app.post("/api/admin/users/:id/revoke-sessions", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const target = await members.byId(req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
-    await members.update(target.id, (u: any) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; });
-    res.json({ success: true, agentTokensRevoked: await revokeAllTokens(getPool(), target.id) });
+    await members.update(target.id, (u: any) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; }); // sessions end first, whatever happens next
+    const ended = await endAgentReach(getPool(), target.id); // a failure answers 500 by name, and pressing again finishes it
+    res.json({ success: true, agentTokensRevoked: ended.agentTokens, agentReachEnded: ended });
   });
 
   /**
@@ -9941,7 +9940,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       "submission",
       `${firstName(user.name)} raised a hand for ${role.name}`,
       `role-application:${entry.id}`,
-      "/admin?tab=submissions",
+      "/admin?tab=submissions", [], { actorUserId: user.id },
     );
     res.json({ success: true });
   });
@@ -13074,7 +13073,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       roles: rolesRepo.all().map((r: any) => ({
         id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadRoleHolders(), r.id),
       })),
-      notYetWired: NOT_YET_WIRED,
+      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()), // Power groups: the removal warning
     });
   });
 
@@ -14301,7 +14300,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       note: note ? String(note) : null,
     });
     if (!r.ok) return res.status(409).json({ error: r.error });
-    await notifyAdmins("exit_opened", `${user.name ?? "A member"} has begun a departure`, `exit:${r.exit.id}:opened`);
+    await notifyAdmins("exit_opened", `${user.name ?? "A member"} has begun a departure`, `exit:${r.exit.id}:opened`, "/admin", [], { actorUserId: user.id });
     void recordEvent(getPool(), {
       kind: "audit", text: "exit:opened:voluntary", actorUserId: user.id,
       entityType: "user", entityRef: user.id, audience: "admin",
@@ -15293,7 +15292,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         link: "/gratitude",
         // One notification per send, keyed on the movement's own key, so a
         // retried request rings once for the same reason it pays once.
-        dedupeKey: `send:${user.id}:${nonce}`,
+        dedupeKey: `send:${user.id}:${nonce}`, actorUserId: user.id,
       });
       await recordEvent(getPool(), {
         kind: "member_send",
@@ -15376,7 +15375,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     }
     const r = await reserveItem(getPool(), { itemId: item.id, userId: user.id });
     if (!r.ok) return res.status(r.status).json({ error: r.error });
-    await notifyAdmins("library", `${user.name ?? "A member"} reserved ${item.name}`, `loan:${r.loanId}:reserved`);
+    await notifyAdmins("library", `${user.name ?? "A member"} reserved ${item.name}`, `loan:${r.loanId}:reserved`, "/admin", [], { actorUserId: user.id });
     res.json({ success: true, loanId: r.loanId, escrow: r.escrow });
   });
 
@@ -15394,7 +15393,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // SWEEP. Reserve rings the stewards and return rings the stewards; cancel
     // was the one transition in the family that did not, so an item quietly
     // came free and the shelf list was the only place that knew.
-    await notifyAdmins("library", `${user.name ?? "A member"} cancelled a reservation, the item is free again`, `loan:${loan.id}:cancelled`);
+    await notifyAdmins("library", `${user.name ?? "A member"} cancelled a reservation, the item is free again`, `loan:${loan.id}:cancelled`, "/admin", [], { actorUserId: user.id });
     res.json({ success: true, released: r.released });
   });
 
@@ -15405,7 +15404,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!loan || loan.userId !== user.id) return res.status(404).json({ error: "No such loan" });
     const r = await markReturned(getPool(), loan.id, user.id);
     if (!r.ok) return res.status(409).json({ error: r.error });
-    await notifyAdmins("library", `${user.name ?? "A member"} returned an item, settle the loan`, `loan:${loan.id}:returned`);
+    await notifyAdmins("library", `${user.name ?? "A member"} returned an item, settle the loan`, `loan:${loan.id}:returned`, "/admin", [], { actorUserId: user.id });
     res.json({ success: true });
   });
 
@@ -18417,6 +18416,7 @@ ${inner}
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
   registerSessionRhythmRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify, lapseContext });
   registerSessionCalendarRoutes(app, { authedUser, getPool, overLimit, members, circlesRepo, clientIp, deploymentOrigin, projectName: notifyDeps.projectName });
+  registerSessionDecisionRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, lapseContext });
   registerRoleTensionRoutes(app, { authedUser, isAdmin, getPool, overLimit, notify, seasonState });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
   /**

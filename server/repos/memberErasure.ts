@@ -84,9 +84,33 @@ function rowToRecord(r: RowDataPacket): ErasureRecord {
   };
 }
 
+/**
+ * What this record answers to anybody who reads it: a step, a count, a date.
+ *
+ * `erased_identity` (0282) is deliberately NOT here. It is who the erasure is
+ * for, held only while the sweep is open, and the steward's queue, the
+ * failed-actions job and its report all read through this list. The one reader
+ * of that column is `erasedIdentity` below, and its one caller is the sweep.
+ */
 const COLUMNS =
   "`user_id`, `started_at`, `finished_at`, `attempts`, `last_attempt_at`, " +
   "`steps_done`, `failed_step`, `last_error`";
+
+/**
+ * Who the member was before the tombstone: what every step that matches them
+ * by name or address needs, and what the tombstone takes off the user row.
+ */
+export interface ErasedIdentity {
+  name: string;
+  email: string;
+  handle: string | null;
+}
+
+/** The identity as the column stores it, or SQL NULL for "keep what is held". */
+function identityParam(identity: ErasedIdentity | null | undefined): string | null {
+  if (!identity) return null;
+  return JSON.stringify({ name: String(identity.name ?? ""), email: String(identity.email ?? ""), handle: identity.handle ?? null });
+}
 
 /**
  * Open the record for a FRESH sweep: every step will run.
@@ -101,14 +125,21 @@ const COLUMNS =
  * obligation is the age of the FIRST attempt, for the reason
  * `subject_refs.erasure_pending_since` is never moved forward: a number that
  * resets whenever somebody tries never grows old enough to escalate.
+ *
+ * `identity` is who the member is as this attempt starts, or null when the row
+ * it read is already a tombstone. Null never overwrites: an erasure asked
+ * again of a tombstone whose first sweep stopped keeps the name and address
+ * that first attempt held, which is the only place they still exist.
  */
-export async function beginErasure(pool: Pool, userId: string): Promise<void> {
+export async function beginErasure(pool: Pool, userId: string, identity: ErasedIdentity | null = null): Promise<void> {
+  const held = identityParam(identity);
   await pool.query(
-    "INSERT INTO `member_erasures` (`user_id`, `attempts`, `last_attempt_at`, `steps_done`) " +
-      "VALUES (?, 1, CURRENT_TIMESTAMP, JSON_ARRAY()) " +
+    "INSERT INTO `member_erasures` (`user_id`, `attempts`, `last_attempt_at`, `steps_done`, `erased_identity`) " +
+      "VALUES (?, 1, CURRENT_TIMESTAMP, JSON_ARRAY(), ?) " +
       "ON DUPLICATE KEY UPDATE `attempts` = `attempts` + 1, `last_attempt_at` = CURRENT_TIMESTAMP, " +
-      "`finished_at` = NULL, `steps_done` = JSON_ARRAY(), `failed_step` = NULL, `last_error` = NULL",
-    [userId],
+      "`finished_at` = NULL, `steps_done` = JSON_ARRAY(), `failed_step` = NULL, `last_error` = NULL, " +
+      "`erased_identity` = COALESCE(?, `erased_identity`)",
+    [userId, held, held],
   );
 }
 
@@ -119,15 +150,56 @@ export async function beginErasure(pool: Pool, userId: string): Promise<void> {
  * The INSERT half is not dead code. A member whose erasure predates this table
  * has no row, and a resume asked about them should run the whole sweep rather
  * than refuse, which is exactly what an empty `steps_done` produces.
+ *
+ * `restart` empties `steps_done` instead, for a sweep that never reached the
+ * tombstone: until then the member could still write, so nothing recorded
+ * proves a step's work is still done, and the resume runs them all again
+ * (`resumeErasure`). Emptied here so the record says what THIS attempt did.
+ *
+ * `identity` follows the rule `beginErasure` states: written from a row that is
+ * not a tombstone, and null keeps what is held.
  */
-export async function noteResumeAttempt(pool: Pool, userId: string): Promise<void> {
+export async function noteResumeAttempt(
+  pool: Pool,
+  userId: string,
+  opts: { restart?: boolean; identity?: ErasedIdentity | null } = {},
+): Promise<void> {
+  const held = identityParam(opts.identity);
   await pool.query(
-    "INSERT INTO `member_erasures` (`user_id`, `attempts`, `last_attempt_at`, `steps_done`) " +
-      "VALUES (?, 1, CURRENT_TIMESTAMP, JSON_ARRAY()) " +
+    "INSERT INTO `member_erasures` (`user_id`, `attempts`, `last_attempt_at`, `steps_done`, `erased_identity`) " +
+      "VALUES (?, 1, CURRENT_TIMESTAMP, JSON_ARRAY(), ?) " +
       "ON DUPLICATE KEY UPDATE `attempts` = `attempts` + 1, `last_attempt_at` = CURRENT_TIMESTAMP, " +
-      "`failed_step` = NULL, `last_error` = NULL",
+      "`failed_step` = NULL, `last_error` = NULL, `erased_identity` = COALESCE(?, `erased_identity`)" +
+      (opts.restart ? ", `steps_done` = JSON_ARRAY()" : ""),
+    [userId, held, held],
+  );
+}
+
+/**
+ * Who this open erasure is for, or null when nothing is held.
+ *
+ * The only reader of `erased_identity`, and the sweep its only caller. Read
+ * tolerantly for the reason `readSteps` gives: MySQL hands a json column back
+ * parsed and MariaDB as a string.
+ */
+export async function erasedIdentity(pool: Pool, userId: string): Promise<ErasedIdentity | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT `erased_identity` FROM `member_erasures` WHERE `user_id` = ? AND `finished_at` IS NULL LIMIT 1",
     [userId],
   );
+  let v: unknown = rows[0]?.erased_identity ?? null;
+  if (typeof v === "string") {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const email = String(o.email ?? "");
+  if (!email) return null;
+  return { name: String(o.name ?? ""), email, handle: o.handle == null ? null : String(o.handle) };
 }
 
 /**
@@ -146,12 +218,23 @@ export async function noteStepDone(pool: Pool, userId: string, step: string): Pr
   );
 }
 
-/** The local sweep completed. The failure fields go with it. */
+/**
+ * The local sweep completed. The failure fields go with it, and so does who it
+ * was for: in the same statement, so no finished record ever holds a name.
+ *
+ * The second statement clears any OTHER finished record still holding one.
+ * Nothing in this release leaves one, but an image from before 0282 put back
+ * over a migrated database finishes sweeps without knowing the column exists,
+ * and this is where the first finish after it comes forward takes them.
+ */
 export async function noteErasureFinished(pool: Pool, userId: string): Promise<void> {
   await pool.query(
-    "UPDATE `member_erasures` SET `finished_at` = CURRENT_TIMESTAMP, `failed_step` = NULL, `last_error` = NULL " +
-      "WHERE `user_id` = ?",
+    "UPDATE `member_erasures` SET `finished_at` = CURRENT_TIMESTAMP, `failed_step` = NULL, `last_error` = NULL, " +
+      "`erased_identity` = NULL WHERE `user_id` = ?",
     [userId],
+  );
+  await pool.query(
+    "UPDATE `member_erasures` SET `erased_identity` = NULL WHERE `finished_at` IS NOT NULL AND `erased_identity` IS NOT NULL",
   );
 }
 

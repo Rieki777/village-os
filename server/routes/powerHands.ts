@@ -282,7 +282,7 @@ export function register(app: Express, deps: Deps): void {
       });
       // Keyed by the row, as a seat hand's bell is: each hand is its own
       // summons, and a retry that stored nothing rings nothing.
-      await notifyAdmins("submission", said, `${POWER_APPLICATION}:${entry.id}`, "/admin?tab=submissions");
+      await notifyAdmins("submission", said, `${POWER_APPLICATION}:${entry.id}`, "/admin?tab=submissions", [], { actorUserId: userId });
       res.json({ success: true, hand: { status: "new", submittedAt } });
     });
   });

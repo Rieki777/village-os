@@ -266,6 +266,8 @@ export function register(app: Express, deps: Deps): void {
           : `${firstName(user.name)} flagged a wobble on ${questTitle}`,
         `quest-confidence:${req.params.id}:${value}`,
         "/review",
+        [],
+        { actorUserId: user.id },
       );
     }
     res.json({ success: true });

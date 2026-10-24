@@ -879,6 +879,7 @@ export function register(app: Express, deps: Deps): void {
             body: "Read what they did and consent when you are ready. Value moves when a steward says so.",
             link: "/review",
             dedupeKey: `quest-submission:${active.id}:${recipientId}`,
+            actorUserId: user.id,
           });
         } catch (bell) {
           console.error(`[quests] claim ${active.id}: the submission bell for ${recipientId} did not send`, bell);
