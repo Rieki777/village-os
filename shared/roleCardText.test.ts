@@ -14,7 +14,9 @@ import { ROLE_CCOS_WORDS } from "./roleCcos";
 import {
   docFromProposal,
   fieldPath,
+  foldHeading,
   isRoleCardText,
+  ROLE_CARD_FIELDS,
   read,
   readRoleCard,
   ROLE_CARD_WORDS,
@@ -227,6 +229,44 @@ describe("limits and refusals: reported, never dropped", () => {
     const r = readRoleCard(card("## My season\n\n### Village goals I serve\n- A thriving community\n  How it helps: potlucks"), ctx());
     expect(r.problems).toEqual([]);
     expect(r.proposalBody.season!.servesGoals).toEqual([{ goal: EXAMPLE_ORG_GOALS[1], howItHelps: "potlucks" }]);
+  });
+
+  it("reads served goals under the card's heading and under its earlier wording, so a downloaded card still reads", () => {
+    for (const heading of ["Village goals it serves", "Village goals I serve"]) {
+      const r = readRoleCard(card(`## My season\n\n### ${heading}\n- A thriving community\n  How it helps: potlucks`), ctx());
+      expect(r.problems, heading).toEqual([]);
+      expect(r.proposalBody.season!.servesGoals, heading).toEqual([{ goal: EXAMPLE_ORG_GOALS[1], howItHelps: "potlucks" }]);
+    }
+  });
+
+  it("still reads every heading a version 1 card has ever been written with", () => {
+    // The writer takes its headings from the card's own words, so a renamed
+    // heading changes every card downloaded AFTER the rename, and the cards
+    // members already hold keep the old one. This list only ever grows: when
+    // a card word changes, add the old wording here and as an alias.
+    const WRITTEN: ReadonlyArray<[string, string]> = [
+      ["aim", "Purpose"],
+      ["existsWhile", "This role exists while"],
+      ["domain", "What I look after"],
+      ["authorities", "What I can decide on my own"],
+      ["accountabilities", "What you can count on me for"],
+      ["responsibilities", "What I do regularly"],
+      ["bringMe", "Bring me"],
+      ["notMine", "Not mine to hold"],
+      ["signsStretched", "Signs I'm stretched"],
+      ["flowsBack", "What flows back"],
+      ["stepBack", "How I can step back"],
+      ["timeCommitment", "Time"],
+      ["measures", "How we'll know it's working"],
+      ["seasonAim", "My aim this season"],
+      ["seasonalGoals", "My seasonal goals"],
+      // Written until batch 49 renamed the card word to "Village goals it serves".
+      ["servesGoals", "Village goals I serve"],
+      ["servesGoals", "Village goals it serves"],
+    ];
+    const accepts = (key: string, heading: string) =>
+      ROLE_CARD_FIELDS.some((f) => f.key === key && [f.heading, ...f.aliases].some((a) => foldHeading(a) === foldHeading(heading)));
+    for (const [key, heading] of WRITTEN) expect(accepts(key, heading), `${key}: "${heading}"`).toBe(true);
   });
 
   it("measures: more than eight across the roles, and a measure that ranks people", () => {
