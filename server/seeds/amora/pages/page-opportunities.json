@@ -1,0 +1,80 @@
+{
+  "hero": {
+    "lede": "Join our thriving village economy. These opportunities align business success with community prosperity through shared revenue."
+  },
+  "ventures": {
+    "cards": [
+      {
+        "id": "retreat-center",
+        "title": "Retreat Center",
+        "status": "Planning",
+        "description": "A 120-150 key wellness retreat facility offering transformational experiences, workshops, and healing programs.",
+        "details": "120-150 guest rooms\nMultiple workshop spaces\nSpa and wellness facilities\nFarm-to-table restaurant",
+        "icon": "tent"
+      },
+      {
+        "id": "health-wellness",
+        "title": "Health & Wellness Center",
+        "status": "Planning",
+        "description": "Integrative health services combining traditional and alternative medicine for residents and visitors.",
+        "details": "Primary care services\nAlternative therapies\nMental health support\nPreventive wellness programs",
+        "icon": "health"
+      },
+      {
+        "id": "cafe-restaurant",
+        "title": "Café & Restaurant",
+        "status": "Planning",
+        "description": "Farm-to-table dining experience showcasing local and organic produce from our regenerative farms.",
+        "details": "Organic menu\nCommunity gathering space\nEvent hosting\nCoffee roasting",
+        "icon": "cafe"
+      },
+      {
+        "id": "artisan-market",
+        "title": "Artisan Market",
+        "status": "Future",
+        "description": "A marketplace for local crafts, produce, and goods created by community members and regional artisans.",
+        "details": "Local crafts and art\nFresh produce\nCommunity goods\nVisitor souvenirs",
+        "icon": "market"
+      },
+      {
+        "id": "learning-center",
+        "title": "Learning Center",
+        "status": "Future",
+        "description": "Educational programs for children and adults, including a forest school and skill-sharing workshops.",
+        "details": "Forest school\nAdult education\nSkill workshops\nResearch programs",
+        "icon": "learning"
+      },
+      {
+        "id": "fitness-recreation",
+        "title": "Fitness & Recreation",
+        "status": "Future",
+        "description": "Fitness facilities and outdoor recreation programs for residents and retreat guests.",
+        "details": "Yoga studio\nFitness equipment\nHiking programs\nWater activities",
+        "icon": "fitness"
+      },
+      {
+        "id": "art-culture",
+        "title": "Art & Culture Hub",
+        "status": "Future",
+        "description": "A creative space for artists, musicians, and cultural programs that enrich community life.",
+        "details": "Artist studios\nPerformance space\nGallery\nMusic programs",
+        "icon": "art"
+      },
+      {
+        "id": "regenerative-agriculture",
+        "title": "Regenerative Agriculture",
+        "status": "Active",
+        "description": "Farming operations that produce food for the community while regenerating the land.",
+        "details": "Organic vegetables\nFruit orchards\nMedicinal herbs\nPermaculture design",
+        "icon": "farm"
+      }
+    ]
+  },
+  "revenue": {
+    "heading": "Revenue Sharing",
+    "body": "All businesses at {village} share a percentage of revenue with the community. This creates alignment between business success and community prosperity. The exact percentage is negotiated based on the business type and community investment."
+  },
+  "cta": {
+    "body": "Join a community call to learn more about specific opportunities, the application process, and how the economics work."
+  }
+}
