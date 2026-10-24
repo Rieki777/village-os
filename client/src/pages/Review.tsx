@@ -273,6 +273,8 @@ export default function Review() {
         finished?: number;
         resumed?: number;
         swept?: number;
+        stillStuck?: number;
+        stayed?: number;
         error?: string;
       };
       if (!r.ok) {
@@ -288,7 +290,9 @@ export default function Review() {
         toast.success(
           swept > 0
             ? `${swept} of ${d.resumed} unfinished sweeps completed here.`
-            : `${d.resumed} unfinished sweeps are still stuck. The queue says which step.`,
+            : d.stillStuck === 0 && d.stayed
+              ? `${d.stayed} of these members stayed, so their deletions were ended.`
+              : `${d.stillStuck ?? d.resumed} unfinished sweeps are still stuck. The queue says which step.`,
         );
       }
       if (d.asked) {

@@ -29,7 +29,8 @@ import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/
 import { anonymizeMember, type ErasureDeps } from "../lib/erasure";
 import { clearMemberDrivers } from "../lib/memberDrivers";
 import { usersRepo } from "../repos/users";
-import { erasureRecord } from "../repos/memberErasure";
+import { beginErasure, erasureRecord, noteErasureFailed, noteStepDone } from "../repos/memberErasure";
+import { cancelExit, createExit, exitById } from "../lib/exit";
 import { register } from "./erasureQueue";
 
 const configured = testDbConfigured();
@@ -184,5 +185,115 @@ describe.skipIf(!configured)("the erasure queue", () => {
     expect(JSON.stringify(read.body)).not.toContain("role-holdings");
     // And the refusal changed nothing: the member is still owed a finish.
     expect((await erasureRecord(pool, MEMBER))!.finishedAt).toBeNull();
+  });
+
+  /*
+   * A MEMBER WHO STAYED (round 2, finding 1). Resolving an exit runs the
+   * erasure and only then marks the exit resolved, so a sweep that stops
+   * before the tombstone leaves the exit open with the admin's "They're
+   * staying" button on it. Cancelling used to flip the exit and nothing else.
+   * The record stayed open, Finish them restarts every unfinished record from
+   * the top, and the next steward to press it, clearing somebody else's stuck
+   * sweep, closed the account of a member the village had decided keeps it.
+   */
+  describe("a departure cancelled after its resolve stopped part way", () => {
+    let n = 0;
+
+    /** A living member with an open exit whose resolve stopped before the tombstone. */
+    async function resolveStopped(): Promise<{ id: string; exitId: string; before: any }> {
+      const id = `queue-stayed-${(n += 1)}`;
+      await pool.query("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [id, "Ned Okafor", `${id}@examples.invalid`]); // module-review-ok: seeding the scratch schema this suite provisioned
+      const opened = await createExit(pool, { userId: id, kind: "voluntary", openedBy: "admin", noticeDays: 0 });
+      if (!opened.ok) throw new Error(opened.error);
+      const before = await usersRepo(pool).byId(id);
+      await expect(anonymizeMember(pool, before, null, deps())).rejects.toThrow(/role holder write was refused/);
+      const stopped = await erasureRecord(pool, id);
+      expect(stopped!.stepsDone, "the resolve must stop before the close, or this is a different case").not.toContain("tombstone");
+      return { id, exitId: opened.exit.id, before };
+    }
+
+    const cancel = (exitId: string) => cancelExit(pool, exitId, { memberById: (id) => usersRepo(pool).byId(id), actorId: "admin-1" });
+
+    async function expectStillThemselves(id: string, before: any): Promise<void> {
+      const after = await usersRepo(pool).byId(id);
+      expect(
+        { name: after!.name, email: after!.email, tokenVersion: after!.tokenVersion },
+        "a steward's Finish them closed the account of a member who stayed",
+      ).toEqual({ name: before.name, email: before.email, tokenVersion: before.tokenVersion });
+      expect(await erasureRecord(pool, id), "the deletion the cancel ended is still waiting to be finished").toBeNull();
+    }
+
+    it("ends the deletion when the admin cancels, so Finish them leaves the member alone", async () => {
+      const { id, exitId, before } = await resolveStopped();
+
+      const out = await cancel(exitId);
+      expect(out.status).toBe(200);
+      expect((await exitById(pool, exitId))!.status).toBe("cancelled");
+      expect(await erasureRecord(pool, id), "the cancel left the deletion armed for the next Finish them").toBeNull();
+
+      breakRoleHolders = false;
+      const { body } = await retry();
+      await expectStillThemselves(id, before);
+      expect(body.local.count).toBe(0);
+      // Some of what they held is already gone, and the cancel cannot put it back.
+      expect(String(out.body.message)).toMatch(/already removed/);
+    });
+
+    it("leaves a deletion an exit cancelled before this fix alone too, the next time Finish them is pressed", async () => {
+      const { id, exitId, before } = await resolveStopped();
+      // What the cancel route did before: the exit flips and the record stays armed.
+      await pool.query("UPDATE `exits` SET `status` = 'cancelled', `resolved_at` = CURRENT_TIMESTAMP WHERE `id` = ?", [exitId]); // module-review-ok: reproducing the old cancel's single write on the scratch schema
+      expect((await erasureRecord(pool, id))!.finishedAt).toBeNull();
+
+      breakRoleHolders = false;
+      const { body } = await retry();
+      await expectStillThemselves(id, before);
+      expect(body.stillStuck, "a member who stayed was counted as a deletion still stuck").toBe(0);
+      expect(body.stayed).toBe(1);
+    });
+
+    it("still finishes a deletion asked for after an exit was cancelled", async () => {
+      const { id, exitId } = await resolveStopped();
+      await pool.query("UPDATE `exits` SET `status` = 'cancelled', `resolved_at` = CURRENT_TIMESTAMP - INTERVAL 1 HOUR WHERE `id` = ?", [exitId]); // module-review-ok: an exit cancelled an hour before the deletion, on the scratch schema
+      await pool.query("UPDATE `member_erasures` SET `last_attempt_at` = CURRENT_TIMESTAMP WHERE `user_id` = ?", [id]); // module-review-ok: the deletion asked for after the cancel, on the scratch schema
+
+      breakRoleHolders = false;
+      const { body } = await retry();
+      expect(body.swept).toBe(1);
+      expect((await usersRepo(pool).byId(id))!.name).toBe("A departed member");
+      expect((await erasureRecord(pool, id))!.finishedAt).toBeTruthy();
+    });
+
+    it("refuses to cancel once the account is closed, and leaves the record for the queue", async () => {
+      const { id, exitId } = await resolveStopped();
+      breakRoleHolders = false;
+      // The sweep finished, and the status write after it never ran.
+      await anonymizeMember(pool, await usersRepo(pool).byId(id), null, deps());
+
+      const out = await cancel(exitId);
+      expect(out.status).toBe(409);
+      expect((await exitById(pool, exitId))!.status).toBe("open");
+    });
+
+    it("refuses to cancel while the record says the account was closed, or a deletion is still running", async () => {
+      const id = `queue-stayed-${(n += 1)}`;
+      await pool.query("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [id, "Ned Okafor", `${id}@examples.invalid`]); // module-review-ok: seeding the scratch schema this suite provisioned
+      const opened = await createExit(pool, { userId: id, kind: "voluntary", openedBy: "admin", noticeDays: 0 });
+      if (!opened.ok) throw new Error(opened.error);
+
+      // Begun moments ago, with no step failed: it may still be going.
+      await beginErasure(pool, id);
+      const running = await cancel(opened.exit.id);
+      expect(running.status).toBe(409);
+      expect(String(running.body.error)).toMatch(/right now/);
+
+      // Past the close: whatever the row says, the record cannot be ended here.
+      await noteStepDone(pool, id, "tombstone");
+      await noteErasureFailed(pool, id, "audit", "refused");
+      const closed = await cancel(opened.exit.id);
+      expect(closed.status).toBe(409);
+      expect((await erasureRecord(pool, id))!.stepsDone).toContain("tombstone");
+      expect((await exitById(pool, opened.exit.id))!.status).toBe("open");
+    });
   });
 });
