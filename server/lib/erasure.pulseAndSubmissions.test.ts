@@ -41,6 +41,7 @@ import { erasureRecord } from "../repos/memberErasure";
 import { recentEvents } from "./events";
 import { countActiveMembers } from "../repos/mapStats";
 import { ERASED_SUBJECT } from "../repos/commsPeople";
+import { forgetPulseLinesNaming } from "../repos/pulseLines";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -275,6 +276,42 @@ describe.skipIf(!configured)("what an erased member left on the pulse and in the
       expect((await rowOf("pn-join")).text, "a living member's line is never called departed").toBe("Juno joined the Bakers");
       expect((await rowOf("pn-grat")).text).toBe("Ann appreciated a departed member");
       expect((await rowOf("pn-grat-oak")).text, "the namesake's own line is theirs").toBe("Ann appreciated Juno");
+    });
+
+    // Adversarial round 3, finding 1. The UPDATE matches the line's words under
+    // the column's collation, which ignores accents as well as case (MySQL 8's
+    // utf8mb4_0900_ai_ci, MariaDB's uca1400_ai_ci). So the namesake count has
+    // to compare names the same way, or a living María is called departed when
+    // a Maria leaves.
+    it("counts a namesake whose first name differs only by an accent, in either direction, so their line is never called departed", async () => {
+      const maria = "r3-nm-maria";
+      const mariaOak = "r3-nm-maria-oak";
+      const jose = "r3-nm-jose";
+      const joseRuiz = "r3-nm-jose-ruiz";
+      await person(maria, "Maria Lopez");
+      await person(mariaOak, "María Oak");
+      await person(jose, "José Mora");
+      await person(joseRuiz, "Jose Ruiz");
+      // Older appointment lines, written before lines recorded a subject: the living members'.
+      await line({ id: "pn-join-maria-oak", kind: "role", text: "María joined the Bakers", actor: "r2-admin", entityType: "role", entityRef: "role-bakers" });
+      await line({ id: "pn-join-jose-ruiz", kind: "role", text: "Jose joined the Potters", actor: "r2-admin", entityType: "role", entityRef: "role-potters" });
+      // The control: this database compares names the way CI's MySQL 8 does, without accents.
+      expect(
+        (await q("SELECT id FROM users WHERE id = ? AND TRIM(name) LIKE 'Maria %'", [mariaOak])).length,
+        "the control: the users table's collation ignores accents",
+      ).toBe(1);
+      expect(
+        (await q("SELECT id FROM health_events WHERE id = ? AND text LIKE 'José joined the %'", ["pn-join-jose-ruiz"])).length,
+        "the control: the pulse table's collation ignores accents",
+      ).toBe(1);
+
+      await erase(maria);
+      await erase(jose);
+
+      expect.soft((await rowOf("pn-join-maria-oak")).text, "a living María's line is never called departed").toBe("María joined the Bakers");
+      expect.soft((await rowOf("pn-join-jose-ruiz")).text, "a living Jose's line is never called departed").toBe("Jose joined the Potters");
+      // What is left standing is counted, as the step's answer says.
+      expect((await forgetPulseLinesNaming(pool, { userId: maria, name: "Maria Lopez" })).appointmentLinesLeft).toBe(1);
     });
 
     it("takes a line they wrote themselves after the first pulse step and before their sessions died", async () => {

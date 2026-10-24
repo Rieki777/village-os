@@ -192,15 +192,24 @@ export async function forgetPulseLinesNaming(
 
 /**
  * How many living members other than this one go by the same first name,
- * compared the way the table's own LIKE compares (without case), so a line
- * that could be theirs is never called departed. Example members do not
- * count: their lines are examples too, and every rewrite here skips those.
+ * compared under the column's collation, which ignores case AND accents
+ * (utf8mb4_0900_ai_ci on MySQL 8, uca1400_ai_ci on MariaDB): the same
+ * comparison the appointment UPDATE's LIKE makes, so a line that could be
+ * theirs is never called departed. Example members do not count: their lines
+ * are examples too, and every rewrite here skips those.
+ *
+ * THE COUNT IS THE DATABASE'S, WITH NO SECOND FILTER (adversarial round 3,
+ * finding 1). A re-check in JavaScript stood here and compared lowercased
+ * first words exactly, so "María Oak" left the count while the UPDATE's LIKE
+ * still matched "María joined the Bakers", and erasing a Maria called a
+ * living María departed. Where the two queries could still differ, this one
+ * over-counts, which leaves the line standing and counted in
+ * `appointmentLinesLeft`: the safe direction.
  */
 async function livingNamesakes(pool: Pool, userId: string, first: string): Promise<number> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT name FROM users WHERE id <> ? AND is_example = 0 AND (email IS NULL OR email NOT LIKE '%@anonymized.invalid') AND (TRIM(name) = ? OR TRIM(name) LIKE ?)",
+    "SELECT COUNT(*) AS n FROM users WHERE id <> ? AND is_example = 0 AND (email IS NULL OR email NOT LIKE '%@anonymized.invalid') AND (TRIM(name) = ? OR TRIM(name) LIKE ?)",
     [userId, first, `${likeEscape(first)} %`],
   );
-  const want = first.toLowerCase();
-  return rows.filter((r) => firstWordOf(String(r.name ?? "")).toLowerCase() === want).length;
+  return Number(rows[0]?.n ?? 0);
 }
