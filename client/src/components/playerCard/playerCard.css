@@ -1,0 +1,1383 @@
+/*
+ * THE PLAYER CARD'S NIGHT: the approved design, as the design wrote it.
+ *
+ * Source: AMORA_ORG_DESIGN_PACK/player-card-reference/card-template-ccos.html
+ * (https://claude.ai/artifact/XGP6VP5WFU1T6ti7RD482P, Rye 2026-10-22: "When I
+ * okay a design that is the design we ship"). Every rule below is that file's
+ * rule, with its class names given a `pc-` prefix so nothing here can reach a
+ * page around the card. Values are the design's: the palette, the two faces,
+ * the sizes, weights, letter-spacing, radii, borders, gradients, spacing and
+ * the design's own breakpoints. Where the design's selector relationships
+ * decide something subtle (`.pc-quest span` beats `.pc-qn`, as `.quest span`
+ * beat `.qn`), the same relationship is kept on purpose.
+ *
+ * A THEME-FROZEN SURFACE. The card is drawn in this night palette whatever the
+ * page's theme: on the owner's night sheet, on the light public profile, on a
+ * role application and on a shared proposal. That is not a dark mode (there is
+ * no toggle; design ruling 2026-09-21 stands). It is one fixed design surface,
+ * the way the living map keeps its own palette (`.circle-lens` in index.css).
+ * The palette lives in this stylesheet, which is the token layer for this
+ * surface: `scripts/check-theme-literals.mjs` reads `.tsx` only, so no hex is
+ * written into a component.
+ *
+ * `.pc-night` carries the tokens and is put on the card's root and on the one
+ * thing the card portals out of itself (a sign's sheet). It also re-reads the
+ * app's semantic tokens (`--card`, `--muted-foreground`, `--border` and the
+ * rest) on this palette, so a shared control drawn inside the card, like the
+ * raise-a-tension form or the decide doors, is drawn on the night too and
+ * needs no edit of its own. The fonts are self-hosted already (main.tsx
+ * imports Marcellus 400 and Montserrat 400 to 700 as latin woff2), so the card
+ * costs no font file of its own; it names the two faces itself, because a
+ * village's own display face must not replace the design's.
+ *
+ * THE BREAKPOINTS ARE THE CARD'S WIDTH, NOT THE SCREEN'S. The design was a
+ * whole page, so its media queries read the viewport, and its content was the
+ * viewport less a 16px gutter each side. The live card also sits in narrower
+ * columns (a shared proposal is about 740px wide on a laptop), where a
+ * viewport query would lay four moons and three columns into a phone's width.
+ * So `.pc-wrap` is a container named `pc`, and each of the design's
+ * `@media (max-width: N)` is `@container pc (max-width: N - 32)`: at the
+ * design's own page width the two switch at the same pixel, and in a narrow
+ * column the card lays itself out as the design does on a screen that wide.
+ * The name's `5.5vw` is `5.5cqi + 1.76px` for the same reason.
+ *
+ * Plain CSS, imported by PlayerRoleCard.tsx, so it ships in the card's own
+ * lazy chunk and costs the main bundle nothing. Unlayered on purpose: the
+ * night sheet's unlayered heading rule (`.sheet-night :is(h1..h6)`) must not
+ * reach the card's headings. Every rule names a `pc-` class, so none of them
+ * reaches into a shared control the card embeds.
+ */
+
+.pc-night {
+  --pc-ground: #0d1411;
+  --pc-panel: #16221c;
+  --pc-raised: #1c2b23;
+  --pc-line: #2b3b32;
+  --pc-edge: #6d8175;
+  --pc-ink: #e9efe6;
+  --pc-dim: #9cb0a3;
+  --pc-gold: #dfab4d;
+  --pc-gold-lit: #f2ce85;
+  --pc-gold-deep: #6b4a15;
+  --pc-living: #6fc48f;
+  --pc-warn: #e0a35e;
+  --pc-display: "Marcellus", Georgia, serif;
+  --pc-body: "Montserrat", system-ui, sans-serif;
+  color-scheme: dark;
+
+  /* The app's semantic tokens, read on this palette (see the header). */
+  --background: var(--pc-ground);
+  --foreground: var(--pc-ink);
+  --card: var(--pc-panel);
+  --card-foreground: var(--pc-ink);
+  --popover: var(--pc-panel);
+  --popover-foreground: var(--pc-ink);
+  --secondary: var(--pc-raised);
+  --secondary-foreground: var(--pc-ink);
+  --muted: var(--pc-raised);
+  --muted-foreground: var(--pc-dim);
+  --accent: var(--pc-raised);
+  --accent-foreground: var(--pc-ink);
+  --border: var(--pc-edge);
+  --input: var(--pc-edge);
+  --ring: var(--pc-gold);
+  --destructive: var(--pc-warn);
+  --destructive-foreground: var(--pc-ground);
+  --sheet-notice: var(--pc-gold);
+  --sheet-open: var(--pc-living);
+  --font-display: var(--pc-display);
+  --font-body: var(--pc-body);
+
+  font-family: var(--pc-body);
+  color: var(--pc-ink);
+}
+
+/* body, .page and .wrap */
+.pc-card {
+  background: var(--pc-ground);
+  font-size: 15px;
+  line-height: 1.6;
+  padding-inline: 16px;
+  padding-block: 28px 64px;
+  border-radius: 16px;
+  min-width: 0;
+}
+/* On a phone the page around the card already keeps the design's 16px gutter,
+   so the card adds none of its own: its sections are the design's width. */
+@media (max-width: 640px) {
+  .pc-card {
+    padding-inline: 0;
+  }
+}
+.pc-card *,
+.pc-card *::before,
+.pc-card *::after {
+  box-sizing: border-box;
+}
+.pc-wrap {
+  container: pc / inline-size;
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+.pc-card :is(h1, h2, h3, h4) {
+  font-family: var(--pc-display);
+  font-weight: 400;
+  margin: 0;
+  text-wrap: balance;
+  letter-spacing: normal;
+  color: inherit;
+}
+/* The design's h1, h2 and h3 sizes, by class: the card sits inside a page that
+   has its own h1, so its headings take the levels the page needs and the
+   design's sizes from these. */
+.pc-name {
+  font-size: clamp(34px, calc(5.5cqi + 1.76px), 50px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.pc-h2 {
+  font-size: 26px;
+  line-height: 1.2;
+}
+.pc-h3 {
+  font-size: 19px;
+}
+.pc-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pc-dim);
+}
+.pc-gold {
+  color: var(--pc-gold);
+}
+.pc-panel {
+  background: var(--pc-panel);
+  border: 1px solid var(--pc-line);
+  border-radius: 16px;
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.pc-lede {
+  color: var(--pc-dim);
+  max-width: 70ch;
+}
+.pc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pc-chip {
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--pc-line);
+  border-radius: 999px;
+  padding: 3px 11px;
+  color: var(--pc-dim);
+  white-space: nowrap;
+  max-width: 100%;
+}
+.pc-chip.pc-gold {
+  border-color: var(--pc-gold);
+  color: var(--pc-gold);
+}
+.pc-chip.pc-live {
+  border-color: var(--pc-living);
+  color: var(--pc-living);
+}
+@container pc (max-width: 608px) {
+  .pc-chip {
+    white-space: normal;
+  }
+}
+.pc-night :focus-visible {
+  outline: 2px solid var(--pc-gold);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* Hero */
+.pc-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 26px;
+  align-items: center;
+}
+.pc-portrait {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  padding: 4px;
+  background: conic-gradient(from 200deg, var(--pc-gold-deep), var(--pc-gold), var(--pc-gold-lit), var(--pc-gold), var(--pc-gold-deep));
+}
+.pc-portrait .pc-crop {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--pc-raised);
+}
+.pc-portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  object-position: 50% 0;
+  transform: scale(1.3);
+  transform-origin: 50% 25%;
+}
+/* No portrait: the owner's initial, in the design's face, in the same ring. */
+.pc-portrait .pc-initial {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--pc-display);
+  font-size: 64px;
+  line-height: 1;
+  color: var(--pc-gold-lit);
+}
+.pc-tagline {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 6px 0 8px;
+}
+.pc-herotext {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.pc-heroactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+@container pc (max-width: 608px) {
+  .pc-hero {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+  .pc-hero .pc-chips,
+  .pc-hero .pc-heroactions {
+    justify-content: center;
+  }
+}
+
+/* Season block */
+.pc-season {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 18px;
+}
+@container pc (max-width: 828px) {
+  .pc-season {
+    grid-template-columns: 1fr;
+  }
+}
+.pc-col {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+}
+.pc-stack {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.pc-aim {
+  font-family: var(--pc-display);
+  font-size: 21px;
+  line-height: 1.4;
+  border-left: 2px solid var(--pc-gold);
+  padding-left: 14px;
+}
+.pc-goals {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pc-goal {
+  background: var(--pc-raised);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.pc-goal b {
+  font-weight: 600;
+}
+.pc-goal span {
+  color: var(--pc-dim);
+  font-size: 14px;
+}
+.pc-quests {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pc-quest {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  background: var(--pc-raised);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.pc-qn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid var(--pc-gold);
+  color: var(--pc-gold);
+  display: grid;
+  place-items: center;
+  font-family: var(--pc-display);
+}
+.pc-quest b {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+}
+.pc-quest span {
+  color: var(--pc-dim);
+  font-size: 13px;
+}
+.pc-state {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid var(--pc-edge);
+  color: var(--pc-dim);
+  white-space: nowrap;
+}
+.pc-state.pc-done {
+  border-color: var(--pc-living);
+  color: var(--pc-living);
+}
+
+/* Live signs */
+.pc-signs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@container pc (max-width: 828px) {
+  .pc-signs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container pc (max-width: 488px) {
+  .pc-signs {
+    grid-template-columns: 1fr;
+  }
+}
+.pc-signs > li {
+  display: grid;
+  min-width: 0;
+}
+.pc-sign {
+  background: var(--pc-raised);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
+}
+/* A sign whose rows can be read opens its sheet on a tap. */
+button.pc-sign {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  border: 1px solid transparent;
+  cursor: pointer;
+  width: 100%;
+  transition: border-color 0.2s;
+}
+button.pc-sign:hover {
+  border-color: var(--pc-gold);
+}
+.pc-sign .pc-num {
+  font-family: var(--pc-display);
+  font-size: 30px;
+  line-height: 1;
+  color: var(--pc-gold);
+  font-variant-numeric: tabular-nums;
+}
+.pc-sign .pc-what {
+  font-size: 14px;
+}
+.pc-sign .pc-trend {
+  font-size: 12px;
+  color: var(--pc-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pc-sign .pc-from {
+  font-size: 12px;
+  color: var(--pc-dim);
+  border-top: 1px solid var(--pc-line);
+  padding-top: 6px;
+}
+.pc-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--pc-panel);
+  overflow: hidden;
+}
+.pc-meter i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--pc-gold-deep), var(--pc-gold));
+}
+
+/* Small trio */
+.pc-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@container pc (max-width: 828px) {
+  .pc-trio {
+    grid-template-columns: 1fr;
+  }
+}
+.pc-mini {
+  background: var(--pc-raised);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.pc-load {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.pc-load i {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--pc-line);
+}
+.pc-load i.pc-on {
+  background: var(--pc-gold);
+}
+
+/* Role tiles */
+.pc-htiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 6px;
+  margin: 0;
+  list-style: none;
+}
+.pc-htile {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  width: 180px;
+  min-height: 120px;
+  padding: 14px 8px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, var(--pc-raised), var(--pc-panel));
+  border: 1px solid var(--pc-line);
+  color: var(--pc-ink);
+  text-decoration: none;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.pc-htile svg {
+  display: block;
+  width: 34px;
+  height: 34px;
+  color: var(--pc-gold);
+}
+.pc-htile:hover {
+  border-color: var(--pc-gold);
+  transform: translateY(-2px);
+}
+/* The role's health, one small line under its title: a dot and its words. */
+.pc-htile small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--pc-dim);
+  font-size: 12px;
+}
+@container pc (max-width: 608px) {
+  .pc-htiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pc-htile {
+    width: auto;
+  }
+}
+.pc-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.pc-dot.pc-steady {
+  background: var(--pc-living);
+}
+.pc-dot.pc-look {
+  background: var(--pc-gold);
+}
+.pc-dot.pc-act {
+  background: var(--pc-warn);
+}
+
+/* One role in full */
+.pc-rolecard {
+  background: var(--pc-raised);
+  border: 1px solid var(--pc-gold-deep);
+  border-radius: 16px;
+  padding: 22px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  scroll-margin-top: 16px;
+}
+.pc-rolecard:target {
+  border-color: var(--pc-gold);
+  box-shadow: 0 0 0 1px var(--pc-gold) inset;
+}
+.pc-card .pc-rolecard h3.pc-roletitle {
+  font-size: 24px;
+  overflow-wrap: anywhere;
+}
+.pc-rolecard .pc-why {
+  margin: 4px 0;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--pc-gold-deep);
+  border-left: 4px solid var(--pc-gold);
+  background: linear-gradient(120deg, rgba(242, 206, 133, 0.1), rgba(242, 206, 133, 0.02));
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.pc-rolecard .pc-why .pc-eyebrow {
+  color: var(--pc-gold);
+}
+.pc-rolecard .pc-why q {
+  font-family: var(--pc-display);
+  font-size: 24px;
+  line-height: 1.35;
+  color: var(--pc-ink);
+  quotes: none;
+  overflow-wrap: anywhere;
+}
+.pc-rolecard .pc-why q::before,
+.pc-rolecard .pc-why q::after {
+  content: none;
+}
+@container pc (max-width: 608px) {
+  .pc-rolecard .pc-why q {
+    font-size: 20px;
+  }
+}
+.pc-rolecard .pc-why .pc-while {
+  font-size: 14px;
+  color: var(--pc-dim);
+  margin-top: 4px;
+}
+.pc-rolecard .pc-why .pc-while .pc-ccos {
+  color: var(--pc-gold);
+  font-weight: 600;
+}
+.pc-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@container pc (max-width: 728px) {
+  .pc-cols {
+    grid-template-columns: 1fr;
+  }
+}
+.pc-box {
+  background: var(--pc-panel);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pc-rolecard .pc-box {
+  align-content: start;
+}
+ul.pc-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+  list-style: disc;
+}
+ul.pc-list li {
+  font-size: 14px;
+}
+.pc-dim {
+  color: var(--pc-dim);
+}
+/* The design sets these sizes inline on its paragraphs ("font-size:14px"). */
+.pc-f14 {
+  font-size: 14px;
+}
+.pc-f13 {
+  font-size: 13px;
+}
+.pc-f12 {
+  font-size: 12px;
+}
+.pc-arc3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@container pc (max-width: 728px) {
+  .pc-arc3 {
+    grid-template-columns: 1fr;
+  }
+}
+.pc-arc3 b {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pc-ink);
+  margin-bottom: 4px;
+}
+.pc-arc3 p {
+  font-size: 14px;
+  color: var(--pc-dim);
+  white-space: pre-line;
+}
+.pc-chip.pc-arch {
+  border-color: var(--pc-gold-deep);
+  color: var(--pc-gold-lit);
+}
+.pc-health {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 13px;
+  color: var(--pc-dim);
+}
+.pc-health b {
+  font-weight: 600;
+  color: var(--pc-ink);
+}
+
+/* The CCOS term on a heading: dotted underline, the term on hover, focus or tap. */
+.pc-ccoswrap {
+  position: relative;
+  display: inline;
+}
+.pc-ccos {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  position: relative;
+  outline: none;
+  border-radius: 4px;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: inline;
+}
+.pc-night .pc-ccos:focus-visible {
+  outline: 2px solid var(--pc-gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* 44px to a thumb, with no layout moved: the touch area grows, the words do not. */
+.pc-ccos::before {
+  content: "";
+  position: absolute;
+  inset: -14px -4px;
+}
+.pc-ccostip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  background: var(--pc-ground);
+  border: 1px solid var(--pc-gold-deep);
+  color: var(--pc-gold-lit);
+  font: 600 12px/1.4 var(--pc-body);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 8px;
+  width: max-content;
+  max-width: min(240px, 70vw);
+  white-space: normal;
+  pointer-events: none;
+}
+.pc-ccostip[hidden] {
+  display: none;
+}
+
+/* Applications */
+.pc-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--pc-line);
+  color: var(--pc-dim);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: 600 13px var(--pc-body);
+  cursor: pointer;
+  min-height: 44px;
+  text-decoration: none;
+}
+.pc-tab:hover,
+.pc-tab[aria-pressed="true"] {
+  border-color: var(--pc-gold);
+  color: var(--pc-ink);
+  background: var(--pc-raised);
+}
+.pc-tab svg {
+  width: 16px;
+  height: 16px;
+}
+.pc-app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  background: var(--pc-raised);
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: var(--pc-ink);
+  text-decoration: none;
+  min-height: 44px;
+}
+a.pc-app:hover {
+  box-shadow: 0 0 0 1px var(--pc-gold) inset;
+}
+.pc-app span {
+  color: var(--pc-dim);
+  font-size: 13px;
+}
+.pc-hist {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@container pc (max-width: 828px) {
+  .pc-hist {
+    grid-template-columns: 1fr;
+  }
+}
+.pc-histcol {
+  background: var(--pc-raised);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+.pc-histcol.pc-now {
+  border: 1px solid var(--pc-gold-deep);
+}
+.pc-histcol .pc-app {
+  background: var(--pc-panel);
+}
+.pc-histcol ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+/* The moon track */
+.pc-track {
+  position: relative;
+  height: 48px;
+  margin: 6px 8px 0;
+}
+.pc-track .pc-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 26px;
+  height: 2px;
+  background: var(--pc-line);
+}
+.pc-track .pc-fill {
+  position: absolute;
+  left: 0;
+  top: 26px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--pc-gold-deep), var(--pc-gold));
+}
+.pc-mk {
+  position: absolute;
+  top: 27px;
+  transform: translate(-50%, -50%);
+  display: inline-block;
+}
+.pc-mk.pc-new {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--pc-ground);
+  border: 1.5px solid var(--pc-gold);
+}
+.pc-mk.pc-full {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--pc-gold-lit);
+  box-shadow: 0 0 10px rgba(242, 206, 133, 0.5);
+}
+.pc-mk.pc-inv {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--pc-living);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.pc-mk.pc-today {
+  top: 0;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+.pc-mk.pc-today b {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pc-living);
+  line-height: 1.6;
+}
+.pc-mk.pc-today i {
+  width: 2px;
+  height: 26px;
+  background: var(--pc-living);
+  border-radius: 1px;
+}
+.pc-ends {
+  display: flex;
+  justify-content: space-between;
+  color: var(--pc-dim);
+  font-size: 12px;
+  margin: 0 8px;
+}
+.pc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: var(--pc-dim);
+  font-size: 13px;
+}
+.pc-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.pc-legend .pc-mk {
+  position: static;
+  transform: none;
+}
+.pc-legend .pc-mk.pc-inv {
+  transform: rotate(45deg);
+}
+.pc-moons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@container pc (max-width: 868px) {
+  .pc-moons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container pc (max-width: 488px) {
+  .pc-moons {
+    grid-template-columns: 1fr;
+  }
+}
+.pc-moon {
+  background: var(--pc-raised);
+  border: 1px solid var(--pc-line);
+  border-radius: 14px;
+  padding: 16px;
+  min-width: 0;
+}
+.pc-moon.pc-now {
+  border-color: var(--pc-gold);
+  box-shadow: 0 0 0 1px var(--pc-gold) inset;
+}
+.pc-moon .pc-dates {
+  color: var(--pc-gold);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 2px 0 8px;
+}
+.pc-moon ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--pc-dim);
+  font-size: 13.5px;
+  display: grid;
+  gap: 5px;
+  list-style: disc;
+}
+.pc-pwrap {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  justify-self: center;
+}
+.pc-ringpill {
+  background: var(--pc-ground);
+  border: 1px solid var(--pc-gold);
+  color: var(--pc-gold);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pc-loadslide {
+  display: block;
+  margin-top: 4px;
+}
+.pc-loadslide input {
+  width: 100%;
+  accent-color: var(--pc-gold);
+  height: 44px;
+  cursor: pointer;
+  margin: -8px 0;
+  position: relative;
+  z-index: 1;
+  display: block;
+}
+.pc-loadends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pc-dim);
+}
+.pc-loadends span:first-child {
+  color: var(--pc-living);
+}
+.pc-loadends span:last-child {
+  color: var(--pc-warn);
+}
+.pc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Agreements */
+details.pc-terms {
+  background: var(--pc-panel);
+  border: 1px solid var(--pc-line);
+  border-radius: 16px;
+}
+details.pc-terms summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 16px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+}
+details.pc-terms summary::-webkit-details-marker {
+  display: none;
+}
+.pc-termstitle {
+  font-family: var(--pc-display);
+  font-size: 19px;
+}
+.pc-rows {
+  padding: 0 22px 16px;
+  display: grid;
+  margin: 15px 0;
+}
+.pc-rowsrole {
+  padding: 0 22px;
+  font-family: var(--pc-display);
+  font-size: 17px;
+}
+.pc-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--pc-line);
+  font-size: 14px;
+}
+@container pc (max-width: 528px) {
+  .pc-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+.pc-row dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pc-dim);
+  padding-top: 2px;
+}
+.pc-row dd {
+  margin: 0;
+}
+.pc-money {
+  font-size: 13px;
+  color: var(--pc-dim);
+}
+.pc-termsnote {
+  padding: 0 22px;
+  font-size: 14px;
+}
+
+/* ── The live parts the design's page did not draw, in the design's own marks ── */
+
+/* Links that read as words: gold, underlined. */
+.pc-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--pc-gold);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* A chip that is a link (the circle): its words stay chip-sized, its touch area is 44px. */
+a.pc-chip {
+  position: relative;
+  text-decoration: none;
+}
+a.pc-chip::before {
+  content: "";
+  position: absolute;
+  inset: -11px -2px;
+}
+a.pc-chip:hover {
+  border-color: var(--pc-gold);
+  color: var(--pc-ink);
+}
+
+/* The owner's edit controls. */
+.pc-edit {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+.pc-edit label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.pc-edit textarea,
+.pc-edit input {
+  width: 100%;
+  border: 1px solid var(--pc-edge);
+  border-radius: 10px;
+  background: var(--pc-ground);
+  color: var(--pc-ink);
+  font: 400 14px/1.5 var(--pc-body);
+  padding: 10px 12px;
+  min-height: 44px;
+}
+.pc-edit textarea:focus,
+.pc-edit input:focus {
+  border-color: var(--pc-gold);
+  outline: none;
+}
+.pc-btnrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--pc-gold);
+  background: var(--pc-gold);
+  color: var(--pc-ground);
+  font: 700 13px var(--pc-body);
+  cursor: pointer;
+}
+.pc-btn:hover {
+  background: var(--pc-gold-lit);
+}
+.pc-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.pc-note {
+  font-size: 12px;
+  color: var(--pc-dim);
+}
+.pc-said {
+  font-size: 13px;
+  color: var(--pc-ink);
+}
+/* "Proposed, waiting for consent", beside a role word an open draft would change. */
+.pc-pending {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pc-gold);
+}
+
+/* A role proposal's changed words, in the design's gold. */
+.pc-changed {
+  border: 1px solid var(--pc-gold);
+  background: linear-gradient(120deg, rgba(223, 171, 77, 0.14), rgba(223, 171, 77, 0.06)), var(--pc-panel);
+}
+.pc-chip.pc-changed {
+  border-color: var(--pc-gold);
+  color: var(--pc-gold-lit);
+  background: none;
+}
+.pc-changedmark {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pc-gold);
+}
+
+/* The open proposals for a role's words. */
+.pc-proposals {
+  border: 1px solid var(--pc-gold-deep);
+}
+.pc-proposal {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--pc-line);
+  padding-top: 10px;
+}
+.pc-proposal b {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Ready to hand over: four checks, never a percentage. */
+.pc-handhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pc-handhead strong {
+  font-family: var(--pc-display);
+  font-weight: 400;
+  font-size: 19px;
+  color: var(--pc-gold);
+}
+.pc-checks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+.pc-checks > li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.pc-checks .pc-tick {
+  color: var(--pc-gold);
+  font-weight: 700;
+}
+.pc-checks .pc-open {
+  color: var(--pc-dim);
+}
+.pc-checks ul {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--pc-dim);
+}
+
+/* Tensions raised to the role. */
+.pc-tensions {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+.pc-tensions ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+/* Accomplished, by moon. */
+.pc-donemoon {
+  display: grid;
+  gap: 8px;
+}
+.pc-donemoon h4 {
+  font-size: 13px;
+  font-family: var(--pc-body);
+  font-weight: 600;
+  color: var(--pc-gold);
+}
+.pc-donemoon .pc-goal i {
+  font-style: normal;
+  font-size: 13px;
+  color: var(--pc-ink);
+}
+
+/* The sheet of rows behind a sign, portalled out of the card. */
+.pc-sheet {
+  background: var(--pc-panel);
+  color: var(--pc-ink);
+  border: 1px solid var(--pc-line);
+  font-family: var(--pc-body);
+}
+.pc-sheet ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  font-size: 14px;
+}
+.pc-sheet li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  border-bottom: 1px solid var(--pc-line);
+  padding: 8px 0;
+}
+
+/* A card that could not load, or holds no roles yet: the doors. */
+.pc-doors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-card * {
+    transition: none !important;
+  }
+}
+
+/* Pieces of the design's inline styles, given names. */
+.pc-goal.pc-sgoal {
+  border: 1px solid var(--pc-gold-deep);
+  border-left: 3px solid var(--pc-gold);
+}
+.pc-col.pc-tasks {
+  gap: 10px;
+}
+.pc-signsblock {
+  gap: 10px;
+}
+.pc-headgroup {
+  display: grid;
+  gap: 4px;
+}
+.pc-roles {
+  display: grid;
+  gap: 16px;
+}
+/* "This role exists while" is gold and set heavier, with or without its term. */
+.pc-ccos-lead {
+  color: var(--pc-gold);
+  font-weight: 600;
+}
+/* The design opens "What I can decide on my own" 6px below the domain's words. */
+.pc-authorities {
+  margin-top: 6px;
+}
+/* A role with no terms written says so inside the agreements, at the rows' edge. */
+.pc-terms .pc-dim.pc-f14 {
+  padding: 0 22px 12px;
+}
+/* A sign not counted yet: its words, quiet, where a count would stand. */
+.pc-sign .pc-num.pc-notyet {
+  font-family: var(--pc-body);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--pc-dim);
+}
