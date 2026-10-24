@@ -22,8 +22,9 @@
 -- The step that finishes the sweep sets it back to NULL in the same statement
 -- that stamps `finished_at`, so a finished erasure holds nothing about who it
 -- was for. It is personal data while it stands, and nothing reads it but the
--- resume: the steward's queue, the failed-actions job and the data export
--- read a column list that leaves it out (server/repos/memberErasure.ts).
+-- resume: the steward's queue and the failed-actions job read a column list
+-- that leaves it out (server/repos/memberErasure.ts), and the data export
+-- does not read this table at all.
 --
 -- EXPAND ONLY, AND THE ROLLBACK HOLDS.
 -- One nullable column with no default. The previous release names its columns
