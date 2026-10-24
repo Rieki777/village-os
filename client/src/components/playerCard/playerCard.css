@@ -1105,8 +1105,7 @@ details.pc-terms summary::-webkit-details-marker {
 /* A chip that is a link (the circle): its words stay chip-sized, its touch area is 44px. */
 a.pc-chip {
   position: relative;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
 }
 a.pc-chip::before {
   content: "";
