@@ -529,11 +529,14 @@ is the platform's one public identity URL.
 
 **A departed member's title and home still survive the tombstone. Their characters and portraits do
 not, any more.** `anonymizeMember` writes through `members.update`, so it can only clear columns the
-users repository owns, and `title` and `home_structure_key` are not among them. The tombstone handle
-is deterministic (`departed-` plus the last eight characters of the user id) and appears on their
-forum bylines, so `GET /api/profiles/<that handle>` still answers with their remaining standing
-chips, whatever `title` they carried and wherever `home_structure_key` says they sleep. Both columns
-are READ (`server/lib/profile.ts` names them in its SELECT and publishes them) and NEITHER is
+users repository owns, and `title` and `home_structure_key` are not among them. The tombstone used to
+keep a deterministic handle (`departed-` plus the last eight characters of the user id), which their
+forum bylines print, and `GET /api/profiles/<that handle>` needs no sign-in, so it answered with their
+join date, moons, standing chips and gratitude counts, whatever `title` they carried and wherever
+`home_structure_key` says they sleep. The sweep's `handle-after-tombstone` step takes that handle
+off, and the boot backfill gives the step to every erasure that finished before it existed
+(adversarial round 3, finding 13). A tombstone then has no page, and the gratitude form finds no
+tombstone by handle. Both columns are READ (`server/lib/profile.ts` names them in its SELECT and publishes them) and NEITHER is
 written by anything in the tree: no route, no repository and no migration sets either one. So the
 exposure is latent rather than live, and it is latent in the way that ends in one commit. A fork
 that adds a title editor, or a "where I sleep" control, without also adding a line to the erasure

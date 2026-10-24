@@ -184,7 +184,9 @@ above the size of a gathering, not to the size of one person's usage.
   (`backfillFinishedErasures`, `server/lib/erasure.ts`). On a village that
   erased somebody on an older release, this ends the agent token, open
   invitation link, place at a gathering, vouch for somebody still waiting,
-  group ownership and delegation that outlived them. A fee for a place ahead
+  group ownership and delegation that outlived them, and takes off the
+  `departed-<id>` handle an old tombstone kept, so no profile page answers to
+  it (`handle-after-tombstone`). A fee for a place ahead
   comes back once, and a freed seat goes to whoever was waiting, who is told.
   Look for `[erasure] finished-erasure backfill:` in the boot log. A member it
   stopped part way is counted there and tried again on the next boot.
