@@ -14,11 +14,12 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, untilALockIsAwaited, type TestDb } from "../db/testDb";
+import { usersRepo } from "../repos/users";
 import { endAgentReach, mintToken, revokeAllTokens, revokeToken, verifyToken, withAgentReachEnded } from "./agentTokens";
-import { enqueueAgentDelivery, getInbox } from "./agentInbox";
+import { enqueueAgentDelivery, getInbox, setInbox } from "./agentInbox";
 import { mintFeedToken, resolveFeedToken } from "./icsFeed";
-import { memberKeyView } from "./memberSecrets";
+import { MEMBER_SECRETS_ENV, memberKeyView, storeMemberKey } from "./memberSecrets";
 import { makeSetPasswordToken, readSetPasswordToken, setPasswordLinkRefusal } from "./memberTokens";
 
 const configured = testDbConfigured();
@@ -269,5 +270,164 @@ describe.skipIf(!configured)("withAgentReachEnded", () => {
     expect(logged[0]).toContain("usr-reach-ray");
     const reported = await q("SELECT audience, actor_kind FROM health_events WHERE kind = 'agent_reach' AND entity_ref = ?", ["usr-reach-ray"]);
     expect(reported, "an admin cannot see that the end after a credential change failed").toEqual([{ audience: "admin", actor_kind: "system" }]);
+  });
+});
+
+/*
+ * A WRITE ALREADY PAST ITS SESSION CHECK (adversarial round 2, finding 15).
+ * `PUT /api/agent/inbox` and `PUT /api/agent/key` check the session once, at
+ * the start, and then wait on a DNS lookup that the attacker's own nameserver
+ * can hold for seconds. A new password or an admin's revoke sessions that
+ * lands in that wait ends what stood on both sides of the bump and returns,
+ * and the write then landed after it for a member who is still alive: the
+ * check after the write only asked about a tombstone. The inbox handed the
+ * thief its signing secret, and the key took every prompt the member sent.
+ *
+ * The write now asks under the member's row lock whether the row is still
+ * the session's (`whileSessionHolds`, server/lib/agentTokens.ts).
+ */
+describe.skipIf(!configured)("a write already past its session check when the credential changes", () => {
+  const SECRETS_ENV = { [MEMBER_SECRETS_ENV]: "ab".repeat(32) } as NodeJS.ProcessEnv;
+  // An address literal, so the guard answers without a DNS lookup and the
+  // test never reaches the network. TEST-NET-1 passes the range check.
+  const HOOK = "https://192.0.2.10/hook";
+  const KEY = { provider: "anthropic" as const, key: "sk-ant-example-0000" };
+  const REFUSED = { ok: false, status: 401, error: "auth_required" };
+
+  /** A living member, and the tokenVersion a session signed now carries. */
+  async function seedMember(id: string): Promise<number> {
+    await q("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,'x')", [id, `Member ${id}`, `${id}@examples.invalid`]);
+    return Number((await usersRepo(pool).byId(id))!.tokenVersion ?? 0);
+  }
+
+  const bump = (id: string) => usersRepo(pool).update(id, (u) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; });
+  /** What set-password runs: end, bump, end. */
+  const resetPassword = (id: string) => withAgentReachEnded(pool, id, () => bump(id));
+  /** What an admin's revoke sessions runs: bump, then end once. */
+  const revokeSessions = async (id: string) => { await bump(id); return endAgentReach(pool, id); };
+
+  /**
+   * A pool that calls `hook` on each statement before passing it to this
+   * suite's pool, including statements on a connection it hands out, because
+   * a write inside a transaction runs on one.
+   */
+  function hooked(hook: (sql: string) => Promise<void>): mysql.Pool {
+    return {
+      query: async (sql: string, params?: unknown[]) => {
+        await hook(sql);
+        return pool.query(sql, params); // module-review-ok: passes the code under test's own SQL through to this suite's scratch schema, and writes none of its own
+      },
+      getConnection: async () => {
+        const conn = await pool.getConnection();
+        return new Proxy(conn, {
+          get(target, prop) {
+            if (prop === "query") {
+              return async (sql: string, params?: unknown[]) => {
+                await hook(sql);
+                return target.query(sql, params); // module-review-ok: passes the code under test's own SQL through on the connection it asked for
+              };
+            }
+            const value = Reflect.get(target, prop, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      },
+    } as unknown as mysql.Pool;
+  }
+
+  /**
+   * The finding's order: `change` runs to the end just before the write's
+   * first statement reaches the database. That is after the request's
+   * session check and its DNS wait, and before it has read, locked or
+   * written anything.
+   */
+  function changedJustBefore(change: () => Promise<unknown>): { pool: mysql.Pool; changed: () => boolean } {
+    let changed = false;
+    const racing = hooked(async () => {
+      if (changed) return;
+      changed = true;
+      await change();
+    });
+    return { pool: racing, changed: () => changed };
+  }
+
+  it("setInbox refuses when a new password lands after its session check, and leaves no inbox and no secret", async () => {
+    const id = "usr-race-mia";
+    const version = await seedMember(id);
+    const race = changedJustBefore(() => resetPassword(id));
+
+    const out = await setInbox(race.pool, id, HOOK, SECRETS_ENV, version);
+
+    expect(race.changed(), "the reset must land inside the write, or this is the plain case").toBe(true);
+    expect(out, "an inbox written for a session the reset ended must refuse itself and hand back no secret").toEqual(REFUSED);
+    expect(await getInbox(pool, id), "the inbox outlived the reset that answered the theft").toBeNull();
+  });
+
+  it("storeMemberKey refuses when a new password lands after its session check, and keeps no key", async () => {
+    const id = "usr-race-max";
+    const version = await seedMember(id);
+    const race = changedJustBefore(() => resetPassword(id));
+
+    const out = await storeMemberKey(race.pool, id, KEY, SECRETS_ENV, version);
+
+    expect(race.changed(), "the reset must land inside the write, or this is the plain case").toBe(true);
+    expect(out, "a key stored for a session the reset ended must refuse itself").toEqual(REFUSED);
+    expect(await memberKeyView(pool, id), "the key outlived the reset that answered the theft").toBeNull();
+  });
+
+  it("an admin's revoke sessions that lands after the session check refuses both writes the same way", async () => {
+    const id = "usr-race-mae";
+    const version = await seedMember(id);
+
+    const inbox = await setInbox(changedJustBefore(() => revokeSessions(id)).pool, id, HOOK, SECRETS_ENV, version);
+    expect(inbox).toEqual(REFUSED);
+    expect(await getInbox(pool, id)).toBeNull();
+
+    const key = await storeMemberKey(changedJustBefore(() => revokeSessions(id)).pool, id, KEY, SECRETS_ENV, version + 1);
+    expect(key).toEqual(REFUSED);
+    expect(await memberKeyView(pool, id)).toBeNull();
+  });
+
+  it("a session that has already ended is refused before it touches what the member set since", async () => {
+    const id = "usr-race-ida";
+    const before = await seedMember(id);
+    const inbox = await setInbox(pool, id, HOOK, SECRETS_ENV, before);
+    expect(inbox.ok, "a living member with a current session sets an inbox").toBe(true);
+    expect((await storeMemberKey(pool, id, KEY, SECRETS_ENV, before)).ok, "and stores a key").toBe(true);
+
+    // Signing out on another device: the bump alone, with nothing ended.
+    await bump(id);
+
+    expect(await setInbox(pool, id, "https://192.0.2.11/other", SECRETS_ENV, before)).toEqual(REFUSED);
+    expect((await getInbox(pool, id))?.id, "a refused write replaced the member's inbox").toBe(inbox.ok ? inbox.inbox.id : "set");
+    expect(await storeMemberKey(pool, id, { provider: "anthropic", key: "sk-ant-other-9999" }, SECRETS_ENV, before)).toEqual(REFUSED);
+    expect((await memberKeyView(pool, id))?.last4, "a refused write replaced the member's key").toBe("0000");
+
+    // The session signed after the bump writes as before.
+    const now = await setInbox(pool, id, "https://192.0.2.11/other", SECRETS_ENV, before + 1);
+    expect(now.ok, "the member's current session was refused").toBe(true);
+    expect((await storeMemberKey(pool, id, { provider: "anthropic", key: "sk-ant-other-9999" }, SECRETS_ENV, before + 1)).ok).toBe(true);
+    expect((await memberKeyView(pool, id))?.last4).toBe("9999");
+  });
+
+  it("a reset that arrives while the write holds the member's row waits for it, and its second end takes the write back", async () => {
+    const id = "usr-race-ned";
+    const version = await seedMember(id);
+    const race: { resetting: ReturnType<typeof resetPassword> | null } = { resetting: null };
+    const racing = hooked(async (sql) => {
+      if (race.resetting || !/^INSERT INTO `?agent_inboxes\b/.test(sql)) return;
+      race.resetting = resetPassword(id);
+      // The bump has to wait on the row this write holds, or nothing here is serialised.
+      await untilALockIsAwaited(pool);
+    });
+
+    const out = await setInbox(racing, id, HOOK, SECRETS_ENV, version);
+    expect(race.resetting, "the reset must start inside the write").not.toBeNull();
+    const { ended } = await race.resetting!;
+
+    expect(out.ok, "the write held the row first, so it landed before the bump").toBe(true);
+    expect(ended.inbox, "the end after the bump must find the inbox the write left").toBe(true);
+    expect(await getInbox(pool, id)).toBeNull();
+    expect(Number((await usersRepo(pool).byId(id))!.tokenVersion)).toBe(version + 1);
   });
 });

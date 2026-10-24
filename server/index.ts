@@ -6913,7 +6913,7 @@ async function startServer() {
     app.put("/api/agent/inbox", async (req, res) => {
       const user = await me(req, res);
       if (!user) return;
-      const out = await setInbox(getPool(), user.id, req.body?.url);
+      const out = await setInbox(getPool(), user.id, req.body?.url, process.env, Number(user.tokenVersion ?? 0)); // a session ended since its check answers 401
       if (!out.ok) return res.status(out.status).json({ error: out.error });
       // The secret, once.
       res.json({ inbox: out.inbox, secret: out.secret, signatureHeader: SIGNATURE_HEADER });
@@ -6955,8 +6955,8 @@ async function startServer() {
         key: String(req.body?.key ?? ""),
         baseUrl: req.body?.baseUrl,
         model: req.body?.model,
-      });
-      if (!out.ok) return res.status(400).json({ error: out.error });
+      }, process.env, Number(user.tokenVersion ?? 0));
+      if (!out.ok) return res.status(out.status ?? 400).json({ error: out.error }); // 401 when the session ended since its check
       void recordEvent(getPool(), {
         kind: "agent_key", text: `set their own assistant key (${out.view.provider})`,
         actorUserId: user.id, actorKind: "agent", entityType: "member_key", entityRef: user.id, audience: "admin",

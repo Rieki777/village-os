@@ -689,6 +689,13 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     const after = await call("POST", "/api/agent/tokens", { name: "eli after", scopes: SCOPES }, String(reset.json.token));
     expect(after.status).toBe(200);
     expect((await call("GET", "/api/agent/v1/me", undefined, String(after.json.token))).status).toBe(200);
+    // And sets an inbox and a key again. Both writes ask for the tokenVersion
+    // this session was signed at, which the reset moved (adversarial round 2, finding 15).
+    const inboxAfter = await call("PUT", "/api/agent/inbox", { url: "https://192.0.2.10/agent" }, String(reset.json.token));
+    expect(inboxAfter.status, JSON.stringify(inboxAfter.json)).toBe(200);
+    const keyAfter = await call("PUT", "/api/agent/key", { provider: "anthropic", key: "sk-ant-after-0000" }, String(reset.json.token));
+    expect(keyAfter.status, JSON.stringify(keyAfter.json)).toBe(200);
+    expect(await reachRows(eli.id)).toEqual({ inbox: 1, key: 1 });
   });
 
   it("an admin's revoke sessions ends every token the member made, and says how many", async () => {
