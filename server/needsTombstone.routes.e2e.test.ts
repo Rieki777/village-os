@@ -91,6 +91,9 @@ let bystander = { token: "", id: "" };
  * boot job is what finds it.
  */
 const GONE = "needstomb-gone-old";
+/** Waiting for the seat the old erasure left them holding. */
+const WAITER = "needstomb-waiter";
+const SEATED = "needstomb-bread-night";
 
 interface Answer { status: number; json: any; text: string }
 
@@ -149,6 +152,11 @@ beforeAll(async () => {
     "a".repeat(64),
     GONE,
   ]);
+  // And the one seat at a gathering ahead, with a living member waiting for it.
+  await seed("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?, 'Ida Fenn', ?, 'x')", [WAITER, `${WAITER}@example.test`]);
+  await seed("INSERT INTO `events` (`id`, `title`, `starts_at`, `status`, `kind`, `layer`, `capacity`) VALUES (?, 'Bread night', CURRENT_TIMESTAMP + INTERVAL 5 DAY, 'scheduled', 'gathering', 'village', 1)", [SEATED]);
+  await seed("INSERT INTO `event_rsvps` (`id`, `event_id`, `user_id`, `status`, `idempotency_key`) VALUES (?, ?, ?, 'going', ?)", [`rsvp-${GONE}`, SEATED, GONE, `seed:${GONE}`]);
+  await seed("INSERT INTO `event_waitlist` (`id`, `event_id`, `user_id`) VALUES (?, ?, ?)", [`wl-${WAITER}`, SEATED, WAITER]);
   expect(await needRows(GONE), "the control: the old erasure left their answer").toBe(1);
 
   await waitForPortFree(PORT);
@@ -210,6 +218,11 @@ describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", (
       expect.arrayContaining(["needs", "tombstone", "needs-after-tombstone", "invites-after-tombstone"]),
     );
     expect(records[0].finished, "and the finish did not move").toBe("2026-09-20 10:00:00");
+    // The seat went to the person waiting, and they were told: the job runs once the promotion sink is wired.
+    const [seats] = await pool.query<any[]>("SELECT `user_id`, `status` FROM `event_rsvps` WHERE `event_id` = ? ORDER BY `user_id`", [SEATED]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(seats.map((r) => ({ ...r }))).toEqual([{ user_id: WAITER, status: "going" }]);
+    const [told] = await pool.query<any[]>("SELECT `type` FROM `notifications` WHERE `user_id` = ? AND `dedupe_key` = ?", [WAITER, `waitlist:${SEATED}:${WAITER}`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(told.map((r) => r.type), "the member given the seat is told it is theirs").toEqual(["waitlist_promoted"]);
     expect(logs.join("")).toMatch(/\[erasure\] finished-erasure backfill: 1 finished erasure\(s\) read, 1 given \d+ step\(s\) they predate, 0 stopped part way\./);
     const [ledger] = await pool.query<any[]>("SELECT `value` FROM `app_config` WHERE `config_key` = 'data-migrations'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(JSON.stringify(ledger[0]?.value ?? ""), "recorded in the runOnce ledger, so the next boot does not run it again").toMatch(
