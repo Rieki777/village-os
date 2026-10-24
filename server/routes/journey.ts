@@ -1,14 +1,19 @@
 /**
  * Journey to Launch: the founding team's own working tracker.
  *
- * Six routes, lifted out of server/index.ts unchanged:
+ * Six routes, lifted out of server/index.ts unchanged, and three added when
+ * the plan became data (2026-10-22):
  *
- *   GET  /api/journey/state      the whole document
- *   POST /api/journey/checkbox   one checkbox
- *   POST /api/journey/kanban     one card's column and assignee
- *   POST /api/journey/copy       one copy section
- *   POST /api/journey/decision   one decision's status, choice and notes
- *   POST /api/journey/resources  the working-document links, replaced whole
+ *   GET  /api/journey/state         the whole document, with the plan resolved
+ *   POST /api/journey/checkbox      one checkbox
+ *   POST /api/journey/kanban        one card's column and assignee
+ *   POST /api/journey/copy          one copy section
+ *   POST /api/journey/decision      one decision's status, choice and notes
+ *   POST /api/journey/resources     the working-document links, replaced whole
+ *   POST /api/journey/plan          the plan (weeks, tasks, decisions, intro,
+ *                                   build partner), replaced whole
+ *   POST /api/journey/owner         one task's owner
+ *   POST /api/journey/owners/import owner choices a browser held, filling gaps
  *
  * THE READ IS GATED LIKE THE WRITES, and that is the property to keep. This
  * document is notes, decisions and a kanban about a village that has not
@@ -32,6 +37,17 @@
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
+import {
+  cleanPlan,
+  isDeliveryStatus,
+  ownersProblems,
+  PLAN_ID,
+  planProblems,
+  resolvePlan,
+  type CommandCentrePlan,
+  type DeliveryStatus,
+} from "../../shared/commandCentrePlan";
+import { DEFAULT_COMMAND_CENTRE_PLAN } from "../lib/commandCentrePlanDefault";
 
 type Deps = Pick<AppDeps, "isAdmin" | "journeyRepo">;
 
@@ -46,7 +62,9 @@ export function register(app: Express, deps: Deps): void {
     // only mutations checked auth.
     if (!(await isJourney(req))) return res.status(401).json({ error: "auth_required" });
     const state = journeyRepo.get();
-    res.json(state);
+    // The plan arrives RESOLVED: a document written before the plan was data
+    // has none and reads as today's plan, so its stored ticks keep matching.
+    res.json({ ...state, plan: planOf(state), owners: ownersOf(state) });
   });
 
   // Journey State: Update Checkbox
@@ -159,4 +177,100 @@ export function register(app: Express, deps: Deps): void {
     await journeyRepo.put(journey);
     res.json({ success: true, resources: cleaned });
   });
+
+  /**
+   * The plan, replaced whole: weeks, tasks, decisions, the intro line and the
+   * build partner's name. `{ plan, revision }`.
+   *
+   * Three refusals, each one a property the page relies on:
+   *   - a plan `planProblems` rejects (limits, ids, a link to no task) is a
+   *     400 that says what to fix;
+   *   - a plan that DROPS an item the current one holds is a 400 as well.
+   *     Removing an item hides it, so its ticks, notes and decision answers
+   *     stay stored under its id and come back if it is restored;
+   *   - a `revision` that is not the current one is a 409. Two admins in two
+   *     tabs would otherwise each save over the other's plan without a word.
+   */
+  app.post("/api/journey/plan", async (req, res) => {
+    if (!(await isJourney(req))) {
+      return res.status(401).json({ error: "auth_required" });
+    }
+    const current = planOf(journeyRepo.get());
+    if (req.body?.revision !== current.revision) {
+      return res.status(409).json({
+        error: "Somebody saved the plan after you opened it. Reload the page to see their version, then make your change again.",
+        revision: current.revision,
+      });
+    }
+    const problems = planProblems(req.body?.plan, current);
+    if (problems.length > 0) {
+      return res.status(400).json({ error: problems[0], problems });
+    }
+    const plan: CommandCentrePlan = { ...cleanPlan(req.body.plan), revision: current.revision + 1 };
+    await journeyRepo.put({ ...journeyRepo.get(), plan });
+    res.json({ success: true, plan });
+  });
+
+  /**
+   * One task's owner: the dropdown on each timeline row. `{ id, status }`.
+   *
+   * These used to live only in the browser that picked them, under a page
+   * sentence saying everything here was shared and synced to the server.
+   */
+  app.post("/api/journey/owner", async (req, res) => {
+    if (!(await isJourney(req))) {
+      return res.status(401).json({ error: "auth_required" });
+    }
+    const { id, status } = req.body ?? {};
+    if (typeof id !== "string" || !PLAN_ID.test(id) || !isDeliveryStatus(status)) {
+      return res.status(400).json({ error: "Send a task id and one of the four owners" });
+    }
+    const journey = journeyRepo.get();
+    const owners = { ...ownersOf(journey), [id]: status };
+    await journeyRepo.put({ ...journey, owners });
+    res.json({ success: true, owners });
+  });
+
+  /**
+   * The one-time move of owner choices a browser kept locally. `{ owners }`.
+   *
+   * FILLS GAPS AND NEVER OVERWRITES. Whatever the server already holds is
+   * what every other admin has been looking at, so a stale browser arriving
+   * late cannot change it. The page clears its local copy once this lands.
+   */
+  app.post("/api/journey/owners/import", async (req, res) => {
+    if (!(await isJourney(req))) {
+      return res.status(401).json({ error: "auth_required" });
+    }
+    const incoming = req.body?.owners;
+    const problems = ownersProblems(incoming);
+    if (problems.length > 0) {
+      return res.status(400).json({ error: problems[0], problems });
+    }
+    const journey = journeyRepo.get();
+    const owners = { ...ownersOf(journey) };
+    const imported: string[] = [];
+    for (const [id, status] of Object.entries(incoming as Record<string, DeliveryStatus>)) {
+      if (id in owners) continue;
+      owners[id] = status;
+      imported.push(id);
+    }
+    if (imported.length > 0) await journeyRepo.put({ ...journey, owners });
+    res.json({ success: true, imported, owners });
+  });
+}
+
+/** The stored plan over today's default. */
+function planOf(journey: Record<string, unknown>): CommandCentrePlan {
+  return resolvePlan(journey?.plan, DEFAULT_COMMAND_CENTRE_PLAN);
+}
+
+/** Owner choices by task id, only the ones that still read as owners. */
+function ownersOf(journey: Record<string, unknown>): Record<string, DeliveryStatus> {
+  const stored = journey?.owners;
+  const out: Record<string, DeliveryStatus> = {};
+  if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+    for (const [id, status] of Object.entries(stored)) if (isDeliveryStatus(status)) out[id] = status;
+  }
+  return out;
 }

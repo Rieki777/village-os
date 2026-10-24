@@ -7,7 +7,7 @@
  * renders a picker from it. Leaving it in Admin.tsx would have forced the nav
  * to stay there too.
  */
-import { Coins, FileText, Users } from "lucide-react";
+import { Coins, FileText, LayoutTemplate, Users } from "lucide-react";
 
 /*
  * ONE SECTION LEFT, and the six that went are why this comment exists.
@@ -24,7 +24,14 @@ import { Coins, FileText, Users } from "lucide-react";
  * carry the portrait and the bio a seat row has no place for, and a card for
  * somebody who holds no seat is the only way they reach the page at all.
  */
+/** The tab that edits the page specs rather than one stored section. */
+export const PAGES_TAB_KEY = "pages";
+
 export const CONTENT_SECTIONS = [
+  // Every word the public pages say about this village (Rye, 2026-10-22).
+  // Not one section but one per page (`page-home`, ...), edited by
+  // components/admin/pages/PagesEditor.tsx from the specs in shared/pageContent.
+  { key: PAGES_TAB_KEY, label: "Pages", icon: LayoutTemplate },
   { key: "team", label: "Team Page", icon: Users },
   // Added for the brochure lane's legal-content extraction (fe3f3e1): 22
   // jurisdiction-specific claims moved out of compiled JSX into this section,

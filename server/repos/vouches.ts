@@ -5,12 +5,19 @@
  * stay ENUMERABLE: findable by looking in one known directory rather than by
  * knowing which lib happened to own the subject.
  *
- * THERE IS NO DELETE IN THIS FILE, AND THE ONE UPDATE ONLY RAISES. A vouch,
- * once given, stands (Rye, 2026-09-08). Withdrawal would drop somebody out of
- * a membership they already hold and hand every member a demotion button over
- * a neighbour. The single write that touches an existing row turns the same
- * person's ordinary vouch into a super vouch, which strengthens a vouch and
- * can never weaken or remove one.
+ * NO MEMBER CAN WITHDRAW A VOUCH, AND THE ONE MEMBER-FACING UPDATE ONLY
+ * RAISES. A vouch, once given, stands (Rye, 2026-09-08). Withdrawal would drop
+ * somebody out of a membership they already hold and hand every member a
+ * demotion button over a neighbour. The single write a member can make to an
+ * existing row turns the same person's ordinary vouch into a super vouch,
+ * which strengthens a vouch and can never weaken or remove one.
+ *
+ * THE ERASURE IS THE ONE EXCEPTION, at the end of this file, and it demotes
+ * nobody. The vouches FOR a member who asked to be forgotten go, because they
+ * are other people's sentences about that person and the membership they
+ * admitted ended with the tombstone. The vouches a departed member GAVE stay,
+ * because each one is the record of somebody else's admission, and only the
+ * words they wrote on them go.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
@@ -97,4 +104,25 @@ export async function recordVouch(
       "ON DUPLICATE KEY UPDATE kind = IF(? = 'super', 'super', kind)",
     [input.id, VILLAGE, input.voucherUserId, input.vouchedUserId, input.kind, input.note ?? null, input.kind],
   );
+}
+
+/**
+ * A member who asked to be forgotten, for the erasure's
+ * `vouches-after-tombstone` step (server/lib/erasure.ts). See the header for
+ * why the two halves differ: the vouches written about them go whole, and the
+ * vouches they gave stay without their words.
+ *
+ * Idempotent: a DELETE keyed on the member and an UPDATE writing NULL, so a
+ * second run matches nothing.
+ */
+export async function forgetVouchesOf(pool: Pool, userId: string): Promise<{ received: number; wordsCleared: number }> {
+  const [gone]: any = await pool.query(
+    "DELETE FROM member_vouches WHERE village_id = ? AND vouched_user_id = ?",
+    [VILLAGE, userId],
+  );
+  const [cleared]: any = await pool.query(
+    "UPDATE member_vouches SET note = NULL WHERE village_id = ? AND voucher_user_id = ? AND note IS NOT NULL",
+    [VILLAGE, userId],
+  );
+  return { received: Number(gone?.affectedRows ?? 0), wordsCleared: Number(cleared?.affectedRows ?? 0) };
 }

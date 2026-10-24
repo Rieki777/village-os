@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_VOUCHES_FOR_MEMBERSHIP,
+  VOUCHED_IS_GONE,
   refuseVouch,
   vouchBar,
   vouchingOffRefusal,
@@ -122,10 +123,17 @@ describe("vouchBar", () => {
 });
 
 describe("refuseVouch", () => {
-  const base = { voucherUserId: "a", vouchedUserId: "u-new", existing: [] as Vouch[], vouchedIsMember: false };
+  const base = { voucherUserId: "a", vouchedUserId: "u-new", existing: [] as Vouch[], vouchedIsMember: false, vouchedIsGone: false };
 
   it("allows an ordinary first vouch", () => {
     expect(refuseVouch(base)).toBeNull();
+  });
+
+  it("REFUSES A VOUCH FOR A MEMBER WHO HAS LEFT, ordinary or super, whatever the village's dial says", () => {
+    // A super vouch, or the vouch that meets the bar, would set a tombstone's membership back on.
+    for (const over of [{}, { kind: "super" }, { kind: "super", needed: 0 }, { kind: "member", needed: 0 }]) {
+      expect(refuseVouch({ ...base, ...over, vouchedIsGone: true })?.error).toBe(VOUCHED_IS_GONE);
+    }
   });
 
   it("REFUSES VOUCHING FOR YOURSELF, which is the whole mechanism", () => {

@@ -17,15 +17,17 @@ vi.stubGlobal("IntersectionObserver", class {
   takeRecords() { return []; }
 });
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }));
-vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Testville" }));
-vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: (fallback: string) => fallback, useValueTokenName: () => "Credits" }));
-vi.mock("@/lib/moneyClaims", () => ({ useValueConversion: () => "" }));
+// The words come from the page spec's defaults (shared/pageContent/rights.ts):
+// a village that has saved nothing, with its config loaded.
+vi.mock("@/hooks/useVillageContent", () => ({ readVillageSection: () => Promise.resolve(null) }));
+vi.mock("@/lib/gameApi", () => ({ useGameConfig: () => ({ project: { name: "Testville" } }) }));
 
 import StewardRights from "./StewardRights";
 
 describe("StewardRights doors", () => {
-  it("are one link each, with no control nested inside", () => {
+  it("are one link each, with no control nested inside", async () => {
     render(<StewardRights />);
+    await screen.findByRole("link", { name: /return to/i });
     for (const [name, href] of [
       [/return to steward journey/i, "/steward"],
       [/explore quests/i, "/quests"],

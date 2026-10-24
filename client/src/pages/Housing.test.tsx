@@ -40,13 +40,23 @@ vi.mock("@/lib/gameApi", async (importOriginal) => ({
   // The helpers under test are real; only the config reads are stubbed.
   ...(await importOriginal<typeof import("@/lib/gameApi")>()),
   useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
+  useGameConfig: () => ({ project: { name: "Willowbrook" }, currency: { name: "Thanks" } }),
 }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
+// `legal` is the Legal section (the transfer note); `page` is what
+// GET /api/content/page-housing answers (null = never saved).
+const saved = vi.hoisted(() => ({ legal: null as Record<string, unknown> | null, page: null as unknown }));
 vi.mock("@/hooks/useVillageContent", () => ({
-  useVillageContent: () => ({ content: null, loading: false, isPlaceholder: true }),
+  useVillageContent: (section: string) =>
+    section === "legal"
+      ? { content: saved.legal, loading: false, isPlaceholder: !saved.legal }
+      : { content: null, loading: false, isPlaceholder: true },
+  readVillageSection: () => Promise.resolve(saved.page),
 }));
 
 import Housing from "./Housing";
+import { HOUSING_PAGE } from "@shared/pageContent/housing";
+import { markerDocument } from "@shared/pageContent/resolve";
 
 /** What `GET /api/housing/public` answers, with only `homes` varying. */
 const answering = (homes: unknown[]) =>
@@ -71,6 +81,12 @@ const renderPage = () =>
     </Router>,
   );
 
+beforeEach(() => {
+  saved.legal = null;
+  saved.page = null;
+  // afterEach's unstubAllGlobals takes the module-level stub with it.
+  vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("a village that has not described its homes", () => {
@@ -174,5 +190,98 @@ describe("a village that HAS described its homes", () => {
     renderPage();
     await waitFor(() => expect(screen.queryByText("Land Share Agreements")).toBeTruthy());
     expect(screen.queryByText("Housing Options")).toBeNull();
+  });
+});
+
+/* ── THE PAGE'S WORDS (Admin, Pages, Housing) ──────────────────────────────
+ *
+ * Every word on this page about the village is a field in
+ * shared/pageContent/housing.ts. A field a founder can save and the page
+ * never reads is the defect this system exists to end, so every field gets a
+ * distinct marker and every marker has to reach the page.
+ */
+describe("every field in the Housing spec reaches the page", () => {
+  beforeEach(() => vi.stubGlobal("fetch", answering([])));
+
+  it("renders a distinct marker typed into each field and each list row", async () => {
+    const doc = markerDocument(HOUSING_PAGE);
+    saved.page = doc;
+    renderPage();
+    await screen.findByText(String((doc.hero as Record<string, string>).lede));
+
+    const text = document.body.textContent ?? "";
+    const missing: string[] = [];
+    for (const [sectionId, section] of Object.entries(doc)) {
+      for (const [key, value] of Object.entries(section as Record<string, unknown>)) {
+        const rows = Array.isArray(value) ? (value as Record<string, string>[]) : [{ [key]: value as string }];
+        for (const row of rows) {
+          for (const [field, v] of Object.entries(row)) {
+            // An icon is a word that picks a picture, never text on the
+            // page; the next test follows it to the picture it picks.
+            if (field === "id" || field === "icon") continue;
+            if (!text.includes(v)) missing.push(`${sectionId}.${key}.${field} (${v})`);
+          }
+        }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it("draws the picture the icon word names, and a plain one for a word it does not know", async () => {
+    saved.page = {
+      features: {
+        items: [
+          { title: "Springs", body: "Clean water.", icon: "water" },
+          { title: "Typo", body: "Still a feature.", icon: "wtaer" },
+        ],
+      },
+    };
+    renderPage();
+    const springs = await screen.findByText("Springs");
+    expect(springs.parentElement?.querySelector("svg.lucide-droplets")).toBeTruthy();
+    const typo = screen.getByText("Typo");
+    expect(typo.parentElement?.querySelector("svg.lucide-mountain")).toBeTruthy();
+  });
+
+  it("draws nothing of a section the village hid, and no empty band for an empty list", async () => {
+    saved.page = { features: { items: [] }, tenure: { hidden: true } };
+    renderPage();
+    await screen.findByText(HOUSING_PAGE.sections.find((s) => s.id === "cta")!.fields[0].default);
+
+    expect(screen.queryByText("Mountain Views")).toBeNull();
+    expect(screen.queryByText("Land Share Agreements")).toBeNull();
+    expect(screen.queryByText("Learn About Residency")).toBeNull();
+    expect(document.querySelector("section.bg-aqua-light")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Housing at Willowbrook");
+  });
+
+  it("fills {village} in the defaults", async () => {
+    renderPage();
+    expect(await screen.findByText(/^At Willowbrook, you don't purchase land outright/)).toBeTruthy();
+  });
+});
+
+describe("the Transferable card and the Legal transfer note", () => {
+  beforeEach(() => vi.stubGlobal("fetch", answering([])));
+
+  it("says to ask a steward when the village has written no note", async () => {
+    renderPage();
+    expect(await screen.findByText(/Ask a steward about this village's specific transfer and tax terms/)).toBeTruthy();
+  });
+
+  it("carries the note while the card keeps the platform's description", async () => {
+    saved.legal = { landShareTransferNote: "under the 2019 succession rules" };
+    renderPage();
+    expect(
+      await screen.findByText("Pass your land share to your children under the 2019 succession rules, keeping it in the family."),
+    ).toBeTruthy();
+  });
+
+  it("keeps the village's own description when it wrote one, note or no note", async () => {
+    saved.legal = { landShareTransferNote: "under the 2019 succession rules" };
+    saved.page = { tenure: { points: [{ id: "transferable", body: "Leave it to whoever you choose." }] } };
+    renderPage();
+    expect(await screen.findByText("Leave it to whoever you choose.")).toBeTruthy();
+    expect(screen.queryByText(/succession rules/)).toBeNull();
   });
 });

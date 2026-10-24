@@ -19,6 +19,7 @@
  * somewhere.
  */
 import { useMemo } from "react";
+import { Link } from "wouter";
 import { ArrowLeft, Hand } from "lucide-react";
 import CircleScene from "@/components/CircleScene";
 import { ExampleChip } from "@/components/ExamplesBanner";
@@ -108,6 +109,13 @@ export default function CircleCard({
       {circle.status === "forming" && (
         <p className="text-xs text-muted-foreground mb-2">Still forming. Be one of the first to hold a role here.</p>
       )}
+      {/* The circle's own card: its words, its roles and who agreed to them. */}
+      <Link
+        href={`/circles/${encodeURIComponent(circle.id)}`}
+        className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-2"
+      >
+        Open this circle's card
+      </Link>
 
       <dl className="space-y-2.5 my-3">
         {circle.purpose && (

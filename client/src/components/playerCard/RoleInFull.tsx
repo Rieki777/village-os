@@ -31,7 +31,8 @@
  * Phone first: one column at 375px, every control at least 44px, long words
  * wrap, and nothing is wider than the screen.
  */
-import { useContext } from "react";
+import { useContext, useState } from "react";
+import { Link } from "wouter";
 import { CARD_WORDS as W, type RoleOut, type Slot } from "@shared/playerCard";
 import type { RoleEditKey } from "@shared/playerCardEdit";
 import type { SignSheetOut } from "@shared/playerCardPayload";
@@ -40,7 +41,9 @@ import { ROLE_CCOS_WORDS } from "@shared/roleCcos";
 import type { HoldingKey } from "@shared/playerCardCcos";
 import { TASK_BOARD_PATH } from "@shared/sessionTasks";
 import RaiseTension from "@/components/roleTension/RaiseTension";
-import { BOX, CardEditContext, EditInPlace, Eyebrow, LINK, ListSlot, PendingNote, SlotView } from "./cardParts";
+import DecideDoors, { type DecideDoorWords } from "@/components/review/DecideDoors";
+import { ROLE_PROPOSAL_WORDS as PW } from "@shared/playerCardProposals";
+import { BOX, CardEditContext, ChangedMark, EditInPlace, Eyebrow, GOLD_FRAME, LINK, ListSlot, PendingNote, SlotView, useChanged } from "./cardParts";
 import { CcosTerm, INLINE_TAP } from "./CcosTerm";
 import { SignList } from "./SignList";
 
@@ -77,6 +80,7 @@ function Part({
   return (
     <>
       <Eyebrow term={term}>{heading}</Eyebrow>
+      <ChangedMark k={k} />
       <div className="mt-1 min-w-0 break-words">{children}</div>
       <PendingNote show={role.pending.includes(k)} />
       <EditInPlace target={{ kind: "role", key: k, roleId: role.id }} label={`${heading}, ${role.title}`} initial={initial} hint={hint} multiline={multiline} />
@@ -86,7 +90,7 @@ function Part({
 
 function RoleWord(props: React.ComponentProps<typeof Part>) {
   return (
-    <div className={`${BOX} min-w-0`} data-role-section={props.k}>
+    <div className={`${BOX} min-w-0 ${useChanged(props.k) ? GOLD_FRAME : ""}`} data-role-section={props.k}>
       <Part {...props} />
     </div>
   );
@@ -100,21 +104,37 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
   const time = role.time.text;
   const exists = role.existsWhile.text;
   const holding = role.holdingWell.parts.filter((p) => draws(p.text));
+  // A decided proposal's confirmation, kept here: adopting the last one empties its panel.
+  const [decided, setDecided] = useState<string | null>(null);
+  // A role proposal's changed words, drawn in gold (role proposals PR C).
+  const timeChanged = useChanged("timeCommitment");
+  const purposeChanged = useChanged("purpose");
   return (
     <article id={role.anchor} aria-labelledby={headingId} className="grid min-w-0 scroll-mt-6 gap-4 rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-sm sm:p-8">
       <h3 id={headingId} className="font-display text-2xl font-bold break-words">
         {role.title}
       </h3>
 
-      {role.chips.length || time.kind === "shown" ? (
-        <ul className="flex flex-wrap gap-2" aria-label="About this role">
+      {role.chips.length || role.circle || time.kind === "shown" ? (
+        <ul className="flex flex-wrap items-center gap-2" aria-label="About this role">
+          {role.circle ? (
+            <li>
+              {/* The circle this role sits in, linked to that circle's card. */}
+              <Link
+                href={role.circle.href}
+                className="inline-flex min-h-11 items-center rounded-full border border-border px-3 text-sm underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                {role.circle.name}
+              </Link>
+            </li>
+          ) : null}
           {role.chips.map((c) => (
             <li key={c} className="rounded-full border border-border px-3 py-1 text-sm">
               {c}
             </li>
           ))}
           {time.kind === "shown" ? (
-            <li className="rounded-full border border-border px-3 py-1 text-sm" data-role-chip="time">
+            <li className={`rounded-full border px-3 py-1 text-sm ${timeChanged ? GOLD_FRAME : "border-border"}`} data-role-chip="time">
               <CcosTerm term={role.time.term} tap={INLINE_TAP}>
                 {time.value}
               </CcosTerm>
@@ -122,6 +142,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
           ) : null}
         </ul>
       ) : null}
+      {time.kind === "shown" ? <ChangedMark k="timeCommitment" /> : null}
       {editing && time.kind !== "unread" ? (
         <div data-role-section="timeCommitment">
           {time.kind === "empty" ? (
@@ -150,10 +171,19 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         </div>
       ) : null}
 
-      <div className="min-w-0 rounded-xl border border-notice/40 border-l-4 border-l-notice bg-card p-4">
+      {role.proposals.length ? (
+        <RoleProposals role={role} onDone={setDecided} />
+      ) : decided ? (
+        <p role="status" className="text-sm font-medium">
+          {decided}
+        </p>
+      ) : null}
+
+      <div className={`min-w-0 rounded-xl border border-notice/40 border-l-4 border-l-notice p-4 ${purposeChanged ? "bg-notice/10" : "bg-card"}`}>
         <Eyebrow gold term={role.purpose.term}>
           {role.purpose.heading}
         </Eyebrow>
+        <ChangedMark k="purpose" />
         <SlotView slot={role.purpose.text}>{(t) => <p className="mt-1 font-display text-xl break-words">{t}</p>}</SlotView>
         {role.purpose.why ? <p className="mt-2 text-sm text-muted-foreground">{role.purpose.why}</p> : null}
         <PendingNote show={role.pending.includes("purpose")} />
@@ -168,6 +198,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
               </span>
               {exists.kind === "shown" ? ` ${exists.value}` : exists.kind === "empty" ? `: ${exists.words}` : null}
             </p>
+            <ChangedMark k="existsWhile" />
             <PendingNote show={role.pending.includes("existsWhile")} />
             <EditInPlace
               target={{ kind: "role", key: "existsWhile", roleId: role.id }}
@@ -261,6 +292,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
                     {p.heading}
                   </CcosTerm>
                 </p>
+                <ChangedMark k={p.key} />
                 <SlotView slot={p.text}>{(t) => <p className="mt-1 whitespace-pre-line break-words text-sm text-muted-foreground">{t}</p>}</SlotView>
                 <PendingNote show={role.pending.includes(p.key)} />
                 <EditInPlace
@@ -375,5 +407,57 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         </ul>
       </div>
     </article>
+  );
+}
+
+/** The player card's words for the doors every org draft has. */
+const DOOR_WORDS: DecideDoorWords = {
+  adopt: PW.adopt,
+  adoptConfirm: PW.adoptConfirm,
+  adoptYes: PW.adoptYes,
+  putToVillage: PW.putToVillage,
+  putConfirm: PW.putConfirm,
+  putYes: PW.putYes,
+  voting: PW.voting,
+  waitingHolder: PW.waitingHolder,
+  waitingVillage: PW.waitingVillage,
+  blocked: PW.blocked,
+  adopted: PW.adopted,
+  putDone: PW.putDone,
+  cancel: PW.cancel,
+  failed: PW.failed,
+};
+
+/**
+ * The open proposals for this role's words, each with the words it would put
+ * live and the doors that adopt it. A draft opened from a card is listed on no
+ * review page, so the role's own section is where it is decided.
+ */
+function RoleProposals({ role, onDone }: { role: RoleOut; onDone: (said: string) => void }) {
+  const { reload } = useContext(CardEditContext);
+  return (
+    <div className={`${BOX} grid gap-3`} data-role-proposals={role.id}>
+      <Eyebrow gold>{PW.heading}</Eyebrow>
+      {role.proposals.map((p) => (
+        <div key={p.draftId} className="grid gap-2">
+          <p className="text-xs text-muted-foreground">{p.proposedOn}</p>
+          {p.fields.map((f) => (
+            <div key={f.key} className="grid gap-1">
+              <p className="text-sm font-semibold">{f.label}</p>
+              {f.lines.length ? (
+                <ul className="list-disc space-y-1 break-words pl-5 text-sm">
+                  {f.lines.map((l, i) => (
+                    <li key={i}>{l}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">{PW.clears}</p>
+              )}
+            </div>
+          ))}
+          <DecideDoors draftId={p.draftId} reload={reload} words={DOOR_WORDS} onDone={onDone} />
+        </div>
+      ))}
+    </div>
   );
 }
