@@ -56,7 +56,7 @@ screen and is shown where the room is, with one tap back to it.
 |---|---|---|
 | **Drop in** | The village's place line, the moon and the season. A shared breath that every screen in the room takes at the same pace, from one start time the server holds. Who is here. | Reads the place line or asks someone to, starts the breath, names who is here and who sent word. |
 | **Arrival** | Each person gives one number from 1 to 11 for how they are arriving and, if they like, what would make it an 11+. Nobody fixes anybody's answer. | Goes first, calls names two at a time. When the room arrives low (two or more numbers and a median of 5 or below), offers a lighter agenda and asks for consent. The tool suggests; it never trims. |
-| **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, object, or sleep on it, and a concern or an objection is said in one sentence. Sleeping on it (Rye, 2026-10-22) is for someone who decides best after a night: it needs no sentence, it is never an objection, and the round, here and on every proposal, stays open and says so until they answer again. | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
+| **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, object, or sleep on it, and a concern or an objection is said in one sentence. Sleeping on it (Rye, 2026-10-22) is for someone who decides best after a night: it needs no sentence, it is never an objection, and the round, here and on every proposal, stays open and says so. Since 2026-10-23 a night names when it ends (see "A night on a proposal" below). | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
 | **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round, a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a seat, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
 | **Actions** | Every action is claimed by a person or a role, here and now, or parked. | Reads each action out and waits for a claim. |
 | **Close** | Gratitude, one word each, feedback on the facilitation, and an idea for the tool. | Closes the session, which keeps the record. |
@@ -183,7 +183,7 @@ calendar, described under "Circle meetings on a calendar".
 | `live_session_people` | Who joined, when they were last seen, and their arrival number and words while the session is open. |
 | `live_session_items` | The agenda: title, aim, minutes, position, status, the seconds it was active, and which earlier session it came over from. |
 | `live_session_entries` | Notes, ideas, what we learned (stored as the kind `seed`), proposals, actions and tensions, each with its author, and for an action its person or role and a due date. |
-| `live_session_responses` | One answer per person per target: consent to the agenda, consent on a proposal, the closing word, and feedback on the facilitation. |
+| `live_session_responses` | One answer per person per target: consent to the agenda, consent on a proposal, the closing word, and feedback on the facilitation. A night (`sleep`) carries its answer-by time in `answer_by` (0281). |
 | `live_session_task_state` | One row per action open or done at close: its status (`open`, `done`, `let_go`), its person or role now, its date, the kind and the one line of its latest answer, who gave it, and a version that goes up on every answer. |
 | `live_session_task_events` | Every answer to a task, in order, with the state it left. Append-only. |
 | `live_session_task_sends` | Each time a session's task emails went out: the send's number (1 is the close), who pressed, and the counts by outcome. Numbers only, never an address. |
@@ -222,6 +222,33 @@ later session that was brought over from it keeps its words and loses the link. 
 emails already sent keep their link as text. Everybody else in an open room finds it gone on their
 next poll and lands on the list, which says the session was discarded (`discardSession` in
 `server/lib/liveSessions.ts`).
+
+## A night on a proposal
+
+Rye ruled on 2026-10-23 that someone who sleeps on a proposal names a time to answer by, and that a
+night left unanswered by then counts as no objection. Choosing "I'll sleep on it" asks "When will you
+answer by?": Tomorrow, 9:00; In two days, 9:00; or a time from a quarter of an hour to a week ahead
+(the week is a choice the ruling left open, kept small). The answer cannot be sent without one. The
+round names each night ("Ada asked for a night. The round stays open until 9:00 tomorrow."), and a night
+whose time has come counts as no objection, by default: "1 no objection by default" in the tally and in
+the minutes, and it never keeps the round waiting. A night asked for before 0281 has no time and keeps
+the round waiting until its person answers, as it did.
+
+**The round outlives the call** (Rye's choice, the same day). A proposal still open at the close with
+somebody sleeping on it keeps its round on the record. Whoever asked for a night hears where to answer
+and by when (`session_night_open`, bell only), and answers it from the record: I consent, a concern or an
+objection, each of the last two in one sentence. Nobody else can answer after the call. Once no night
+lasts, the round consents when nobody objects and nobody in the room at the close went unheard; the
+facilitator hears how it went (`session_night_settled`, bell only), and marking a consented round decided
+stays their act, from the record. A night that simply ends is settled by the `session-nights` job, every
+fifteen minutes, which writes the record's tally and minutes again. The rule is
+`shared/sessions.ts` `nightRoundState`, and the summary keeps which rounds outlived the close.
+
+| Door | Who | Limit |
+|---|---|---|
+| `POST /api/sessions/:id/respond` `{ target, value: "sleep", answerBy }` | the room's people | 300 an hour |
+| `POST /api/sessions/:id/night` `{ entryId, value, text }` | whoever asked for a night on it, by their time | 60 an hour |
+| `POST /api/sessions/:id/entries/:entryId/decide` | the facilitator, an admin | 60 an hour |
 
 ## When a circle meets: its rhythm
 
@@ -629,7 +656,7 @@ nothing from then on.
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
-and their own answers. From the task layer it carries `tasks`, the tasks they hold now, and
+and their own answers, a night's answer-by time with it. From the task layer it carries `tasks`, the tasks they hold now, and
 `taskAnswers`, every answer they gave a task with its date and words. A note somebody else left on
 a task they hold is that person's, and stays out. From the agenda library it carries `library`, the
 items they brought in their own words, `libraryTakes`, the times they put an item on an agenda, and
