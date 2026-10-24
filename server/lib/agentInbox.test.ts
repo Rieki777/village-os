@@ -80,6 +80,10 @@ function drainPool(opts: { failures?: number; deliveries: { id: string; attempts
         return [rows.filter((r) => !r.delivered_at && !r.dropped_at).map((r) => ({ ...r, inbox_url: inbox.url, inbox_user_id: inbox.user_id, inbox_enabled: inbox.enabled, inbox_failures: inbox.consecutive_failures }))];
       }
       if (/^SELECT \* FROM agent_inboxes WHERE user_id/.test(sql)) return [[inbox]];
+      // The holder read (`holderListens`): a living member. A tombstone or a
+      // missing holder is asserted against a real schema, in
+      // server/lib/erasure.agentResume.test.ts.
+      if (/ FROM users WHERE id = \?$/.test(sql)) return [[{ id: args[0], email: `${args[0]}@example.test` }]];
       if (/^UPDATE agent_deliveries SET attempts = attempts \+ 1/.test(sql)) {
         const r = rows.find((x) => x.id === args[0]);
         if (!r || r.attempts !== args[1]) return [{ affectedRows: 0 }];
