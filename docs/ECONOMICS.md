@@ -493,6 +493,55 @@ consent (`OwedClaim.boost`), each seat at settlement (`runSettlement`'s `boostFo
 accepted proposal, all through `quoteWorkPay`'s `boost`. The old single `badges.multiplier`
 names no token and multiplies nothing.
 
+### The cash work pays, and the record of it (0285)
+
+Rye, 2026-10-23: "roles and quests and more can be paid in cash, tokens (equity, credits,
+etc), and voice (governance) and most roles will carry all 3, few quests will pay cash, but
+some will." And: "The Game wouldn't pay cash, but it would say what they are owed and they
+can claim it when they're paid out so that the treasurer has a record to check when sending
+or giving cash payments."
+
+**The platform never moves money, and nothing here changes that.** Fiat flows in only. Cash
+has no token, no ledger account and no posting. What the platform keeps is a RECORD of what
+the village owes, in `cash_owed`, beside the ledger and never inside it, so conservation and
+every boot invariant are untouched by it.
+
+**Every contribution type states its cash.** `quests.cash_minor` and `org_roles.cash_minor`
+(with `cash_currency`, stamped with the village's currency at the save, for the reason 0265
+gives for `value_currency`) are set in the same editors as the value and the tokens, and read
+by `readWorkValueInput` like the value. Zero and blank both store nothing. A Work With Us
+proposal carries no value until it is accepted, so its cash is typed on accepting it (Admin,
+Submissions, "Accept with this cash"). Cards show the work's own cash beside its tokens
+(`WorkPay.cashPay`); a role's terms on offer may state cash too, and that line shows only
+where the role states none of its own, so the two never read as one sum. The pay path never
+reads terms (`shared/seatSettings.boundary.test.ts`): the cash it owes is the role's own.
+
+**Owed at the moment the work is paid in tokens, keyed so a retry writes nothing new:**
+
+| Work | When | Occurrence key |
+| --- | --- | --- |
+| a quest | at consent, on the consent's connection, inside the commit that flips the claim | the claim |
+| a role | each settled cycle (`runSettlement`), before the token rules are read, once the Game has started | the cycle, the seat, the member |
+| a proposal | when the acceptance's token payment goes through (`applyAcceptReward`) | the submission |
+
+A village with no `role.cycle` rule can still pay its roles in cash, which is why the role step
+runs before `runSettlement` can return early. It waits for the Game to start the way the ledger
+does, so a seat held while a village is still setting up owes nothing. A badge multiplier never
+touches cash: the ruling attaches a multiplier to a token.
+
+**Owed, claimed, paid.** A row moves one way. The member reads what they are owed on their
+profile and claims it when the village pays out (`POST /api/me/cash-owed/:id/claim`, their own
+row only). Whoever holds `cash.pay` reads the village's list (`GET /api/cash-owed/queue`) and
+marks a row paid with a note saying how (`POST /api/cash-owed/:id/paid`); the note is required,
+because a payment with no stated method is not a record anybody can check. A holder may mark an
+owed row paid before it is claimed, when the money went out first. Nobody marks their own cash
+paid, the witness rule `canConfirm` holds for consent. With nobody holding the key, the one gate
+falls through to admin. The member is told when it is marked paid, with the note.
+
+**An erasure leaves these rows.** They are the village's record of money it owed and paid, and a
+row holds an account id and an amount, never a name, so an erased member reads as the tombstone
+everywhere else does.
+
 **Who the pool follows.** Before 2026-10-21 a member who finished many quests earned
 Gratitude for each, and so a share of the cycle pool. Now the pool follows peer thanks
 alone, and the same member is paid for each quest directly, in its own tokens. A member who

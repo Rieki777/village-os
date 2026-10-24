@@ -41,7 +41,7 @@ export interface CashQueueEntry extends CashOwedEntry {
 export const CASH_PAID_NOTE_MAX = 500;
 
 export const CASH_STATE_WORDS: Record<CashOwedState, string> = {
-  owed: "Owed to you",
+  owed: "Owed",
   claimed: "Claimed, waiting to be paid",
   paid: "Paid",
 };

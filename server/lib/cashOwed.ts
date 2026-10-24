@@ -32,6 +32,7 @@
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import {
   claimCashOwedRow,
+  cashOwedIdForOccurrence,
   cashOwedRowById,
   cashOwedRowsFor,
   insertCashOwedRow,
@@ -74,8 +75,9 @@ interface OweInput {
 async function owe(db: Pool | PoolConnection, p: OweInput): Promise<boolean> {
   const cash = p.cash ? readWorkValue(p.cash.minor, p.cash.currency) : null;
   if (!cash || cash.minor <= 0) return false;
-  const res = await insertCashOwedRow(db, {
-    id: newId(),
+  const id = newId();
+  await insertCashOwedRow(db, {
+    id,
     occurrenceKey: p.occurrenceKey,
     userId: p.userId,
     workKind: p.workKind,
@@ -84,7 +86,8 @@ async function owe(db: Pool | PoolConnection, p: OweInput): Promise<boolean> {
     amountMinor: cash.minor,
     currency: cash.currency,
   });
-  return res.affectedRows === 1;
+  // Whether THIS call wrote it: the id that holds the occurrence is ours.
+  return (await cashOwedIdForOccurrence(db, p.occurrenceKey)) === id;
 }
 
 /** A consented quest owes its cash to the claimant, once per claim. */

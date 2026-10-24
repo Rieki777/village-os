@@ -39,6 +39,17 @@ export async function insertCashOwedRow(db: Pool | PoolConnection, r: CashOwedIn
   return res;
 }
 
+/**
+ * The id that holds an occurrence, read on the same pool or connection the
+ * insert ran on. `affectedRows` cannot say whether the insert above wrote:
+ * mysql2 connects with FOUND_ROWS, so a duplicate under ON DUPLICATE KEY
+ * reports 1, the same as a fresh row. The id that won is the answer.
+ */
+export async function cashOwedIdForOccurrence(db: Pool | PoolConnection, occurrenceKey: string): Promise<string | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `id` FROM `cash_owed` WHERE `occurrence_key` = ?", [occurrenceKey]);
+  return rows[0] ? String(rows[0].id) : null;
+}
+
 /** Everything one member is or was owed, newest first. */
 export async function cashOwedRowsFor(pool: Pool, userId: string, limit: number): Promise<RowDataPacket[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
