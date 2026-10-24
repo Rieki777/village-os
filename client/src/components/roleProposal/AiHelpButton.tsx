@@ -1,77 +1,58 @@
 /**
- * The "Let AI help me with this" button on the words and season steps (role
- * proposals PR C). It draws ONLY when the adapter says the bridge is
- * configured for the village (`aiHelpStatus`, ./aiHelp.ts), and the adapter
- * says "not configured" until a guide route exists, so today it draws nothing.
- * A button that does not work is never shown.
+ * "Let AI help me with this" on the words and season steps (role proposals
+ * PR C, wired by the role guide).
  *
- * Once configured, a press asks for suggestions on the words written so far
- * and lists them. Each one waits for the member's own "Use this", which puts
- * the words in the field like typing does. The AI never saves or submits.
+ * It hosts the role guide's panel (./RoleGuidePanel.tsx), which draws only
+ * when a guide can answer, says which one is answering, and offers the other
+ * when both can. Every suggestion waits for the member's own "Use this", which
+ * puts the words in the field exactly as typing does, so the step's autosave
+ * keeps them. The guide never saves or submits.
+ *
+ * WHICH ROLE. The words step shows one role at a time and draws this button
+ * inside that role's section (`data-words-role`), so the panel offers only that
+ * role's suggestions. The season step's handler takes the aim, so that is the
+ * one season field the panel offers there.
  */
-import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
-import { aiHelpStatus, type AiHelpStatus, type AiHelpStep, type AiSuggestion } from "./aiHelp";
-import { RP_WORDS } from "./proposalWords";
-import { QUIET } from "./parts";
+import { useEffect, useRef, useState } from "react";
+import { useParams } from "wouter";
+import { useVillageName } from "@/hooks/useVillageName";
+import type { GuideSuggestion } from "@shared/roleGuide";
+import { onBroughtIn, type AiHelpStep } from "./aiHelp";
+import RoleGuidePanel from "./RoleGuidePanel";
 
 export default function AiHelpButton({
   step,
-  words,
   onAccept,
 }: {
   step: AiHelpStep;
-  /** The words written on this step so far, by field. */
-  words: Record<string, string>;
+  /** The words written on this step so far, by field. The guide reads the saved draft, so these are not sent. */
+  words?: Record<string, string>;
   /** The member accepted one suggestion: put it in its field. */
   onAccept: (field: string, words: string) => void;
 }) {
-  const [status, setStatus] = useState<AiHelpStatus | null>(null);
-  const [suggestions, setSuggestions] = useState<AiSuggestion[]>([]);
-  const [busy, setBusy] = useState(false);
+  const { id = "" } = useParams<{ id: string }>();
+  const villageName = useVillageName();
+  const here = useRef<HTMLDivElement>(null);
+  const [roleId, setRoleId] = useState<string | null>(null);
+  const [document, setDocument] = useState<string | null>(null);
+
+  useEffect(() => onBroughtIn(step, setDocument), [step]);
   useEffect(() => {
-    let alive = true;
-    void aiHelpStatus(step).then((s) => {
-      if (alive) setStatus(s);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [step]);
-  if (!status || !status.configured) return null;
-  const { suggest } = status;
-  const ask = async () => {
-    setBusy(true);
-    setSuggestions(await suggest({ step, words }).catch(() => []));
-    setBusy(false);
-  };
+    setRoleId(here.current?.closest("[data-words-role]")?.getAttribute("data-words-role") ?? null);
+  });
+
+  if (!id) return null;
+  const accepts = (s: GuideSuggestion) => (step === "season" ? s.field === "aim" : s.roleId === roleId);
   return (
-    <div className="grid gap-2" data-ai-help={step}>
-      <div>
-        <button type="button" onClick={() => void ask()} disabled={busy} className={QUIET}>
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          {RP_WORDS.aiHelp}
-        </button>
-      </div>
-      {suggestions.length > 0 && (
-        <ul className="grid gap-2">
-          {suggestions.map((s, i) => (
-            <li key={`${s.field}-${i}`} className="rounded-lg border border-stone-200 bg-white p-3 text-sm">
-              <p className="whitespace-pre-line break-words text-stone-800">{s.words}</p>
-              <button
-                type="button"
-                className={QUIET}
-                onClick={() => {
-                  onAccept(s.field, s.words);
-                  setSuggestions((list) => list.filter((_, j) => j !== i));
-                }}
-              >
-                {RP_WORDS.useSuggestion}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div ref={here} data-ai-help={step}>
+      <RoleGuidePanel
+        proposalId={id}
+        step={step}
+        villageName={villageName}
+        document={document}
+        accepts={accepts}
+        onAccept={(s) => onAccept(s.field, Array.isArray(s.words) ? s.words.join("\n") : s.words)}
+      />
     </div>
   );
 }
