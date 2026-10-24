@@ -117,7 +117,12 @@ export interface RoomActions {
   addEntry(input: EntryInput, opts?: WriteOptions): Promise<WriteResult<{ id?: number }>>;
   patchEntry(entryId: number, patch: EntryPatch, opts?: WriteOptions): Promise<WriteResult>;
   deleteEntry(entryId: number, opts?: WriteOptions): Promise<WriteResult>;
-  respond(target: ResponseTarget, value: string, text?: string | null, opts?: WriteOptions): Promise<WriteResult>;
+  /** `answerBy` (an ISO instant) goes with a night, `sleep`, and with nothing else. */
+  respond(target: ResponseTarget, value: string, text?: string | null, opts?: WriteOptions, answerBy?: string): Promise<WriteResult>;
+  /** On a closed record (0281): answer a round you slept on, by your time. */
+  answerNight(entryId: number, value: string, text: string | null, opts?: WriteOptions): Promise<WriteResult>;
+  /** On a closed record (0281): the facilitator marks a round that consented after the call decided. */
+  decideAfterNight(entryId: number, opts?: WriteOptions): Promise<WriteResult>;
   act(action: SessionAction, opts?: WriteOptions): Promise<WriteResult<{ state?: SessionState }>>;
   hosts(input: { facilitatorUserId?: number; secretaryUserId?: number | null }, opts?: WriteOptions): Promise<WriteResult>;
   close(opts?: WriteOptions): Promise<WriteResult & { unowned?: number[] }>;
@@ -371,7 +376,10 @@ export function useSessionRoom(
     addEntry: (input, opts) => write("POST", "/entries", input, opts),
     patchEntry: (entryId, patch, opts) => write("PATCH", `/entries/${entryId}`, patch, opts),
     deleteEntry: (entryId, opts) => write("DELETE", `/entries/${entryId}`, undefined, opts),
-    respond: (target, value, text, opts) => write("POST", "/respond", text ? { target, value, text } : { target, value }, opts),
+    respond: (target, value, text, opts, answerBy) =>
+      write("POST", "/respond", { target, value, ...(text ? { text } : {}), ...(answerBy ? { answerBy } : {}) }, opts),
+    answerNight: (entryId, value, text, opts) => write("POST", "/night", { entryId, value, ...(text ? { text } : {}) }, opts),
+    decideAfterNight: (entryId, opts) => write("POST", `/entries/${entryId}/decide`, {}, opts),
     act: (action, opts) => write<{ state?: SessionState }>("POST", "/act", { action }, opts),
     hosts: (input, opts) => write("POST", "/hosts", input, opts),
     close: async (opts) => {

@@ -186,8 +186,11 @@ export type EntryStatus = (typeof ENTRY_STATUSES)[number];
 
 /**
  * Four answers. `sleep` (Rye, 2026-10-22) is for someone who decides best
- * after a night: it is never an objection, it needs no sentence, and the round
- * stays open until they answer again with one of the other three.
+ * after a night: it is never an objection and it needs no sentence. Since
+ * Rye's ruling on 2026-10-23 it names a time to answer by (`answerBy`): the
+ * round waits for them until then, and a night still unanswered at that time
+ * counts as no objection, by default. A night asked for before the ruling has
+ * no time, and keeps the round waiting until they answer, as it did.
  */
 export const CONSENT_VALUES = ["consent", "concern", "object", "sleep"] as const;
 export type ConsentValue = (typeof CONSENT_VALUES)[number];
@@ -206,6 +209,26 @@ export const CONSENT_LABELS: Record<ConsentValue, string> = {
 /** A concern or an objection is said in one sentence, so the room can hear it whole. Sleeping on it needs none. */
 export function consentNeedsWords(value: ConsentValue): boolean {
   return value === "concern" || value === "object";
+}
+
+/**
+ * How far ahead a night's answer-by time may be. At most a week, so a round is
+ * never held for longer (a choice the ruling left open, made small); at least
+ * a quarter of an hour, so a night is never over before the room has heard it
+ * was asked for.
+ */
+export const SLEEP_LIMITS = {
+  maxAheadMs: 7 * 86_400_000,
+  minAheadMs: 15 * 60_000,
+} as const;
+
+/** A night's answer-by time from a body (an ISO instant), inside the window from `now`. */
+export function cleanAnswerBy(raw: unknown, now: number): { ok: true; value: number } | { ok: false; error: string } {
+  const at = typeof raw === "string" && raw.trim() ? Date.parse(raw) : typeof raw === "number" ? raw : Number.NaN;
+  if (!Number.isFinite(at)) return { ok: false, error: SESSION_REFUSALS.answerByNeeded };
+  if (at < now + SLEEP_LIMITS.minAheadMs) return { ok: false, error: SESSION_REFUSALS.answerBySoon };
+  if (at > now + SLEEP_LIMITS.maxAheadMs) return { ok: false, error: SESSION_REFUSALS.answerByFar };
+  return { ok: true, value: at };
 }
 
 /**
@@ -559,6 +582,12 @@ export interface ConsentTally {
   object: number;
   /** People sleeping on it: answered for now, never an objection, and the round waits for them. */
   sleeping: number;
+  /**
+   * Nights whose answer-by time passed with no other answer: each counts as no
+   * objection, by default (Rye, 2026-10-23), and never keeps the round waiting.
+   * Absent from a record written before the ruling, which reads as none.
+   */
+  byDefault?: number;
   /** People here who have not answered yet. */
   waiting: number;
   /** Everyone here has answered, nobody is sleeping on it, and nobody objects. */
@@ -569,17 +598,62 @@ export interface ConsentTally {
 export interface ConsentAnswer {
   who: number;
   value: ConsentValue;
+  /** On a night: when it ends, in ms. Null on a night asked for before answer-by times, which never ends by itself. */
+  answerBy?: number | null;
+}
+
+/** A night whose answer-by time has come counts as no objection. */
+export function nightIsOver(a: Pick<ConsentAnswer, "value" | "answerBy">, now: number): boolean {
+  return a.value === "sleep" && a.answerBy != null && a.answerBy <= now;
+}
+
+/** A night that still lasts: its answer-by time is still ahead. */
+export function nightLasts(a: Pick<ConsentAnswer, "value" | "answerBy">, now: number): boolean {
+  return a.value === "sleep" && a.answerBy != null && a.answerBy > now;
+}
+
+/**
+ * A round that outlives its call (Rye, 2026-10-23: "Round outlives the call").
+ * A proposal still open at the close with somebody sleeping on it keeps its
+ * round after the session closes: whoever asked for a night answers it from
+ * the record until their time, and once no night lasts, the round consents
+ * when nobody objects and nobody in the room at the close went unheard
+ * (`waitingAtClose`, since nobody else can answer after the call). Marking it
+ * decided stays the facilitator's act. Pure, so the record, the job and the
+ * doors read one rule.
+ */
+export function nightRoundState(
+  atClose: { waiting: number } | undefined,
+  answers: readonly ConsentAnswer[],
+  now: number,
+): { outlives: boolean; open: boolean; consented: boolean; tally: ConsentTally } {
+  const t = consentTally(answers, [], now);
+  const outlives = atClose != null;
+  const open = t.sleeping > 0;
+  const consented = outlives && !open && atClose.waiting === 0 && t.object === 0 && answers.length > 0;
+  return { outlives, open, consented, tally: { ...t, waiting: atClose?.waiting ?? 0, consented } };
+}
+
+/** When a night ends, in the village's own clock: "9:00 on Saturday 24 October". */
+export function nightAtWords(at: number, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "numeric", minute: "2-digit", weekday: "long", day: "numeric", month: "long", hourCycle: "h23" }).formatToParts(new Date(at));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${Number(part("hour"))}:${part("minute")} on ${part("weekday")} ${part("day")} ${part("month")}`;
 }
 
 /**
  * A consent round, counted person by person. `waiting` is the people here now
  * who have not answered, so an answer from someone who has left never stands in
  * for someone present who has not been heard. Every answer counts toward the
- * totals, and an objection blocks whoever gave it, present or not.
+ * totals, and an objection blocks whoever gave it, present or not. A night
+ * whose answer-by time has come (by `now`) counts as no objection, by default.
  */
-export function consentTally(answers: readonly ConsentAnswer[], presentIds: readonly number[]): ConsentTally {
-  const t = { consent: 0, concern: 0, object: 0, sleep: 0 };
-  for (const a of answers) t[a.value] += 1;
+export function consentTally(answers: readonly ConsentAnswer[], presentIds: readonly number[], now: number = Date.now()): ConsentTally {
+  const t = { consent: 0, concern: 0, object: 0, sleep: 0, byDefault: 0 };
+  for (const a of answers) {
+    if (nightIsOver(a, now)) t.byDefault += 1;
+    else t[a.value] += 1;
+  }
   const waitingIds = consentWaitingIds(answers, presentIds);
   const heardHere = presentIds.some((id) => answers.some((a) => a.who === id));
   return {
@@ -587,6 +661,7 @@ export function consentTally(answers: readonly ConsentAnswer[], presentIds: read
     concern: t.concern,
     object: t.object,
     sleeping: t.sleep,
+    byDefault: t.byDefault,
     waiting: waitingIds.length,
     consented: heardHere && waitingIds.length === 0 && t.object === 0 && t.sleep === 0,
   };
@@ -757,11 +832,30 @@ export interface SessionEntry {
   createdAt: string;
 }
 
+/**
+ * Where an open proposal of a closed session stands, when its round outlived
+ * the call (`nightRoundState`). Only on a closed record, and only for the
+ * people who read its answers.
+ */
+export interface NightRound {
+  entryId: number;
+  /** A night on it still lasts. */
+  open: boolean;
+  /** No night lasts, nobody objects, and nobody at the close went unheard. */
+  consented: boolean;
+  /** The viewer asked for a night on it that still lasts, so they answer it here. */
+  canAnswer: boolean;
+  /** The viewer may mark it decided: the session's facilitator or an admin, once it consented. */
+  canDecide: boolean;
+}
+
 export interface SessionResponse {
   target: ResponseTarget;
   userId: number;
   value: string;
   text: string | null;
+  /** On a night (`sleep`): when it ends, an ISO instant. Null otherwise, and on a night asked for before answer-by times. */
+  answerBy?: string | null;
 }
 
 export interface SeatOption {
@@ -810,6 +904,8 @@ export interface SessionView {
    * that left nothing behind: its open actions and its backlog.
    */
   carried: { sessionId: number; title: string; actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } | null;
+  /** On a closed record: the proposals whose round outlived the call (Rye, 2026-10-23). Absent or empty otherwise. */
+  nights?: NightRound[];
   /**
    * Every task from this circle's earlier sessions that is still open, or that
    * was answered since the circle last met, with its latest answer, as this
@@ -1115,6 +1211,14 @@ export const SESSION_REFUSALS = {
   targetUnknown: "That is not something to answer here.",
   consentValue: "Answer with consent, concern or object.",
   consentWords: "Say your concern or objection in one sentence.",
+  answerByNeeded: "Say when you will answer by.",
+  nightInRoom: "This session is still open. Answer in the room.",
+  noNight: "Nobody asked for a night on this proposal.",
+  nightNotYours: "Only somebody who asked for a night on this proposal answers it after the call.",
+  nightOver: "Your night has ended, so your answer counts as no objection.",
+  nightValue: "Answer with I consent, I consent with a concern, or I object.",
+  answerBySoon: "Give yourself at least a quarter of an hour.",
+  answerByFar: "Choose a time within the next week.",
   wordNeeded: "Give one word as you leave.",
   facilitationValue: "Answer with flowed, mixed or stuck.",
   arrivalScore: `Give a whole number from ${ARRIVAL_MIN} to ${ARRIVAL_MAX}.`,
@@ -1154,6 +1258,13 @@ export const SESSION_NOTICES = {
    * words ("Thursday 22 October", from taskDateWords), never machine digits.
    */
   actionBody: (text: string, dueWords: string | null): string => (dueWords ? `${text.replace(/[.!?]+$/, "")}, by ${dueWords}.` : text),
+  /** To somebody whose night outlives the call: where and by when to answer. */
+  nightOpen: (title: string): string => `You asked for a night on a proposal in "${title}"`,
+  nightOpenBody: (text: string, when: string): string =>
+    `${text.replace(/[.!?]+$/, "")}. Answer from the session's record by ${when}, or your answer counts as no objection.`,
+  /** To the facilitator, once no night lasts on a round that outlived the call. */
+  nightSettled: (title: string, consented: boolean): string =>
+    consented ? `The round on a proposal in "${title}" consented after the call. You can mark it decided.` : `The night is over on a proposal in "${title}".`,
 } as const;
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1270,13 +1381,30 @@ export const ROOM_COPY = {
   consentNeedsSentence: "A concern or an objection needs one sentence, so the room can hear it whole.",
   consentSend: "Give my answer",
   consentChange: "Change my answer",
-  tallyLine: (t: { consent: number; concern: number; object: number; sleeping?: number; waiting: number }) =>
-    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting${t.sleeping ? `, ${t.sleeping} sleeping on it` : ""}, ${t.waiting} still to answer`,
+  tallyLine: (t: { consent: number; concern: number; object: number; sleeping?: number; byDefault?: number; waiting: number }) =>
+    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting${t.sleeping ? `, ${t.sleeping} sleeping on it` : ""}${t.byDefault ? `, ${t.byDefault} no objection by default` : ""}, ${t.waiting} still to answer`,
   /** A record written before anyone could sleep on it carries no `sleeping`, and reads the same as it did. */
-  talliedLine: (t: { consent: number; concern: number; object: number; sleeping?: number }) =>
-    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting${t.sleeping ? `, ${t.sleeping} sleeping on it` : ""}`,
+  talliedLine: (t: { consent: number; concern: number; object: number; sleeping?: number; byDefault?: number }) =>
+    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting${t.sleeping ? `, ${t.sleeping} sleeping on it` : ""}${t.byDefault ? `, ${t.byDefault} no objection by default` : ""}`,
   /** Under a round while somebody is sleeping on it. */
   sleepingOpen: "Somebody asked for a night. The round stays open until they answer.",
+  /** Choosing "I'll sleep on it": the time they will answer by (Rye, 2026-10-23). */
+  nightAsk: "When will you answer by?",
+  nightTomorrow: "Tomorrow, 9:00",
+  nightTwoDays: "In two days, 9:00",
+  nightTimeLabel: "Or choose a time",
+  nightHint: "If you have not answered by then, your answer counts as no objection.",
+  nightNeeded: "Say when you will answer by.",
+  nightOpen: (name: string, when: string): string => `${name} asked for a night. The round stays open until ${when}.`,
+  nightOver: (name: string, when: string): string => `${name}'s night ended at ${when}, so it counts as no objection.`,
+  /** On a closed record, for a round that outlived the call. */
+  recordNightYours: (when: string): string => `You asked for a night. Answer by ${when}, or your answer counts as no objection.`,
+  recordConsented: "The round consented after the call: nobody objects.",
+  recordNotConsented: "The night is over, and the round did not consent.",
+  markDecided: "Mark it decided",
+  nightAnswerAsk: "Your answer after a night",
+  nightAnswered: "Your answer is in the record.",
+  decidedAfterNight: "Marked decided.",
   consented: "Everyone here consents.",
   waitingFor: (names: readonly string[]) => `Waiting for ${names.join(", ")}`,
   proposalConsentAsk: "Do you consent to this proposal?",

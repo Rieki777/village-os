@@ -501,6 +501,20 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} of your circles meet soon.",
     celebrate: false,
   },
+  // A night on a proposal (0281): whoever asked for one hears where to answer
+  // once the call has closed, and the facilitator hears when no night lasts.
+  session_night_open: {
+    group: "work",
+    blurb: "You asked for a night on a proposal and the call has closed. The notice says where to answer, and by when.",
+    many: "{n} proposals wait for your answer after a night.",
+    celebrate: false,
+  },
+  session_night_settled: {
+    group: "work",
+    blurb: "A proposal from a session you facilitated waited for a night, and the night is over. The notice says how the round went.",
+    many: "{n} rounds you facilitated are settled after a night.",
+    celebrate: false,
+  },
   session_item_settled: {
     group: "work",
     blurb: "A session that took up an agenda item you added has closed. The item says whether it was taken up or waits for next time.",

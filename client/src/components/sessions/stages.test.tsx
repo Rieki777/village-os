@@ -86,6 +86,8 @@ function doors(): RoomActions {
     patchEntry: (...a) => ok("patchEntry", ...a),
     deleteEntry: (...a) => ok("deleteEntry", ...a),
     respond: (...a) => ok("respond", ...a),
+    answerNight: (...a) => ok("answerNight", ...a),
+    decideAfterNight: (...a) => ok("decideAfterNight", ...a),
     act: (...a) => ok("act", ...a),
     hosts: (...a) => ok("hosts", ...a),
     close: (...a) => ok("close", ...a),
@@ -167,8 +169,8 @@ describe("a consent round", () => {
     expect(log[0]!.args.slice(0, 3)).toEqual(["agenda", "consent", null]);
   });
 
-  it("sleeping on it carries no words, and the round says it stays open while anybody sleeps on it", async () => {
-    // Ada (1) sleeps on it; Bo (2), whose screen this is, has not answered yet.
+  it("sleeping on it carries no words but a time to answer by, and the round says it stays open while anybody sleeps on it", async () => {
+    // Ada (1) slept on it before answer-by times; Bo (2), whose screen this is, has not answered yet.
     const view = makeView({ responses: [{ target: "agenda", userId: 1, value: "sleep", text: null }] });
     render(<ConsentRound view={view} actions={doors()} target="agenda" ask={SESSION_COPY.agendaConsentAsk} />);
     expect(screen.getByText(ROOM_COPY.tallyLine({ consent: 0, concern: 0, object: 0, sleeping: 1, waiting: 1 }))).toBeInTheDocument();
@@ -176,9 +178,12 @@ describe("a consent round", () => {
     expect(screen.queryByText(ROOM_COPY.consented)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: CONSENT_LABELS.sleep }));
     expect(screen.queryByPlaceholderText(ROOM_COPY.consentSentence)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: ROOM_COPY.consentSend })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.nightTomorrow }));
     fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.consentSend }));
     await waitFor(() => expect(log).toHaveLength(1));
     expect(log[0]!.args.slice(0, 3)).toEqual(["agenda", "sleep", null]);
+    expect(typeof log[0]!.args[4]).toBe("string");
   });
 
   it("says when everyone here consents", () => {
