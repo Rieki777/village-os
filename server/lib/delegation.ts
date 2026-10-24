@@ -107,11 +107,12 @@
  * and one member holding two delegations could otherwise carry a three-seat
  * village alone while the record read as three parties agreeing.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import type { VoteChoice } from "../../shared/governanceEngine";
 import { evaluationRulesFor } from "../../shared/ballotSubjects";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { variable } from "./variables";
+import { whileSessionHolds } from "./agentTokens";
 
 export interface DelegationRow {
   delegatorId: string;
@@ -254,7 +255,7 @@ export function delegationProblem(
 
 export type SetDelegationResult =
   | { ok: true; delegation: DelegationRow; chain: ResolvedChain }
-  | { ok: false; error: string };
+  | { ok: false; status?: 401; error: string };
 
 /**
  * Give a delegation, or move one that already stands. It lands PENDING, and
@@ -284,30 +285,53 @@ export type SetDelegationResult =
  * those three assignments silently changes the rule. The case named "keeps an
  * acceptance only for the same live delegate" in delegation.test.ts is what
  * fails if anybody does.
+ *
+ * WRITTEN WHILE THE SESSION HOLDS. `sessionVersion` is the tokenVersion the
+ * request's session was checked at, and `PUT /api/governance/delegation`
+ * always passes it. A new password and an admin's revoke sessions end the
+ * delegation the member gave on both sides of the bump (`endVoiceGiven`), so
+ * one written after that would hand the member's vote to whoever the stolen
+ * session named. With a version the row is written under the member's row
+ * lock, and only while the row still carries it (`whileSessionHolds`): a
+ * change that committed first is refused with status 401 and nothing
+ * written, and one that comes later waits for the commit, and the end after
+ * the bump takes the delegation back. Without one it writes as it always
+ * has, for a caller that acts for no session.
  */
 export async function setDelegation(
   pool: Pool,
   delegatorId: string,
   delegateId: string,
+  sessionVersion?: number,
 ): Promise<SetDelegationResult> {
   const delegator = String(delegatorId ?? "").trim();
   const delegate = String(delegateId ?? "").trim();
   const offered = await loadOfferedMap(pool);
   const problem = delegationProblem(offered, delegator, delegate);
   if (problem) return { ok: false, error: problem };
-  await pool.query( // module-review-ok: the delegations table's one enumerable home (the ballots.ts pattern; no cache sits above it)
-    "INSERT INTO delegations (delegator_id, delegate_id, created_at, revoked_at, accepted_at) VALUES (?,?,NOW(),NULL,NULL) " +
-      "ON DUPLICATE KEY UPDATE " +
-      "accepted_at = IF(delegate_id = VALUES(delegate_id) AND revoked_at IS NULL, accepted_at, NULL), " +
-      "delegate_id = VALUES(delegate_id), created_at = NOW(), revoked_at = NULL",
-    [delegator, delegate],
-  );
+  if (sessionVersion === undefined) {
+    await writeDelegation(pool, delegator, delegate);
+  } else {
+    const held = await whileSessionHolds(pool, delegator, sessionVersion, (conn) => writeDelegation(conn, delegator, delegate));
+    if (!held.ok) return { ok: false, status: 401, error: "auth_required" };
+  }
   const row = await delegationOf(pool, delegator);
   if (!row) throw new Error(`delegation for ${delegator} vanished inside its own write`);
   // The chain is walked over what CARRIES. A pending delegation resolves to
   // the delegator themselves, because nobody is deciding for them yet.
   const carrying = await loadDelegationMap(pool);
   return { ok: true, delegation: row, chain: resolveFinal(carrying, delegator) };
+}
+
+/** The upsert `setDelegation` describes, on a pool or on the connection that holds the delegator's row. */
+async function writeDelegation(db: Pool | PoolConnection, delegator: string, delegate: string): Promise<void> {
+  await db.query( // module-review-ok: the delegations table's one enumerable home (the ballots.ts pattern; no cache sits above it)
+    "INSERT INTO delegations (delegator_id, delegate_id, created_at, revoked_at, accepted_at) VALUES (?,?,NOW(),NULL,NULL) " +
+      "ON DUPLICATE KEY UPDATE " +
+      "accepted_at = IF(delegate_id = VALUES(delegate_id) AND revoked_at IS NULL, accepted_at, NULL), " +
+      "delegate_id = VALUES(delegate_id), created_at = NOW(), revoked_at = NULL",
+    [delegator, delegate],
+  );
 }
 
 export interface AcceptanceCounts {

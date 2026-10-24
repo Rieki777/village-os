@@ -143,6 +143,13 @@ export type SessionHoldRefusal = "holder_gone" | "session_ended";
  * written. A refusal touches nothing, so a session that ended cannot replace
  * what the member set since with the session that replaced it.
  *
+ * The same window stood in front of three more writes the end after the
+ * bump reaches: an invitation link (`makeInvite`, server/routes/invites.ts),
+ * the circle calendar address (`makeAddress`, server/lib/sessionCalendar.ts)
+ * and the delegation the member gives (`setDelegation`,
+ * server/lib/delegation.ts). Each writes through this too (adversarial
+ * round 3).
+ *
  * Profile saves ask the same question under the same lock
  * (`sessionGone`, server/routes/profile.ts).
  */
@@ -476,13 +483,14 @@ function addEnded(a: AgentReachEnded, b: AgentReachEnded): AgentReachEnded {
  * an admin by name.
  *
  * A request already past its session check when the bump lands can still
- * reach its write after the second end returns. The inbox and the model key
- * close that themselves: they write under the member's row lock only while
+ * reach its write after the second end returns. The inbox, the model key, an
+ * invitation link (`makeInvite`), the circle calendar address
+ * (`makeAddress`) and the delegation the member gives (`setDelegation`)
+ * close that themselves: each writes under the member's row lock only while
  * the session's tokenVersion is still the row's (`whileSessionHolds`), so
  * such a write either lands before the bump, and the second end removes it,
- * or is refused. A `vat_` token, a calendar feed, an invitation link or a
- * circle calendar address made in that window is not covered by this
- * (adversarial round 2, finding 15; round 3, finding 7).
+ * or is refused (adversarial round 2, finding 15; round 3). A `vat_` token
+ * or a private calendar feed minted in that window is not covered by this.
  */
 export async function withAgentReachEnded<T>(
   pool: Pool,

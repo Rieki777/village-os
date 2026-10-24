@@ -20,13 +20,14 @@ import { endAgentReach, mintToken, revokeAllTokens, revokeToken, verifyToken, wi
 import { enqueueAgentDelivery, getInbox, setInbox } from "./agentInbox";
 import { mintFeedToken, resolveFeedToken } from "./icsFeed";
 import { makeInviteDoor } from "./inviteDoor";
-import { INVITE_REFUSALS, hashInviteToken, mintInviteToken } from "./invites";
+import { INVITE_REFUSALS } from "./invites";
 import { MEMBER_SECRETS_ENV, memberKeyView, storeMemberKey } from "./memberSecrets";
 import { makeSetPasswordToken, readSetPasswordToken, setPasswordLinkRefusal } from "./memberTokens";
 import { feedFor, makeAddress } from "./sessionCalendar";
 import { castVote, openBallot, voteOf } from "./ballots";
 import { VOICE_BACK_NOTICE, acceptDelegations, delegationOf, isCarrying, revokeDelegation, setDelegation } from "./delegation";
-import { claimInvite, createInvite } from "../repos/memberInvites";
+import { claimInvite, openInviteCount } from "../repos/memberInvites";
+import { makeInvite } from "../routes/invites";
 
 const configured = testDbConfigured();
 
@@ -39,6 +40,11 @@ const JON = "usr-reset-jon";
 async function q(sql: string, params: unknown[] = []): Promise<any[]> {
   const [rows] = await pool.query<any[]>(sql, params); // module-review-ok: seeding and reading back the scratch schema this suite provisioned, which is the assertion
   return rows;
+}
+
+/** The tokenVersion a session signed for this member now carries. */
+async function versionOf(userId: string): Promise<number> {
+  return Number((await usersRepo(pool).byId(userId))?.tokenVersion ?? 0);
 }
 
 async function mint(userId: string, name: string): Promise<{ token: string; id: string }> {
@@ -134,14 +140,11 @@ describe.skipIf(!configured)("revokeAllTokens", () => {
  * and stays the record of that admission.
  */
 
-let inviteSeq = 0;
-
-/** One invitation link, as `POST /api/invites` makes it. */
+/** One invitation link, made the way `POST /api/invites` makes it, for the member's current session. */
 async function link(inviter: string): Promise<{ id: string; token: string }> {
-  const token = mintInviteToken();
-  const id = `inv-reach-${String(++inviteSeq).padStart(3, "0")}`;
-  await createInvite(pool, { id, tokenHash: hashInviteToken(token), inviterUserId: inviter, days: 14 });
-  return { id, token };
+  const made = await makeInvite(pool, inviter, await versionOf(inviter));
+  if (!made.ok) throw new Error(`the link was refused: ${made.error}`);
+  return { id: made.id, token: made.token };
 }
 
 /** The invitation door both sign-up routes hold, over the real users repository. */
@@ -168,8 +171,12 @@ const circleFeed = {
 /** The key in a circle calendar address. */
 const keyIn = (address: string): string => new URL(address).searchParams.get("key") ?? "";
 
-/** A circle calendar address for this member, as `POST FOLLOW_KEY_API` makes it. */
-const circleAddress = async (userId: string): Promise<string> => keyIn(await makeAddress(pool, { userId }, ORIGIN));
+/** A circle calendar address for this member, as `POST FOLLOW_KEY_API` makes it for their current session. */
+async function circleAddress(userId: string): Promise<string> {
+  const made = await makeAddress(pool, { userId }, ORIGIN, await versionOf(userId));
+  if (!made.ok) throw new Error(`the address was refused: ${made.error}`);
+  return keyIn(made.value);
+}
 
 interface Planted {
   token: string;
@@ -542,6 +549,105 @@ describe.skipIf(!configured)("a write already past its session check when the cr
     expect(await getInbox(pool, id)).toBeNull();
     expect(Number((await usersRepo(pool).byId(id))!.tokenVersion)).toBe(version + 1);
   });
+
+  /*
+   * THE THREE DOORS ROUND 3 GAVE THE END (adversarial round 3, findings 7 and
+   * 8), and the same window. `POST /api/invites`, `POST FOLLOW_KEY_API` and
+   * `PUT /api/governance/delegation` check the session at the start too. A
+   * new password or a revoke that landed after that check ended what stood
+   * and returned, and the link, the address or the delegation was then
+   * written for a session that had ended. Each now writes under the same
+   * lock (`whileSessionHolds`).
+   */
+  const DELEGATE = "usr-race-bea";
+  let doorSeq = 0;
+  /** A living member nobody has made anything for yet. */
+  const fresh = async (): Promise<{ id: string; version: number }> => {
+    const id = `usr-race-door-${String(++doorSeq).padStart(2, "0")}`;
+    return { id, version: await seedMember(id) };
+  };
+  const DOORS: Record<string, {
+    make: (p: mysql.Pool, id: string, version: number) => Promise<{ ok: boolean }>;
+    /** The write's own statement, which a racing change waits behind. */
+    write: RegExp;
+    /** Whether one stands for this member. */
+    stands: (id: string) => Promise<boolean>;
+  }> = {
+    "an invitation link": {
+      make: (p, id, version) => makeInvite(p, id, version),
+      write: /^INSERT INTO `?member_invites\b/,
+      stands: async (id) => (await openInviteCount(pool, id)) > 0,
+    },
+    "a circle calendar address": {
+      make: (p, id, version) => makeAddress(p, { userId: id }, ORIGIN, version),
+      write: /^INSERT INTO `?live_session_feed_keys\b/,
+      stands: async (id) => {
+        const [row] = await q("SELECT COUNT(*) AS n FROM live_session_feed_keys k JOIN live_session_members m ON m.`no` = k.member_no WHERE m.user_id = ?", [id]);
+        return Number(row.n) > 0;
+      },
+    },
+    "a delegation": {
+      make: (p, id, version) => setDelegation(p, id, DELEGATE, version),
+      write: /^INSERT INTO `?delegations\b/,
+      stands: async (id) => {
+        const given = await delegationOf(pool, id);
+        return !!given && given.revokedAt === null;
+      },
+    },
+  };
+
+  for (const [what, door] of Object.entries(DOORS)) {
+    it(`${what} refuses when a new password lands after its session check, and none is left`, async () => {
+      const { id, version } = await fresh();
+      const race = changedJustBefore(() => resetPassword(id));
+
+      const out = await door.make(race.pool, id, version);
+
+      expect(race.changed(), "the reset must land inside the write, or this is the plain case").toBe(true);
+      expect(out, `${what} made for a session the reset ended must refuse itself`).toEqual(REFUSED);
+      expect(await door.stands(id), `${what} outlived the reset that answered the theft`).toBe(false);
+    });
+
+    it(`${what} refuses the same way when an admin's revoke sessions lands after the check`, async () => {
+      const { id, version } = await fresh();
+
+      const out = await door.make(changedJustBefore(() => revokeSessions(id)).pool, id, version);
+
+      expect(out, `${what} made for a session the revoke ended must refuse itself`).toEqual(REFUSED);
+      expect(await door.stands(id), `${what} outlived the admin's revoke`).toBe(false);
+    });
+
+    it(`${what}: a session that has already ended makes none, and the member's current session makes one`, async () => {
+      const { id, version } = await fresh();
+      // Signing out on another device: the bump alone, with nothing ended.
+      await bump(id);
+
+      expect(await door.make(pool, id, version), `${what} was made for a session that had ended`).toEqual(REFUSED);
+      expect(await door.stands(id)).toBe(false);
+
+      expect((await door.make(pool, id, version + 1)).ok, "the member's current session was refused").toBe(true);
+      expect(await door.stands(id)).toBe(true);
+    });
+
+    it(`${what}: a reset that arrives while the write holds the member's row waits for it, and its second end takes the write back`, async () => {
+      const { id, version } = await fresh();
+      const race: { resetting: ReturnType<typeof resetPassword> | null } = { resetting: null };
+      const racing = hooked(async (sql) => {
+        if (race.resetting || !door.write.test(sql)) return;
+        race.resetting = resetPassword(id);
+        // The bump has to wait on the row this write holds, or nothing here is serialised.
+        await untilALockIsAwaited(pool);
+      });
+
+      const out = await door.make(racing, id, version);
+      expect(race.resetting, "the reset must start inside the write").not.toBeNull();
+      await race.resetting!;
+
+      expect(out.ok, "the write held the row first, so it landed before the bump").toBe(true);
+      expect(await door.stands(id), `${what} the write left outlived the end after the bump`).toBe(false);
+      expect(Number((await usersRepo(pool).byId(id))!.tokenVersion)).toBe(version + 1);
+    });
+  }
 });
 
 /*

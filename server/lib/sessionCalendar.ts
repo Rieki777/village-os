@@ -41,6 +41,7 @@ import * as store from "../repos/sessionCalendar";
 import * as rhythms from "../repos/sessionRhythm";
 import * as room from "../repos/liveSessions";
 import { ensureMemberNo, memberNo, type Outcome, type Refusal } from "./liveSessions";
+import { whileSessionHolds } from "./agentTokens";
 import { mapRhythm } from "./sessionRhythm";
 import { exportOwnCalendarsFor, importedRowsFor, ownCalendars, retireGoneCircleCalendars } from "./circleOwnCalendar";
 import { calendarIdFor, calendarRemoveMissing, calendarUpsert, type CalendarRow, type CalendarUpsertInput } from "./calendar";
@@ -263,12 +264,25 @@ export async function setFollow(pool: Pool, who: { userId: string }, raw: unknow
 
 // ── The address ─────────────────────────────────────────────────────────────
 
-/** A new private address, taking the place of the old. The key is in it, and is shown this once. */
-export async function makeAddress(pool: Pool, who: { userId: string }, origin: string, now = new Date()): Promise<string> {
+/**
+ * A new private address, taking the place of the old. The key is in it, and
+ * is shown this once.
+ *
+ * `sessionVersion` is the tokenVersion the request's session was checked at.
+ * The address never expires and reads as the member, so a new password and
+ * an admin's revoke sessions stop it on both sides of the bump
+ * (`endAgentReach`). The key is written under the member's row lock, and only
+ * while the row still carries that version (`whileSessionHolds`): a session
+ * that change ended since its check gets 401 and no address, and a change
+ * that comes later waits for the commit, and the end after the bump stops
+ * the address.
+ */
+export async function makeAddress(pool: Pool, who: { userId: string }, origin: string, sessionVersion: number, now = new Date()): Promise<Outcome<string>> {
   const no = await ensureMemberNo(pool, who.userId, now);
   const raw = randomBytes(32).toString("hex");
-  await store.putKey(pool, no, hashKey(raw), now);
-  return feedUrl(origin, raw);
+  const held = await whileSessionHolds(pool, who.userId, sessionVersion, (conn) => store.putKey(conn, no, hashKey(raw), now));
+  if (!held.ok) return refuse(401, "auth_required");
+  return done(feedUrl(origin, raw));
 }
 
 /**
