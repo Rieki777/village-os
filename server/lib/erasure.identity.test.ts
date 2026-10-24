@@ -92,7 +92,7 @@ async function q(sql: string, params: any[] = []): Promise<any[]> {
  * it whatever that step's SQL shares with an earlier one. Every other call,
  * `getConnection` included, goes to the real pool.
  */
-function refuseOnceAfterTombstone(pattern: RegExp) {
+function refuseOnceAfterTombstone(pattern: RegExp, when: (params: any) => boolean = () => true) {
   let armed = false;
   let fired = false;
   const proxy = new Proxy(pool, {
@@ -100,7 +100,7 @@ function refuseOnceAfterTombstone(pattern: RegExp) {
       if (prop === "query") {
         return (sql: any, params?: any) => {
           const text = typeof sql === "string" ? sql : String(sql?.sql ?? "");
-          if (armed && !fired && pattern.test(text)) {
+          if (armed && !fired && pattern.test(text) && when(params)) {
             fired = true;
             return Promise.reject(new Error("the agent sweep was refused"));
           }
@@ -302,6 +302,166 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
     expect(app.note, "a resumed sweep scrubbed the tombstone's name instead of the member's").not.toContain(NAME);
     expect(app.note).not.toContain("@wrenh");
     expect(app.note).toContain("a former member");
+  });
+
+  /*
+   * THE PERSON WHO SIGNED UP AGAIN (round 2, finding 0). The tombstone frees
+   * the address and the handle, so sign-up admits them both while the sweep
+   * waits for its retry. A resume that matched by the address it held then
+   * scrubbed the living account's housing request, its order and its comms
+   * contact. These rows are the leaver's by user id and must still go.
+   */
+  let receiptNo = 930;
+
+  async function seedOwnRows(id: string, address: string): Promise<{ request: string }> {
+    const request = await createReservation(pool, {
+      structureKey: null,
+      homeType: "tiny-home",
+      name: NAME,
+      email: address,
+      phone: "555 0100",
+      notes: "Call after six",
+      userId: id,
+    });
+    await q("INSERT INTO `product_purchases` (`id`, `product_id`, `user_id`, `payer_email`, `amount_minor`, `receipt_no`) VALUES (?,?,?,?,?,?)", [
+      `pp-${id}`,
+      "prod-1",
+      id,
+      address,
+      1200,
+      (receiptNo += 1),
+    ]);
+    // Linked by the account alone: the address book holds one row per address,
+    // and the old address is about to be somebody's again.
+    const alt = `${id}-alt@examples.invalid`;
+    await q(
+      "INSERT INTO `comms_contacts` (`id`, `village_id`, `email_key`, `email`, `name`, `user_id`, `first_source`) VALUES (?,?,?,?,?,?,'housing')",
+      [`cc-${id}`, VILLAGE, alt, alt, NAME, id],
+    );
+    return { request: request.id };
+  }
+
+  /** The new account at the freed address and handle, with a request, an order and a contact. */
+  async function seedSignedUpAgain(again: string, address: string, handle: string): Promise<{ request: string }> {
+    await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `handle`) VALUES (?,?,?,'x',?)", [again, NAME, address, handle]);
+    const request = await createReservation(pool, {
+      structureKey: null,
+      homeType: "casita",
+      name: NAME,
+      email: address,
+      phone: "555 0199",
+      notes: "Back again",
+      userId: again,
+    });
+    await q("INSERT INTO `product_purchases` (`id`, `product_id`, `user_id`, `payer_email`, `amount_minor`, `receipt_no`) VALUES (?,?,?,?,?,?)", [
+      `pp-${again}`,
+      "prod-1",
+      again,
+      address,
+      1500,
+      (receiptNo += 1),
+    ]);
+    // What the path_joined sink makes at sign-up.
+    await q(
+      "INSERT INTO `comms_contacts` (`id`, `village_id`, `email_key`, `email`, `name`, `user_id`, `first_source`) VALUES (?,?,?,?,?,?,'path_joined')",
+      [`cc-${again}`, VILLAGE, address, address, NAME, again],
+    );
+    return { request: request.id };
+  }
+
+  /** The new account's rows, read together so one failure shows every row the resume touched. */
+  async function signedUpAgainRows(again: string, request: string): Promise<Record<string, unknown>> {
+    return {
+      request: await q("SELECT `name`, `email`, `phone`, `user_id` FROM `housing_reservations` WHERE `id` = ?", [request]),
+      order: await q("SELECT `payer_email` FROM `product_purchases` WHERE `id` = ?", [`pp-${again}`]),
+      contact: await q("SELECT `user_id` FROM `comms_contacts` WHERE `id` = ?", [`cc-${again}`]),
+    };
+  }
+
+  const untouched = (again: string, address: string) => ({
+    request: [{ name: NAME, email: address, phone: "555 0199", user_id: again }],
+    order: [{ payer_email: address }],
+    contact: [{ user_id: again }],
+  });
+
+  async function expectOwnRowsScrubbed(id: string, request: string): Promise<void> {
+    expect(
+      await q("SELECT `name`, `email`, `phone`, `user_id` FROM `housing_reservations` WHERE `id` = ?", [request]),
+      "the leaver's own request, found by their user id, must still be scrubbed",
+    ).toEqual([{ name: ANON, email: `deleted-${id}@anonymized.invalid`, phone: null, user_id: null }]);
+    expect(await q("SELECT `payer_email` FROM `product_purchases` WHERE `id` = ?", [`pp-${id}`])).toEqual([{ payer_email: null }]);
+    expect(await q("SELECT `id` FROM `comms_contacts` WHERE `user_id` = ?", [id])).toEqual([]);
+  }
+
+  it("leaves the account that signed up again at the freed address and handle alone, on a resume right after the tombstone (round 2, finding 0)", async () => {
+    const id = "er-again-1";
+    const again = "er-again-1b";
+    const address = `${id}@examples.invalid`;
+    const target = await seedMember(id, "wrenh11");
+    const own = await seedOwnRows(id, address);
+    await seedNeighbour("er-again-ned1");
+
+    await stopRightAfterTombstone(id, target);
+    // The address and the handle are free, and the person comes back before the retry.
+    const theirs = await seedSignedUpAgain(again, address, "wrenh11");
+    // A neighbour's words naming the living account by its handle.
+    await q(
+      "INSERT INTO `seat_applications` (`id`, `candidate_user_id`, `proposed_by`, `seat_ids`, `note`, `settings_json`, `settings_hash`, `term_ends_at`, `status`) " +
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+      [
+        "sa-00000000000000b1",
+        "er-again-ned1",
+        "er-again-ned1",
+        JSON.stringify(["seat-orchard"]),
+        "Ask @wrenh11 about the hives.",
+        JSON.stringify({ v: 1 }),
+        "a".repeat(64),
+        "2029-06-30 00:00:00",
+        "voting",
+      ],
+    );
+
+    const out = await resumeErasure(pool, id, deps());
+    expect(out.finished).toBe(true);
+    expect(out.ran).toContain("comms");
+
+    expect(
+      {
+        ...(await signedUpAgainRows(again, theirs.request)),
+        note: await q("SELECT `note` FROM `seat_applications` WHERE `id` = 'sa-00000000000000b1'"),
+      },
+      "a resume scrubbed the account that signed up again at the freed address and handle",
+    ).toEqual({ ...untouched(again, address), note: [{ note: "Ask @wrenh11 about the hives." }] });
+    await expectOwnRowsScrubbed(id, own.request);
+  });
+
+  it("leaves the account that signed up again at the freed address alone, on a resume from event-places-after-tombstone (round 2, finding 0)", async () => {
+    const id = "er-again-2";
+    const again = "er-again-2b";
+    const address = `${id}@examples.invalid`;
+    const target = await seedMember(id, "wrenh12");
+    const own = await seedOwnRows(id, address);
+
+    // The first read the step makes, for this member and nobody else.
+    const flaky = refuseOnceAfterTombstone(/FROM event_seat_charges c /, (ps) => Array.isArray(ps) && ps[0] === id);
+    await expect(anonymizeMember(flaky.pool, target, null, deps(flaky.arm))).rejects.toThrow(/the agent sweep was refused/);
+    expect(flaky.fired()).toBe(true);
+    const stopped = await erasureRecord(pool, id);
+    expect(stopped!.failedStep).toBe("event-places-after-tombstone");
+    expect(stopped!.stepsDone).toContain("comms");
+    expect(stopped!.stepsDone).not.toContain("housing-reservations-after-tombstone");
+
+    const theirs = await seedSignedUpAgain(again, address, "wrenh12");
+
+    const out = await resumeErasure(pool, id, deps());
+    expect(out.finished).toBe(true);
+    expect(out.ran[0]).toBe("event-places-after-tombstone");
+
+    expect(
+      await signedUpAgainRows(again, theirs.request),
+      "a resume scrubbed the account that signed up again at the freed address",
+    ).toEqual(untouched(again, address));
+    await expectOwnRowsScrubbed(id, own.request);
   });
 
   it("holds who the member was only while the sweep is open, and never in what the queue reads", async () => {
