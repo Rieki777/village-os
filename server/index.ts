@@ -18419,7 +18419,7 @@ ${inner}
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
   registerSessionRhythmRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify, lapseContext });
   registerSessionCalendarRoutes(app, { authedUser, getPool, overLimit, members, circlesRepo, clientIp, deploymentOrigin, projectName: notifyDeps.projectName });
-  registerSessionDecisionRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, lapseContext });
+  registerSessionDecisionRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, lapseContext, members, notify });
   registerRoleTensionRoutes(app, { authedUser, isAdmin, getPool, overLimit, notify, seasonState });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
   /**

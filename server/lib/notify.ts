@@ -307,6 +307,10 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // A circle meeting tomorrow: the bell, for the same reason. No preference covers a
     // meeting reminder yet.
     case "session_coming_up":
+    // The advice process: the bell, for the same reason. No preference covers advice yet.
+    case "session_advice_asked":
+    case "session_advice_given":
+    case "session_advice_decided":
     // A night on a proposal after the call (0281): the bell, for the same reason.
     case "session_night_open":
     case "session_night_settled":
