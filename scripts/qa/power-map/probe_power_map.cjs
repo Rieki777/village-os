@@ -19,8 +19,8 @@
  *   - the open-call glyph is drawn dashed (colour never alone, spec 4);
  *   - tapping a circle moves the camera; tapping a SEAT does not (harm 2);
  *   - Escape walks back out; ArrowRight moves focus between siblings;
- *   - no horizontal scroll at any width; below 480 the accordion carries
- *     the page (spec 12a);
+ *   - no horizontal scroll at any width; below 640 the circle wall carries
+ *     the page under the small map (2026-10-23, "map, then circle cards");
  *   - zero console errors, zero page errors.
  */
 const path = require("path");
@@ -147,18 +147,18 @@ async function pocket(browser, width, height) {
     const boxes = Array.from(document.querySelectorAll("[data-power-map-box]")).map(
       (b) => b.getBoundingClientRect().width,
     );
-    const accordion = document.querySelector("[data-power-accordion]");
+    const wall = document.querySelector("[data-power-wall]");
     return {
       horiz: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       mapShown: boxes.some((w) => w > 50),
-      accordion: (accordion?.getBoundingClientRect().height ?? 0) > 50,
+      wall: (wall?.getBoundingClientRect().height ?? 0) > 50,
       legend: !!document.querySelector("[data-power-legend]"),
       crumbOrTitle: !!document.querySelector("[data-power-crumb], h1"),
     };
   });
   expect(!shell.horiz, "no horizontal scroll");
-  expect(shell.accordion, "the accordion carries the page (spec 12)");
-  if (width < 480) expect(!shell.mapShown, "below 480 the canvas rests (spec 12a)", shell.mapShown);
+  if (width < 640) expect(shell.wall, "the circle wall carries the page under the map");
+  expect(shell.mapShown, "the map is drawn at every width");
   expect(shell.legend, "the legend is reachable");
   expect(errors.length === 0, "zero console and page errors", errors.slice(0, 3));
   await ctx.close();

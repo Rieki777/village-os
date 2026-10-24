@@ -1,41 +1,38 @@
 /**
- * One role in full, in the order of the approved CCOS card
- * (https://claude.ai/artifact/XGP6VP5WFU1T6ti7RD482P, Rye 2026-10-22): its
- * full title; its chips (key role, circle, held until, the review week, the
- * time chip); its purpose in a highlighted block, with "This role exists
- * while" inside it; "What I look after" and "What I can decide on my own" in
- * one box beside "Bring me"; what you can count on it for; what it does
- * regularly; how we'll know it's working; who it works with and its powers;
- * "Holding this role well"; what is not its to hold; its runbook; tensions;
- * and how ready it is to hand over: four checks read as "N of 4 ready", never
- * a percentage, the card check listing its five parts from
- * shared/roleHandover.ts underneath. The CCOS words never count toward it.
+ * One role in full, as the approved CCOS card draws it
+ * (https://claude.ai/artifact/XGP6VP5WFU1T6ti7RD482P, Rye 2026-10-22, the
+ * `.rolecard`): its full title; its chips (key role, circle, held until, the
+ * review week, the time chip, and any power it holds, in green); its purpose
+ * in the highlighted gold block, with "This role exists while" inside it;
+ * "What I look after" and "What I can decide on my own" in one box beside
+ * "Bring me"; what you can count on it for; what it does regularly; how we'll
+ * know it's working beside who it works closely with; "Holding this role
+ * well" in three columns; and what is not its to hold.
  *
- * Plain headings, each with its CCOS term on hover or tap where the village
- * shows the terms (CcosTerm, the circle card's pattern).
+ * The live parts the design's page did not draw follow, in the design's own
+ * boxes: the role's health in words under its chips, the open proposals for
+ * its words with the doors that adopt them (#574), its runbook, the tensions
+ * raised to it, and how ready it is to hand over: four checks read as "N of 4
+ * ready", never a percentage, the card check listing its five parts from
+ * shared/roleHandover.ts. The CCOS words never count toward it.
  *
- * NOTHING EXTRA FOR A ROLE THAT HAS NONE OF THE CCOS WORDS. Each of them draws
- * only once it is written, so no empty box appears. In "Edit my card" an
- * unwritten one draws with its "Not written yet" and its edit control, so the
- * owner can propose words for it.
+ * Each heading carries its CCOS term on hover or tap, the design's dotted
+ * underline, where the village shows the terms (`org.ccos_terms`).
  *
- * Tensions read as counts in plain words ("1 open tension, private to the
- * role's holders"), with the words only where the server sent them. A member
- * who does not hold the role gets the raise control; the holder's own card
- * links to Waiting on you, where they answer.
+ * NOTHING EXTRA FOR A ROLE THAT HAS NONE OF THE CCOS WORDS. Each draws only
+ * once it is written, so no empty box appears. In "Edit my card" an unwritten
+ * one draws with its "Not written yet" and its edit control, so the owner can
+ * propose words for it. Role words change by consent: saving one opens a
+ * proposed change, and a role proposal's changed words are framed in gold.
  *
- * Role words carry the owner's edit control in edit mode; saving one opens a
- * proposed change that waits for consent. Other roles are named by their full
- * title and nobody but the owner is named anywhere.
- *
- * Phone first: one column at 375px, every control at least 44px, long words
- * wrap, and nothing is wider than the screen.
+ * Phone first: the design's own breakpoints, one column at 375px, every
+ * control at least 44px, long words wrap, nothing wider than the screen.
  */
-import { useContext, useState } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { CARD_WORDS as W, type RoleOut, type Slot } from "@shared/playerCard";
 import type { RoleEditKey } from "@shared/playerCardEdit";
-import type { SignSheetOut } from "@shared/playerCardPayload";
+import type { HealthOut } from "@shared/playerCardHealth";
 import { ROLE_HANDOVER_WORDS, runbookIsLink } from "@shared/roleHandover";
 import { ROLE_CCOS_WORDS } from "@shared/roleCcos";
 import type { HoldingKey } from "@shared/playerCardCcos";
@@ -43,9 +40,8 @@ import { TASK_BOARD_PATH } from "@shared/sessionTasks";
 import RaiseTension from "@/components/roleTension/RaiseTension";
 import DecideDoors, { type DecideDoorWords } from "@/components/review/DecideDoors";
 import { ROLE_PROPOSAL_WORDS as PW } from "@shared/playerCardProposals";
-import { BOX, CardEditContext, ChangedMark, EditInPlace, Eyebrow, GOLD_FRAME, LINK, ListSlot, PendingNote, SlotView, useChanged } from "./cardParts";
-import { CcosTerm, INLINE_TAP } from "./CcosTerm";
-import { SignList } from "./SignList";
+import { CardEditContext, ChangedContext, ChangedMark, EditInPlace, Eyebrow, GOLD_FRAME, isChanged, ListSlot, PendingNote, SlotView, useChanged } from "./cardParts";
+import { CardTerm } from "./CcosTerm";
 
 /** The hint under each "Holding this role well" line's edit control. */
 const HOLDING_HINTS: Record<HoldingKey, string> = {
@@ -67,36 +63,81 @@ function Part({
   initial,
   hint,
   multiline = true,
+  gold = false,
 }: {
   role: RoleOut;
   k: RoleEditKey;
   heading: string;
   term?: string | null;
-  children: React.ReactNode;
+  children: ReactNode;
   initial: string;
   hint?: string;
   multiline?: boolean;
+  gold?: boolean;
 }) {
   return (
     <>
-      <Eyebrow term={term}>{heading}</Eyebrow>
+      <Eyebrow term={term} gold={gold}>
+        {heading}
+      </Eyebrow>
       <ChangedMark k={k} />
-      <div className="mt-1 min-w-0 break-words">{children}</div>
+      {children}
       <PendingNote show={role.pending.includes(k)} />
       <EditInPlace target={{ kind: "role", key: k, roleId: role.id }} label={`${heading}, ${role.title}`} initial={initial} hint={hint} multiline={multiline} />
     </>
   );
 }
 
+/** A role word in its own box, framed in gold when a proposal changes it. */
 function RoleWord(props: React.ComponentProps<typeof Part>) {
   return (
-    <div className={`${BOX} min-w-0 ${useChanged(props.k) ? GOLD_FRAME : ""}`} data-role-section={props.k}>
+    <div className={`pc-box${useChanged(props.k) ? ` ${GOLD_FRAME}` : ""}`} data-role-section={props.k}>
       <Part {...props} />
     </div>
   );
 }
 
-export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: Record<string, SignSheetOut>; timeZone: string }) {
+/** Two boxes side by side, or one alone when only one has anything to draw. */
+function Pair({ children }: { children: ReactNode[] }) {
+  const kids = children.filter(Boolean);
+  if (!kids.length) return null;
+  if (kids.length === 1) return <>{kids[0]}</>;
+  return <div className="pc-cols">{kids}</div>;
+}
+
+/** "Not mine to hold": one line reads as the design's sentence, several as its bullets. */
+function NotMineWords({ slot }: { slot: Slot<string[]> }) {
+  return (
+    <SlotView slot={slot}>
+      {(items) =>
+        items.length === 1 ? (
+          <p className="pc-dim pc-f14">{items[0]}</p>
+        ) : (
+          <ul className="pc-list pc-dim">
+            {items.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        )
+      }
+    </SlotView>
+  );
+}
+
+/** The role's health in words: the dot's words, then the three facts behind it. */
+function HealthLine({ health }: { health: HealthOut }) {
+  return (
+    <p className="pc-health" data-role-health>
+      <span className={`pc-dot pc-${health.dot}`} aria-hidden="true" />
+      <b>{health.dotWords}</b>
+      {health.facts.map((f) => (
+        <span key={f.key}>· {f.words}</span>
+      ))}
+    </p>
+  );
+}
+
+export function RoleInFull({ role, health = null }: { role: RoleOut; health?: HealthOut | null }) {
   const { editing } = useContext(CardEditContext);
   /** A CCOS section draws once it is written, or in edit mode so the owner can propose words for it. */
   const draws = (slot: Slot<unknown>): boolean => slot.kind === "shown" || (slot.kind === "empty" && editing);
@@ -107,46 +148,59 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
   // A decided proposal's confirmation, kept here: adopting the last one empties its panel.
   const [decided, setDecided] = useState<string | null>(null);
   // A role proposal's changed words, drawn in gold (role proposals PR C).
-  const timeChanged = useChanged("timeCommitment");
-  const purposeChanged = useChanged("purpose");
+  const changed = useContext(ChangedContext);
+  const ch = (k: RoleEditKey) => isChanged(changed, k);
+  const timeChanged = ch("timeCommitment");
+  const keyRole = role.chips[0] === W.keyRole;
+  const otherChips = keyRole ? role.chips.slice(1) : role.chips;
+  const powers = role.powers.items.kind === "shown" ? role.powers.items.value : [];
+
   return (
-    <article id={role.anchor} aria-labelledby={headingId} className="grid min-w-0 scroll-mt-6 gap-4 rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-sm sm:p-8">
-      <h3 id={headingId} className="font-display text-2xl font-bold break-words">
+    <article id={role.anchor} aria-labelledby={headingId} className="pc-rolecard">
+      <h3 id={headingId} className="pc-roletitle">
         {role.title}
       </h3>
 
-      {role.chips.length || role.circle || time.kind === "shown" ? (
-        <ul className="flex flex-wrap items-center gap-2" aria-label="About this role">
+      {role.chips.length || role.circle || time.kind === "shown" || powers.length || role.plays ? (
+        <ul className="pc-chips" aria-label="About this role">
+          {keyRole ? <li className="pc-chip pc-gold">{W.keyRole}</li> : null}
           {role.circle ? (
             <li>
               {/* The circle this role sits in, linked to that circle's card. */}
-              <Link
-                href={role.circle.href}
-                className="inline-flex min-h-11 items-center rounded-full border border-border px-3 text-sm underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-              >
+              <Link href={role.circle.href} className="pc-chip">
                 {role.circle.name}
               </Link>
             </li>
           ) : null}
-          {role.chips.map((c) => (
-            <li key={c} className="rounded-full border border-border px-3 py-1 text-sm">
+          {otherChips.map((c) => (
+            <li key={c} className="pc-chip">
               {c}
             </li>
           ))}
           {time.kind === "shown" ? (
-            <li className={`rounded-full border px-3 py-1 text-sm ${timeChanged ? GOLD_FRAME : "border-border"}`} data-role-chip="time">
-              <CcosTerm term={role.time.term} tap={INLINE_TAP}>
-                {time.value}
-              </CcosTerm>
+            <li className={`pc-chip${timeChanged ? ` ${GOLD_FRAME}` : ""}`} data-role-chip="time">
+              <CardTerm term={role.time.term}>{time.value}</CardTerm>
             </li>
           ) : null}
+          {powers.map((p) => (
+            <li key={p} className="pc-chip pc-live" data-role-chip="power">
+              {p}
+            </li>
+          ))}
+          {role.plays
+            ? role.plays.chips.map((c) => (
+                <li key={c.key} className="pc-chip pc-arch" title={role.plays!.label}>
+                  {c.name}
+                </li>
+              ))
+            : null}
         </ul>
       ) : null}
       {time.kind === "shown" ? <ChangedMark k="timeCommitment" /> : null}
       {editing && time.kind !== "unread" ? (
         <div data-role-section="timeCommitment">
           {time.kind === "empty" ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="pc-dim pc-f14">
               {role.time.heading}: {time.words}
             </p>
           ) : null}
@@ -160,41 +214,30 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
           />
         </div>
       ) : null}
-      {role.plays ? (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted-foreground">{role.plays.label}</span>
-          {role.plays.chips.map((c) => (
-            <span key={c.key} className="rounded-full border border-border px-3 py-1">
-              {c.name}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      {health ? <HealthLine health={health} /> : null}
 
       {role.proposals.length ? (
         <RoleProposals role={role} onDone={setDecided} />
       ) : decided ? (
-        <p role="status" className="text-sm font-medium">
+        <p role="status" className="pc-said">
           {decided}
         </p>
       ) : null}
 
-      <div className={`min-w-0 rounded-xl border border-notice/40 border-l-4 border-l-notice p-4 ${purposeChanged ? "bg-notice/10" : "bg-card"}`}>
+      <div className="pc-why" data-role-section="purpose">
         <Eyebrow gold term={role.purpose.term}>
           {role.purpose.heading}
         </Eyebrow>
         <ChangedMark k="purpose" />
-        <SlotView slot={role.purpose.text}>{(t) => <p className="mt-1 font-display text-xl break-words">{t}</p>}</SlotView>
-        {role.purpose.why ? <p className="mt-2 text-sm text-muted-foreground">{role.purpose.why}</p> : null}
+        <SlotView slot={role.purpose.text}>{(t) => <q>{t}</q>}</SlotView>
+        {role.purpose.why ? <p className="pc-dim pc-f14">{role.purpose.why}</p> : null}
         <PendingNote show={role.pending.includes("purpose")} />
         <EditInPlace target={{ kind: "role", key: "purpose", roleId: role.id }} label={`${role.purpose.heading}, ${role.title}`} initial={asText(role.purpose.text)} />
         {draws(exists) ? (
-          <div className="mt-3" data-role-section="existsWhile">
-            <p className="text-sm text-muted-foreground break-words">
-              <span className="font-semibold text-notice">
-                <CcosTerm term={role.existsWhile.term} tap={INLINE_TAP}>
-                  {role.existsWhile.heading}
-                </CcosTerm>
+          <div data-role-section="existsWhile">
+            <p className="pc-while">
+              <span className="pc-ccos-lead">
+                <CardTerm term={role.existsWhile.term}>{role.existsWhile.heading}</CardTerm>
               </span>
               {exists.kind === "shown" ? ` ${exists.value}` : exists.kind === "empty" ? `: ${exists.words}` : null}
             </p>
@@ -211,32 +254,34 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         ) : null}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className={`${BOX} min-w-0`} data-role-section="decide">
-          <Part role={role} k="decide" heading={role.decide.heading} term={role.decide.term} initial={asText(role.decide.text)}>
-            <SlotView slot={role.decide.text}>{(t) => <p className="text-sm">{t}</p>}</SlotView>
-          </Part>
-          {draws(role.authorities.items) ? (
-            <div className="mt-4" data-role-section="authorities">
-              <Part
-                role={role}
-                k="authorities"
-                heading={role.authorities.heading}
-                term={role.authorities.term}
-                initial={asText(role.authorities.items)}
-                hint={ROLE_CCOS_WORDS.authoritiesHint}
-              >
-                <ListSlot slot={role.authorities.items} />
-              </Part>
-            </div>
-          ) : null}
-        </div>
-        {role.bringMe.items.kind !== "unread" && (
-          <RoleWord role={role} k="bringMe" heading={role.bringMe.heading} initial={asText(role.bringMe.items)} hint={ROLE_HANDOVER_WORDS.bringMeHint}>
-            <ListSlot slot={role.bringMe.items} />
-          </RoleWord>
-        )}
-      </div>
+      <Pair>
+        {[
+          <div key="decide" className={`pc-box${ch("decide") || ch("authorities") ? ` ${GOLD_FRAME}` : ""}`} data-role-section="decide">
+            <Part role={role} k="decide" heading={role.decide.heading} term={role.decide.term} initial={asText(role.decide.text)}>
+              <SlotView slot={role.decide.text}>{(t) => <p>{t}</p>}</SlotView>
+            </Part>
+            {draws(role.authorities.items) ? (
+              <div className="pc-stack pc-authorities" data-role-section="authorities">
+                <Part
+                  role={role}
+                  k="authorities"
+                  heading={role.authorities.heading}
+                  term={role.authorities.term}
+                  initial={asText(role.authorities.items)}
+                  hint={ROLE_CCOS_WORDS.authoritiesHint}
+                >
+                  <ListSlot slot={role.authorities.items} />
+                </Part>
+              </div>
+            ) : null}
+          </div>,
+          role.bringMe.items.kind !== "unread" ? (
+            <RoleWord key="bring" role={role} k="bringMe" heading={role.bringMe.heading} initial={asText(role.bringMe.items)} hint={ROLE_HANDOVER_WORDS.bringMeHint}>
+              <ListSlot slot={role.bringMe.items} />
+            </RoleWord>
+          ) : null,
+        ]}
+      </Pair>
 
       <RoleWord role={role} k="countOnMe" heading={role.countOnMe.heading} term={role.countOnMe.term} initial={asText(role.countOnMe.items)}>
         <ListSlot slot={role.countOnMe.items} />
@@ -255,45 +300,42 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         </RoleWord>
       ) : null}
 
-      {role.working.items.kind !== "unread" && (
-        <div className="grid min-w-0 gap-2">
-          <Eyebrow term={role.working.term}>{role.working.heading}</Eyebrow>
-          <SlotView slot={role.working.items}>{(signs) => <SignList signs={signs} sheets={sheets} timeZone={timeZone} />}</SlotView>
-        </div>
-      )}
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {role.worksWith.items.kind !== "unread" && (
-          <div className={`${BOX} min-w-0`}>
-            <Eyebrow>{role.worksWith.heading}</Eyebrow>
-            <div className="mt-1">
+      <Pair>
+        {[
+          role.working.items.kind !== "unread" ? (
+            <div key="working" className="pc-box" data-role-section="working">
+              <Eyebrow term={role.working.term}>{role.working.heading}</Eyebrow>
+              <SlotView slot={role.working.items}>
+                {(signs) => (
+                  <ul className="pc-list">
+                    {signs.map((s, i) => (
+                      <li key={i}>{s.measure}</li>
+                    ))}
+                  </ul>
+                )}
+              </SlotView>
+            </div>
+          ) : null,
+          role.worksWith.items.kind !== "unread" ? (
+            <div key="with" className="pc-box" data-role-section="worksWith">
+              <Eyebrow>{role.worksWith.heading}</Eyebrow>
               <ListSlot slot={role.worksWith.items} />
             </div>
-          </div>
-        )}
-        {role.powers.items.kind !== "unread" && (
-          <div className={`${BOX} min-w-0`}>
-            <Eyebrow>{role.powers.heading}</Eyebrow>
-            <div className="mt-1">
-              <ListSlot slot={role.powers.items} />
-            </div>
-          </div>
-        )}
-      </div>
+          ) : null,
+        ]}
+      </Pair>
 
       {holding.length ? (
-        <div className={`${BOX} min-w-0`} data-role-section="holdingWell">
+        <div className="pc-box pc-arc" data-role-section="holdingWell">
           <Eyebrow gold>{role.holdingWell.heading}</Eyebrow>
-          <div className="mt-2 grid gap-4 md:grid-cols-3">
+          <div className="pc-arc3">
             {holding.map((p) => (
-              <div key={p.key} className="min-w-0" data-holding={p.key}>
-                <p className="text-sm font-semibold">
-                  <CcosTerm term={p.term} tap={INLINE_TAP}>
-                    {p.heading}
-                  </CcosTerm>
-                </p>
+              <div key={p.key} className={ch(p.key) ? GOLD_FRAME : undefined} data-holding={p.key}>
+                <b>
+                  <CardTerm term={p.term}>{p.heading}</CardTerm>
+                </b>
                 <ChangedMark k={p.key} />
-                <SlotView slot={p.text}>{(t) => <p className="mt-1 whitespace-pre-line break-words text-sm text-muted-foreground">{t}</p>}</SlotView>
+                <SlotView slot={p.text}>{(t) => <p>{t}</p>}</SlotView>
                 <PendingNote show={role.pending.includes(p.key)} />
                 <EditInPlace
                   target={{ kind: "role", key: p.key, roleId: role.id }}
@@ -316,7 +358,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
           initial={asText(role.notMine.items)}
           hint={ROLE_HANDOVER_WORDS.notMineHint}
         >
-          <ListSlot slot={role.notMine.items} />
+          <NotMineWords slot={role.notMine.items} />
         </RoleWord>
       )}
 
@@ -325,11 +367,13 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
           <SlotView slot={role.runbook.text}>
             {(t) =>
               runbookIsLink(t) ? (
-                <a href={t} target="_blank" rel="noopener noreferrer" className={`${LINK} break-all`}>
+                <a href={t} target="_blank" rel="noopener noreferrer" className="pc-link">
                   {t}
                 </a>
               ) : (
-                <p className="whitespace-pre-line break-words text-sm">{t}</p>
+                <p className="pc-f14" style={{ whiteSpace: "pre-line" }}>
+                  {t}
+                </p>
               )
             }
           </SlotView>
@@ -337,27 +381,27 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
       )}
 
       {role.tensions.kind !== "unread" && (
-        <div className={BOX} data-role-tensions={role.id}>
+        <div className="pc-box" data-role-tensions={role.id}>
           <Eyebrow>{W.tensions}</Eyebrow>
           <SlotView slot={role.tensions}>
             {(t) => (
-              <div className="mt-1 grid gap-2 text-sm">
-                <ul className="grid gap-0.5" data-tension-counts>
+              <div className="pc-tensions">
+                <ul data-tension-counts>
                   {t.counts.map((c) => (
                     <li key={c}>{c}</li>
                   ))}
                 </ul>
                 {t.open.length ? (
-                  <ul className="list-disc space-y-1 break-words pl-5" data-tension-words="open">
+                  <ul className="pc-list" data-tension-words="open">
                     {t.open.map((s, i) => (
                       <li key={i}>{s}</li>
                     ))}
                   </ul>
                 ) : null}
                 {t.public.length ? (
-                  <div className="grid gap-1">
-                    <p className="text-muted-foreground">{W.tensionsBrought}</p>
-                    <ul className="list-disc space-y-1 break-words pl-5" data-tension-words="circle">
+                  <div className="pc-stack">
+                    <p className="pc-dim">{W.tensionsBrought}</p>
+                    <ul className="pc-list" data-tension-words="circle">
                       {t.public.map((s, i) => (
                         <li key={i}>{s}</li>
                       ))}
@@ -368,7 +412,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
             )}
           </SlotView>
           {role.tensionDoor === "waiting" ? (
-            <a href={TASK_BOARD_PATH} className={LINK} data-tension-door="waiting">
+            <a href={TASK_BOARD_PATH} className="pc-link" data-tension-door="waiting">
               {W.tensionsWaiting}
             </a>
           ) : null}
@@ -376,24 +420,21 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         </div>
       )}
 
-      <div className={BOX}>
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="pc-box" data-role-handover>
+        <div className="pc-handhead">
           <Eyebrow>{role.handover.heading}</Eyebrow>
-          <span className="text-sm font-semibold">{role.handover.summary}</span>
+          <strong>{role.handover.summary}</strong>
         </div>
-        <ul className="mt-2 grid gap-1 text-sm" data-handover-checks>
+        <ul className="pc-checks" data-handover-checks>
           {role.handover.checks.map((c) => (
-            <li key={c.key} data-check={c.key} data-ready={c.state === "ready" ? "true" : "false"} className="flex items-start gap-2">
-              <span aria-hidden="true" className={c.state === "ready" ? "text-notice" : "text-muted-foreground"}>
+            <li key={c.key} data-check={c.key} data-ready={c.state === "ready" ? "true" : "false"}>
+              <span aria-hidden="true" className={c.state === "ready" ? "pc-tick" : "pc-open"}>
                 {c.state === "ready" ? "✓" : "○"}
               </span>
-              <span className="grid min-w-0 gap-0.5">
-                <span>
-                  <span className="font-medium">{c.label}:</span>{" "}
-                  <span className={c.state === "ready" ? "text-card-foreground" : "text-muted-foreground"}>{c.words}</span>
-                </span>
+              <span>
+                <b>{c.label}:</b> <span className={c.state === "ready" ? undefined : "pc-dim"}>{c.words}</span>
                 {c.parts ? (
-                  <ul className="grid gap-0.5 text-xs text-muted-foreground" data-handover-parts>
+                  <ul data-handover-parts>
                     {c.parts.map((p) => (
                       <li key={p.key} data-done={p.done ? "true" : "false"}>
                         {p.words}
@@ -436,22 +477,22 @@ const DOOR_WORDS: DecideDoorWords = {
 function RoleProposals({ role, onDone }: { role: RoleOut; onDone: (said: string) => void }) {
   const { reload } = useContext(CardEditContext);
   return (
-    <div className={`${BOX} grid gap-3`} data-role-proposals={role.id}>
+    <div className="pc-box pc-proposals" data-role-proposals={role.id}>
       <Eyebrow gold>{PW.heading}</Eyebrow>
       {role.proposals.map((p) => (
-        <div key={p.draftId} className="grid gap-2">
-          <p className="text-xs text-muted-foreground">{p.proposedOn}</p>
+        <div key={p.draftId} className="pc-proposal">
+          <p className="pc-dim pc-f12">{p.proposedOn}</p>
           {p.fields.map((f) => (
-            <div key={f.key} className="grid gap-1">
-              <p className="text-sm font-semibold">{f.label}</p>
+            <div key={f.key} className="pc-stack">
+              <b>{f.label}</b>
               {f.lines.length ? (
-                <ul className="list-disc space-y-1 break-words pl-5 text-sm">
+                <ul className="pc-list">
                   {f.lines.map((l, i) => (
                     <li key={i}>{l}</li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground">{PW.clears}</p>
+                <p className="pc-dim pc-f14">{PW.clears}</p>
               )}
             </div>
           ))}
