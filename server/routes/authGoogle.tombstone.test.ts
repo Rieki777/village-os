@@ -13,12 +13,14 @@
  * Each case stands the race up exactly: the read returns the live member and
  * the locked write applies to a tombstoned copy.
  */
+import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { register } from "./authGoogle";
 import { OAUTH_HANDOFF_COOKIE, makeHandoffToken, makeOAuthState, readOAuthState } from "../lib/oauthGoogle";
 import { makeGoogleLink, readGoogleLink } from "../lib/oauthAccounts";
 
-const SECRET = "test-secret-for-the-tombstone-race";
+/** Any signing key does: these routes are mounted on a stand-in app, so a fresh one per run is all they need. */
+const SECRET = randomBytes(24).toString("hex");
 const CLIENT_ID = "client-id.apps.example";
 const EMAIL = "wren@example.test";
 const SUB = "google-sub-wren";
@@ -146,7 +148,7 @@ describe("a Google sign-in that lands on a tombstone", () => {
     expect(out.cookies[OAUTH_HANDOFF_COOKIE], "a handoff was signed for a tombstone").toBeUndefined();
     expect(out.redirect).toBe("/login?oauth=error&reason=account_unavailable");
     // And the tombstone carries no link that would refuse this Google account forever.
-    expect(readGoogleLink(SECRET, row)).toBeNull();
+    expect(readGoogleLink(SECRET, row), "a Google link was written onto a tombstone").toBeNull();
     expect(row.prefs.googleLink).toBeUndefined();
   });
 
