@@ -160,7 +160,7 @@ function profileRoutes(authedUser: () => Promise<any>) {
     put: (p: string, h: any) => routes.set(`PUT ${p}`, h),
     post: (p: string, h: any) => routes.set(`POST ${p}`, h),
   } as any;
-  registerProfileRoutes(app, { authedUser: authedUser as any, members: usersRepo(pool), publicUser: (u: any) => u });
+  registerProfileRoutes(app, { authedUser: authedUser as any, members: usersRepo(pool), publicUser: (u: any) => u, getPool: () => pool });
   return async (key: string, body: Record<string, unknown>) => {
     const out: { status: number; body: any } = { status: 200, body: null };
     const res: any = {
