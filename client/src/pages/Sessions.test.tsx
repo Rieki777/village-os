@@ -80,7 +80,11 @@ beforeEach(() => {
   state.user = { id: "usr-wren", name: "Wren" };
   state.modules = [{ id: "sessions", lifecycle: "members" }];
   calls = [];
-  answers = { "GET /api/sessions": () => json(LIST) };
+  answers = {
+    "GET /api/sessions": () => json(LIST),
+    // "Asking for advice" reads its own lists; a member who has asked nothing and been asked nothing.
+    "GET /api/sessions/advice/requests": () => json({ askedOfMe: [], mine: [], circles: [], today: "2026-10-24" }),
+  };
   state.fetch = async (path, init) => {
     const method = (init?.method ?? "GET").toUpperCase();
     calls.push({ path, method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
