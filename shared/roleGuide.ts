@@ -48,6 +48,8 @@ export interface GuideSuggestion {
   path: string;
   /** The role it belongs to, by name, or null for the season. */
   role: string | null;
+  /** That role's id: the posted role it renews, or the new role's draft id. Null for the season. */
+  roleId: string | null;
   /** The field's key: `domain`, `accountabilities`, `aim`. */
   field: string;
   /** The suggested words. A list field arrives as lines. */

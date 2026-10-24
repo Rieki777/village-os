@@ -51,7 +51,7 @@ describe("the guide's card as suggestions", () => {
     const proposed = { newRoles: [{ id: "n1", circleId: "c-land", seats: 1, words: { name: "Garden Steward", domain: "The seed bank and the planting plan" }, reviewOn: null } as any] };
     const out = suggestionsFrom("words", current, proposed, [], ctx, sentencesOf(DOC));
     expect(out).toEqual([
-      { path: "newRoles.0.words.domain", role: "Garden Steward", field: "domain", words: "The seed bank and the planting plan", source: DOC.split("\n")[0], problem: null },
+      { path: "newRoles.0.words.domain", role: "Garden Steward", roleId: "n1", field: "domain", words: "The seed bank and the planting plan", source: DOC.split("\n")[0], problem: null },
     ]);
   });
 

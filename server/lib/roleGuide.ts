@@ -129,10 +129,10 @@ export function suggestionsFrom(
   const out: GuideSuggestion[] = [];
   const fields = new Set(GUIDE_FIELDS[step]);
   const problemAt = (path: string) => problems.find((p) => p.field === path || p.field.startsWith(`${path}.`))?.sentence ?? null;
-  const push = (path: string, role: string | null, field: string, was: Words, now: Words) => {
+  const push = (path: string, role: string | null, roleId: string | null, field: string, was: Words, now: Words) => {
     if (now === null || sameWords(was, now)) return;
     const words = swapWords(now, ctx.swap);
-    out.push({ path, role, field, words, source: sourceFor(words, sentences), problem: problemAt(path) });
+    out.push({ path, role, roleId, field, words, source: sourceFor(words, sentences), problem: problemAt(path) });
   };
   const roleName = (key: string) => ctx.roles.find((r) => r.key === key)?.name ?? null;
 
@@ -144,7 +144,7 @@ export function suggestionsFrom(
       const known = ctx.roles.find((r) => r.key === key);
       const was = { ...(known?.words ?? {}) } as Record<string, unknown>;
       for (const [field, value] of Object.entries(p.words ?? {})) {
-        if (fields.has(field)) push(`${key}.words.${field}`, roleName(key), field, asWords(was[field]), asWords(value));
+        if (fields.has(field)) push(`${key}.words.${field}`, roleName(key), p.roleId, field, asWords(was[field]), asWords(value));
       }
     });
     (proposed.newRoles ?? []).forEach((n, i) => {
@@ -152,12 +152,12 @@ export function suggestionsFrom(
       const key = `newRoles.${i}`;
       const was = current.newRoles[i].words as Record<string, unknown>;
       for (const [field, value] of Object.entries(n.words ?? {})) {
-        if (fields.has(field)) push(`${key}.words.${field}`, roleName(key), field, asWords(was[field]), asWords(value));
+        if (fields.has(field)) push(`${key}.words.${field}`, roleName(key), current.newRoles[i].id ?? null, field, asWords(was[field]), asWords(value));
       }
     });
   } else if (proposed.season) {
-    push("season.aim", null, "aim", asWords(current.season.aim), asWords(proposed.season.aim));
-    push("season.seasonalGoals", null, "seasonalGoals", goalLines(current.season.seasonalGoals), goalLines(proposed.season.seasonalGoals));
+    push("season.aim", null, null, "aim", asWords(current.season.aim), asWords(proposed.season.aim));
+    push("season.seasonalGoals", null, null, "seasonalGoals", goalLines(current.season.seasonalGoals), goalLines(proposed.season.seasonalGoals));
   }
   return out;
 }

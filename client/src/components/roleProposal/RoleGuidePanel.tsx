@@ -33,6 +33,7 @@ export default function RoleGuidePanel({
   step,
   villageName,
   document,
+  accepts,
   onAccept,
 }: {
   proposalId: string;
@@ -40,6 +41,8 @@ export default function RoleGuidePanel({
   villageName: string;
   /** Text brought in from the member's document, when there is one. Never stored. */
   document?: string | null;
+  /** Whether this place on the page can take a suggestion: the role on show, or the season's aim. */
+  accepts: (s: GuideSuggestion) => boolean;
   /** The member pressed Use this: put the words where `path` says. */
   onAccept: (s: GuideSuggestion) => void;
 }) {
@@ -91,6 +94,8 @@ export default function RoleGuidePanel({
   const name = guide.options.find((o) => o.id === guide.answering)?.name ?? "";
   const shared = guide.answering === "saberra" ? ROLE_GUIDE_WORDS.sharedWith.saberra(name) : ROLE_GUIDE_WORDS.sharedWith.village(name);
 
+  const shown = suggestions.filter(accepts);
+
   const send = () => {
     const text = reply.trim().slice(0, GUIDE_ANSWER_MAX);
     if (!text) return;
@@ -134,9 +139,9 @@ export default function RoleGuidePanel({
         </ul>
       )}
 
-      {suggestions.length > 0 && (
+      {shown.length > 0 && (
         <ul className="grid gap-2" data-guide-suggestions>
-          {suggestions.map((s) => (
+          {shown.map((s) => (
             <li key={s.path} className="grid gap-1.5 rounded-lg border border-stone-200 bg-white p-3 text-sm" data-suggestion={s.path}>
               <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <span className="rounded-full bg-teal-deep/10 px-2 py-0.5 text-teal-deep">{ROLE_GUIDE_WORDS.suggested}</span>
@@ -175,7 +180,7 @@ export default function RoleGuidePanel({
         </ul>
       )}
 
-      {asked && !busy && !error && !question && suggestions.length === 0 && <p className={LEDE}>{ROLE_GUIDE_WORDS.nothingMissing}</p>}
+      {asked && !busy && !error && !question && shown.length === 0 && <p className={LEDE}>{ROLE_GUIDE_WORDS.nothingMissing}</p>}
 
       {question && (
         <div className="grid gap-2" data-guide-question>
