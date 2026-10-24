@@ -1218,14 +1218,21 @@ export async function forgetDocumentedHolder(
 /**
  * Convert a documented holder into a real member holding, keeping the same
  * row so the seat's history does not restart when somebody finally signs up.
+ *
+ * NEVER FOR A MEMBER WHO HAS LEFT. An erasure keeps the user row as a
+ * tombstone, and a seating flipped to it is a holding the moon settlement pays
+ * and nothing releases, because the erasure's seating steps have already run.
+ * Refused here, in the same statement that writes, so every door that seats
+ * through this one is covered whatever it checked first.
  */
 export async function claimSeating(pool: Pool, assignmentId: string, userId: string): Promise<boolean> {
   const [r]: any = await pool.query(
     `UPDATE org_role_assignments
         SET holder_kind = 'member', user_id = ?, holder_key = ?
       WHERE id = ? AND ended_at IS NULL AND holder_kind = 'documented' AND is_example = 0
-        AND is_agent = 0`,
-    [userId, userId, assignmentId],
+        AND is_agent = 0
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND LOWER(u.email) LIKE '%@anonymized.invalid')`,
+    [userId, userId, assignmentId, userId],
   );
   return !!r?.affectedRows;
 }
