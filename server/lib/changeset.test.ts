@@ -28,7 +28,7 @@ import {
   type ChangesetDeps,
 } from "./changeset";
 import { dryRunProposal } from "./proposalDryRun";
-import { loadVariables, numberVar, rawValue, wireVariableGuard } from "./variables";
+import { loadVariables, numberVar, rawValue, setVariable, wireVariableGuard } from "./variables";
 import { DEFAULT_EXIT_POLICY, exitLeverRefusal } from "./exitPolicy";
 import { loadModuleSettings } from "./modules";
 import { villageId } from "./economy";
@@ -482,6 +482,10 @@ describe.skipIf(!configured)("a set of exit dials is judged on the state it prod
 
   it("refuses the whole set when its final state is refused, writes nothing, and is not marked applied", async () => {
     let told = 0;
+    // The village holds a Voice share of 0. That was the inherited default
+    // until the ruling of 2026-10-23 made it 100, so it is stored here, which
+    // is the state this case was written about.
+    expect((await setVariable(pool, "exit.keep_pct.voice", "0")).ok).toBe(true);
     // Rate first: judged alone against today it is coherent and used to land,
     // then convert was refused and the set was stamped applied anyway.
     const p = await proposal("gmp-voice-noshare", [

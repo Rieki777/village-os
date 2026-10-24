@@ -112,7 +112,7 @@ export default function QuestsTab({ password }: { password: string }) {
               if (!adding.title.trim()) return toast.error("Give it a title");
               const pay = draftToBody(addingPay, offered ?? [], currency, { required: true });
               if (!pay.ok) return toast.error(pay.error);
-              const d = await call("/admin/quests", { ...adding, valueMinor: pay.valueMinor, valueTokens: pay.valueTokens });
+              const d = await call("/admin/quests", { ...adding, valueMinor: pay.valueMinor, valueTokens: pay.valueTokens, cashMinor: pay.cashMinor });
               if (d) {
                 forgetExamplesCache("quests");
                 toast.success("Posted");
@@ -285,7 +285,7 @@ export default function QuestsTab({ password }: { password: string }) {
                       if (!pay.ok) return toast.error(pay.error);
                       const r = await call(`/admin/quests/${q.id}`, {
                         title: d.title, description: d.description,
-                        valueMinor: pay.valueMinor, valueTokens: pay.valueTokens,
+                        valueMinor: pay.valueMinor, valueTokens: pay.valueTokens, cashMinor: pay.cashMinor,
                         status: d.status, circle: d.circle,
                         subtitle: d.subtitle ?? "", story: d.story ?? "", firstStep: d.firstStep ?? "",
                         deliverable: d.deliverable ?? "", imageUrl: d.imageUrl ?? "",
