@@ -6,13 +6,15 @@
  *
  * ── THE SEASON ───────────────────────────────────────────────────────────
  *
- * The season is the one a session opened now would be stamped with
- * (server/lib/liveSessions.ts `sessionStamp`): the village's own seasons when
- * it has written them, the natural ones by hemisphere otherwise. The circle's
- * closed sessions of the last four months whose stamp names that season are
- * its season; a village that keeps no seasons (the tropics) reads its last
- * three months instead. Only a session two or more people were in counts as
- * the circle meeting, the rule its last-met date already keeps.
+ * The season is the one a session opened now would be stamped with, read from
+ * the instant it began (server/lib/liveSessions.ts `seasonNow`): the village's
+ * own seasons when it has written them, the natural ones by hemisphere
+ * otherwise. The circle's meetings since then are its season, so a season
+ * named twice in a year is two seasons and a long one is read whole; a village
+ * that keeps no seasons (the tropics) reads its last three months instead. A
+ * meeting is a closed session two or more people were in, counted the house's
+ * one way (server/repos/liveSessions.ts `heldWithAtLeast`), so it stays a
+ * meeting after one of its people leaves the village.
  *
  * ── WHO ──────────────────────────────────────────────────────────────────
  *
@@ -21,7 +23,7 @@
  */
 import type { Pool } from "mysql2/promise";
 import * as store from "../repos/sessionPulse";
-import { memberNo, sessionStamp, type Outcome, type Refusal } from "./liveSessions";
+import { memberNo, seasonNow, type Outcome, type Refusal } from "./liveSessions";
 import { libraryViewer } from "./sessionLibrary";
 import { villageTimezone } from "./villageReaders";
 import type { LapseContext } from "./orgChart";
@@ -67,12 +69,9 @@ export async function circlePulse(pool: Pool, who: PulseAsker, circleId: string,
   if (!mayKeepRhythm(circleId, viewer)) return refuse(403, PULSE_REFUSALS.notYours);
 
   const zone = villageTimezone();
-  const season = (await sessionStamp(pool, now)).season ?? null;
-  const days = season ? PULSE_LIMITS.seasonLookbackDays : PULSE_LIMITS.noSeasonDays;
-  const from = new Date(now.getTime() - days * 86_400_000);
-  const rows = (await store.closedSince(pool, circleId, from)).filter((r) => !season || readJson(r.stamp)?.season === season);
-  const peopleIn = new Map((await store.peopleCounts(pool, rows.map((r) => Number(r.id)))).map((r) => [Number(r.session_id), Number(r.n)] as const));
-  const met = rows.filter((r) => (peopleIn.get(Number(r.id)) ?? 0) >= 2);
+  const { season, startedAt } = await seasonNow(pool, now);
+  const from = startedAt ?? new Date(now.getTime() - PULSE_LIMITS.noSeasonDays * 86_400_000);
+  const met = await store.meetingsSince(pool, circleId, from);
   const ids = met.map((r) => Number(r.id));
 
   const entries = await store.entryCounts(pool, ids);
@@ -84,7 +83,7 @@ export async function circlePulse(pool: Pool, who: PulseAsker, circleId: string,
   return done({
     circleId,
     season,
-    since: villageKey(met.length ? asDate(met[0].closed_at) : from, zone),
+    since: villageKey(from, zone),
     sessions: met.length,
     people: await store.distinctPeople(pool, ids),
     decisions: entries.decisions,

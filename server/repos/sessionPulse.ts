@@ -7,7 +7,7 @@
  * only: the pulse keeps no table of its own.
  */
 import type { RowDataPacket } from "mysql2/promise";
-import type { Queryable } from "./liveSessions";
+import { MEETING_MIN_PEOPLE, heldWithAtLeast, type Queryable } from "./liveSessions";
 
 const rowsOf = async (q: Queryable, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> => {
   const [rows] = await q.query<RowDataPacket[]>(sql, params);
@@ -16,19 +16,20 @@ const rowsOf = async (q: Queryable, sql: string, params: unknown[] = []): Promis
 
 const none = <T>(list: readonly T[]): boolean => list.length === 0;
 
-/** A circle's closed sessions since an instant, oldest first, with their stamp and summary. */
-export async function closedSince(q: Queryable, circleId: string, since: Date): Promise<RowDataPacket[]> {
+/**
+ * A circle's meetings since an instant, oldest first, with their summary: its
+ * closed sessions at least `MEETING_MIN_PEOPLE` people were in, counted the
+ * house's one way (`heldWithAtLeast`), so a meeting stays a meeting after one
+ * of its people leaves the village.
+ */
+export async function meetingsSince(q: Queryable, circleId: string, since: Date): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
-    "SELECT `id`, `stamp`, `summary`, `closed_at` FROM `live_sessions` WHERE `circle_id` = ? AND `status` = 'closed' AND `closed_at` >= ? ORDER BY `closed_at`, `id`",
-    [circleId, since],
+    "SELECT `s`.`id`, `s`.`summary`, `s`.`closed_at` FROM `live_sessions` `s` " +
+      `WHERE \`s\`.\`circle_id\` = ? AND \`s\`.\`status\` = 'closed' AND \`s\`.\`closed_at\` >= ? AND ${heldWithAtLeast("s")} ` +
+      "ORDER BY `s`.`closed_at`, `s`.`id`",
+    [circleId, since, MEETING_MIN_PEOPLE],
   );
-}
-
-/** How many people were in each of some sessions. */
-export async function peopleCounts(q: Queryable, sessionIds: readonly number[]): Promise<RowDataPacket[]> {
-  if (none(sessionIds)) return [];
-  return rowsOf(q, "SELECT `session_id`, COUNT(*) AS `n` FROM `live_session_people` WHERE `session_id` IN (?) GROUP BY `session_id`", [sessionIds]);
 }
 
 /** Different people across some sessions. */

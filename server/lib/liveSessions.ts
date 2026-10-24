@@ -100,6 +100,9 @@ import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { civilDate, moonPhase, moonPhaseGlyph, moonPhaseName, seasonInstants } from "../../shared/lunar";
 import { orderParcels } from "../../shared/land";
 import { isTropicalLatitude, parseVillageSeasons, villageSeasonOn } from "../../shared/villageSeasons";
+import { naturalSeasonStart, villageSeasonStartKey } from "../../shared/sessionPulse";
+import { civilDayStart } from "../../shared/seasonPlans";
+import { villageKey } from "../../shared/sessionRhythm";
 import { villageLandRows } from "../repos/villageLand";
 import { villageTimezone } from "./villageReaders";
 import {
@@ -625,6 +628,30 @@ export function stampSeason(
   }
   if (village.latitude != null && isTropicalLatitude(village.latitude)) return null;
   return seasonAt(now, village.hemisphere);
+}
+
+/**
+ * The season a session opened now would be stamped with, and the instant it
+ * began. The village's own seasons when it has written them: the latest start
+ * on or before today in the village's clock, or last year's last start before
+ * the year's first. The natural ones otherwise: the latest equinox or
+ * solstice. Null for both where the village keeps no seasons (the tropics), or
+ * the stamp cannot tell.
+ */
+export async function seasonNow(pool: Pool, now: Date): Promise<{ season: string | null; startedAt: Date | null }> {
+  const season = (await sessionStamp(pool, now)).season ?? null;
+  if (!season) return { season: null, startedAt: null };
+  try {
+    const own = parseVillageSeasons(stringVar("calendar.seasons"));
+    if (own) {
+      const zone = villageTimezone();
+      const key = villageSeasonStartKey(own, villageKey(now, zone));
+      return { season, startedAt: key ? civilDayStart(key, zone) : null };
+    }
+  } catch {
+    return { season, startedAt: null };
+  }
+  return { season, startedAt: naturalSeasonStart(now) };
 }
 
 /** This deployment is one village; the land table keys its rows by it (0069). */

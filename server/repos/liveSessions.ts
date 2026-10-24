@@ -203,7 +203,7 @@ export const MEETING_MIN_PEOPLE = 2;
  * meeting stays a meeting after one of its people leaves the village and their
  * row goes. A session closed before the count was kept reads its rows alone.
  */
-const heldWithAtLeast = (alias: string): string =>
+export const heldWithAtLeast = (alias: string): string =>
   `GREATEST((SELECT COUNT(*) FROM \`live_session_people\` \`p_${alias}\` WHERE \`p_${alias}\`.\`session_id\` = \`${alias}\`.\`id\`), ` +
   `CASE WHEN JSON_VALID(\`${alias}\`.\`summary\`) ` +
   `THEN COALESCE(CAST(JSON_EXTRACT(\`${alias}\`.\`summary\`, '$.counts.people') AS UNSIGNED), 0) ELSE 0 END) >= ?`;

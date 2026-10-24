@@ -143,16 +143,9 @@ describe.skipIf(!configured)("a circle's season, against a real schema", () => {
     expect(out.status, JSON.stringify(out.body)).toBe(200);
     const p = out.body as CirclePulse;
     expect(p).toMatchObject({ circleId: "c-garden", sessions: 1, people: 2, decisions: 1, tensions: 1, actions: { open: 1, done: 0, letGo: 0 }, arrival: 7 });
-    expect(p.since).toBe(new Date().toISOString().slice(0, 10));
-  });
-
-  it("leaves out a session whose stamp names another season", async () => {
-    const before = ((await pulse("m-ana")).body as CirclePulse).season;
-    await q("UPDATE `live_sessions` SET `stamp` = JSON_SET(`stamp`, '$.season', 'a season long gone') WHERE `circle_id` = 'c-garden' AND `title` = 'Garden, week 1'");
-    const after = (await pulse("m-ana")).body as CirclePulse;
-    // This village has said nowhere where it is, so its season is the natural one by hemisphere, and named.
-    expect(typeof before).toBe("string");
-    expect(after).toMatchObject({ sessions: 0, decisions: 0, people: 0, arrival: null });
+    // This village has said nowhere where it is, so its season is the natural one by hemisphere, named, and read from the day it began.
+    expect(typeof p.season).toBe("string");
+    expect(p.since <= new Date().toISOString().slice(0, 10)).toBe(true);
   });
 
   it("is read by the circle's members and admins, and by nobody else", async () => {
@@ -160,5 +153,15 @@ describe.skipIf(!configured)("a circle's season, against a real schema", () => {
     expect((await pulse("m-founder")).status).toBe(200);
     expect(await pulse("m-dee")).toMatchObject({ status: 403, body: { error: PULSE_REFUSALS.notYours } });
     expect(await pulse("m-ana", "c-moon")).toMatchObject({ status: 404, body: { error: PULSE_REFUSALS.circleUnknown } });
+  });
+
+  it("keeps a meeting a meeting after one of its two people leaves the village", async () => {
+    await q("DELETE FROM `live_session_people` WHERE `member_no` = (SELECT `no` FROM `live_session_members` WHERE `user_id` = 'm-ben')");
+    expect((await pulse("m-ana")).body).toMatchObject({ sessions: 1, decisions: 1, people: 1 });
+  });
+
+  it("reads only the meetings since the season began", async () => {
+    await q("UPDATE `live_sessions` SET `closed_at` = DATE_SUB(`closed_at`, INTERVAL 200 DAY) WHERE `circle_id` = 'c-garden' AND `title` = 'Garden, week 1'");
+    expect((await pulse("m-ana")).body).toMatchObject({ sessions: 0, decisions: 0, people: 0, arrival: null });
   });
 });

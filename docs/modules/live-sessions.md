@@ -388,11 +388,12 @@ room arrived (the median of the arrival rounds' medians, out of 11, numbers only
 members by standing and admins, one circle at a time, their own first; counts only, never a name. No
 table: it reads the sessions, their entries, the task layer's state and who came.
 
-The season is the one a session opened now would be stamped with: the village's own seasons when it has
-written them, the natural ones by hemisphere otherwise. The circle's closed sessions of the last four
-months whose stamp names that season are its season, and only a session two or more people were in counts
-as the circle meeting, the rule its last-met date already keeps. A village that keeps no seasons (the
-tropics) reads its last three months.
+The season is the one a session opened now would be stamped with, read from the day it began: the
+village's own seasons when it has written them (the latest start on or before today, so a season named
+twice in a year is two seasons and a long one is read whole), the natural ones by hemisphere otherwise
+(the latest equinox or solstice). Only a closed session two or more people were in counts as the circle
+meeting, counted the house's one way, so it stays a meeting after one of its people leaves the village. A
+village that keeps no seasons (the tropics) reads its last three months.
 
 **The regenerative lens** folds under every open proposal in the room: "Look at it through a regenerative
 lens" opens four questions (who and what it touches beyond the people here; what it gives back to the

@@ -4,7 +4,8 @@
  * server/sessionPulse.db.test.ts.
  */
 import { describe, expect, it } from "vitest";
-import { LENS_COPY, PULSE_COPY, circlePulseUrl, medianOf, type CirclePulse } from "./sessionPulse";
+import { LENS_COPY, PULSE_COPY, circlePulseUrl, medianOf, naturalSeasonStart, villageSeasonStartKey, type CirclePulse } from "./sessionPulse";
+import { parseVillageSeasons } from "./villageSeasons";
 
 const pulse = (over: Partial<CirclePulse> = {}): CirclePulse => ({
   circleId: "garden",
@@ -26,6 +27,23 @@ describe("a circle's season", () => {
     expect(medianOf([9, 5, 7])).toBe(7);
     expect(medianOf([6, 8])).toBe(7);
     expect(medianOf([6, 7])).toBe(6.5);
+  });
+
+  it("reads a village's own season from the day it began, each spell of a repeated name its own, a long one whole", () => {
+    // The house's own example list (shared/villageSeasons.ts): Green comes twice, and Dry runs five months.
+    const seasons = parseVillageSeasons("Dry: 12-01, Green: 05-01, Little summer: 07-10, Green: 08-01")!;
+    expect(villageSeasonStartKey(seasons, "2026-08-20")).toBe("2026-08-01");
+    expect(villageSeasonStartKey(seasons, "2026-07-15")).toBe("2026-07-10");
+    expect(villageSeasonStartKey(seasons, "2026-04-28")).toBe("2025-12-01");
+    expect(villageSeasonStartKey(seasons, "2026-12-01")).toBe("2026-12-01");
+    expect(villageSeasonStartKey([], "2026-04-28")).toBeNull();
+  });
+
+  it("reads a natural season from the latest equinox or solstice", () => {
+    const autumn = naturalSeasonStart(new Date("2026-10-24T12:00:00Z"));
+    expect(autumn.toISOString().slice(0, 7)).toBe("2026-09");
+    const winter = naturalSeasonStart(new Date("2026-01-10T12:00:00Z"));
+    expect(winter.toISOString().slice(0, 7)).toBe("2025-12");
   });
 
   it("names its door", () => {

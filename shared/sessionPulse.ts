@@ -15,8 +15,9 @@
  *   consent, the tensions it named, where its actions stand, and how the room
  *   arrived (the arrival round's median, numbers only). The season is the one
  *   a session's stamp names (the village's own seasons, or the natural ones
- *   by hemisphere); a village with no seasons (the tropics) reads the last
- *   three months.
+ *   by hemisphere), read from the day it began (`villageSeasonStartKey`,
+ *   `naturalSeasonStart`); a village with no seasons (the tropics) reads the
+ *   last three months.
  *
  *   THE LENS. Four questions under an open proposal, for a room that wants to
  *   look at it whole before it consents. They are prompts, kept nowhere.
@@ -28,6 +29,7 @@
  * COPY RULES. Platform code carries no village's name. No em-dashes, and every
  * string a member reads lives in this file so the voice gate reads it.
  */
+import { seasonInstants } from "./lunar";
 import { CIRCLES_API } from "./sessionRhythm";
 import { circleWords } from "./sessionTasks";
 
@@ -43,11 +45,39 @@ export function circlePulseUrl(circleId: string): string {
 }
 
 export const PULSE_LIMITS = {
-  /** How far back a season's sessions are read: a season is three months, and a little more for a long one. */
-  seasonLookbackDays: 120,
   /** The window when the village keeps no seasons. */
   noSeasonDays: 90,
 } as const;
+
+const pad = (n: number): string => String(n).padStart(2, "0");
+
+/**
+ * The village date the village's own season on `todayKey` began: the latest
+ * start on or before it, and before the year's first start, the last start of
+ * the year before. Every spell of a season named twice in a year is its own
+ * season this way, and a season longer than any fixed window is read whole.
+ */
+export function villageSeasonStartKey(seasons: readonly { month: number; day: number }[], todayKey: string): string | null {
+  if (!seasons.length) return null;
+  const [year, month, day] = todayKey.split("-").map(Number);
+  const today = month * 100 + day;
+  const starts = seasons.map((s) => s.month * 100 + s.day).sort((a, b) => a - b);
+  const passed = starts.filter((s) => s <= today);
+  const pick = passed.length ? passed[passed.length - 1] : starts[starts.length - 1];
+  return `${passed.length ? year : year - 1}-${pad(Math.floor(pick / 100))}-${pad(pick % 100)}`;
+}
+
+/** The instant the natural season on `now` began: the latest equinox or solstice at or before it. */
+export function naturalSeasonStart(now: Date): Date {
+  const t = now.getTime();
+  const of = (year: number): number[] => {
+    const table = seasonInstants(year);
+    return table
+      ? [table.marEquinox, table.junSolstice, table.sepEquinox, table.decSolstice].map((d) => d.getTime())
+      : [Date.UTC(year, 2, 20), Date.UTC(year, 5, 21), Date.UTC(year, 8, 22), Date.UTC(year, 11, 21)];
+  };
+  return new Date(Math.max(...[...of(now.getUTCFullYear() - 1), ...of(now.getUTCFullYear())].filter((x) => x <= t)));
+}
 
 // ── Wire shape ───────────────────────────────────────────────────────────────
 
@@ -55,7 +85,7 @@ export interface CirclePulse {
   circleId: string;
   /** The season's name as a stamp writes it ("spring", or the village's own), or null where the village keeps none. */
   season: string | null;
-  /** The village date the window starts, YYYY-MM-DD: the season's first session, or three months back. */
+  /** The village date the window starts, YYYY-MM-DD: the day the season began, or three months back. */
   since: string;
   /** Sessions the circle closed this season with two or more people in them. */
   sessions: number;
