@@ -406,6 +406,30 @@ export async function lockUserRowForUpdate(conn: PoolConnection, id: string): Pr
 }
 
 /**
+ * Whether an account other than `userId` holds this address, and this handle, now.
+ *
+ * For an erasure resumed after its tombstone (`asTheyWere`, server/lib/erasure.ts).
+ * The tombstone frees both, so sign-up can give them to somebody new while the
+ * sweep waits for its retry, and matching by them then finds a living member.
+ * The address is matched trimmed and lower-cased, the way the sweep matches it,
+ * and the handle lower-cased. An empty key is held by nobody.
+ */
+export async function heldByAnotherAccount(
+  pool: Pool,
+  userId: string,
+  who: { emailKey: string; handle: string | null },
+): Promise<{ email: boolean; handle: boolean }> {
+  const emailKey = String(who.emailKey ?? "");
+  const handle = String(who.handle ?? "").trim().toLowerCase();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT EXISTS(SELECT 1 FROM users WHERE id <> ? AND ? <> '' AND LOWER(TRIM(email)) = ?) AS email_held, " +
+      "EXISTS(SELECT 1 FROM users WHERE id <> ? AND ? <> '' AND LOWER(handle) = ?) AS handle_held",
+    [userId, emailKey, emailKey, userId, handle, handle],
+  );
+  return { email: Number(rows[0]?.email_held ?? 0) === 1, handle: Number(rows[0]?.handle_held ?? 0) === 1 };
+}
+
+/**
  * Lock one member's row FOR UPDATE on the caller's connection, the way
  * `lockUserRowForUpdate` does, and hand back the two fields a session is
  * judged against: the email, which says whether the row is an erasure's
