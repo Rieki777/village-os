@@ -1,4 +1,5 @@
 import { anonymizeMember } from "./lib/erasure";
+import { resolveExit } from "./lib/exitResolve";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
 import { joiningOf, pickNextAction } from "./lib/nextAction";
@@ -14362,8 +14363,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   /**
    * The terminal act: refuses with the NAMED blocking domains until the
-   * member's open state is clean, then runs the existing tombstone. Exit
-   * never invents a settle path — 2.2 #8 stands.
+   * member's open state is clean. Then a leaver still holding value stays on
+   * as a former member and anybody else meets the existing tombstone (Rye,
+   * 2026-10-23; `resolveExit`). Exit never invents a settle path: 2.2 #8 stands.
    */
   app.post("/api/admin/exits/:id/resolve", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
@@ -14382,17 +14384,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
         blocking,
       });
     }
-    const { agreementRef } = req.body ?? {};
-    await anonymizeMember(getPool(), target, adminActor(req)?.id ?? null, erasureDeps);
-    await getPool().query(
-      "UPDATE exits SET status = 'resolved', resolved_at = NOW(), agreement_ref = COALESCE(?, agreement_ref) WHERE id = ?",
-      [agreementRef ? String(agreementRef).slice(0, 255) : null, exit.id],
-    );
-    // Seats vacate at the tombstone; the stewards hear which ones.
+    const out = await resolveExit(getPool(), { exitId: exit.id, target, actorId: adminActor(req)?.id ?? null, agreementRef: req.body?.agreementRef, deps: erasureDeps });
+    // Seats vacate at resolve, whichever way it went; the stewards hear which ones.
     for (const roleId of roleIds) {
       await notifyAdmins("exit_opened", `An opening in ${roleId} (departure resolved)`, `exit:${exit.id}:vacancy:${roleId}`);
     }
-    res.json({ success: true, vacatedRoles: roleIds });
+    res.json({ success: true, outcome: out.outcome, held: out.held, vacatedRoles: roleIds });
   });
 
   /** A person who stays: the exit closes without a tombstone. */

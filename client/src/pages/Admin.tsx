@@ -5712,10 +5712,10 @@ function ExitsAdminTab({ password }: { password: string }) {
                   <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/settle-balances`); if (d) { toast.success(`Swept: ${JSON.stringify(d.swept)}`); loadState(selectedUser); } }}
                     className="text-sm border border-teal-deep text-teal-deep rounded-lg px-3 py-2 font-medium">Sweep balances</button>
                   <button onClick={async () => {
-                    if (!window.confirm("Resolve this exit? The account becomes a tombstone: identity removed, contributions kept.")) return;
+                    if (!window.confirm("Resolve this exit? A member still holding tokens stays on as a former member, with their account and balances, and their membership and roles end. An account with nothing of value left becomes a tombstone: identity removed, contributions kept.")) return;
                     const d = await call(`/admin/exits/${openExit.id}/resolve`);
-                    if (d) { toast.success(`Resolved${d.vacatedRoles.length ? `. Roles opened: ${d.vacatedRoles.join(", ")}` : ""}`); setSelectedUser(""); load(); }
-                  }} className="text-sm bg-red-600 text-white rounded-lg px-3 py-2 font-medium">Resolve (tombstone)</button>
+                    if (d) { toast.success(`${d.outcome === "former" ? "Resolved. Kept as a former member" : "Resolved. The account is a tombstone"}${d.vacatedRoles.length ? `. Roles opened: ${d.vacatedRoles.join(", ")}` : ""}`); setSelectedUser(""); load(); }
+                  }} className="text-sm bg-red-600 text-white rounded-lg px-3 py-2 font-medium">Resolve</button>
                   <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/cancel`); if (d) { toast.success("They're staying"); loadState(selectedUser); load(); } }}
                     className="text-sm text-gray-500 hover:text-gray-900 px-2">They're staying</button>
                 </>
