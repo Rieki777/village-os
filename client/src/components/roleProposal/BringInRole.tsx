@@ -89,6 +89,8 @@ export default function BringInRole({
 }) {
   const village = useVillageName("This village");
   const [mode, setMode] = useState<Mode>("file");
+  // Open at first when the draft holds no role yet, then the member's own: filling the draft never snaps it shut.
+  const [open, setOpen] = useState(() => proposal.roles.length + proposal.newRoles.length === 0);
   const [pasted, setPasted] = useState("");
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
@@ -159,7 +161,6 @@ export default function BringInRole({
       return next;
     });
 
-  const hasRoles = proposal.roles.length + proposal.newRoles.length > 0;
   const tab = (m: Mode, label: string, Icon: typeof FileUp) => (
     <button
       type="button"
@@ -178,7 +179,7 @@ export default function BringInRole({
   const loose = reading ? reading.read.problems.filter((p) => !reading.changes.some((c) => under(c.path)(p))) : [];
 
   return (
-    <details className={`${PANEL} grid gap-3`} open={!hasRoles} data-bring-in="">
+    <details className={`${PANEL} grid gap-3`} open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)} data-bring-in="">
       <summary className={`flex min-h-[44px] cursor-pointer items-center font-display text-lg font-bold text-stone-900 ${FOCUS}`}>{RC_WORDS.bringIn}</summary>
       <div className="mt-2 grid gap-3">
         <p className={LEDE}>{RC_WORDS.bringInLede}</p>
