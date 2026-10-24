@@ -218,4 +218,35 @@ describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", (
     expect(mine.json?.answered).toBe(true);
     expect(mine.json?.mine?.length).toBe(2);
   });
+
+  /*
+   * THE SAME DOOR, AND WHAT IT LEAVES ON OTHER PEOPLE'S SCREENS (lane E2,
+   * findings 9 and 10). Opening a departure rings every admin with the
+   * member's full name, and the route used to write that row with no actor, so
+   * the sweep's notifications step never matched it. The note the member types
+   * goes onto the exit record. Both are read back through the routes an admin
+   * reads them through, with the row's actor asked for directly as the control
+   * that the producer now records whose departure it is.
+   */
+  it("the founder's bell and the exit record keep no word of a member once their exit resolves", async () => {
+    const sorrel = await register("Sorrel Vane", "sorrel");
+    const opened = await call("POST", "/api/profile/request-exit", { password: PASSWORD, note: "Leaving because of how Sam treated me" }, sorrel.token);
+    expect(opened.status, `request-exit: ${opened.text}`).toBe(200);
+    const exitId = String(opened.json?.exit?.id ?? "");
+
+    const titles = async () => ((await call("GET", "/api/notifications")).json?.notifications ?? []).map((n: any) => String(n.title));
+    expect(await titles(), "the control: the founder is told, by name").toContain("Sorrel Vane has begun a departure");
+    const [row] = (await pool.query<any[]>("SELECT `actor_user_id` FROM `notifications` WHERE `dedupe_key` LIKE ?", [`exit:${exitId}:opened:%`]))[0]; // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(row?.actor_user_id, "the founder's row records whose departure it is").toBe(sorrel.id);
+    const exitRecord = async () => ((await call("GET", "/api/admin/exits")).json?.exits ?? []).find((e: any) => e.id === exitId);
+    expect((await exitRecord())?.resolution, "the control: the note is on the record").toContain("Sam");
+
+    const resolved = await call("POST", `/api/admin/exits/${exitId}/resolve`, { agreementRef: "leftovers" });
+    expect(resolved.status, `resolve: ${resolved.text}`).toBe(200);
+
+    expect((await titles()).filter((t: string) => /sorrel/i.test(t)), "no title on the founder's bell names them").toEqual([]);
+    const after = await exitRecord();
+    expect(after?.status, "the record of leaving stays").toBe("resolved");
+    expect(String(after?.resolution ?? ""), "their words do not outlive them").not.toContain("Sam");
+  });
 });

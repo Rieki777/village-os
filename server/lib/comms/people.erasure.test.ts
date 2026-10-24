@@ -142,8 +142,8 @@ describe.skipIf(!configured)("a person's comms rows, exported, erased and swept"
         "VALUES ('msg-relay', 'key-relay', ?, ?, 'essential', 'map.contact_relay', 'A note', ?, 'sent')",
       [OTHER, OTHER, "Wren.Halloway@Example.test"],
     );
-    // Wren's own yes to a gathering is a member's row, kept like every other
-    // member trace (the tombstone covers it), and Wren hosts a gathering.
+    // Wren's own yes to a gathering, which erasure takes by its own step
+    // (`event-places-after-tombstone`, asserted below), and Wren hosts a gathering.
     await q("INSERT INTO event_rsvps (id, event_id, user_id, status, idempotency_key) VALUES ('rsvp-member', 'ev-9', ?, 'going', 'rsvp-key-member')", [MEMBER]);
     await q("INSERT INTO event_comms (event_id, host_user_id) VALUES ('ev-9', ?)", [MEMBER]);
   });

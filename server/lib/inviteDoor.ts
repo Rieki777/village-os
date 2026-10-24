@@ -26,7 +26,7 @@
 import type { Pool } from "mysql2/promise";
 
 import { claimInvite, inviteByHash, releaseInvite } from "../repos/memberInvites";
-import { recordVouch, vouchesFor } from "../repos/vouches";
+import { livingVouchesFor, recordVouch } from "../repos/vouches";
 import { INVITATION_NEEDED, INVITE_REFUSALS, hashInviteToken, inviteStanding } from "./invites";
 import { isTombstone } from "./oauthAccounts";
 import { boolVar, numberVar } from "./variables";
@@ -132,7 +132,9 @@ export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
           kind: "arrival",
           note: null,
         });
-        if (vouchState(await vouchesFor(pool, userId), needed).met) {
+        // The count of people still here, the one the vouch route admits on:
+        // a vouch a departed member gave before they left admits nobody.
+        if (vouchState(await livingVouchesFor(pool, userId), needed).met) {
           await host.members.update(userId, (m: any) => {
             m.membershipGranted = true;
           });
