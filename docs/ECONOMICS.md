@@ -2774,6 +2774,19 @@ pay out what somebody paid in, which is what makes a refund provably funded. A
 cancelled seat is refunded from escrow (`event_seat_refund`), and only a gathering
 that actually happened moves the fee on to the treasury (`event_seat_kept`).
 
+**On a gathering that repeats, "happened" is read one evening at a time.** Each
+evening's fee is held under that evening's village-time date, the
+`<occurrenceKey>` in its key, and `settleFinishedSeats` keeps it only once THAT
+evening ended more than the grace ago, read through the calendar's own expansion
+(`occurrenceOf`, `server/lib/calendar.ts`) in the village's zone with any move the
+host made applied. The row's own `starts_at` and `ends_at` are only the series'
+first evening and decide nothing for the others. An evening the host called off or
+took out of the series never happened, so its fee stays in escrow, where giving the
+place back still refunds it. Until 2026-10-23 the settle read the row's own times,
+so a weekly gathering's fees for evenings still ahead went to the treasury a day
+after its first evening, and a member who then gave their place back was refunded
+nothing. `server/lib/eventSeats.recurring.test.ts` holds the per-evening rule.
+
 **`spendSinkFor` has exactly one POSTING user, and it is no longer the only
 caller.** It had one when this was written and the line number has moved twice
 since; measured again on `wt/econ-small` by grepping the whole tree, there are
@@ -3377,7 +3390,9 @@ decided rather than re-splitting a pool that is already partly out the door.
 | 2a | the gathering is held | `sys:event-escrow` | `sys:treasury` | `credits` | **10** (10) | `event_seat_kept` | `seat:<eventId>:-:<wren>:1:keep` |
 | 2b | or it is cancelled | `sys:event-escrow` | `mem:<wren>` | `credits` | **10** (10) | `event_seat_refund` | `seat:<eventId>:-:<wren>:1:refund` |
 
-`<occurrenceKey>` is `-` for a gathering that does not repeat, and `chargeSeq`
+`<occurrenceKey>` is `-` for a gathering that does not repeat, and the evening's
+village-time date for one that does, whose row 2a waits for that evening and not
+for the series' first (section 12). `chargeSeq`
 starts at 1 so a member who leaves and retakes a seat gets a distinct key rather
 than a silent duplicate.
 
