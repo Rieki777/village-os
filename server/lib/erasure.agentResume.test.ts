@@ -192,7 +192,10 @@ describe.skipIf(!configured)("a member's agent written while an erasure is stopp
 
     expect(await agentRowsRemaining(pool, id), "a resumed erasure left the member's agent standing").toEqual(NONE);
     expect(out.finished).toBe(true);
-    expect(out.ran, "the original step is skipped by name on a resume").not.toContain("member-agent");
+    // The tombstone never landed, so the resume runs every step again from
+    // the top (erasure.identity.test.ts covers the other tables), the first
+    // pass included, and the second pass still follows the tombstone.
+    expect(out.ran, "before the close, a resume runs the first pass again").toContain("member-agent");
     expect(out.ran.indexOf("member-agent-after-tombstone")).toBeGreaterThan(out.ran.indexOf("tombstone"));
   });
 

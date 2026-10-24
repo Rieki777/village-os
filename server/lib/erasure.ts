@@ -174,18 +174,26 @@ import { guestPersonKey } from "../../shared/comms/kinds";
 import { isTombstone } from "./oauthAccounts";
 import {
   beginErasure,
+  erasedIdentity,
   erasureRecord,
   noteErasureFailed,
   noteErasureFinished,
   noteResumeAttempt,
   noteStepDone,
+  type ErasedIdentity,
 } from "../repos/memberErasure";
 
 export type ErasureDeps = {
-  /** The users repository. Its `update` writes the tombstone. */
+  /**
+   * The users repository. Its `update` writes the tombstone, and `erasure`
+   * is how the tombstone step says so: once a row is a tombstone, the
+   * repository keeps its identity fixed against every other writer
+   * (`server/repos/users.ts`), and this sweep is the one writer that may
+   * still change it.
+   */
   members: {
     byId(id: string): Promise<any>;
-    update(id: string, fn: (u: any) => void): Promise<unknown>;
+    update(id: string, fn: (u: any) => void, opts?: { erasure?: boolean }): Promise<unknown>;
   };
   /** Submissions, scrubbed of PII keys while the proposal content stays. */
   submissionsRepo: { all(): unknown[]; replaceAll(rows: unknown[]): Promise<unknown> };
@@ -228,10 +236,12 @@ const tombstoneAddress = (id: string): string => `deleted-${id}@anonymized.inval
 
 /**
  * The member's real address as a match key, or "" when it is no longer known.
- * `target` is the record read before the sweep began, so on a first run this
- * is their real address; a resume reads the tombstone and gets "", and the
- * steps that match by address then find their rows by user id alone, the
- * limit the comms step states.
+ * `target` carries their real address on every run: the record read before
+ * the sweep began on a first run, and on a resume the identity
+ * `member_erasures` held from before the tombstone (`asTheyWere`, 0282). Only
+ * a record from before 0282 that stopped past the tombstone gets "", and the
+ * steps that match by address then find its rows by user id alone, the limit
+ * the comms step states.
  */
 const realEmailKey = (target: any): string => {
   const email = String(target?.email ?? "");
@@ -632,6 +642,8 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     {
       name: "tombstone",
       run: async () => {
+        // `erasure`: a second erasure of a tombstone writes these fields again,
+        // and only this step may (see ErasureDeps).
         await members.update(target.id, (u: any) => {
           u.name = ANON;
           u.email = tombstoneAddress(u.id);
@@ -649,7 +661,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
           u.membershipGranted = false;
           u.walletAddress = null;
           u.walletVerifiedAt = null;
-        });
+        }, { erasure: true });
       },
     },
     {
@@ -718,9 +730,12 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        *
        * AFTER THE TOMBSTONE, for the reason the needs step below gives: the
        * member's sessions die there, so nothing they do afterwards can write a
-       * fresh comms row behind this step. `target` is the record read before
-       * the sweep began, so its address is still the real one here; a resume
-       * reads the tombstone and finds the rest by user id alone.
+       * fresh comms row behind this step. `target` carries the member's real
+       * address here on every run: the record read before the sweep began on a
+       * first run, and on a resume the identity `member_erasures` held from
+       * before the tombstone (`asTheyWere`). Only a record from before 0282
+       * that stopped past the tombstone has no address left, and that one
+       * finds the rest by user id alone.
        */
       name: "comms",
       run: async () => {
@@ -893,11 +908,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        * words of every alignment text, the seats' terms on offer and the
        * village presets; the words otherwise stay, de-attributed (decision 2).
        * Hash, parties and seal are untouched, so receipts still verify.
-       * `target` is the row as read before the tombstone, so it still holds
-       * the name. server/lib/alignmentErasure.ts says the rest.
+       * `target` holds the member's real name and handle on every run, a
+       * resume included, for the reason the comms step gives.
+       *
+       * A target that is STILL a tombstone has no name left to look for: a
+       * record from before 0282 that stopped past the tombstone, or an erasure
+       * asked again after one finished. Its strings name nobody, and scrubbing
+       * "A departed member" out of other people's words would rewrite every
+       * departed member they mention, so the step finds nothing to do.
+       * server/lib/alignmentErasure.ts says the rest.
        */
       name: "alignment-names-after-tombstone",
       run: async () => {
+        if (isTombstone({ email: String(target.email ?? "") })) return;
         await eraseFromAlignments(pool, { id: target.id, name: target.name, handle: target.handle });
       },
     },
@@ -1205,6 +1228,38 @@ async function runSweep(
 }
 
 /**
+ * Who this row says the member is, for `member_erasures` to hold, or null when
+ * the row is already a tombstone and says nothing true about them.
+ */
+function identityOf(row: any): ErasedIdentity | null {
+  const email = String(row?.email ?? "");
+  if (!email || isTombstone({ email })) return null;
+  return { name: String(row?.name ?? ""), email, handle: row?.handle == null ? null : String(row.handle) };
+}
+
+/**
+ * The member as they were before the tombstone, for every step to match by.
+ *
+ * THE DEFECT THIS CLOSES. A resume re-reads the user row, and after the
+ * tombstone that row says "A departed member" at `deleted-<id>@anonymized.invalid`
+ * with the handle `departed-<id>`. Every step that finds the member by name or
+ * address (the comms address book, the alignment words, and any step added
+ * later) then matched nothing, and the record still read finished.
+ *
+ * A row that is not a tombstone is the truth and is used as it stands. A
+ * tombstone gets back the name, address and handle the first attempt held in
+ * `member_erasures.erased_identity` (0282), which the finish clears. Only those
+ * three fields come back; the id and every other field stay the row's own. A
+ * record from before 0282 holds nothing, and the tombstone is all there is.
+ */
+async function asTheyWere(pool: Pool, target: any): Promise<any> {
+  if (identityOf(target)) return target;
+  const held = await erasedIdentity(pool, String(target.id));
+  if (!held) return target;
+  return { ...target, name: held.name, email: held.email, handle: held.handle };
+}
+
+/**
  * Erase a member, from the beginning.
  *
  * Every step runs, whatever any earlier attempt recorded. An erasure asked for
@@ -1225,8 +1280,8 @@ export async function anonymizeMember(
   // rename is a write and the seed is only re-applied on a refresh.
   if (isExampleUser(target)) return ASKED_NOBODY;
 
-  await beginErasure(pool, target.id);
-  const result = await runSweep(pool, target, actorId, deps, new Set());
+  await beginErasure(pool, target.id, identityOf(target));
+  const result = await runSweep(pool, await asTheyWere(pool, target), actorId, deps, new Set());
   return result.external ?? ASKED_NOBODY;
 }
 
@@ -1243,7 +1298,18 @@ export async function anonymizeMember(
  *
  * RE-READS THE MEMBER rather than taking one. The record outlives the request
  * that made it, and the row may have been tombstoned by the attempt that
- * failed, so the only honest source for "who is this" is the database now.
+ * failed, so the only honest source for "who is this" is the database now,
+ * with the name and address the tombstone took handed back (`asTheyWere`).
+ *
+ * BEFORE THE TOMBSTONE, A RESUME STARTS AGAIN FROM THE TOP. The tombstone is
+ * where the member's sessions die, so until it lands the account works and
+ * the member can write behind any step already recorded as done: a contact
+ * request, a thank-you naming them, a skill tag, a bell notice to a neighbour.
+ * Skipping those steps by name left the words standing for good, which
+ * "member-agent-after-tombstone" fixed for the agent tables alone. Every step is
+ * idempotent by the rule this list's header states, so running them all again
+ * costs only the writes that match something. Past the tombstone nothing can
+ * write any more, and the record's steps are skipped as they always were.
  */
 export async function resumeErasure(
   pool: Pool,
@@ -1263,9 +1329,11 @@ export async function resumeErasure(
   }
   if (isExampleUser(target)) return { ran: [], finished: false, external: null };
 
-  await noteResumeAttempt(pool, userId);
+  const done = new Set(record?.stepsDone ?? []);
+  const restart = !done.has("tombstone");
+  await noteResumeAttempt(pool, userId, { restart, identity: identityOf(target) });
   // The actor is the village rather than a person: a resume is the queue
   // finishing an obligation, and attributing it to whoever pressed the button
   // would put their name on an act somebody else began.
-  return runSweep(pool, target, null, deps, new Set(record?.stepsDone ?? []));
+  return runSweep(pool, await asTheyWere(pool, target), null, deps, restart ? new Set() : done);
 }
