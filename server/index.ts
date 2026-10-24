@@ -2704,7 +2704,7 @@ async function authedUser(req: express.Request): Promise<any | null> {
   const decoded = decodeToken(AUTH_TOKEN_SECRET, header.slice(7));
   if (!decoded) return null;
   const user = await members.byId(decoded.userId);
-  if (!user) return null;
+  if (!holderStands(user)) return null; // a tombstone holds no session, whatever version one was signed at
   // Session revocation (S1): a token minted before the member's tokenVersion
   // was bumped is dead. Tokens from before this field existed carry no `v` and
   // are accepted while the member's version is still 0, so shipping this did
