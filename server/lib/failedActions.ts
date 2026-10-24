@@ -21,7 +21,9 @@
  *
  *  - A deletion that stopped BEFORE the tombstone step leaves an account that
  *    still works, and somebody may be using it. Finishing it unattended could
- *    wipe an account in use, so a steward decides at /review.
+ *    wipe an account in use, so a steward decides at /review. The account is
+ *    read as well as the record (`erasureStanding`): one that is already a
+ *    tombstone is closed, whatever the record's steps say.
  *  - A payment, a seat fee or a governance landing changes what somebody holds
  *    or may do. Each is already retried by its own mechanism or is a human
  *    act, and a second automatic path would race the first.
@@ -243,6 +245,8 @@ export interface ErasureRowForReport {
   sinceLastAttemptSeconds: number | null;
   /** Seconds since the deletion first began, by the database's clock. */
   sinceStartSeconds?: number | null;
+  /** The member's own account is a tombstone (`isTombstone`), whatever the steps say. */
+  accountClosed?: boolean;
 }
 
 export type ErasureStanding = "running" | "before-close" | "after-close" | "needs-a-person";
@@ -255,11 +259,20 @@ export type ErasureStanding = "running" | "before-close" | "after-close" | "need
  * step, and its last attempt began under ten minutes ago. A sweep takes
  * seconds, so the hourly report meeting one mid-way is rare, and reporting it
  * as stopped or resuming it beside itself would both be wrong. It is neither.
+ *
+ * CLOSED IS READ OFF THE ACCOUNT AS WELL AS THE RECORD (round 3). A record can
+ * lack "tombstone" over an account that already is one: the write committed
+ * and its note was lost, or a second resolve over the closed account emptied
+ * the steps and stopped early. Read off the steps alone, that account sat in
+ * "before-close", which this job never resumes, so it waited for a steward
+ * while the report placed it before the close. Nobody can be using a
+ * tombstone, which is the whole reason a closed account is this job's to
+ * finish, and `resumeErasure` restarts it to the end by the same rule.
  */
 export function erasureStanding(r: ErasureRowForReport): ErasureStanding {
   const recent = r.sinceLastAttemptSeconds != null && r.sinceLastAttemptSeconds < MAY_STILL_BE_RUNNING_SECONDS;
   if (r.failedStep == null && recent) return "running";
-  if (!r.stepsDone.includes("tombstone")) return "before-close";
+  if (!r.stepsDone.includes("tombstone") && !r.accountClosed) return "before-close";
   if (r.attempts >= GIVE_UP_AFTER_ATTEMPTS || r.failedStep === "load-member") return "needs-a-person";
   return "after-close";
 }

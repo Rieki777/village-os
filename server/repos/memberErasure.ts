@@ -25,6 +25,7 @@
  * direction this table must never fail in.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { isTombstone } from "../lib/oauthAccounts";
 
 /**
  * The longest error sentence this table stores.
@@ -395,15 +396,23 @@ export async function unfinishedErasures(pool: Pool, limit = 200): Promise<Erasu
  * pool pins UTC (server/db/pool.ts), a test suite's pool does not, and there a
  * TIMESTAMP read into a Date shifts by the host's offset, so a backoff built on
  * it would fire hours early or late. Which of these the job may resume without a
- * person is the job's decision, and it is made on `stepsDone`, not here.
+ * person is the job's decision, and it is made on `stepsDone` and on
+ * `accountClosed`, not here.
+ *
+ * `accountClosed` reads the ACCOUNT, by the one rule `resumeErasure` uses
+ * (`isTombstone`), because a record can lack "tombstone" over an account that
+ * is one: the write committed and its note was lost, or a second resolve over
+ * the closed account emptied the steps and stopped early. The address is read
+ * only to answer that, and never leaves this function.
  */
 export async function unfinishedErasuresWithAge(
   pool: Pool,
   limit = 500,
-): Promise<Array<ErasureRecord & { sinceLastAttemptSeconds: number | null; sinceStartSeconds: number | null }>> {
+): Promise<Array<ErasureRecord & { sinceLastAttemptSeconds: number | null; sinceStartSeconds: number | null; accountClosed: boolean }>> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT ${COLUMNS}, TIMESTAMPDIFF(SECOND, \`last_attempt_at\`, CURRENT_TIMESTAMP) AS since_s, ` +
-      "TIMESTAMPDIFF(SECOND, `started_at`, CURRENT_TIMESTAMP) AS started_s " +
+      "TIMESTAMPDIFF(SECOND, `started_at`, CURRENT_TIMESTAMP) AS started_s, " +
+      "(SELECT u.`email` FROM `users` u WHERE u.`id` = `member_erasures`.`user_id`) AS account_email " +
       "FROM `member_erasures` WHERE `finished_at` IS NULL ORDER BY `started_at`, `user_id` LIMIT ?",
     [Math.max(1, Math.min(1000, Math.trunc(limit)))],
   );
@@ -411,6 +420,7 @@ export async function unfinishedErasuresWithAge(
     ...rowToRecord(r),
     sinceLastAttemptSeconds: r.since_s == null ? null : Math.max(0, Number(r.since_s)),
     sinceStartSeconds: r.started_s == null ? null : Math.max(0, Number(r.started_s)),
+    accountClosed: r.account_email != null && isTombstone({ email: String(r.account_email) }),
   }));
 }
 
