@@ -22,11 +22,9 @@
  * had members when it ran, so an existing village keeps its pages without
  * anybody touching a setting.
  *
- * A village that has rewritten these pages in its own fork turns them back on
- * with one statement against its own database, then a restart:
- *
- *   INSERT INTO app_config (config_key, value) VALUES ('brochure-pages', '{"enabled":true}')
- *     ON DUPLICATE KEY UPDATE value = VALUES(value);
+ * Since 2026-10-22 a village switches them on or off in Admin, Make it yours,
+ * Pages (server/routes/brochurePages.ts), and the change applies on the next
+ * page load: every word on them is the village's own, edited on that screen.
  *
  * This list is the single source for every place that hides a brochure link:
  * the routes, the menus, the footer, the sitemap and the next-step prompt.

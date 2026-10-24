@@ -11,10 +11,13 @@
  * The tokens offered are the ones this village pays work in (the pay options),
  * plus any the badge already names. Self and hypha badges carry no powers, so
  * they get no control. Its own file because client/src/pages/Admin.tsx is on a
- * line ratchet. Light-only, like the rest of this folder.
+ * line ratchet, and the badge definition row it sits in moved here with it
+ * (`BadgeDefinitionRow`), so the Badges tab grew by one line, not twenty.
+ * Light-only, like the rest of this folder.
  */
 import { useState } from "react";
 import { usePayOptions } from "@/components/WorkValueEditor";
+import { ExampleChip } from "@/components/ExamplesBanner";
 
 /** The most one badge may multiply a token by: `MAX_BADGE_MULTIPLIER`, server/lib/badges.ts. */
 const MAX_FACTOR = 3;
@@ -115,6 +118,43 @@ export default function BadgeMultipliersEditor({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** One badge definition in the Badges tab: its name, what it grants or denies, its multipliers, and the switch. */
+export function BadgeDefinitionRow({
+  badge: b,
+  call,
+  onSaved,
+}: {
+  badge: any;
+  call: (path: string, body?: unknown, method?: string) => Promise<any>;
+  onSaved: () => void;
+}) {
+  return (
+    <div className={`border rounded-lg px-4 py-3 ${b.active ? "border-gray-200" : "border-gray-100 opacity-60"}`}>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <p className="text-sm font-medium text-gray-900">
+            {b.name} <span className="text-xs text-gray-400">({b.kind})</span>
+            {b.isExample && <ExampleChip className="ml-2 align-middle" />}
+          </p>
+          <p className="text-xs text-gray-500">
+            {b.kind === "earned" && b.rule ? `at ${b.rule.threshold} ${String(b.rule.metric).replace(/_/g, " ")}${b.rule.stackable ? ` · stacks ×${b.rule.maxStack}` : ""} · ` : ""}
+            {(b.capabilities ?? []).length ? `grants ${b.capabilities.join(", ")} · ` : ""}
+            {(b.denies ?? []).length ? `denies ${b.denies.join(", ")} · ` : ""}
+            {b.description || "no description"}
+          </p>
+          <BadgeMultipliersEditor badge={b} call={call} onSaved={onSaved} />
+        </div>
+        <button
+          onClick={async () => { const d = await call(`/admin/badges/${b.id}`, { active: !b.active }, "PUT"); if (d) onSaved(); }}
+          className="text-xs text-gray-500 hover:text-gray-900"
+        >
+          {b.active ? "Deactivate" : "Reactivate"}
+        </button>
+      </div>
     </div>
   );
 }

@@ -54,7 +54,7 @@ import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import VillageAnswers from "@/components/admin/VillageAnswers";
 import VillageCurrencyField from "@/components/admin/VillageCurrencyField";
-import BadgeMultipliersEditor from "@/components/admin/BadgeMultipliersEditor";
+import { BadgeDefinitionRow } from "@/components/admin/BadgeMultipliersEditor";
 import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -5036,29 +5036,7 @@ function BadgesAdminTab({ password }: { password: string }) {
         <h3 className="font-semibold text-gray-900 mb-3">Badge definitions</h3>
         <div className="space-y-2 mb-5">
           {(data?.badges ?? []).map((b: any) => (
-            <div key={b.id} className={`border rounded-lg px-4 py-3 ${b.active ? "border-gray-200" : "border-gray-100 opacity-60"}`}>
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {b.name} <span className="text-xs text-gray-400">({b.kind})</span>
-                    {b.isExample && <ExampleChip className="ml-2 align-middle" />}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {b.kind === "earned" && b.rule ? `at ${b.rule.threshold} ${String(b.rule.metric).replace(/_/g, " ")}${b.rule.stackable ? ` · stacks ×${b.rule.maxStack}` : ""} · ` : ""}
-                    {(b.capabilities ?? []).length ? `grants ${b.capabilities.join(", ")} · ` : ""}
-                    {(b.denies ?? []).length ? `denies ${b.denies.join(", ")} · ` : ""}
-                    {b.description || "no description"}
-                  </p>
-                  <BadgeMultipliersEditor badge={b} call={call} onSaved={load} />
-                </div>
-                <button
-                  onClick={async () => { const d = await call(`/admin/badges/${b.id}`, { active: !b.active }, "PUT"); if (d) load(); }}
-                  className="text-xs text-gray-500 hover:text-gray-900"
-                >
-                  {b.active ? "Deactivate" : "Reactivate"}
-                </button>
-              </div>
-            </div>
+            <BadgeDefinitionRow key={b.id} badge={b} call={call} onSaved={load} />
           ))}
           {(data?.badges ?? []).length === 0 && <p className="text-sm text-gray-400">No badges yet.</p>}
         </div>
@@ -7532,7 +7510,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <button onClick={() => saveBrand("images", { images: brand.images })} disabled={savingSection === "images"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
           {savingSection === "images" ? "Saving..." : "Save pictures"}
         </button>
-        <p className="text-xs text-gray-400 mt-2">The logo, footer mark and tab icon apply live, no deploy. Alt text ships with the pictures and is what a screen reader reads aloud in place of the image. Crawler-facing metadata (og:image, canonical URL) stays neutral in <code>client/index.html</code>; a fork that wants it adds it in its own fork.</p>
+        <p className="text-xs text-gray-400 mt-2">The logo, footer mark and tab icon apply live, no deploy. Alt text ships with the pictures and is what a screen reader reads aloud in place of the image. What a shared link shows (its sentence and picture) is set in Make it yours, Pages, Whole site, and falls back to your Tagline and homepage picture.</p>
         {/* Typography lives with Pictures: both are "how the village looks".
             Self-contained component — see client/src/components/TypographyPanel.tsx. */}
         <LookPanel password={password} />
@@ -7622,7 +7600,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           </li>
           <li>
             <p className="font-medium text-gray-900">5. Social image & favicon</p>
-            <p className="text-gray-500">Only in a fork you build yourself: edit <code>client/index.html</code> for the <code>og:image</code> and <code>twitter:image</code> links, which are build-time and not in this wizard.</p>
+            <p className="text-gray-500">Set the sentence and picture a shared link shows in Make it yours, Pages, Whole site. The tab icon is in Pictures. Both apply live, with no deploy.</p>
           </li>
           <li>
             <p className="font-medium text-gray-900">6. Full reference</p>
