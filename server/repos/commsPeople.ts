@@ -341,12 +341,24 @@ async function keysFor(pool: Pool, who: { userId?: string | null; emailKeys?: st
 /**
  * Every address a housing request left, with when, for the address book's
  * one-time backfill (server/lib/comms/backfill.ts). Read-only.
+ *
+ * NOTHING OF AN ERASED MEMBER'S. A request the housing scrub already reached
+ * holds the tombstone address, and a request made before that scrub existed
+ * still holds the member's real name and address under their tombstoned user
+ * id. Neither is somebody the village may write to, so both are left out here,
+ * the same rule the backfill's members loop applies to accounts. A request a
+ * person sent before they joined holds no user id, and once their address is
+ * gone from the account nothing links the two; that row cannot be told apart
+ * from a guest's.
  */
 export async function housingAddresses(
   pool: Pool,
 ): Promise<Array<{ email: string; name: string | null; createdAt: number }>> {
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: a read-only pass over housing requests for the address book's one-time backfill
-    "SELECT email, name, UNIX_TIMESTAMP(created_at) AS created_at FROM housing_reservations WHERE village_id = ? ORDER BY created_at, id",
+    "SELECT h.email, h.name, UNIX_TIMESTAMP(h.created_at) AS created_at FROM housing_reservations h " +
+      "LEFT JOIN users u ON u.id = h.user_id " +
+      "WHERE h.village_id = ? AND LOWER(h.email) NOT LIKE '%@anonymized.invalid' " +
+      "AND (u.id IS NULL OR LOWER(u.email) NOT LIKE '%@anonymized.invalid') ORDER BY h.created_at, h.id",
     [VILLAGE],
   );
   return rows.map((r) => ({ email: String(r.email ?? ""), name: str(r.name), createdAt: Number(r.created_at ?? 0) }));
@@ -466,7 +478,8 @@ export type CommsForgetCounts = Record<string, number>;
  * count it, so the row is kept with its address, subject, words, headers and
  * attachments blanked and its contact unlinked. The subject goes too, because
  * a subject carries a first name the moment a template merges one. Where the
- * person was the SENDER of a relayed message, their address in `reply_to` goes.
+ * person was the SENDER of a relayed message, their address in `reply_to` goes,
+ * and the subject with it (`forgetMailRepliedTo`, below).
  *
  * NO SUPPRESSION IS KEPT. A suppression is the address itself under another
  * name, so keeping an `erased` row would keep the very thing the person asked
@@ -539,10 +552,7 @@ export async function forgetCommsPerson(
     );
   }
   if (k.emailKeys.length) {
-    await run("emailsRepliedTo", "UPDATE comms_messages SET reply_to = NULL WHERE village_id = ? AND LOWER(reply_to) IN (?)", [
-      VILLAGE,
-      k.emailKeys,
-    ]);
+    counts.emailsRepliedTo = (counts.emailsRepliedTo ?? 0) + (await forgetMailRepliedTo(pool, { emailKeys: k.emailKeys }));
   }
   if (ids.length) {
     await run("journeys", "DELETE FROM comms_enrollments WHERE village_id = ? AND contact_id IN (?)", [VILLAGE, ids]);
@@ -589,6 +599,47 @@ export async function forgetCommsPerson(
     await run("contacts", "DELETE FROM comms_contacts WHERE village_id = ? AND id IN (?)", [VILLAGE, ids]);
   }
   return counts;
+}
+
+/**
+ * An email sent to somebody else with this person as its reply-to loses that
+ * address AND its subject, and returns how many rows it blanked.
+ *
+ * Two producers set a reply-to, and both send the person's name in the
+ * subject: the contact relay ("<first name> wants to connect") and the housing
+ * team alert ("Home reservation request from <name as typed>"). The row stays
+ * as the village's record that the email went, to the recipient it went to.
+ * Both go out as essential mail, which never stores its words, so the bodies
+ * are cleared only so a later producer that keeps them is covered too.
+ *
+ * `origins` narrows the match to the producers named, for an address read off
+ * a record of the person's (a housing request) where the reply-to is the only
+ * link back to them. One statement, and once `reply_to` is NULL a second run
+ * matches nothing.
+ */
+export async function forgetMailRepliedTo(pool: Pool, who: { emailKeys: string[]; origins?: string[] }): Promise<number> {
+  const keys = Array.from(new Set(who.emailKeys.map((k) => String(k ?? "").trim().toLowerCase()).filter(Boolean)));
+  if (!keys.length) return 0;
+  const origins = who.origins?.length ? who.origins : null;
+  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the comms erasure step, keyed on this one person's addresses
+    "UPDATE comms_messages SET reply_to = NULL, subject = ?, body_html = NULL, body_text = NULL, headers = NULL, attachments = NULL, " +
+      `updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND LOWER(reply_to) IN (?)${origins ? " AND origin IN (?)" : ""}`,
+    [ERASED_SUBJECT, VILLAGE, keys, ...(origins ? [origins] : [])],
+  );
+  return Number(res.affectedRows ?? 0);
+}
+
+/**
+ * The addresses a signed-in member typed into their own housing requests,
+ * lower-cased the way a reply-to is matched. Read-only.
+ */
+export async function housingAddressesOf(pool: Pool, userId: string): Promise<string[]> {
+  if (!userId) return [];
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: a read-only pass over one member's own housing requests for the erasure sweep
+    "SELECT DISTINCT LOWER(TRIM(email)) AS email FROM housing_reservations WHERE village_id = ? AND user_id = ?",
+    [VILLAGE, userId],
+  );
+  return rows.map((r) => String(r.email ?? "")).filter(Boolean);
 }
 
 // ── Retention ───────────────────────────────────────────────────────────────
