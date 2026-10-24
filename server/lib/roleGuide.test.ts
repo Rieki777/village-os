@@ -75,8 +75,10 @@ describe("the guide's card as suggestions", () => {
   });
 
   it("suggests the season's aim and goals on the season step only", () => {
-    const proposed = { season: { aim: "Feed the village from its own land", seasonalGoals: ["A harvest list each week"], servesGoals: [] } };
-    expect(suggestionsFrom("season", current, proposed, [], ctx, []).map((s) => s.path)).toEqual(["season.aim", "season.seasonalGoals"]);
+    const proposed = { season: { aim: "Feed the village from its own land", seasonalGoals: [{ title: "A harvest list each week", doneWhen: "the kitchen plans from it" }], servesGoals: [] } };
+    const season = suggestionsFrom("season", current, proposed, [], ctx, []);
+    expect(season.map((s) => s.path)).toEqual(["season.aim", "season.seasonalGoals"]);
+    expect(season[1].words).toEqual(["A harvest list each week: the kitchen plans from it"]);
     expect(suggestionsFrom("words", current, proposed, [], ctx, [])).toEqual([]);
   });
 });

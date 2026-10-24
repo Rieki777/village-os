@@ -24,6 +24,7 @@ import type { Pool } from "mysql2/promise";
 import { listOrgAssignments, listOrgRoles, type LapseContext, type OrgAssignment, type OrgRole } from "./orgChart";
 import { accomplishmentsOf } from "./sessionTasks";
 import { swapNames, SHARED_NAME_STAND_IN, type NamedMember } from "./nameSwap";
+import { goalLines } from "./roleGuide";
 import { readCharterRow } from "../repos/circleCard";
 import { villageCircles } from "../repos/roleProposals";
 import { charterFromRow } from "@shared/circleCharter";
@@ -169,7 +170,7 @@ export async function roleGuideContext(pool: Pool, input: ContextInput): Promise
     roles: guideRoles,
     circles: guideCircles,
     orgGoals: input.orgGoals.map((g) => g.trim()).filter(Boolean),
-    season: { aim: input.body.season.aim, seasonalGoals: input.body.season.seasonalGoals.map((g) => (typeof g === "string" ? g : String((g as any)?.text ?? ""))).filter(Boolean) },
+    season: { aim: input.body.season.aim, seasonalGoals: goalLines(input.body.season.seasonalGoals) ?? [] },
     accomplished: done.map(swap),
     checks: guideChecks({ roles: checkRoles, chart, circles: checkCircles }),
     swap,

@@ -93,6 +93,24 @@ const sameWords = (a: Words, b: Words): boolean => JSON.stringify(a ?? null) ===
 const swapWords = (w: string | string[], swap: (t: string) => string): string | string[] => (Array.isArray(w) ? w.map(swap) : swap(w));
 
 /**
+ * A season's goals as lines, the way the season step shows them: the goal,
+ * then when it is done after a colon. Null when there is no list. PURE.
+ */
+export function goalLines(goals: unknown): string[] | null {
+  if (!Array.isArray(goals)) return null;
+  return goals
+    .map((g) => {
+      if (typeof g === "string") return g;
+      const o = (g ?? {}) as { title?: unknown; doneWhen?: unknown };
+      const title = String(o.title ?? "").trim();
+      const when = typeof o.doneWhen === "string" ? o.doneWhen.trim() : "";
+      return when ? `${title}: ${when}` : title;
+    })
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
  * Every field the guide's card changes, as suggestions. PURE.
  *
  * `current` is the draft as it stands; `proposed` is what the reader made of
@@ -139,7 +157,7 @@ export function suggestionsFrom(
     });
   } else if (proposed.season) {
     push("season.aim", null, "aim", asWords(current.season.aim), asWords(proposed.season.aim));
-    push("season.seasonalGoals", null, "seasonalGoals", asWords(current.season.seasonalGoals), asWords(proposed.season.seasonalGoals));
+    push("season.seasonalGoals", null, "seasonalGoals", goalLines(current.season.seasonalGoals), goalLines(proposed.season.seasonalGoals));
   }
   return out;
 }
