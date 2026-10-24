@@ -4936,6 +4936,11 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(byHand.every((n: any) => (n.role === "admin" || n.role === "founder") && n.type === "payments_alert"
       && String(n.title).startsWith("Cancel 1 recurring payment(s) by hand in the Stripe dashboard.")
       && String(n.body).includes("sub_lapsed"))).toBe(true);
+    // Then off the admins' bells again. "Waves C+D" reads the founder's newest
+    // 50 notices for a moderation alert that sits at the edge of that window,
+    // and this one extra row pushed it out (measured: 3 failures with the row
+    // kept, 72/72 with it gone).
+    await testDb.conn.query("DELETE FROM notifications WHERE dedupe_key LIKE ?", [`erasure-subscriptions-by-hand:${lapsedId}:%`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
 
     // Month two lands anyway: banked, nothing delivered, every admin told once.
     const refusedNotices = async () => (await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
