@@ -97,7 +97,7 @@ Estimated sessions: 7
 | created_at | timestamp DEFAULT now() | |
 
 ## Alterations to existing tables
-- `roles`: ADD `circle_id varchar(64) NULL` (validated against `circles.id` on write, same rule as `quests.roleRequired`), ADD `seats int DEFAULT 1` (vacancy = holders < seats, derived, no status column).
+- `roles`: ADD `circle_id varchar(64) NULL` (validated against `circles.id` on write, same rule as `quests.roleRequired`), ADD `seats int DEFAULT 1` (vacancy = holders < `seats`, derived, no status column).
 - `users`: ADD `contactable boolean DEFAULT true` (JSON: `user.contactable`; opt-out honored server-side, absent = true).
 - `quests`: NO column change in v1 — `quests.circle` free text resolves through `circles.aliases`; a proper `circle_id` FK lands with the Phase 1b quest-domain cutover.
 
@@ -177,7 +177,7 @@ One new Admin tab, "Circles & Map" (existing tab pattern in Admin.tsx): (1) Circ
 
 ## v1 (ship first, useful alone)
 
-Ships useful alone in 5 sessions: (S1) circles as data — schema + circles.json/seed/ensureDataFiles, roles.circleId + seats, GET /api/circles, admin Circles CRUD + alias reconciliation, aliases resolving quests.circle; (S2) GET /api/map + mapLayout.ts pure function with unit tests + MapCanvas SVG orbit render with pan/zoom, public-vs-member payload tiers via map.viewPeople; (S3) NodeCard sheet + CircleAccordion mobile fallback + nav/route/mobileNav gated behind map.enabled + vacant-role pulse + raise-hand into submissions; (S4) contact relay — users.contactable, contact_requests + idempotency, caps, Resend Reply-To relay, profile toggle, admin contact log, map.contact capability; (S5) concierge — deterministic matcher + concierge_queries logging + 'coordination' assistant kind with candidate-set validation + ConciergeBar + admin unmatched-queries view. Each session leaves the app deployable; sessions 1–3 already deliver a dynamic, legible sociocratic map; 4–5 make it the coordination tool.
+Ships useful alone in 5 sessions: (S1) circles as data — schema + circles.json/seed/ensureDataFiles, `roles.circleId` + `seats`, GET /api/circles, admin Circles CRUD + alias reconciliation, aliases resolving quests.circle; (S2) GET /api/map + mapLayout.ts pure function with unit tests + MapCanvas SVG orbit render with pan/zoom, public-vs-member payload tiers via map.viewPeople; (S3) NodeCard sheet + CircleAccordion mobile fallback + nav/route/mobileNav gated behind map.enabled + vacant-role pulse + raise-hand into submissions; (S4) contact relay — users.contactable, contact_requests + idempotency, caps, Resend Reply-To relay, profile toggle, admin contact log, map.contact capability; (S5) concierge — deterministic matcher + concierge_queries logging + 'coordination' assistant kind with candidate-set validation + ConciergeBar + admin unmatched-queries view. Each session leaves the app deployable; sessions 1–3 already deliver a dynamic, legible sociocratic map; 4–5 make it the coordination tool.
 
 ## v2 (the rest of the design)
 

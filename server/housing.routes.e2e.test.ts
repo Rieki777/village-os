@@ -49,6 +49,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
+import { scrubReservationsOf } from "./repos/housing";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -853,6 +854,36 @@ describe.skipIf(!DB_CONFIGURED)("housing routes: the guards nothing was testing"
 
     // And a reservation that does not exist is still a 404.
     expect((await call("PUT", "/api/housing/reservations/hres-ghost/status", { body: { status: "reserved" } })).status).toBe(404);
+  });
+
+  it("writes to nobody once the person who asked has been erased, and still moves the home", async () => {
+    /*
+     * The erasure scrubs a request instead of deleting it, because a reserved
+     * row is a home held (`scrubReservationsOf`, the
+     * `housing-reservations-after-tombstone` step). The row then carries the
+     * tombstone's address, which reaches nobody, so the move must send nothing
+     * and say so to the founder's panel.
+     */
+    const askEmail = `erased-${PORT}@example.test`;
+    const made = await call("POST", "/api/housing/reservations", {
+      body: { homeType: "casita", name: "Lark Benn", email: askEmail, phone: "555 0123", notes: "Two dogs", structureKey: "eraseKey" },
+      token: null,
+      ip: "10.6.0.9",
+    });
+    expect(made.status).toBe(200);
+    await settle(1200); // let the create route's own sends land and be counted
+    const address = `deleted-hs-gone-${PORT}@anonymized.invalid`;
+    expect(await scrubReservationsOf(pool, { userId: `hs-gone-${PORT}`, emailKey: askEmail, name: "A departed member", address })).toBe(1);
+
+    const before = resendAttempts();
+    const reserved = await call("PUT", `/api/housing/reservations/${made.json.id}/status`, { body: { status: "reserved" } });
+    expect(reserved.status).toBe(200);
+    await settle(800);
+    expect(resendAttempts() - before, "no letter goes to a tombstone's address").toBe(0);
+    expect(reserved.json.notified, "the panel is told nobody was written to").toBe(false);
+    expect(await reservationsFor(address)).toMatchObject([
+      { name: "A departed member", phone: null, notes: null, status: "reserved", structure_key: "eraseKey" },
+    ]);
   });
 
   it("counts a home against a hamlet only once someone is actually reserved", async () => {

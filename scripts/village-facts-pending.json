@@ -1,6 +1,6 @@
 {
   "note": "Village facts welded into client copy, recorded per file and per rule. This list only ever shrinks. Read scripts/check-village-facts.mjs before editing it, and lower PENDING_CEILING in that file to match the total here.",
-  "total": 22,
+  "total": 15,
   "rules": {
     "money": {
       "what": "a currency amount in display text",
@@ -35,8 +35,6 @@
     "client/src/pages/Admin.tsx::token-name": 3,
     "client/src/pages/Admin.tsx::unit": 2,
     "client/src/pages/Contribute.tsx::money": 1,
-    "client/src/pages/InvestorJourney.tsx::money": 1,
-    "client/src/pages/LoveLetter.tsx::money": 6,
     "client/src/pages/MasterPlan.tsx::unit": 1,
     "client/src/pages/Stay.tsx::money": 1,
     "client/src/pages/Wallet.tsx::money": 1
@@ -65,13 +63,6 @@
     },
     "client/src/pages/Contribute.tsx::money": {
       "since": "2026-09-03"
-    },
-    "client/src/pages/InvestorJourney.tsx::money": {
-      "since": "2026-09-03"
-    },
-    "client/src/pages/LoveLetter.tsx::money": {
-      "since": "2026-09-03",
-      "note": "The dropdown on the page that collects money: four USD bands submitted as data, plus the suggested range above it and the placeholder below."
     },
     "client/src/pages/MasterPlan.tsx::unit": {
       "since": "2026-09-03",
