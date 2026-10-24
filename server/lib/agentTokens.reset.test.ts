@@ -415,7 +415,7 @@ describe.skipIf(!configured)("a write already past its session check when the cr
     const version = await seedMember(id);
     const race: { resetting: ReturnType<typeof resetPassword> | null } = { resetting: null };
     const racing = hooked(async (sql) => {
-      if (race.resetting || !/^INSERT INTO agent_inboxes\b/.test(sql)) return;
+      if (race.resetting || !/^INSERT INTO `?agent_inboxes\b/.test(sql)) return;
       race.resetting = resetPassword(id);
       // The bump has to wait on the row this write holds, or nothing here is serialised.
       await untilALockIsAwaited(pool);

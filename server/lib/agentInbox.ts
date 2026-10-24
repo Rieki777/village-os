@@ -33,7 +33,7 @@ import { NO_MEMBER_SECRETS_KEY_SENTENCE, memberSecretsKey } from "./memberSecret
 import { recordEvent } from "./events";
 import { holderStands, whileSessionHolds } from "./agentTokens";
 import { usersRepo } from "../repos/users";
-import { enabledInboxUserIds, forgetInboxOf } from "../repos/memberAgent";
+import { enabledInboxUserIds, forgetInboxOf, replaceInboxOn } from "../repos/memberAgent";
 
 export const DELIVERY_KINDS = ["test", "week_ahead", "weekly_digest", "opportunity"] as const;
 export type DeliveryKind = (typeof DELIVERY_KINDS)[number];
@@ -231,18 +231,11 @@ export async function setInbox(
   // is taken, and this refuses; one that comes later waits for the commit,
   // and the sweep after the tombstone or the end after the bump removes what
   // this wrote. No secret leaves for a write that is refused.
-  const held = await whileSessionHolds(pool, userId, sessionVersion, async (conn) => {
-    // Replacing the URL retires the old inbox whole: its id, its derived
-    // secret and anything still queued for it. A fresh id means a fresh secret.
-    if (prior) {
-      await conn.query("DELETE FROM agent_deliveries WHERE inbox_id = ?", [prior.id]);
-      await conn.query("DELETE FROM agent_inboxes WHERE user_id = ?", [userId]);
-    }
-    await conn.query(
-      "INSERT INTO agent_inboxes (id, user_id, url, enabled, consecutive_failures) VALUES (?,?,?,1,0)",
-      [id, userId, url],
-    );
-  });
+  // Replacing the URL retires the old inbox whole: its id, its derived secret
+  // and anything still queued for it. A fresh id means a fresh secret.
+  const held = await whileSessionHolds(pool, userId, sessionVersion, (conn) =>
+    replaceInboxOn(conn, userId, prior?.id ?? null, { id, url }),
+  );
   if (!held.ok && held.refusal === "session_ended") return { ok: false, status: 401, error: "auth_required" };
   if (!held.ok) {
     // An inbox that fails its holder is removed where it is found.

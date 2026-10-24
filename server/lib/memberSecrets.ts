@@ -29,6 +29,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { keyEnvProblem, keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 import { guardOutboundUrl } from "./toolcheck";
 import { whileSessionHolds } from "./agentTokens";
+import { upsertMemberKeyOn } from "../repos/memberAgent";
 
 export type { Sealed };
 
@@ -168,15 +169,18 @@ export async function storeMemberKey(
   // request that passed its session check and then waited on the base URL's
   // DNS lookup can reach this write after an erasure's sweep, a new password
   // or a revoke has ended everything that stood.
-  const held = await whileSessionHolds(pool, userId, sessionVersion, async (conn) => {
-    await conn.query(
-      "INSERT INTO member_llm_keys (user_id, provider, base_url, model, ciphertext, iv, tag, last4, set_at) " +
-        "VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) " +
-        "ON DUPLICATE KEY UPDATE provider = VALUES(provider), base_url = VALUES(base_url), model = VALUES(model), " +
-        "ciphertext = VALUES(ciphertext), iv = VALUES(iv), tag = VALUES(tag), last4 = VALUES(last4), set_at = CURRENT_TIMESTAMP",
-      [userId, input.provider, compat ? base.url : null, compat ? model : null, sealed.ciphertext, sealed.iv, sealed.tag, last4],
-    );
-  });
+  const held = await whileSessionHolds(pool, userId, sessionVersion, (conn) =>
+    upsertMemberKeyOn(conn, {
+      userId,
+      provider: input.provider,
+      baseUrl: compat ? base.url : null,
+      model: compat ? model : null,
+      ciphertext: sealed.ciphertext,
+      iv: sealed.iv,
+      tag: sealed.tag,
+      last4,
+    }),
+  );
   if (!held.ok && held.refusal === "session_ended") return { ok: false, status: 401, error: "auth_required" };
   if (!held.ok) {
     // A tombstone keeps no third-party credential.

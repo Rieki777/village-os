@@ -50,7 +50,7 @@
  * this village hold about me", and a table missing from it is invisible to
  * every other check in the repository.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
 /** How many rows a sweep step removed, for the record it writes. */
 export interface AgentSweepCounts {
@@ -81,6 +81,59 @@ export async function forgetInboxOf(pool: Pool, userId: string): Promise<{ deliv
   );
   const [inboxes] = await pool.query("DELETE FROM `agent_inboxes` WHERE `user_id` = ?", [userId]);
   return { deliveries: affected(deliveries), inboxes: affected(inboxes) };
+}
+
+/**
+ * Set a member's inbox, retiring `priorId` whole first: everything queued for
+ * it, then the row. A fresh id means a fresh derived secret.
+ *
+ * ON THE CALLER'S CONNECTION, and never a pool: `setInbox`
+ * (server/lib/agentInbox.ts) runs this inside the transaction that holds the
+ * member's row and has just asked whether the session still holds it
+ * (`whileSessionHolds`, server/lib/agentTokens.ts). On a pool these would run
+ * on other connections, outside that lock, and the check would cover nothing.
+ */
+export async function replaceInboxOn(
+  conn: PoolConnection,
+  userId: string,
+  priorId: string | null,
+  inbox: { id: string; url: string },
+): Promise<void> {
+  if (priorId) {
+    await conn.query("DELETE FROM `agent_deliveries` WHERE `inbox_id` = ?", [priorId]);
+    await conn.query("DELETE FROM `agent_inboxes` WHERE `user_id` = ?", [userId]);
+  }
+  await conn.query(
+    "INSERT INTO `agent_inboxes` (`id`, `user_id`, `url`, `enabled`, `consecutive_failures`) VALUES (?,?,?,1,0)",
+    [inbox.id, userId, inbox.url],
+  );
+}
+
+/** A member's key as it is stored: sealed, with the parts the panel shows beside it. */
+export interface SealedMemberKeyRow {
+  userId: string;
+  provider: string;
+  baseUrl: string | null;
+  model: string | null;
+  ciphertext: string;
+  iv: string;
+  tag: string;
+  last4: string;
+}
+
+/**
+ * Store or replace a member's sealed key, ON THE CALLER'S CONNECTION, for the
+ * reason `replaceInboxOn` gives: `storeMemberKey` (server/lib/memberSecrets.ts)
+ * runs it under the member's row lock.
+ */
+export async function upsertMemberKeyOn(conn: PoolConnection, row: SealedMemberKeyRow): Promise<void> {
+  await conn.query(
+    "INSERT INTO `member_llm_keys` (`user_id`, `provider`, `base_url`, `model`, `ciphertext`, `iv`, `tag`, `last4`, `set_at`) " +
+      "VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) " +
+      "ON DUPLICATE KEY UPDATE `provider` = VALUES(`provider`), `base_url` = VALUES(`base_url`), `model` = VALUES(`model`), " +
+      "`ciphertext` = VALUES(`ciphertext`), `iv` = VALUES(`iv`), `tag` = VALUES(`tag`), `last4` = VALUES(`last4`), `set_at` = CURRENT_TIMESTAMP",
+    [row.userId, row.provider, row.baseUrl, row.model, row.ciphertext, row.iv, row.tag, row.last4],
+  );
 }
 
 /** The holder of every enabled inbox, for the daily week-ahead job. */

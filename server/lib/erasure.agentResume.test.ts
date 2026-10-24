@@ -487,7 +487,7 @@ describe.skipIf(!configured)("a member's agent written while an erasure is stopp
       const target = await seedMember(id);
       const race: { sweeping: Promise<unknown> | null } = { sweeping: null };
       const racing = hooked(async (sql) => {
-        if (race.sweeping || !/^INSERT INTO agent_inboxes\b/.test(sql)) return;
+        if (race.sweeping || !/^INSERT INTO `?agent_inboxes\b/.test(sql)) return;
         race.sweeping = anonymizeMember(pool, target, null, deps());
         // The sweep has to wait on the row this write holds, or nothing here is serialised.
         await untilALockIsAwaited(pool);
