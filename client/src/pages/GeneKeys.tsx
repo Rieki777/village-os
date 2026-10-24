@@ -19,7 +19,7 @@
  * page is its own lazy chunk: nobody pays for the library until they open it.
  * The page wears the profile's night world, like the seal and the card.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { GENE_KEYS_SITE, viewOf, type Chart, type GeneKeysView } from "@shared/geneKeys";
 import { resultsAcross, type TimeWindow } from "@shared/geneKeysSky";
@@ -82,6 +82,18 @@ export default function GeneKeysPage() {
   }, [on, user]);
 
   const matches = useMemo(() => (places && !place ? searchPlaces(places, typed) : []), [places, place, typed]);
+
+  // Each step is a new screen: start it at the top, and move focus to its heading so a
+  // screen reader says where the member now is. Not on the first paint, which is already there.
+  const firstStep = useRef(true);
+  useEffect(() => {
+    if (firstStep.current) {
+      firstStep.current = false;
+      return;
+    }
+    window.scrollTo({ top: 0 });
+    document.getElementById(`gk-${step}-h`)?.focus({ preventScroll: true });
+  }, [step]);
 
   if (!modules.loaded) {
     return (
@@ -147,12 +159,12 @@ export default function GeneKeysPage() {
 
   return (
     <Layout>
-      <div className="sheet-night relative min-h-screen bg-background py-10 text-foreground">
+      <div className="sheet-night relative min-h-screen bg-background pt-10 pb-32 text-foreground">
         <div className="container max-w-2xl">
           {step === "form" ? (
             <section aria-labelledby="gk-form-h" className="flex flex-col gap-5">
               <p className={EYEBROW}>Step 1 of 2 · Find your lines</p>
-              <h1 id="gk-form-h" className="font-display text-4xl">
+              <h1 id="gk-form-h" tabIndex={-1} className="font-display text-4xl focus:outline-none">
                 When and where were you born?
               </h1>
               <label className="flex flex-col gap-1.5 text-sm font-medium">
@@ -231,7 +243,7 @@ export default function GeneKeysPage() {
           {step === "choose" ? (
             <section aria-labelledby="gk-choose-h" className="flex flex-col gap-4">
               <p className={EYEBROW}>Step 1 of 2 · One more check</p>
-              <h1 id="gk-choose-h" className="font-display text-4xl">
+              <h1 id="gk-choose-h" tabIndex={-1} className="font-display text-4xl focus:outline-none">
                 {mine === null ? "Your lines shift during that day" : "You were born close to a change"}
               </h1>
               <p className="text-base text-muted-foreground">
@@ -284,7 +296,7 @@ export default function GeneKeysPage() {
                   {picked.view.profile}
                 </span>
                 <div className="flex flex-col gap-1">
-                  <h1 id="gk-result-h" className="font-display text-4xl">
+                  <h1 id="gk-result-h" tabIndex={-1} className="font-display text-4xl focus:outline-none">
                     {picked.view.names}
                   </h1>
                   <p className={HINT}>{picked.chosen ? "Chosen by you" : "Your Gene Keys profile"}</p>
@@ -305,7 +317,7 @@ export default function GeneKeysPage() {
           {step === "share" ? (
             <section aria-labelledby="gk-share-h" className="flex flex-col gap-4">
               <p className={EYEBROW}>Almost done</p>
-              <h1 id="gk-share-h" className="font-display text-4xl">
+              <h1 id="gk-share-h" tabIndex={-1} className="font-display text-4xl focus:outline-none">
                 Who sees your lines?
               </h1>
               <fieldset className="flex flex-col gap-2">
@@ -358,7 +370,7 @@ export default function GeneKeysPage() {
           {step === "done" && picked ? (
             <section aria-labelledby="gk-done-h" className="flex flex-col items-start gap-4">
               <p className={EYEBROW}>Lines found</p>
-              <h1 id="gk-done-h" className="font-display text-4xl">
+              <h1 id="gk-done-h" tabIndex={-1} className="font-display text-4xl focus:outline-none">
                 {picked.view.names}
               </h1>
               <p className="text-base text-muted-foreground">
