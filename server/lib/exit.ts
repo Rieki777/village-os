@@ -38,7 +38,7 @@ import {
 } from "./ledger";
 import { numberVar, stringVar } from "./variables";
 import { tokenTypesPostedTo } from "../repos/tokenLedger";
-import { ownExitResolutions, setExitResolution } from "../repos/exitNotes";
+import { cancelOpenExit, ownExitResolutions, setExitResolution } from "../repos/exitNotes";
 import { openRedemptionCount } from "./redemptionStore";
 
 /*
@@ -146,6 +146,24 @@ export async function createExit(
     [id, input.userId, input.kind, "open", input.openedBy, noticeEnds, input.note?.slice(0, 2000) ?? null],
   );
   return { ok: true, exit: (await exitById(pool, id))! };
+}
+
+/** What the cancel route answers, status and body together. */
+export interface CancelExitOutcome {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+/**
+ * A person who stays: the exit closes without a tombstone.
+ */
+export async function cancelExit(
+  pool: Pool,
+  exitId: string,
+  _deps: { memberById(id: string): Promise<any>; actorId: string | null },
+): Promise<CancelExitOutcome> {
+  if (!(await cancelOpenExit(pool, exitId))) return { status: 404, body: { error: "No open exit with that id" } };
+  return { status: 200, body: { success: true } };
 }
 
 /** A line the settle route appends to `exits.resolution`, as `sweepBalances` writes it. */
