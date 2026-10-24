@@ -135,7 +135,9 @@ issued Gratitude into an account nobody holds. `departedRecipient` in `server/li
 answers for three doors: `sendGratitude` (the wall, by address, id, typed address or old handle, and
 forum hearts), the Hearts give (`POST /api/gratitude`) and member token sends
 (`POST /api/wallet/send`). Each refuses with 404 and `DEPARTED_RECIPIENT`, before anything is written.
-Pinned by `server/lib/gratitude.tombstone.test.ts` and the last case of
+The admin hand-mint and its co-signed approval ask the same question through `mintRecipientRefusal`,
+which also refuses a standing example with 409, so a steward mints nothing to either.
+Pinned by `server/lib/gratitude.tombstone.test.ts` and the last two cases of
 `server/needsTombstone.routes.e2e.test.ts`.
 
 `GET /api/profile/export` is the "everything the village holds about me" document and carries

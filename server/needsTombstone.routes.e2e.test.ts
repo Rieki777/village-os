@@ -393,4 +393,74 @@ describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", (
 
     expect(await landed(), "no ledger leg and no acknowledgement reached the tombstone").toEqual({ legs: 0, gifts: 0 });
   });
+
+  /*
+   * NOR DOES THE ADMIN HAND-MINT, OR ITS SECOND SIGNATURE (round 4). The
+   * hand-mint looked the recipient up by id and refused only a missing row, so
+   * a steward could mint into the tombstone's account, or into a standing
+   * example's. The co-signed approval reads the recipient again when the second
+   * steward signs, so a grant asked for while a member was here would pay their
+   * tombstone the moment it was signed after they left. Each door is asked for
+   * the tombstone, for an example identity and for a living member, and the
+   * ledger is read for what reached them.
+   */
+  it("the hand-mint and its co-signed approval mint nothing to a member who has left, or to a standing example", async () => {
+    // A standing example identity, written as the examples seed writes one: no
+    // password, an @examples.invalid address, is_example set. This village's
+    // own seed may have none, and the guard has to hold for one that does.
+    const example = "needstomb-example";
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_example`) VALUES (?, 'Sample Rowan', ?, '', 'member', 1)",
+      [example, `${example}@examples.invalid`],
+    );
+    const legsTo = async (id: string) => {
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) AS n FROM `token_ledger` l JOIN `ledger_accounts` a ON a.`id` = l.`to_account` WHERE a.`user_id` = ?",
+        [id],
+      );
+      return Number(rows[0]?.n ?? 0);
+    };
+    const asksFor = async (id: string) => {
+      const [rows] = await pool.query<any[]>("SELECT `id`, `status` FROM `admin_mint_requests` WHERE `to_user_id` = ? ORDER BY `id`", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      return rows.map((r) => `${r.id}:${r.status}`);
+    };
+    const livingBefore = await legsTo(bystander.id);
+
+    // The steward's own hand-mint: under the co-sign line, and over it.
+    for (const amount of [2, 150]) {
+      const gone = await call("POST", "/api/admin/tokens/credits/mint", { toUserId: GONE, amount, reason: "for the bread" });
+      expect(gone.status, `no hand-mint of ${amount} to a tombstone: ${gone.text}`).toBe(404);
+      expect(String(gone.json?.error), "the steward is told why").toMatch(/left the village/);
+      const sample = await call("POST", "/api/admin/tokens/credits/mint", { toUserId: example, amount, reason: "for the bread" });
+      expect(sample.status, `no hand-mint of ${amount} to a standing example: ${sample.text}`).toBe(409);
+      expect(sample.json?.code, "the example refusal every admin door gives").toBe("example_immutable");
+    }
+    expect(await asksFor(GONE), "and no grant waits for a second steward in a departed member's name").toEqual([]);
+    expect(await asksFor(example)).toEqual([]);
+    const living = await call("POST", "/api/admin/tokens/credits/mint", { toUserId: bystander.id, amount: 2, reason: "for the bread" });
+    expect(living.status, `the control: a living member is minted to: ${living.text}`).toBe(200);
+
+    // Asked for by another steward while each of them was here, signed now.
+    const ask = (id: string, to: string) => pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO `admin_mint_requests` (`id`, `token_slug`, `to_user_id`, `amount`, `reason`, `requested_by`, `status`) VALUES (?, 'credits', ?, 150, 'asked before they left', 'needstomb-other-steward', 'pending')",
+      [id, to],
+    );
+    await ask("amr-needstomb-gone", GONE);
+    await ask("amr-needstomb-example", example);
+    await ask("amr-needstomb-living", bystander.id);
+    const signGone = await call("POST", "/api/admin/mint-requests/amr-needstomb-gone/approve", {});
+    expect(signGone.status, `no signed grant pays a tombstone: ${signGone.text}`).toBe(404);
+    expect(String(signGone.json?.error), "the second steward is told why").toMatch(/left the village/);
+    expect(await asksFor(GONE), "the grant is left for a steward to decline").toEqual(["amr-needstomb-gone:pending"]);
+    const signExample = await call("POST", "/api/admin/mint-requests/amr-needstomb-example/approve", {});
+    expect(signExample.status, `no signed grant pays a standing example: ${signExample.text}`).toBe(409);
+    const signLiving = await call("POST", "/api/admin/mint-requests/amr-needstomb-living/approve", {});
+    expect(signLiving.status, `the control: a signed grant pays a living member: ${signLiving.text}`).toBe(200);
+    const declined = await call("POST", "/api/admin/mint-requests/amr-needstomb-gone/decline", { reason: "they have left" });
+    expect(declined.status, `a steward can still clear it: ${declined.text}`).toBe(200);
+
+    expect(await legsTo(GONE), "no ledger leg reached the tombstone").toBe(0);
+    expect(await legsTo(example), "or the standing example").toBe(0);
+    expect(await legsTo(bystander.id), "the living member got the hand-mint and the signed grant").toBe(livingBefore + 2);
+  });
 });

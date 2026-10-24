@@ -532,7 +532,7 @@ import { distributionsForMember, gratitudeCyclesRepo, gratitudeDistributionsRepo
 import { grantsForMember, portraitsForMember } from "./repos/characterPortraits";
 import { charactersForMember } from "./repos/playerCharacters";
 import { claimsRepo as claimsRepoFactory, questClosed, questsRepo as questsRepoFactory} from "./repos/quests";
-import { asBudget, DEPARTED_RECIPIENT, departedRecipient, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
+import { asBudget, DEPARTED_RECIPIENT, departedRecipient, mintRecipientRefusal, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
 import { recentEvents, recordEvent } from "./lib/events";
 import { checkToolLink } from "./lib/toolcheck";
 import { canSeeTool } from "../shared/toolsVisibility";
@@ -16590,7 +16590,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(400).json({ error: "A reason is required. Every hand-mint must explain itself" });
     }
     const target = await members.byId(String(toUserId));
-    if (!target) return res.status(404).json({ error: "Member not found" });
+    const refused = mintRecipientRefusal(target); if (!target || refused) return res.status(refused?.status ?? 404).json(refused?.body ?? { error: "Member not found" }); // nothing is minted to a tombstone or a standing example: server/lib/gratitude.ts
 
     /*
      * 0106: NOBODY GRANTS THEMSELVES POWER ALONE.
@@ -16803,7 +16803,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // A grant queued before Gratitude stopped being mintable is refused at the second door too.
     if (request.tokenSlug === HEARTS) return res.status(400).json({ error: GRATITUDE_ONLY_SENT });
     const target = await members.byId(request.toUserId);
-    if (!target) return res.status(404).json({ error: "Member not found" });
+    const refused = mintRecipientRefusal(target); if (!target || refused) return res.status(refused?.status ?? 404).json(refused?.body ?? { error: "Member not found" }); // a member who left after the asking is refused here: server/lib/gratitude.ts
     // The rule that has no exception, re-read at the second door: the person
     // this pays cannot be the person who asked for it, whoever signs.
     if (target.id === request.requestedBy) {

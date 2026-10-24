@@ -3185,8 +3185,21 @@ and forum hearts), the Hearts give (`POST /api/gratitude`) and member sends
 (`POST /api/wallet/send`), with 404 and "That member has left the village, so
 nothing can be sent to them." before anything is written, so no allowance is
 spent and no ledger leg posts. A former member keeps their address and is not a
-tombstone, so they can still be paid. The admin hand-mint
-(`POST /api/admin/tokens/:slug/mint`) does not ask this question.
+tombstone, so they can still be paid.
+
+**The admin hand-mint refuses a tombstone too.** `POST /api/admin/tokens/:slug/mint`
+used to refuse only a missing recipient, so a steward could issue any platform
+token from `sys:mint` into a tombstone's account, or a standing example's. It now
+asks `mintRecipientRefusal` in `server/lib/gratitude.ts` before anything is
+recorded or moved: a tombstone gets 404 and the same sentence as the send doors,
+and a standing example gets 409 and the example refusal every admin door gives,
+under the co-sign line and over it, so no grant waits for a second steward in a
+departed member's name. The co-signed approval
+(`POST /api/admin/mint-requests/:id/approve`) asks it again when the second
+steward signs, so a grant asked for while a member was here mints nothing once
+they have left; it stays pending, and a steward can decline it. A former member
+can still be minted to. Pinned by `server/lib/gratitude.tombstone.test.ts` and
+`server/needsTombstone.routes.e2e.test.ts`.
 
 ### What the village owes
 

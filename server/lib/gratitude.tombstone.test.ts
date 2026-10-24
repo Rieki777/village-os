@@ -25,7 +25,8 @@ import mysql from "mysql2/promise";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { loadTokenRegistry, memberAccount } from "./ledger";
 import { loadVariables } from "./variables";
-import { budgetFor, sendGratitude, type GratitudeDeps } from "./gratitude";
+import { budgetFor, DEPARTED_RECIPIENT, mintRecipientRefusal, sendGratitude, type GratitudeDeps } from "./gratitude";
+import { EXAMPLE_REFUSAL_BODY } from "./examples";
 import { gratitudeLogRepo } from "../repos/gratitude";
 import { usersRepo } from "../repos/users";
 
@@ -117,4 +118,31 @@ describe.skipIf(!configured)("gratitude and a member who has left (MySQL)", () =
       expect((await budgetFor(deps(), await giver())).spent, "and the giver's allowance is untouched").toBe(spentBefore);
     });
   }
+
+  /*
+   * THE ADMIN HAND-MINT ASKS THE SAME QUESTION (round 4). Its route and its
+   * co-signed approval live in server/index.ts, where no test can call them,
+   * and needsTombstone.routes.e2e drives both through the built server. This
+   * case pins the question itself against rows exactly as the real repo reads
+   * them back: the tombstone by its address, a standing example by its
+   * is_example flag, and a living member, who is paid.
+   */
+  it("the hand-mint refuses the tombstone and a standing example as the repo reads them, and pays a living member", async () => {
+    const EXAMPLE = "gt-example";
+    await q(
+      "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `is_example`) VALUES (?, 'Sample Sorrel', ?, '', 1)", // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      [EXAMPLE, `${EXAMPLE}@examples.invalid`],
+    );
+    const repo = usersRepo(pool);
+    expect(mintRecipientRefusal(await repo.byId(GONE)), "a tombstone is refused with the sentence every send door gives").toEqual({
+      status: 404,
+      body: { error: DEPARTED_RECIPIENT },
+    });
+    expect(mintRecipientRefusal(await repo.byId(EXAMPLE)), "a standing example is refused as every admin door refuses it").toEqual({
+      status: 409,
+      body: EXAMPLE_REFUSAL_BODY,
+    });
+    expect(mintRecipientRefusal(await repo.byId(LIVING)), "the control: a living member is minted to").toBeNull();
+    expect(mintRecipientRefusal(null), "a missing row is the route's own 404").toBeNull();
+  });
 });
