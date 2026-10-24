@@ -72,11 +72,13 @@ export function WaitingLine({ view, target, className = "" }: { view: StageProps
 export interface ConsentRoundProps extends Omit<StageProps, "now"> {
   target: ResponseTarget;
   ask: string;
+  /** The room's own clock, for when a night ends; the device's when a caller has none. */
+  now?: number;
   /** Not in the room yet: the round is shown and nothing can be sent. */
   readOnly?: boolean;
 }
 
-export default function ConsentRound({ view, actions, target, ask, readOnly }: ConsentRoundProps) {
+export default function ConsentRound({ view, actions, target, ask, readOnly, now = Date.now() }: ConsentRoundProps) {
   const mine = myResponse(view, target);
   const [choice, setChoice] = useState<ConsentValue | null>(mine && isConsentValue(mine.value) ? mine.value : null);
   const draft = useDraft(`${view.id}:${target}:words`, mine?.text ?? "");
@@ -85,7 +87,6 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
   const [note, setNote] = useState<string | null>(null);
   // A night's end, as the viewer's own clock writes it in a datetime field.
   const [nightEnds, setNightEnds] = useState(mine?.answerBy ? localInputValue(Date.parse(mine.answerBy)) : "");
-  const now = Date.now();
   const { tally } = consentOn(view, target, now);
   const heard = view.responses.filter((r) => r.target === target && (r.value === "concern" || r.value === "object") && r.text);
   const nights = seesAnswers(view) ? view.responses.filter((r) => r.target === target && r.value === "sleep") : [];

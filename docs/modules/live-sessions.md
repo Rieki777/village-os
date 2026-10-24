@@ -241,8 +241,12 @@ objection, each of the last two in one sentence. Nobody else can answer after th
 lasts, the round consents when nobody objects and nobody in the room at the close went unheard; the
 facilitator hears how it went (`session_night_settled`, bell only), and marking a consented round decided
 stays their act, from the record. A night that simply ends is settled by the `session-nights` job, every
-fifteen minutes, which writes the record's tally and minutes again. The rule is
-`shared/sessions.ts` `nightRoundState`, and the summary keeps which rounds outlived the close.
+fifteen minutes, which writes the record's tally and minutes again; a round that fails to settle waits for
+the next run and never holds up the rest. Somebody who may not read the record hears from these doors what
+the record's own door says, and nothing about what is in it. A member who leaves while their night lasts
+takes their answer with them, and the round it held is written again from the answers left and settled,
+with no notice: the facilitator finds it settled on the record. The rule is `shared/sessions.ts`
+`nightRoundState`, and the summary keeps which rounds outlived the close.
 
 | Door | Who | Limit |
 |---|---|---|

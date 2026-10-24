@@ -44,6 +44,9 @@
  * server now holds and never what this device hoped it would.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+/** How often a closed record with a round still outliving its call is asked for again. */
+const CLOSED_NIGHT_ASK_MS = 60_000;
 import { toast } from "sonner";
 import { gameFetch } from "@/lib/gameApi";
 import {
@@ -185,6 +188,8 @@ export function useSessionRoom(
   const stopped = useRef(false);
   /** The room a poll is out asking for, so polls never stack; null when none is out. */
   const asking = useRef<number | null>(null);
+  /** When a closed record was last asked for, so one with a night still on it is asked again slowly. */
+  const closedAskedAt = useRef(0);
   const current = useRef<SessionView | null>(null);
   /** The shortest round trip the offset was measured on: the steadiest reading wins. */
   const bestTrip = useRef(Number.POSITIVE_INFINITY);
@@ -284,9 +289,17 @@ export function useSessionRoom(
   );
 
   const poll = useCallback(async () => {
-    // A closed session's record stays as it was, so there is nothing to ask for.
+    // A closed session's record stays as it was, so there is nothing to ask for,
+    // unless a round on it outlived the call (0281): then it is asked for once a
+    // minute, so a night that ends or an answer that lands shows without a reload.
     // A poll still out for an earlier room does not hold up this one.
-    if (stopped.current || asking.current === generation.current || !tabVisible() || current.current?.status === "closed") return;
+    if (stopped.current || asking.current === generation.current || !tabVisible()) return;
+    const record = current.current;
+    if (record?.status === "closed") {
+      const live = record.nights?.some((n) => n.open || n.canDecide);
+      if (!live || Date.now() - closedAskedAt.current < CLOSED_NIGHT_ASK_MS) return;
+      closedAskedAt.current = Date.now();
+    }
     const mine = generation.current;
     asking.current = mine;
     try {

@@ -6,14 +6,25 @@
  * What each case holds: a night cannot be sent without its time, a quick
  * choice fills it and the time goes with the answer; the round says until
  * when each night lasts, by name, and that a night which ended counts as no
- * objection; on the record, whoever asked for a night answers it, the
- * facilitator marks a round that consented decided, and a refusal is said in
- * the server's words.
+ * objection; on the record, whoever asked for a night answers it while it
+ * lasts on the room's clock, the facilitator marks a round that consented
+ * decided, what landed is read out from the record with the focus on the
+ * proposal, and a refusal is said in the server's words.
  */
-import { describe, expect, it } from "vitest";
+import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CONSENT_LABELS, ROOM_COPY, type NightRound, type SessionView } from "@shared/sessions";
-import { makeView } from "./__tests__/roomFixture";
+import { json, makeView } from "./__tests__/roomFixture";
+
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("@/modules/ModuleProvider", () => ({ useModuleOn: () => true }));
+vi.mock("wouter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("wouter")>();
+  return { ...actual, Link: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => <a href={href} className={className}>{children}</a> };
+});
+
+import ClosedRecord from "./ClosedRecord";
 import ConsentRound from "./ConsentRound";
 import NightAfterCall from "./NightAfterCall";
 import { localInputValue, nightWhen, nineAfter } from "./roomUi";
@@ -72,11 +83,12 @@ describe("a round that outlived its call, on the record", () => {
   const closed = (responses: SessionView["responses"]) => roomWith({ status: "closed", responses });
   const round = (over: Partial<NightRound> = {}): NightRound => ({ entryId: 5, open: true, consented: false, canAnswer: false, canDecide: false, ...over });
 
-  it("lets whoever asked for a night answer it, a concern in one sentence", async () => {
+  it("lets whoever asked for a night answer it, a concern in one sentence, and hands what landed to the record", async () => {
     const at = Date.now() + 3_600_000;
     const view = closed([{ target: "decision:5", userId: 2, value: "sleep", text: null, answerBy: new Date(at).toISOString() }]);
     const log: Logged[] = [];
-    render(<NightAfterCall view={view} entryId={5} round={round({ canAnswer: true })} actions={doors(log)} />);
+    const done = vi.fn();
+    render(<NightAfterCall view={view} entryId={5} round={round({ canAnswer: true })} actions={doors(log)} onDone={done} />);
     expect(screen.getByText(ROOM_COPY.recordNightYours(nightWhen(at, Date.now())))).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: CONSENT_LABELS.concern }));
     fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.consentSend }));
@@ -85,8 +97,16 @@ describe("a round that outlived its call, on the record", () => {
     fireEvent.change(screen.getByLabelText(ROOM_COPY.consentSentence), { target: { value: "Mondays clash with the market." } });
     fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.consentSend }));
     await waitFor(() => expect(log).toEqual([{ name: "answerNight", args: [5, "concern", "Mondays clash with the market.", { quiet: true }] }]));
-    expect(await screen.findByText(ROOM_COPY.nightAnswered)).toBeInTheDocument();
+    await waitFor(() => expect(done).toHaveBeenCalledWith(ROOM_COPY.nightAnswered));
     expect(screen.queryByRole("radio", { name: CONSENT_LABELS.sleep })).not.toBeInTheDocument();
+  });
+
+  it("offers no answer once the night has passed on the room's clock, whatever the last poll said", () => {
+    const at = Date.now() + 60_000;
+    const view = closed([{ target: "decision:5", userId: 2, value: "sleep", text: null, answerBy: new Date(at).toISOString() }]);
+    render(<NightAfterCall view={view} entryId={5} round={round({ canAnswer: true })} actions={doors([])} now={at + 1} />);
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.getByText(ROOM_COPY.nightOver("Bo Fern", nightWhen(at, at + 1)))).toBeInTheDocument();
   });
 
   it("offers the facilitator Mark it decided once the round consented, and says a refusal in the server's words", async () => {
@@ -97,6 +117,32 @@ describe("a round that outlived its call, on the record", () => {
     fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.markDecided }));
     await waitFor(() => expect(log).toEqual([{ name: "decideAfterNight", args: [5, { quiet: true }] }]));
     expect(await screen.findByRole("alert")).toHaveTextContent("Only the person facilitating can do that.");
+  });
+
+  describe("inside the record", () => {
+    beforeEach(() => {
+      vi.stubGlobal("fetch", vi.fn(async () => json({ tasks: [], mail: { canSend: false, lastSend: null } })));
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("reads out a decision marked after the night, with the focus on the proposal", async () => {
+      const log: Logged[] = [];
+      const view = makeView({
+        status: "closed",
+        closedAt: "2026-10-02T18:00:00.000Z",
+        entries: [proposal as any],
+        responses: [{ target: "decision:5", userId: 3, value: "sleep", text: null, answerBy: new Date(Date.now() - 60_000).toISOString() }],
+        nights: [round({ open: false, consented: true, canDecide: true })],
+        me: { userId: 1, joined: true, facilitates: true, secretary: false, admin: false },
+      });
+      render(<ClosedRecord view={view} actions={doors(log)} />);
+      fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.markDecided }));
+      await waitFor(() => expect(document.activeElement?.id).toBe("record-decision-5"));
+      expect(screen.getByText(ROOM_COPY.decidedAfterNight)).toBeInTheDocument();
+      expect(log).toEqual([{ name: "decideAfterNight", args: [5, { quiet: true }] }]);
+    });
   });
 
   it("says a settled round that did not consent, and offers nothing to do", () => {

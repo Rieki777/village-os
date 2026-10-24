@@ -12,8 +12,11 @@
  *   once no night lasts    whether the round consented, and for the
  *                          facilitator or an admin, Mark it decided.
  *
- * Every write reads its result before it says anything, a refusal is said in
- * the server's words, and what landed is read out in one polite line.
+ * Every write reads its result before it says anything and a refusal is said
+ * in the server's words. What landed is handed to the record (`onDone`), which
+ * reads it out from a line that outlives this round, and the focus moves to
+ * the proposal itself, since the form or the button it came from is gone.
+ * Times are read on the room's own clock (`now`), never the device's alone.
  */
 import { useState } from "react";
 import { CONSENT_LABELS, ROOM_COPY, SESSION_LIMITS, cleanLine, consentNeedsWords, type NightRound, type SessionView } from "@shared/sessions";
@@ -28,13 +31,17 @@ export default function NightAfterCall({
   entryId,
   round,
   actions,
+  now = Date.now(),
+  onDone,
 }: {
   view: SessionView;
   entryId: number;
   round: NightRound;
   actions?: Pick<RoomActions, "answerNight" | "decideAfterNight">;
+  now?: number;
+  /** What landed, for the record to read out, and to move the focus to this proposal. */
+  onDone?: (words: string) => void;
 }) {
-  const now = Date.now();
   const target = `decision:${entryId}`;
   const nights = view.responses.filter((r) => r.target === target && r.value === "sleep" && r.answerBy);
   const mine = nights.find((r) => r.userId === view.me.userId);
@@ -42,8 +49,9 @@ export default function NightAfterCall({
   const [words, setWords] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const [said, setSaid] = useState("");
   const idBase = `night-${entryId}`;
+  // Their own night, still ahead on the room's clock: the server's word and the clock both say so.
+  const mineLasts = round.canAnswer && !!mine && Date.parse(mine.answerBy!) > now;
 
   const send = async () => {
     if (!choice || busy || !actions) return;
@@ -57,7 +65,7 @@ export default function NightAfterCall({
     const r = await actions.answerNight(entryId, choice, consentNeedsWords(choice) ? sentence : null, { quiet: true });
     setBusy(false);
     if (!r.ok) setNote(r.error);
-    else setSaid(ROOM_COPY.nightAnswered);
+    else onDone?.(ROOM_COPY.nightAnswered);
   };
 
   const decide = async () => {
@@ -67,14 +75,14 @@ export default function NightAfterCall({
     const r = await actions.decideAfterNight(entryId, { quiet: true });
     setBusy(false);
     if (!r.ok) setNote(r.error);
-    else setSaid(ROOM_COPY.decidedAfterNight);
+    else onDone?.(ROOM_COPY.decidedAfterNight);
   };
 
   return (
     <div className="mt-2 space-y-2" data-night-round={round.open ? "open" : round.consented ? "consented" : "settled"}>
       {nights.map((r) => {
         const at = Date.parse(r.answerBy!);
-        if (r === mine && round.canAnswer) {
+        if (r === mine && mineLasts) {
           return (
             <p key={`night-${r.userId}`} className="text-sm font-semibold text-foreground">
               {ROOM_COPY.recordNightYours(nightWhen(at, now))}
@@ -88,7 +96,7 @@ export default function NightAfterCall({
           </p>
         );
       })}
-      {round.canAnswer && actions && (
+      {mineLasts && actions && (
         <div className="space-y-2">
           <div role="radiogroup" aria-label={ROOM_COPY.nightAnswerAsk} className="grid gap-2 sm:grid-cols-3">
             {AFTER_NIGHT.map((v) => (
@@ -137,10 +145,6 @@ export default function NightAfterCall({
           {note}
         </p>
       )}
-      {/* Mounted from the start, so what landed is read out when its words arrive. */}
-      <p aria-live="polite" className={said ? "text-sm text-open" : "sr-only"}>
-        {said}
-      </p>
     </div>
   );
 }

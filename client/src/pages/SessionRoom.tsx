@@ -191,6 +191,7 @@ export default function SessionRoom() {
               <ClosedRecord
                 view={view}
                 actions={actions}
+                now={now}
                 deleteRecord={view.me.admin ? <DiscardSession kind="delete" onConfirm={discardAnswer} onGone={leave} /> : null}
               />
             ) : (
