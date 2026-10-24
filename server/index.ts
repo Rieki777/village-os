@@ -1085,7 +1085,7 @@ const DEFAULT_SETTINGS = {
   villageDues: {
     amount: "", // e.g. "250" — blank means "to be confirmed" and no figure is shown on the site
     period: "month",
-    currency: "$",
+    currency: "", // blank: the page writes the village's own fiatCurrency, or no symbol (figureWithCurrency, shared/money.ts)
     note: "", // blank: the resident page then says its own dues words (token row 25, 2026-10-22)
   },
   /*

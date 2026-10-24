@@ -10,6 +10,8 @@ import {
   defaultDisplayCurrency,
   displayCurrencyProblem,
   exponentOf,
+  currencySymbol,
+  figureWithCurrency,
   formatMoney, hasDailyRate, projectCurrencyToStore, FX_QUOTES } from "./money";
 
 describe("exponents", () => {
@@ -188,5 +190,29 @@ describe("hasDailyRate", () => {
     for (const q of ["USD", "CHF", "GBP", "JPY", "CAD", "AUD", "NZD", "SEK", "NOK", "DKK", "MXN", "BRL", "PLN", "CZK"]) {
       expect(FX_QUOTES as readonly string[], q).toContain(q);
     }
+  });
+});
+
+describe("a figure a village typed, with its currency (the village dues)", () => {
+  it("writes the symbol the village typed beside it, as typed", () => {
+    expect(figureWithCurrency("250", "$", "CRC")).toBe("$250");
+    expect(figureWithCurrency("250", "CRC", "")).toBe("CRC 250");
+  });
+
+  it("writes the village's own fiat currency when it typed no symbol", () => {
+    expect(figureWithCurrency("25000", "", "CRC")).toBe("₡25000");
+    expect(figureWithCurrency("250", null, "usd")).toBe("$250");
+    expect(figureWithCurrency("250", "", "CHF")).toBe("CHF 250");
+  });
+
+  it("invents no currency when the village has stated none", () => {
+    expect(figureWithCurrency("250", "", "")).toBe("250");
+    expect(figureWithCurrency("250", undefined, undefined)).toBe("250");
+    expect(figureWithCurrency("", "$", "USD")).toBe("");
+  });
+
+  it("reads an unknown code as itself and never throws", () => {
+    expect(currencySymbol("XQZ1")).toBe("XQZ1");
+    expect(currencySymbol("")).toBe("");
   });
 });

@@ -227,3 +227,30 @@ describe("the tenure ladder is honorary and says so", () => {
     expect(document.body.textContent ?? "").not.toMatch(/rights of nature/i);
   });
 });
+
+/*
+ * THE DUES FIGURE. Its currency was a compiled "$" whenever the village had
+ * typed none, so a village pricing in colones published dollars. The village
+ * here has stated no currency at all, so the figure stands alone.
+ */
+describe("the village dues", () => {
+  it("prints the amount with no invented currency when the village stated none", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ villageDues: { amount: "250", period: "month", currency: "", note: "" } }) })) as unknown as typeof fetch,
+    );
+    renderPage();
+    const figure = await screen.findByText("250");
+    expect(figure.textContent).toBe("250");
+    expect(figure.parentElement?.textContent ?? "").not.toMatch(/\$/);
+  });
+
+  it("prints the symbol the village typed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ villageDues: { amount: "300", period: "month", currency: "€", note: "" } }) })) as unknown as typeof fetch,
+    );
+    renderPage();
+    expect(await screen.findByText("€300")).toBeTruthy();
+  });
+});
