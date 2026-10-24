@@ -42,6 +42,13 @@ describe("the player card, live", () => {
     expect(screen.getByText("Across my role")).toBeTruthy();
   });
 
+  it("draws no aim heading for a reader who may not read the plan", () => {
+    render(<PlayerRoleCardView data={fixturePayload(1, "stranger", { plan: undefined, seasonalGoals: undefined, tasks: undefined })} />);
+    expect(screen.queryByText("My aim this season")).toBeNull();
+    expect(screen.queryByText("This moon's tasks")).toBeNull();
+    expect(screen.getByText("Across my role")).toBeTruthy();
+  });
+
   it("links each role's circle to that circle's card", () => {
     render(<PlayerRoleCardView data={fixturePayload(1)} />);
     expect(screen.getByRole("link", { name: "Community Anchor" }).getAttribute("href")).toBe("/circles/c1");
