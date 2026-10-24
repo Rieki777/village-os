@@ -40,7 +40,8 @@ import { anonymizeMember, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
 import { erasureRecord } from "../repos/memberErasure";
-import { createMeetMe } from "./calendarCommunity";
+import { cancelMeetMe, createMeetMe } from "./calendarCommunity";
+import { CLOSED_WINDOW_SUBJECT } from "../repos/meetMeWindows";
 import { listCalendarItems } from "./calendar";
 import { rsvp } from "./gatherings";
 import { insertNotification, type NotifyDeps } from "./notify";
@@ -320,6 +321,94 @@ describe.skipIf(!configured)("what an erased member left behind after the sweep"
       expect(Number((await q("SELECT COUNT(*) AS n FROM comms_messages"))[0].n), "nothing was sent about the erasure").toBe(rowsBefore);
       // The bystander's window, its guest's journey and their confirmation, exactly as they were.
       expect({ facts: await facts(theirsId), letters: await lettersAbout(theirsId) }).toEqual(theirsBefore);
+    });
+
+    /*
+     * ROUND 3, FINDING 15 (a decision, implemented as recommended). The
+     * erasure finds a window through its own row, so a window the member
+     * closed themselves (DELETE /api/events/meet-me/:id, cancelMeetMe) left
+     * every guest's journey and mail about it for good: nothing could find
+     * them any more. Closing a window now takes its words out of that mail,
+     * and only once the window is proven the closer's: the scrub is keyed on
+     * the id alone, so run first it would let any member blank the mail of a
+     * real gathering's guests by sending its id.
+     */
+    it("goes from its guests' mail when its owner closes it, and nobody else's close reaches any mail", async () => {
+      const owner = "e2-mm3-wren";
+      const guest = "e2-mm3-bay";
+      const other = "e2-mm3-ida";
+      const host = "e2-mm3-host";
+      await person(owner, "Wren Halloway");
+      await person(guest, "Bay Holt");
+      await person(other, "Ida Fenn");
+      await person(host, "Cal Moss");
+      await q("INSERT INTO comms_journeys (village_id, journey_key, state, version) VALUES (?, 'gathering.going', 'on', 1) ON DUPLICATE KEY UPDATE state = 'on'", [VILLAGE]);
+
+      const mine = await createMeetMe(pool, { userId: owner, firstName: "Wren Halloway", layer: "village", place: "the bakery on Calle 3", note: "come say hi, I'll be in the red jacket", ...window() });
+      const windowId = (mine as { id: string }).id;
+      // A real gathering, which is not a meet-me window, whose host is a living member.
+      const gatheringId = "e2-mm3-supper";
+      const starts = new Date(Date.now() + 30 * 3600 * 1000);
+      await q("INSERT INTO events (id, title, starts_at, ends_at, status, kind, layer, created_by, owner_user_id) VALUES (?,?,?,?,?,?,?,?,?)", [
+        gatheringId, "Harvest supper", starts, new Date(starts.getTime() + 2 * 3600 * 1000), "scheduled", "gathering", "village", host, host,
+      ]);
+      for (const id of [windowId, gatheringId]) {
+        expect((await rsvp(pool, id, guest, "going")).ok, `the guest says yes to ${id}`).toBe(true);
+        const going: any = await handleGatheringTrigger(eventDeps(), { type: "rsvp_changed", eventId: id, occurrenceKey: "", personKey: guest, status: "going" });
+        expect(going.enrollmentId, `the yes to ${id} enrolled the guest`).toBeTruthy();
+      }
+      // A reminder still waiting in the queue for the window's journey.
+      const [enr] = await q("SELECT id FROM comms_enrollments WHERE journey_key = 'gathering.going' AND subject_ref = ?", [`event:${windowId}:`]);
+      await q(
+        "INSERT INTO comms_messages (id, village_id, idempotency_key, to_email, email_key, kind, origin, subject, body_html, status, enrollment_id) VALUES ('msg-mm3-queued', ?, ?, ?, ?, 'events', 'journey', 'Tomorrow: Meet Wren', '<p>the bakery on Calle 3</p>', 'queued', ?)",
+        [VILLAGE, `j:gathering.going:remind:${enr.id}`, `${guest}@example.test`, `${guest}@example.test`, enr.id],
+      );
+
+      const journeys = async (eventId: string) => q("SELECT state, CAST(facts AS CHAR) AS f FROM comms_enrollments WHERE subject_ref LIKE ? ORDER BY id", [`event:${eventId}:%`]);
+      const lettersAbout = async (eventId: string) =>
+        q(
+          "SELECT m.id, m.status, m.subject, m.body_html, m.body_text, CAST(m.attachments AS CHAR) AS attachments FROM comms_messages m " +
+            "WHERE m.idempotency_key LIKE ? OR m.enrollment_id IN (SELECT id FROM comms_enrollments WHERE subject_ref LIKE ?) ORDER BY m.id",
+          [`ev:${eventId}:%`, `event:${eventId}:%`],
+        );
+      const mail = async () => ({ window: { journeys: await journeys(windowId), letters: await lettersAbout(windowId) }, gathering: { journeys: await journeys(gatheringId), letters: await lettersAbout(gatheringId) } });
+      const before = await mail();
+      // The control: both carry their words today, and the gathering's journey is live.
+      expect(before.window.journeys.map((j) => j.f).join(" ")).toContain("the bakery on Calle 3");
+      expect(before.window.letters.find((m) => m.attachments)?.subject).toContain("Meet Wren");
+      expect(before.gathering.letters.find((m) => m.attachments)?.subject).toContain("Harvest supper");
+      expect(before.gathering.journeys.length, "the gathering's guest is on its journeys").toBeGreaterThan(0);
+      expect(before.gathering.journeys.filter((j) => j.state !== "active"), "and every one of them is live").toEqual([]);
+      const rowsBefore = Number((await q("SELECT COUNT(*) AS n FROM comms_messages"))[0].n);
+
+      // Nobody but the owner closes anything, and a refused close reaches no mail: another member
+      // sending the gathering's id, its own host sending it through the meet-me door, another member
+      // sending the window's id.
+      expect(await cancelMeetMe(pool, gatheringId, other)).toBe(false);
+      expect(await cancelMeetMe(pool, gatheringId, host)).toBe(false);
+      expect(await cancelMeetMe(pool, windowId, other)).toBe(false);
+      expect(await mail(), "no refused close changed a word of anybody's mail").toEqual(before);
+      expect(await q("SELECT id FROM events WHERE id IN (?, ?) ORDER BY id", [gatheringId, windowId])).toHaveLength(2);
+
+      expect(await cancelMeetMe(pool, windowId, owner)).toBe(true);
+
+      const after = await journeys(windowId);
+      expect(after.length, "the journey rows stay, as the record that the guest was on them").toBe(before.window.journeys.length);
+      for (const j of after) {
+        expect(j.f, "and forgets what it told them").not.toContain('"told"');
+        expect(j.f).not.toContain("Calle 3");
+        expect(j.state).toBe("stopped");
+      }
+      const letters = await lettersAbout(windowId);
+      expect(letters.map((m) => m.id).sort()).toEqual(before.window.letters.map((m) => m.id).sort());
+      for (const m of letters) {
+        expect(m, `${m.id} keeps no word of the window`).toMatchObject({ subject: CLOSED_WINDOW_SUBJECT, body_html: null, body_text: null, attachments: null });
+      }
+      expect(letters.find((m) => m.id === "msg-mm3-queued")?.status, "a reminder still waiting does not go").toBe("cancelled");
+      expect(Number((await q("SELECT COUNT(*) AS n FROM comms_messages"))[0].n), "nothing was sent about the close").toBe(rowsBefore);
+      expect(await q("SELECT id FROM events WHERE id = ?", [windowId]), "the window is closed").toEqual([]);
+      // The real gathering, its guest's journey and their confirmation, exactly as they were.
+      expect({ journeys: await journeys(gatheringId), letters: await lettersAbout(gatheringId) }).toEqual(before.gathering);
     });
   });
 

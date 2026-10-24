@@ -6,7 +6,8 @@
  * server/lib/calendarCommunity.ts still opens, lists and closes windows where
  * it always did. What lives here is what the erasure's meet-me step needs
  * (lane E2), called from `forgetMeetMeWindowsOf` in server/lib/gatherings.ts,
- * which frees each window the way any gathering is freed.
+ * which frees each window the way any gathering is freed, and what the
+ * owner's own close asks before its DELETE (round 3, finding 15).
  */
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { subjectRef } from "../../shared/comms/contracts";
@@ -26,6 +27,27 @@ export async function meetMeWindowIdsOf(pool: Pool, userId: string): Promise<str
   );
   return rows.map((r) => String(r.id));
 }
+
+/**
+ * Is this id a meet-me window this member opened. The same test the close's
+ * own DELETE makes, asked first, because `forgetWindowMail` is keyed on the id
+ * alone and would blank the mail of any gathering's guests it was handed.
+ */
+export async function ownsMeetMeWindow(pool: Pool, windowId: string, userId: string): Promise<boolean> {
+  if (!windowId || !userId) return false;
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id FROM events WHERE id = ? AND kind = 'meet-me' AND (created_by = ? OR owner_user_id = ?) LIMIT 1",
+    [windowId, userId, userId],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * What a guest's copy about a window reads as once its owner closed it
+ * themselves (round 3, finding 15). The owner is still here, so the label the
+ * erasure writes would say something untrue of them.
+ */
+export const CLOSED_WINDOW_SUBJECT = "[removed when the window closed]";
 
 /**
  * What one window left in its guests' mail, taken out before the window goes
@@ -50,8 +72,17 @@ export async function meetMeWindowIdsOf(pool: Pool, userId: string): Promise<str
  * erasure finds this id at all. A resume that died in between finds the
  * window again and runs this again, and every statement is a constant keyed on
  * the window, so it matches the same rows and writes the same values.
+ *
+ * THE OWNER'S OWN CLOSE RUNS IT TOO (round 3, finding 15): `cancelMeetMe` in
+ * server/lib/calendarCommunity.ts, with CLOSED_WINDOW_SUBJECT for the subject,
+ * and only once `ownsMeetMeWindow` says the window is theirs. Keyed on the id
+ * alone, this would otherwise blank any gathering's guests' mail.
  */
-export async function forgetWindowMail(pool: Pool, windowId: string): Promise<{ journeys: number; letters: number; withdrawn: number }> {
+export async function forgetWindowMail(
+  pool: Pool,
+  windowId: string,
+  subjectNow: string = ERASED_SUBJECT,
+): Promise<{ journeys: number; letters: number; withdrawn: number }> {
   const out = { journeys: 0, letters: 0, withdrawn: 0 };
   if (!windowId) return out;
   const subject = subjectRef.eventPrefix(windowId);
@@ -73,7 +104,7 @@ export async function forgetWindowMail(pool: Pool, windowId: string): Promise<{ 
   const [letters] = await pool.query<ResultSetHeader>( // module-review-ok: comms_messages, every copy about one window, blanked to constants
     "UPDATE comms_messages SET subject = ?, body_html = NULL, body_text = NULL, headers = NULL, attachments = NULL, updated_at = CURRENT_TIMESTAMP " +
       `WHERE village_id = ? AND ${about}`,
-    [ERASED_SUBJECT, VILLAGE, ...aboutParams],
+    [subjectNow, VILLAGE, ...aboutParams],
   );
   out.letters = Number(letters.affectedRows ?? 0);
 
