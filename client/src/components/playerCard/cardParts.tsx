@@ -9,7 +9,6 @@
  * own. No hex colour anywhere.
  */
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
-import { Link } from "wouter";
 import { Pencil } from "lucide-react";
 import type { Slot } from "@shared/playerCard";
 import { EDIT_WORDS, roleWordPayload, type PersonalEditKey, type RoleEditKey } from "@shared/playerCardEdit";
@@ -67,10 +66,9 @@ export interface CardEditState {
   owner?: boolean;
   /** Read the card again after a save. */
   reload: () => void;
-  reviewHref: string | null;
 }
 
-export const CardEditContext = createContext<CardEditState>({ editing: false, owner: false, reload: () => undefined, reviewHref: null });
+export const CardEditContext = createContext<CardEditState>({ editing: false, owner: false, reload: () => undefined });
 
 type Target = { kind: "personal"; key: PersonalEditKey; goal?: string } | { kind: "role"; key: RoleEditKey; roleId: string };
 
@@ -105,7 +103,7 @@ export function EditInPlace({
   multiline?: boolean;
   hint?: string;
 }) {
-  const { editing, reload, reviewHref } = useContext(CardEditContext);
+  const { editing, reload } = useContext(CardEditContext);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -128,7 +126,7 @@ export function EditInPlace({
         : await proposeRoleWords(target.roleId, target.key, text);
     setBusy(false);
     if (r.ok) {
-      setSaid(target.kind === "personal" ? EDIT_WORDS.saved : EDIT_WORDS.proposed);
+      setSaid(target.kind === "personal" ? EDIT_WORDS.saved : EDIT_WORDS.sent);
       setOpen(false);
       reload();
     } else setSaid(r.error);
@@ -177,17 +175,44 @@ export function EditInPlace({
       {said && (
         <p role="status" className="mt-1 text-sm text-card-foreground">
           {said}
-          {said === EDIT_WORDS.proposed && reviewHref ? (
-            <>
-              {" "}
-              <Link href={reviewHref} className={LINK}>
-                {EDIT_WORDS.seeProposal}
-              </Link>
-            </>
-          ) : null}
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * A ROLE PROPOSAL'S CHANGED WORDS, drawn in gold (role proposals PR C). The
+ * proposal steps hand the card, per role, the sections whose words differ
+ * from the posted role, or mark the role new; each such section says so in
+ * the card's own gold. Absent, nothing is marked.
+ */
+export interface ChangedWords {
+  keys: readonly RoleEditKey[];
+  isNew: boolean;
+}
+
+export const CHANGED_WORDS = { changed: "Changed from the posted role", isNew: "New" } as const;
+
+export const ChangedContext = createContext<ChangedWords | null>(null);
+
+/** Whether this role's section is changed (or new) in the proposal being drawn. */
+export function useChanged(k: RoleEditKey): boolean {
+  const c = useContext(ChangedContext);
+  return !!c && (c.isNew || c.keys.includes(k));
+}
+
+/** The gold frame a changed section takes, or nothing. */
+export const GOLD_FRAME = "border-notice bg-notice/10";
+
+/** "Changed from the posted role", or "New", under a changed section's heading. */
+export function ChangedMark({ k }: { k: RoleEditKey }) {
+  const c = useContext(ChangedContext);
+  if (!c || !(c.isNew || c.keys.includes(k))) return null;
+  return (
+    <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-notice" data-changed-mark={k}>
+      {c.isNew ? CHANGED_WORDS.isNew : CHANGED_WORDS.changed}
+    </p>
   );
 }
 

@@ -206,7 +206,7 @@ describe("the role's handover words, proposed by consent", () => {
 
   it("proposes Bring me as one org draft change through the card's route", async () => {
     const calls = routes({
-      "POST /api/people/me/role-card/roles/r1/propose": { status: 200, body: { success: true, draftId: "d1", key: "bringMe", review: "/review" } },
+      "POST /api/people/me/role-card/roles/r1/propose": { status: 200, body: { success: true, draftId: "d1", key: "bringMe" } },
     });
     render(<PlayerRoleCardView data={fixturePayload(1)} />);
     fireEvent.click(screen.getByRole("button", { name: "Edit my card" }));
@@ -214,7 +214,7 @@ describe("the role's handover words, proposed by consent", () => {
     expect(screen.getByText(ROLE_HANDOVER_WORDS.bringMeHint)).toBeTruthy();
     fireEvent.change(screen.getByLabelText(`Bring me, ${FIXTURE_ROLE_TITLE(1)}`), { target: { value: "Names\nDates" } });
     fireEvent.click(screen.getByRole("button", { name: "Propose this change" }));
-    await screen.findByRole("link", { name: EDIT_WORDS.seeProposal });
+    await screen.findByText(EDIT_WORDS.sent);
     expect(calls).toEqual([{ url: "/api/people/me/role-card/roles/r1/propose", method: "POST", body: { key: "bringMe", text: "Names\nDates" } }]);
   });
 

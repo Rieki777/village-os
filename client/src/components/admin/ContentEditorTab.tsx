@@ -14,7 +14,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, RefreshCw, Save } from "lucide-react";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
-import { emptyContentFor } from "./contentSections";
+import { emptyContentFor, PAGES_TAB_KEY } from "./contentSections";
+import PagesEditor from "./pages/PagesEditor";
 import { takePrefill } from "@/lib/profilePrefill";
 import {
   SECTION_FIELDS,
@@ -25,7 +26,12 @@ import {
   type DocField,
 } from "./contentFields";
 
-export default function ContentEditorTab({ password, sectionKey, sectionLabel }: {
+/** Pages has its own editor; every other content tab is one stored section. */
+export default function ContentEditorTab(props: { password: string; sectionKey: string; sectionLabel: string }) {
+  return props.sectionKey === PAGES_TAB_KEY ? <PagesEditor password={props.password} /> : <SectionEditorTab {...props} />;
+}
+
+function SectionEditorTab({ password, sectionKey, sectionLabel }: {
   password: string;
   sectionKey: string;
   sectionLabel: string;

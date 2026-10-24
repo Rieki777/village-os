@@ -32,6 +32,7 @@
  */
 import { addBusinessDays, isWithinBusinessDays } from "./businessDays";
 import { civilDateKey } from "./lunar";
+import { NEW_PROPOSAL_HREF } from "./roleProposals";
 import { looksLikePaymentDetails } from "./seatSettings";
 import { seatList } from "./seatApplications";
 import { civilDayWords } from "./seasonPlans";
@@ -154,12 +155,11 @@ export function consentStateWords(state: ConsentState, closesOnDay: string | nul
 // ── The nudges ──────────────────────────────────────────────────────────────
 
 /**
- * Where a nudge and the profile banner send a member. The proposal steps are
- * PR C (`NEW_PROPOSAL_HREF`, /role-proposals/new); until that page exists this
- * is the role application page members use today, and PR C changes this one
- * constant.
+ * Where a nudge and the profile banner send a member: the proposal steps (PR
+ * C), which start a draft from the member's current card, or open the draft
+ * they already have.
  */
-export const PROPOSE_ENTRY_HREF = "/propose?type=role_application";
+export const PROPOSE_ENTRY_HREF = NEW_PROPOSAL_HREF;
 
 /** Why a member is nudged to propose their roles, most pressing first. */
 export const NUDGE_REASONS = ["window-closing", "review-due", "window-open"] as const;

@@ -31,9 +31,11 @@ class NoopIntersectionObserver {
 }
 vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
+import { MASTER_PLAN_PAGE } from "@shared/pageContent/masterPlan";
+import { markerDocument } from "@shared/pageContent/resolve";
 
 const useBrandImagesMock = vi.fn();
 /*
@@ -43,6 +45,10 @@ const useBrandImagesMock = vi.fn();
  * unexercised. Only the two hooks that reach for the network are replaced.
  */
 const useVillageSettingsMock = vi.fn<() => Record<string, unknown> | null>(() => ({}));
+/** The saved page, as GET /api/content/page-master-plan would answer it (null = never saved). */
+let storedPlan: unknown = null;
+/** The village's Events page URL; blank hides the call button. */
+let eventsUrl = "";
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -51,13 +57,15 @@ vi.mock("@/lib/gameApi", async () => {
   const actual = await vi.importActual<typeof import("@/lib/gameApi")>("@/lib/gameApi");
   return {
     useBrandImages: () => useBrandImagesMock(),
-    useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
+    useVillageLinks: () => ({ siteUrl: "", eventsUrl, contactEmail: "", mailTo: () => "" }),
     useVillageSettings: () => useVillageSettingsMock(),
+    useGameConfig: () => ({ project: { name: "Willowbrook" }, currency: { name: "Thanks" } }),
     statedFacts: actual.statedFacts,
     altOr: actual.altOr,
   };
 });
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
+vi.mock("@/hooks/useVillageContent", () => ({ readVillageSection: () => Promise.resolve(storedPlan) }));
 
 import MasterPlan from "./MasterPlan";
 
@@ -69,6 +77,11 @@ const renderPlan = () =>
   );
 
 const hero = () => document.querySelector("section") as HTMLElement;
+
+beforeEach(() => {
+  storedPlan = null;
+  eventsUrl = "";
+});
 
 describe("the master plan hero", () => {
   beforeEach(() => {
@@ -153,14 +166,19 @@ describe("the size of the land", () => {
   // is the py-12 one.
   const statsBand = () =>
     document.querySelector("section.py-12.bg-teal-deep") as HTMLElement | null;
+  /** The band once the page's words (its tile labels) have arrived. */
+  const bandDrawn = async () => {
+    await waitFor(() => expect(statsBand()).toBeTruthy());
+    return statsBand() as HTMLElement;
+  };
 
-  it("states the unit the village measures in", () => {
+  it("states the unit the village measures in", async () => {
     useVillageSettingsMock.mockReturnValue({
       landFacts: { acres: { value: "40", note: "hectares" } },
     });
 
     renderPlan();
-    const band = statsBand();
+    const band = await bandDrawn();
 
     expect(band).toBeTruthy();
     expect(band).toHaveTextContent("40");
@@ -170,7 +188,7 @@ describe("the size of the land", () => {
     expect(document.body.textContent ?? "").not.toMatch(/acre/i);
   });
 
-  it("converts nothing, so the number on the page is the number that was typed", () => {
+  it("converts nothing, so the number on the page is the number that was typed", async () => {
     // 40 hectares is 98.8 acres. Publishing 98.8 would put a figure on an
     // investor page that nobody at the village ever wrote, which is a worse
     // thing to ship than the bug this replaces.
@@ -179,6 +197,7 @@ describe("the size of the land", () => {
     });
 
     renderPlan();
+    await bandDrawn();
 
     // Scoped to the band a converted figure would land in, so unrelated copy
     // elsewhere on the page cannot fail this for the wrong reason.
@@ -186,7 +205,7 @@ describe("the size of the land", () => {
     expect(statsBand()?.textContent ?? "").not.toContain("98");
   });
 
-  it("keeps the page a village with a bare number already has", () => {
+  it("keeps the page a village with a bare number already has", async () => {
     // No unit stated: the same payload that renders "40 / Total Acres" today,
     // rendering "40 / Total Acres" after the fix. Nobody's live page moves.
     useVillageSettingsMock.mockReturnValue({
@@ -194,13 +213,13 @@ describe("the size of the land", () => {
     });
 
     renderPlan();
-    const band = statsBand();
+    const band = await bandDrawn();
 
     expect(band).toHaveTextContent("40");
     expect(band).toHaveTextContent("Total Acres");
   });
 
-  it("carries a unit it has never heard of", () => {
+  it("carries a unit it has never heard of", async () => {
     // Costa Rica measures in manzanas as well as hectares, and a closed list
     // of units is how the next village gets told its own land is unspeakable.
     // Free text, published verbatim.
@@ -210,10 +229,10 @@ describe("the size of the land", () => {
 
     renderPlan();
 
-    expect(statsBand()).toHaveTextContent("Total manzanas");
+    expect(await bandDrawn()).toHaveTextContent("Total manzanas");
   });
 
-  it("leaves the other tiles' labels alone", () => {
+  it("leaves the other tiles' labels alone", async () => {
     useVillageSettingsMock.mockReturnValue({
       landFacts: {
         acres: { value: "40", note: "hectares" },
@@ -223,17 +242,104 @@ describe("the size of the land", () => {
     });
 
     renderPlan();
-    const band = statsBand();
+    const band = await bandDrawn();
 
+    // Today's words, now the defaults of Admin, Pages, Master Plan.
     expect(band).toHaveTextContent("Planned Homes");
     expect(band).toHaveTextContent("Retreat Keys");
   });
 
-  it("shows no band at all when the village has stated nothing", () => {
+  it("shows no band at all when the village has stated nothing", async () => {
     useVillageSettingsMock.mockReturnValue({ landFacts: { acres: { value: "", note: "hectares" } } });
 
     renderPlan();
+    // The words have arrived (the vision heading is drawn), and still no band.
+    await screen.findByText("Our Vision");
 
     expect(statsBand()).toBeNull();
   });
+});
+
+/**
+ * EVERY FIELD IN THE MASTER PLAN SPEC REACHES THE PAGE (2026-10-22).
+ *
+ * The page's words moved into Admin, Pages, Master Plan. A field a founder can
+ * save and the page never reads is the Tagline bug again, so a distinct marker
+ * goes into every field and every list row and each one must come out.
+ */
+describe("every field in the Master Plan spec reaches the page", () => {
+  const ALL_FIGURES = {
+    landFacts: {
+      acres: { value: "40", note: "" },
+      plannedHomes: { value: "150", note: "" },
+      guestRooms: { value: "120", note: "" },
+      appraisal: { value: "$1", note: "" },
+    },
+  };
+
+  beforeEach(() => {
+    useBrandImagesMock.mockReset();
+    useBrandImagesMock.mockReturnValue({ masterPlanHero: "" });
+    useVillageSettingsMock.mockReturnValue(ALL_FIGURES);
+  });
+
+  it("renders a distinct marker typed into each field and each list row", async () => {
+    const doc = markerDocument(MASTER_PLAN_PAGE);
+    storedPlan = doc;
+    // The call button is drawn only when the village has an Events page.
+    eventsUrl = "https://example.org/events";
+    renderPlan();
+    await screen.findByText((doc.vision as Record<string, string>).heading);
+
+    const text = document.body.textContent ?? "";
+    const missing: string[] = [];
+    for (const [sectionId, section] of Object.entries(doc)) {
+      for (const [key, value] of Object.entries(section as Record<string, unknown>)) {
+        // The document's link is checked by where it points, below.
+        if (sectionId === "valuation" && key === "pdfUrl") continue;
+        const values = Array.isArray(value)
+          ? value.flatMap((row) => Object.entries(row as Record<string, string>).filter(([k]) => k !== "id").map(([, v]) => v))
+          : [value as string];
+        for (const v of values) if (!text.includes(v)) missing.push(`${sectionId}.${key} (${v})`);
+      }
+    }
+    expect(missing).toEqual([]);
+    const pdf = (doc.valuation as Record<string, string>).pdfUrl;
+    expect(screen.getByRole("link", { name: (doc.valuation as Record<string, string>).pdfLabel })).toHaveAttribute("href", pdf);
+  });
+
+  it("draws nothing of a section the village hid", async () => {
+    storedPlan = { vision: { hidden: true }, phases: { hidden: true }, valuation: { hidden: true }, cta: { hidden: true } };
+    renderPlan();
+    await bandDrawnHere();
+
+    for (const gone of ["Our Vision", "Village Center", "Development Phases", "Land Valuation", "Be Part of the Vision"]) {
+      expect(screen.queryByText(gone)).toBeNull();
+    }
+  });
+
+  it("draws today's words by default, and no document button until the village links one", async () => {
+    renderPlan();
+    await screen.findByText("Our Vision");
+
+    expect(screen.getByText("Retreat & Wellness")).toBeInTheDocument();
+    expect(screen.getByText("120-150 key retreat")).toBeInTheDocument();
+    expect(screen.getByText("Residential Phase 1")).toBeInTheDocument();
+    expect(document.body.textContent ?? "").toContain("Our vision for a regenerative village that harmonizes human habitation with the natural beauty");
+    // The disabled "Coming Soon" button every village used to show is gone until there is a document.
+    expect(screen.queryByText(/Coming Soon/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Master Plan PDF/ })).toBeNull();
+  });
+
+  it("splits a zone's tags on commas and leaves the blanks out", async () => {
+    storedPlan = { vision: { zones: [{ title: "Orchard", description: "Fruit.", tags: "Apples, , Pears ," }] } };
+    renderPlan();
+    await screen.findByText("Orchard");
+
+    expect(screen.getByText("Apples")).toBeInTheDocument();
+    expect(screen.getByText("Pears")).toBeInTheDocument();
+    expect(screen.queryByText("Village Center")).toBeNull();
+  });
+
+  const bandDrawnHere = () => waitFor(() => expect(document.querySelector("section.py-12.bg-teal-deep")).toBeTruthy());
 });

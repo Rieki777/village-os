@@ -22,5 +22,5 @@ export interface PlayerCardPayload {
   timeZone: string;
   /** Sheets by `SignOut.sheetKey`. Empty below the member tier. */
   sheets: Record<string, SignSheetOut>;
-  links: { wallet?: string; apply: string; plan: string; newApplication?: string; review?: string };
+  links: { wallet?: string; apply: string; plan: string; newApplication?: string };
 }
