@@ -44,6 +44,7 @@ import type { Express } from "express";
 import { claimPaths } from "../../shared/gameConfig";
 import type { AppDeps } from "../lib/appDeps";
 import { isTombstone } from "../lib/oauthAccounts";
+import { DEPARTED_HANDLE_REFUSAL, isDepartedHandle } from "../lib/profile";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
 
@@ -79,6 +80,11 @@ export function register(app: Express, deps: Deps): void {
       wanted = String(handle).toLowerCase().trim();
       if (!HANDLE_RE.test(wanted)) {
         return res.status(400).json({ error: "Handles are 3-30 characters: letters, numbers, dashes" });
+      }
+      // A member who already wears one, from before this rule, keeps saving
+      // their profile with it; nobody moves onto one (server/lib/profile.ts).
+      if (isDepartedHandle(wanted) && wanted !== String(authed.handle ?? "").toLowerCase()) {
+        return res.status(400).json({ error: DEPARTED_HANDLE_REFUSAL });
       }
       const clash = (await members.all()).some(
         (u: any) => u.id !== authed.id && String(u.handle ?? "").toLowerCase() === wanted,

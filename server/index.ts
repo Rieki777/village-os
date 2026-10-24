@@ -403,7 +403,7 @@ import {
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
-import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
+import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
@@ -530,7 +530,7 @@ import { distributionsForMember, gratitudeCyclesRepo, gratitudeDistributionsRepo
 import { grantsForMember, portraitsForMember } from "./repos/characterPortraits";
 import { charactersForMember } from "./repos/playerCharacters";
 import { claimsRepo as claimsRepoFactory, questClosed, questsRepo as questsRepoFactory} from "./repos/quests";
-import { asBudget, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
+import { asBudget, DEPARTED_RECIPIENT, departedRecipient, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
 import { recentEvents, recordEvent } from "./lib/events";
 import { checkToolLink } from "./lib/toolcheck";
 import { canSeeTool } from "../shared/toolsVisibility";
@@ -1810,7 +1810,7 @@ const isJourney = isAdmin;
  * unique per deployment, member-editable within the same rules.
  */
 function slugifyHandle(name: string): string {
-  return (
+  return livingHandle( // a name never gives a living member the departed's prefix (server/lib/profile.ts)
     String(name ?? "")
       .toLowerCase()
       .normalize("NFKD")
@@ -15235,7 +15235,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       ? await members.byEmail(typedEmail)
       : (String(to ?? "").trim() ? await members.byId(String(to).trim()) : null);
     if (!typedEmail && !String(to ?? "").trim()) return res.status(400).json({ error: "Who is it for?" });
-    if (!recipient) return res.status(404).json({ error: "No member here has that address" });
+    if (!recipient || departedRecipient(recipient)) return res.status(404).json({ error: recipient ? DEPARTED_RECIPIENT : "No member here has that address" }); // nothing moves to a tombstone: server/lib/gratitude.ts
     if (recipient.id === user.id) {
       return res.status(400).json({ error: "That is your own account. Sending to yourself moves nothing" });
     }
@@ -19256,7 +19256,7 @@ ${inner}
     }
     const { toId, amount, note, tag, structureKey, quiet, clientNonce } = req.body ?? {};
     const recipient = toId ? await members.byId(String(toId)) : null;
-    if (!recipient) return res.status(404).json({ error: "No member found" });
+    if (!recipient || departedRecipient(recipient)) return res.status(404).json({ error: recipient ? DEPARTED_RECIPIENT : "No member found" }); // nothing moves to a tombstone: server/lib/gratitude.ts
     if (isExampleUser(recipient)) {
       return res.status(409).json({
         error: "That is a standing example, not a member. Appreciation flows to real people.",

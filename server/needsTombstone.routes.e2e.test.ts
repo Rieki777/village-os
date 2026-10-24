@@ -319,4 +319,78 @@ describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", (
     expect(after?.status, "the record of leaving stays").toBe("resolved");
     expect(String(after?.resolution ?? ""), "their words do not outlive them").not.toContain("Sam");
   });
+
+  /*
+   * THE HANDLE THE BOOT JOB FREED STAYS FREE (round 3 leftover). The first case
+   * proved the old tombstone gave up departed-gone-old. Freed, it was the next
+   * living member's for the asking: a name that slugs to it at sign-up, or the
+   * handle field on the profile, and every old link to the departed member's
+   * page reached that living person.
+   */
+  it("no living member takes the handle the old tombstone gave up", async () => {
+    const namesake = await call("POST", "/api/auth/register", {
+      name: "Departed Gone Old", email: `namesake-${PORT}@example.test`, password: PASSWORD, paths: ["resident"],
+    }, "");
+    expect(namesake.status, `a member whose name slugs to it still joins: ${namesake.text}`).toBe(200);
+    expect(String(namesake.json?.user?.handle), "the handle their name gives does not start with departed-").not.toMatch(/^departed-/);
+    expect(String(namesake.json?.user?.handle), "and still comes from their name").toMatch(/^gone-old/);
+
+    const asked = await call("PUT", "/api/profile", { handle: GONE_HANDLE }, bystander.token);
+    expect(asked.status, `nobody living may choose it: ${asked.text}`).toBe(400);
+    expect(String(asked.json?.error), "the member is told why").toMatch(/"departed-".*members who have left/);
+    const page = await call("GET", `/api/profiles/${GONE_HANDLE}`, undefined, "");
+    expect(page.status, `an old link still reaches nobody: ${page.text.slice(0, 200)}`).toBe(404);
+
+    // The control: the same member, the same field, an ordinary handle.
+    const plain = await call("PUT", "/api/profile", { handle: `bay-${PORT}` }, bystander.token);
+    expect(plain.status, plain.text).toBe(200);
+  });
+
+  /*
+   * NOTHING MOVES TO THE OLD TOMBSTONE, by its address or by its id (round 3
+   * leftover). Three doors take a recipient a member names: tokens by address
+   * or id, Gratitude on the wall, and Hearts. Each is asked for the tombstone
+   * and for a living member, and the ledger is read for what reached it.
+   */
+  it("no door sends anything to a member who has left, by address or by id", async () => {
+    const address = `deleted-${GONE}@anonymized.invalid`;
+    const landed = async () => {
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) AS n FROM `token_ledger` l JOIN `ledger_accounts` a ON a.`id` = l.`to_account` WHERE a.`user_id` = ?",
+        [GONE],
+      );
+      const [gifts] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `gratitude_log` WHERE `to_id` = ?", [GONE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      return { legs: Number(rows[0]?.n ?? 0), gifts: Number(gifts[0]?.n ?? 0) };
+    };
+    const minted = await call("POST", "/api/admin/tokens/credits/mint", { toUserId: bystander.id, amount: 5, reason: "test float" });
+    expect(minted.status, `the sender holds credits: ${minted.text}`).toBe(200);
+    const sender = await register("Moss Kell", "moss");
+
+    // Tokens, by address and by id.
+    for (const [door, body] of [["address", { toEmail: address }], ["id", { to: GONE }]] as const) {
+      const sent = await call("POST", "/api/wallet/send", { ...body, tokenType: "credits", amount: 1, clientNonce: `gone-${door}` }, bystander.token);
+      expect(sent.status, `no credits to a tombstone by ${door}: ${sent.text}`).toBe(404);
+      expect(String(sent.json?.error)).toMatch(/left the village/);
+    }
+    const toLiving = await call("POST", "/api/wallet/send", { to: sender.id, tokenType: "credits", amount: 1, clientNonce: "living-1" }, bystander.token);
+    expect(toLiving.status, `the control: a living member is paid: ${toLiving.text}`).toBe(200);
+
+    // Gratitude on the wall, by address typed and passed, and Hearts by id.
+    for (const body of [{ toEmail: address }, { to: address }]) {
+      const thanked = await call("POST", "/api/game/gratitude/send", { ...body, amount: 1, message: "Thank you." }, bystander.token);
+      expect(thanked.status, `no Gratitude to a tombstone: ${thanked.text}`).toBe(404);
+      expect(String(thanked.json?.error)).toMatch(/left the village/);
+    }
+    const hearted = await call("POST", "/api/gratitude", { toId: GONE, amount: 1, note: "Thank you." }, bystander.token);
+    expect(hearted.status, `no Hearts to a tombstone: ${hearted.text}`).toBe(404);
+    expect(String(hearted.json?.error)).toMatch(/left the village/);
+    // The control for both: a living recipient is past the recipient checks and
+    // meets this village's own later refusal (it has not launched), or lands.
+    const thankedLiving = await call("POST", "/api/game/gratitude/send", { toEmail: `moss-${PORT}@example.test`, amount: 1, message: "Thank you." }, bystander.token);
+    expect(String(thankedLiving.json?.error ?? ""), thankedLiving.text).not.toMatch(/left the village|No member/);
+    const heartedLiving = await call("POST", "/api/gratitude", { toId: sender.id, amount: 1, note: "Thank you." }, bystander.token);
+    expect(String(heartedLiving.json?.error ?? ""), heartedLiving.text).not.toMatch(/left the village|No member/);
+
+    expect(await landed(), "no ledger leg and no acknowledgement reached the tombstone").toEqual({ legs: 0, gifts: 0 });
+  });
 });

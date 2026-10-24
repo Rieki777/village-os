@@ -18,6 +18,7 @@ import { issuanceRefusal } from "./gameStart";
 import { PLATFORM_TOKEN, lockLedgerAccounts, memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
 import { allowanceFor, writeGratitudeRow, shareCapFor, fullSendsIn, recognitionName, toLedgerUnits, type Allowance } from "./economy";
 import { userIdForHandle } from "./profile";
+import { isTombstone } from "./oauthAccounts";
 import type { GratitudeLogRepo, GratitudeEntry } from "../repos/gratitude";
 import type { UsersRepo } from "../repos/users";
 
@@ -140,6 +141,28 @@ export interface SendInput {
   contextRef?: string;
 }
 
+/**
+ * NOTHING IS SENT TO A MEMBER WHO HAS LEFT.
+ *
+ * An erased member's row stays, as "A departed member" at
+ * `deleted-<id>@anonymized.invalid`, so history keeps somebody to point at.
+ * Every door that pays a recipient a member names looked that row up by
+ * address or by id and refused only the standing examples, so typing the
+ * address, or hearting a departed member's old post, issued tokens into an
+ * account nobody holds: the sender's allowance or balance spent, and
+ * Gratitude, the voting-weight token by default, piling up in the name of
+ * somebody who is gone.
+ *
+ * The three doors ask this one question: `sendGratitude` below (the wall and
+ * forum hearts), and in server/index.ts the Hearts give (`POST /api/gratitude`)
+ * and member sends (`POST /api/wallet/send`).
+ */
+export const DEPARTED_RECIPIENT = "That member has left the village, so nothing can be sent to them.";
+
+export function departedRecipient(member: { email?: unknown } | null | undefined): boolean {
+  return !!member && isTombstone({ email: String(member.email ?? "") });
+}
+
 export type SendOutcome =
   | { ok: true; entry: GratitudeEntry; recipient: any; budget: GratitudeBudget }
   | { ok: false; status: number; error: string };
@@ -237,6 +260,7 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
       error: who.toId ? "No member here with that id" : "No member found with that email",
     };
   }
+  if (departedRecipient(recipient)) return { ok: false, status: 404, error: DEPARTED_RECIPIENT };
   if (recipient.id === user.id) return { ok: false, status: 400, error: `Send ${recognitionName()} to others` };
   // The example identities have fixed, public @examples.invalid addresses, so
   // without this any member can send to one: the sender's real budget is spent
