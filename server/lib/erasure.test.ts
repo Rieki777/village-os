@@ -401,6 +401,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(out.ran).toEqual([
       "tombstone",
       "member-agent-after-tombstone",
+      "guest-places-after-tombstone",
       "comms",
       "needs-after-tombstone",
       "journal-after-tombstone",
@@ -411,6 +412,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "season-plan-words-after-tombstone",
       "role-tensions-after-tombstone",
       "event-places-after-tombstone",
+      "housing-contacts-after-tombstone",
       "housing-reservations-after-tombstone",
       "vouches-after-tombstone",
       "conversations-after-tombstone",

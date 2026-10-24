@@ -474,9 +474,14 @@ export type CommsForgetCounts = Record<string, number>;
  * nothing can write to it again.
  *
  * GUEST ROWS GO WITH THE GUEST. A guest's yes to a gathering and their place
- * on its waitlist are deleted. A seat a future gathering held for them is
- * free from that moment, and the next answer to that gathering serves its
- * waitlist the ordinary way.
+ * on its waitlist are deleted. A bare delete frees a seat the queue never
+ * hears about (a new `going` takes a free seat without looking at the queue;
+ * only a seat freed through `rsvp` or `withdrawRsvp` serves it), so the
+ * erasure gives these places up FIRST, through `releasePlacesOf` and the seat
+ * rules, in its `guest-places-after-tombstone` and
+ * `housing-contacts-after-tombstone` steps (server/lib/erasure.ts). By the
+ * time this runs there is normally nothing left here to delete, and what this
+ * deletes is the backstop.
  *
  * ORDER: the reports and the ledger first, while the contact ids still find
  * them, the address book last.
