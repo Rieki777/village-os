@@ -103,8 +103,15 @@ const shown = (v: WordValue | undefined): string | null => {
   return Array.isArray(v) ? v.map((x) => `- ${x}`).join("\n") : v;
 };
 
+/** Field names in the order the card writes them; any field the card has no heading for comes after. */
+const CARD_ORDER: readonly string[] = ROLE_CARD_FIELDS.map((f) => f.key);
+const inCardOrder = (fields: Iterable<string>): string[] => {
+  const rank = (f: string) => (CARD_ORDER.indexOf(f) === -1 ? CARD_ORDER.length : CARD_ORDER.indexOf(f));
+  return Array.from(new Set(fields)).sort((a, b) => rank(a) - rank(b));
+};
+
 const wordChanges = (group: RoleGroup, i: number, words: RoleWords): Array<{ path: string; label: string; value: string }> =>
-  Object.keys(words)
+  inCardOrder(Object.keys(words))
     .filter((f) => shown(words[f]) !== null)
     .map((f) => ({ path: fieldPath.word(group, i, f as RoleCardWordField), label: headingFor(f), value: shown(words[f]) ?? "" }));
 
@@ -123,7 +130,7 @@ export function changesOf(body: RoleCardBody, current: ProposalBody, names: (rol
       out.push({ path: fieldPath.role("roles", i), kind: "role", roleTitle, label: roleTitle, value: null, words: wordChanges("roles", i, r.words) });
       return;
     }
-    for (const f of Array.from(new Set([...Object.keys(r.words), ...Object.keys(draft.words)]))) {
+    for (const f of inCardOrder([...Object.keys(r.words), ...Object.keys(draft.words)])) {
       if (same(r.words[f], draft.words[f])) continue;
       out.push({ path: fieldPath.word("roles", i, f as RoleCardWordField), kind: "word", roleTitle, label: headingFor(f), value: has(r.words, f) ? shown(r.words[f]) : null });
     }
@@ -135,7 +142,7 @@ export function changesOf(body: RoleCardBody, current: ProposalBody, names: (rol
       out.push({ path: fieldPath.role("newRoles", i), kind: "role", roleTitle, label: roleTitle, value: null, words: wordChanges("newRoles", i, r.words) });
       return;
     }
-    for (const f of Array.from(new Set([...Object.keys(r.words), ...Object.keys(draft.words)]))) {
+    for (const f of inCardOrder([...Object.keys(r.words), ...Object.keys(draft.words)])) {
       if (same(r.words[f], draft.words[f])) continue;
       out.push({ path: fieldPath.word("newRoles", i, f as RoleCardWordField), kind: "word", roleTitle, label: headingFor(f), value: has(r.words, f) ? shown(r.words[f]) : null });
     }

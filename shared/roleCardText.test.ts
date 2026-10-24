@@ -550,6 +550,26 @@ describe("what the member keeps", () => {
     expect(isBlocked("roles.0.words.domain", r.problems)).toBe(false);
   });
 
+  it("lists a role the card adds with its words in the card's own order", () => {
+    const rye = readRoleCard(FIXTURE, ctx());
+    const added = changesOf(rye.proposalBody, emptyBody(), (id) => id)[0];
+    expect(added.words!.map((w) => w.label)).toEqual([
+      "Role title",
+      "Purpose",
+      "This role exists while",
+      "What I look after",
+      "What I can decide on my own",
+      "What you can count on me for",
+      "What I do regularly",
+      "Bring me",
+      "Not mine to hold",
+      "Signs I'm stretched",
+      "What flows back",
+      "How I can step back",
+      "Time",
+    ]);
+  });
+
   it("sends only what is ticked, and leaves the rest as the draft holds it", () => {
     const put = acceptOnly(r.proposalBody, new Set(["roles.0.words.bringMe", "newRoles.0"]), current, { "newRoles.0": "c-land" });
     expect(put).toEqual({
