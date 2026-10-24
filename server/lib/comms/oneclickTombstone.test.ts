@@ -302,8 +302,11 @@ describe.skipIf(!configured)("one-click links for a member who has been erased",
   });
 
   it("the vote's invitation passes over an erased member: no contact made for them, no email, no notice", async () => {
-    // Erasure keeps a member's own yes to a gathering today (people.erasure.test.ts).
-    // Seeded after it, so the case holds whichever way that rule lands.
+    // Erasure takes a member's own yes (`event-places-after-tombstone`,
+    // people.erasure.test.ts). Seeded after it, the row stands for an answer
+    // that outlived that step: one written in the window after the tombstone,
+    // or one left by an erasure that finished before the step existed. The
+    // tombstone check in `invite` is what passes over it.
     for (const [id, who] of [
       ["rs-oc-gone", GONE],
       ["rs-oc-live", LIVE],
