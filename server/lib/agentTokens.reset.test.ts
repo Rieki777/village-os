@@ -16,7 +16,7 @@ import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, untilALockIsAwaited, type TestDb } from "../db/testDb";
 import { usersRepo } from "../repos/users";
-import { endAgentReach, mintToken, revokeAllTokens, revokeToken, verifyToken, withAgentReachEnded } from "./agentTokens";
+import { endAgentReach, mintToken, revokeAllTokens, revokeToken, verifyToken, withAgentReachEnded, type AgentReachEnded } from "./agentTokens";
 import { enqueueAgentDelivery, getInbox, setInbox } from "./agentInbox";
 import { mintFeedToken, resolveFeedToken } from "./icsFeed";
 import { makeInviteDoor } from "./inviteDoor";
@@ -529,16 +529,45 @@ describe.skipIf(!configured)("a write already past its session check when the cr
     expect((await memberKeyView(pool, id))?.last4).toBe("9999");
   });
 
+  /**
+   * A pool whose `write` statement, once it reaches the database, first starts
+   * a reset (end, bump, end) and holds the write until the reset's bump is
+   * stuck behind the member's row. The write's transaction holds that row by
+   * then, so a bump that commits while the write waits proves the write held
+   * nothing, and the case fails by that name. The lock poll alone cannot say
+   * so: on a local MariaDB `innodb_trx` can still list an earlier case's wait
+   * long after it ended, and a stale row answers it at once.
+   */
+  function resetFromInside(id: string, write: RegExp) {
+    const race: { resetting: Promise<{ ended: AgentReachEnded }> | null; bumping: boolean; bumped: boolean } = {
+      resetting: null,
+      bumping: false,
+      bumped: false,
+    };
+    const racing = hooked(async (sql) => {
+      if (race.resetting || !write.test(sql)) return;
+      race.resetting = withAgentReachEnded(pool, id, async () => {
+        race.bumping = true;
+        await bump(id);
+        race.bumped = true;
+      });
+      const deadline = Date.now() + 10_000;
+      while (!race.bumping) {
+        if (Date.now() > deadline) throw new Error("the reset never reached its bump");
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      // Long enough for a bump nothing holds back to commit many times over.
+      await new Promise((r) => setTimeout(r, 250));
+      expect(race.bumped, "the bump did not wait for the row this write holds, so nothing here is serialised").toBe(false);
+      await untilALockIsAwaited(pool);
+    });
+    return { pool: racing, race };
+  }
+
   it("a reset that arrives while the write holds the member's row waits for it, and its second end takes the write back", async () => {
     const id = "usr-race-ned";
     const version = await seedMember(id);
-    const race: { resetting: ReturnType<typeof resetPassword> | null } = { resetting: null };
-    const racing = hooked(async (sql) => {
-      if (race.resetting || !/^INSERT INTO `?agent_inboxes\b/.test(sql)) return;
-      race.resetting = resetPassword(id);
-      // The bump has to wait on the row this write holds, or nothing here is serialised.
-      await untilALockIsAwaited(pool);
-    });
+    const { pool: racing, race } = resetFromInside(id, /^INSERT INTO `?agent_inboxes\b/);
 
     const out = await setInbox(racing, id, HOOK, SECRETS_ENV, version);
     expect(race.resetting, "the reset must start inside the write").not.toBeNull();
@@ -631,13 +660,7 @@ describe.skipIf(!configured)("a write already past its session check when the cr
 
     it(`${what}: a reset that arrives while the write holds the member's row waits for it, and its second end takes the write back`, async () => {
       const { id, version } = await fresh();
-      const race: { resetting: ReturnType<typeof resetPassword> | null } = { resetting: null };
-      const racing = hooked(async (sql) => {
-        if (race.resetting || !door.write.test(sql)) return;
-        race.resetting = resetPassword(id);
-        // The bump has to wait on the row this write holds, or nothing here is serialised.
-        await untilALockIsAwaited(pool);
-      });
+      const { pool: racing, race } = resetFromInside(id, door.write);
 
       const out = await door.make(racing, id, version);
       expect(race.resetting, "the reset must start inside the write").not.toBeNull();
