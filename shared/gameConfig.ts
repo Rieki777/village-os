@@ -234,6 +234,10 @@ export interface GameConfig {
     name: string;
     /** Sentence-position variant, e.g. "gratitude" in "send gratitude". */
     nameLower: string;
+    /** What the village calls ALL its tokens together, the umbrella word. Rye,
+     *  2026-10-23: "Village Tokens is the umbrella word, which should be able
+     *  to be set in admin". Set in Admin then Tokens; pages say it as `{tokens}`. */
+    collectiveName: string;
     /** The project's EQUITY token, on Base, governed by Hypha. The platform
      *  never mints, moves, or prices it: it reads balances and displays them. */
     equity: TokenRef;
@@ -500,6 +504,8 @@ export const GAME_CONFIG: GameConfig = {
      *  and reaches this stored value only when the name is empty. Held in
      *  agreement with name by shared/currencyDefaults.test.ts. */
     nameLower: "gratitude",
+    /** The umbrella word's platform default, Rye's own (2026-10-23). A village renames it in Admin then Tokens. */
+    collectiveName: "Village Tokens",
     // Platform-neutral defaults. A project's real token names and symbols are
     // its own identity (Amora calls its equity token "Amora" per the
     // project's wish); that belongs in the project's own fork of this file,

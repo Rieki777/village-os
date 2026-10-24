@@ -103,6 +103,8 @@ export interface HumanReward {
   valueCurrency: string;
   /** What it pays at consent. Null is the village's standard rules. */
   valueTokens?: TokenAmount[] | null;
+  /** The cash it pays at consent (0285), in minor units of `valueCurrency`. Null pays none. */
+  cashMinor?: number | null;
   stayCreditReward?: number | null;
   minStage?: string | null;
   requiresRole?: string | null;
@@ -546,6 +548,9 @@ export async function acceptQuestProposal(
     valueMinor: input.reward.valueMinor,
     valueCurrency: input.reward.valueCurrency,
     valueTokens: input.reward.valueTokens ?? null,
+    // The cash is stamped with the value's currency: both are the village's at this save.
+    cashMinor: input.reward.cashMinor ?? null,
+    cashCurrency: input.reward.cashMinor ? input.reward.valueCurrency : null,
     stayCreditReward:
       input.reward.stayCreditReward === null || input.reward.stayCreditReward === undefined
         ? null

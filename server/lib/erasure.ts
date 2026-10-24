@@ -302,6 +302,31 @@ function unlink(uploadsDir: string, fileName: string): void {
 }
 
 /**
+ * End every PERMISSION holding (`role_holders`) a departing member has.
+ *
+ * The erasure's "role-holdings" step, and the former-member resolve
+ * (server/lib/exitResolve.ts) calls it too, so a member who stays on after
+ * leaving and one who is erased give up their roles by one code path.
+ *
+ * By id (0123). A departing member who held the village's only permission
+ * seat left a filtered snapshot with no rows in it, and an empty payload
+ * carries no version stamp, so the whole-table write deleted every seat
+ * granted since the snapshot was taken. Called even with nothing to take, so
+ * a repository that refuses the write still fails loudly; `remove([])` is a
+ * no-op. Idempotent: a second call finds no holding to remove.
+ */
+export async function endPermissionHoldings(
+  userId: string,
+  deps: Pick<ErasureDeps, "roleHoldersRepo" | "withRoleHolderLock" | "loadRoleHolders">,
+): Promise<void> {
+  await deps.withRoleHolderLock(async () => {
+    await deps.roleHoldersRepo.remove(
+      deps.loadRoleHolders().filter((h) => h.userId === userId).map((h) => String(h.id)),
+    );
+  });
+}
+
+/**
  * A person's comms rows, with the day-21 hand-offs that named them first.
  *
  * The hand-off asks a path's contact person to write to somebody by first
@@ -453,17 +478,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     {
       name: "role-holdings",
       run: async () => {
-        await withRoleHolderLock(async () => {
-          // By id (0123). A departing member who held the village's only
-          // permission seat left a filtered snapshot with no rows in it, and
-          // an empty payload carries no version stamp, so the whole-table
-          // write deleted every seat granted since the snapshot was taken.
-          // Called even with nothing to take, so a repository that refuses the
-          // write still fails this step loudly; `remove([])` is a no-op.
-          await roleHoldersRepo.remove(
-            loadRoleHolders().filter((h) => h.userId === target.id).map((h) => String(h.id)),
-          );
-        });
+        await endPermissionHoldings(target.id, { roleHoldersRepo, withRoleHolderLock, loadRoleHolders });
       },
     },
     {

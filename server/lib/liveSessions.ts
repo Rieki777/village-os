@@ -92,6 +92,7 @@ import {
 import { exportRhythmsFor, forgetRhythmsFor } from "./sessionRhythm";
 import { exportFollowsFor, forgetFollowsFor } from "./sessionCalendar";
 import { exportReviewsFor, forgetReviewsFor } from "./sessionDecisions";
+import { exportAdviceFor, forgetAdviceFor } from "./sessionAdvice";
 import { taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
 import { LIBRARY_REFUSALS, cleanIds } from "../../shared/sessionLibrary";
 import { numberVar, stringVar } from "./variables";
@@ -99,6 +100,9 @@ import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { civilDate, moonPhase, moonPhaseGlyph, moonPhaseName, seasonInstants } from "../../shared/lunar";
 import { orderParcels } from "../../shared/land";
 import { isTropicalLatitude, parseVillageSeasons, villageSeasonOn } from "../../shared/villageSeasons";
+import { naturalSeasonStart, villageSeasonStartKey } from "../../shared/sessionPulse";
+import { civilDayStart } from "../../shared/seasonPlans";
+import { villageKey } from "../../shared/sessionRhythm";
 import { villageLandRows } from "../repos/villageLand";
 import { villageTimezone } from "./villageReaders";
 import { effectiveLifecycle } from "./modules";
@@ -646,6 +650,30 @@ export function stampSeason(
   }
   if (village.latitude != null && isTropicalLatitude(village.latitude)) return null;
   return seasonAt(now, village.hemisphere);
+}
+
+/**
+ * The season a session opened now would be stamped with, and the instant it
+ * began. The village's own seasons when it has written them: the latest start
+ * on or before today in the village's clock, or last year's last start before
+ * the year's first. The natural ones otherwise: the latest equinox or
+ * solstice. Null for both where the village keeps no seasons (the tropics), or
+ * the stamp cannot tell.
+ */
+export async function seasonNow(pool: Pool, now: Date): Promise<{ season: string | null; startedAt: Date | null }> {
+  const season = (await sessionStamp(pool, now)).season ?? null;
+  if (!season) return { season: null, startedAt: null };
+  try {
+    const own = parseVillageSeasons(stringVar("calendar.seasons"));
+    if (own) {
+      const zone = villageTimezone();
+      const key = villageSeasonStartKey(own, villageKey(now, zone));
+      return { season, startedAt: key ? civilDayStart(key, zone) : null };
+    }
+  } catch {
+    return { season, startedAt: null };
+  }
+  return { season, startedAt: naturalSeasonStart(now) };
 }
 
 /** This deployment is one village; the land table keys its rows by it (0069). */
@@ -2285,9 +2313,12 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   calendarAddress: Record<string, unknown>[];
   ownCalendarsAttached: Record<string, unknown>[];
   reviewsSet: Record<string, unknown>[];
+  /** The advice process (0284): the requests they made, and the advice they gave. */
+  adviceAsked: Record<string, unknown>[];
+  adviceGiven: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [], adviceAsked: [], adviceGiven: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -2365,7 +2396,8 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   const rhythmsSet = await exportRhythmsFor(pool, no);
   const { circlesFollowed, calendarAddress, ownCalendarsAttached } = await exportFollowsFor(pool, no);
   const reviewsSet = await exportReviewsFor(pool, no);
-  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet };
+  const { adviceAsked, adviceGiven } = await exportAdviceFor(pool, no);
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet, adviceAsked, adviceGiven };
 }
 
 /**
@@ -2456,6 +2488,8 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
       no,
       written.filter((e) => String(e.kind) === "decision").map((e) => Number(e.id)),
     );
+    // The advice process (0284): the requests they made go with every answer to them, and their own advice goes.
+    await forgetAdviceFor(conn, no);
   });
   await repo.deleteMemberNo(pool, no);
 }

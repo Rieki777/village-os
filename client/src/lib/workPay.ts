@@ -15,7 +15,9 @@
  *   the tokens    by their live names, never converted into money: a token only
  *                 has a price when the exchange posts one, and "no price set" is
  *                 not "worth nothing"
- *   the cash      a role's agreement, stated and never paid by the platform
+ *   the cash      what the work itself pays in cash (0285), and a role's
+ *                 agreement; both stated, and never paid by the platform, which
+ *                 records what the village owes instead
  *
  * Pure apart from `useDisplayRates`, which reads the day's rates once per page.
  */
@@ -128,12 +130,30 @@ export function cashWords(cash: StatedCash | null | undefined): string | null {
 }
 
 /**
+ * The cash the work itself pays (0285), in the village's currency and, beside
+ * it, the viewer's: "₡20,000 cash". Null when it pays none.
+ */
+export function cashPayWords(pay: WorkPay, rates: DisplayRates | null): { own: string; converted: string | null } | null {
+  if (!pay.cashPay || pay.cashPay.minor <= 0) return null;
+  const words = valueWords(pay.cashPay, rates);
+  return { own: `${words.own} cash`, converted: words.converted };
+}
+
+/**
+ * The terms' cash, shown only where the work states no cash of its own: a role
+ * whose agreement and whose own figure both appeared would read as two sums.
+ */
+export function agreementCashWords(pay: WorkPay): string | null {
+  return pay.cashPay ? null : cashWords(pay.cash);
+}
+
+/**
  * What the card leads with. `inquire` when nothing at all is known about the
  * pay, which is the one case the card says to ask.
  */
 export function payHeadline(pay: WorkPay): "valued" | "paid-unvalued" | "inquire" {
   if (pay.value) return "valued";
-  if (pay.lines.length > 0 || cashWords(pay.cash)) return "paid-unvalued";
+  if (pay.lines.length > 0 || pay.cashPay || cashWords(pay.cash)) return "paid-unvalued";
   return "inquire";
 }
 
