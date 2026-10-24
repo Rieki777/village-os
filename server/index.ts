@@ -4567,7 +4567,7 @@ async function runRetentionSweep(): Promise<string> {
  *  - quest_claims.user_name → same (rows KEPT, amounts intact);
  *  - token_ledger descriptions that carried their first name → generic
  *    (keyed by structured refs, never string matching);
- *  - submissions they authored: PII keys inside data scrubbed, row kept;
+ *  - submissions they sent: their words and name inside data scrubbed, row kept;
  *  - their notifications deleted; notifications they acted in de-attributed
  *    AND text-scrubbed (the title and body restate the person independently
  *    of the actor id — see the statement itself);
@@ -4575,7 +4575,7 @@ async function runRetentionSweep(): Promise<string> {
  *  - org seatings end and lose the name and note they carried (the OTHER
  *    plane called "role", §3.15 — the appointments line above is a different
  *    table and reaches none of this);
- *  - PUBLIC pulse lines naming them are deleted; ADMIN audit rows are kept
+ *  - PUBLIC pulse lines they wrote are deleted, others lose their name; ADMIN audit rows kept
  *    (id-only, retained as the legal record — Law 8968 permits retention
  *    for accountability obligations).
  *
@@ -22380,8 +22380,8 @@ ${inner}
       }
       await addActivity("governance", `${firstName(member.name)} sits in ${who}, by a vote of the whole village.`, {
         actorUserId: actorId,
-        entityType: "role",
-        entityRef: role.id,
+        entityType: "user", // its subject, so an erasure finds it (server/repos/pulseLines.ts); the audit row below names the role
+        entityRef: member.id,
       });
       void recordEvent(getPool(), {
         kind: "audit",
@@ -22474,8 +22474,8 @@ ${inner}
       });
       await addActivity("governance", `${member ? firstName(member.name) : "A member"} no longer sits in ${who}, by a vote of the whole village.`, {
         actorUserId: actorId,
-        entityType: "role",
-        entityRef: asked.roleId,
+        entityType: "user", // its subject, so an erasure finds it (server/repos/pulseLines.ts); the audit row below names the role
+        entityRef: asked.userId,
       });
       void recordEvent(getPool(), {
         kind: "audit",
@@ -25957,7 +25957,7 @@ ${inner}
       return holders.filter((h) => !gone.includes(h));
     });
     if (appointedHolderId) {
-      await addActivity("role", `${firstName(member.name)} joined the ${role.name}`, { actorUserId: appointer, entityType: "role", entityRef: role.id });
+      await addActivity("role", `${firstName(member.name)} joined the ${role.name}`, { actorUserId: appointer, entityType: "user", entityRef: member.id }); // its subject, for the erasure (server/repos/pulseLines.ts)
       await notify({
         userId: member.id,
         type: "role_appointed",

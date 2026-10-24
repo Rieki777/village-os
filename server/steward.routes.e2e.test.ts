@@ -491,6 +491,11 @@ describe.skipIf(!DB_CONFIGURED)("the village gives it a power, and seats somebod
 
     const pulse = await publicPulse();
     expect(pulse.some((t) => t.includes("sits in Game Steward, by a vote of the whole village"))).toBe(true);
+    // The line records who it names, so an erasure finds it by them (server/repos/pulseLines.ts).
+    const [line] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT entity_type, entity_ref FROM health_events WHERE audience = 'public' AND text LIKE '% sits in Game Steward, by a vote of the whole village.' AND text NOT LIKE '% no longer %'",
+    );
+    expect(line.map((r) => ({ ...r }))).toEqual([{ entity_type: "user", entity_ref: solId }]);
   });
 
   it("ACTS IMMEDIATELY on the power it was given, with no further vote and nobody to ask", async () => {
@@ -549,6 +554,11 @@ describe.skipIf(!DB_CONFIGURED)("voted in means voteable out", () => {
     expect(closed.status, JSON.stringify(closed.json)).toBe(200);
     expect(closed.json?.outcome).toBe("passed");
     expect(await seatedIn(ROLE_ID)).toEqual([]);
+    // The pulse line records who it names, as the seating's line does.
+    const [line] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT entity_type, entity_ref FROM health_events WHERE audience = 'public' AND text LIKE '% no longer sits in Game Steward, by a vote of the whole village.'",
+    );
+    expect(line.map((r) => ({ ...r }))).toEqual([{ entity_type: "user", entity_ref: solId }]);
   });
 
   it("and the power goes with the seat, on the very next request", async () => {
