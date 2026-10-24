@@ -157,7 +157,7 @@ export async function cancelSubscription(subscriptionId: string): Promise<Subscr
     const verb = method === "GET" ? "read" : "cancel";
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await fetch(url, { // module-review-ok: the fixed Stripe API host, never an address anybody typed in, called the way createCheckout calls it; guardedFetchJson pins typed-in hosts and has no DELETE
         method,
         headers: { Authorization: `Bearer ${key}` },
         signal: AbortSignal.timeout(20_000),

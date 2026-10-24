@@ -4887,7 +4887,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const lapsedToken = lapsedReg.json.token;
     const lapsedId = String(lapsedReg.json.user.id);
     const lapsedBuy = `pp-lapsed-${Date.now()}`;
-    await testDb.conn.query(
+    await testDb.conn.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO product_purchases (id, product_id, user_id, amount_minor, receipt_no) VALUES (?,?,?,500,9107)",
       [lapsedBuy, lapsedProd.json.id, lapsedId],
     );
@@ -4909,13 +4909,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     // The delete closes the account and stops at the Stripe step, recorded for the retry.
     expect((await api("POST", "/api/profile/delete-account", { password: "LoopTest123!" }, lapsedToken)).status).toBe(500);
-    const [[lapsedErasure]] = await testDb.conn.query<any[]>("SELECT failed_step FROM member_erasures WHERE user_id = ?", [lapsedId]);
+    const [[lapsedErasure]] = await testDb.conn.query<any[]>("SELECT failed_step FROM member_erasures WHERE user_id = ?", [lapsedId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(lapsedErasure.failed_step).toBe("product-subscriptions-after-tombstone");
-    const [[lapsedRow]] = await testDb.conn.query<any[]>("SELECT email FROM users WHERE id = ?", [lapsedId]);
+    const [[lapsedRow]] = await testDb.conn.query<any[]>("SELECT email FROM users WHERE id = ?", [lapsedId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(String(lapsedRow.email)).toMatch(/@anonymized\.invalid$/);
 
     // Month two lands anyway: banked, nothing delivered, every admin told once.
-    const refusedNotices = async () => (await testDb.conn.query<any[]>(
+    const refusedNotices = async () => (await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`product-renewrefused:${lapsedBuy}:%`],
     ))[0];
     expect((await hook({
@@ -4928,7 +4928,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(told.length).toBeGreaterThan(0);
     expect(told.every((n: any) => String(n.title).startsWith("Renewal charged but NOT delivered") && String(n.title).includes("the buyer has left the village"))).toBe(true);
     // No receipt goes into the tombstone's bell.
-    const [lapsedBell] = await testDb.conn.query<any[]>("SELECT dedupe_key FROM notifications WHERE user_id = ?", [lapsedId]);
+    const [lapsedBell] = await testDb.conn.query<any[]>("SELECT dedupe_key FROM notifications WHERE user_id = ?", [lapsedId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(lapsedBell).toEqual([]);
     // The same period delivered again under another event id still pays nothing, and tells nobody twice.
     expect((await hook({
@@ -4939,7 +4939,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect((await refusedNotices()).length).toBe(told.length);
     // A checkout they opened before leaving and paid after is a FIRST period, and pays nothing either.
     const lateBuy = `pp-lapsed-late-${Date.now()}`;
-    await testDb.conn.query(
+    await testDb.conn.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO product_purchases (id, product_id, user_id, amount_minor, receipt_no) VALUES (?,?,?,1000,9108)",
       [lateBuy, pack.json.id, lapsedId],
     );
@@ -4948,7 +4948,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       data: { object: { id: "cs_lapsed_late", payment_intent: "pi_lapsed_late", metadata: { module: "commerce", orderId: lateBuy } } },
     })).status).toBe(200);
     expect(await grantLegs(lateBuy)).toBe(0);
-    const [lateTold] = await testDb.conn.query<any[]>("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`product-renewrefused:${lateBuy}:%`]);
+    const [lateTold] = await testDb.conn.query<any[]>("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`product-renewrefused:${lateBuy}:%`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(lateTold.length).toBeGreaterThan(0);
     expect(lateTold.every((n: any) => String(n.title).startsWith("Purchase charged but NOT delivered") && String(n.title).endsWith("Refund this payment."))).toBe(true);
 
