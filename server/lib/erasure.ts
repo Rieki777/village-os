@@ -204,7 +204,8 @@ export type ErasureDeps = {
   /** Permission holdings, which end here. The org chart is a different plane. */
   roleHoldersRepo: { remove(ids: string[]): Promise<unknown> };
   withRoleHolderLock: <T>(fn: () => Promise<T>) => Promise<T>;
-  loadRoleHolders: () => Array<{ id: string; userId: string }>;
+  /** `roleId` is read by a former member's resolve, to name the roles it ends (round 4). */
+  loadRoleHolders: () => Array<{ id: string; userId: string; roleId?: string }>;
   /**
    * The uploads volume. A portrait's bytes outlive its row, and its address
    * needs no sign-in, so revoking a face means unlinking a file.
@@ -1368,6 +1369,7 @@ export async function anonymizeMember(
   target: any,
   actorId: string | null,
   deps: ErasureDeps,
+  opts: { begun?: boolean } = {},
 ): Promise<ErasureOutcome> {
   // Defensive: every route into here refuses example identities, and if one
   // ever slips through, the scrub would rename the author of every seeded
@@ -1375,9 +1377,24 @@ export async function anonymizeMember(
   // rename is a write and the seed is only re-applied on a refresh.
   if (isExampleUser(target)) return ASKED_NOBODY;
 
-  await beginErasure(pool, target.id, identityOf(target));
+  if (!opts.begun) await beginMemberErasure(pool, target);
   const result = await runSweep(pool, await asTheyWere(pool, target), actorId, deps, new Set());
   return result.external ?? ASKED_NOBODY;
+}
+
+/**
+ * Open the erasure record that `anonymizeMember` sweeps under, on its own.
+ *
+ * For a caller that must open it at one exact moment and sweep after: a
+ * resolve opens it while it holds the exit's row (`resolveExit`,
+ * server/lib/exitResolve.ts, round 4), so a "They're staying" from then on
+ * finds the deletion running and refuses, and one that landed first stops the
+ * resolve before any record exists. That caller then passes `begun`. An
+ * example identity opens nothing, as `anonymizeMember` erases nothing for one.
+ */
+export async function beginMemberErasure(pool: Pool, target: any): Promise<void> {
+  if (isExampleUser(target)) return;
+  await beginErasure(pool, target.id, identityOf(target));
 }
 
 /**

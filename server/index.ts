@@ -14379,11 +14379,11 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
     }
     const out = await resolveExit(getPool(), { exitId: exit.id, target, actorId: adminActor(req)?.id ?? null, agreementRef: req.body?.agreementRef, deps: erasureDeps });
-    // Seats vacate at resolve, whichever way it went; the stewards hear which ones.
-    for (const roleId of roleIds) {
+    // Seats vacate at resolve, whichever way it went, and the stewards hear which; a resolve a cancel stopped vacates none (409).
+    for (const roleId of out.stopped ? [] : roleIds) {
       await notifyAdmins("exit_opened", `An opening in ${roleId} (departure resolved)`, `exit:${exit.id}:vacancy:${roleId}`);
     }
-    res.json({ success: true, outcome: out.outcome, held: out.held, vacatedRoles: roleIds });
+    res.status(out.stopped ? 409 : 200).json(out.stopped ? { error: out.stopped.message, ...out.stopped } : { success: true, outcome: out.outcome, held: out.held, vacatedRoles: roleIds });
   });
 
   /** A person who stays: the exit closes without a tombstone, and so does a deletion it began (cancelExit). */
