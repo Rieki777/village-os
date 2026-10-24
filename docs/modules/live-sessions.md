@@ -171,10 +171,11 @@ every half minute while its tab is visible.
 
 ## What the record holds
 
-Seventeen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other sixteen holds that number. Three
+Nineteen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other eighteen holds that number. Three
 (0255) are the task layer, described under "After the call: tasks", one (0280) is a decision's review
-date, described under "After the call: a circle's decisions and their reviews", two (0264) are the agenda
+date, described under "After the call: a circle's decisions and their reviews", two (0284) are the advice
+process, described under "Before deciding: the advice process", two (0264) are the agenda
 library and one (0279) where its items came from, described under "Before the call: the agenda library",
 one (0271) is a circle's rhythm, described under "When a circle meets: its rhythm", two (0275) are who
 follows which circles on their own calendar, and the last (0277) is which circle keeps which calendar of
@@ -198,6 +199,8 @@ its own, both described under "Circle meetings on a calendar".
 | `live_session_circle_calendars` | One per circle that attached its own calendar: which of the village's external calendar subscriptions it is, and who attached it. |
 | `live_session_library_sources` | One per agenda item that came from a tension or a decision's review: which kind, which one, and the role's or the circle's name as it was then. One item per tension, and per review date. |
 | `live_session_decision_reviews` | One per decision with a review date: the village date, who set it, and the agenda item its review became once it was made. |
+| `live_session_advice_requests` | One per request for advice: the circle asked, who asked, what they mean to decide and why, the decide-by date, and once settled whether it was decided or withdrawn and what was decided. |
+| `live_session_advice_asks` | One per person asked on a request, with their advice once they give it. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
@@ -374,6 +377,31 @@ decision's record is never written to: 0280 keeps the date beside it.
 |---|---|---|
 | `GET /api/sessions/circles/:circleId/decisions` | the circle's members, admins | none |
 | `PUT /api/sessions/circles/:circleId/decisions/:entryId/review` `{ reviewOn }` | the circle's members, admins | 60 an hour |
+
+## Before deciding: the advice process
+
+Anybody may decide, once they have asked the people their decision touches (Rye, 2026-10-22, feature 4 of
+the sessions program). **Asking for advice** on /sessions lets a member name what they mean to decide,
+why, and the date they will decide by (In 3 days, In a week, In two weeks, or a date up to sixty days
+ahead), and ask a circle. Everybody with standing in it is asked, the asker aside: in its last meeting, or
+holding one of its roles now, the audience a circle's meeting reminder reaches (at most sixty people).
+Each person asked gives advice in their own words and can change it until the decision; the advice is
+open to everybody asked, which is the point of the process. Nobody has to follow it. The asker records
+what they decided and how the advice shaped it, or withdraws the request after a confirm.
+
+A request is read by whoever asked and the people asked, and by nobody else: to anybody else it does not
+exist, and every refusal says so in the same words. A member keeps at most ten requests open. The bells
+are bell only: the people asked hear they were asked (`session_advice_asked`), the asker hears the first
+advice from each person (`session_advice_given`), and the people asked hear what was decided
+(`session_advice_decided`). A withdrawal rings nobody.
+
+| Door | Who | Limit |
+|---|---|---|
+| `GET /api/sessions/advice/requests` | any member: the requests they made, and the ones they were asked about | none |
+| `POST /api/sessions/advice/requests` `{ circleId, intent, context, decideBy }` | any member | 60 an hour |
+| `PUT /api/sessions/advice/requests/:id/advice` `{ advice }` | the people asked, while it is open | 60 an hour |
+| `POST /api/sessions/advice/requests/:id/decide` `{ decision }` | whoever asked, while it is open | 60 an hour |
+| `POST /api/sessions/advice/requests/:id/withdraw` | whoever asked, while it is open | 60 an hour |
 
 ## Before the call: the agenda library
 
@@ -715,6 +743,8 @@ circle's, and stays. The circles they followed and their calendar address go, so
 nothing from then on. A circle's own calendar they attached says it was attached by nobody, and stays,
 and so does a decision's review date they set. A decision they wrote went with the rest of their words,
 so its review date goes too, with every "Review:" item made from it, since those carried the words.
+The requests for advice they made go, with every ask and every word of advice on them, since those
+answered their words; and their own advice on anybody else's request goes.
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
@@ -728,4 +758,5 @@ item); a session's id travels only where they may read that session. From a circ
 the circles they follow (`*` for every circle) and since when, `calendarAddress`, when their
 address was made and last read, never its key, and `ownCalendarsAttached`, the circles whose own
 calendar they attached, never its address. From decisions it carries `reviewsSet`, the review dates they
-set last.
+set last. From the advice process it carries `adviceAsked`, the requests they made in their own words,
+and `adviceGiven`, the advice they gave, each with the request's id and nothing else of it.
