@@ -16,9 +16,9 @@ import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, untilALockIsAwaited, type TestDb } from "../db/testDb";
 import { usersRepo } from "../repos/users";
-import { endAgentReach, mintToken, revokeAllTokens, revokeToken, verifyToken, withAgentReachEnded, type AgentReachEnded } from "./agentTokens";
+import { endAgentReach, listTokens, mintToken, revokeAllTokens, revokeToken, verifyToken, withAgentReachEnded, type AgentReachEnded } from "./agentTokens";
 import { enqueueAgentDelivery, getInbox, setInbox } from "./agentInbox";
-import { mintFeedToken, resolveFeedToken } from "./icsFeed";
+import { feedTokenStatus, mintFeedToken, resolveFeedToken } from "./icsFeed";
 import { makeInviteDoor } from "./inviteDoor";
 import { INVITE_REFUSALS } from "./invites";
 import { MEMBER_SECRETS_ENV, memberKeyView, storeMemberKey } from "./memberSecrets";
@@ -196,7 +196,9 @@ async function plantReach(userId: string): Promise<Planted> {
   // would plant nothing and the zeros below would prove nothing.
   await q("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,'x') ON DUPLICATE KEY UPDATE name = VALUES(name)", [userId, `Member ${userId}`, `${userId}@examples.invalid`]);
   const { token } = await mint(userId, `${userId} agent`);
-  const feed = await mintFeedToken(pool, userId);
+  const fed = await mintFeedToken(pool, userId, await versionOf(userId));
+  if (!fed.ok) throw new Error(`the feed address was refused: ${fed.error}`);
+  const feed = fed.raw;
   // A plain row: setInbox resolves the host over DNS, and a database test does not reach the network.
   await q("INSERT INTO agent_inboxes (id, user_id, url, enabled) VALUES (?,?,?,1)", [`inb-${userId}`, userId, "https://attacker.example/hook"]);
   const queued = await enqueueAgentDelivery(pool, userId, { kind: "week_ahead", data: { note: "queued" } });
@@ -403,7 +405,7 @@ describe.skipIf(!configured)("withAgentReachEnded", () => {
  * thief its signing secret, and the key took every prompt the member sent.
  *
  * The write now asks under the member's row lock whether the row is still
- * the session's (`whileSessionHolds`, server/lib/agentTokens.ts).
+ * the session's (`whileSessionHolds`, server/lib/sessionHold.ts).
  */
 describe.skipIf(!configured)("a write already past its session check when the credential changes", () => {
   const SECRETS_ENV = { [MEMBER_SECRETS_ENV]: "ab".repeat(32) } as NodeJS.ProcessEnv;
@@ -587,6 +589,12 @@ describe.skipIf(!configured)("a write already past its session check when the cr
    * and returned, and the link, the address or the delegation was then
    * written for a session that had ended. Each now writes under the same
    * lock (`whileSessionHolds`).
+   *
+   * AND THE TWO MINTS THE END ALWAYS REACHED (adversarial round 4). `POST
+   * /api/agent/tokens` and `POST /api/events/feed/token` stood in the same
+   * window: a `vat_` token reads as the member for up to a year, and a
+   * private calendar feed address never expires. Both mint under the lock
+   * now too.
    */
   const DELEGATE = "usr-race-bea";
   let doorSeq = 0;
@@ -622,6 +630,17 @@ describe.skipIf(!configured)("a write already past its session check when the cr
         const given = await delegationOf(pool, id);
         return !!given && given.revokedAt === null;
       },
+    },
+    "a vat_ agent token": {
+      make: (p, id, version) => mintToken(p, id, { name: "door agent", scopes: ["me.read"] }, version),
+      write: /^INSERT INTO `?agent_tokens\b/,
+      stands: async (id) => (await listTokens(pool, id)).some((t) => t.live),
+    },
+    "a private calendar feed address": {
+      make: (p, id, version) => mintFeedToken(p, id, version),
+      // The mint's first write retires the member's old address, so that is the statement a racing change waits behind.
+      write: /^UPDATE `?calendar_feed_tokens\b/,
+      stands: async (id) => (await feedTokenStatus(pool, id)).hasToken,
     },
   };
 

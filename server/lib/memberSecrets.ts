@@ -28,7 +28,7 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { keyEnvProblem, keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 import { guardOutboundUrl } from "./toolcheck";
-import { whileSessionHolds } from "./agentTokens";
+import { whileSessionHolds } from "./sessionHold";
 import { upsertMemberKeyOn } from "../repos/memberAgent";
 
 export type { Sealed };

@@ -49,7 +49,7 @@ const toRow = (r: RowDataPacket): InviteRow => ({
  * ON THE CALLER'S CONNECTION, and never a pool: `makeInvite`
  * (server/routes/invites.ts) runs it inside the transaction that holds the
  * inviter's row and has just asked whether the session still holds it
- * (`whileSessionHolds`, server/lib/agentTokens.ts). On a pool it would run on
+ * (`whileSessionHolds`, server/lib/sessionHold.ts). On a pool it would run on
  * another connection, outside that lock, and the check would cover nothing.
  */
 export async function createInviteOn(

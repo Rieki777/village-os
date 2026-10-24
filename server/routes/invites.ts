@@ -40,7 +40,7 @@ import {
   mintInviteToken,
   readInviteToken,
 } from "../lib/invites";
-import { whileSessionHolds } from "../lib/agentTokens";
+import { whileSessionHolds } from "../lib/sessionHold";
 import { createInviteOn, invitesBy, openInviteCount, revokeInvite } from "../repos/memberInvites";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability" | "mayAct" | "overLimit" | "clientIp"> & {

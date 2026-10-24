@@ -90,7 +90,7 @@ export async function forgetInboxOf(pool: Pool, userId: string): Promise<{ deliv
  * ON THE CALLER'S CONNECTION, and never a pool: `setInbox`
  * (server/lib/agentInbox.ts) runs this inside the transaction that holds the
  * member's row and has just asked whether the session still holds it
- * (`whileSessionHolds`, server/lib/agentTokens.ts). On a pool these would run
+ * (`whileSessionHolds`, server/lib/sessionHold.ts). On a pool these would run
  * on other connections, outside that lock, and the check would cover nothing.
  */
 export async function replaceInboxOn(

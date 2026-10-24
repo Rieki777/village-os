@@ -21,19 +21,25 @@
  * A changed echo, a missing token, an old token or someone else's token is a
  * 409 and nothing writes.
  */
-import { revokeLiveTokensOf } from "../repos/agentTokens";
+import { insertToken, revokeLiveTokensOf } from "../repos/agentTokens";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { revokeOpenInvitesOf } from "../repos/memberInvites";
-import { lockSessionFieldsForUpdate } from "../repos/users";
 import { removeInbox } from "./agentInbox";
 import { endVoiceGiven, type DelegationNotice } from "./delegation";
 import { recordEvent } from "./events";
 import { revokeFeedTokens } from "./icsFeed";
 import { removeMemberKey } from "./memberSecrets";
 import { insertNotification } from "./notify";
-import { isTombstone } from "./oauthAccounts";
 import { stopAddress } from "./sessionCalendar";
+import { whileSessionHolds } from "./sessionHold";
+
+/*
+ * The session lock and the tombstone test live in server/lib/sessionHold.ts,
+ * which keeps this file's imports out from under the ballots. `holderStands`
+ * is answered from here as well, for the callers that always asked here.
+ */
+export { holderStands } from "./sessionHold";
 
 export const TOKEN_PREFIX = "vat_";
 
@@ -109,80 +115,6 @@ function toRow(r: RowDataPacket): AgentTokenRow {
   };
 }
 
-/**
- * Whether a token's holder can still be acted for. "The row exists" is not the
- * test: an erasure keeps the member row as a tombstone (server/lib/erasure.ts),
- * and the resolver mints a fresh session from whatever row it finds, so without
- * this an erased member's agent read the village as them until the token ran out.
- */
-export function holderStands<T extends { email?: unknown }>(user: T | null | undefined): user is T {
-  return !!user && !isTombstone({ email: String(user.email ?? "") });
-}
-
-/**
- * Why `whileSessionHolds` wrote nothing. `holder_gone`: no member row, or an
- * erasure's tombstone. `session_ended`: the member stands, and the session
- * that asked was signed at a tokenVersion the row no longer has.
- */
-export type SessionHoldRefusal = "holder_gone" | "session_ended";
-
-/**
- * Run `write` on one connection, in a transaction that holds the member's row
- * FOR UPDATE, and only while that row is still the session's: it stands
- * (`holderStands`) and its tokenVersion is `sessionVersion`, the one the
- * request's session was checked at (adversarial round 2, finding 15).
- *
- * WHY UNDER THE LOCK. A request checks its session once, at the start, and the
- * inbox and key writes then wait on a DNS lookup whose length the member's
- * own nameserver sets. A new password, an admin's revoke sessions, signing out
- * and the erasure's tombstone all change this row, and each of those waits
- * for the lock or has committed before it is taken. So either the write lands
- * first, and the end that follows the bump (`withAgentReachEnded`, or the
- * revoke's `endAgentReach`) or the erasure's sweep after the tombstone removes
- * it; or the change landed first, and this refuses before anything is
- * written. A refusal touches nothing, so a session that ended cannot replace
- * what the member set since with the session that replaced it.
- *
- * The same window stood in front of three more writes the end after the
- * bump reaches: an invitation link (`makeInvite`, server/routes/invites.ts),
- * the circle calendar address (`makeAddress`, server/lib/sessionCalendar.ts)
- * and the delegation the member gives (`setDelegation`,
- * server/lib/delegation.ts). Each writes through this too (adversarial
- * round 3).
- *
- * Profile saves ask the same question under the same lock
- * (`sessionGone`, server/routes/profile.ts).
- */
-export async function whileSessionHolds<T>(
-  pool: Pool,
-  userId: string,
-  sessionVersion: number,
-  write: (conn: PoolConnection) => Promise<T>,
-): Promise<{ ok: true; value: T } | { ok: false; refusal: SessionHoldRefusal }> {
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    const row = await lockSessionFieldsForUpdate(conn, userId);
-    const refusal: SessionHoldRefusal | null = !holderStands(row)
-      ? "holder_gone"
-      : row.tokenVersion !== sessionVersion
-        ? "session_ended"
-        : null;
-    if (refusal) {
-      await conn.rollback();
-      return { ok: false, refusal };
-    }
-    const value = await write(conn);
-    await conn.commit();
-    return { ok: true, value };
-  } catch (err) {
-    await conn.rollback().catch(() => undefined);
-    throw err;
-  } finally {
-    conn.release();
-  }
-}
-
 export function isLive(row: AgentTokenRow, now = new Date()): boolean {
   return !row.revokedAt && new Date(row.expiresAt).getTime() > now.getTime();
 }
@@ -197,13 +129,24 @@ export interface MintInput {
 
 export type MintResult =
   | { ok: true; token: string; row: AgentTokenRow }
-  | { ok: false; status: 400 | 429; error: string };
+  | { ok: false; status: 400 | 401 | 429; error: string };
 
 /**
  * Mint. The token value is in the result and nowhere else: not in the row,
  * not in the audit line, not in a log.
+ *
+ * MINTED WHILE THE SESSION HOLDS (adversarial round 4). `sessionVersion` is
+ * the tokenVersion the request's session was checked at, and
+ * `POST /api/agent/tokens` always passes it. A token reads as the member for
+ * up to a year, and a new password and an admin's revoke sessions end every
+ * token on both sides of the bump (`endAgentReach`). With a version the row
+ * is written under the member's row lock, and only while the row still
+ * carries it (`whileSessionHolds`): a change that committed first is refused
+ * with status 401 and no token, and one that comes later waits for the
+ * commit, and the end after the bump revokes the token. Without one it writes
+ * as it always has, for a caller that acts for no session.
  */
-export async function mintToken(pool: Pool, userId: string, input: MintInput): Promise<MintResult> {
+export async function mintToken(pool: Pool, userId: string, input: MintInput, sessionVersion?: number): Promise<MintResult> {
   const name = String(input.name ?? "").trim().slice(0, 80);
   if (!name) return { ok: false, status: 400, error: "Give this token a name so you can tell it apart later" };
   if (!input.scopes.length) return { ok: false, status: 400, error: "Pick at least one scope" };
@@ -228,10 +171,14 @@ export async function mintToken(pool: Pool, userId: string, input: MintInput): P
   const id = `atk-${randomBytes(8).toString("hex")}`;
   const prefix = token.slice(0, TOKEN_PREFIX.length + 6);
   const expiresAt = new Date(Date.now() + ttl * 24 * 60 * 60 * 1000);
-  await pool.query(
-    "INSERT INTO agent_tokens (id, user_id, name, token_hash, prefix, scopes, expires_at) VALUES (?,?,?,?,?,?,?)",
-    [id, userId, name, hashToken(token), prefix, JSON.stringify(input.scopes), expiresAt],
-  );
+  const write = (db: Pool | PoolConnection) =>
+    insertToken(db, { id, userId, name, tokenHash: hashToken(token), prefix, scopes: input.scopes, expiresAt });
+  if (sessionVersion === undefined) {
+    await write(pool);
+  } else {
+    const held = await whileSessionHolds(pool, userId, sessionVersion, write);
+    if (!held.ok) return { ok: false, status: 401, error: "auth_required" };
+  }
   const row = await tokenById(pool, id);
   if (!row) return { ok: false, status: 400, error: "The token did not save" };
   await recordEvent(pool, {
@@ -483,14 +430,15 @@ function addEnded(a: AgentReachEnded, b: AgentReachEnded): AgentReachEnded {
  * an admin by name.
  *
  * A request already past its session check when the bump lands can still
- * reach its write after the second end returns. The inbox, the model key, an
- * invitation link (`makeInvite`), the circle calendar address
- * (`makeAddress`) and the delegation the member gives (`setDelegation`)
- * close that themselves: each writes under the member's row lock only while
- * the session's tokenVersion is still the row's (`whileSessionHolds`), so
- * such a write either lands before the bump, and the second end removes it,
- * or is refused (adversarial round 2, finding 15; round 3). A `vat_` token
- * or a private calendar feed minted in that window is not covered by this.
+ * reach its write after the second end returns. Every write this end reaches
+ * closes that itself: a `vat_` token (`mintToken`), the private calendar feed
+ * (`mintFeedToken`), the inbox, the model key, an invitation link
+ * (`makeInvite`), the circle calendar address (`makeAddress`) and the
+ * delegation the member gives (`setDelegation`). Each writes under the
+ * member's row lock only while the session's tokenVersion is still the row's
+ * (`whileSessionHolds`, server/lib/sessionHold.ts), so such a write either
+ * lands before the bump, and the second end removes it, or is refused with
+ * 401 auth_required (adversarial round 2, finding 15; rounds 3 and 4).
  */
 export async function withAgentReachEnded<T>(
   pool: Pool,

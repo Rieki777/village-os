@@ -31,7 +31,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { guardOutboundUrl } from "./toolcheck";
 import { NO_MEMBER_SECRETS_KEY_SENTENCE, memberSecretsKey } from "./memberSecrets";
 import { recordEvent } from "./events";
-import { holderStands, whileSessionHolds } from "./agentTokens";
+import { holderStands, whileSessionHolds } from "./sessionHold";
 import { usersRepo } from "../repos/users";
 import { enabledInboxUserIds, forgetInboxOf, replaceInboxOn } from "../repos/memberAgent";
 

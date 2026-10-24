@@ -112,7 +112,7 @@ import type { VoteChoice } from "../../shared/governanceEngine";
 import { evaluationRulesFor } from "../../shared/ballotSubjects";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { variable } from "./variables";
-import { whileSessionHolds } from "./agentTokens";
+import { whileSessionHolds } from "./sessionHold";
 
 export interface DelegationRow {
   delegatorId: string;

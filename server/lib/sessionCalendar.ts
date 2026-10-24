@@ -41,7 +41,7 @@ import * as store from "../repos/sessionCalendar";
 import * as rhythms from "../repos/sessionRhythm";
 import * as room from "../repos/liveSessions";
 import { ensureMemberNo, memberNo, type Outcome, type Refusal } from "./liveSessions";
-import { whileSessionHolds } from "./agentTokens";
+import { whileSessionHolds } from "./sessionHold";
 import { mapRhythm } from "./sessionRhythm";
 import { exportOwnCalendarsFor, importedRowsFor, ownCalendars, retireGoneCircleCalendars } from "./circleOwnCalendar";
 import { calendarIdFor, calendarRemoveMissing, calendarUpsert, type CalendarRow, type CalendarUpsertInput } from "./calendar";

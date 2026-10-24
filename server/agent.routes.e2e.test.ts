@@ -706,8 +706,14 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     await expectReachStands(gil.id, gilFeed, "this reset");
 
     // The member keeps their agent: the session the reset hands back mints a fresh token, and it answers.
+    // The mint asks for the tokenVersion this session was signed at, which the reset moved (adversarial round 4).
     const after = await call("POST", "/api/agent/tokens", { name: "eli after", scopes: SCOPES }, String(reset.json.token));
-    expect(after.status).toBe(200);
+    expect(after.status, JSON.stringify(after.json)).toBe(200);
+    // And a private calendar address, made the same way, answers.
+    const feedAfter = await call("POST", "/api/events/feed/token", {}, String(reset.json.token));
+    expect(feedAfter.status, JSON.stringify(feedAfter.json)).toBe(200);
+    const feedAfterUrl = new URL(String(feedAfter.json.url));
+    expect((await call("GET", `${feedAfterUrl.pathname}${feedAfterUrl.search}`, undefined, "")).status, "the address made after the reset does not answer").toBe(200);
     expect((await call("GET", "/api/agent/v1/me", undefined, String(after.json.token))).status).toBe(200);
     // And sets an inbox and a key again. Both writes ask for the tokenVersion
     // this session was signed at, which the reset moved (adversarial round 2, finding 15).

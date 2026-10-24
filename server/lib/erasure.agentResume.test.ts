@@ -407,7 +407,7 @@ describe.skipIf(!configured)("a member's agent written while an erasure is stopp
      * A pool that calls `hook` on each statement before passing it to this
      * suite's pool, including statements on a connection it hands out: the
      * inbox and key writes run inside a transaction that holds the member's
-     * row (`whileSessionHolds`, server/lib/agentTokens.ts).
+     * row (`whileSessionHolds`, server/lib/sessionHold.ts).
      */
     function hooked(hook: (sql: string) => Promise<void>): mysql.Pool {
       return {

@@ -46,7 +46,7 @@ export async function keyRow(q: Queryable, no: number): Promise<RowDataPacket[]>
  * A new key for a member, taking the place of the old. ON THE CALLER'S
  * CONNECTION, and never a pool: `makeAddress` (server/lib/sessionCalendar.ts)
  * runs it under the member's row lock, while the session still holds it
- * (`whileSessionHolds`, server/lib/agentTokens.ts).
+ * (`whileSessionHolds`, server/lib/sessionHold.ts).
  */
 export async function putKey(conn: PoolConnection, no: number, keyHash: string, now: Date): Promise<void> {
   await conn.query(

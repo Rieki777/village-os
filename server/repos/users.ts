@@ -436,7 +436,7 @@ export async function heldByAnotherAccount(
  * tombstone, and the tokenVersion every session is signed at. Null when there
  * is no such member.
  *
- * Its caller is `whileSessionHolds` (server/lib/agentTokens.ts). A locking
+ * Its caller is `whileSessionHolds` (server/lib/sessionHold.ts). A locking
  * read returns the newest committed row, so a tokenVersion bump that
  * committed first is seen here, and one that comes later waits for the
  * caller's transaction to end.
