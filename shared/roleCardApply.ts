@@ -110,6 +110,16 @@ const inCardOrder = (fields: Iterable<string>): string[] => {
   return Array.from(new Set(fields)).sort((a, b) => rank(a) - rank(b));
 };
 
+/**
+ * The role words a card carries. A draft holds more than a card writes (the
+ * runbook, why it matters, cash pay), and a card that never wrote a field has
+ * said nothing about it. Comparing only the carried words is what keeps a
+ * brought-in card from listing those fields as removed, so "accept all" can
+ * never wipe them.
+ */
+const CARRIED = new Set<string>(ROLE_CARD_WORD_FIELDS);
+const carried = (fields: Iterable<string>): string[] => inCardOrder(fields).filter((f) => CARRIED.has(f));
+
 const wordChanges = (group: RoleGroup, i: number, words: RoleWords): Array<{ path: string; label: string; value: string }> =>
   inCardOrder(Object.keys(words))
     .filter((f) => shown(words[f]) !== null)
@@ -130,7 +140,7 @@ export function changesOf(body: RoleCardBody, current: ProposalBody, names: (rol
       out.push({ path: fieldPath.role("roles", i), kind: "role", roleTitle, label: roleTitle, value: null, words: wordChanges("roles", i, r.words) });
       return;
     }
-    for (const f of inCardOrder([...Object.keys(r.words), ...Object.keys(draft.words)])) {
+    for (const f of carried([...Object.keys(r.words), ...Object.keys(draft.words)])) {
       if (same(r.words[f], draft.words[f])) continue;
       out.push({ path: fieldPath.word("roles", i, f as RoleCardWordField), kind: "word", roleTitle, label: headingFor(f), value: has(r.words, f) ? shown(r.words[f]) : null });
     }
@@ -142,7 +152,7 @@ export function changesOf(body: RoleCardBody, current: ProposalBody, names: (rol
       out.push({ path: fieldPath.role("newRoles", i), kind: "role", roleTitle, label: roleTitle, value: null, words: wordChanges("newRoles", i, r.words) });
       return;
     }
-    for (const f of inCardOrder([...Object.keys(r.words), ...Object.keys(draft.words)])) {
+    for (const f of carried([...Object.keys(r.words), ...Object.keys(draft.words)])) {
       if (same(r.words[f], draft.words[f])) continue;
       out.push({ path: fieldPath.word("newRoles", i, f as RoleCardWordField), kind: "word", roleTitle, label: headingFor(f), value: has(r.words, f) ? shown(r.words[f]) : null });
     }
@@ -200,7 +210,7 @@ export function acceptOnly(body: RoleCardBody, accepted: ReadonlySet<string>, cu
   const out: AcceptedBody = {};
   const keepWords = (group: RoleGroup, i: number, card: RoleWords, draft: RoleWords): RoleWords => {
     const words: RoleWords = { ...draft };
-    for (const f of Array.from(new Set([...Object.keys(card), ...Object.keys(draft)]))) {
+    for (const f of carried([...Object.keys(card), ...Object.keys(draft)])) {
       if (!accepted.has(fieldPath.word(group, i, f as RoleCardWordField))) continue;
       if (has(card, f)) words[f] = card[f];
       else delete words[f];

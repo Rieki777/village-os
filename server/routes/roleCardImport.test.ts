@@ -58,7 +58,7 @@ describe("every role card door turns away a visitor and a guest", () => {
   });
 
   it("reads with the word fields the shared format's tests read with", () => {
-    expect(ROLE_WORD_FIELDS.fields).toEqual(["name", "aim", "domain", "accountabilities", "whyItMatters", "bringMe", "notMine", "runbook", "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment"]);
+    expect(ROLE_WORD_FIELDS.fields).toEqual(["name", "aim", "domain", "accountabilities", "whyItMatters", "cashMinor", "cashCurrency", "bringMe", "notMine", "runbook", "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment"]);
     expect(Array.from(ROLE_WORD_FIELDS.lists).sort()).toEqual(["accountabilities", "authorities", "bringMe", "notMine", "responsibilities"]);
   });
 });
