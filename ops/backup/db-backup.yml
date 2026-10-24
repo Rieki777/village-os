@@ -789,7 +789,7 @@ jobs:
               ...lines,
               ``,
               `**What to do**`,
-              `Open [docs/RUNBOOK.md](https://github.com/Rieki777/village-os/blob/main/docs/RUNBOOK.md) in Village OS and read "The backup is red". It says what each failure above means, which of them are urgent, and what to do about each. A first-time failure here is usually two repository secrets that were never set, and the run log names them.`,
+              `Open [docs/RUNBOOK.md](https://github.com/ReGen-Civics/village-os/blob/main/docs/RUNBOOK.md) in Village OS and read "The backup is red". It says what each failure above means, which of them are urgent, and what to do about each. A first-time failure here is usually two repository secrets that were never set, and the run log names them.`,
               ``,
               `This issue closes itself on the next fully green run. While it is open, the problem is live.`,
             ].join("\n");

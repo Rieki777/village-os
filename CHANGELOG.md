@@ -38,6 +38,177 @@ made at the time.
 
 ---
 
+## 1.3.0 (not yet tagged)
+
+**Village OS moved to the ReGen Civics organisation, and two new modules
+arrived.** The code is now at github.com/ReGen-Civics/village-os, and the
+image is published as `ghcr.io/regen-civics/village-os`. Links to the old
+repository address redirect. **1.2.0 and every older release stay at the old
+image address, `ghcr.io/rieki777/village-os`**, unchanged and still pullable.
+
+59 pull requests landed on `main` since 1.2.0, and together they make 12
+database changes. This release was drafted as 1.2.1 and never published under
+that number.
+
+### What changed for your village
+
+**Two new modules, both off until you turn them on**
+
+- **Live Sessions.** A circle holds a working call together: an arrival round,
+  an agenda the circle consents to, a page and a clock for each item, and every
+  action held by a person or a seat. After the call each action carries on in
+  a task board, with task emails. Arrival words are erased when the session
+  closes.
+- **Village Comms.** The village's email in one place: reminders for the
+  gatherings people said yes to, a few emails along the path a person chose,
+  guest RSVPs, a live vote on a session time, and letters to the people who
+  agreed to get them. It needs a Resend account and a verified sending domain,
+  and Admin, Comms, Settings walks through both.
+
+**Every village's email**, whether or not Village Comms is on: each email is
+recorded before it goes, carries a one-click stop and a preferences page, and
+an address that bounces or complains stops being written to.
+
+**Seats and seasons**
+
+- A seat can say what it offers whoever holds it: how long it runs, its
+  rhythm, what it records as pay, and its quests. Members can read it.
+- A member can apply for one to five seats on terms, as one proposal. Whoever
+  holds the seat power approves it, or the village votes. **Waiting on you**
+  on the task board shows what needs an answer.
+- **Your season:** each member says which seats they keep, hand back or apply
+  for, and what they commit to.
+- **Align:** a member aligns with a seat's terms in one click, the Aligned
+  register shows what is in force, and aligned terms can change and end.
+  Signing the Love Letter aligns a member with the words they read.
+
+**The village's structure**
+
+- A batch of structure changes, from a person or an outside service, is
+  reviewed on the map, its duplicates settled, and accepted as one draft.
+- Whoever holds the new decide power publishes that draft, or puts it to the
+  village as a vote.
+- People can be carried across to a new chart, and the empty old circles
+  retired.
+
+**Finding your way**
+
+- The words on every page were rewritten so the village guides a member
+  through it like a game, and **the Trail** shows a member their next step on
+  every page.
+- A **Start here** card on the profile shows the one next step to membership,
+  a quest or a seat. **My tasks** is in the menus, a notice opens its task,
+  and It's done works from the bell.
+- **Role cards:** each seat has a card on `/roles`, `/circles`, the setup
+  wizard and `/review`, and `/roles?seat=<id>` opens one seat's card.
+- The menus are regrouped under Village and Decide, and the Module Library is
+  on the bar.
+- Joining: the Love Letter's thank-you says what happens next, a signed-in
+  request to join names its account, and a yes to a request stops the "still
+  with us" emails.
+
+**The Journal**, for villages that turned it on: an entry is shared with the
+village's organisational memory, under code-names, unless its author keeps it
+private. **Nothing leaves the village in this release.** The connection is not
+built yet, so the village only records what would cross. An entry written
+under 1.2.0 keeps its setting, and one its author marked `internal` or `clear`
+then now counts as shared. The Journal has a door on the member's profile.
+
+**The Living Map:** a second round of QA fixes (79 of the 80 confirmed
+defects), the village's own circles and seats drawn live, crown bar chips the
+founders choose, a blank slate for a village with no published map that its
+founder's agent can draft from the masterplan, and a treasury chip for
+members.
+
+**Saberra villages** get a setup panel, Sync now, seats placed in their
+circles, and a polling schedule with a report of each run.
+
+**Security and setup**
+
+- The web server framework (express) moved to 5.3.0, which fixes a critical
+  advisory in how it reads proxy addresses (GHSA-jqcg-44mw-7w3h).
+- The public rules feed listed the blockchain RPC address together with its
+  key. It now withholds the key.
+- The page a member returns to after signing in passes one strict rule
+  everywhere, so a crafted link cannot send them outside the village.
+- A malformed `VILLAGE_SECRETS_KEY` is named, with what is wrong with it,
+  before anything else.
+- The setup prompt has your AI assistant find the latest release once and use
+  that version for the guides, the download and the image.
+- Dependency updates, including the test runner and the animation library,
+  with no change a member sees.
+
+### What you must do
+
+- **Pull from the new address.** On one computer with `docker-compose.yml`,
+  set `VILLAGE_OS_IMAGE` in `.env` to `ghcr.io/regen-civics/village-os:1.3.0`,
+  then `docker compose pull && docker compose up -d`. On a hosting provider,
+  change the image to `ghcr.io/regen-civics/village-os:1.3.0` and redeploy.
+  Going back to 1.2.0 means naming the old address (`docs/UPGRADING.md`).
+- **If your village set a blockchain RPC key,** rotate it. Earlier releases
+  published it.
+- **If your village runs the Journal and Saberra together,** tell members that
+  a new entry is shared under a code-name unless they keep it private.
+- **If you forked the repository,** point your `upstream` remote at
+  `https://github.com/ReGen-Civics/village-os.git`. A fork that builds with its
+  own Dockerfile or deploy script ships `server/assets/` beside `dist/`, as the
+  stock `Dockerfile` does, or the stock character art falls back to sigils.
+- Nothing else. The two new modules stay off until you turn them on, and
+  Village Comms asks for its settings when you do. `RESEND_WEBHOOK_SECRET` is
+  new and optional; Comms Settings can create the webhook and store it for you.
+
+### Does it touch your data
+
+**Yes. 12 database changes**, applied by the village itself as 1.3.0 starts,
+before it answers anyone. Every one adds tables, columns or an enum value.
+None rewrites a value you already have, so going back to 1.2.0 leaves them in
+place and 1.2.0 ignores them.
+
+| File in `drizzle/` | What it adds | Undone by going back? |
+|---|---|---|
+| `0238_a_circle_holds_a_live_session.sql` | Six tables for Live Sessions | No; 1.2.0 ignores them |
+| `0243_a_draft_can_retire_a_circle.sql` | `rest_circle`, a new kind of structure change, in `org_draft_changes`.`op` | No; 1.2.0 never writes it |
+| `0244_every_email_is_recorded_before_it_is_sent.sql` | Nine tables: every email sent, the address book and its permissions, the stop list, delivery reports, editable words and journeys | No; 1.2.0 ignores them |
+| `0245_a_gathering_asks_when_and_remembers_who_came.sql` | Eight tables for gatherings: guest requests, attendance, recaps, feedback and time votes | No; 1.2.0 ignores them |
+| `0246_a_path_remembers_who_walks_it.sql` | Three tables: who walks a path, and letters with their recipients | No; 1.2.0 ignores them |
+| `0255_a_task_keeps_going_after_the_call.sql` | Three tables for the task board, filled from closed sessions (none, on a village coming from 1.2.0) | No; 1.2.0 ignores them |
+| `0256_a_seat_offers_its_terms.sql` | Three empty columns on `org_roles` for the terms a seat offers | No; 1.2.0 ignores them |
+| `0257_a_member_applies_for_seats_on_terms.sql` | A table of seat applications, and an empty column with an index on `org_role_assignments` | No; 1.2.0 ignores them |
+| `0258_a_member_plans_their_season.sql` | A table of season plans | No; 1.2.0 ignores it |
+| `0259_a_member_aligns_with_seat_terms.sql` | Four tables: the words members align with, who must align, each alignment, and its seal | No; 1.2.0 ignores them |
+| `0260_aligned_terms_can_end.sql` | A table of how aligned terms end | No; 1.2.0 ignores it |
+| `0261_a_journal_crosses_under_a_code_name.sql` | Two tables: members' code-names, and the outbox of what would cross to organisational memory | No; 1.2.0 ignores them |
+
+**What the village keeps from now on:** every email it sends is recorded, with
+its words, for 18 months by default (`comms.retention_months`). A password
+link's words are never stored, and erasing a member clears theirs at once.
+
+The release workflow runs `node scripts/check-migration-compat.mjs --base
+v1.2.0` against a populated 1.2.0 database before the image is published.
+Take the backup in `docs/UPGRADING.md` anyway.
+
+### For operators
+
+- **The image moved.** `release.yml` publishes to
+  `ghcr.io/regen-civics/village-os` from 1.3.0 on, so it can only run from the
+  transferred repository. The first publish creates the package under the
+  organisation; check it is public with the `curl` in `ops/RELEASES.md`.
+- **The pinned `VILLAGE_OS_RELEASE` changes with the version.** The
+  regencivics.earth card moves `VILLAGE_OS_RELEASE` from `"1.2.0"` to
+  `"1.3.0"` and `VILLAGE_OS_RELEASE_COMMIT` to the commit `v1.3.0` points at;
+  the release job prints both (`docs/RELEASING.md`, step 8). For this release
+  only, the card's `VILLAGE_OS_REPO_URL` and its setup prompt's raw address
+  also change owner, from `Rieki777` to `ReGen-Civics`. Anyone else who pins
+  `VILLAGE_OS_RELEASE` moves it the same way, because that number picks the
+  starter kit, the guide and the prompt.
+- `release.yml` refuses a tag whose `docker-compose.yml` starts a different
+  image, because the starter kit carries that file.
+  `scripts/setup-prompt-contract.test.mjs` holds the setup prompt's single
+  `---` line, which the card's copy button depends on.
+- The fleet ledger's home is `ReGen-Civics/village-os-ops`.
+
+---
+
 ## 1.2.0 (2026-10-03)
 
 **The release that makes a village yours to run.** Village OS is now public,

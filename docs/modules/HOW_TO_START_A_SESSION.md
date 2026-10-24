@@ -11,12 +11,12 @@ sessions use, so it is the path that gets exercised daily.
 
 ## 1. Fork the repository
 
-Fork `Rieki777/village-os` on GitHub, then clone your fork.
+Fork `ReGen-Civics/village-os` on GitHub, then clone your fork.
 
 ```
 git clone https://github.com/<your-username>/village-os.git
 cd village-os
-git remote add upstream https://github.com/Rieki777/village-os.git
+git remote add upstream https://github.com/ReGen-Civics/village-os.git
 ```
 
 The `upstream` remote matters later: modules ship by pull request to upstream and by no other route, so
