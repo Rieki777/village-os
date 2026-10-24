@@ -808,7 +808,7 @@ import {
   createCheckout,
   handleStripeEvent,
   isSuspended, buyerHasLeft, BUYER_HAS_LEFT,
-  recordFiatCharge,
+  recordFiatCharge, refusedChargeAdvice,
   registerPaymentHandlers,
   stripeConfigured,
   webhookSecretConfigured,
@@ -5934,7 +5934,7 @@ async function startServer() {
       if (firstTimeForThisPeriod) await notifyAdmins(
         "payment",
         `${isRenewal ? "Renewal" : "Purchase"} charged but NOT delivered: ${row.product_name} (${purchaseId}, ${periodKey}), ${refusal}. ` +
-          `${!(subId ?? row.stripe_subscription_id) ? "Refund this payment." : refusal === BUYER_HAS_LEFT ? "Their erasure cancels the subscription in Stripe; check it did, and refund this period there." : "Cancel the subscription in Stripe and refund this period."}`,
+          refusedChargeAdvice(Boolean(subId ?? row.stripe_subscription_id), refusal),
         `product-renewrefused:${purchaseId}:${periodKey}`,
       );
     } else if (row.token_slug && row.token_amount && row.user_id) {

@@ -4955,6 +4955,11 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const told = await refusedNotices();
     expect(told.length).toBeGreaterThan(0);
     expect(told.every((n: any) => String(n.title).startsWith("Renewal charged but NOT delivered") && String(n.title).includes("the buyer has left the village"))).toBe(true);
+    // No Stripe key here, so the erasure handed the cancel to the admins, and
+    // the alarm must say the admins cancel it, never that the erasure did.
+    expect(told.map((n: any) => String(n.title).split("the buyer has left the village. ")[1])).toEqual(told.map(() =>
+      "Stripe is not connected: cancel the subscription in the Stripe dashboard and refund this period.",
+    ));
     // No receipt goes into the tombstone's bell.
     const [lapsedBell] = await testDb.conn.query<any[]>("SELECT dedupe_key FROM notifications WHERE user_id = ?", [lapsedId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(lapsedBell).toEqual([]);

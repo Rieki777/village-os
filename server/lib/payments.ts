@@ -552,6 +552,38 @@ export function buyerHasLeft(member: { email?: unknown } | null | undefined): bo
   return !member || isTombstone({ email: String(member.email ?? "") });
 }
 
+/**
+ * The last sentence of the admins' "charged but NOT delivered" alarm in
+ * `settleProductPurchase` (server/index.ts): what to do about a charge the
+ * village banked and refused to deliver.
+ *
+ * FOR A BUYER WHO HAS LEFT, IT SAYS WHO CANCELS THE SUBSCRIPTION, and that
+ * depends on the Stripe key, because the erasure's
+ * `product-subscriptions-after-tombstone` step (server/lib/erasure.ts) asks
+ * the same question. With the key the erasure cancels it in Stripe, so the
+ * admins check it did. With no key the erasure cannot, and hands the cancel to
+ * the admins by hand; the alarm used to say the erasure cancels it there too,
+ * which in that village was never true. The no-key sentence claims nothing
+ * about what the erasure did, so it also holds for a subscription whose first
+ * period landed after the erasure ran. With the key, such a late subscription
+ * is one the erasure never saw, and "check it did" is what finds it.
+ *
+ * SHORT ON PURPOSE. The whole alarm is the notice's title, and
+ * `insertNotification` cuts a title at 255 characters. With Stripe's real ids
+ * the words before this sentence run to about 128 characters plus the product
+ * name, so each sentence here stays under 100 to survive a product name of 30.
+ * A longer no-key sentence was cut mid-word in every village.
+ *
+ * The key is read only on that branch: every other refusal reads as it always
+ * did, key or no key.
+ */
+export function refusedChargeAdvice(hasSubscription: boolean, refusal: string): string {
+  if (!hasSubscription) return "Refund this payment.";
+  if (refusal !== BUYER_HAS_LEFT) return "Cancel the subscription in Stripe and refund this period.";
+  if (stripeConfigured()) return "Their erasure cancels the subscription in Stripe; check it did, and refund this period there.";
+  return "Stripe is not connected: cancel the subscription in the Stripe dashboard and refund this period.";
+}
+
 export async function isSuspended(pool: Pool, userId: string): Promise<boolean> {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT 1 FROM payment_suspensions WHERE user_id = ? AND lifted_at IS NULL LIMIT 1",

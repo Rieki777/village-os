@@ -47,6 +47,7 @@ import { erasureRecord } from "../repos/memberErasure";
 import { blockingStates, exitOpenState } from "./exit";
 import { register as registerProfileRoutes } from "../routes/profile";
 import { loadSecrets } from "./secrets";
+import { BUYER_HAS_LEFT, refusedChargeAdvice } from "./payments";
 
 const configured = testDbConfigured();
 const STEP = "product-subscriptions-after-tombstone";
@@ -84,6 +85,22 @@ const byHandBody = (ids: string[]) =>
   `Subscription ids to find in the Stripe dashboard: ${ids.join(", ")}. ` +
   "Cancel each one still active, and refund any period charged after the account was deleted.";
 const byHandKey = (userId: string) => `erasure-subscriptions-by-hand:${userId}`;
+
+/**
+ * The last sentence of the admins' "charged but NOT delivered" alarm for a
+ * buyer who has left, word for word, one for each thing the erasure does with
+ * the subscription: cancel it in Stripe, or hand it to the admins.
+ */
+const ERASURE_CANCELS_ADVICE = "Their erasure cancels the subscription in Stripe; check it did, and refund this period there.";
+const BY_HAND_ADVICE = "Stripe is not connected: cancel the subscription in the Stripe dashboard and refund this period.";
+
+/**
+ * The alarm as `settleProductPurchase` composes it, for a renewal refused
+ * because the buyer has left, with ids the length Stripe and the village
+ * really mint: a `pp-<ms>-<6>` purchase and an `inv_in_...` period.
+ */
+const refusedAlarm = (productName: string, advice: string) =>
+  `Renewal charged but NOT delivered: ${productName} (pp-1761300000000-abc123, inv_in_1PQrStUvWxYz0123456789ab), ${BUYER_HAS_LEFT}. ` + advice;
 
 /** Every by-hand alarm about one leaver, on anybody's bell. */
 const byHandBell = (userId: string) =>
@@ -327,6 +344,49 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       })));
       expect(await byHandBell(wren.id), "the host's spine wrote it, so the sweep wrote no bell row of its own").toEqual([]);
       expect((await erasureRecord(pool, wren.id))?.finishedAt).not.toBeNull();
+    });
+
+    it("tells the admins of a charge after the delete what the erasure did with the subscription, with the key and without", async () => {
+      // No key: the erasure hands the cancel to the admins, and the
+      // subscription is still live in Stripe, so a renewal can land. The alarm
+      // for that renewal used to say the erasure cancels it in Stripe.
+      delete process.env.STRIPE_SECRET_KEY;
+      const wren = await member("subs-alarm-nokey", "Wren Alarmed");
+      await purchase("pp-al1", wren.id, "prod-month", { status: "paid", sub: "sub_alarm_nokey", at: "2026-04-02 10:00:00" });
+      const s = useStripe({ sub_alarm_nokey: "active" });
+      await anonymizeMember(pool, wren, "admin-1", deps());
+      expect(await byHandAudit(wren.id), "the erasure handed this one to the admins").toEqual([
+        { text: "member:subscriptions-cancel-by-hand:1:sub_alarm_nokey", audience: "admin" },
+      ]);
+      expect(s.subs.sub_alarm_nokey, "nothing cancelled it, so a renewal can still land").toBe("active");
+      expect(refusedChargeAdvice(true, BUYER_HAS_LEFT)).toBe(BY_HAND_ADVICE);
+
+      // The key: the erasure cancels it in Stripe, and the alarm says so.
+      process.env.STRIPE_SECRET_KEY = KEY;
+      const ash = await member("subs-alarm-key", "Ash Alarmed");
+      await purchase("pp-al2", ash.id, "prod-month", { status: "paid", sub: "sub_alarm_key", at: "2026-04-03 10:00:00" });
+      const k = useStripe({ sub_alarm_key: "active" });
+      await anonymizeMember(pool, ash, "admin-1", deps());
+      expect(k.deletes()).toEqual(["sub_alarm_key"]);
+      expect(refusedChargeAdvice(true, BUYER_HAS_LEFT)).toBe(ERASURE_CANCELS_ADVICE);
+
+      // Every other refusal reads as it always did, key or no key.
+      for (const key of [KEY, undefined]) {
+        if (key) process.env.STRIPE_SECRET_KEY = key;
+        else delete process.env.STRIPE_SECRET_KEY;
+        expect(refusedChargeAdvice(false, BUYER_HAS_LEFT)).toBe("Refund this payment.");
+        expect(refusedChargeAdvice(false, "the product is no longer active")).toBe("Refund this payment.");
+        expect(refusedChargeAdvice(true, "the product is no longer active")).toBe("Cancel the subscription in Stripe and refund this period.");
+        expect(refusedChargeAdvice(true, "the buyer's purchasing is suspended")).toBe("Cancel the subscription in Stripe and refund this period.");
+      }
+
+      // The whole alarm is the notice title, which the bell cuts at 255
+      // characters, so the advice must survive a product name of 30 either way.
+      const name = "Garden share and monthly meals";
+      expect(name.length).toBe(30);
+      for (const advice of [ERASURE_CANCELS_ADVICE, BY_HAND_ADVICE]) {
+        expect(refusedAlarm(name, advice).length, advice).toBeLessThanOrEqual(255);
+      }
     });
 
     it("stops loudly when Stripe fails with the key present, rings nobody, and the retry cancels it", async () => {
