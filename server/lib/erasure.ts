@@ -1373,9 +1373,20 @@ export async function anonymizeMember(
  * server/lib/exit.ts). A cancel made before it did left the record armed, and
  * without this the next Finish them, pressed for somebody else, restarted it
  * from the top and closed the account of a member who stayed. Only the restart
- * asks: past the tombstone the account is closed and the sweep finishes as
- * before. An erasure asked for again after the cancel moves the record's last
- * attempt past it, so it runs (`stayedSinceLastAttempt`).
+ * asks, and only for an account that still works: past the tombstone the
+ * account is closed and the sweep finishes as before. An erasure asked for
+ * again after the cancel moves the record's last attempt past it, so it runs
+ * (`stayedSinceLastAttempt`).
+ *
+ * "PAST THE TOMBSTONE" IS READ OFF THE ACCOUNT, NOT THE RECORD (round 3,
+ * finding 17). A record can lack "tombstone" over an account that is one: the
+ * write committed and its note was lost (`noteStepDone` sits outside the
+ * step's try, and a deploy's SIGTERM can land between them), or a second
+ * resolve over the closed account emptied the steps and stopped early. The old
+ * cancel route flipped such an exit with no look at the account, and this
+ * then ended the record of somebody who could no longer sign in, with every
+ * step after the tombstone unrun. `cancelExit` refuses a closed account for
+ * the same reason (server/lib/exit.ts).
  *
  * The record goes the way the cancel would have taken it (`abandonErasure`);
  * one that may still be running is left alone and still not run.
@@ -1422,7 +1433,9 @@ async function endForAMemberWhoStayed(pool: Pool, userId: string): Promise<Sweep
  * write any more, and the record's steps are skipped as they always were.
  *
  * A RESTART NEVER RUNS FOR A MEMBER WHO STAYED: a departure cancelled after
- * the sweep stopped ends the record instead (`endForAMemberWhoStayed`).
+ * the sweep stopped ends the record instead (`endForAMemberWhoStayed`). A
+ * closed account cannot have stayed, whatever its record's steps say, so its
+ * restart runs to the end.
  */
 export async function resumeErasure(
   pool: Pool,
@@ -1444,7 +1457,8 @@ export async function resumeErasure(
 
   const done = new Set(record?.stepsDone ?? []);
   const restart = !done.has("tombstone");
-  if (restart && (await stayedSinceLastAttempt(pool, userId))) return endForAMemberWhoStayed(pool, userId);
+  const closed = isTombstone({ email: String(target.email ?? "") });
+  if (restart && !closed && (await stayedSinceLastAttempt(pool, userId))) return endForAMemberWhoStayed(pool, userId);
   await noteResumeAttempt(pool, userId, { restart, identity: identityOf(target) });
   // The actor is the village rather than a person: a resume is the queue
   // finishing an obligation, and attributing it to whoever pressed the button

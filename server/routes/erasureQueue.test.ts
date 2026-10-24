@@ -264,6 +264,71 @@ describe.skipIf(!configured)("the erasure queue", () => {
       expect((await erasureRecord(pool, id))!.finishedAt).toBeTruthy();
     });
 
+    /*
+     * A CLOSED ACCOUNT CANNOT HAVE STAYED (round 3, finding 17). The resume
+     * used to decide "they stayed" from the record's steps alone, and two
+     * states from before this release give a record without "tombstone" over
+     * an account that is one: a tombstone write that committed with its note
+     * lost (`noteStepDone` runs outside the step's try, and a deploy's SIGTERM
+     * can land between them), and a second resolve over a closed account,
+     * which empties the steps and can then stop early. The old cancel route
+     * flipped either exit with no look at the account, and the next Finish
+     * them deleted the record and told the steward the member stayed, while
+     * every step after the tombstone never ran.
+     */
+    async function closeByHand(id: string): Promise<void> {
+      await usersRepo(pool).update(
+        id,
+        (u: any) => {
+          u.name = "A departed member";
+          u.email = `deleted-${id}@anonymized.invalid`;
+          u.handle = null;
+          u.passwordHash = "";
+          u.tokenVersion = (u.tokenVersion ?? 0) + 1;
+        },
+        { erasure: true },
+      );
+    }
+
+    async function expectSweptToTheEnd(id: string, body: any): Promise<void> {
+      expect(body.stayed, "Finish them counted a closed account as a member who stayed").toBe(0);
+      expect(body.swept).toBe(1);
+      expect(body.stillStuck).toBe(0);
+      const record = await erasureRecord(pool, id);
+      expect(record, "Finish them ended the record of an account that is already closed").not.toBeNull();
+      expect(record!.finishedAt).toBeTruthy();
+      // The steps the abandoned record never ran: the ones after the close.
+      expect(record!.stepsDone).toEqual(expect.arrayContaining(["tombstone", "member-agent-after-tombstone", "external-stores"]));
+      expect((await usersRepo(pool).byId(id))!.email).toBe(`deleted-${id}@anonymized.invalid`);
+    }
+
+    it("finishes the sweep of a closed account whose tombstone note was lost, though its exit was cancelled the old way", async () => {
+      const { id, exitId } = await resolveStopped();
+      await closeByHand(id);
+      expect((await erasureRecord(pool, id))!.stepsDone, "the note must be missing, or this is a different case").not.toContain("tombstone");
+      await pool.query("UPDATE `exits` SET `status` = 'cancelled', `resolved_at` = CURRENT_TIMESTAMP WHERE `id` = ?", [exitId]); // module-review-ok: reproducing the old cancel's single write on the scratch schema
+
+      breakRoleHolders = false;
+      const { body } = await retry();
+      await expectSweptToTheEnd(id, body);
+    });
+
+    it("finishes the sweep of a closed account resolved a second time, though its exit was cancelled the old way", async () => {
+      const { id, exitId } = await resolveStopped();
+      // The first resolve got past the close and stopped later on.
+      await closeByHand(id);
+      await noteStepDone(pool, id, "tombstone");
+      await noteErasureFailed(pool, id, "audit", "refused");
+      // The admin resolves again: a fresh sweep empties the steps and stops early.
+      await expect(anonymizeMember(pool, await usersRepo(pool).byId(id), null, deps())).rejects.toThrow(/role holder write was refused/);
+      expect((await erasureRecord(pool, id))!.stepsDone).not.toContain("tombstone");
+      await pool.query("UPDATE `exits` SET `status` = 'cancelled', `resolved_at` = CURRENT_TIMESTAMP WHERE `id` = ?", [exitId]); // module-review-ok: reproducing the old cancel's single write on the scratch schema
+
+      breakRoleHolders = false;
+      const { body } = await retry();
+      await expectSweptToTheEnd(id, body);
+    });
+
     it("refuses to cancel once the account is closed, and leaves the record for the queue", async () => {
       const { id, exitId } = await resolveStopped();
       breakRoleHolders = false;
