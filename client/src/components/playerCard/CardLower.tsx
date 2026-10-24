@@ -1,39 +1,77 @@
 /**
- * The card's lower half: the moon timeline, how I hold my roles, my
- * applications, and my agreements in a small closed <details> at the bottom,
- * pay small and last. Agreements are never edited here; they change through a
- * new role application, and the owner is told so in edit mode.
+ * The card's lower half, as the approved design draws it: the moon cycle (the
+ * track with its new and full moons, any invoice the terms set and today, then
+ * one card per moon), how I hold my roles, my applications in three columns
+ * (past seasons, this season, next season), and the agreements in a small
+ * closed <details> at the bottom, pay small and last. Agreements are never
+ * edited here; they change through a new role application, and the owner is
+ * told so in edit mode.
  */
 import { useContext } from "react";
 import { Link } from "wouter";
-import { CARD_WORDS as W, type ApplicationOut, type PlayerCard, type Slot } from "@shared/playerCard";
+import { CARD_WORDS as W, type AgreementRow, type ApplicationOut, type PlayerCard, type Slot } from "@shared/playerCard";
+import type { TrackMarkKind } from "@shared/playerCardHero";
 import { EDIT_WORDS } from "@shared/playerCardEdit";
-import { CardEditContext, EditInPlace, Eyebrow, H2, LINK, SECTION, SlotView } from "./cardParts";
+import { countWord } from "@shared/playerCardHero";
+import { CardEditContext, EditInPlace, Eyebrow, SlotView } from "./cardParts";
 import ProposalLinks from "@/components/roleProposal/ProposalLinks";
+
+const MARK_CLASS: Record<TrackMarkKind, string> = { new: "pc-new", full: "pc-full", invoice: "pc-inv" };
+const LEGEND: Record<TrackMarkKind, string> = { new: W.newMoon, full: W.fullMoon, invoice: W.invoiceDue };
+
+function Track({ track }: { track: NonNullable<PlayerCard["timeline"]["track"]> }) {
+  return (
+    <>
+      <div className="pc-track" aria-hidden="true" data-moon-track>
+        <div className="pc-rail" />
+        {track.today !== null ? <div className="pc-fill" style={{ width: `${track.today}%` }} /> : null}
+        {track.marks.map((m) => (
+          <span key={`${m.kind}-${m.at}`} className={`pc-mk ${MARK_CLASS[m.kind]}`} style={{ left: `${m.pct}%` }} />
+        ))}
+        {track.today !== null ? (
+          <span className="pc-mk pc-today" style={{ left: `${track.today}%` }}>
+            <b>{W.today}</b>
+            <i />
+          </span>
+        ) : null}
+      </div>
+      <div className="pc-ends" aria-hidden="true">
+        <span>{track.startLabel}</span>
+        <span>{track.endLabel}</span>
+      </div>
+      <div className="pc-legend" aria-hidden="true">
+        {track.kinds.map((k) => (
+          <span key={k}>
+            <i className={`pc-mk ${MARK_CLASS[k]}`} />
+            {LEGEND[k]}
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
 
 export function MoonTimeline({ timeline }: { timeline: PlayerCard["timeline"] }) {
   return (
-    <section aria-labelledby="pc-moons-h" className={`${SECTION} grid gap-4`}>
-      <div className="grid gap-1">
-        <h3 id="pc-moons-h" className={H2}>
+    <section aria-labelledby="pc-moons-h" className="pc-panel">
+      <div className="pc-headgroup">
+        <Eyebrow gold>{W.timelineEyebrow}</Eyebrow>
+        <h3 id="pc-moons-h" className="pc-h2">
           {timeline.heading}
         </h3>
-        <p className="text-sm text-muted-foreground">{timeline.lede}</p>
+        <p className="pc-lede pc-f14">{timeline.lede}</p>
       </div>
-      <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {timeline.track ? <Track track={timeline.track} /> : null}
+      <ol className="pc-moons">
         {timeline.moons.map((m) => (
-          <li
-            key={m.startsAt}
-            aria-current={m.now ? "true" : undefined}
-            className={`rounded-xl border p-4 ${m.now ? "border-notice bg-muted" : "border-border/70"}`}
-          >
-            {m.title ? <p className="font-semibold">{m.title}</p> : null}
-            <p className="text-sm text-muted-foreground">{m.label}</p>
+          <li key={m.startsAt} aria-current={m.now ? "true" : undefined} className={`pc-moon${m.now ? " pc-now" : ""}`}>
+            {m.title ? <h4 className="pc-h3">{m.title}</h4> : null}
+            <p className="pc-dates">{m.label}</p>
             {m.markers.length ? (
-              <ul className="mt-2 grid gap-1 text-sm">
+              <ul>
                 {m.markers.map((k, i) => (
                   <li key={i}>
-                    <span className="font-medium">{k.day}:</span> {k.words}
+                    {k.day}: {k.words}
                   </li>
                 ))}
               </ul>
@@ -42,7 +80,7 @@ export function MoonTimeline({ timeline }: { timeline: PlayerCard["timeline"] })
         ))}
       </ol>
       {timeline.rhythm.length ? (
-        <ul className="grid gap-1 text-sm">
+        <ul className="pc-list pc-dim">
           {timeline.rhythm.map((r, i) => (
             <li key={i}>{r}</li>
           ))}
@@ -55,17 +93,17 @@ export function MoonTimeline({ timeline }: { timeline: PlayerCard["timeline"] })
 export function HowIHold({ howIHold }: { howIHold: PlayerCard["howIHold"] }) {
   if (howIHold.items.kind === "unread") return null;
   return (
-    <section aria-labelledby="pc-hold-h" className={`${SECTION} grid gap-3`}>
-      <h3 id="pc-hold-h" className={H2}>
+    <section aria-labelledby="pc-hold-h" className="pc-panel">
+      <h3 id="pc-hold-h" className="pc-h2">
         {howIHold.heading}
       </h3>
       <SlotView slot={howIHold.items}>
         {(items) => (
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="pc-trio">
             {items.map((h) => (
-              <div key={h.label} className="rounded-xl border border-border/70 p-4">
+              <div key={h.label} className="pc-mini">
                 <Eyebrow>{h.label}</Eyebrow>
-                <p className="mt-1 text-sm">{h.text}</p>
+                <p className="pc-f14">{h.text}</p>
               </div>
             ))}
           </div>
@@ -82,23 +120,30 @@ export function HowIHold({ howIHold }: { howIHold: PlayerCard["howIHold"] }) {
 
 function AppGroup({ heading, slot, now = false }: { heading: string; slot: Slot<ApplicationOut[]>; now?: boolean }) {
   return (
-    <div className={`grid content-start gap-2 rounded-xl border p-4 ${now ? "border-notice" : "border-border/70"}`}>
+    <div className={`pc-histcol${now ? " pc-now" : ""}`}>
       <Eyebrow gold={now}>{heading}</Eyebrow>
       <SlotView slot={slot}>
         {(apps) => (
-          <ul className="grid gap-2">
+          <ul>
             {apps.map((a) => (
               <li key={a.id}>
-                <Link
-                  href={a.href}
-                  className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 rounded-lg border border-border/60 px-3 py-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  <span className="grid">
-                    <span className="font-semibold">{a.title}</span>
-                    {a.filed ? <span className="text-xs text-muted-foreground">{a.filed}</span> : null}
-                    {a.starts ? <span className="text-xs text-muted-foreground">{a.starts}</span> : null}
-                  </span>
-                  <span className="text-sm text-notice">{a.status}</span>
+                <Link href={a.href} className="pc-app">
+                  <div>
+                    <b>{a.title}</b>
+                    {a.filed ? (
+                      <>
+                        <br />
+                        <span>{a.filed}</span>
+                      </>
+                    ) : null}
+                    {a.starts ? (
+                      <>
+                        <br />
+                        <span>{a.starts}</span>
+                      </>
+                    ) : null}
+                  </div>
+                  <span className="pc-state">{a.status}</span>
                 </Link>
               </li>
             ))}
@@ -113,11 +158,14 @@ export function MyApplications({ applications }: { applications: PlayerCard["app
   const { owner } = useContext(CardEditContext);
   if (applications.thisSeason.kind === "unread") return null;
   return (
-    <section aria-labelledby="pc-apps-h" className={`${SECTION} grid gap-3`}>
-      <h3 id="pc-apps-h" className={H2}>
-        {applications.heading}
-      </h3>
-      <div className="grid gap-3 md:grid-cols-3">
+    <section aria-labelledby="pc-apps-h" className="pc-panel">
+      <div className="pc-headgroup">
+        <Eyebrow gold>{W.historyEyebrow}</Eyebrow>
+        <h3 id="pc-apps-h" className="pc-h2">
+          {applications.heading}
+        </h3>
+      </div>
+      <div className="pc-hist">
         <AppGroup heading={W.past} slot={applications.past} />
         <AppGroup heading={W.thisSeason} slot={applications.thisSeason} now />
         <AppGroup heading={W.nextSeason} slot={applications.nextSeason} />
@@ -128,48 +176,63 @@ export function MyApplications({ applications }: { applications: PlayerCard["app
   );
 }
 
+function Rows({ rows }: { rows: AgreementRow[] }) {
+  return (
+    <dl className="pc-rows">
+      {rows.map((row) => (
+        <div key={row.label} className="pc-row">
+          <dt>{row.label}</dt>
+          <dd className={row.small ? "pc-money" : undefined}>
+            {row.lines.map((l, i) => (
+              <span key={i} style={{ display: "block" }}>
+                {l}
+              </span>
+            ))}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function Agreements({ agreements, newApplicationHref }: { agreements: PlayerCard["agreements"]; newApplicationHref?: string }) {
   const { editing } = useContext(CardEditContext);
   const shown = agreements.roles.filter((r) => r.rows.kind !== "unread");
   if (!shown.length) return null;
+  // Every role on the same terms: recorded once, as the design writes it.
+  const keyOf = (r: (typeof shown)[number]) => JSON.stringify(r.rows);
+  const once = shown.length > 1 && shown.every((r) => keyOf(r) === keyOf(shown[0]));
   return (
-    <details className="rounded-2xl border border-border bg-card p-4 text-card-foreground sm:p-6">
-      <summary className="flex min-h-11 cursor-pointer items-center font-semibold">{agreements.heading}</summary>
+    <details className="pc-terms">
+      <summary>
+        <span className="pc-headgroup" style={{ gap: 2 }}>
+          <span className="pc-eyebrow">{W.agreementsEyebrow}</span>
+          <span className="pc-termstitle">{once ? W.termsOnce(countWord(shown.length).toLowerCase()) : agreements.heading}</span>
+        </span>
+        <span className="pc-gold" aria-hidden="true">
+          ▾
+        </span>
+      </summary>
       {editing ? (
-        <p className="mt-2 text-sm">
+        <p className="pc-termsnote">
           {EDIT_WORDS.termsNote}{" "}
           {newApplicationHref ? (
-            <Link href={newApplicationHref} className={LINK}>
+            <Link href={newApplicationHref} className="pc-link">
               {EDIT_WORDS.newApplication}
             </Link>
           ) : null}
         </p>
       ) : null}
-      <div className="mt-3 grid gap-4">
-        {shown.map((r) => (
-          <div key={r.roleId} className="grid gap-2">
-            <p className="font-semibold">{r.title}</p>
-            <SlotView slot={r.rows}>
-              {(rows) => (
-                <dl className="grid gap-2">
-                  {rows.map((row) => (
-                    <div key={row.label} className={`grid gap-0.5 sm:grid-cols-[8rem_1fr] ${row.small ? "text-xs" : "text-sm"}`}>
-                      <dt className="font-medium text-muted-foreground">{row.label}</dt>
-                      <dd>
-                        {row.lines.map((l, i) => (
-                          <span key={i} className="block">
-                            {l}
-                          </span>
-                        ))}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-            </SlotView>
+      {once ? (
+        <SlotView slot={shown[0].rows}>{(rows) => <Rows rows={rows} />}</SlotView>
+      ) : (
+        shown.map((r) => (
+          <div key={r.roleId}>
+            <p className="pc-rowsrole">{r.title}</p>
+            <SlotView slot={r.rows}>{(rows) => <Rows rows={rows} />}</SlotView>
           </div>
-        ))}
-      </div>
+        ))
+      )}
     </details>
   );
 }
