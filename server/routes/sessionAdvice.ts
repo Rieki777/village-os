@@ -9,7 +9,8 @@
  *   POST /api/sessions/advice/requests/:id/decide       { decision } -> { request }
  *   POST /api/sessions/advice/requests/:id/withdraw     -> { request }
  *
- * BEHIND THE ROOM'S OWN GATES: server/index.ts registers this module after
+ * BEHIND THE ROOM'S OWN GATES: server/routes/sessionDecisions.ts registers
+ * this module (server/index.ts has no room for another counted line), after
  * server/routes/liveSessions.ts, so the module gate and the members-only gate
  * on `/api/sessions` stand in front of every door, and this module mounts the
  * module gate on its own prefix too. No door is read as a room's: each takes
