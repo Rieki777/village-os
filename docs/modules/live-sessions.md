@@ -58,7 +58,7 @@ screen and is shown where the room is, with one tap back to it.
 | **Drop in** | The village's place line, the moon and the season. A shared breath that every screen in the room takes at the same pace, from one start time the server holds. Who is here. | Reads the place line or asks someone to, starts the breath, names who is here and who sent word. |
 | **Arrival** | Each person gives one number from 1 to 11 for how they are arriving and, if they like, what would make it an 11+. Nobody fixes anybody's answer. | Goes first, calls names two at a time. When the room arrives low (two or more numbers and a median of 5 or below), offers a lighter agenda and asks for consent. The tool suggests; it never trims. |
 | **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, object, or sleep on it, and a concern or an objection is said in one sentence. Sleeping on it (Rye, 2026-10-22) is for someone who decides best after a night: it needs no sentence, it is never an objection, and the round, here and on every proposal, stays open and says so until they answer again. | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
-| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round, a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a role, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
+| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round (and, folded under it, the regenerative lens: four questions for a room that wants to look at it whole first), a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a role, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
 | **Actions** | Every action is claimed by a person or a role, here and now, or parked. | Reads each action out and waits for a claim. |
 | **Close** | Gratitude, one word each, feedback on the facilitation, and an idea for the tool. | Closes the session, which keeps the record. |
 
@@ -377,6 +377,32 @@ decision's record is never written to: 0280 keeps the date beside it.
 |---|---|---|
 | `GET /api/sessions/circles/:circleId/decisions` | the circle's members, admins | none |
 | `PUT /api/sessions/circles/:circleId/decisions/:entryId/review` `{ reviewOn }` | the circle's members, admins | 60 an hour |
+
+## This season: a circle's pulse, and the regenerative lens
+
+Feature 6 of the sessions program (Rye, 2026-10-22). **This season** on /sessions says how a circle has
+been doing, from what its sessions already wrote down: "The Garden circle met 5 times this spring: 12
+decisions by consent, 9 of 14 actions done", and under it the times it met, the people who came, what it
+decided by consent, the tensions it named, where the actions those sessions left stand now, and how the
+room arrived (the median of the arrival rounds' medians, out of 11, numbers only). It is for the circle's
+members by standing and admins, one circle at a time, their own first; counts only, never a name. No
+table: it reads the sessions, their entries, the task layer's state and who came.
+
+The season is the one a session opened now would be stamped with: the village's own seasons when it has
+written them, the natural ones by hemisphere otherwise. The circle's closed sessions of the last four
+months whose stamp names that season are its season, and only a session two or more people were in counts
+as the circle meeting, the rule its last-met date already keeps. A village that keeps no seasons (the
+tropics) reads its last three months.
+
+**The regenerative lens** folds under every open proposal in the room: "Look at it through a regenerative
+lens" opens four questions (who and what it touches beyond the people here; what it gives back to the
+land, the village and the people doing the work; what it will ask of us in a year and of the people who
+come after us; how we would notice it stops serving and how easily we could undo it). They are prompts,
+kept nowhere.
+
+| Door | Who | Limit |
+|---|---|---|
+| `GET /api/sessions/circles/:circleId/pulse` | the circle's members, admins | none |
 
 ## Before deciding: the advice process
 

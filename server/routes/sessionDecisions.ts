@@ -16,8 +16,9 @@
  * brings back.
  *
  * THE ADVICE PROCESS'S DOORS register from here too (server/routes/sessionAdvice.ts),
- * after this module's own: server/index.ts has no room for another counted
- * line, and a decision and the advice before it belong together.
+ * after this module's own, and so does a circle's season (server/routes/sessionPulse.ts):
+ * server/index.ts has no room for another counted line, and a decision, the
+ * advice before it and the season it shapes belong together.
  */
 import type { Express, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -29,6 +30,7 @@ import { liveCircles } from "./sessionRhythm";
 import { CIRCLES_API } from "../../shared/sessionRhythm";
 import { DECISION_LIMITS, DECISION_REFUSALS } from "../../shared/sessionDecisions";
 import { register as registerAdvice } from "./sessionAdvice";
+import { register as registerPulse } from "./sessionPulse";
 
 /**
  * What this module touches, and why. `circlesRepo` says which circles are
@@ -80,4 +82,5 @@ export function register(app: Express, deps: Deps): void {
   });
 
   registerAdvice(app, deps);
+  registerPulse(app, deps);
 }
