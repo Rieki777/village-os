@@ -98,9 +98,9 @@ export function register(app: Express, deps: Deps): void {
   };
 
   app.post("/api/governance/role-proposals/:id/guide", async (req, res) => {
-    const me = await authedUser(req);
-    if (!me) return res.status(401).json({ error: "auth_required" });
-    const uid = String(me.id);
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const uid = String(user.id);
     const step: RoleGuideStep | null = req.body?.step === "words" || req.body?.step === "season" ? req.body.step : null;
     if (!step) return res.status(400).json({ error: "Ask about the words step or the season step." });
     if (await overLimit(`role-guide:${uid}`, TURNS_PER_HOUR, HOUR_MS)) {
@@ -113,7 +113,7 @@ export function register(app: Express, deps: Deps): void {
     if (!p || p.userId !== uid) return res.status(404).json({ error: "No draft of yours by that link." });
     if (p.status !== "draft") return res.status(409).json({ error: "This proposal has been submitted, so its words are settled." });
 
-    const state = guideStateFor(true, me.prefs?.guide, villageGuideName());
+    const state = guideStateFor(true, user.prefs?.guide, villageGuideName());
     if (!state.answering) return res.status(503).json({ error: "The guide can't answer right now. Your words are safe, and you can carry on by hand." });
 
     const memberKey = await resolveMemberKey(pool, uid);
