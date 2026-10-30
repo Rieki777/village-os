@@ -7,6 +7,7 @@
  *   POST /api/cash-owed/:id/paid      the money went out, and this is how
  *   POST /api/cash-owed/transfers     one bank transfer paid some or all of one member's lines
  *   GET  /api/cash-owed/export.csv    every line, paid and unpaid, for the accounts
+ *   GET  /api/me/cash-owed/export.csv?year=YYYY   a member's own cash received that year
  *
  * Rye, 2026-10-23: "The Game wouldn't pay cash, but it would say what they are
  * owed and they can claim it when they're paid out so that the treasurer has a
@@ -31,7 +32,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { createHash } from "node:crypto";
-import { cashCsv, cashExportRows, cashOwedFor, cashQueue, claimCash, markCashPaid, recordCashTransfer } from "../lib/cashOwed";
+import { cashCsv, cashExportRows, cashOwedFor, cashQueue, claimCash, markCashPaid, memberCashYearCsv, paidCashFor, recordCashTransfer } from "../lib/cashOwed";
 import { cashTotalsByCurrency, type CashOwedEntry, type CashQueueEntry } from "../../shared/cashOwed";
 import { formatMoney } from "../../shared/money";
 
@@ -57,6 +58,22 @@ export function register(app: Express, deps: Deps): void {
       mayPay: user.role === "admin" || user.role === "founder"
         || (await cashKeyHolders().catch(() => [] as string[])).includes(String(user.id)),
     });
+  });
+
+  /*
+   * A member's own year, for their taxes or books. Their own lines only, read
+   * by their own id, so it needs no key. The file is built in server/lib.
+   */
+  app.get("/api/me/cash-owed/export.csv", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const year = Number(req.query.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      return res.status(400).json({ error: "bad_year", message: "Ask for a year, like ?year=2026." });
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="cash-received-${year}.csv"`);
+    res.send(memberCashYearCsv(await paidCashFor(getPool(), user.id), year));
   });
 
   app.post("/api/me/cash-owed/:id/claim", async (req, res) => {

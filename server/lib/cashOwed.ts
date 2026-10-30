@@ -48,6 +48,7 @@ import {
   CASH_PAID_NOTE_MAX,
   CASH_REFERENCE_MAX,
   CASH_TRANSFER_MAX_LINES,
+  cashTotalsByCurrency,
   cashTransferNote,
   type CashOwedEntry,
   type CashQueueEntry,
@@ -360,6 +361,42 @@ export function cashCsv(rows: ReadonlyArray<CashQueueEntry>): string {
     ].map(csvCell).join(","));
   }
   return `${lines.join("\r\n")}\r\n`;
+}
+
+/*
+ * A MEMBER'S OWN YEAR, FOR THEIR TAXES OR BOOKS (Rye, 2026-10-30: "a year
+ * export of cash received, with dates and bank references").
+ *
+ * Paid lines only, filed under the year the payment was RECORDED (`paid_at`).
+ * The day the money went out is the treasurer's word inside the note, and
+ * nothing reads a date out of the note (the rule in shared/cashOwed.ts), so a
+ * transfer sent on 30 December and recorded on 2 January files under the new
+ * year with its real date printed beside it. A total per currency closes the
+ * file; amounts in two currencies are never added together.
+ */
+const YEAR_COLUMNS = ["paid_recorded_on", "payment_note", "work_kind", "work", "amount", "amount_minor", "currency", "line_id"] as const;
+
+/** One member's paid cash for one calendar year, oldest first, with a total row per currency. */
+export function memberCashYearCsv(entries: ReadonlyArray<CashOwedEntry>, year: number): string {
+  const paid = entries
+    .filter((e) => e.state === "paid" && e.paidAt && new Date(e.paidAt).getUTCFullYear() === year)
+    .sort((a, b) => String(a.paidAt).localeCompare(String(b.paidAt)) || a.id.localeCompare(b.id));
+  const lines = [YEAR_COLUMNS.join(",")];
+  for (const e of paid) {
+    lines.push([
+      String(e.paidAt).slice(0, 10), e.paidNote, e.workKind, e.workTitle,
+      majorAmount(e.amountMinor, e.currency), e.amountMinor, e.currency, e.id,
+    ].map(csvCell).join(","));
+  }
+  for (const t of cashTotalsByCurrency(paid)) {
+    lines.push(["", `Total received in ${year}`, "", "", majorAmount(t.minor, t.currency), t.minor, t.currency, ""].map(csvCell).join(","));
+  }
+  return `${lines.join("\r\n")}\r\n`;
+}
+
+/** Every paid line a member has, for the year export. Not capped at the profile's 200. */
+export async function paidCashFor(pool: Pool, userId: string): Promise<CashOwedEntry[]> {
+  return (await cashOwedRowsFor(pool, userId, 10000)).map(rowToCashEntry).filter((e) => e.state === "paid");
 }
 
 /** Every line for the export, with the owner and payer ids still raw. */

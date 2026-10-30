@@ -23,6 +23,7 @@ import express from "express";
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { hasCapability, type CapabilityCtx } from "../shared/capabilities";
+import { cashYearsPaid } from "../shared/cashOwed";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { register as registerCashOwed } from "./routes/cashOwed";
 import { cashCsv, csvCell } from "./lib/cashOwed";
@@ -216,6 +217,37 @@ describe.skipIf(!configured)("recording a bank transfer against the cash owed", 
     expect(csv.text).toContain('"paid"');
     expect(csv.text).toContain('"owed"');
     expect(csv.text).toContain('"20000.00"');
+  });
+
+  it("gives a member their own cash received in one year, with the bank reference and a total", async () => {
+    as("treasurer");
+    expect((await call("POST", "/api/cash-owed/transfers", transfer())).status).toBe(200);
+    as("treasurer");
+    expect((await call("POST", "/api/cash-owed/transfers", transfer({ userId: "ben", ids: ["c4"], reference: "BEN 1" }))).status).toBe(200);
+    await pool.query("UPDATE `cash_owed` SET `paid_at` = '2025-12-31 10:00:00' WHERE `id` = 'c2'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const thisYear = new Date(String((await stateOf("c1")).paid_at)).getUTCFullYear();
+
+    as("ora");
+    const now = await call("GET", `/api/me/cash-owed/export.csv?year=${thisYear}`);
+    expect(now.status).toBe(200);
+    expect(now.text).toContain("Bank transfer on 2026-10-29. Reference: BAC 77812");
+    expect(now.text).toContain('"c1"');
+    expect(now.text, "a line paid in another year stays in that year").not.toContain('"c2"');
+    expect(now.text, "an owed line is not cash received").not.toContain('"c3"');
+    expect(now.text, "another member's cash never appears").not.toContain("BEN 1");
+    expect(now.text).toContain(`"Total received in ${thisYear}"`);
+    const last = await call("GET", "/api/me/cash-owed/export.csv?year=2025");
+    expect(last.text).toContain('"c2"');
+    expect(last.text).not.toContain('"c1"');
+
+    expect((await call("GET", "/api/me/cash-owed/export.csv?year=soon")).status).toBe(400);
+    as(null);
+    expect((await call("GET", `/api/me/cash-owed/export.csv?year=${thisYear}`)).status).toBe(401);
+  });
+
+  it("lists the years a member was paid in, newest first", () => {
+    const e = (id: string, state: string, paidAt: string | null) => ({ id, state, paidAt }) as any;
+    expect(cashYearsPaid([e("a", "paid", "2025-03-01T00:00:00Z"), e("b", "paid", "2026-01-02T00:00:00Z"), e("c", "owed", null), e("d", "paid", "2026-05-01T00:00:00Z")])).toEqual([2026, 2025]);
   });
 
   it("defuses spreadsheet formulas and quotes in a CSV cell", () => {
