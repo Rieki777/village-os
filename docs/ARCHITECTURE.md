@@ -702,9 +702,14 @@ The retention sweep never deletes an unstamped row, at any age.
   becomes a tombstone (name/email/handle scrubbed, password removed,
   `tokenVersion` bumped so every session dies) and every denormalised trace
   is scrubbed: gratitude names, claim names, ledger descriptions (keyed by
-  structured refs, never string matching), submission PII keys, tool
-  clicks, role seats. PUBLIC pulse lines naming them are deleted; ADMIN
-  audit rows are kept as the legal record.
+  structured refs, never string matching), the words and name in every
+  submission they sent, signed in or signed out under their address
+  (`KEPT_BY_TYPE` in `server/lib/submissionWords.ts` lists what stays and
+  why), with the team alerts those set off, tool clicks, role seats. PUBLIC
+  pulse lines they wrote are deleted; a line somebody else wrote that names
+  them ("Ann appreciated Wren", "Wren joined the Stewards") stays with its
+  living actor and loses the name (`server/repos/pulseLines.ts`), so no
+  activity count moves. ADMIN audit rows are kept as the legal record.
   **ORG SEATINGS TOO** (`releaseSeatingsForUser`), which they did not for
   as long as 0049 has existed: "role seats" above means `role_holders`, the
   permission plane, and the org chart is the other thing called role
