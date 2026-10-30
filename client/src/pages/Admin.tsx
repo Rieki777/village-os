@@ -5716,7 +5716,7 @@ function ExitsAdminTab({ password }: { password: string }) {
                     const d = await call(`/admin/exits/${openExit.id}/resolve`);
                     if (d) { toast.success(`${d.outcome === "former" ? "Resolved. Kept as a former member" : "Resolved. The account is a tombstone"}${d.vacatedRoles.length ? `. Roles opened: ${d.vacatedRoles.join(", ")}` : ""}`); setSelectedUser(""); load(); }
                   }} className="text-sm bg-red-600 text-white rounded-lg px-3 py-2 font-medium">Resolve</button>
-                  <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/cancel`); if (d) { toast.success("They're staying"); loadState(selectedUser); load(); } }}
+                  <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/cancel`); if (d) { toast.success(d.message ?? "They're staying", d.message ? { duration: 15000 } : undefined); loadState(selectedUser); load(); } }}
                     className="text-sm text-gray-500 hover:text-gray-900 px-2">They're staying</button>
                 </>
               )}

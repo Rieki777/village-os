@@ -378,7 +378,7 @@ surfaces each carried their own spelling of it and the wallet carried none.
 
 **Leaving.** `POST /api/profile/delete-account` is an anonymisation, not a deletion.
 `anonymizeMember` in `server/lib/erasure.ts` renames the row to "A departed member", rewrites the
-email and handle to tombstones, bumps `tokenVersion` so every session dies, clears bio, avatar,
+email to a tombstone address, clears the handle, bumps `tokenVersion` so every session dies, clears bio, avatar,
 paths, journeys, prefs and contributions, then sweeps the tables that restate the person
 independently of the join (`gratitude_log` names, `quest_claims.user_name`, notification titles and
 bodies, skill tags, push subscriptions, forum subscriptions, wallet challenges, concierge queries,
@@ -529,10 +529,13 @@ is the platform's one public identity URL.
 
 **A departed member's title and home still survive the tombstone. Their characters and portraits do
 not, any more.** `anonymizeMember` writes through `members.update`, so it can only clear columns the
-users repository owns, and `title` and `home_structure_key` are not among them. The tombstone handle
-is deterministic (`departed-` plus the last eight characters of the user id) and appears on their
-forum bylines, so `GET /api/profiles/<that handle>` still answers with their remaining standing
-chips, whatever `title` they carried and wherever `home_structure_key` says they sleep. Both columns
+users repository owns, and `title` and `home_structure_key` are not among them. A member erased
+before round 2 of the erasure review carries a deterministic tombstone handle (`departed-` plus the
+last eight characters of the user id) on their forum bylines, so `GET /api/profiles/<that handle>`
+still answers with their remaining standing chips, whatever `title` they carried and wherever
+`home_structure_key` says they sleep. A tombstone written since holds no handle at all: a living
+member could take that handle first and block the erasure for good (finding 5), so that door is
+closed for new departures and open for old ones. Both columns
 are READ (`server/lib/profile.ts` names them in its SELECT and publishes them) and NEITHER is
 written by anything in the tree: no route, no repository and no migration sets either one. So the
 exposure is latent rather than live, and it is latent in the way that ends in one commit. A fork

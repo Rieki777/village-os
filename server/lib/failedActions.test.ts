@@ -97,6 +97,18 @@ describe("where an unfinished deletion stands", () => {
     expect(erasureStanding(erasure({ stepsDone: [], attempts: 50 }))).toBe("before-close");
   });
 
+  it("is closed when the account itself is a tombstone, whatever the record's steps say", () => {
+    // The tombstone's note was lost, or a second resolve emptied the steps.
+    const closed = erasure({ stepsDone: ["role-holdings"], failedStep: null, accountClosed: true });
+    expect(erasureStanding(closed)).toBe("after-close");
+    expect(mayResumeUnattended(closed)).toBe(true);
+    expect(erasureStanding(erasure({ stepsDone: [], failedStep: "role-holdings", accountClosed: true }))).toBe("after-close");
+    // The attempt cap still hands it to a person.
+    expect(erasureStanding(erasure({ stepsDone: [], accountClosed: true, attempts: GIVE_UP_AFTER_ATTEMPTS }))).toBe("needs-a-person");
+    // An account that still works stays where it was.
+    expect(erasureStanding(erasure({ stepsDone: ["role-holdings"], accountClosed: false }))).toBe("before-close");
+  });
+
   it("is closed after it, and needs a person after ten attempts or a missing record", () => {
     expect(erasureStanding(erasure())).toBe("after-close");
     expect(erasureStanding(erasure({ attempts: GIVE_UP_AFTER_ATTEMPTS - 1 }))).toBe("after-close");
