@@ -96,7 +96,8 @@ import { exportAdviceFor, forgetAdviceFor } from "./sessionAdvice";
 import { fillFor, filledInOut, fillKey, keepFills, latestStanding, mapFill, mayUndo, readFor, recordFill, standingFills } from "./sessionOnBehalf";
 import * as fillsRepo from "../repos/sessionOnBehalf";
 import { ON_BEHALF_REFUSALS as OB } from "../../shared/sessionOnBehalf";
-import { taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
+import { liveHoldersOf, taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
+import { holderFirstName } from "../../shared/roleHolderLabel";
 import { LIBRARY_REFUSALS, cleanIds } from "../../shared/sessionLibrary";
 import { numberVar, stringVar } from "./variables";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
@@ -462,6 +463,8 @@ interface SeatBook {
   /** The active seats that are not standing examples, as the room offers them. */
   options: SeatOption[];
   active: Set<string>;
+  /** First names of who sits in each owning seat now. Only the room view fills it, never the minutes. */
+  holdersOf?: Map<string, string[]>;
 }
 
 /** The org chart's seats. The circle's own seats first when a circle is meeting. */
@@ -477,6 +480,35 @@ export async function seatBook(pool: Pool | PoolConnection, circleId: string | n
   return { nameOf, options, active: new Set(active.map((r) => r.id)) };
 }
 
+/**
+ * Who sits in each of these seats now, as first names, for "Treasurer (Rick)" (Rye, 2026-10-30).
+ * Read from the roster on every read, so a handover renames the line by itself. A lapsed term,
+ * an ended seating and a standing example name nobody, the same reading the task board makes.
+ */
+export async function seatHoldersFor(
+  pool: Pool | PoolConnection,
+  seatIds: Iterable<string>,
+  lookup: MemberLookup,
+  lapseContext?: () => LapseContext,
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  const wanted = Array.from(new Set(seatIds));
+  if (wanted.length === 0) return out;
+  const seatings = await listOrgAssignments(pool as Pool, lapseContext?.());
+  await Promise.all(
+    wanted.map(async (seat) => {
+      const names = await Promise.all(
+        liveHoldersOf(seatings, seat).map(async (userId) => {
+          const m = await lookup(userId).catch(() => null);
+          return m && typeof m.name === "string" ? holderFirstName(m.name) : "";
+        }),
+      );
+      out.set(seat, names.filter(Boolean));
+    }),
+  );
+  return out;
+}
+
 const entryOut = (e: EntryRec, names: Map<number, Named>, seats: SeatBook): SessionEntry => ({
   id: e.id,
   itemId: e.itemId,
@@ -488,6 +520,7 @@ const entryOut = (e: EntryRec, names: Map<number, Named>, seats: SeatBook): Sess
   ownerName: nameIn(names, e.ownerNo),
   ownerSeatId: e.ownerSeatId,
   ownerSeatName: e.ownerSeatId ? (seats.nameOf.get(e.ownerSeatId) ?? null) : null,
+  ...(seats.holdersOf && e.ownerSeatId ? { ownerSeatHolders: seats.holdersOf.get(e.ownerSeatId) ?? [] } : {}),
   dueOn: e.dueOn,
   createdAt: e.createdAt,
 });
@@ -2353,7 +2386,13 @@ export async function buildView(
   const nos = new Set<number>([s.facilitatorNo, ...people.map((p) => p.no)]);
   if (s.secretaryNo) nos.add(s.secretaryNo);
   for (const e of [...entries, ...(carriedFrom?.entries ?? [])]) if (e.ownerNo != null) nos.add(e.ownerNo);
-  const [names, seats] = await Promise.all([namesFor(pool, nos, ctx.lookup), seatBook(pool, s.circleId)]);
+  const owningSeats = [...entries, ...(carriedFrom?.entries ?? [])].map((e) => e.ownerSeatId).filter((id): id is string => !!id);
+  const [names, book, holdersOf] = await Promise.all([
+    namesFor(pool, nos, ctx.lookup),
+    seatBook(pool, s.circleId),
+    seatHoldersFor(pool, owningSeats, ctx.lookup, ctx.lapseContext),
+  ]);
+  const seats: SeatBook = { ...book, holdersOf };
   const faces = await facesFor(pool, people.map((p) => names.get(p.no)?.userId ?? null));
 
   const open = s.status === "open";

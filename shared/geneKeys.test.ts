@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  BODIES, PROFILES, SPHERES, analyse, chartProblems, gateLine, lineWord, oppositeGate, profileOf, sphereOf,
+  BODIES, LINE_WORDS, PROFILES, SPHERES, SPHERE_WORDS, analyse, chartProblems, gateLine, lineWord, oppositeGate, profileOf, sphereOf, viewOf,
   type Chart,
 } from "./geneKeys";
 import { chartAt, resultsAcross, zonedToUtc } from "./geneKeysSky";
@@ -76,6 +76,48 @@ describe("all 26 activations and all 11 spheres for one birth", () => {
   it("matches genekeys.com sphere by sphere", () => {
     const spheres = "12.2 11.2 36.5 6.5 34.1 23.1 21.2 19.4 41.3 15.4 53.1";
     expect(SPHERES.map((s) => kl(sphereOf(chart, s))).join(" ")).toBe(spheres);
+  });
+});
+
+/**
+ * Love and Prosperity, live (2026-10-30): seven synthetic London births at noon
+ * in winter (UTC+0) run through genekeys.com's free profiler, every one of the
+ * 11 spheres read off the page. The first four put Culture on lines 3 and 5 and
+ * Pearl on 4 and 5, the four line words not seen before; the last three test
+ * the Moon-led Attraction sphere.
+ */
+describe("Love and Prosperity match genekeys.com", () => {
+  const LIVE: Array<[string, string]> = [
+    ["1960-01-07", "54.2 53.2 57.4 51.4 30.3 9.1 11.3 40.1 32.4 34.2 26.4"],
+    ["1960-01-10", "54.5 53.5 32.1 42.1 17.3 9.5 11.5 40.3 32.6 34.2 26.5"],
+    ["1960-01-13", "61.2 62.2 32.4 42.4 2.2 5.3 10.2 40.6 50.2 34.3 26.5"],
+    ["1960-01-22", "60.6 56.6 28.2 27.2 40.1 11.2 58.3 47.1 28.3 34.5 11.1"],
+    ["1975-12-04", "5.1 35.1 64.3 63.3 46.2 50.1 12.5 29.4 35.3 42.4 21.6"],
+    ["1988-02-17", "30.4 29.4 14.6 8.6 26.5 17.6 11.5 11.1 50.3 51.6 42.6"],
+    ["2003-01-29", "19.2 33.2 44.4 24.4 32.6 11.1 9.3 28.5 48.3 7.4 7.1"],
+  ];
+
+  it.each(LIVE)("all 11 spheres for a birth on %s", (date, spheres) => {
+    const chart = chartAt(new Date(`${date}T12:00:00Z`));
+    expect(SPHERES.map((s) => kl(sphereOf(chart, s))).join(" ")).toBe(spheres);
+  });
+
+  it("names the four line words the profiler showed for the first time", () => {
+    const words = (date: string, sphere: "culture" | "pearl") => viewOf(chartAt(new Date(`${date}T12:00:00Z`))).prosperity.find((s) => s.sphere === sphere)!.word;
+    expect(words("1960-01-13", "culture")).toBe("Unit");
+    expect(words("1960-01-22", "culture")).toBe("Society");
+    expect(words("1960-01-07", "pearl")).toBe("Charity");
+    expect(words("1960-01-10", "pearl")).toBe("Power");
+  });
+
+  it("has six words and a tagline for every sphere, and the view carries all three sequences", () => {
+    for (const s of SPHERES) {
+      expect(LINE_WORDS[s].filter(Boolean)).toHaveLength(6);
+      expect(SPHERE_WORDS[s].tagline).toBeTruthy();
+    }
+    const v = viewOf(chartAt(new Date("1975-12-04T12:00:00Z")));
+    expect([v.spheres.length, v.love.length, v.prosperity.length]).toEqual([4, 5, 2]);
+    expect(v.love[0]).toMatchObject({ name: "Attraction", keyLine: "46.2", word: "Lust / Passion" });
   });
 });
 
