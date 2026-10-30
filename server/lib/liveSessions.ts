@@ -95,6 +95,9 @@ import { exportReviewsFor, forgetReviewsFor } from "./sessionDecisions";
 import { exportAdviceFor, forgetAdviceFor } from "./sessionAdvice";
 import { fillFor, filledInOut, fillKey, keepFills, latestStanding, mapFill, mayUndo, readFor, recordFill, standingFills } from "./sessionOnBehalf";
 import * as fillsRepo from "../repos/sessionOnBehalf";
+import * as votesRepo from "../repos/sessionVotes";
+import { mapVote, noVotes, sortByVotes, talliesFor } from "./sessionVotes";
+import { VOTE_REFUSALS as VR, isAgendaVote } from "../../shared/sessionVotes";
 import { ON_BEHALF_REFUSALS as OB } from "../../shared/sessionOnBehalf";
 import { liveHoldersOf, taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
 import { holderFirstName } from "../../shared/roleHolderLabel";
@@ -1073,6 +1076,8 @@ export async function addItem(pool: Pool, sessionId: number, actor: Actor, raw: 
     const addedByNo = who.value ?? actor.no;
     const id = await repo.insertItem(conn, { sessionId, title, aim, minutes, position, addedByNo, fromSessionId, now });
     if (who.value != null) await recordFill(conn, { sessionId, actorNo: actor.no, personNo: who.value, target: "item", targetId: id, act: "added" }, now);
+    // While the room votes (0290), a new item takes its place by the score, which is none yet.
+    if (!s.state.orderSet) await sortByVotes(conn, sessionId, [...items, { id, status: "waiting", position }]);
     return done({ id });
   });
 }
@@ -1193,6 +1198,55 @@ export async function patchItem(
       }
     }
     return done(null);
+  });
+}
+
+// ── The room votes its agenda (0290, shared/sessionVotes.ts) ────────────────
+
+/**
+ * One person's vote on a waiting item: 1 up, -1 down, 0 to take it back. Their
+ * own, the same as a consent answer: nobody votes for anybody else. While the
+ * order is not set, the agenda sorts itself again by the score.
+ */
+export async function voteOnItem(pool: Pool, sessionId: number, actor: Actor, itemId: number, raw: unknown, now = new Date()): Promise<Outcome<null>> {
+  const b = bodyOf(raw);
+  if (!isAgendaVote(b.vote)) return refuse(400, VR.voteValue);
+  if (has(b, "forUserId") && b.forUserId !== actor.no) return refuse(403, OB.ownAnswer);
+  const vote = b.vote;
+  return inRoom(pool, sessionId, actor, async ({ conn, s }) => {
+    const items = (await repo.itemRows(conn, sessionId)).map(mapItem);
+    const item = items.find((i) => i.id === itemId);
+    if (!item) return refuse(404, R.itemUnknown);
+    if (s.state.orderSet) return refuse(409, VR.voteClosed);
+    if (item.status !== "waiting") return refuse(409, VR.waitingOnly);
+    if (vote === 0) await votesRepo.deleteVote(conn, itemId, actor.no);
+    else await votesRepo.writeVote(conn, { sessionId, itemId, no: actor.no, vote, now });
+    await sortByVotes(conn, sessionId, items);
+    return done(null);
+  });
+}
+
+/**
+ * The facilitator sets the order the room voted (`set` true: the vote closes
+ * and the order stands), or opens the vote again (`set` false: the agenda
+ * sorts by the score once more).
+ */
+export async function setAgendaOrder(pool: Pool, sessionId: number, actor: Actor, raw: unknown): Promise<Outcome<{ state: SessionState }>> {
+  const b = bodyOf(raw);
+  if (typeof b.set !== "boolean") return refuse(400, VR.setValue);
+  const set = b.set;
+  return inRoom(pool, sessionId, actor, async (room) => {
+    const { conn, s, roles } = room;
+    if (!roles.runs) return refuse(403, R.facilitatorOnly);
+    if (s.state.orderSet === set) {
+      room.still = true;
+      return done({ state: s.state });
+    }
+    const items = (await repo.itemRows(conn, sessionId)).map(mapItem);
+    await sortByVotes(conn, sessionId, items);
+    const state = { ...s.state, orderSet: set };
+    await repo.writeState(conn, sessionId, JSON.stringify(state));
+    return done({ state });
   });
 }
 
@@ -2078,6 +2132,7 @@ export async function discardSession(pool: Pool, sessionId: number, viewer: View
     await releaseForDiscard(conn, sessionId, s.status);
     await deleteTaskRowsForSession(conn, sessionId, await repo.sessionEntryIds(conn, sessionId));
     await fillsRepo.deleteFillsForSession(conn, sessionId);
+    await votesRepo.deleteVotesForSession(conn, sessionId);
     if (!(await repo.deleteSessionRows(conn, sessionId))) return refuse(404, R.notFound);
     return done({ status: s.status });
   });
@@ -2339,12 +2394,15 @@ export async function buildView(
   now = Date.now(),
 ): Promise<SessionView> {
   const roles = rolesIn(s, viewer);
-  const [peopleRaw, itemsRaw, entriesRaw, fillsRaw] = await Promise.all([
+  const [peopleRaw, itemsRaw, entriesRaw, fillsRaw, votesRaw] = await Promise.all([
     repo.peopleRows(pool, s.id),
     repo.itemRows(pool, s.id),
     repo.entryRows(pool, s.id),
     fillsRepo.fillRows(pool, s.id),
+    votesRepo.voteRows(pool, s.id),
   ]);
+  // The room's vote on its agenda (0290): every tally is the room's to see, and each viewer reads their own vote.
+  const tallies = talliesFor(votesRaw.map(mapVote), viewer.no);
   // What the facilitator filled in for somebody and still stands (0288): marked for everyone who reads the room.
   const standing = standingFills(fillsRaw.map(mapFill));
   const people = peopleRaw.map(mapPerson);
@@ -2467,7 +2525,7 @@ export async function buildView(
     people: peopleOut,
     items: items.map((i) => {
       const from = brought.get(i.id);
-      return { ...itemOut(i), libraryId: from?.libraryId ?? null, broughtBy: from?.broughtBy ?? null, filledIn: markOf("item", i.id) };
+      return { ...itemOut(i), libraryId: from?.libraryId ?? null, broughtBy: from?.broughtBy ?? null, filledIn: markOf("item", i.id), votes: tallies.get(i.id) ?? noVotes() };
     }),
     entries: entries.map((e) => ({ ...entryOut(e, names, seats), filledIn: markOf("entry", e.id) })),
     responses: responsesOut,
@@ -2548,9 +2606,10 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   adviceGiven: Record<string, unknown>[];
   /** Filled in by the facilitator (0288): what was filled in for them, and what they filled in for somebody, with nobody else's number. */
   filledIn: Record<string, unknown>[];
+  agendaVotes: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [], adviceAsked: [], adviceGiven: [], filledIn: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [], adviceAsked: [], adviceGiven: [], filledIn: [], agendaVotes: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -2638,7 +2697,13 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
     at: toIso(r.created_at),
     undoneAt: toIso(r.undone_at),
   }));
-  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet, adviceAsked, adviceGiven, filledIn };
+  const agendaVotes = (await votesRepo.memberVoteRows(pool, no)).map((r) => ({
+    sessionId: Number(r.session_id),
+    itemId: Number(r.item_id),
+    vote: Number(r.vote),
+    at: toIso(r.updated_at),
+  }));
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet, adviceAsked, adviceGiven, filledIn, agendaVotes };
 }
 
 /**
@@ -2733,6 +2798,8 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
     await forgetAdviceFor(conn, no);
     // Filled in by the facilitator (0288): what was filled in for them goes; what they filled in says nobody did.
     await fillsRepo.forgetFillsFor(conn, no);
+    // The agenda vote (0290): their votes go.
+    await votesRepo.forgetVotesFor(conn, no);
   });
   await repo.deleteMemberNo(pool, no);
 }

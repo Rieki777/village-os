@@ -38,6 +38,7 @@
  * string a member reads lives in this file so the voice gate reads it.
  */
 import type { FilledIn } from "./sessionOnBehalf";
+import type { ItemVotes } from "./sessionVotes";
 import type { TaskCard } from "./sessionTasks";
 
 // ── Stages ───────────────────────────────────────────────────────────────────
@@ -162,8 +163,11 @@ export type ItemStatus = (typeof ITEM_STATUSES)[number];
  * decision  a proposal text that a consent round runs on
  * action    something to do, which must leave with an owner
  * tension   something sensed that wants its own time; it goes to the backlog
+ * win       a win or a celebration somebody shares (Rye, 2026-10-30: "add a
+ *           section for 'wins and celebrations' to share about things
+ *           they've won at!"); it goes into the record under its item
  */
-export const ENTRY_KINDS = ["note", "idea", "seed", "decision", "action", "tension"] as const;
+export const ENTRY_KINDS = ["note", "idea", "seed", "decision", "action", "tension", "win"] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 
 export function isEntryKind(v: unknown): v is EntryKind {
@@ -177,7 +181,26 @@ export const ENTRY_LABELS: Record<EntryKind, string> = {
   decision: "Proposal",
   action: "Action",
   tension: "Tension",
+  win: "Win",
 };
+
+/**
+ * The sections an item's page shows, by name, so a meeting template can
+ * switch each on or off (a Friday session that recounts the week leads with
+ * `wins`). A view that names none shows them all.
+ */
+export const ITEM_SECTIONS = ["notes", "ideas", "wins", "proposal", "learned", "actions"] as const;
+export type ItemSection = (typeof ITEM_SECTIONS)[number];
+
+export function isItemSection(v: unknown): v is ItemSection {
+  return typeof v === "string" && (ITEM_SECTIONS as readonly string[]).includes(v);
+}
+
+/** The sections on, from whatever a template named: unknown names drop, and none named means every one. */
+export function itemSectionsOn(named: readonly unknown[] | null | undefined): Set<ItemSection> {
+  const known = (named ?? []).filter(isItemSection);
+  return new Set(named == null ? ITEM_SECTIONS : known);
+}
 
 /** open: live. done: an action finished or a decision consented. parked: moved to the backlog. */
 export const ENTRY_STATUSES = ["open", "done", "parked"] as const;
@@ -399,6 +422,12 @@ export interface SessionState {
   breath: { pattern: BreathKey; rounds: number; startedAt: number | null };
   /** A speaking round: the order people speak in and who is speaking now. */
   round: { label: string | null; order: number[]; at: number };
+  /**
+   * The facilitator set the agenda's order (0290, shared/sessionVotes.ts):
+   * the room's vote is closed. False while the room votes and the agenda
+   * sorts itself by the score.
+   */
+  orderSet: boolean;
 }
 
 export function defaultSessionState(): SessionState {
@@ -411,6 +440,7 @@ export function defaultSessionState(): SessionState {
     itemExtraMin: 0,
     breath: { pattern: "settle", rounds: 6, startedAt: null },
     round: { label: null, order: [], at: 0 },
+    orderSet: false,
   };
 }
 
@@ -448,6 +478,7 @@ export function normalizeSessionState(raw: unknown): SessionState {
       order,
       at: intOrNull(roundIn.at, 0, Math.max(0, order.length)) ?? 0,
     },
+    orderSet: src.orderSet === true,
   };
 }
 
@@ -820,6 +851,8 @@ export interface SessionItem {
   broughtBy?: string | null;
   /** The latest fill-in on it that still stands (0288, shared/sessionOnBehalf.ts). */
   filledIn?: FilledIn | null;
+  /** The room's vote on it (0290, shared/sessionVotes.ts). Optional so older fixtures still type. */
+  votes?: ItemVotes;
 }
 
 export interface SessionEntry {
@@ -878,6 +911,11 @@ export interface SeatOption {
 }
 
 export interface SessionView {
+  /**
+   * The sections each item's page shows, when a meeting template named them
+   * (`ITEM_SECTIONS`). Absent or null shows every one.
+   */
+  itemSections?: ItemSection[] | null;
   id: number;
   title: string;
   circleId: string | null;
@@ -1085,6 +1123,7 @@ export function buildMinutes(input: MinutesInput, audience: MinutesAudience): st
       lines.push(`- **${how}:** ${text(d.text)}${counts}`);
     }
     for (const s of list.filter((e) => e.kind === "seed")) lines.push(`- **What we learned:** ${text(s.text)}`);
+    for (const w of list.filter((e) => e.kind === "win")) lines.push(`- **Win:** ${text(w.text)}`);
     for (const a of list.filter((e) => e.kind === "action" && e.status !== "parked")) {
       lines.push(`- **Action:** ${text(a.text)}, held by ${owner(a)}${a.dueOn ? `, by ${a.dueOn}` : ""}.`);
     }
@@ -1160,6 +1199,7 @@ export const SESSION_COPY = {
   overChoices: "Time is up for this item. Add five minutes with the room's consent, park it, or wrap it up.",
   addNote: "Add a note",
   addIdea: "Add an idea",
+  addWin: "Share a win",
   addAction: "Add an action",
   addTension: "Name a tension",
   addDecision: "Write the proposal",
@@ -1435,6 +1475,19 @@ export const ROOM_COPY = {
   extendFive: "Add five minutes",
   wrapNext: "Wrap up and start the next",
   wrapUp: "Wrap it up",
+  /** The facilitator's next-step bar: the one next thing to do, named, on the agenda, the items and the close. */
+  nextStepLabel: "Next step",
+  upNext: (title: string) => `Up next: ${title}`,
+  nowOn: (title: string) => `Now: ${title}`,
+  lastItem: "This is the last item on the agenda.",
+  timeUpFor: (title: string) => `Time is up for ${title}.`,
+  startFirst: "Start the first item",
+  startNext: "Start the next item",
+  itemsDone: "Every item on the agenda is done.",
+  agendaReady: "When the agenda is ready, start the first item.",
+  agendaNone: "Add an item to the agenda, or move on.",
+  closeLast: "Last step: one word each, then close the session.",
+  goToClose: "Go to Close the session",
   timeLeft: (seconds: number) => `${roomClock(seconds)} left`,
   timeOver: (seconds: number) => `${roomClock(seconds)} over`,
   leftWord: "left",
@@ -1444,6 +1497,8 @@ export const ROOM_COPY = {
   proposal: "Proposal",
   seed: "What we learned",
   seedHelp: "One sentence the circle wants to remember from this item. It goes into the record.",
+  wins: "Wins and celebrations",
+  winsHelp: "Something you won at, finished, or want the circle to celebrate. It goes into the record.",
   actionsHere: "Actions",
   nothingYet: "Nothing here yet.",
   writeHere: "Write it here",

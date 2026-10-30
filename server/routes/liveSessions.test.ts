@@ -29,6 +29,9 @@ const DOORS = [
   "POST /api/sessions/:id/arrival",
   "POST /api/sessions/:id/items",
   "PATCH /api/sessions/:id/items/:itemId",
+  // The room votes its agenda (0290): one vote per person per item, and whoever runs the room sets the order.
+  "POST /api/sessions/:id/items/:itemId/vote",
+  "POST /api/sessions/:id/agenda/order",
   "POST /api/sessions/:id/entries",
   "PATCH /api/sessions/:id/entries/:entryId",
   "DELETE /api/sessions/:id/entries/:entryId",
