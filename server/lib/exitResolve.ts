@@ -24,6 +24,13 @@
  * and a balance the registry cannot name is no token any surface can show,
  * so neither counts. A negative balance never reaches here: it blocks resolve.
  *
+ * CASH THE VILLAGE OWES THEM COUNTS TOO (round 4, R4-4). An unpaid row in
+ * `cash_owed` (0285), owed or claimed, keeps the account on exactly as a token
+ * balance does, so the treasurer still has somebody to pay. It is checked
+ * beside `heldValueOf` by `unpaidCashOf` (server/lib/cashOwed.ts) and never
+ * folded into it: a `HeldValue` is a token, and `formerMemberNote` prints it as
+ * one. The note names the cash as a count, never the amount or the work.
+ *
  * WHAT A FORMER MEMBER LOSES, and each line has a reason:
  *   - `membershipGranted` AND `stageGranted`. Admission is either one
  *     (`isAdmitted`, server/lib/admission.ts), so ending membership clears
@@ -78,6 +85,7 @@ import { recordPartyLeft } from "./alignmentEndings";
 import { releaseSeatingsForUser } from "./orgChart";
 import { recordEvent } from "./events";
 import { endedInWords, resolveEndingLine, resolveEndingsIn, type FormerMemberStep } from "./exit";
+import { unpaidCashOf } from "./cashOwed";
 import { withdrawUnseatedOf } from "../repos/seatApplications";
 import { markExitResolved, whileExitHeld, type HeldExit } from "../repos/exitNotes";
 
@@ -109,6 +117,8 @@ export interface ExitResolution {
   outcome: ExitOutcome;
   /** What a former member still holds. Empty when the account was erased. */
   held: HeldValue[];
+  /** How many cash payments the village still owes them (`unpaidCashOf`). Zero when the account was erased. */
+  cashOwed: number;
   /** What the outside stores answered, on the erasure path only. */
   external: ErasureOutcome | null;
   /** Present exactly when `outcome` is "stopped". */
@@ -143,9 +153,12 @@ export const FORMER_MEMBER_MARK = "kept as a former member: ";
  * The line a former member's exit carries: the date and what they still hold.
  * It names no person, which is why an erasure asked for later keeps it.
  */
-export function formerMemberNote(held: readonly HeldValue[], now: Date): string {
-  const what = held.map((h) => `${h.amount} ${h.token}`).join(", ");
-  return `\n[${now.toISOString().slice(0, 10)}] ${FORMER_MEMBER_MARK}still holds ${what}`.slice(0, 2000);
+export function formerMemberNote(held: readonly HeldValue[], now: Date, cashOwed = 0): string {
+  const what = [
+    held.length ? `still holds ${held.map((h) => `${h.amount} ${h.token}`).join(", ")}` : "",
+    cashOwed > 0 ? `is owed ${cashOwed} cash payment(s)` : "",
+  ].filter(Boolean).join(", and ");
+  return `\n[${now.toISOString().slice(0, 10)}] ${FORMER_MEMBER_MARK}${what}`.slice(0, 2000);
 }
 
 /** One step a former member's resolve runs before membership ends. */
@@ -230,20 +243,21 @@ export async function resolveExit(
   const now = input.now ?? new Date();
   const agreement = input.agreementRef ? String(input.agreementRef).slice(0, 255) : null;
   const held = await heldValueOf(pool, String(input.target.id));
+  const cashOwed = await unpaidCashOf(pool, String(input.target.id));
 
-  if (!held.length) {
+  if (!held.length && !cashOwed) {
     // Opened in the hold, so a cancel from here on finds the deletion running and refuses.
     const closed = await whileExitHeld(pool, input.exitId, async (hold) => {
       if (!hold.exit.open) return hold.exit;
       await beginMemberErasure(pool, input.target);
       return null;
     });
-    if (closed) return { outcome: "stopped", held, external: null, stopped: stoppedBy(closed) };
+    if (closed) return { outcome: "stopped", held, cashOwed, external: null, stopped: stoppedBy(closed) };
     const external = await anonymizeMember(pool, input.target, input.actorId, input.deps, { begun: true });
     // Conditional like every resolve write. It finds the exit closed only when a cancel ended a record
     // that ran past MAY_STILL_BE_RUNNING_SECONDS, and the account is closed either way.
     await markExitResolved(pool, input.exitId, agreement, "");
-    return { outcome: "erased", held, external };
+    return { outcome: "erased", held, cashOwed, external };
   }
 
   const closed = await keepAsFormerMember(pool, {
@@ -252,9 +266,9 @@ export async function resolveExit(
     deps: input.deps,
     now,
     agreementRef: agreement,
-    note: formerMemberNote(held, now),
+    note: formerMemberNote(held, now, cashOwed),
   });
-  if (closed) return { outcome: "stopped", held, external: null, stopped: stoppedBy(closed) };
+  if (closed) return { outcome: "stopped", held, cashOwed, external: null, stopped: stoppedBy(closed) };
   await recordEvent(pool, {
     kind: "audit",
     text: "member:kept-as-former",
@@ -263,5 +277,5 @@ export async function resolveExit(
     entityRef: String(input.target.id),
     audience: "admin",
   });
-  return { outcome: "former", held, external: null };
+  return { outcome: "former", held, cashOwed, external: null };
 }

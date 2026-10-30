@@ -791,7 +791,7 @@ import {
   type PatternKind,
 } from "./lib/seasonPatterns";
 import { applyAcceptReward } from "./lib/proposalAward";
-import { statedProposalCash } from "./lib/cashOwed"; // 0285: a proposal's cash, owed when it is accepted
+import { cashNotGivenUp, statedProposalCash } from "./lib/cashOwed"; // 0285: a proposal's cash, owed when it is accepted; R4-4: deleting gives unpaid cash up
 import { GRATITUDE_ONLY_SENT } from "../shared/workValue";
 import { buildRetrospective, proposeNextPattern } from "./lib/seasonRetrospective";
 import {
@@ -25874,6 +25874,8 @@ ${inner}
   app.post("/api/profile/delete-account", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
+    // R4-4: cash the village still owes is given up only when the member says so, asked before the confirmation is spent.
+    const cashKept = await cashNotGivenUp(getPool(), user.id, req.body); if (cashKept) return res.status(409).json(cashKept);
     const confirmed = await confirmIdentity(req, res, user, "delete-account");
     if (!confirmed.ok) return res.status(403).json(confirmed.body);
     const stranding = await departureStrandingRefusal(user, true);
@@ -25881,9 +25883,7 @@ ${inner}
     // S52: same lock as the admin path — settle blocking state first. The
     // 409 names each domain so the member knows exactly what remains.
     const blocking = blockingStates(await exitOpenState(getPool(), user.id, roleIdsFor(user.id)));
-    if (blocking.length) {
-      return res.status(409).json({ error: "Open state must settle through its own domain first", blocking });
-    }
+    if (blocking.length) return res.status(409).json({ error: "Open state must settle through its own domain first", blocking });
     const external = await anonymizeMember(getPool(), user, user.id, erasureDeps);
     // Lane C: a member is never told "deleted" about a store that did not
     // answer. The sentence says what happened here, and names the shortfall

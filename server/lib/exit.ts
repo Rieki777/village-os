@@ -45,6 +45,8 @@ import { abandonErasure, type AbandonedErasure } from "../repos/memberErasure";
 import { recordEvent } from "./events";
 import { isTombstone } from "./oauthAccounts";
 import { openRedemptionCount } from "./redemptionStore";
+import { unpaidCashOf } from "./cashOwed";
+import { CASH_ON_DELETION, CASH_ON_DEPARTURE, cashStillOwedWords } from "../../shared/cashOwed";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -474,7 +476,26 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     blocking: false,
   });
 
+  // Last, so the domains other lanes add land above it.
+  states.push(await cashState(pool, userId));
+
   return states;
+}
+
+/**
+ * The cash the village still owes the member, as a NOTICE (round 4, R4-4).
+ *
+ * NEVER BLOCKING. It is the village's debt to the member, which the member
+ * cannot settle, and Rye's ruling of 2026-10-23 answers what happens to it:
+ * resolve keeps a leaver owed cash on as a former member, so they can still
+ * claim it (`unpaidCashOf`, server/lib/exitResolve.ts). Deleting the account
+ * gives it up, and delete-account asks first (`cashNotGivenUp`,
+ * server/lib/cashOwed.ts). A count only, never the amount or the work.
+ */
+export async function cashState(pool: Pool, userId: string): Promise<ExitDomainState> {
+  const n = await unpaidCashOf(pool, userId);
+  if (!n) return { domain: "cash", count: 0, description: "no cash owed", blocking: false };
+  return { domain: "cash", count: n, description: `${cashStillOwedWords(n)}. ${CASH_ON_DEPARTURE}. ${CASH_ON_DELETION}`, blocking: false };
 }
 
 export function blockingStates(states: ExitDomainState[]): ExitDomainState[] {
