@@ -121,7 +121,8 @@ describe("roughly when", () => {
 });
 
 describe("the reveal", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("ends with the profile as the heading's neighbour, the names as the heading, and the two lines marked", () => {
     // Reduced motion draws the finished state at once, which is the state this pins.
