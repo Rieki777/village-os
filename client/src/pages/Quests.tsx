@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import WorkPayBlock from "@/components/WorkPayBlock";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -285,6 +286,12 @@ export default function Quests() {
                     <span className="block text-xs text-muted-foreground">
                       {suggestion.quest.subtitle ?? "A gentle way in. See the first step."}
                     </span>
+                    {/* What it pays, before it is taken on (Rye, 2026-10-30). */}
+                    {suggestion.quest.pay && (
+                      <span className="mt-1 block text-xs">
+                        <WorkPayBlock pay={suggestion.quest.pay} />
+                      </span>
+                    )}
                   </span>
                   <ArrowRight className="w-4 h-4 text-teal-deep shrink-0" />
                 </Link>

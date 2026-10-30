@@ -759,7 +759,7 @@ import {
   type LapseContext,
   type OrgRole,
 } from "./lib/orgChart";
-import { mapSeatTier, mapShowsStructureTo, orgSeatTier, projectSeats, villageWay } from "./lib/seatProjection";
+import { mapSeatTier, mapShowsStructureTo, orgSeatTier, payBadgeBoosts, projectSeats, villageWay } from "./lib/seatProjection";
 // ── Lane L3: how resources flow — declarations, never movements ─────────────
 import {
   answerFourQuestions,
@@ -9742,7 +9742,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // ONE seat object, shared with `/api/org` (server/lib/seatProjection.ts).
     const roles = projectSeats(orgRoles, orgAssignments, mapSeatTier(viewPeople, !!viewerCapCtx && hasCapability("terms.read", viewerCapCtx)), {
       route: "map", now: new Date(), nameOf, firstName, avatarOf: (id) => avatarByUser.get(id) ?? null,
-      heldTerms: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await heldTermsFor(getPool(), orgAssignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await rulesFor(getPool(), "role.cycle") : undefined,
+      heldTerms: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await heldTermsFor(getPool(), orgAssignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await rulesFor(getPool(), "role.cycle") : undefined, payBadges: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await payBadgeBoosts(getPool(), await dormantBadgeIds()).catch(() => []) : undefined,
     });
 
     const seasonNow = seasonState();
@@ -11898,7 +11898,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     overLimit,
     questsRepo,
     stayPostingHooks,
-    getPool,
+    getPool, currentPatternId,
   });
 
   /**
@@ -19034,7 +19034,7 @@ ${inner}
   });
   registerSeasonPlanRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, notify, overLimit, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, moduleGate: requireModule("governance") });
   registerPlayerCardRoutes(app, { authedUser, isAdmin, capabilityCtx, getPool, firstName, overLimit, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
-  registerCircleCardRoutes(app, { authedUser, isAdmin, capabilityCtx, getPool, overLimit, circles: () => circlesRepo.all() as any[], seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), sessionsLifecycle: () => effectiveLifecycle("sessions"), boolVar });
+  registerCircleCardRoutes(app, { authedUser, isAdmin, capabilityCtx, getPool, overLimit, circles: () => circlesRepo.all() as any[], seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), sessionsLifecycle: () => effectiveLifecycle("sessions"), boolVar, dormantBadgeIds });
 
   // The quest board, the share card, crews, the admin CRUD and the two steps
   // a member takes through a quest, all thirteen registered at exactly the
@@ -25077,7 +25077,7 @@ ${inner}
       ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
       // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
-      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined, ...(await orgRoleExtras(getPool(), roles, assignments, tier, { now: new Date(), timeZone: seatCalendar().timezone || "UTC", seasonId: seatCalendar().currentSeasonId })) }), // heldTerms: red team U2, server/lib/heldTerms.ts; health and handles: server/lib/orgRoleHealth.ts
+      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined, payBadges: tier.terms ? await payBadgeBoosts(getPool(), await dormantBadgeIds()).catch(() => []) : undefined, ...(await orgRoleExtras(getPool(), roles, assignments, tier, { now: new Date(), timeZone: seatCalendar().timezone || "UTC", seasonId: seatCalendar().currentSeasonId })) }), // heldTerms: red team U2, server/lib/heldTerms.ts; health and handles: server/lib/orgRoleHealth.ts
     });
   });
 

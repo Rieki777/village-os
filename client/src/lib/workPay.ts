@@ -23,7 +23,7 @@
  */
 import { useEffect, useState } from "react";
 import { crossRate, exponentOf, formatMoney } from "@shared/money";
-import type { PayLine, StatedCash, WorkPay, WorkValue } from "@shared/workValue";
+import type { PayBadge, PayLine, StatedCash, WorkPay, WorkValue } from "@shared/workValue";
 import { storedText } from "@/lib/safeStorage";
 
 export type { WorkPay } from "@shared/workValue";
@@ -145,6 +145,25 @@ export function cashPayWords(pay: WorkPay, rates: DisplayRates | null): { own: s
  */
 export function agreementCashWords(pay: WorkPay): string | null {
   return pay.cashPay ? null : cashWords(pay.cash);
+}
+
+/** "×2", "×1.5": a badge multiplier as a member reads it. */
+export function factorWords(factor: number): string {
+  return `×${Math.round(factor * 100) / 100}`;
+}
+
+/**
+ * "×2 Village Voice with the Builder badge" (0278). The multiplier is paid at
+ * consent or settlement to whoever holds the badge, so the card names it
+ * beside the base figures and never folds it into them.
+ */
+export function badgeWords(b: PayBadge): string {
+  return `${factorWords(b.factor)} ${b.name} with the ${b.badge} badge`;
+}
+
+/** The lines that pay Voice, by live name, for the sentence saying what Voice is. */
+export function voiceNames(pay: WorkPay): string[] {
+  return pay.lines.filter((l) => l.voice).map((l) => l.name);
 }
 
 /**

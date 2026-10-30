@@ -521,6 +521,17 @@ consent (`OwedClaim.boost`), each seat at settlement (`runSettlement`'s `boostFo
 accepted proposal, all through `quoteWorkPay`'s `boost`. The old single `badges.multiplier`
 names no token and multiplies nothing.
 
+**A card NAMES the multiplier and never applies it (Rye, 2026-10-30: each quest and role shows
+its full pay, cash, tokens, Voice and badge, before you take it on).** `payBadgeBoosts` and
+`withPayBadges` (`server/lib/workPay.ts`) read the same badges `rewardMultipliersFor` pays from
+(awake, no example, never self or hypha) and list, on `WorkPay.badges`, each one that multiplies
+one of the work's own lines: "×2 Village Voice with the Builder badge". The line's amount stays
+the base figure, because who holds the badge is only known at payment. A Voice token's line
+carries `voice: true`, so the card can say what Voice is. The quest board and detail, the
+consent queue, role cards at the `terms.read` tier, the circle card page and the Stay page's
+"Earn your nights" list (`server/routes/stays.ts`, which now sends each quest's whole `pay`
+beside its stay credits) all carry it. None of this posts anything.
+
 ### The cash work pays, and the record of it (0285)
 
 Rye, 2026-10-23: "roles and quests and more can be paid in cash, tokens (equity, credits,
