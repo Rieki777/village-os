@@ -1,4 +1,4 @@
--- 0290: a circle keeps its meeting templates.
+-- 0291: a circle keeps its meeting templates.
 --
 -- Four new tables and nothing else, so this file is expand-only: the previous
 -- release neither reads nor writes them, and rolling an image back over a

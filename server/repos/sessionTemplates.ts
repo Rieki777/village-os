@@ -1,5 +1,5 @@
 /**
- * Meeting templates (0290): every statement server/lib/sessionTemplates.ts
+ * Meeting templates (0291): every statement server/lib/sessionTemplates.ts
  * runs against `live_session_templates`, `live_session_template_uses`,
  * `live_session_priorities` and `live_session_shares`, one function each.
  *

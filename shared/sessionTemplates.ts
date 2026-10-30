@@ -1,5 +1,5 @@
 /**
- * MEETING TEMPLATES for Live Sessions (0290): the contract.
+ * MEETING TEMPLATES for Live Sessions (0291): the contract.
  *
  * A template is a meeting the village holds again and again: its name, a
  * category it sorts under ("Weekly rhythm", "Heart share"), the circle that
@@ -601,6 +601,7 @@ export const TEMPLATE_COPY = {
   stickBack: "Back one",
   stickStop: "Put the stick down",
   stickGive: "Give it to",
+  stickChoose: "Someone here",
   captureLabel: "Capture what was shared",
   capturePlaceholder: "One line for the record",
   captureKind: "What it is",

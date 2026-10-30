@@ -326,7 +326,7 @@ export function register(app: Express, deps: Deps): void {
     const input = cleanStart(req.body, new Set(circles().map((c) => c.id)));
     if (!input.ok) return res.status(input.status).json({ error: input.error });
     const pool = getPool();
-    // A meeting template (0290, shared/sessionTemplates.ts): checked before the room opens, linked once it has.
+    // A meeting template (0291, shared/sessionTemplates.ts): checked before the room opens, linked once it has.
     const template = await templateForStart(pool, req.body?.templateId);
     if (!template.ok) return res.status(template.status).json({ error: template.error });
     const no = await ensureMemberNo(pool, uid);

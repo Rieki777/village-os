@@ -2317,7 +2317,7 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   /** The advice process (0284): the requests they made, and the advice they gave. */
   adviceAsked: Record<string, unknown>[];
   adviceGiven: Record<string, unknown>[];
-  /** Meeting templates (0290): what they shared around the talking stick, and the priorities they wrote. */
+  /** Meeting templates (0291): what they shared around the talking stick, and the priorities they wrote. */
   heartShares: Record<string, unknown>[];
   prioritiesWritten: Record<string, unknown>[];
 }> {
@@ -2401,7 +2401,7 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   const { circlesFollowed, calendarAddress, ownCalendarsAttached } = await exportFollowsFor(pool, no);
   const reviewsSet = await exportReviewsFor(pool, no);
   const { adviceAsked, adviceGiven } = await exportAdviceFor(pool, no);
-  // Meeting templates (0290): what they shared around the talking stick, and the priorities they wrote.
+  // Meeting templates (0291): what they shared around the talking stick, and the priorities they wrote.
   const { shares: heartShares, priorities: prioritiesWritten } = await exportTemplatesFor(pool, no);
   return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet, adviceAsked, adviceGiven, heartShares, prioritiesWritten };
 }
@@ -2496,7 +2496,7 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
     );
     // The advice process (0284): the requests they made go with every answer to them, and their own advice goes.
     await forgetAdviceFor(conn, no);
-    // Meeting templates (0290): what they shared around the stick goes; a priority they wrote stays the circle's, by nobody.
+    // Meeting templates (0291): what they shared around the stick goes; a priority they wrote stays the circle's, by nobody.
     await forgetTemplatesFor(conn, no);
   });
   await repo.deleteMemberNo(pool, no);

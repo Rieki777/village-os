@@ -156,7 +156,7 @@ export type Capability =
   // that". The sender, the domain and the provider key are NOT behind it;
   // they stay with the admin in the secrets plane (the comms build spec 8).
   | "comms.manage" // run the village's email: automations, their words, and letters
-  // ── Meeting templates (Live Sessions, 0290) ──────────────────────────────
+  // ── Meeting templates (Live Sessions, 0291) ──────────────────────────────
   //
   // Make, change, duplicate, order and archive the meetings the village holds
   // again and again (shared/sessionTemplates.ts). Opens at the member rung,
