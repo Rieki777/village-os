@@ -42,6 +42,7 @@ import DecideLens from "@/components/power/DecideLens";
 import LensRow from "@/components/power/LensRow";
 import MapToolStrip from "@/components/power/MapToolStrip";
 import CircleWall from "@/components/power/CircleWall";
+import MapKey from "@/components/power/MapKey";
 import { headlineFor, villageCounts } from "@/components/power/villageCounts";
 // Lane L3: the resources lens rides PowerMap's `lenses` seam and the
 // layout's pad argument; these two imports and the wiring below are its
@@ -186,6 +187,10 @@ export default function VillageMap() {
       roles: data.roles.filter((r) => r.circleId === c.id).map((r) => ({ id: r.id, vacant: r.vacant })),
       questCount: data.quests.filter((q) => q.circleId === c.id).length,
       name: String(c.name ?? c.id),
+      // The layout reads these two: a forming circle with no roles rides its
+      // container's band, and a link or lead circle holds the middle.
+      status: c.status ?? null,
+      layer: c.layer ?? null,
     }));
     const villageRoles = data.roles.filter((r) => !r.circleId).map((r) => ({ id: r.id, vacant: r.vacant }));
     // The resources ring draws AROUND the village, so the canvas grows by
@@ -454,6 +459,7 @@ export default function VillageMap() {
                       onName={setNamedId}
                     />
                   </div>
+                  <MapKey className="px-4 mt-3" />
                   {/* THE KEY. Every number on the map, named, in the order it
                       is counted round the ring. A row steps into its circle;
                       the one a tap has named on the map is marked here too. */}
@@ -648,7 +654,7 @@ export default function VillageMap() {
                 {listMode ? (
                   <CircleWall data={data} onOpen={openFromWall} className="flex-1 min-w-0" />
                 ) : (
-                  <>
+                  <div className="flex-1 min-w-0">
                   {/* The stage is HEIGHT-driven and the drawing is a disc, so
                       this number is the one that decides how big the picture
                       renders. At 74vh on a 720px screen the canvas was 533px
@@ -657,7 +663,7 @@ export default function VillageMap() {
                       Taller stage, bigger disc, and the width beside it is
                       the gutter a long name is now allowed to use. */}
                   <div
-                    className={`relative flex-1 min-w-0 aspect-square md:aspect-auto md:h-[86vh] md:min-h-[560px] md:max-h-[980px]${
+                    className={`relative w-full aspect-square md:aspect-auto md:h-[86vh] md:min-h-[560px] md:max-h-[980px]${
                       arranging ? " [&_[data-circle-id]]:cursor-grab" : ""
                     }`}
                     data-power-map-box
@@ -679,7 +685,8 @@ export default function VillageMap() {
                       arrangeHint={arranging && !publishing ? "press M to pick it up and move it" : undefined}
                     />
                   </div>
-                  </>
+                  <MapKey className="mt-3" />
+                  </div>
                 )}
                   <aside data-scroll-contain className={`w-80 shrink-0 bg-card border border-border rounded-2xl ${selectedSeat ? "p-3" : "p-5"} sticky top-24 max-h-[80vh] overflow-y-auto hidden md:block`}>
                     {/* Arranging rides the top of this card, so the canvas never moves when it turns on. */}
