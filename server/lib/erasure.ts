@@ -1297,11 +1297,13 @@ async function runSweep(
     if (done.has(step.name)) continue;
     try {
       await step.run();
+      // Inside the try (round 5): a note that does not land is this step failing, recorded at once. Outside
+      // it, the record showed no failed step and read as possibly running for ten minutes. The step re-runs.
+      await noteStepDone(pool, target.id, step.name);
     } catch (err: any) {
       await noteErasureFailed(pool, target.id, step.name, String(err?.message ?? err));
       throw err;
     }
-    await noteStepDone(pool, target.id, step.name);
     ran.push(step.name);
   }
 
@@ -1412,8 +1414,9 @@ export async function beginMemberErasure(pool: Pool, target: any): Promise<void>
  *
  * "PAST THE TOMBSTONE" IS READ OFF THE ACCOUNT, NOT THE RECORD (round 3,
  * finding 17). A record can lack "tombstone" over an account that is one: the
- * write committed and its note was lost (`noteStepDone` sits outside the
- * step's try, and a deploy's SIGTERM can land between them), or a second
+ * write committed and its note was lost (a deploy's SIGTERM can land between
+ * them; a note that fails with the process alive is recorded as the step
+ * failing since round 5, see `runSweep`), or a second
  * resolve over the closed account emptied the steps and stopped early. The old
  * cancel route flipped such an exit with no look at the account, and this
  * then ended the record of somebody who could no longer sign in, with every
