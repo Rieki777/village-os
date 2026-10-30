@@ -43,6 +43,7 @@ import { readHeldSeatIds, readRolesForPreview } from "../repos/orgDrafts";
 import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
+import { moveWords, placementOf } from "./circlePlacement";
 import { canonicalJson } from "../../shared/canonicalJson";
 import { OFFER_WORDS, readTermsOffer } from "../../shared/seatTermsOffer";
 import { ORG_DRAFT } from "../../shared/ballotSubjects";
@@ -980,13 +981,18 @@ export function previewLoadedDraft(
         typeof c.payload?.parentCircleId === "string" && c.payload.parentCircleId ? String(c.payload.parentCircleId) : null;
       const moving = working.find((x) => x.id === circleId);
       const parentName = parentId ? (working.find((x) => x.id === parentId)?.name ?? parentId) : null;
+      // 0286: a move may also set the circle's order among its siblings and its layer.
+      const placed = placementOf(c.payload);
       reads = !moving
         ? `Move the circle "${circleId || c.orgRoleId}"`
-        : parentId
-          ? `Move "${moving.name}" inside "${parentName}"`
-          : `Move "${moving.name}" to the top of the village`;
+        : moveWords(
+            moving.name,
+            { changes: (moving.parentCircleId ?? null) !== parentId, toId: parentId, toName: parentName },
+            placed.ok ? placed.placement : {},
+          );
       if (!moving) blocked = "That circle does not exist";
       else if (moving.isExample) blocked = "A standing example is not moved. Publish your own circles and it is removed";
+      else if (!placed.ok) blocked = placed.problem;
       else blocked = parentingRefusal(working, circleId, parentId)?.message ?? null;
       if (!blocked && moving) moving.parentCircleId = parentId;
       lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
@@ -1411,7 +1417,7 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     return row ?? null;
   }
   if (c.op === "move_circle") {
-    const [[row]] = await conn.query<any[]>("SELECT id, parent_circle_id FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    const [[row]] = await conn.query<any[]>("SELECT id, parent_circle_id, sort_order, layer FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     return row ?? null;
   }
   if (c.op === "update_circle") return captureCircleWords(conn, c.orgRoleId);
@@ -1560,7 +1566,11 @@ async function applyChange(
      */
     const circleId = c.orgRoleId.slice("circle:".length);
     const parentId = typeof p.parentCircleId === "string" && p.parentCircleId ? p.parentCircleId : null;
-    await conn.query("UPDATE circles SET parent_circle_id = ? WHERE id = ? AND is_example = 0", [parentId, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    // 0286: and the order and layer, each only when the move carries it.
+    const placed = placementOf(p);
+    if (!placed.ok) throw new Error(placed.problem);
+    const { order, layer } = placed.placement;
+    await conn.query("UPDATE circles SET parent_circle_id = ?, sort_order = COALESCE(?, sort_order), layer = CASE WHEN ? THEN ? ELSE layer END WHERE id = ? AND is_example = 0", [parentId, order ?? null, layer !== undefined ? 1 : 0, layer ?? null, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     return null;
   }
@@ -1747,11 +1757,13 @@ export async function revertDraft(
     // Where every circle sits NOW, and its name for a refusal. Undoing a move is
     // itself a move, and the village may have changed since the publish: if the
     // old parent now sits inside the moved circle, putting it back closes a loop.
-    const [circleRows]: any = await conn.query("SELECT id, name, parent_circle_id FROM circles"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    const [circleRows]: any = await conn.query("SELECT id, name, parent_circle_id, sort_order, layer FROM circles"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     const nowCircles = (circleRows as any[]).map((x) => ({
       id: String(x.id),
       name: String(x.name ?? x.id),
       parentCircleId: x.parent_circle_id ? String(x.parent_circle_id) : null,
+      order: Number(x.sort_order ?? 0),
+      layer: x.layer == null ? null : String(x.layer),
     }));
     for (const c of [...draft.changes].reverse()) {
       if (c.op === "move_circle") {
@@ -1773,7 +1785,16 @@ export async function revertDraft(
           }
           const refused = parentingRefusal(nowCircles, circleId, back);
           if (refused) throw new Error(`This move cannot be undone as things stand. ${refused.message}`);
-          await conn.query("UPDATE circles SET parent_circle_id = ? WHERE id = ?", [back, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+          // 0286: the order and layer this draft set go back too, by the same rule:
+          // only while they are still what this draft left.
+          const place = placementOf(c.payload);
+          const set = place.ok ? place.placement : {};
+          if ((set.order !== undefined && current.order !== set.order) || (set.layer !== undefined && current.layer !== set.layer)) {
+            throw new Error(`This move cannot be undone as things stand. "${current.name}" has been rearranged again since, and undoing this would throw that later change away.`);
+          }
+          const backOrder = set.order !== undefined ? Number(c.beforeJson.sort_order ?? current.order) : current.order;
+          const backLayer = set.layer !== undefined ? (c.beforeJson.layer == null ? null : String(c.beforeJson.layer)) : current.layer;
+          await conn.query("UPDATE circles SET parent_circle_id = ?, sort_order = ?, layer = ? WHERE id = ?", [back, backOrder, backLayer, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           const moved = nowCircles.find((x) => x.id === circleId);
           if (moved) moved.parentCircleId = back;

@@ -4,6 +4,8 @@
  * of "permaculture is at two o'clock" must survive every visit, so positions
  * depend only on sortOrder and index, never on render order or jitter.
  */
+import { isCircleLayer, type CircleLayer } from "./circleView";
+
 export interface LayoutCircle {
   id: string;
   order: number;
@@ -136,8 +138,6 @@ const MIN_CANVAS = 320;
  * read as the most important one in the village. The layer is data a village
  * sets, never a name written here.
  */
-export const CIRCLE_LAYERS = ["link", "lead", "operating", "advisory", "council"] as const;
-export type CircleLayer = (typeof CIRCLE_LAYERS)[number];
 export const LAYER_RANK: Readonly<Record<CircleLayer, number>> = {
   link: 0,
   lead: 1,
@@ -146,7 +146,6 @@ export const LAYER_RANK: Readonly<Record<CircleLayer, number>> = {
   council: 4,
 };
 const OPERATING_RANK = LAYER_RANK.operating;
-const isLayer = (v: unknown): v is CircleLayer => (CIRCLE_LAYERS as readonly unknown[]).includes(v);
 
 /** The band forming circles ride: its width, the font its names are sized
  *  for, the room either end of a name, and the gap between two arcs. */
@@ -241,7 +240,7 @@ interface PackedNode {
   band?: { inner: number; outer: number; crown: number; arcs: Map<string, { a0: number; a1: number }> };
 }
 
-const rankOf = (n: PackedNode): number => (isLayer(n.input.layer) ? LAYER_RANK[n.input.layer] : OPERATING_RANK);
+const rankOf = (n: PackedNode): number => (isCircleLayer(n.input.layer) ? LAYER_RANK[n.input.layer] : OPERATING_RANK);
 const bySize = (a: PackedNode, b: PackedNode): number =>
   b.r - a.r || a.input.order - b.input.order || a.input.id.localeCompare(b.input.id);
 const byLayer = (a: PackedNode, b: PackedNode): number =>
