@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { SHARE_DEFAULTS, type SeasonSummary, type ShareChoices } from "@shared/seasonSummary";
-import { cardPng, drawSeasonCard, paletteFrom, seasonCardModel } from "@/lib/seasonCard";
+import { cardPng, drawSeasonCard, fontsReady, paletteFrom, seasonCardModel } from "@/lib/seasonCard";
 import SeasonSummaryCard from "./SeasonSummaryCard";
 import { markSeasonSeen } from "./seen";
 import { useTokenName } from "@/hooks/useTokenNames";
@@ -74,7 +74,10 @@ export default function SeasonSummarySection() {
   if (!summary) return null;
 
   const picture = async (): Promise<Blob | null> => {
-    const canvas = drawSeasonCard(document.createElement("canvas"), seasonCardModel(summary, choices, thanks), paletteFrom(cardRef.current));
+    // The article inside the wrapper carries the faces; the wrapper only the colours.
+    const palette = paletteFrom(cardRef.current?.firstElementChild ?? cardRef.current);
+    await fontsReady(palette);
+    const canvas = drawSeasonCard(document.createElement("canvas"), seasonCardModel(summary, choices, thanks), palette);
     return cardPng(canvas);
   };
   // The constructor, because the client's typecheck refuses the `u` flag on a literal.

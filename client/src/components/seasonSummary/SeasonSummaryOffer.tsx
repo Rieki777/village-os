@@ -63,7 +63,7 @@ export default function SeasonSummaryOffer() {
   };
 
   return (
-    <div className="fixed inset-x-4 bottom-24 z-50 mx-auto max-w-sm sm:bottom-6 sm:right-6 sm:left-auto sm:mx-0">
+    <div className="fixed inset-x-4 bottom-24 z-50 mx-auto max-w-sm sm:right-6 sm:left-auto sm:mx-0">
       <div role="dialog" aria-labelledby="season-offer-title" className="sheet-night rounded-2xl border border-notice bg-card p-5 text-card-foreground shadow-sm">
         <div className="flex items-start gap-3">
           <Sparkles className="mt-1 h-5 w-5 shrink-0 text-notice" aria-hidden="true" />

@@ -127,8 +127,8 @@ export function paletteFrom(el: Element | null): CardPalette {
     gold: v("--sheet-notice", "#dfab4d"),
     goldLit: v("--sheet-earned-lit", "#f2ce85"),
     edge: v("--border", "#6d8175"),
-    display: v("--font-display", "Georgia, serif"),
-    body: (css?.fontFamily || "system-ui, sans-serif"),
+    display: v("--card-display", "Georgia, serif"),
+    body: v("--card-body", "system-ui, sans-serif"),
   };
 }
 
@@ -204,21 +204,29 @@ export function drawSeasonCard(canvas: HTMLCanvasElement, m: SeasonCardModel, p:
     y += 104;
   }
 
-  // The numbers, label over value.
+  // The numbers, label over value, two to a row so the badges always fit.
   ctx.textAlign = "left";
   y += 10;
-  for (const s of m.stats) {
-    ctx.fillStyle = p.gold;
-    ctx.font = `500 22px ${p.body}`;
-    ctx.fillText(s.label.toUpperCase(), pad, y);
-    y += 44;
-    ctx.fillStyle = p.ink;
-    ctx.font = `400 34px ${p.body}`;
-    for (const line of wrap(ctx, s.value, inner, 2)) {
-      ctx.fillText(line, pad, y);
-      y += 44;
-    }
-    y += 18;
+  const gap = 48;
+  const col = (inner - gap) / 2;
+  for (let i = 0; i < m.stats.length; i += 2) {
+    let rowEnd = y;
+    m.stats.slice(i, i + 2).forEach((s, j) => {
+      const x = pad + j * (col + gap);
+      let cy = y;
+      ctx.fillStyle = p.gold;
+      ctx.font = `500 22px ${p.body}`;
+      ctx.fillText(s.label.toUpperCase(), x, cy);
+      cy += 42;
+      ctx.fillStyle = p.ink;
+      ctx.font = `400 32px ${p.body}`;
+      for (const line of wrap(ctx, s.value, col, 2)) {
+        ctx.fillText(line, x, cy);
+        cy += 40;
+      }
+      rowEnd = Math.max(rowEnd, cy);
+    });
+    y = rowEnd + 22;
   }
 
   // The member's own best work, one panel each.
@@ -253,7 +261,7 @@ export function drawSeasonCard(canvas: HTMLCanvasElement, m: SeasonCardModel, p:
   }
 
   // Badges as a line of gold names.
-  if (m.badges.length && y < CARD_H - 200) {
+  if (m.badges.length) {
     y += 20;
     ctx.fillStyle = p.gold;
     ctx.font = `500 22px ${p.body}`;
@@ -272,6 +280,20 @@ export function drawSeasonCard(canvas: HTMLCanvasElement, m: SeasonCardModel, p:
   ctx.font = `italic 500 34px ${p.display}`;
   ctx.fillText(m.footer, CARD_W / 2, CARD_H - 96);
   return canvas;
+}
+
+/** Wait for the faces the card names, so the canvas never paints in a fallback. */
+export async function fontsReady(p: CardPalette): Promise<void> {
+  try {
+    await Promise.all([
+      document.fonts.load(`600 96px ${p.display}`),
+      document.fonts.load(`italic 500 34px ${p.display}`),
+      document.fonts.load(`400 34px ${p.body}`),
+      document.fonts.load(`500 22px ${p.body}`),
+    ]);
+  } catch {
+    /* a face that will not load is drawn in its fallback */
+  }
 }
 
 /** The card as a PNG blob, or null when the browser cannot encode one. */

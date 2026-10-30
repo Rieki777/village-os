@@ -6,12 +6,22 @@
  * heading, so what they see and what they post are never confused.
  *
  * Drawn in the profile's night world (`.sheet-night` in index.css): every
- * colour is a token, so a village's own gold reaches it.
+ * colour is a token, so a village's own gold reaches it. The faces are the
+ * approved design's, Cormorant Garamond over Jost (both already shipped by
+ * main.tsx), set as two properties the shared picture reads back.
  */
 import { formatMoney } from "@shared/money";
 import { CONTRIBUTION_WORDS, type SeasonSummary, type ShareChoices } from "@shared/seasonSummary";
 import { amountText, firstName, seasonSpan, termText } from "@/lib/seasonCard";
 import { useTokenName } from "@/hooks/useTokenNames";
+import type { CSSProperties } from "react";
+
+const FACES = {
+  "--card-display": "'Cormorant Garamond', Georgia, serif",
+  "--card-body": "Jost, system-ui, sans-serif",
+  fontFamily: "var(--card-body)",
+} as CSSProperties;
+const DISPLAY = { fontFamily: "var(--card-display)" };
 
 function Heading({ children, shared }: { children: string; shared: boolean }) {
   return (
@@ -34,13 +44,14 @@ export default function SeasonSummaryCard({ summary, choices }: { summary: Seaso
   return (
     <article
       aria-labelledby="season-summary-title"
+      style={FACES}
       className="relative overflow-hidden rounded-2xl border border-notice bg-card p-6 text-card-foreground shadow-sm sm:p-8 space-y-6"
     >
       <header className="text-center space-y-2">
         <p className="text-xs font-semibold uppercase tracking-widest text-notice">
           {s.season.name} · {seasonSpan(s.season)}
         </p>
-        <h3 id="season-summary-title" className="font-display text-4xl sm:text-5xl">
+        <h3 id="season-summary-title" style={DISPLAY} className="text-4xl font-semibold sm:text-5xl">
           {who ? `${who}'s season` : "Your season"}
         </h3>
         {!s.season.closed && <p className="text-sm text-muted-foreground">This season is still running. The summary so far.</p>}
@@ -118,7 +129,7 @@ export default function SeasonSummaryCard({ summary, choices }: { summary: Seaso
         </section>
       )}
 
-      <p className="text-center font-display text-xl italic text-notice">Thank you for the season</p>
+      <p style={DISPLAY} className="text-center text-2xl italic text-notice">Thank you for the season</p>
     </article>
   );
 }
