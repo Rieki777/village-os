@@ -24,6 +24,14 @@
  * and a balance the registry cannot name is no token any surface can show,
  * so neither counts. A negative balance never reaches here: it blocks resolve.
  *
+ * AND CASH THE VILLAGE STILL OWES THEM (Rye, 2026-10-30, the sixth of the exit
+ * suggestions). A `cash_owed` row in state `owed` or `claimed` (0285) is money
+ * the treasurer has not sent yet, and the member reads it marked paid by
+ * signing in. Erasing the account would take that sight away from somebody
+ * holding no tokens at all, so unpaid cash keeps the account exactly as a
+ * balance does (`unpaidCashOf`, server/lib/formerMember.ts). Cash already
+ * marked `paid` keeps nothing.
+ *
  * WHAT A FORMER MEMBER LOSES, and each line has a reason:
  *   - `membershipGranted` AND `stageGranted`. Admission is either one
  *     (`isAdmitted`, server/lib/admission.ts), so ending membership clears
@@ -37,10 +45,24 @@
  *     marked `party_left` (`recordPartyLeft`), in the erasure's order and for
  *     the erasure's reason: a released seating ends seat terms by the
  *     derivation, and the record would then never say why.
+ *   - Every DELEGATION they gave or carried (`endDelegationsOf`), the call the
+ *     erasure makes, notices included (Rye, 2026-10-30). Each member who
+ *     handed them a voice is told and decides their own votes again, and a
+ *     vote copied from them onto an open ballot is no longer cast. Their OWN
+ *     votes on a ballot still open stand: the roll froze with them on it, and
+ *     `castVote` refuses them a new one (`leftTheVillage`).
  *
  * WHAT THEY KEEP: everything else. Their name, sign-in, sessions, wallet,
  * history and balances. An admin can admit them again through any door that
- * admits anybody.
+ * admits anybody, and every reader of "former member" answers from that
+ * moment (`isFormerMember`, server/lib/formerMember.ts).
+ *
+ * THEIR VOUCHES are never touched here, and that is the rule working. A vouch
+ * that admitted somebody already did its work, and the membership it wrote
+ * stands. A vouch they gave somebody still waiting stops counting, because a
+ * vouch is a member's ongoing promise, and that is read where vouches are
+ * counted (`livingVouchesFor`, server/repos/vouches.ts). The row stays, so a
+ * former member admitted again finds their word counting again.
  *
  * ORDER AND RETRY. Every step is a DELETE keyed on the member, an UPDATE
  * writing a constant, or a write keyed on its subject, so a resolve that dies
@@ -51,11 +73,13 @@
 import type { Pool } from "mysql2/promise";
 import { fromLedgerUnits } from "./economy";
 import { balancesFor, memberAccount, tokenDef, type TokenDef } from "./ledger";
-import { anonymizeMember, endPermissionHoldings, type ErasureDeps } from "./erasure";
+import { anonymizeMember, endPermissionHoldings, noticeSpine, type ErasureDeps } from "./erasure";
 import type { ErasureOutcome } from "./memberDrivers";
 import { recordPartyLeft } from "./alignmentEndings";
 import { releaseSeatingsForUser } from "./orgChart";
 import { recordEvent } from "./events";
+import { endDelegationsOf } from "./delegation";
+import { cashWords, unpaidCashOf, type UnpaidCash } from "./formerMember";
 import { withdrawUnseatedOf } from "../repos/seatApplications";
 import { markExitResolved } from "../repos/exitNotes";
 
@@ -75,6 +99,8 @@ export interface ExitResolution {
   outcome: ExitOutcome;
   /** What a former member still holds. Empty when the account was erased. */
   held: HeldValue[];
+  /** The cash still owed to a former member, per currency. Empty when the account was erased. */
+  owed: UnpaidCash[];
   /** What the outside stores answered, on the erasure path only. */
   external: ErasureOutcome | null;
 }
@@ -104,12 +130,15 @@ export async function heldValueOf(pool: Pool, userId: string): Promise<HeldValue
 export const FORMER_MEMBER_MARK = "kept as a former member: ";
 
 /**
- * The line a former member's exit carries: the date and what they still hold.
- * It names no person, which is why an erasure asked for later keeps it.
+ * The line a former member's exit carries: the date, what they still hold, and
+ * the cash still owed to them. It names no person, which is why an erasure
+ * asked for later keeps it.
  */
-export function formerMemberNote(held: readonly HeldValue[], now: Date): string {
-  const what = held.map((h) => `${h.amount} ${h.token}`).join(", ");
-  return `\n[${now.toISOString().slice(0, 10)}] ${FORMER_MEMBER_MARK}still holds ${what}`.slice(0, 2000);
+export function formerMemberNote(held: readonly HeldValue[], now: Date, owed: readonly UnpaidCash[] = []): string {
+  const parts: string[] = [];
+  if (held.length) parts.push(`still holds ${held.map((h) => `${h.amount} ${h.token}`).join(", ")}`);
+  if (owed.length) parts.push(`is owed ${cashWords(owed)} in cash`);
+  return `\n[${now.toISOString().slice(0, 10)}] ${FORMER_MEMBER_MARK}${parts.join("; ")}`.slice(0, 2000);
 }
 
 /**
@@ -127,6 +156,9 @@ export async function keepAsFormerMember(pool: Pool, target: any, deps: ErasureD
     u.stageGranted = null;
     u.role = "member";
   });
+  // Last, as the erasure has it, and idempotent the same way: a retry finds no
+  // live row, tells nobody twice (one stable key per delegator) and derives.
+  await endDelegationsOf(pool, userId, noticeSpine(pool, deps));
 }
 
 /**
@@ -141,15 +173,16 @@ export async function resolveExit(
   const now = input.now ?? new Date();
   const agreement = input.agreementRef ? String(input.agreementRef).slice(0, 255) : null;
   const held = await heldValueOf(pool, String(input.target.id));
+  const owed = await unpaidCashOf(pool, String(input.target.id));
 
-  if (!held.length) {
+  if (!held.length && !owed.length) {
     const external = await anonymizeMember(pool, input.target, input.actorId, input.deps);
     await markExitResolved(pool, input.exitId, agreement, "");
-    return { outcome: "erased", held, external };
+    return { outcome: "erased", held, owed, external };
   }
 
   await keepAsFormerMember(pool, input.target, input.deps, now);
-  await markExitResolved(pool, input.exitId, agreement, formerMemberNote(held, now));
+  await markExitResolved(pool, input.exitId, agreement, formerMemberNote(held, now, owed));
   await recordEvent(pool, {
     kind: "audit",
     text: "member:kept-as-former",
@@ -158,5 +191,5 @@ export async function resolveExit(
     entityRef: String(input.target.id),
     audience: "admin",
   });
-  return { outcome: "former", held, external: null };
+  return { outcome: "former", held, owed, external: null };
 }

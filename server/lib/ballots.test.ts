@@ -29,6 +29,8 @@ import {
   standingObjectionCount,
   talliesFor,
   withdrawBallot,
+  LEFT_THE_VILLAGE_OBJECTION,
+  LEFT_THE_VILLAGE_VOTE,
   type OpenBallotInput,
 } from "./ballots";
 import { setWeight, weightsFor, weightChangeProblem, allWeights } from "./governanceWeights";
@@ -140,6 +142,37 @@ describe.skipIf(!configured)("ballots (MySQL)", () => {
     const late = await castVote(pool, id, "u-b", "yes");
     expect(late.ok).toBe(false);
     if (!late.ok) expect(late.error).toContain("Votes are locked");
+  });
+
+  it("A FORMER MEMBER casts no new vote, and the vote they cast before leaving and the roll it froze both stand (Rye, 2026-10-30)", async () => {
+    const opened = await openOne({ method: "consent" });
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    const id = opened.ballot.id;
+    const here = { mayVoteNow: true, deniedByWarning: false };
+    const left = { mayVoteNow: false, deniedByWarning: false, leftTheVillage: true };
+
+    // Cast while still a member.
+    expect((await castVote(pool, id, "u-a", "yes", undefined, here)).ok).toBe(true);
+    const rollBefore = await pool.query<any[]>("SELECT user_id, weight FROM ballot_electorate WHERE ballot_id = ? ORDER BY user_id", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+
+    // Then they leave: a changed vote is refused with the sentence, on the roll or off it.
+    const changed = await castVote(pool, id, "u-a", "no", "I changed my mind", left);
+    expect(changed).toEqual({ ok: false, error: LEFT_THE_VILLAGE_VOTE });
+    const offRoll = await castVote(pool, id, "u-nobody", "yes", undefined, left);
+    expect(offRoll).toEqual({ ok: false, error: LEFT_THE_VILLAGE_VOTE });
+    // An objection filed directly is the consent ballot's no, and is refused the same way.
+    expect(await fileObjection(pool, id, "u-a", "A risk I see", { leftTheVillage: true })).toEqual({ ok: false, error: LEFT_THE_VILLAGE_OBJECTION });
+
+    const [votes] = await pool.query<any[]>("SELECT user_id, choice FROM ballot_votes WHERE ballot_id = ?", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(votes, "the vote cast before leaving stands, unchanged").toEqual([{ user_id: "u-a", choice: "yes" }]);
+    expect(await objectionsFor(pool, id), "nothing was filed").toEqual([]);
+    const rollAfter = await pool.query<any[]>("SELECT user_id, weight FROM ballot_electorate WHERE ballot_id = ? ORDER BY user_id", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(rollAfter[0], "the frozen roll is not rewritten, so the quorum does not shift").toEqual(rollBefore[0]);
+
+    // The control: on the same ballot, somebody still here may do both.
+    expect((await castVote(pool, id, "u-b", "yes", undefined, here)).ok).toBe(true);
+    expect((await fileObjection(pool, id, "u-c", "A risk I see", { leftTheVillage: false })).ok).toBe(true);
   });
 
   it("THE SNAPSHOT LAW: a dial and a weight change mid-ballot move nothing", async () => {

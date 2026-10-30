@@ -1,5 +1,6 @@
 import { anonymizeMember } from "./lib/erasure";
 import { resolveExit } from "./lib/exitResolve";
+import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
 import { joiningOf, pickNextAction } from "./lib/nextAction";
@@ -170,6 +171,7 @@ import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
@@ -14391,7 +14393,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     for (const roleId of roleIds) {
       await notifyAdmins("exit_opened", `An opening in ${roleId} (departure resolved)`, `exit:${exit.id}:vacancy:${roleId}`);
     }
-    res.json({ success: true, outcome: out.outcome, held: out.held, vacatedRoles: roleIds });
+    res.json({ success: true, outcome: out.outcome, held: out.held, owed: out.owed, vacatedRoles: roleIds });
   });
 
   /** A person who stays: the exit closes without a tombstone. */
@@ -18363,6 +18365,7 @@ ${inner}
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay") });
+  registerOwnHoldingsRoutes(app, { authedUser, getPool });
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -21438,15 +21441,12 @@ ${inner}
    * roll built afterwards, which matters because quorum is measured against the
    * roll frozen at open (`seatRecord.routes.e2e.test.ts`). This filtered on
    * `passwordHash` until 2026-09-14, which also dropped every member who joins
-   * through Google (`googleMemberVote.routes.e2e.test.ts`).
-   *
-   * The gap that is NOT covered: a member who stops taking part but keeps
-   * their account is still in the pool, because "left the village" has no
-   * representation here other than deleting the account. Confirming a
-   * departure by vote is a separate piece of work.
+   * through Google (`googleMemberVote.routes.e2e.test.ts`). A FORMER MEMBER is
+   * taken out before the gate is asked, whatever a badge grants (Rye,
+   * 2026-10-30; `withoutFormerMembers`, server/lib/formerMember.ts).
    */
   async function buildElectorate(): Promise<Array<{ userId: string; weight: number }>> {
-    const candidates = (await members.all()).filter((u: any) => isPresentMember(u, AUTH_TOKEN_SECRET));
+    const candidates = await withoutFormerMembers(getPool(), (await members.all()).filter((u: any) => isPresentMember(u, AUTH_TOKEN_SECRET)));
     const eligible: any[] = [];
     for (const u of candidates) {
       const ctx = await capabilityCtx(u);
@@ -23382,7 +23382,7 @@ ${inner}
       getPool(), req.params.id, user.id,
       String(req.body?.choice ?? ""),
       req.body?.reason === undefined ? undefined : String(req.body.reason),
-      { mayVoteNow: voteGate.allowed, deniedByWarning: voteGate.source === "denied by warning badge" },
+      { mayVoteNow: voteGate.allowed, deniedByWarning: voteGate.source === "denied by warning badge", leftTheVillage: await leftTheVillage(getPool(), user) },
       req.body?.standsForSteward === true, // 0218: castVote honours it on the Birthing alone, and reports what it stored
     );
     if (!result.ok) return res.status(409).json({ error: result.error });
@@ -23394,7 +23394,7 @@ ${inner}
   app.post("/api/governance/ballots/:id/objections", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    const result = await fileObjection(getPool(), req.params.id, user.id, String(req.body?.text ?? ""));
+    const result = await fileObjection(getPool(), req.params.id, user.id, String(req.body?.text ?? ""), { leftTheVillage: await leftTheVillage(getPool(), user) });
     if (!result.ok) return res.status(409).json({ error: result.error });
     res.json({ success: true, id: result.id });
   });

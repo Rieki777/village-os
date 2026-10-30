@@ -42,6 +42,7 @@ import { numberVar, stringVar } from "./variables";
 import { tokenTypesPostedTo } from "../repos/tokenLedger";
 import { ownExitResolutions, setExitResolution } from "../repos/exitNotes";
 import { openRedemptionCount } from "./redemptionStore";
+import { cashWords, unpaidCashOf } from "./formerMember";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -277,6 +278,20 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     description: positive.length
       ? `holds ${positive.map(([t, v]) => `${fromLedgerUnits(t, v)} ${t}`).join(", ")}. Settled by the village's exit shares in an explicit admin act; while anything besides recognition is still held at resolve, the account stays on as a former member`
       : "nothing held",
+    blocking: false,
+  });
+
+  // Cash the village still owes them (0285), `owed` or `claimed`. Never a
+  // block: the platform moves no money, and a debt the village owes a leaver
+  // is no reason to hold the leaver. It is the line that explains a resolve
+  // keeping an account that holds no tokens (Rye, 2026-10-30; `resolveExit`).
+  const owed = await unpaidCashOf(pool, userId);
+  states.push({
+    domain: "cash",
+    count: owed.reduce((n, c) => n + c.rows, 0),
+    description: owed.length
+      ? `is owed ${cashWords(owed)} in cash the village has not paid yet. Unpaid cash keeps the account at resolve, so they stay on as a former member and can still sign in to see it marked paid`
+      : "no cash owed",
     blocking: false,
   });
 

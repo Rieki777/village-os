@@ -118,6 +118,41 @@ describe("the acknowledgement cannot be ticked over the platform's words", () =>
       "The account becomes a tombstone; contributions stay part of the village record",
     );
   });
+
+  it("a leaver reads before they go that kept Voice wanes like everyone's, and that cash still owed keeps the account (Rye, 2026-10-30)", () => {
+    expect(DEFAULT_EXIT_POLICY.voluntary.valuationMethod).toContain("Voice a former member keeps wanes under the same rule as everyone's.");
+    expect(DEFAULT_EXIT_POLICY.voluntary.unwindSteps).toContain(
+      "Anyone still holding tokens, or still owed cash, stays on as a former member, with their account and balances",
+    );
+  });
+
+  it("every wording the platform has shipped is still the platform's, today's included, so none can be published as the village's", () => {
+    /*
+     * The wording of 2026-10-23 joined the retired list on 2026-10-30, the
+     * day it changed. Each pair here is one release's terms exactly as it
+     * shipped them, and the guard has to name both terms for every one.
+     */
+    const shipped = [
+      { valuationMethod: DEFAULT_EXIT_POLICY.voluntary.valuationMethod, unwindSteps: [...DEFAULT_EXIT_POLICY.voluntary.unwindSteps] },
+      ...RETIRED_DEFAULT_TERMS.valuationMethod.map((valuationMethod, i) => ({
+        valuationMethod,
+        unwindSteps: [...RETIRED_DEFAULT_TERMS.unwindSteps[i]],
+      })),
+    ];
+    expect(shipped).toHaveLength(3);
+    for (const terms of shipped) {
+      const policy = normalizeExitPolicy({ ...own(), voluntary: { ...own().voluntary, ...terms } });
+      expect(platformDefaultTerms(policy), terms.valuationMethod).toEqual([
+        "How contributed value is honored",
+        "The steps of a voluntary departure",
+      ]);
+    }
+    // The one retired the day this case was written, word for word.
+    expect(RETIRED_DEFAULT_TERMS.valuationMethod).toContain(
+      "To be decided by the community: how contributed value is honored when someone leaves. Until then, a member who leaves keeps their tokens and their account, and stays on as a former member. Recognition stays on the village's books. The exit records what they still hold.",
+    );
+    expect(RETIRED_DEFAULT_TERMS.unwindSteps.some((s) => s.includes("Anyone still holding tokens stays on as a former member, with their account and balances"))).toBe(true);
+  });
 });
 
 describe("normalizing an admin body", () => {
@@ -703,6 +738,16 @@ describe("a stored policy gets fields it was saved before", () => {
         expect(read.voluntary.noticePeriodDays).toBe(21);
         expect(read.involuntary.process).toBe("Our process.");
       }
+    });
+
+    it("a draft saved between 2026-10-23 and 2026-10-30 reads today's words too, so a leaver learns about waning and cash", () => {
+      const between = oldDraft(true);
+      between.voluntary.valuationMethod = RETIRED_DEFAULT_TERMS.valuationMethod[1];
+      between.voluntary.unwindSteps = [...RETIRED_DEFAULT_TERMS.unwindSteps[1]];
+      const read = withPolicyDefaults(between);
+      expect(read.voluntary.valuationMethod).toBe(DEFAULT_EXIT_POLICY.voluntary.valuationMethod);
+      expect(read.voluntary.unwindSteps).toEqual(DEFAULT_EXIT_POLICY.voluntary.unwindSteps);
+      expect(read.voluntary.noticePeriodDays).toBe(21);
     });
 
     it("leaves a published policy exactly as the village saved it", () => {

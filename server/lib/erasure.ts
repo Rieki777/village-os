@@ -269,6 +269,16 @@ function bellOnly(pool: Pool, members: ErasureDeps["members"]): NotifyDeps {
   };
 }
 
+/**
+ * The spine a notice from this sweep goes through: the host's when it handed
+ * one, else the bell alone (`bellOnly`). Exported for the former-member resolve
+ * (`keepAsFormerMember`, server/lib/exitResolve.ts), which ends a leaver's
+ * delegations with the same call and tells the same people the same way.
+ */
+export function noticeSpine(pool: Pool, deps: Pick<ErasureDeps, "members" | "notify">): (input: NotifyInput) => Promise<unknown> {
+  return deps.notify ?? ((input: NotifyInput) => insertNotification(bellOnly(pool, deps.members), input));
+}
+
 /** Nothing outside holds anything, and nothing was asked. */
 const ASKED_NOBODY: ErasureOutcome = { asked: [], confirmed: [], unconfirmed: [] };
 
@@ -1077,8 +1087,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        */
       name: "delegations-after-tombstone",
       run: async () => {
-        const notify = deps.notify ?? ((input: NotifyInput) => insertNotification(bellOnly(pool, members), input));
-        await endDelegationsOf(pool, target.id, notify);
+        await endDelegationsOf(pool, target.id, noticeSpine(pool, deps));
       },
     },
     {
