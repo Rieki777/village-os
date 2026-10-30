@@ -65,6 +65,7 @@ import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gr
 import { applyPendingModes } from "./circleTreasury";
 import { openExitFor } from "./exit";
 import { isTombstone } from "./oauthAccounts";
+import { DEPARTED_RECIPIENT, departedById } from "./departed";
 import { attendeeEmail, clearCheckinNotes } from "../repos/eventCheckins";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { numberVar, stringVar } from "./variables";
@@ -2603,6 +2604,11 @@ async function owedPreflight(db: Pool | PoolConnection, row: OwedPosting): Promi
   if (!row.idempotencyKey) return refuse("an occurrence key is required");
   const tooLong = keyTooLong(row.idempotencyKey);
   if (tooLong) return refuse(tooLong);
+  // Nothing posts to a member who has left (round 4, finding 3): a row
+  // recorded while they were here, settled after, or pressed on /review. Asked
+  // before the launch question, so a tombstone's row is refused for good, and
+  // never left owed until launch to be paid then. See server/lib/departed.ts.
+  if (await departedById(db, row.toUserId)) return refuse(DEPARTED_RECIPIENT);
   const closed = await issuanceRefusal(db);
   if (closed) return { outcome: "refused", reason: "not_launched", message: closed };
   return null;

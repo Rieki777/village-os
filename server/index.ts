@@ -9970,7 +9970,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     }
     if (toUserId === user.id) return res.status(400).json({ error: "That's you" });
     const recipient = await members.byId(String(toUserId));
-    if (!recipient) return res.status(404).json({ error: "Member not found" });
+    if (!recipient || departedRecipient(recipient)) return res.status(404).json({ error: recipient ? DEPARTED_RECIPIENT : "Member not found" }); // nothing reaches a tombstone, round 4 finding 7: server/lib/departed.ts
     // Example identities carry empty prefs, so contactable is not false, and
     // their ids are public on every forum thread payload. Without this the
     // relay writes a contact_requests row that outlives the identities and

@@ -463,4 +463,76 @@ describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", (
     expect(await legsTo(example), "or the standing example").toBe(0);
     expect(await legsTo(bystander.id), "the living member got the hand-mint and the signed grant").toBe(livingBefore + 2);
   });
+
+  /*
+   * THE CONTACT RELAY IS A FOURTH DOOR THAT NAMES A RECIPIENT BY ID (round 4,
+   * finding 7). A tombstone keeps `contactable`, and its id is public on every
+   * forum payload, so the relay stored the sender's words for nobody, spent a
+   * slot of their daily cap, and tried a real email to an @anonymized.invalid
+   * address. Asked for the tombstone and for a living member, with the stored
+   * rows and the mail ledger read for what reached it.
+   */
+  it("the contact relay stores nothing for, and mails nothing to, a member who has left", async () => {
+    const reached = async (to: string) => {
+      const [asks] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `contact_requests` WHERE `to_user_id` = ?", [to]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      return Number(asks[0]?.n ?? 0);
+    };
+    const mailed = async () => {
+      const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) AS n FROM `comms_messages` WHERE `origin` = 'map.contact_relay' AND `to_email` LIKE '%@anonymized.invalid'",
+      );
+      return Number(rows[0]?.n ?? 0);
+    };
+    const gone = await call("POST", "/api/map/contact", { toUserId: GONE, message: "Are you still building the oven?" });
+    expect(gone.status, `the relay refuses a tombstone: ${gone.text}`).toBe(404);
+    expect(String(gone.json?.error), "the sender is told why").toMatch(/left the village/);
+    expect(await reached(GONE), "no message is stored for them").toBe(0);
+    expect(await mailed(), "and no relay mail is put on the ledger for an anonymized address").toBe(0);
+
+    // The control: the same sender, the same words, a living member.
+    const living = await call("POST", "/api/map/contact", { toUserId: bystander.id, message: "Are you still building the oven?" });
+    expect(living.status, `the relay reaches a living member: ${living.text}`).toBe(200);
+    expect(await reached(bystander.id), "and stores the message for them").toBe(1);
+  });
+
+  /*
+   * NOR DOES A STEWARD'S CONSENT PAY THEM (round 4, finding 3). A claim the
+   * member submitted before leaving survives the erasure, renamed. Consenting
+   * to it minted the quest's tokens into the tombstone's account and wrote
+   * cash the village owed to nobody. The consent is refused before anything is
+   * recorded, and the decline that clears the claim stays open.
+   */
+  it("a steward's consent to work a member submitted before leaving pays and owes them nothing", async () => {
+    const seed = (sql: string, params: unknown[]) => pool.query(sql, params); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await seed(
+      "INSERT INTO `quests` (`id`, `title`, `description`, `status`, `stay_credit_reward`, `cash_minor`, `cash_currency`) VALUES ('needstomb-quest', 'Mend the oven', 'The bread oven door', 'open', 2, 5000, 'USD')",
+      [],
+    );
+    for (const [id, who] of [["claim-needstomb-gone", GONE], ["claim-needstomb-living", bystander.id]]) {
+      await seed(
+        "INSERT INTO `quest_claims` (`id`, `quest_id`, `quest_title`, `user_id`, `user_name`, `status`) VALUES (?, 'needstomb-quest', 'Mend the oven', ?, 'A member', 'submitted')",
+        [id, who],
+      );
+    }
+    const owedFor = async (claimId: string, userId: string) => {
+      const [owed] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `quest_owed_postings` WHERE `claim_id` = ?", [claimId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      const [cash] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `cash_owed` WHERE `user_id` = ?", [userId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      const [status] = await pool.query<any[]>("SELECT `status` FROM `quest_claims` WHERE `id` = ?", [claimId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      return { owed: Number(owed[0]?.n ?? 0), cash: Number(cash[0]?.n ?? 0), status: String(status[0]?.status) };
+    };
+
+    const consented = await call("POST", "/api/admin/quest-claims/claim-needstomb-gone/consent", { approve: true });
+    expect(consented.status, `no consent pays a tombstone: ${consented.text}`).toBe(409);
+    expect(String(consented.json?.error), "the steward is told why, and what to do").toMatch(/left the village.*[Dd]ecline the claim/);
+    expect(await owedFor("claim-needstomb-gone", GONE), "nothing is recorded").toEqual({ owed: 0, cash: 0, status: "submitted" });
+
+    // The control: the same quest, a living claimant, is past this refusal
+    // (this village has not launched, so it meets that refusal instead).
+    const living = await call("POST", "/api/admin/quest-claims/claim-needstomb-living/consent", { approve: true });
+    expect(String(living.json?.error ?? ""), living.text).not.toMatch(/left the village/);
+
+    const declined = await call("POST", "/api/admin/quest-claims/claim-needstomb-gone/consent", { approve: false });
+    expect(declined.status, `a steward can still clear it: ${declined.text}`).toBe(200);
+    expect((await owedFor("claim-needstomb-gone", GONE)).status).toBe("declined");
+  });
 });

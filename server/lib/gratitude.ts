@@ -18,7 +18,6 @@ import { issuanceRefusal } from "./gameStart";
 import { PLATFORM_TOKEN, lockLedgerAccounts, memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
 import { allowanceFor, writeGratitudeRow, shareCapFor, fullSendsIn, recognitionName, toLedgerUnits, type Allowance } from "./economy";
 import { userIdForHandle } from "./profile";
-import { isTombstone } from "./oauthAccounts";
 import type { GratitudeLogRepo, GratitudeEntry } from "../repos/gratitude";
 import type { UsersRepo } from "../repos/users";
 
@@ -141,28 +140,10 @@ export interface SendInput {
   contextRef?: string;
 }
 
-/**
- * NOTHING IS SENT TO A MEMBER WHO HAS LEFT.
- *
- * An erased member's row stays, as "A departed member" at
- * `deleted-<id>@anonymized.invalid`, so history keeps somebody to point at.
- * Every door that pays a recipient a member names looked that row up by
- * address or by id and refused only the standing examples, so typing the
- * address, or hearting a departed member's old post, issued tokens into an
- * account nobody holds: the sender's allowance or balance spent, and
- * Gratitude, the voting-weight token by default, piling up in the name of
- * somebody who is gone.
- *
- * The three doors ask this one question: `sendGratitude` below (the wall and
- * forum hearts), and in server/index.ts the Hearts give (`POST /api/gratitude`)
- * and member sends (`POST /api/wallet/send`). The admin hand-mint asks it
- * through `mintRecipientRefusal` below.
- */
-export const DEPARTED_RECIPIENT = "That member has left the village, so nothing can be sent to them.";
-
-export function departedRecipient(member: { email?: unknown } | null | undefined): boolean {
-  return !!member && isTombstone({ email: String(member.email ?? "") });
-}
+// NOTHING IS SENT TO A MEMBER WHO HAS LEFT: the question and its sentence live
+// in server/lib/departed.ts, and are re-exported here for the doors that import them from this file.
+export { DEPARTED_RECIPIENT, departedRecipient } from "./departed";
+import { DEPARTED_RECIPIENT, departedRecipient } from "./departed";
 
 /**
  * NOR DOES A STEWARD MINT TO THEM, OR TO A STANDING EXAMPLE.
