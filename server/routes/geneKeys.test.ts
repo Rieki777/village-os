@@ -5,7 +5,9 @@
  * a chart that breaks the sky's own rules is refused before anything is
  * written, and the batched read is capped. The second block runs against a
  * real scratch schema: hidden lines stay hidden from every other door, Maia
- * reads the lines only with the member's yes, and erasure leaves nothing.
+ * reads the lines only with the member's yes, erasure leaves nothing, the
+ * "Lines found" badge comes only with shown lines, and "Who complements me"
+ * lists only people who joined it, to people who joined it.
  *
  * Every person here is invented, and every chart is computed from an invented
  * birth by the same code the browser runs.
@@ -14,7 +16,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { loadModuleSettings, setModuleLifecycle } from "../lib/modules";
-import { forgetMemberGeneKeys, geneKeysForAssistant } from "../lib/geneKeys";
+import { assistantNoteFor, forgetMemberGeneKeys, geneKeysForAssistant } from "../lib/geneKeys";
+import { viewOf } from "../../shared/geneKeys";
+import { evaluateEarnedBadges } from "../lib/badges";
 import { chartAt, zonedToUtc } from "../../shared/geneKeysSky";
 import { register } from "./geneKeys";
 
@@ -27,6 +31,7 @@ const ROUTES = [
   "DELETE /api/gene-keys/me",
   "GET /api/gene-keys/people",
   "GET /api/gene-keys/people/:handle",
+  "GET /api/gene-keys/complements",
   "GET /api/gene-keys/places",
 ];
 
@@ -61,11 +66,18 @@ const call = async (handlers: Map<string, Handler>, key: string, req: any = {}) 
   return out;
 };
 
+/** Every notice the routes sent, newest last. */
+const notices: Array<{ userId: string; title: string; dedupeKey?: string }> = [];
+
 function deps(pool: any, who: () => string | null, limited = false) {
   return {
     authedUser: async () => (who() ? { id: who() } : null),
     getPool: () => pool,
     overLimit: async () => limited,
+    notify: async (n: any) => {
+      notices.push(n);
+      return { sent: true };
+    },
   } as any;
 }
 
@@ -73,6 +85,28 @@ function deps(pool: any, who: () => string | null, limited = false) {
 const WREN = chartAt(zonedToUtc(1990, 6, 15, 14, 30, "America/New_York"));
 /** Kai's chart: London, 10 July 2001, 04:02. A Generator, 3/6. */
 const KAI = chartAt(zonedToUtc(2001, 7, 10, 4, 2, "Europe/London"));
+/** Juno's chart: Tokyo, 3 March 1995, 14:54. A Generator, 1/3. */
+const JUNO = chartAt(zonedToUtc(1995, 3, 3, 14, 54, "Asia/Tokyo"));
+
+describe("what Maia is told", () => {
+  const wren = viewOf(WREN);
+
+  it("says when she shapes something, keeps the offer the same, and nudges the circle rather than inviting", () => {
+    const text = assistantNoteFor(wren, false);
+    expect(text).toMatch(/2\/5 \(Dancer · Fixer\)/);
+    expect(text).toMatch(/Strategy: Inform\./);
+    expect(text).toMatch(/say so in a few plain words/);
+    expect(text).toMatch(/the same options everyone gets/);
+    expect(text).toMatch(/Never send an invitation on a circle's behalf/);
+  });
+
+  it("talking plainly keeps the facts for choosing and takes every trace out of her wording", () => {
+    const text = assistantNoteFor(wren, true);
+    expect(text).toMatch(/talk to them plainly/);
+    expect(text).toMatch(/do not mention their profile, type or authority/);
+    expect(text).not.toMatch(/Strategy:|say so in a few plain words/);
+  });
+});
 
 describe("the gene keys doors, without a database", () => {
   const deadPool = { query: async () => [[], []] };
@@ -142,6 +176,7 @@ describe.skipIf(!configured)("gene keys against a real schema", () => {
     pool = testPool(db, { connectionLimit: 4 });
     await loadModuleSettings(pool);
     await setModuleLifecycle("gene-keys", "members", null, { sharedPasswordPosture: () => false });
+    await setModuleLifecycle("badges", "members", null, { sharedPasswordPosture: () => false });
     await q( // module-review-ok: fixture SQL against the S5 scratch schema
       "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `handle`) VALUES (?,?,?,'x',?), (?,?,?,'x',?), (?,?,?,'x',?)",
       ["m-wren", "Wren Alder", "wren@example.test", "wren", "m-kai", "Kai Moss", "kai@example.test", "kai", "m-juno", "Juno Ash", "juno@example.test", "juno"],
@@ -158,7 +193,10 @@ describe.skipIf(!configured)("gene keys against a real schema", () => {
 
   beforeEach(async () => {
     as("m-wren");
+    notices.length = 0;
     await q("DELETE FROM `member_gene_keys`"); // module-review-ok: fixture SQL against the S5 scratch schema
+    await q("DELETE FROM `badge_awards` WHERE `badge_id` = 'lines-found'"); // module-review-ok: fixture SQL against the S5 scratch schema
+    await q("DELETE FROM `badge_events` WHERE `badge_id` = 'lines-found'"); // module-review-ok: fixture SQL against the S5 scratch schema
   });
 
   it("saves a chart, derives the type on the server, and shows it back to its owner", async () => {
@@ -223,5 +261,100 @@ describe.skipIf(!configured)("gene keys against a real schema", () => {
     await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact" } });
     expect(await forgetMemberGeneKeys(pool, "m-wren")).toBe(1);
     expect(await q("SELECT * FROM `member_gene_keys` WHERE `user_id` = 'm-wren'")).toEqual([]); // module-review-ok: fixture SQL against the S5 scratch schema
+  });
+
+  it("shows Love and Prosperity beside the Activation Sequence", async () => {
+    const g = (await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact" } })).body.geneKeys;
+    expect(g.love.map((s: any) => s.name)).toEqual(["Attraction", "IQ", "EQ", "SQ", "Core"]);
+    expect(g.prosperity.map((s: any) => s.name)).toEqual(["Culture", "Pearl"]);
+    expect(g.love.every((s: any) => s.word && /^\d+\.\d$/.test(s.keyLine))).toBe(true);
+    expect([g.complement, g.maiaPlain]).toEqual([false, false]);
+  });
+
+  it("awards Lines found once, the moment lines are saved and shown, with one notice and no multiplier", async () => {
+    const [badge] = await q("SELECT `kind`, `multiplier`, `multipliers`, `rule` FROM `badges` WHERE `id` = 'lines-found'"); // module-review-ok: fixture SQL against the S5 scratch schema
+    expect(badge.kind).toBe("earned");
+    expect([badge.multiplier, badge.multipliers]).toEqual([null, null]);
+
+    const first = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact" } });
+    expect(first.body.badgeEarned).toBe("Lines found");
+    const again = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact" } });
+    expect(again.body.badgeEarned).toBeNull();
+    expect(await q("SELECT `count` FROM `badge_awards` WHERE `badge_id` = 'lines-found' AND `user_id` = 'm-wren'")).toEqual([{ count: 1 }]); // module-review-ok: fixture SQL against the S5 scratch schema
+    expect(notices.map((n) => [n.userId, n.title])).toEqual([["m-wren", "Badge earned: Lines found"]]);
+  });
+
+  it("never marks a hidden member, and awards it when they show their lines", async () => {
+    as("m-kai");
+    expect((await call(handlers, "PUT /api/gene-keys/me", { body: { chart: KAI, source: "exact", visibility: "hide" } })).body.badgeEarned).toBeNull();
+    expect(await q("SELECT * FROM `badge_awards` WHERE `badge_id` = 'lines-found'")).toEqual([]); // module-review-ok: fixture SQL against the S5 scratch schema
+    expect((await call(handlers, "PATCH /api/gene-keys/me", { body: { maia: true } })).body.badgeEarned).toBeNull();
+    expect((await call(handlers, "PATCH /api/gene-keys/me", { body: { visibility: "show" } })).body.badgeEarned).toBe("Lines found");
+
+    await setModuleLifecycle("badges", "off", null, { sharedPasswordPosture: () => false });
+    as("m-juno");
+    expect((await call(handlers, "PUT /api/gene-keys/me", { body: { chart: JUNO, source: "exact" } })).body.badgeEarned).toBeNull();
+    await setModuleLifecycle("badges", "members", null, { sharedPasswordPosture: () => false });
+  });
+
+  it("the cycle-close engine counts shown lines only and never awards a second time what a save already awarded", async () => {
+    await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact" } });
+    as("m-kai");
+    await call(handlers, "PUT /api/gene-keys/me", { body: { chart: KAI, source: "exact", visibility: "hide" } });
+    await q("DELETE FROM `badge_awards` WHERE `badge_id` = 'lines-found' AND `user_id` = 'm-juno'"); // module-review-ok: fixture SQL against the S5 scratch schema
+    as("m-juno");
+    // Juno shows lines with the badges module off, so only the engine can award hers.
+    await setModuleLifecycle("badges", "off", null, { sharedPasswordPosture: () => false });
+    await call(handlers, "PUT /api/gene-keys/me", { body: { chart: JUNO, source: "exact" } });
+    await setModuleLifecycle("badges", "members", null, { sharedPasswordPosture: () => false });
+
+    const ran = await evaluateEarnedBadges(pool);
+    expect(ran.newTiers.filter((t) => t.badgeId === "lines-found").map((t) => t.userId)).toEqual(["m-juno"]);
+    const held = await q("SELECT `user_id`, `count` FROM `badge_awards` WHERE `badge_id` = 'lines-found' ORDER BY `user_id`"); // module-review-ok: fixture SQL against the S5 scratch schema
+    expect(held).toEqual([{ user_id: "m-juno", count: 1 }, { user_id: "m-wren", count: 1 }]);
+  });
+
+  it("lists only people who joined Who complements me, to people who joined, ranked by the gaps they fill", async () => {
+    await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact" } });
+    as("m-kai");
+    await call(handlers, "PUT /api/gene-keys/me", { body: { chart: KAI, source: "exact" } });
+    await call(handlers, "PATCH /api/gene-keys/me", { body: { complement: true } });
+    as("m-juno");
+    await call(handlers, "PUT /api/gene-keys/me", { body: { chart: JUNO, source: "exact" } });
+
+    as("m-wren");
+    expect((await call(handlers, "GET /api/gene-keys/complements")).body).toEqual({ state: "not-joined" });
+    await call(handlers, "PATCH /api/gene-keys/me", { body: { complement: true } });
+    let got = (await call(handlers, "GET /api/gene-keys/complements")).body;
+    expect(got.state).toBe("joined");
+    // Juno has not joined, so only Kai, who brings both of Wren's missing lines 3 and 6.
+    expect(got.people.map((p: any) => [p.name, p.handle, p.fills])).toEqual([["Kai Moss", "kai", [3, 6]]]);
+
+    as("m-juno");
+    await call(handlers, "PATCH /api/gene-keys/me", { body: { complement: true } });
+    as("m-wren");
+    got = (await call(handlers, "GET /api/gene-keys/complements")).body;
+    // Juno is 1/3: line 3 and line 1, both missing from Wren's 2/5. A tie on gaps and type, so by name.
+    expect(got.people.map((p: any) => [p.name, p.fills])).toEqual([["Juno Ash", [1, 3]], ["Kai Moss", [3, 6]]]);
+
+    as("m-kai");
+    await call(handlers, "PATCH /api/gene-keys/me", { body: { visibility: "hide" } });
+    as("m-wren");
+    expect((await call(handlers, "GET /api/gene-keys/complements")).body.people.map((p: any) => p.name)).toEqual(["Juno Ash"]);
+    await call(handlers, "PATCH /api/gene-keys/me", { body: { visibility: "hide" } });
+    expect((await call(handlers, "GET /api/gene-keys/complements")).body).toEqual({ state: "hidden" });
+    as("m-kai");
+    expect((await call(handlers, "GET /api/gene-keys/complements")).body).toEqual({ state: "hidden" });
+    as("m-ash");
+    expect((await call(handlers, "GET /api/gene-keys/complements")).body).toEqual({ state: "no-lines" });
+  });
+
+  it("talks plainly once the member asks, and only then", async () => {
+    await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", maia: true } });
+    expect(await geneKeysForAssistant(pool, "m-wren")).toMatch(/Strategy: Inform/);
+    const plain = await call(handlers, "PATCH /api/gene-keys/me", { body: { maiaPlain: true } });
+    expect(plain.body.geneKeys.maiaPlain).toBe(true);
+    expect(await geneKeysForAssistant(pool, "m-wren")).toMatch(/talk to them plainly/);
+    expect((await call(handlers, "PATCH /api/gene-keys/me", { body: { maiaPlain: "yes" } })).status).toBe(400);
   });
 });
