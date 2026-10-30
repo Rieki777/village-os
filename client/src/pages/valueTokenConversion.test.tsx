@@ -79,6 +79,8 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 vi.mock("@/modules/ModuleProvider", () => ({
   useHypha: () => ({ enabled: false, dhoSlug: "", tokens: [] }),
+  // Maia's type line under a first quest asks this; Gene Keys is off here.
+  useModule: () => undefined,
 }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
 vi.mock("@/hooks/useTokenNames", () => ({

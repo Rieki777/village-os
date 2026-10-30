@@ -80,6 +80,8 @@ export default function GeneKeysPage() {
   const [unknownTime, setUnknownTime] = useState(false);
   const [part, setPart] = useState<Part>("unknown");
   const [asked, setAsked] = useState<string | null>(null);
+  /** The badge this save earned, by name, to say so on the last step. */
+  const [badge, setBadge] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [place, setPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[] | null>(null);
@@ -173,7 +175,8 @@ export default function GeneKeysPage() {
     setProblem(null);
     try {
       const saved = await saveMyGeneKeys({ chart: picked.chart, source: picked.chosen ? "chosen" : "exact", visibility, maia });
-      setMyGeneKeys(saved);
+      setMyGeneKeys(saved.mine);
+      setBadge(saved.badgeEarned);
       setStep("done");
     } catch (e) {
       setProblem(e instanceof GeneKeysRefusal ? e.message : "Your lines did not save. Try again.");
@@ -430,6 +433,11 @@ export default function GeneKeysPage() {
               <p className="text-base text-muted-foreground">
                 {visibility === "show" ? "Your seal now sits by your portrait." : "Your lines are saved and kept to you."}
               </p>
+              {badge ? (
+                <p role="status" className="rounded-full border border-notice/60 bg-notice/15 px-4 py-2 text-sm font-semibold text-notice">
+                  Badge earned: {badge}
+                </p>
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <Link href="/profile/characters" className={BTN_GOLD}>
                   Next: see roles that fit you

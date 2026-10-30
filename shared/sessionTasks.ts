@@ -34,6 +34,7 @@
  */
 import { looksLikePaymentDetails } from "./seatSettings";
 import { cleanDueOn, cleanLine } from "./sessions";
+import { roleWithHolders } from "./roleHolderLabel";
 
 // ── Doors ────────────────────────────────────────────────────────────────────
 
@@ -1021,8 +1022,9 @@ export const TASK_COPY = {
   fromNoCircle: (sessionTitle: string, date: string): string => `From ${sessionTitle} · ${date}`,
   heldYou: "Held by you",
   heldPerson: (name: string): string => `Held by ${name}`,
-  heldSeat: (seat: string, names: readonly string[]): string => `${seat} holds it · ${names.join(", ")}`,
-  heldSeatVacant: (seat: string): string => `${seat} holds it · nobody sits there yet`,
+  /** The role first, who sits there now by first name after it (Rye, 2026-10-30): "Held by Treasurer (Rick)". */
+  heldSeat: (seat: string, names: readonly string[]): string => `Held by ${roleWithHolders(seat, names)}`,
+  heldSeatVacant: (seat: string): string => `Held by ${seat} · nobody sits there yet`,
   heldCircle: "Back with the circle",
   /** A seat the org chart no longer names. */
   seatUnnamed: "A role",

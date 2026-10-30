@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 /**
  * Gene Keys in the browser: the birth-town list, the part of the day, the
- * reveal, the seal, and a circle's six lines. Every person is invented; every chart comes from an invented birth
+ * reveal, the seal, a circle's six lines, Love and Prosperity, the moon's
+ * contemplation, the share card, Maia's type line, Who complements me, and the
+ * glyph on the living map. Every person is invented; every chart comes from an invented birth
  * through the same calculator the flow page runs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,14 +20,24 @@ vi.mock("@/modules/ModuleProvider", () => ({
   useModule: (id: string) => (id === "gene-keys" && modules.on ? { id, lifecycle: "members" } : undefined),
 }));
 
-const api = vi.hoisted(() => ({ people: {} as Record<string, unknown>, asked: [] as string[][] }));
+const api = vi.hoisted(() => ({
+  people: {} as Record<string, unknown>,
+  asked: [] as string[][],
+  complements: { state: "not-joined" } as unknown,
+  changed: [] as unknown[],
+}));
 vi.mock("@/lib/geneKeysApi", () => ({
   readPeopleGeneKeys: async (ids: string[]) => {
     api.asked.push(ids);
     return api.people;
   },
+  readMyGeneKeys: async () => null,
   readPlacesText: async () => "",
-  changeMyGeneKeys: async () => null,
+  readComplements: async () => api.complements,
+  changeMyGeneKeys: async (patch: unknown) => {
+    api.changed.push(patch);
+    return null;
+  },
   removeMyGeneKeys: async () => true,
   GeneKeysRefusal: class extends Error {},
 }));
@@ -35,6 +47,17 @@ import GeneKeysSeal from "./GeneKeysSeal";
 import CircleLines from "./CircleLines";
 import GeneKeysReveal from "./GeneKeysReveal";
 import { PARTS } from "@/pages/GeneKeys";
+import { GeneKeysLines } from "./GeneKeysLines";
+import GeneKeysComplements, { COMPLEMENTS_WORDS } from "./GeneKeysComplements";
+import CircleGlyph from "./CircleGlyph";
+import HolderGeneKeys from "./HolderGeneKeys";
+import MaiaTypeLine, { maiaTypeLine } from "./MaiaTypeLine";
+import { setMyGeneKeys } from "./useMyGeneKeys";
+import { forgetShownLines, heldLines, shownLinesOf } from "./shownLines";
+import { shareCardWords } from "./shareCard";
+import { FREQUENCY_KEY, LADDER_MOONS, MOON_KEY_PREFIX, contemplationEntry, ladderFrom, promptFor } from "./moon";
+import type { OwnGeneKeysView } from "@shared/geneKeys";
+import type { JournalEntry } from "@shared/journal";
 
 const view = (zone: string, y: number, mo: number, d: number, h: number, mi: number): GeneKeysView =>
   viewOf(chartAt(zonedToUtc(y, mo, d, h, mi, zone)));
@@ -52,6 +75,9 @@ beforeEach(() => {
   modules.on = true;
   api.people = {};
   api.asked = [];
+  api.complements = { state: "not-joined" };
+  api.changed = [];
+  forgetShownLines();
 });
 afterEach(cleanup);
 
@@ -163,5 +189,155 @@ describe("a circle's six lines", () => {
     const { container } = inRouter(<CircleLines holders={HOLDERS} />);
     await waitFor(() => expect(api.asked).toHaveLength(1));
     expect(container.innerHTML).toBe("");
+  });
+});
+
+const own = (v: GeneKeysView, over: Partial<OwnGeneKeysView> = {}): OwnGeneKeysView => ({
+  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, source: "exact", stale: false, ...over,
+});
+
+describe("Love and Prosperity on the lines card", () => {
+  it("folds both sequences under the Activation tiles, with each sphere's own word", () => {
+    inRouter(<GeneKeysLines view={WREN} whose="Wren" />);
+    expect(screen.getByText("Love and Prosperity")).toBeTruthy();
+    for (const name of ["Attraction", "IQ", "EQ", "SQ", "Core", "Culture", "Pearl"]) expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.queryByText(/With a chosen birth time/)).toBeNull();
+  });
+
+  it("tells the owner of a chosen birth time that Attraction may read differently", () => {
+    inRouter(<GeneKeysLines view={own(WREN, { source: "chosen" })} whose={null} />);
+    expect(screen.getByText(/Attraction follows the Moon/)).toBeTruthy();
+  });
+});
+
+describe("a contemplation each moon", () => {
+  const entry = (cycle: number, frequency: string, writtenAt: string, extra: Partial<JournalEntry> = {}): JournalEntry =>
+    ({
+      id: `e-${cycle}-${writtenAt}`,
+      practice: "free",
+      answers: [
+        { questionKey: `${MOON_KEY_PREFIX}${cycle}`, prompt: "p", text: "words" },
+        { questionKey: FREQUENCY_KEY, prompt: "q", text: frequency },
+      ],
+      writtenAt,
+      ...extra,
+    }) as JournalEntry;
+
+  it("asks about the Life's Work key and saves a private free entry under its own keys", () => {
+    expect(promptFor(WREN)).toBe("This moon, sit with Gene Key 12, the key of your Life's Work. Where did it show up in you?");
+    const e = contemplationEntry(WREN, { clientId: "c1", cycle: 330, text: "  In a hard talk.  ", frequency: "gift", now: new Date("2026-10-30T09:00:00Z") });
+    expect([e.practice, e.privacy, e.depth]).toEqual(["free", "private", "light"]);
+    expect(e.answers.map((a) => [a.questionKey, a.text])).toEqual([[`${MOON_KEY_PREFIX}330`, "In a hard talk."], [FREQUENCY_KEY, "Gift"]]);
+  });
+
+  it("builds the ladder from the latest mark per moon, the last season only, ignoring other pages", () => {
+    const entries = [
+      entry(300, "Shadow", "2026-01-01T00:00:00Z"),
+      entry(300, "Gift", "2026-01-02T00:00:00Z"),
+      entry(301, "Siddhi", "2026-02-01T00:00:00Z"),
+      { id: "x", practice: "free", answers: [{ questionKey: "free.what", prompt: "p", text: "a day" }], writtenAt: "2026-02-02T00:00:00Z" } as JournalEntry,
+      entry(302, "Nonsense", "2026-03-01T00:00:00Z"),
+    ];
+    expect(ladderFrom(entries)).toEqual([{ cycle: 300, frequency: "gift" }, { cycle: 301, frequency: "siddhi" }]);
+    const many = Array.from({ length: 20 }, (_, i) => entry(400 + i, "Gift", `2027-01-${String(i + 1).padStart(2, "0")}T00:00:00Z`));
+    const ladder = ladderFrom(many);
+    expect(ladder).toHaveLength(LADDER_MOONS);
+    expect(ladder[0].cycle).toBe(407);
+  });
+});
+
+describe("the share card", () => {
+  it("prints the profile, its words, the type, the four keys and Richard's credit, and no birth detail", () => {
+    const w = shareCardWords(WREN, "Willowbrook");
+    expect(w.eyebrow).toBe("MY LINES IN WILLOWBROOK");
+    expect([w.profile, w.names, w.type]).toEqual(["2/5", "Dancer · Fixer", "A Manifestor · Inform"]);
+    expect(w.keys.map((k) => `${k.name} ${k.keyLine}`)).toEqual(["Life's Work 12.2", "Evolution 11.2", "Radiance 36.5", "Purpose 6.5"]);
+    expect(w.footer).toMatch(/Richard Rudd/);
+    expect(JSON.stringify(w)).not.toMatch(/1990|New York|14:30/);
+  });
+});
+
+describe("Maia speaks your type", () => {
+  it("leads with waiting for emotional authority, and speaks each type's strategy otherwise", () => {
+    expect(maiaTypeLine({ type: "Manifestor", authority: "Emotional" })).toMatch(/^No rush on this one/);
+    expect(maiaTypeLine({ type: "Generator", authority: "Sacral" })).toMatch(/lights you up, that is your yes/);
+    expect(maiaTypeLine({ type: "Projector", authority: "Splenic" })).toMatch(/welcome an invitation/);
+    expect(maiaTypeLine({ type: "Manifestor", authority: "Splenic" })).toMatch(/heads up first/);
+  });
+
+  it("speaks only with Maia's yes, and never once the member asked her to talk plainly", () => {
+    setMyGeneKeys(own(KAI, { maia: false }));
+    const { container, rerender } = inRouter(<MaiaTypeLine />);
+    expect(container.innerHTML).toBe("");
+    setMyGeneKeys(own(KAI, { maia: true }));
+    rerender(<Router hook={memoryLocation({ path: "/" }).hook}><MaiaTypeLine /></Router>);
+    expect(screen.getByText("From Maia:")).toBeTruthy();
+    setMyGeneKeys(own(KAI, { maia: true, maiaPlain: true }));
+    rerender(<Router hook={memoryLocation({ path: "/" }).hook}><MaiaTypeLine /></Router>);
+    expect(screen.queryByText("From Maia:")).toBeNull();
+    setMyGeneKeys(null);
+  });
+});
+
+describe("who complements me", () => {
+  it("offers to join, and joining is the one setting it changes", async () => {
+    inRouter(<GeneKeysComplements mine={own(WREN)} />);
+    fireEvent.click(await screen.findByRole("button", { name: COMPLEMENTS_WORDS.join }));
+    await waitFor(() => expect(api.changed).toEqual([{ complement: true }]));
+  });
+
+  it("lists who joined with the lines they bring, and says when lines must be shown first", async () => {
+    api.complements = { state: "joined", people: [{ name: "Kai Moss", handle: "kai", view: KAI, fills: [3, 6] }] };
+    inRouter(<GeneKeysComplements mine={own(WREN, { complement: true })} />);
+    expect(await screen.findByText(/Brings line 3 \(Changer\) and line 6 \(Teacher\)/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Kai Moss" }).getAttribute("href")).toBe("/profile/kai");
+    cleanup();
+    api.complements = { state: "hidden" };
+    inRouter(<GeneKeysComplements mine={own(WREN, { visibility: "hide" })} />);
+    expect(await screen.findByText(COMPLEMENTS_WORDS.hidden)).toBeTruthy();
+  });
+});
+
+describe("the glyph on the living map", () => {
+  it("asks once for every circle drawn in the same moment, and remembers the answer", async () => {
+    api.people = { "m-wren": WREN, "m-kai": KAI };
+    const [a, b] = await Promise.all([shownLinesOf(["m-wren", "m-ash"]), shownLinesOf(["m-kai", "m-wren"])]);
+    expect(api.asked).toEqual([["m-wren", "m-ash", "m-kai"]]);
+    expect(heldLines(Object.values(a))).toEqual([2, 5]);
+    expect(heldLines(Object.values(b))).toEqual([2, 3, 5, 6]);
+    await shownLinesOf(["m-ash"]);
+    expect(api.asked).toHaveLength(1);
+  });
+
+  it("draws six bars, solid where a line is shown and dashed where it is open, and nothing for a hidden circle", async () => {
+    api.people = { "m-juno": JUNO };
+    const { container } = render(<svg><CircleGlyph cx={0} cy={0} r={40} px={1} holderIds={["m-juno", "m-ash"]} /></svg>);
+    await waitFor(() => expect(container.querySelectorAll("rect")).toHaveLength(7));
+    expect(screen.getByRole("img", { name: "2 of 6 lines shown in this circle" })).toBeTruthy();
+    expect(container.querySelectorAll("rect.fill-foreground")).toHaveLength(2);
+    expect(container.querySelectorAll("rect.stroke-notice")).toHaveLength(4);
+    // The plate sits outside the rim, lower right: its corner is past r / sqrt 2 on both axes.
+    const plate = container.querySelector("rect.fill-background")!;
+    expect(Number(plate.getAttribute("x"))).toBeGreaterThan(40 * Math.SQRT1_2);
+    cleanup();
+    const hidden = render(<svg><CircleGlyph cx={0} cy={0} r={40} px={1} holderIds={["m-ash"]} /></svg>);
+    await waitFor(() => expect(api.asked.flat()).toContain("m-ash"));
+    expect(hidden.container.querySelectorAll("rect")).toHaveLength(0);
+  });
+});
+
+describe("a role holder's seal, for the map's seat card", () => {
+  it("shows a shown member's seal by id, and nothing for a hidden one or with the module off", async () => {
+    api.people = { "m-kai": KAI };
+    inRouter(<HolderGeneKeys userId="m-kai" name="Kai Moss" />);
+    expect((await screen.findByRole("button", { name: /Gene Keys lines 3 and 6/ })).textContent).toBe("3/6");
+    cleanup();
+    const hidden = inRouter(<HolderGeneKeys userId="m-ash" name="Ash" />);
+    await waitFor(() => expect(api.asked.flat()).toContain("m-ash"));
+    expect(hidden.container.innerHTML).toBe("");
+    cleanup();
+    modules.on = false;
+    const off = inRouter(<HolderGeneKeys userId="m-kai" name="Kai Moss" />);
+    expect(off.container.innerHTML).toBe("");
   });
 });

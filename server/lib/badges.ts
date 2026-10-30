@@ -37,6 +37,8 @@ import {
   type Capability,
 } from "../../shared/capabilities";
 import { liveConsequence } from "./capabilityConsequence";
+import { shownGeneKeysUserIds } from "../repos/geneKeys";
+import { recordBadgeTier } from "../repos/badgeEvents";
 // The sentence that names where the seat is actually filled, borrowed rather
 // than re-spelled: the roles routes and the badge panel are two doors onto
 // one rule, and a second wording of it is a twin that drifts.
@@ -49,7 +51,8 @@ export type BadgeKind = (typeof BADGE_KINDS)[number];
  *  ceiling in seasonPatterns.MAX_REWARD_MULTIPLIER; both fail closed. */
 export const MAX_BADGE_MULTIPLIER = 3;
 
-export const EARNED_METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth"] as const;
+/** `gene_keys_shown`: 1 for a member whose Gene Keys lines are saved and shown (0287's "Lines found"). */
+export const EARNED_METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth", "gene_keys_shown"] as const;
 /** Metrics that measure recognition: capability-bearing earned badges may not use them. */
 export const RECOGNITION_METRICS: ReadonlySet<string> = new Set(["gratitude_breadth"]);
 
@@ -499,7 +502,27 @@ async function metricValues(pool: Pool, metric: string): Promise<Map<string, num
     );
     return new Map(rows.map((r) => [String(r.user_id), Number(r.v)]));
   }
+  if (metric === "gene_keys_shown") {
+    // Shown rows only: a public badge must never say a member did Gene Keys they keep hidden.
+    return new Map((await shownGeneKeysUserIds(pool)).map((id) => [id, 1]));
+  }
   return new Map();
+}
+
+/**
+ * Award tier one of an earned badge NOW, for an act that meets its rule on
+ * its own (finding your Gene Keys lines), rather than waiting for the engine
+ * at the next cycle close. It writes the same `rule:{badge}:{user}:tier-1`
+ * event the engine writes, so the two can never award it twice, and a replay
+ * is a no-op. True only when this call awarded it. The caller gates on the
+ * badges module, the way cycle close does.
+ */
+export async function awardFirstTierNow(pool: Pool, badgeId: string, userId: string): Promise<boolean> {
+  const badge = await badgeById(pool, badgeId);
+  if (!badge || !badge.active || badge.kind !== "earned" || badge.isExample) return false;
+  if (!(await recordBadgeTier(pool, badgeId, userId, 1))) return false;
+  await upsertAward(pool, { badgeId, userId, count: 1, awardedBy: null });
+  return true;
 }
 
 export interface EvaluateResult {
