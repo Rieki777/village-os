@@ -39,7 +39,7 @@
  * (reserved rows count toward a hamlet's homes taken) and loses the name,
  * address, phone and notes on it.
  *
- * Three more things stay on purpose, each for its own reason:
+ * Four more things stay on purpose, each for its own reason:
  *
  *   MESSAGES. What they wrote in a conversation stays in it, read as "A
  *   departed member" through the join to the tombstone, the way a forum post
@@ -60,6 +60,22 @@
  *   it must is a legal question for each village. The fact and its dates stay,
  *   de-attributed; the free text beside it goes. Rye decides whether a village
  *   should be able to delete them outright (raised 2026-10-22).
+ *   VOTES ALREADY CAST (round 4, R4-8). A yes, no or abstain the member cast
+ *   in person on a ballot still open stays in `ballot_votes` and counts when
+ *   the ballot closes, because that ballot froze them into its roll: the
+ *   snapshot law (server/lib/ballots.ts, the header) and docs/ECONOMICS.md,
+ *   which already says a former member can vote on a ballot that froze them
+ *   in. It was their own act while present, as a forum post is. The row holds
+ *   a choice, the tombstone's id and any reason they typed on it
+ *   (`ballot_votes.reason`, which no step clears today, so it stays the way a
+ *   forum post's words do). Every COPIED vote goes: the delegations step ends each
+ *   delegation they gave or carried and derives every open ballot again
+ *   ("delegations-after-tombstone"). The member hears this before either door
+ *   (`VOTE_CAST_STAYS`, client/src/components/LeavingKeeps.tsx). Whether a
+ *   cast vote on an open ballot should go with its author is Rye's to decide
+ *   (raised 2026-10-30); that would be a new id-only step after the tombstone
+ *   that deletes their rows with no `followed_user_id` on open ballots, before
+ *   the delegations step re-derives.
  *
  * ORDER IS LOAD-BEARING. The local sweep runs to completion FIRST, then the
  * outside stores are asked, so a slow or refusing vendor never delays the one
