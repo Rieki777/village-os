@@ -74,10 +74,13 @@ import type { Express } from "express";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
 import {
   asOffer,
+  handOffered,
+  handVoteReason,
   POWER_APPLICATION,
   publicHands,
   putToVillageRefusal,
   raiseHandRefusal,
+  SEAT_VOTE_REASON_HEADING,
   standingHands,
   whoMayPutHandToVillage,
   type PublicHand,
@@ -455,18 +458,8 @@ export function register(app: Express, deps: Deps): void {
     }
 
     const said = String(req.body?.reason ?? "").trim().slice(0, 16000);
-    const offered = hand.powerLabel ? `to ${asOffer(hand.powerLabel)}` : `for the power ${hand.capability}`;
-    const quoted = hand.note.trim()
-      ? `They wrote:\n\n${hand.note.trim().split("\n").map((l) => `> ${l}`).join("\n")}`
-      : "They wrote nothing with it.";
-    const reason = [
-      `${hand.userName || "A member"} raised a hand ${offered} on ${hand.submittedAt.slice(0, 10)}.`,
-      quoted,
-      said,
-      `${firstName(user.name)} put that hand to the village.`,
-    ]
-      .filter((part) => part.trim() !== "")
-      .join("\n\n");
+    const offered = handOffered(hand);
+    const reason = handVoteReason(hand, said, firstName(user.name));
 
     const opened = await openSeatVote({
       userId: hand.userId,
@@ -679,7 +672,7 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): OpenSeatVote
         ? `From the day this carries, with no further vote:\n\n${can.map((c) => `- ${c}`).join("\n")}`
         : `${who} carries no powers today, so this seats somebody in a role that grants nothing yet. If the village later votes ${who} a power, whoever is sitting in it holds that power from that day.`,
       "",
-      `## Why this person`,
+      SEAT_VOTE_REASON_HEADING,
       "",
       reason,
       "",

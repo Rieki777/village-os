@@ -447,6 +447,8 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "seat-application-words-after-tombstone",
       "meet-me-windows-after-tombstone",
       "notices-naming-after-tombstone",
+      "ballot-words-after-tombstone",
+      "proposal-ballot-words-after-tombstone",
       "exit-notes-after-tombstone",
       "relayed-mail-after-tombstone",
       "checkin-notes-after-tombstone",
