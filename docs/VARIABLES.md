@@ -22,26 +22,26 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 189 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 190 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 207 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 208 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-234 dials in 35 categories. 139 carry a minimum and a maximum. By type: 103 integer, 19 decimal, 18 percentage, 27 boolean, 29 choice, 37 text, 1 longtext.
+235 dials in 35 categories. 140 carry a minimum and a maximum. By type: 104 integer, 19 decimal, 18 percentage, 27 boolean, 29 choice, 37 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 3 | 3 | 0 |
-| Gratitude | 10 | 10 | 0 |
+| Gratitude | 11 | 11 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
 | Progression | 29 | 29 | 0 |
@@ -90,6 +90,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
 | Full sends per cycle | `gratitude.full_sends_per_cycle` | Gratitude | integer | `7` | the whole village |
 | Require a message with every acknowledgment | `gratitude.require_message` | Gratitude | boolean | `true` | the whole village |
+| Days before close to nudge unsent gratitude | `gratitude.nudge_days_before_close` | Gratitude | integer | `3` | the whole village |
 | The rhythm the village keeps time by | `cycle.mode` | Gratitude | choice | `lunar` | the whole village |
 | How the end of a moon comes to a decision | `cycle.settlement_mode` | Gratitude | choice | `proposal` | the whole village |
 | How long the village has to answer a settlement | `cycle.settlement_vote_days` | Gratitude | integer | `3` | the whole village |
@@ -366,7 +367,7 @@ The role whose holders are told the moment somebody joins. Greeting belongs to a
 
 ## Gratitude
 
-10 dials. 10 for the whole village.
+11 dials. 11 for the whole village.
 
 ### Base sending allowance per cycle
 
@@ -437,6 +438,21 @@ When on, Gratitude cannot be sent silently. The message is what makes recognitio
 | Type | boolean, on or off |
 | Default | `true` |
 | Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Days before close to nudge unsent gratitude
+
+How many days before a cycle closes each member who still has gratitude to send gets one warm note saying how much is left and when the cycle closes, with the people they worked with this cycle one tap away on the send panel. Once per member per cycle, never more. The note sends nothing itself: every gift still goes through the send panel. A member can turn it off in their notification settings. Set it to 0 to switch the nudge off for the whole village.
+
+| Fact | Value |
+| --- | --- |
+| Key | `gratitude.nudge_days_before_close` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 0 to 14 |
+| Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |

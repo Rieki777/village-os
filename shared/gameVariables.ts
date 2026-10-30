@@ -780,6 +780,18 @@ export const VARIABLES: VariableDef[] = [
     type: "boolean",
     default: "true",
   },
+  {
+    key: "gratitude.nudge_days_before_close",
+    category: "Gratitude",
+    label: "Days before close to nudge unsent gratitude",
+    description:
+      "How many days before a cycle closes each member who still has gratitude to send gets one warm note saying how much is left and when the cycle closes, with the people they worked with this cycle one tap away on the send panel. Once per member per cycle, never more. The note sends nothing itself: every gift still goes through the send panel. A member can turn it off in their notification settings. Set it to 0 to switch the nudge off for the whole village.",
+    type: "integer",
+    default: "3",
+    min: 0,
+    max: 14,
+    unit: "days",
+  },
   /*
    * THE RHYTHM DIAL, AND WHY IT IS BACK.
    *
