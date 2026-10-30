@@ -430,6 +430,30 @@ export async function heldByAnotherAccount(
 }
 
 /**
+ * Lock one member's row FOR UPDATE on the caller's connection, the way
+ * `lockUserRowForUpdate` does, and hand back the two fields a session is
+ * judged against: the email, which says whether the row is an erasure's
+ * tombstone, and the tokenVersion every session is signed at. Null when there
+ * is no such member.
+ *
+ * Its caller is `whileSessionHolds` (server/lib/sessionHold.ts). A locking
+ * read returns the newest committed row, so a tokenVersion bump that
+ * committed first is seen here, and one that comes later waits for the
+ * caller's transaction to end.
+ */
+export async function lockSessionFieldsForUpdate(
+  conn: PoolConnection,
+  id: string,
+): Promise<{ email: string; tokenVersion: number } | null> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT `email`, `token_version` FROM `users` WHERE `id` = ? FOR UPDATE",
+    [id],
+  );
+  const row = rows[0];
+  return row ? { email: String(row.email ?? ""), tokenVersion: Number(row.token_version ?? 0) } : null;
+}
+
+/**
  * The ids of every real member: not anonymised, not an example row.
  *
  * The roster the health snapshot's allowance total is taken over

@@ -662,6 +662,22 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     expect(await reachRows(userId), `another member's inbox or key died with ${when}`).toEqual({ inbox: 1, key: 1 });
   }
 
+  /**
+   * A delegation the stolen session gave and the delegate accepted
+   * (adversarial round 3, finding 8). Written straight to the table because
+   * the governance routes are a module this suite does not open; what is
+   * under test is that both doors end it and tell the member.
+   */
+  async function giveVote(delegatorId: string, delegateId: string): Promise<void> {
+    await pool.query("INSERT INTO delegations (delegator_id, delegate_id, created_at, revoked_at, accepted_at) VALUES (?, ?, NOW(), NULL, NOW())", [delegatorId, delegateId]); // module-review-ok: seeding the scratch schema this suite provisioned
+  }
+
+  async function voteGiven(delegatorId: string): Promise<{ live: boolean; told: number }> {
+    const [[row]] = await pool.query<any[]>("SELECT revoked_at FROM delegations WHERE delegator_id = ?", [delegatorId]); // module-review-ok: reading back the row the route ended
+    const [[told]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND dedupe_key LIKE 'delegation-ended-by-reset:%'", [delegatorId]); // module-review-ok: reading back the notice the route wrote
+    return { live: !!row && row.revoked_at === null, told: Number(told.n) };
+  }
+
   it("setting a new password through the real link ends every token the member made, and theirs only", async () => {
     const eli = await register("Eli Moss", "agent-eli");
     const laptop = await mintFor(eli, "eli laptop");
@@ -670,12 +686,16 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     const gil = await register("Gil Ortiz", "agent-gil");
     const bystander = await mintFor(gil, "gil laptop");
     const gilFeed = await plantReach(gil);
+    await giveVote(eli.id, gil.id);
+    await giveVote(gil.id, eli.id);
 
     const { makeSetPasswordToken } = await import("./lib/memberTokens");
     const [[row]] = await pool.query<any[]>("SELECT token_version FROM users WHERE id = ?", [eli.id]); // module-review-ok: the version the reset letter binds its link to
     const link = makeSetPasswordToken(SIGNING, eli.id, Number(row.token_version));
     const reset = await call("POST", "/api/auth/set-password", { token: link, password: "AgentReset456!" }, "");
     expect(reset.status, JSON.stringify(reset.json)).toBe(200);
+    expect(await voteGiven(eli.id), "the vote the member handed on outlived the password reset, or they were not told once").toEqual({ live: false, told: 1 });
+    expect(await voteGiven(gil.id), "the vote another member handed TO them was ended").toEqual({ live: true, told: 0 });
 
     await expectRevoked([laptop, phone], "the password reset");
     await expectAudited(eli.id, 2);
@@ -686,9 +706,22 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     await expectReachStands(gil.id, gilFeed, "this reset");
 
     // The member keeps their agent: the session the reset hands back mints a fresh token, and it answers.
+    // The mint asks for the tokenVersion this session was signed at, which the reset moved (adversarial round 4).
     const after = await call("POST", "/api/agent/tokens", { name: "eli after", scopes: SCOPES }, String(reset.json.token));
-    expect(after.status).toBe(200);
+    expect(after.status, JSON.stringify(after.json)).toBe(200);
+    // And a private calendar address, made the same way, answers.
+    const feedAfter = await call("POST", "/api/events/feed/token", {}, String(reset.json.token));
+    expect(feedAfter.status, JSON.stringify(feedAfter.json)).toBe(200);
+    const feedAfterUrl = new URL(String(feedAfter.json.url));
+    expect((await call("GET", `${feedAfterUrl.pathname}${feedAfterUrl.search}`, undefined, "")).status, "the address made after the reset does not answer").toBe(200);
     expect((await call("GET", "/api/agent/v1/me", undefined, String(after.json.token))).status).toBe(200);
+    // And sets an inbox and a key again. Both writes ask for the tokenVersion
+    // this session was signed at, which the reset moved (adversarial round 2, finding 15).
+    const inboxAfter = await call("PUT", "/api/agent/inbox", { url: "https://192.0.2.10/agent" }, String(reset.json.token));
+    expect(inboxAfter.status, JSON.stringify(inboxAfter.json)).toBe(200);
+    const keyAfter = await call("PUT", "/api/agent/key", { provider: "anthropic", key: "sk-ant-after-0000" }, String(reset.json.token));
+    expect(keyAfter.status, JSON.stringify(keyAfter.json)).toBe(200);
+    expect(await reachRows(eli.id)).toEqual({ inbox: 1, key: 1 });
   });
 
   it("an admin's revoke sessions ends every token the member made, and says how many", async () => {
@@ -699,15 +732,17 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     const hal = await register("Hal Brook", "agent-hal");
     const bystander = await mintFor(hal, "hal laptop");
     const halFeed = await plantReach(hal);
+    await giveVote(fay.id, hal.id);
 
     const revoke = await call("POST", `/api/admin/users/${fay.id}/revoke-sessions`, {});
     expect(revoke.status, JSON.stringify(revoke.json)).toBe(200);
+    expect(await voteGiven(fay.id), "the vote the member handed on outlived the admin's revoke, or they were not told once").toEqual({ live: false, told: 1 });
 
     await expectRevoked([laptop, phone], "the admin's revoke sessions");
     expect(revoke.json.agentTokensRevoked).toBe(2);
     await expectAudited(fay.id, 2);
     await expectReachEnded(fay.id, fayFeed, "the admin's revoke sessions");
-    expect(revoke.json.agentReachEnded, "the answer says what else ended").toEqual({ agentTokens: 2, feeds: 1, inbox: true, key: true });
+    expect(revoke.json.agentReachEnded, "the answer says what else ended").toEqual({ agentTokens: 2, feeds: 1, inbox: true, key: true, invites: 0, circleFeed: 0, delegation: true });
     expect((await call("GET", "/api/profile", undefined, fay.token)).status, "the session itself still dies").toBe(401);
     expect((await call("GET", "/api/agent/v1/me", undefined, bystander)).status, "another member's token died with this revoke").toBe(200);
     await expectReachStands(hal.id, halFeed, "this revoke");
@@ -715,6 +750,8 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     // A second press finds nothing left to end, and writes no second audit line.
     const again = await call("POST", `/api/admin/users/${fay.id}/revoke-sessions`, {});
     expect(again.json.agentTokensRevoked).toBe(0);
+    expect(again.json.agentReachEnded.delegation, "a second press ended a delegation again").toBe(false);
+    expect((await voteGiven(fay.id)).told, "a second press told the member again").toBe(1);
     await expectAudited(fay.id, 2);
   });
 

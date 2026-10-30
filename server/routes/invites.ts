@@ -16,8 +16,16 @@
  * `POST /api/invites` is the only answer that ever carries a token. The list
  * says what became of each link and never the link itself, because the table
  * cannot say it: only the hash is kept.
+ *
+ * ── A LINK IS WRITTEN ONLY WHILE THE SESSION HOLDS ──────────────────────────
+ *
+ * A link admits a stranger on the member's vouch, so a new password and an
+ * admin's revoke sessions withdraw every open one (`endAgentReach`). The make
+ * writes under the member's row lock, so a session that change ended makes
+ * none (`makeInvite`).
  */
 import type { Express } from "express";
+import type { Pool } from "mysql2/promise";
 
 import type { AppDeps } from "../lib/appDeps";
 import type { InviteDoor } from "../lib/inviteDoor";
@@ -32,7 +40,8 @@ import {
   mintInviteToken,
   readInviteToken,
 } from "../lib/invites";
-import { createInvite, invitesBy, openInviteCount, revokeInvite } from "../repos/memberInvites";
+import { whileSessionHolds } from "../lib/sessionHold";
+import { createInviteOn, invitesBy, openInviteCount, revokeInvite } from "../repos/memberInvites";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability" | "mayAct" | "overLimit" | "clientIp"> & {
   invites: InviteDoor;
@@ -45,6 +54,37 @@ const firstName = (name: unknown): string => String(name ?? "").trim().split(/\s
 const NOT_YET =
   "Inviting somebody opens at Contributor: once you are a member and the village has paid you for something you brought it. An invitation is your vouch for the person you send it to.";
 
+/** What a member at the cap reads. */
+const AT_THE_CAP = `You have ${OPEN_INVITES_CAP} invitations nobody has used yet. Withdraw one you no longer need, and then make another.`;
+
+export type MakeInviteResult = { ok: true; id: string; token: string } | { ok: false; status: 401 | 409; error: string };
+
+/**
+ * Make one link for `inviterUserId`, the write behind `POST /api/invites`.
+ * The token is in the result and nowhere else.
+ *
+ * `sessionVersion` is the tokenVersion the request's session was checked at
+ * (adversarial round 3, the window round 2 finding 15 closed for the inbox).
+ * A new password or an admin's revoke sessions that lands after that check
+ * ends the open links on both sides of the bump, and a link written after
+ * that would admit a stranger on the member's vouch for fourteen days. So
+ * the row goes in under the member's row lock, and only while the row still
+ * carries that version (`whileSessionHolds`): a change that committed first
+ * is refused with 401 and nothing written, and one that comes later waits
+ * for the commit, and the end after the bump withdraws the link. An
+ * erasure's tombstone is refused the same way.
+ */
+export async function makeInvite(pool: Pool, inviterUserId: string, sessionVersion: number): Promise<MakeInviteResult> {
+  if ((await openInviteCount(pool, inviterUserId)) >= OPEN_INVITES_CAP) return { ok: false, status: 409, error: AT_THE_CAP };
+  const token = mintInviteToken();
+  const id = `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const held = await whileSessionHolds(pool, inviterUserId, sessionVersion, (conn) =>
+    createInviteOn(conn, { id, tokenHash: hashInviteToken(token), inviterUserId, days: INVITE_DAYS }),
+  );
+  if (!held.ok) return { ok: false, status: 401, error: "auth_required" };
+  return { ok: true, id, token };
+}
+
 export function register(app: Express, deps: Deps): void {
   const { authedUser, getPool, members, guardCapability, mayAct, overLimit, clientIp, invites } = deps;
 
@@ -54,16 +94,9 @@ export function register(app: Express, deps: Deps): void {
     if (!(await guardCapability(req, res, "member.vouch", { status: 403, body: { error: NOT_YET } }))) {
       return;
     }
-    const pool = getPool();
-    if ((await openInviteCount(pool, String(user.id))) >= OPEN_INVITES_CAP) {
-      return res.status(409).json({
-        error: `You have ${OPEN_INVITES_CAP} invitations nobody has used yet. Withdraw one you no longer need, and then make another.`,
-      });
-    }
-    const token = mintInviteToken();
-    const id = `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await createInvite(pool, { id, tokenHash: hashInviteToken(token), inviterUserId: String(user.id), days: INVITE_DAYS });
-    res.json({ id, path: invitePath(token), expiresInDays: INVITE_DAYS });
+    const made = await makeInvite(getPool(), String(user.id), Number(user.tokenVersion ?? 0));
+    if (!made.ok) return res.status(made.status).json({ error: made.error });
+    res.json({ id: made.id, path: invitePath(made.token), expiresInDays: INVITE_DAYS });
   });
 
   app.get("/api/me/invites", async (req, res) => {

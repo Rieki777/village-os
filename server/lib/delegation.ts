@@ -107,11 +107,12 @@
  * and one member holding two delegations could otherwise carry a three-seat
  * village alone while the record read as three parties agreeing.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import type { VoteChoice } from "../../shared/governanceEngine";
 import { evaluationRulesFor } from "../../shared/ballotSubjects";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { variable } from "./variables";
+import { whileSessionHolds } from "./sessionHold";
 
 export interface DelegationRow {
   delegatorId: string;
@@ -254,7 +255,7 @@ export function delegationProblem(
 
 export type SetDelegationResult =
   | { ok: true; delegation: DelegationRow; chain: ResolvedChain }
-  | { ok: false; error: string };
+  | { ok: false; status?: 401; error: string };
 
 /**
  * Give a delegation, or move one that already stands. It lands PENDING, and
@@ -284,30 +285,53 @@ export type SetDelegationResult =
  * those three assignments silently changes the rule. The case named "keeps an
  * acceptance only for the same live delegate" in delegation.test.ts is what
  * fails if anybody does.
+ *
+ * WRITTEN WHILE THE SESSION HOLDS. `sessionVersion` is the tokenVersion the
+ * request's session was checked at, and `PUT /api/governance/delegation`
+ * always passes it. A new password and an admin's revoke sessions end the
+ * delegation the member gave on both sides of the bump (`endVoiceGiven`), so
+ * one written after that would hand the member's vote to whoever the stolen
+ * session named. With a version the row is written under the member's row
+ * lock, and only while the row still carries it (`whileSessionHolds`): a
+ * change that committed first is refused with status 401 and nothing
+ * written, and one that comes later waits for the commit, and the end after
+ * the bump takes the delegation back. Without one it writes as it always
+ * has, for a caller that acts for no session.
  */
 export async function setDelegation(
   pool: Pool,
   delegatorId: string,
   delegateId: string,
+  sessionVersion?: number,
 ): Promise<SetDelegationResult> {
   const delegator = String(delegatorId ?? "").trim();
   const delegate = String(delegateId ?? "").trim();
   const offered = await loadOfferedMap(pool);
   const problem = delegationProblem(offered, delegator, delegate);
   if (problem) return { ok: false, error: problem };
-  await pool.query( // module-review-ok: the delegations table's one enumerable home (the ballots.ts pattern; no cache sits above it)
-    "INSERT INTO delegations (delegator_id, delegate_id, created_at, revoked_at, accepted_at) VALUES (?,?,NOW(),NULL,NULL) " +
-      "ON DUPLICATE KEY UPDATE " +
-      "accepted_at = IF(delegate_id = VALUES(delegate_id) AND revoked_at IS NULL, accepted_at, NULL), " +
-      "delegate_id = VALUES(delegate_id), created_at = NOW(), revoked_at = NULL",
-    [delegator, delegate],
-  );
+  if (sessionVersion === undefined) {
+    await writeDelegation(pool, delegator, delegate);
+  } else {
+    const held = await whileSessionHolds(pool, delegator, sessionVersion, (conn) => writeDelegation(conn, delegator, delegate));
+    if (!held.ok) return { ok: false, status: 401, error: "auth_required" };
+  }
   const row = await delegationOf(pool, delegator);
   if (!row) throw new Error(`delegation for ${delegator} vanished inside its own write`);
   // The chain is walked over what CARRIES. A pending delegation resolves to
   // the delegator themselves, because nobody is deciding for them yet.
   const carrying = await loadDelegationMap(pool);
   return { ok: true, delegation: row, chain: resolveFinal(carrying, delegator) };
+}
+
+/** The upsert `setDelegation` describes, on a pool or on the connection that holds the delegator's row. */
+async function writeDelegation(db: Pool | PoolConnection, delegator: string, delegate: string): Promise<void> {
+  await db.query( // module-review-ok: the delegations table's one enumerable home (the ballots.ts pattern; no cache sits above it)
+    "INSERT INTO delegations (delegator_id, delegate_id, created_at, revoked_at, accepted_at) VALUES (?,?,NOW(),NULL,NULL) " +
+      "ON DUPLICATE KEY UPDATE " +
+      "accepted_at = IF(delegate_id = VALUES(delegate_id) AND revoked_at IS NULL, accepted_at, NULL), " +
+      "delegate_id = VALUES(delegate_id), created_at = NOW(), revoked_at = NULL",
+    [delegator, delegate],
+  );
 }
 
 export interface AcceptanceCounts {
@@ -497,6 +521,74 @@ export async function endDelegationsOf(
   const carried = await declineDelegations(pool, leaver);
   await applyDelegatedVotesEverywhere(pool);
   return { told: live.length, ended: gave + carried.changed };
+}
+
+/** The notice a member reads when a new password or a session revoke ended the vote they had handed on. It names nobody. */
+export const VOICE_BACK_NOTICE = {
+  title: "Your vote is yours again",
+  body: "A new password or a session revoke on your account ended the delegation that handed your vote to another member, so nobody decides your votes for you now. A vote it had copied onto an open ballot is no longer cast. A vote cast from your account stays as it was cast, and you can change it before its ballot closes. If you hand your vote on again, it carries once they accept.",
+};
+
+/** One stable key per delegation a reset ended: who gave it, and when that delegation was given. */
+export const voiceBackKey = (delegatorId: string, givenAt: string): string =>
+  `delegation-ended-by-reset:${delegatorId}:${givenAt}`;
+
+/**
+ * END THE VOTE A MEMBER HANDED ON, for a new password or an admin's revoke
+ * sessions (`endAgentReach`, server/lib/agentTokens.ts). Adversarial round 3,
+ * finding 8: a decision for Rye, built as recommended in a commit of its own
+ * so it can be taken back alone.
+ *
+ * A session needs only `ballot.vote` to hand the member's vote to another
+ * account, and the member hears nothing when it does. Once that account
+ * accepts, every open ballot copies its choice onto the member's row unless
+ * the member votes in person. So the reset that answers a theft takes the
+ * delegation back the way it takes back the agent's tokens. Most resets are a
+ * forgotten password and the delegation was the member's own; that member is
+ * told, can hand the vote on again, and it carries once the delegate accepts
+ * again.
+ *
+ * Three acts, each the one the member's own DELETE makes:
+ *
+ *   1. END the delegation the member gave, accepted or still an offer
+ *      (`revokeDelegation`). A delegation somebody else handed TO the member
+ *      is that member's choice and is left alone.
+ *   2. TELL the member, once, under a key naming the delegation, and only
+ *      when this run ended it. A member who had none, or took it back
+ *      themselves, hears nothing. Told before the derivation, so a derivation
+ *      that fails loses no notice.
+ *   3. DERIVE every open ballot again (`applyDelegatedVotesEverywhere`), so a
+ *      vote copied onto the member's row is no longer cast. It runs whenever
+ *      the member has ever delegated, so a run whose derivation failed after
+ *      the end is finished by the next, which finds the delegation already
+ *      ended and tells nobody.
+ *
+ * A vote the stolen session cast in the member's own name stays as cast:
+ * nothing marks it apart from one the member cast. The notice says so.
+ *
+ * Returns whether this run ended a delegation.
+ */
+export async function endVoiceGiven(
+  pool: Pool,
+  delegatorId: string,
+  notify: (notice: DelegationNotice) => Promise<unknown>,
+): Promise<boolean> {
+  const given = await delegationOf(pool, delegatorId);
+  if (!given) return false;
+  const ended = given.revokedAt === null && (await revokeDelegation(pool, given.delegatorId));
+  if (ended) {
+    await notify({
+      userId: given.delegatorId,
+      type: "governance",
+      title: VOICE_BACK_NOTICE.title,
+      body: VOICE_BACK_NOTICE.body,
+      link: "/governance",
+      actorUserId: null,
+      dedupeKey: voiceBackKey(given.delegatorId, given.createdAt),
+    });
+  }
+  await applyDelegatedVotesEverywhere(pool);
+  return ended;
 }
 
 /** The delegation this member gave, live or revoked, or null if they never gave one. */
