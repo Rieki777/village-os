@@ -417,8 +417,9 @@ const isAddressTaken = (err: any): boolean => err?.code === "ER_DUP_ENTRY" && /u
  * address that differs by case or by an accent the collation folds is caught
  * the same way. Anything else still throws, and the sweep records where.
  *
- * `erasure`: a second erasure of a tombstone writes these fields again, and
- * only this step may (see ErasureDeps).
+ * `erasure`: a second erasure of a tombstone writes these fields again. Two
+ * steps may pass it, this one and "handle-after-tombstone", which takes the
+ * handle off a tombstone that still has one (see ErasureDeps).
  */
 async function writeTombstone(members: ErasureDeps["members"], id: string): Promise<void> {
   const close = (address: string) =>
@@ -2024,9 +2025,13 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "seat-application-words-after-tombstone",
   "meet-me-windows-after-tombstone",
   "notices-naming-after-tombstone",
+  "ballot-words-after-tombstone",
+  "proposal-ballot-words-after-tombstone",
   "exit-notes-after-tombstone",
   "relayed-mail-after-tombstone",
   "checkin-notes-after-tombstone",
+  "pulse-lines-naming-after-tombstone",
+  "submission-words-after-tombstone",
   "season-plan-words-after-tombstone",
   "role-tensions-after-tombstone",
   "event-places-after-tombstone",
@@ -2040,8 +2045,15 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "stay-notes-after-tombstone",
   "purchase-emails-after-tombstone",
   "role-proposals-after-tombstone",
+  "seat-journal-after-tombstone",
+  "seat-claims-after-tombstone",
+  "org-seatings-after-tombstone",
+  "role-holdings-after-tombstone",
   "sessions-after-tombstone",
   "gene-keys-after-tombstone",
+  "quest-crews-after-tombstone",
+  "photo-report-reasons-after-tombstone",
+  "product-subscriptions-after-tombstone",
 ]);
 
 /** Steps after the tombstone a finished erasure is never given, and why. */

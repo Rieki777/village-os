@@ -56,6 +56,7 @@ async function save(id: string, body: Record<string, unknown>): Promise<{ status
     authedUser: (async () => usersRepo(pool).byId(id)) as any,
     members: usersRepo(pool),
     publicUser: (u: any) => u,
+    getPool: () => pool,
   });
   const out: { status: number; body: any } = { status: 200, body: null };
   const res: any = {
