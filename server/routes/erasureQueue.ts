@@ -151,10 +151,14 @@ export function register(app: Express, deps: Deps): void {
       const stalled = await unfinishedErasures(pool);
       let swept = 0;
       let stillStuck = 0;
+      // A member whose departure was cancelled after their sweep stopped: the
+      // record ends and nothing runs (round 2, finding 1). Not stuck, and not swept.
+      let stayed = 0;
       for (const row of stalled) {
         try {
           const out = await resumeErasure(pool, row.userId, erasureDeps);
           if (out.finished) swept += 1;
+          else if (out.stayed) stayed += 1;
           else stillStuck += 1;
         } catch {
           // `resumeErasure` has already recorded which step failed and what it
@@ -177,6 +181,7 @@ export function register(app: Express, deps: Deps): void {
         resumed: stalled.length,
         swept,
         stillStuck,
+        stayed,
         remaining: await halfErasedMembers(pool),
         local: await unfinishedSweeps(pool),
       });

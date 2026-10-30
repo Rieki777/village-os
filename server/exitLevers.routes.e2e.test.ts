@@ -4,9 +4,9 @@
  *
  * There were seven refusals until the founder ruled that members keep their
  * tokens. A share of equity and keeping Voice were lifted that day, and the
- * cases for them below now assert that each SAVES. The last describe drives
- * the departure itself: a leaver still holding tokens is kept as a former
- * member, and an empty account is erased as before.
+ * cases for them below now assert that each SAVES. The describe after the
+ * refusals drives the departure itself: a leaver still holding tokens is kept
+ * as a former member, and an empty account is erased as before.
  *
  * `server/lib/exitPolicy.test.ts` proves `exitLeverProblem` in isolation, with
  * every fact injected. That is a claim about a function. This file is the claim
@@ -26,6 +26,11 @@
  * mean, so the route answers 200 and the value is stored; the sentence about it
  * belongs to the test run. A guard that refused it would be the platform
  * deciding a village's exit terms for it.
+ *
+ * ONE MORE DOOR RIDES ON THIS SERVER: the exit cancel (round 2, finding 1).
+ * `server/routes/erasureQueue.test.ts` proves `cancelExit` against a real
+ * database; the last block here proves the route in the built server calls it,
+ * which no unit test can. The e2e port map is full, so it shares this boot.
  *
  * Boots the BUILT `dist/index.js` against a throwaway schema, so run
  * `pnpm build` first or you are testing stale code. Skips loudly without
@@ -656,5 +661,45 @@ describe.skipIf(!DB_CONFIGURED)("resolving a departure: a former member, or a to
     expect(row?.status).toBe("resolved");
     expect(row?.userName).toBe("A departed member");
     expect(String(row?.resolution ?? "")).not.toContain("kept as a former member");
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("the exit cancel route, wired to cancelExit (round 2, finding 1)", () => {
+  /** A living member with an open exit, opened through the admin's own door. */
+  async function openFor(id: string): Promise<string> {
+    await pool.query("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [id, "Ned Okafor", `${id}@example.test`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const opened = await call("POST", "/api/admin/exits", { body: { userId: id, kind: "voluntary" } });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    return String(opened.json.exit.id);
+  }
+
+  it("ends the deletion a stopped resolve began, and names what it had already removed", async () => {
+    const id = `exitlevers-stayed-${PORT}`;
+    const exitId = await openFor(id);
+    // What a resolve that stopped at portraits leaves behind: open, failed, short of the close.
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO `member_erasures` (`user_id`, `attempts`, `last_attempt_at`, `steps_done`, `failed_step`, `last_error`) " +
+        "VALUES (?, 1, CURRENT_TIMESTAMP, JSON_ARRAY('role-holdings', 'skill-tags'), 'portraits', 'could not take it off the volume')",
+      [id],
+    );
+
+    const out = await call("POST", `/api/admin/exits/${exitId}/cancel`);
+    expect(out.status, JSON.stringify(out.json)).toBe(200);
+    expect(out.json.alreadyRemoved).toEqual(["role-holdings", "skill-tags"]);
+    const [left] = await pool.query<any[]>("SELECT `user_id` FROM `member_erasures` WHERE `user_id` = ?", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(left, "the cancel left the deletion armed for the next Finish them").toEqual([]);
+    expect((await call("POST", `/api/admin/exits/${exitId}/cancel`)).status).toBe(404);
+  });
+
+  it("refuses once the account is closed, and the exit stays open", async () => {
+    const id = `exitlevers-closed-${PORT}`;
+    const exitId = await openFor(id);
+    // The sweep got past the close, and the status write after it never ran.
+    await pool.query("UPDATE `users` SET `email` = ?, `name` = 'A departed member' WHERE `id` = ?", [`deleted-${id}@anonymized.invalid`, id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+
+    const out = await call("POST", `/api/admin/exits/${exitId}/cancel`);
+    expect(out.status, JSON.stringify(out.json)).toBe(409);
+    const [exit] = await pool.query<any[]>("SELECT `status` FROM `exits` WHERE `id` = ?", [exitId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(exit).toEqual([{ status: "open" }]);
   });
 });

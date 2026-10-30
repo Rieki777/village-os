@@ -422,15 +422,7 @@ import {
   staysOpenState,
 } from "./lib/stays";
 import { createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
-import {
-  allExits,
-  blockingStates,
-  createExit,
-  exitById,
-  exitOpenState,
-  openExitFor,
-  sweepBalances,
-} from "./lib/exit";
+import { allExits, blockingStates, cancelExit, createExit, exitById, exitOpenState, openExitFor, sweepBalances } from "./lib/exit";
 import {
   DEFAULT_EXIT_POLICY,
   EXIT_POLICY_TERMS,
@@ -799,7 +791,7 @@ import {
   type PatternKind,
 } from "./lib/seasonPatterns";
 import { applyAcceptReward } from "./lib/proposalAward";
-import { statedProposalCash } from "./lib/cashOwed"; // 0285: a proposal's cash, owed when it is accepted
+import { cashNotGivenUp, statedProposalCash } from "./lib/cashOwed"; // 0285: a proposal's cash, owed when it is accepted; R4-4: deleting gives unpaid cash up
 import { GRATITUDE_ONLY_SENT } from "../shared/workValue";
 import { buildRetrospective, proposeNextPattern } from "./lib/seasonRetrospective";
 import {
@@ -14387,22 +14379,18 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
     }
     const out = await resolveExit(getPool(), { exitId: exit.id, target, actorId: adminActor(req)?.id ?? null, agreementRef: req.body?.agreementRef, deps: erasureDeps });
-    // Seats vacate at resolve, whichever way it went; the stewards hear which ones.
-    for (const roleId of roleIds) {
+    // Seats vacate at resolve, whichever way it went, and the stewards hear which; a resolve a cancel stopped vacates none (409).
+    for (const roleId of out.stopped ? [] : roleIds) {
       await notifyAdmins("exit_opened", `An opening in ${roleId} (departure resolved)`, `exit:${exit.id}:vacancy:${roleId}`);
     }
-    res.json({ success: true, outcome: out.outcome, held: out.held, vacatedRoles: roleIds });
+    res.status(out.stopped ? 409 : 200).json(out.stopped ? { error: out.stopped.message, ...out.stopped } : { success: true, outcome: out.outcome, held: out.held, vacatedRoles: roleIds });
   });
 
-  /** A person who stays: the exit closes without a tombstone. */
+  /** A person who stays: the exit closes without a tombstone, and so does a deletion it began (cancelExit). */
   app.post("/api/admin/exits/:id/cancel", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [r] = await getPool().query<any>(
-      "UPDATE exits SET status = 'cancelled', resolved_at = NOW() WHERE id = ? AND status IN ('open','settling')",
-      [req.params.id],
-    );
-    if (!(r as any).affectedRows) return res.status(404).json({ error: "No open exit with that id" });
-    res.json({ success: true });
+    const out = await cancelExit(getPool(), String(req.params.id), { memberById: (id) => members.byId(id), actorId: adminActor(req)?.id ?? null });
+    res.status(out.status).json(out.body);
   });
 
   /**
@@ -25886,6 +25874,8 @@ ${inner}
   app.post("/api/profile/delete-account", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
+    // R4-4: cash the village still owes is given up only when the member says so, asked before the confirmation is spent.
+    const cashKept = await cashNotGivenUp(getPool(), user.id, req.body); if (cashKept) return res.status(409).json(cashKept);
     const confirmed = await confirmIdentity(req, res, user, "delete-account");
     if (!confirmed.ok) return res.status(403).json(confirmed.body);
     const stranding = await departureStrandingRefusal(user, true);
@@ -25893,9 +25883,7 @@ ${inner}
     // S52: same lock as the admin path — settle blocking state first. The
     // 409 names each domain so the member knows exactly what remains.
     const blocking = blockingStates(await exitOpenState(getPool(), user.id, roleIdsFor(user.id)));
-    if (blocking.length) {
-      return res.status(409).json({ error: "Open state must settle through its own domain first", blocking });
-    }
+    if (blocking.length) return res.status(409).json({ error: "Open state must settle through its own domain first", blocking });
     const external = await anonymizeMember(getPool(), user, user.id, erasureDeps);
     // Lane C: a member is never told "deleted" about a store that did not
     // answer. The sentence says what happened here, and names the shortfall

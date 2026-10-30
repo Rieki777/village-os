@@ -24,6 +24,13 @@
  * and a balance the registry cannot name is no token any surface can show,
  * so neither counts. A negative balance never reaches here: it blocks resolve.
  *
+ * CASH THE VILLAGE OWES THEM COUNTS TOO (round 4, R4-4). An unpaid row in
+ * `cash_owed` (0285), owed or claimed, keeps the account on exactly as a token
+ * balance does, so the treasurer still has somebody to pay. It is checked
+ * beside `heldValueOf` by `unpaidCashOf` (server/lib/cashOwed.ts) and never
+ * folded into it: a `HeldValue` is a token, and `formerMemberNote` prints it as
+ * one. The note names the cash as a count, never the amount or the work.
+ *
  * WHAT A FORMER MEMBER LOSES, and each line has a reason:
  *   - `membershipGranted` AND `stageGranted`. Admission is either one
  *     (`isAdmitted`, server/lib/admission.ts), so ending membership clears
@@ -47,17 +54,40 @@
  * part way is retried by pressing it again. The exit is marked resolved LAST,
  * which is what keeps it retryable: until that write lands, the exit desk
  * still offers the button.
+ *
+ * ONE AT A TIME WITH "THEY'RE STAYING" (round 4). The route reads the exit's
+ * status once, at the top, and this used to run every step and then write
+ * 'resolved' with no status condition. A cancel that landed in between was
+ * overwritten: on this path the member the admins had just kept lost their
+ * membership anyway, and on the tombstone path a cancel that landed before
+ * the deletion began let it close their account. Now each act that matters
+ * happens inside the exit's row hold (`whileExitHeld`,
+ * server/repos/exitNotes.ts), which the cancel takes too, and only while the
+ * exit still reads open or settling:
+ *
+ *   - before each step a former member's resolve runs, the line naming it
+ *     goes onto the exit (`resolveEndingLine`, server/lib/exit.ts), so a
+ *     cancel can say what does not come back;
+ *   - the end of membership and the write to 'resolved' happen in one hold;
+ *   - on the tombstone path the erasure record is opened in the hold, so a
+ *     cancel from then on finds the deletion running and refuses, as it has
+ *     since round 2.
+ *
+ * A resolve that finds the exit closed stops where it is, ends nothing more,
+ * and answers `outcome: "stopped"` with the sentence for the admin.
  */
 import type { Pool } from "mysql2/promise";
 import { fromLedgerUnits } from "./economy";
 import { balancesFor, memberAccount, tokenDef, type TokenDef } from "./ledger";
-import { anonymizeMember, endPermissionHoldings, type ErasureDeps } from "./erasure";
+import { anonymizeMember, beginMemberErasure, endPermissionHoldings, type ErasureDeps } from "./erasure";
 import type { ErasureOutcome } from "./memberDrivers";
 import { recordPartyLeft } from "./alignmentEndings";
 import { releaseSeatingsForUser } from "./orgChart";
 import { recordEvent } from "./events";
+import { endedInWords, resolveEndingLine, resolveEndingsIn, type FormerMemberStep } from "./exit";
+import { unpaidCashOf } from "./cashOwed";
 import { withdrawUnseatedOf } from "../repos/seatApplications";
-import { markExitResolved } from "../repos/exitNotes";
+import { markExitResolved, whileExitHeld, type HeldExit } from "../repos/exitNotes";
 
 /** One balance that keeps an account alive, in HUMAN units. */
 export interface HeldValue {
@@ -68,15 +98,31 @@ export interface HeldValue {
   amount: number;
 }
 
-/** The two ways a resolve ends. */
-export type ExitOutcome = "former" | "erased";
+/** The ways a resolve ends: one of the two outcomes, or stopped because the exit closed first. */
+export type ExitOutcome = "former" | "erased" | "stopped";
+
+/** Why a resolve stopped, for the route to answer with. */
+export interface ResolveStopped {
+  /** What the exit read when the resolve came to act, or null when there is none. */
+  status: string | null;
+  /** The sentence the admin reads. */
+  message: string;
+  /** The steps the exit's record says a resolve had already begun, each once. */
+  alreadyEnded: FormerMemberStep[];
+  /** The permission roles those steps ended, by id. */
+  vacatedRoles: string[];
+}
 
 export interface ExitResolution {
   outcome: ExitOutcome;
   /** What a former member still holds. Empty when the account was erased. */
   held: HeldValue[];
+  /** How many cash payments the village still owes them (`unpaidCashOf`). Zero when the account was erased. */
+  cashOwed: number;
   /** What the outside stores answered, on the erasure path only. */
   external: ErasureOutcome | null;
+  /** Present exactly when `outcome` is "stopped". */
+  stopped?: ResolveStopped;
 }
 
 /** Whether a balance in this token keeps an account alive at resolve. */
@@ -107,26 +153,82 @@ export const FORMER_MEMBER_MARK = "kept as a former member: ";
  * The line a former member's exit carries: the date and what they still hold.
  * It names no person, which is why an erasure asked for later keeps it.
  */
-export function formerMemberNote(held: readonly HeldValue[], now: Date): string {
-  const what = held.map((h) => `${h.amount} ${h.token}`).join(", ");
-  return `\n[${now.toISOString().slice(0, 10)}] ${FORMER_MEMBER_MARK}still holds ${what}`.slice(0, 2000);
+export function formerMemberNote(held: readonly HeldValue[], now: Date, cashOwed = 0): string {
+  const what = [
+    held.length ? `still holds ${held.map((h) => `${h.amount} ${h.token}`).join(", ")}` : "",
+    cashOwed > 0 ? `is owed ${cashOwed} cash payment(s)` : "",
+  ].filter(Boolean).join(", and ");
+  return `\n[${now.toISOString().slice(0, 10)}] ${FORMER_MEMBER_MARK}${what}`.slice(0, 2000);
+}
+
+/** One step a former member's resolve runs before membership ends. */
+interface FormerMemberStepRun {
+  name: FormerMemberStep;
+  /** The permission roles it ends, by id, read just before it runs. */
+  roles?: () => string[];
+  run: () => Promise<unknown>;
 }
 
 /**
  * Membership ends and the roles go; the account and everything in it stay.
- * The header says what each step is for.
+ * The header says what each step is for, and how the hold orders them.
+ *
+ * Null when it ran to the end and the exit is resolved. Otherwise the exit as
+ * the hold read it when it was no longer open: nothing after that point ran.
  */
-export async function keepAsFormerMember(pool: Pool, target: any, deps: ErasureDeps, now: Date = new Date()): Promise<void> {
-  const userId = String(target.id);
-  await recordPartyLeft(pool, userId, now);
-  await endPermissionHoldings(userId, deps);
-  await releaseSeatingsForUser(pool, userId, "member left the village");
-  await withdrawUnseatedOf(pool, userId);
-  await deps.members.update(userId, (u: any) => {
-    u.membershipGranted = false;
-    u.stageGranted = null;
-    u.role = "member";
+export async function keepAsFormerMember(
+  pool: Pool,
+  input: { exitId: string; target: any; deps: ErasureDeps; now: Date; agreementRef: string | null; note: string },
+): Promise<HeldExit | null> {
+  const { deps, now } = input;
+  const userId = String(input.target.id);
+  const steps: FormerMemberStepRun[] = [
+    { name: "alignment-party-left", run: () => recordPartyLeft(pool, userId, now) },
+    {
+      name: "role-holdings",
+      roles: () => deps.loadRoleHolders().filter((h) => h.userId === userId).map((h) => String(h.roleId ?? "")).filter(Boolean),
+      run: () => endPermissionHoldings(userId, deps),
+    },
+    { name: "org-seatings", run: () => releaseSeatingsForUser(pool, userId, "member left the village") },
+    { name: "role-applications", run: () => withdrawUnseatedOf(pool, userId) },
+  ];
+  for (const step of steps) {
+    // The line goes on first and the step runs after the hold: see `resolveEndingLine` for why that order.
+    const closed = await whileExitHeld(pool, input.exitId, async (hold) => {
+      if (!hold.exit.open) return hold.exit;
+      await hold.appendNote(resolveEndingLine(step.name, step.roles?.() ?? [], now));
+      return null;
+    });
+    if (closed) return closed;
+    await step.run();
+  }
+  // The irreversible end and the move to resolved, in one hold: a cancel waits for both or lands before either.
+  return whileExitHeld(pool, input.exitId, async (hold) => {
+    if (!hold.exit.open) return hold.exit;
+    await deps.members.update(userId, (u: any) => {
+      u.membershipGranted = false;
+      u.stageGranted = null;
+      u.role = "member";
+    });
+    await hold.markResolved(input.agreementRef, input.note);
+    return null;
   });
+}
+
+/** What a resolve that found the exit closed tells the admin, with what the exit's record says had already ended. */
+export function stoppedBy(exit: HeldExit): ResolveStopped {
+  const endings = resolveEndingsIn(exit.resolution);
+  const base = { status: exit.status, alreadyEnded: endings.steps, vacatedRoles: endings.roles };
+  if (exit.status === "cancelled") {
+    const message = endings.steps.length
+      ? "This departure was closed with They're staying while the resolve was running, so it stopped before their membership ended " +
+        `and they are still a member. It had already ended ${endedInWords(endings)}, and those do not come back on their own. ` +
+        "Put back what they still need by hand."
+      : "This departure was closed with They're staying before the resolve began, so nothing ended and they are still a member.";
+    return { ...base, message };
+  }
+  if (exit.status === "resolved") return { ...base, message: "This departure is already resolved." };
+  return { ...base, message: "No open exit with that id" };
 }
 
 /**
@@ -141,15 +243,32 @@ export async function resolveExit(
   const now = input.now ?? new Date();
   const agreement = input.agreementRef ? String(input.agreementRef).slice(0, 255) : null;
   const held = await heldValueOf(pool, String(input.target.id));
+  const cashOwed = await unpaidCashOf(pool, String(input.target.id));
 
-  if (!held.length) {
-    const external = await anonymizeMember(pool, input.target, input.actorId, input.deps);
+  if (!held.length && !cashOwed) {
+    // Opened in the hold, so a cancel from here on finds the deletion running and refuses.
+    const closed = await whileExitHeld(pool, input.exitId, async (hold) => {
+      if (!hold.exit.open) return hold.exit;
+      await beginMemberErasure(pool, input.target);
+      return null;
+    });
+    if (closed) return { outcome: "stopped", held, cashOwed, external: null, stopped: stoppedBy(closed) };
+    const external = await anonymizeMember(pool, input.target, input.actorId, input.deps, { begun: true });
+    // Conditional like every resolve write. It finds the exit closed only when a cancel ended a record
+    // that ran past MAY_STILL_BE_RUNNING_SECONDS, and the account is closed either way.
     await markExitResolved(pool, input.exitId, agreement, "");
-    return { outcome: "erased", held, external };
+    return { outcome: "erased", held, cashOwed, external };
   }
 
-  await keepAsFormerMember(pool, input.target, input.deps, now);
-  await markExitResolved(pool, input.exitId, agreement, formerMemberNote(held, now));
+  const closed = await keepAsFormerMember(pool, {
+    exitId: input.exitId,
+    target: input.target,
+    deps: input.deps,
+    now,
+    agreementRef: agreement,
+    note: formerMemberNote(held, now, cashOwed),
+  });
+  if (closed) return { outcome: "stopped", held, cashOwed, external: null, stopped: stoppedBy(closed) };
   await recordEvent(pool, {
     kind: "audit",
     text: "member:kept-as-former",
@@ -158,5 +277,5 @@ export async function resolveExit(
     entityRef: String(input.target.id),
     audience: "admin",
   });
-  return { outcome: "former", held, external: null };
+  return { outcome: "former", held, cashOwed, external: null };
 }

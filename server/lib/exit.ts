@@ -40,8 +40,13 @@ import {
 } from "./ledger";
 import { numberVar, stringVar } from "./variables";
 import { tokenTypesPostedTo } from "../repos/tokenLedger";
-import { ownExitResolutions, setExitResolution } from "../repos/exitNotes";
+import { ownExitResolutions, setExitResolution, whileExitHeld } from "../repos/exitNotes";
+import { abandonErasure, type AbandonedErasure } from "../repos/memberErasure";
+import { recordEvent } from "./events";
+import { isTombstone } from "./oauthAccounts";
 import { openRedemptionCount } from "./redemptionStore";
+import { unpaidCashOf } from "./cashOwed";
+import { CASH_ON_DELETION, CASH_ON_DEPARTURE, cashStillOwedWords } from "../../shared/cashOwed";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -150,13 +155,183 @@ export async function createExit(
   return { ok: true, exit: (await exitById(pool, id))! };
 }
 
+/** What the cancel route answers, status and body together. */
+export interface CancelExitOutcome {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+/** Why a cancel cannot close the departure once the account is closed. */
+const ALREADY_CLOSED =
+  "This account is already closed, so the departure cannot be undone. Finish the deletion from the review queue (/review).";
+
+/**
+ * A person who stays: the exit closes without a tombstone, and so does a
+ * deletion its resolve began (round 2, finding 1).
+ *
+ * THE DEFECT. Resolving runs the erasure and only then marks the exit
+ * resolved, so a sweep that stops before the tombstone (a portrait that will
+ * not come off the volume, a dropped connection) leaves the exit open and the
+ * admin's "They're staying" button on it. This used to flip the exit and
+ * nothing else. The erasure record stayed open, holding the member's identity,
+ * and Finish them on /review restarts every unfinished record from the top, so
+ * the next steward to press it, clearing somebody else's stuck sweep, closed
+ * the account of a member the village had decided keeps it.
+ *
+ * THE ORDER, so a cancel never succeeds while that record is still armed:
+ *
+ *   1. The exit must be open or settling, as before.
+ *   2. An account that is already a tombstone cannot stay. The sweep finished
+ *      or got past the close while the exit never reached "resolved".
+ *   3. The record ends (`abandonErasure`, one conditional statement), unless
+ *      it got past the tombstone or may still be running. Either refuses.
+ *   4. Only then does the exit flip.
+ *
+ * WHAT A CANCEL CANNOT DO is put back what the stopped sweep already removed:
+ * role holdings, org seatings, skill tags, agent tokens and the rest of the
+ * steps before the close. The answer says so, with the steps, so the admin
+ * keeping the member knows to restore them by hand.
+ *
+ * THE SAME FOR A FORMER-MEMBER RESOLVE THAT STOPPED PART WAY (round 4). That
+ * path starts no erasure, so there was no record to read, and the cancel
+ * closed the exit with the plain answer while the member's roles were already
+ * gone. The resolve now writes a line onto the exit before each step it runs
+ * (`resolveEndingLine`), and the answer lists those steps after the
+ * erasure's, with the permission roles by id.
+ *
+ * ONE AT A TIME WITH RESOLVE (round 4). All of it runs inside the exit's row
+ * hold (`whileExitHeld`, server/repos/exitNotes.ts), and so does every write
+ * of a resolve that matters: a cancel that arrives mid-resolve waits for it,
+ * and a resolve that arrives after a cancel reads 'cancelled' and stops
+ * (`resolveExit`, server/lib/exitResolve.ts).
+ */
+export async function cancelExit(
+  pool: Pool,
+  exitId: string,
+  deps: { memberById(id: string): Promise<any>; actorId: string | null },
+): Promise<CancelExitOutcome> {
+  return whileExitHeld(pool, exitId, async (hold): Promise<CancelExitOutcome> => {
+    const userId = hold.exit.userId;
+    if (!hold.exit.open || !userId) return { status: 404, body: { error: "No open exit with that id" } };
+    const member = await deps.memberById(userId);
+    if (member && isTombstone({ email: String(member.email ?? "") })) return { status: 409, body: { error: ALREADY_CLOSED } };
+    const erasure = await abandonErasure(pool, userId);
+    if (erasure.outcome === "closed") return { status: 409, body: { error: ALREADY_CLOSED } };
+    if (erasure.outcome === "running") {
+      return { status: 409, body: { error: "This member's account is being deleted right now. Try again in a few minutes." } };
+    }
+    if (!(await hold.cancel())) return { status: 404, body: { error: "No open exit with that id" } };
+    if (erasure.outcome === "abandoned") {
+      await recordEvent(pool, {
+        kind: "audit",
+        text: "member:erasure-abandoned:exit-cancelled",
+        actorUserId: deps.actorId,
+        entityType: "user",
+        entityRef: userId,
+        audience: "admin",
+      });
+    }
+    return { status: 200, body: stayingAnswer(erasure, resolveEndingsIn(hold.exit.resolution)) };
+  });
+}
+
+/** What "They're staying" says, given what a stopped deletion and a stopped resolve had already ended. */
+function stayingAnswer(erasure: AbandonedErasure, endings: ResolveEndings): Record<string, unknown> {
+  const removed = erasure.outcome === "abandoned" ? erasure.stepsDone : [];
+  if (!removed.length && !endings.steps.length) return { success: true };
+  const sentences = ["They're staying."];
+  const lost = "do not come back on their own. Put back what they still need by hand.";
+  if (removed.length) {
+    sentences.push(
+      endings.steps.length
+        ? "The deletion that stopped had already removed some of what they held, such as their roles and skill tags."
+        : `The deletion that stopped had already removed some of what they held, such as their roles and skill tags, and those ${lost}`,
+    );
+  }
+  if (endings.steps.length) {
+    sentences.push(`The resolve that stopped part way had already ended ${endedInWords(endings)}, and those ${lost}`);
+  }
+  return {
+    success: true,
+    message: sentences.join(" "),
+    alreadyRemoved: [...removed, ...endings.steps.filter((s) => !removed.includes(s))],
+    vacatedRoles: endings.roles,
+  };
+}
+
+/**
+ * The steps a former-member resolve runs before membership ends, in order,
+ * named as the erasure names the same calls (`keepAsFormerMember`,
+ * server/lib/exitResolve.ts). "role-applications" is the erasure's
+ * `withdrawUnseatedOf`, which there runs inside a later step.
+ */
+export const FORMER_MEMBER_STEPS = ["alignment-party-left", "role-holdings", "org-seatings", "role-applications"] as const;
+export type FormerMemberStep = (typeof FORMER_MEMBER_STEPS)[number];
+
+/** What each of those steps ends, as the admin reads it. */
+const ENDED_IN_WORDS: Record<FormerMemberStep, (roles: readonly string[]) => string> = {
+  "alignment-party-left": () => "their part in the aligned terms they were party to",
+  "role-holdings": (roles) => (roles.length ? `their roles (${roles.join(", ")})` : "their roles"),
+  "org-seatings": () => "their places on the org chart",
+  "role-applications": () => "their open role applications",
+};
+
+/** What a resolve's record says it already began ending: each step once, and the permission roles by id. */
+export interface ResolveEndings {
+  steps: FormerMemberStep[];
+  roles: string[];
+}
+
+/** The marker of a former-member resolve's record line, matched by `SETTLE_LINE`. */
+const RESOLVE_ENDING_MARK = "resolve began ending";
+
+const RESOLVE_ENDING_LINE = /^\[\d{4}-\d{2}-\d{2}\] resolve began ending: ([a-z-]+)(?: \((.*)\))?$/;
+
+/**
+ * One line of the record a former-member resolve keeps on the exit, written
+ * BEFORE its step runs (round 4).
+ *
+ * Before, because nothing reads this line to skip work: a retried resolve runs
+ * every step again, each one idempotent. What reads it is the cancel, telling
+ * the admin what does not come back, and the direction that must never fail
+ * there is leaving something out. A line written first and a step that then
+ * died names a step that may have ended nothing; a step that ran and a line
+ * that never landed would hide a role that is gone.
+ *
+ * It names no person, only a step and role ids, which is why an erasure keeps
+ * it (`SETTLE_LINE`).
+ */
+export function resolveEndingLine(step: FormerMemberStep, roles: readonly string[], now: Date): string {
+  const what = roles.length ? ` (${roles.join(", ")})` : "";
+  return `\n[${now.toISOString().slice(0, 10)}] ${RESOLVE_ENDING_MARK}: ${step}${what}`.slice(0, 2000);
+}
+
+/** Every step and role a resolve's record lines name, in the order first written. A retry repeats lines, and they count once. */
+export function resolveEndingsIn(resolution: string | null | undefined): ResolveEndings {
+  const out: ResolveEndings = { steps: [], roles: [] };
+  for (const line of String(resolution ?? "").split("\n")) {
+    const m = RESOLVE_ENDING_LINE.exec(line);
+    const step = FORMER_MEMBER_STEPS.find((s) => s === m?.[1]);
+    if (!m || !step) continue;
+    if (!out.steps.includes(step)) out.steps.push(step);
+    for (const role of (m[2] ?? "").split(", ").filter(Boolean)) if (!out.roles.includes(role)) out.roles.push(role);
+  }
+  return out;
+}
+
+/** The steps a resolve's record names, as one phrase for the admin. */
+export function endedInWords(endings: ResolveEndings): string {
+  return endings.steps.map((s) => ENDED_IN_WORDS[s](endings.roles)).join(", ");
+}
+
 /**
  * A line the village's own acts append to `exits.resolution`: the settle
  * route's, as `sweepBalances` writes them, and resolve's, as `resolveExit`
- * writes the one naming what a former member still holds. None of them names
- * the person, which is why an erasure keeps them.
+ * writes the one naming what a former member still holds and the ones naming
+ * each step it began (`resolveEndingLine`). None of them names the person,
+ * which is why an erasure keeps them.
  */
-const SETTLE_LINE = /^\[\d{4}-\d{2}-\d{2}\] (balances swept|exit policy applied|no balance moved|kept as a former member): /;
+const SETTLE_LINE = /^\[\d{4}-\d{2}-\d{2}\] (balances swept|exit policy applied|no balance moved|kept as a former member|resolve began ending): /;
 
 /** What stands where a departed member's own note was. */
 export const REMOVED_EXIT_NOTE = "[removed at member's request]";
@@ -301,7 +476,26 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     blocking: false,
   });
 
+  // Last, so the domains other lanes add land above it.
+  states.push(await cashState(pool, userId));
+
   return states;
+}
+
+/**
+ * The cash the village still owes the member, as a NOTICE (round 4, R4-4).
+ *
+ * NEVER BLOCKING. It is the village's debt to the member, which the member
+ * cannot settle, and Rye's ruling of 2026-10-23 answers what happens to it:
+ * resolve keeps a leaver owed cash on as a former member, so they can still
+ * claim it (`unpaidCashOf`, server/lib/exitResolve.ts). Deleting the account
+ * gives it up, and delete-account asks first (`cashNotGivenUp`,
+ * server/lib/cashOwed.ts). A count only, never the amount or the work.
+ */
+export async function cashState(pool: Pool, userId: string): Promise<ExitDomainState> {
+  const n = await unpaidCashOf(pool, userId);
+  if (!n) return { domain: "cash", count: 0, description: "no cash owed", blocking: false };
+  return { domain: "cash", count: n, description: `${cashStillOwedWords(n)}. ${CASH_ON_DEPARTURE}. ${CASH_ON_DELETION}`, blocking: false };
 }
 
 export function blockingStates(states: ExitDomainState[]): ExitDomainState[] {
