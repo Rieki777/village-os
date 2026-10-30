@@ -442,3 +442,15 @@ export async function realMemberIdRows(pool: Pool): Promise<RowDataPacket[]> {
   );
   return roster;
 }
+
+/**
+ * Whether this id is a tombstone now: the address `writeTombstone` leaves.
+ * A missing row is not one, so the caller's own "no such member" answer stands.
+ * Read on the caller's connection when it has one, so a check inside a
+ * transaction sees what that transaction sees.
+ */
+export async function isTombstoneId(db: Pool | PoolConnection, id: string): Promise<boolean> {
+  if (!id) return false;
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `email` FROM `users` WHERE `id` = ?", [id]);
+  return !!rows[0] && isTombstone({ email: String(rows[0].email ?? "") });
+}

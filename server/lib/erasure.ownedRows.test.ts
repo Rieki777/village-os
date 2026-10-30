@@ -774,8 +774,9 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     const steps = (await erasureRecord(pool, leaver.id))!.stepsDone;
     const at = steps.indexOf("role-tensions-after-tombstone");
     expect(at).toBeGreaterThan(steps.indexOf("tombstone"));
-    expect(steps.slice(steps.indexOf("tombstone"), steps.indexOf("tombstone") + 4), "the guest-era places go before comms takes the contacts").toEqual([
+    expect(steps.slice(steps.indexOf("tombstone"), steps.indexOf("tombstone") + 5), "the guest-era places go before comms takes the contacts").toEqual([
       "tombstone",
+      "handle-after-tombstone",
       "member-agent-after-tombstone",
       "guest-places-after-tombstone",
       "comms",

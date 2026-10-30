@@ -622,7 +622,7 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
 
     const after = await usersRepo(pool).byId(id);
     expect(after!.name, "a save in flight wrote the member's name back onto the tombstone").toBe(ANON);
-    expect(after!.handle).toBe(`departed-${id.slice(-8)}`);
+    expect(after!.handle, "a tombstone holds no handle (round 2, finding 5)").toBeNull();
     expect(after!.bio).toBe("");
     expect(res.status).toBe(401);
   });
@@ -660,7 +660,7 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
 
     const after = await repo.byId(id);
     expect(after!.name, "a write after the tombstone put the member's name back").toBe(ANON);
-    expect(after!.handle).toBe(`departed-${id.slice(-8)}`);
+    expect(after!.handle, "a tombstone holds no handle (round 2, finding 5)").toBeNull();
     expect(after!.email).toBe(`deleted-${id}@anonymized.invalid`);
     expect(after!.bio).toBe("");
     expect(after!.prefs).toEqual({});

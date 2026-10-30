@@ -1,4 +1,4 @@
-import { anonymizeMember } from "./lib/erasure";
+import { anonymizeMember, backfillFinishedErasures, erasureBackfillJob } from "./lib/erasure";
 import { resolveExit } from "./lib/exitResolve";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
@@ -405,7 +405,7 @@ import {
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
-import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
+import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
@@ -532,7 +532,7 @@ import { distributionsForMember, gratitudeCyclesRepo, gratitudeDistributionsRepo
 import { grantsForMember, portraitsForMember } from "./repos/characterPortraits";
 import { charactersForMember } from "./repos/playerCharacters";
 import { claimsRepo as claimsRepoFactory, questClosed, questsRepo as questsRepoFactory} from "./repos/quests";
-import { asBudget, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
+import { asBudget, DEPARTED_RECIPIENT, departedRecipient, mintRecipientRefusal, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
 import { recentEvents, recordEvent } from "./lib/events";
 import { checkToolLink } from "./lib/toolcheck";
 import { canSeeTool } from "../shared/toolsVisibility";
@@ -1812,7 +1812,7 @@ const isJourney = isAdmin;
  * unique per deployment, member-editable within the same rules.
  */
 function slugifyHandle(name: string): string {
-  return (
+  return livingHandle( // a name never gives a living member the departed's prefix (server/lib/profile.ts)
     String(name ?? "")
       .toLowerCase()
       .normalize("NFKD")
@@ -9970,7 +9970,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     }
     if (toUserId === user.id) return res.status(400).json({ error: "That's you" });
     const recipient = await members.byId(String(toUserId));
-    if (!recipient) return res.status(404).json({ error: "Member not found" });
+    if (!recipient || departedRecipient(recipient)) return res.status(404).json({ error: recipient ? DEPARTED_RECIPIENT : "Member not found" }); // nothing reaches a tombstone, round 4 finding 7: server/lib/departed.ts
     // Example identities carry empty prefs, so contactable is not false, and
     // their ids are public on every forum thread payload. Without this the
     // relay writes a contact_requests row that outlives the identities and
@@ -15237,7 +15237,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       ? await members.byEmail(typedEmail)
       : (String(to ?? "").trim() ? await members.byId(String(to).trim()) : null);
     if (!typedEmail && !String(to ?? "").trim()) return res.status(400).json({ error: "Who is it for?" });
-    if (!recipient) return res.status(404).json({ error: "No member here has that address" });
+    if (!recipient || departedRecipient(recipient)) return res.status(404).json({ error: recipient ? DEPARTED_RECIPIENT : "No member here has that address" }); // nothing moves to a tombstone: server/lib/gratitude.ts
     if (recipient.id === user.id) {
       return res.status(400).json({ error: "That is your own account. Sending to yourself moves nothing" });
     }
@@ -16590,7 +16590,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(400).json({ error: "A reason is required. Every hand-mint must explain itself" });
     }
     const target = await members.byId(String(toUserId));
-    if (!target) return res.status(404).json({ error: "Member not found" });
+    const refused = mintRecipientRefusal(target); if (!target || refused) return res.status(refused?.status ?? 404).json(refused?.body ?? { error: "Member not found" }); // nothing is minted to a tombstone or a standing example: server/lib/gratitude.ts
 
     /*
      * 0106: NOBODY GRANTS THEMSELVES POWER ALONE.
@@ -16803,7 +16803,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // A grant queued before Gratitude stopped being mintable is refused at the second door too.
     if (request.tokenSlug === HEARTS) return res.status(400).json({ error: GRATITUDE_ONLY_SENT });
     const target = await members.byId(request.toUserId);
-    if (!target) return res.status(404).json({ error: "Member not found" });
+    const refused = mintRecipientRefusal(target); if (!target || refused) return res.status(refused?.status ?? 404).json(refused?.body ?? { error: "Member not found" }); // a member who left after the asking is refused here: server/lib/gratitude.ts
     // The rule that has no exception, re-read at the second door: the person
     // this pays cannot be the person who asked for it, whoever signs.
     if (target.id === request.requestedBy) {
@@ -19259,7 +19259,7 @@ ${inner}
     }
     const { toId, amount, note, tag, structureKey, quiet, clientNonce } = req.body ?? {};
     const recipient = toId ? await members.byId(String(toId)) : null;
-    if (!recipient) return res.status(404).json({ error: "No member found" });
+    if (!recipient || departedRecipient(recipient)) return res.status(404).json({ error: recipient ? DEPARTED_RECIPIENT : "No member found" }); // nothing moves to a tombstone: server/lib/gratitude.ts
     if (isExampleUser(recipient)) {
       return res.status(409).json({
         error: "That is a standing example, not a member. Appreciation flows to real people.",
@@ -26424,7 +26424,6 @@ ${inner}
     if (res.headersSent) return next(err);
     respondToTerminalError(err, res);
   });
-
   const port = parseInt(String(process.env.PORT || 3000), 10);
   const staticExists = fs.existsSync(staticPath);
   const indexExists = fs.existsSync(path.join(staticPath, "index.html"));
@@ -26433,6 +26432,7 @@ ${inner}
   console.log(`[startup] staticPath exists=${staticExists}`);
   console.log(`[startup] index.html exists=${indexExists}`);
   console.log(`[startup] PORT=${port}`);
+  await runOnce(erasureBackfillJob(), async () => { await backfillFinishedErasures(getPool(), erasureDeps); }); // after the sinks its steps fire are wired: server/lib/erasure.ts
   // Arm the scheduler tick only now that every boot stage has succeeded and
   // every registerJob call above has run. See the note at the old call site.
   startScheduler(getPool());
