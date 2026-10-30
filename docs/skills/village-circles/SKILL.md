@@ -88,7 +88,7 @@ A role's state is derived, never typed: open (nobody holds it), partly held, hel
 | Change | Who | Where |
 |---|---|---|
 | Make a circle, rename it, change status, sits inside, governance layer | An admin | Admin, Org Chart |
-| Arrange circles: nest one inside another, and (once released) reorder and set the middle | Whoever may publish an org draft: a holder of `org.decide` (stewards by default, or any role the village gives it to), or an admin until the village's launch vote | The circles map, Arrange circles |
+| Arrange circles: nest one inside another, reorder the ring, give a circle the middle, set a layer | Whoever may publish an org draft: a holder of `org.decide` (stewards by default, or any role the village gives it to), or an admin until the village's launch vote | The circles map, Arrange circles |
 | Change a circle's purpose or other card words | Anyone holding a role in that circle, or an admin, proposes; adopted like any draft | The circle's card, `/circles/<id>` |
 | Propose new roles or changes to roles | Members, from their player card; the circle consents within two business days | Player card, role proposals |
 | Seat someone in a role | The holder of `org.seat`, after the circle consents; always with a term | Admin, Org Chart, or the role's card |
