@@ -838,7 +838,9 @@ function VillageSummary({
   // The same counts as the headline and the legend: the village's own, or its
   // examples while it has nothing of its own (villageCounts).
   const counts = villageCounts(data);
-  const open = counts.openRoles;
+  // Openings, the same number as the headline, and how many roles they sit in:
+  // never "open calls", which the legend uses for one state of a role.
+  const open = counts.openings;
   return (
     <div className="space-y-4">
       <div>
@@ -849,7 +851,7 @@ function VillageSummary({
         </p>
         {open > 0 && (
           <p className="text-xs text-amber-700 bg-amber/10 rounded-lg px-3 py-2 mt-3">
-            {open} open call{open === 1 ? "" : "s"}: the dashed openings are waiting for someone.
+            {open} opening{open === 1 ? "" : "s"} in {counts.openRoles} role{counts.openRoles === 1 ? "" : "s"}: the dashed places are waiting for someone.
           </p>
         )}
       </div>
