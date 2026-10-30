@@ -9578,6 +9578,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     notifyReportReviewed,
     overLimit,
     getPool,
+    lapseContext,
   });
 
   // â”€â”€ S19-S23: the village map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€─
