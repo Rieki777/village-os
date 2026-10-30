@@ -2,7 +2,7 @@
 
 <!-- describes: .github/workflows/ci.yml scripts/ server/lib/ledger.ts server/lib/economy.ts shared/modules.ts server/db/migrate.ts -->
 
-**Village OS** (this repository, `Rieki777/village-os`; it was called game-amora until 1.2.0) is a
+**Village OS** (this repository, `ReGen-Civics/village-os`; it was called game-amora until 1.2.0) is a
 white-label village-coordination platform: React 19 + Vite + wouter client
 in `client/src`, one large Express server (`server/index.ts` + `server/lib/*`), MySQL with
 hand-written SQL migrations in `drizzle/` that a custom runner applies **at boot, fail-loud**
@@ -22,7 +22,7 @@ code carries no village's brand — that rule is enforced mechanically (see Gate
 4. `docs/FEEDBACK_HUB_CONTRACT.md` — only when touching the feedback relay.
 5. **The fleet ledger, section 27, THE LANDING ORDER** — read it before you touch a
    contended resource, and append a row when you claim one. Since 2026-10-02 it lives in the
-   maintainers' PRIVATE operations repository, `Rieki777/village-os-ops`, checked out beside the
+   maintainers' PRIVATE operations repository, `ReGen-Civics/village-os-ops`, checked out beside the
    worktrees as a sibling folder named village-os-ops, in the file SEASON2_FLEET_LEDGER at its
    root. Commit and push a claim there directly, no pull request, and read that repository's
    README first: every lane shares one working tree there. Never copy it back into this public tree; `scripts/check-public-tree.mjs`

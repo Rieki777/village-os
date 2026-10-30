@@ -25,7 +25,7 @@
  *             CI runner's and node's homes are excepted, and so is
  *             /home/claude/, the sandbox the map generators were written in.
  *
- * The maintainers' coordination notes live in Rieki777/village-os-ops, which
+ * The maintainers' coordination notes live in ReGen-Civics/village-os-ops, which
  * is private. Put them there, never here.
  *
  * A false positive takes an inline `public-tree-ok: <reason>` on the same line,
@@ -162,7 +162,7 @@ function main(argv) {
     }
     console.error("");
     console.error(`Public tree guard FAILED: ${findings.length} finding(s) across ${files.length} tracked file(s).`);
-    console.error("Internal notes belong in the private operations repository (Rieki777/village-os-ops).");
+    console.error("Internal notes belong in the private operations repository (ReGen-Civics/village-os-ops).");
     console.error("Anything that was a live secret must be ROTATED: deleting it here leaves it in git history.");
     process.exit(1);
   }
