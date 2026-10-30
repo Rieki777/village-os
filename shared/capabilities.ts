@@ -451,14 +451,14 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // village hands to a named circle. Its two routes ask `guardCapability`, so
   // the escape hatch and the public record this column promises are both there.
   "redemption.confirm": true,
-  // HELD BACK, ON PURPOSE AND FOR NOW (0285). The treasurer's job, and its two
-  // routes ask `guardCapability`, so it could cross. Whether it joins the
-  // founding seat's handover set is Rye's word: his 2026-10-22 count ruling
-  // ("confirm 22 and 12") reads the set as "all steward powers", so a further
-  // transferable power moves that reading and needs him. Until he says, it
-  // keeps today's behaviour: an admin holds it, and a village can still grant
-  // it to a treasurer role. Its reason is in WIRED_BUT_HELD_BACK.
-  "cash.pay": false,
+  // Marking the cash a village owes as paid (0285). Held back until Rye's word,
+  // because his 2026-10-22 count ruling reads this set as "all steward powers";
+  // he gave it on 2026-10-30: "yes and this one is then given to a finance role
+  // as well". So the founding stewards hold it at launch and hand it over, and
+  // the seeded Treasury role grants it too (server/seeds/roles-seed.json,
+  // `grantCashPayToTreasury`). Its two routes ask `guardCapability`, so the
+  // escape hatch and the public record this column promises are both there.
+  "cash.pay": true,
   // Turning a module on after launch. Its route counts live holders without
   // the admin short-circuit, so the escape hatch this column describes is the
   // village vote itself: with no holder, anybody may propose it.
@@ -614,13 +614,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 22 keys
- * today. The other 18 are not withheld from anybody: they are personal acts
- * and deployment plumbing that were never anyone's to hold, and one power
- * waiting on the founder's word (`cash.pay`, below), which an admin holds
- * meanwhile. `TRANSFERABLE` carries the reasoning key by key.
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 23 keys
+ * today. The other 17 are not withheld from anybody: they are personal acts
+ * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
+ * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 22 in the founding seat and has
+ * Read this way, a launched village holds all 23 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -642,9 +641,11 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * `module.switch` (ruled 2026-10-09, landed 2026-10-21), which together moved
  * the pair to 22 and 16. A new key born transferable moves the first number
  * and leaves the second; a key RECLASSIFIED from withheld to transferable would
- * move both, in opposite directions. `cash.pay` (0285) was born held back, so
- * it moved only the second, to 17. `session.template` (0291) was born held
- * back too, a member-rung act, and the pair today is 22 and 18.
+ * move both, in opposite directions. `cash.pay` (0285) was born held back,
+ * which moved only the second, to 22 and 17. Rye then ruled it in on
+ * 2026-10-30, a reclassification, which moved both, to 23 and 16.
+ * `session.template` (0291) was born held back, a member-rung act, which moved
+ * only the second: the pair today is 23 and 17.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed

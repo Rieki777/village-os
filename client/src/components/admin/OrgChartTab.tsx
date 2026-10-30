@@ -24,7 +24,20 @@ import { useCallback, useEffect, useState } from "react";
 import { Circle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { CIRCLE_STATUSES } from "@shared/draftKinds";
-import { parentChoicesFor } from "@shared/circleView";
+import { CIRCLE_LAYERS, parentChoicesFor, type CircleLayer } from "@shared/circleView";
+
+/**
+ * What each governance layer means, in the words the editor offers (0286).
+ * Keyed by the union, so a layer added in shared/circleView.ts cannot draw an
+ * empty option here.
+ */
+const LAYER_WORDS: Record<CircleLayer, string> = {
+  link: "Link: the circle that links the others",
+  lead: "Lead: holds the middle of what it sits inside",
+  operating: "Operating: does the work",
+  advisory: "Advisory: counsels the circles",
+  council: "Council",
+};
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import SeatTermsOfferEditor from "@/components/admin/SeatTermsOfferEditor";
@@ -202,7 +215,7 @@ export function OrgChartTab({ password }: { password: string }) {
               {(() => {
                 const cd = circleDraft[c.id] ?? c;
                 // The purpose is not edited here: it changes by consent, on the circle's card.
-                const cDirty = ["name", "status", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
+                const cDirty = ["name", "status", "layer", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
                 const setCircle = (patch: any) => setCircleDraft({ ...circleDraft, [c.id]: { ...cd, ...patch } });
                 return (
                   <div className="mb-4">
@@ -217,6 +230,16 @@ export function OrgChartTab({ password }: { password: string }) {
                           {CIRCLE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </label>
+                      {/* THE GOVERNANCE LAYER (0286). The circles map puts a link or
+                          lead circle in the middle of the circle it sits inside, and
+                          rings the rest by layer, then by the village's own order. */}
+                      <label className="text-xs text-gray-500">Governance layer
+                        <select value={cd.layer ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
+                          onChange={(e) => setCircle({ layer: e.target.value || null })}>
+                          <option value="">None set, drawn as operating</option>
+                          {CIRCLE_LAYERS.map((l) => <option key={l} value={l}>{LAYER_WORDS[l]}</option>)}
+                        </select>
+                      </label>
                       {/* WHERE THIS CIRCLE SITS. Offered from `parentChoicesFor`,
                           the rules the server refuses with, so nothing on this
                           list is a choice the save turns down: not the circle
@@ -229,10 +252,10 @@ export function OrgChartTab({ password }: { password: string }) {
                           {parentChoicesFor(circles, c.id).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                       </label>
-                      <div className="text-xs text-gray-400 pb-2">
-                        {c.grownFromOrgRoleId && <span>Grew from a role. </span>}
-                        {c.isExample && <span className="text-amber-700">Standing example, publish your own to replace it.</span>}
-                      </div>
+                    </div>
+                    <div className="text-xs text-gray-400 pt-1">
+                      {c.grownFromOrgRoleId && <span>Grew from a role. </span>}
+                      {c.isExample && <span className="text-amber-700">Standing example, publish your own to replace it.</span>}
                     </div>
                     {/* A CIRCLE'S PURPOSE CHANGES BY CONSENT (Rye, 2026-10-22): shown here, and
                         proposed on the circle's card, where it goes to the village as an org draft. */}
@@ -250,7 +273,7 @@ export function OrgChartTab({ password }: { password: string }) {
                       disabled={!cDirty || !!c.isExample}
                       className="mt-2 text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       onClick={async () => {
-                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, status: cd.status, parentCircleId: cd.parentCircleId || null }, "PUT");
+                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, status: cd.status, layer: cd.layer || null, parentCircleId: cd.parentCircleId || null }, "PUT");
                         if (ok) { toast.success("Circle saved"); setCircleDraft({ ...circleDraft, [c.id]: undefined }); void load(); }
                       }}
                     >Save circle</button>
