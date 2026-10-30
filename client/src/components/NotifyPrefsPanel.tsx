@@ -9,6 +9,7 @@ import { authToken, clearAuthToken } from "@/lib/gameApi";
 import { actionError } from "@/lib/actionOutcome";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import LeavingEnds, { leftEndedWords, useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
+import LeavingNotices, { useLeavingNotices } from "@/components/LeavingNotices";
 import EmailFromVillage from "@/components/EmailFromVillage";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { TASK_COPY, TASK_EMAIL_PREFS, isTaskEmailPref } from "@shared/sessionTasks";
@@ -92,6 +93,8 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
   const identity = useIdentityConfirm("delete-account");
   // The aligned terms leaving ends (seat settings PR8): named before the member confirms, and again after.
   const endingTerms = useTermsLeavingEnds(confirming);
+  // What deleting cancels (round 3, finding 5): their recurring payments, named before they confirm.
+  const leavingNotices = useLeavingNotices(confirming);
   /** Task emails belong to Live Sessions, so the choice is offered only where the village runs it. */
   const sessionsOn = useModuleOn("sessions");
   const deletePanel = useRef<HTMLDivElement | null>(null);
@@ -372,6 +375,7 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
               records) keeps its numbers, without your name on them. This cannot be undone.
             </p>
             <LeavingEnds titles={endingTerms} />
+            <LeavingNotices notices={leavingNotices} />
             <div className="flex flex-wrap items-center gap-2">
               <IdentityConfirmField
                 state={identity}

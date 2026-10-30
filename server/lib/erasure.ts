@@ -188,9 +188,10 @@ import { insertNotification, type NotifyDeps, type NotifyInput } from "./notify"
 import { forgetVenturesOf } from "../repos/ventures";
 import { forgetFactWordsOf } from "../repos/investorPath";
 import { forgetStayNotesOf } from "../repos/stays";
-import { forgetPayerEmailOf } from "../repos/productPurchases";
+import { forgetPayerEmailOf, liveSubscriptionsOf } from "../repos/productPurchases";
+import { cancelSubscription, stripeConfigured } from "./payments";
 import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
-import { heldByAnotherAccount } from "../repos/users";
+import { heldByAnotherAccount, usersRepo } from "../repos/users";
 import { forgetPulseLinesNaming } from "../repos/pulseLines";
 import { forgetSubmissionWords } from "./submissionWords";
 import { emailKeyOf } from "../../shared/comms/address";
@@ -1453,7 +1454,105 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         });
       },
     },
+    {
+      /*
+       * Recurring purchases (0032, S69): every Stripe subscription their
+       * purchases hold is cancelled, so their card stops being charged. The
+       * village gives a member no door to cancel one, so before this a member
+       * who left kept paying every period, and each renewal paid the
+       * product's tokens into the tombstone (round 3, finding 5). The orders
+       * stay as the record of what was paid; nothing is refunded and no token
+       * moves. A charge that lands anyway is refused delivery and an admin is
+       * told (`settleProductPurchase`, server/index.ts).
+       *
+       * LAST BEFORE THE OUTSIDE STORES, after the audit line, because it asks
+       * Stripe: the local sweep finishes first, for the reason this file's
+       * header gives. After the tombstone, and a new name, so a resume or a
+       * second erasure runs it. Idempotent: `cancelSubscription` reads first,
+       * and one already over or unknown to Stripe is done. A Stripe that
+       * fails with the key present throws: the sweep stops here, loudly, and
+       * the hourly job and the queue resume it.
+       *
+       * NO KEY IS A PERSON'S JOB, AND THE STEP IS DONE. A village that once
+       * sold subscriptions and has since removed its Stripe key can never
+       * cancel one from here, so throwing held every such erasure open at
+       * this step for good, ten retries and then "needs a person", with
+       * `external-stores` behind it never asked. Connecting Stripe later is
+       * no help to a record the queue has given up on. So with no key the
+       * step asks every admin to cancel each one by hand in the Stripe
+       * dashboard, writes the count and the ids to the audit trail, and
+       * counts itself done (`askAdminsToCancelByHand`).
+       */
+      name: "product-subscriptions-after-tombstone",
+      run: async () => {
+        const subs = await liveSubscriptionsOf(pool, target.id);
+        if (!subs.length) return;
+        if (!stripeConfigured()) {
+          await askAdminsToCancelByHand(pool, target.id, actorId, subs.map((s) => s.subscriptionId), deps);
+          return;
+        }
+        for (const sub of subs) {
+          await cancelSubscription(sub.subscriptionId);
+        }
+      },
+    },
   ];
+}
+
+/**
+ * The subscriptions a leaver's erasure could not cancel, handed to the people
+ * who can: every admin and founder hears it on the bell, through the host's
+ * notice spine when it hands one over, and the audit trail records the count
+ * and every id as the step's result.
+ *
+ * THE ALARM THE ADMINS ALREADY GET for money that needs a person: the
+ * `payments_alert` kind, one row per admin under `<key>:<admin id>`, the
+ * shape `notifyAdmins` writes in server/index.ts. It names the subscription
+ * ids, because those are what the Stripe dashboard finds, and never the
+ * leaver, who is a tombstone by now: no actor, no name, no address.
+ *
+ * ONCE PER LEAVER. The key is the leaver's id, so an erasure asked for again
+ * with the key still missing rings nobody twice. The audit line is written on
+ * every run, as every attempt is.
+ */
+async function askAdminsToCancelByHand(
+  pool: Pool,
+  userId: string,
+  actorId: string | null,
+  subscriptionIds: readonly string[],
+  deps: ErasureDeps,
+): Promise<void> {
+  const notify = deps.notify ?? ((input: NotifyInput) => insertNotification(bellOnly(pool, deps.members), input));
+  const title =
+    `Cancel ${subscriptionIds.length} recurring payment(s) by hand in the Stripe dashboard. A departed member's erasure could not cancel them, ` +
+    "because Stripe is not connected, and Stripe may keep charging them.";
+  const body =
+    `Subscription ids to find in the Stripe dashboard: ${subscriptionIds.join(", ")}. ` +
+    "Cancel each one still active, and refund any period charged after the account was deleted.";
+  const admins = (await usersRepo(pool).all()).filter(
+    (u: any) => (u.role === "admin" || u.role === "founder") && String(u.id) !== userId && !isTombstone({ email: String(u.email ?? "") }),
+  );
+  for (const admin of admins) {
+    await notify({
+      userId: String(admin.id),
+      type: "payments_alert",
+      title,
+      body,
+      link: "/admin",
+      dedupeKey: `erasure-subscriptions-by-hand:${userId}:${admin.id}`,
+    });
+  }
+  await recordEvent(pool, {
+    kind: "audit",
+    text: `member:subscriptions-cancel-by-hand:${subscriptionIds.length}:${subscriptionIds.join(",")}`,
+    actorUserId: actorId,
+    entityType: "user",
+    entityRef: userId,
+    audience: "admin",
+  });
+  console.error(
+    `[erasure] Stripe is not connected, so ${subscriptionIds.length} subscription(s) of ${userId} were handed to the admins to cancel by hand`,
+  );
 }
 
 /**

@@ -799,8 +799,8 @@ import {
   ceilMinor,
   createCheckout,
   handleStripeEvent,
-  isSuspended,
-  recordFiatCharge,
+  isSuspended, buyerHasLeft, BUYER_HAS_LEFT,
+  recordFiatCharge, refusedChargeAdvice,
   registerPaymentHandlers,
   stripeConfigured,
   webhookSecretConfigured,
@@ -5871,10 +5871,10 @@ async function startServer() {
      * the goods, and put a human on it.
      */
     const isRenewal = firstTimeForThisPeriod && Number(row.periods_paid) >= 1;
-    let refusal: string | null = null;
+    let refusal: string | null = row.user_id && buyerHasLeft(await members.byId(String(row.user_id))) ? BUYER_HAS_LEFT : null;
     if (isRenewal) {
-      if (!row.active) refusal = "the product is no longer active";
-      else if (row.token_slug) refusal = purchaseProblem(String(row.token_slug));
+      if (!refusal && !row.active) refusal = "the product is no longer active";
+      else if (!refusal && row.token_slug) refusal = purchaseProblem(String(row.token_slug));
       if (!refusal && row.user_id && await isSuspended(pool, String(row.user_id))) {
         refusal = "the buyer's purchasing is suspended";
       }
@@ -5923,10 +5923,10 @@ async function startServer() {
     if (refusal) {
       // Banked, not delivered. Loud, and settled below so Stripe stops
       // retrying a decision rather than a failure.
-      await notifyAdmins(
+      if (firstTimeForThisPeriod) await notifyAdmins(
         "payment",
-        `Renewal charged but NOT delivered: ${row.product_name} (${purchaseId}, ${periodKey}), ${refusal}. ` +
-          `Cancel the subscription in Stripe and refund this period.`,
+        `${isRenewal ? "Renewal" : "Purchase"} charged but NOT delivered: ${row.product_name} (${purchaseId}, ${periodKey}), ${refusal}. ` +
+          refusedChargeAdvice(Boolean(subId ?? row.stripe_subscription_id), refusal),
         `product-renewrefused:${purchaseId}:${periodKey}`,
       );
     } else if (row.token_slug && row.token_amount && row.user_id) {
@@ -5963,7 +5963,7 @@ async function startServer() {
         [periodKey, purchaseId, periodKey],
       );
     }
-    if (row.user_id) {
+    if (row.user_id && refusal !== BUYER_HAS_LEFT) {
       await notify({
         userId: String(row.user_id), type: "payment",
         title: `Receipt #${row.receipt_no}: ${row.product_name}`,
@@ -17162,7 +17162,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   // A member's own account record: read, update, and the contribution journal.
   // Registered at exactly the point those three routes used to sit.
-  registerProfileRoutes(app, { authedUser, members, publicUser });
+  registerProfileRoutes(app, { authedUser, members, publicUser, getPool });
 
   // Where the member stands on each path they walk. Beside the profile routes
   // because it answers only to the account behind the token, and derived from

@@ -45,6 +45,8 @@ import { abandonErasure, type AbandonedErasure } from "../repos/memberErasure";
 import { recordEvent } from "./events";
 import { isTombstone } from "./oauthAccounts";
 import { openRedemptionCount } from "./redemptionStore";
+import { liveSubscriptionsOf } from "../repos/productPurchases";
+import { stripeConfigured } from "./payments";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -474,7 +476,47 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     blocking: false,
   });
 
+  states.push(await subscriptionsState(pool, userId));
+
   return states;
+}
+
+const EVERY: Record<"month" | "year", string> = { month: "every month", year: "every year" };
+
+/**
+ * The member's recurring payments, as a NOTICE the erasure acts on (round 3,
+ * finding 5). The erasure's `product-subscriptions-after-tombstone` step
+ * cancels each one in Stripe (server/lib/erasure.ts), and this line is how the
+ * admin on the exit desk and the member before they confirm
+ * (`GET /api/profile/leaving-notices`, server/routes/profile.ts) hear that
+ * before the delete, in the same words.
+ *
+ * NEVER BLOCKING. Nothing in the app lets a member cancel a subscription
+ * themselves, so a block here would leave a member unable to leave until a
+ * steward found the subscription in Stripe. The erasure is the cancel.
+ *
+ * WITH NO STRIPE KEY THE ERASURE CANNOT CANCEL, and the sentence says who
+ * will: the step asks the admins to cancel each one by hand in the Stripe
+ * dashboard and finishes. Promising an automatic cancel there would tell the
+ * member something this village cannot do.
+ */
+export async function subscriptionsState(pool: Pool, userId: string): Promise<ExitDomainState> {
+  const subs = await liveSubscriptionsOf(pool, userId);
+  if (!subs.length) return { domain: "subscriptions", count: 0, description: "no recurring payments", blocking: false };
+  const named = subs.map((s) => `${s.productName || "A product no longer listed"}${s.interval ? ` (${EVERY[s.interval]})` : ""}`);
+  // Read only when there is something to cancel: the secrets store throws
+  // until boot has loaded it, and every departure reads this domain.
+  const cancel = stripeConfigured()
+    ? "Deleting the account cancels each one in Stripe"
+    : "Stripe is not connected to this village, so deleting the account asks the admins to cancel each one by hand in Stripe";
+  return {
+    domain: "subscriptions",
+    count: subs.length,
+    description:
+      `${subs.length} recurring payment(s) still renewing through Stripe: ${named.join(", ")}. ` +
+      `${cancel}, and nothing already paid is refunded`,
+    blocking: false,
+  };
 }
 
 export function blockingStates(states: ExitDomainState[]): ExitDomainState[] {

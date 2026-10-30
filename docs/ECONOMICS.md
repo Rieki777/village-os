@@ -3116,6 +3116,16 @@ forever. Re-running it moves nothing.
   who stayed, and it names the steps the stopped sweep had already run (role
   holdings, skill tags and the like), which it does not undo. Once the account
   is closed the cancel is refused (round 2 of the erasure review, finding 1).
+- **A recurring payment informs and never blocks** (round 3, finding 5). The
+  enumeration's `subscriptions` domain (`subscriptionsState`) names each Stripe
+  subscription the member's purchases hold, and says the deletion cancels it in
+  Stripe and refunds nothing already paid. It cannot block, because no door lets
+  a member cancel one first. The erasure's `product-subscriptions-after-tombstone`
+  step does the cancelling and moves no token; with no Stripe key it asks the
+  admins to cancel each one by hand and finishes. A charge that lands after the
+  account is gone posts no `product_grant` from the treasury: `settleProductPurchase`
+  refuses a buyer who has left on every period, banks the money in `fiat_charges`
+  as it does for any refused renewal, and asks the admins to refund it.
 
 ### A former member, or a tombstone (the ruling of 2026-10-23)
 
