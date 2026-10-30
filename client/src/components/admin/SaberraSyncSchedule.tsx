@@ -204,6 +204,21 @@ function nextLine(a: SyncRunsAnswer, now: number): string {
   return `Next scheduled sync: ${villageTime(a.nextAt, a.timezone)}.`;
 }
 
+/**
+ * The way from a sync to what it put in the queue. A button, since reviewing
+ * the suggestions is the next thing to do after a sync.
+ */
+export function ReviewQueueButton({ waiting }: { waiting: number }) {
+  return (
+    <a
+      href="/review"
+      className="mt-2 inline-flex items-center min-h-11 px-4 py-2 text-sm font-medium rounded-lg bg-teal-deep text-white hover:bg-teal-deep-dark transition-colors"
+    >
+      Open the review queue ({count(waiting, "suggestion")})
+    </a>
+  );
+}
+
 /** Everything one run did, as sentences built from its fields. */
 function runLines(r: SyncRun): string[] {
   const lines: string[] = [];
@@ -316,6 +331,7 @@ export function SyncRunLog({ password, version }: { password: string; version: n
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
+                {r.outcome === "landed" && r.landed > 0 && <ReviewQueueButton waiting={r.landed} />}
               </li>
             ))}
           </ol>

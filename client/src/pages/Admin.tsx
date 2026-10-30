@@ -23,6 +23,7 @@ import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
+import { BulkStageGrant, StageFloorPicker } from "@/components/admin/StageFloorPicker";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
@@ -2757,6 +2758,7 @@ function PlayersTab({ password }: { password: string }) {
    */
   const [gameStarted, setGameStarted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [picked, setPicked] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2843,8 +2845,10 @@ function PlayersTab({ password }: { password: string }) {
         <p className="text-sm text-gray-400">No players yet.</p>
       ) : (
         <div className="space-y-2">
+          {picked.length > 0 && <BulkStageGrant stages={stages} ids={picked} password={password} onDone={() => { setPicked([]); load(); }} />}
           {players.map((p) => (
             <div key={p.id} className="border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
+              <input type="checkbox" aria-label={`Select ${p.name}`} checked={picked.includes(p.id)} onChange={(e) => setPicked((s) => (e.target.checked ? [...s, p.id] : s.filter((x) => x !== p.id)))} className="h-5 w-5" />
               <div className="flex-1 min-w-[180px]">
                 <div className="font-medium text-gray-900">
                   {p.name}
@@ -2889,16 +2893,7 @@ function PlayersTab({ password }: { password: string }) {
               >
                 Sign out all
               </button>
-              <select
-                value={p.stageGranted ?? ""}
-                onChange={(e) => grant(p.id, e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-              >
-                <option value="">No grant</option>
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>Grant: {s.name}</option>
-                ))}
-              </select>
+              <StageFloorPicker stages={stages} value={p.stageGranted ?? null} onChange={(id) => grant(p.id, id ?? "")} />
               <button
                 onClick={() => remove(p.id, p.email)}
                 className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5 font-medium"
