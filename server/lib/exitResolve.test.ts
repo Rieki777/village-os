@@ -174,7 +174,7 @@ describe.skipIf(!configured)("resolving a departure: what the leaver was part of
     expect(await votesOn(ballot)).toEqual([{ user_id: leaver.id, choice: "yes", followed_user_id: null }]);
     expect(await rollOf(ballot)).toEqual(rollBefore);
     // The account stays: they are a former member, not a tombstone.
-    const after = await usersRepo(pool).byId(leaver.id);
+    const after = (await usersRepo(pool).byId(leaver.id))!;
     expect(after.email).toBe(`${leaver.id}@example.test`);
     expect(after.membershipGranted).toBe(false);
   });
@@ -214,7 +214,7 @@ describe.skipIf(!configured)("resolving a departure: what the leaver was part of
 
     expect((await livingVouchesFor(pool, pip.id)).map((v) => v.voucherUserId), "only the vouch of somebody still here counts").toEqual(["xr-vc-other"]);
     expect((await vouchesFor(pool, pip.id)).map((v) => v.voucherUserId), "the row is never deleted").toEqual([leaver.id, "xr-vc-other"]);
-    expect((await usersRepo(pool).byId(mo.id)).membershipGranted, "the admission their vouch made stands").toBe(true);
+    expect((await usersRepo(pool).byId(mo.id))!.membershipGranted, "the admission their vouch made stands").toBe(true);
     expect((await vouchesFor(pool, mo.id)).map((v) => v.voucherUserId)).toEqual([leaver.id]);
 
     // Admitted again through a door that admits anybody: their word counts again.
@@ -236,7 +236,7 @@ describe.skipIf(!configured)("resolving a departure: what the leaver was part of
     const exit = await exitById(pool, exitId);
     expect(exit?.status).toBe("resolved");
     expect(String(exit?.resolution ?? "")).toContain(`${FORMER_MEMBER_MARK}is owed 25.00 USD in cash`);
-    const after = await usersRepo(pool).byId(owed.id);
+    const after = (await usersRepo(pool).byId(owed.id))!;
     expect(after.email, "not a tombstone: they can still sign in and see it marked paid").toBe(`${owed.id}@example.test`);
     expect(after.membershipGranted).toBe(false);
     // The cash rows are untouched by the departure.
@@ -259,6 +259,6 @@ describe.skipIf(!configured)("resolving a departure: what the leaver was part of
     const { out } = await leave(paid);
     expect(out.outcome).toBe("erased");
     expect(out.owed).toEqual([]);
-    expect((await usersRepo(pool).byId(paid.id)).email).toBe(`deleted-${paid.id}@anonymized.invalid`);
+    expect((await usersRepo(pool).byId(paid.id))!.email).toBe(`deleted-${paid.id}@anonymized.invalid`);
   });
 });

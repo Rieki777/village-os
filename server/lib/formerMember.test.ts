@@ -61,10 +61,12 @@ describe.skipIf(!configured)("against the real tables", () => {
 
   const q = async (sql: string, params: unknown[] = []) => (await pool.query<any[]>(sql, params))[0]; // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned
 
-  const person = async (id: string, over: Record<string, unknown> = {}) => {
+  const person = async (id: string, over: Record<string, unknown> = {}): Promise<any> => {
     await usersRepo(pool).add({ id, name: id, email: `${id}@example.test`, passwordHash: "x", paths: [] });
     if (Object.keys(over).length) await usersRepo(pool).update(id, (u: any) => Object.assign(u, over));
-    return usersRepo(pool).byId(id);
+    const made = await usersRepo(pool).byId(id);
+    if (!made) throw new Error(`${id} was not written`);
+    return made;
   };
 
   /** A departure through the real doors, ending in the status given. */
