@@ -25,6 +25,7 @@ vi.mock("wouter", () => ({
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 vi.mock("@/components/QuestActions", () => ({ default: () => <div /> }));
 vi.mock("@/components/QuestCrews", () => ({ default: () => <div /> }));
+vi.mock("@/components/messages/WorkChatButton", () => ({ default: () => <div /> }));
 vi.mock("@/components/NeedChips", () => ({ default: () => <div /> }));
 vi.mock("@/components/admin/NeedTagPicker", () => ({ default: () => <div /> }));
 vi.mock("@/components/QuestCard", () => ({
@@ -38,7 +39,6 @@ const ctl = vi.hoisted(() => ({ quest: {} as Record<string, unknown> }));
 
 vi.mock("@/lib/gameApi", () => ({
   fetchGameMe: async () => null,
-  authToken: () => null,
   gameFetch: async () => ({ ok: true, status: 200, json: async () => ({ quest: ctl.quest, related: [] }) }),
   useGameConfig: () => ({ stages: [{ id: "member", name: "Member", description: "" }] }),
 }));
