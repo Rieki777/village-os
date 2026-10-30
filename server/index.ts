@@ -633,6 +633,7 @@ import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
+import { grantCashPayToTreasury, seedStarterRoles } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
@@ -1885,18 +1886,7 @@ async function ensureDataFiles() {
       console.error("[seed] circles seed failed (continuing)", e);
     }
   }
-  if (rolesRepo.all().length === 0 && fs.existsSync(ROLES_SEED_FILE)) {
-    try {
-      const seed = JSON.parse(fs.readFileSync(ROLES_SEED_FILE, "utf-8"));
-      if (Array.isArray(seed) && seed.length) {
-        // Seed rows predate the map columns (0018): default what NOT NULL needs.
-        await rolesRepo.replaceAll(seed.map((r: any) => ({ seats: 1, circleId: null, ...r })));
-        console.log(`[seed] ${seed.length} starter role(s) seeded`);
-      }
-    } catch (e) {
-      console.error("[seed] roles seed failed (continuing)", e);
-    }
-  }
+  await seedStarterRoles(rolesRepo, ROLES_SEED_FILE); // server/lib/starterRoles.ts
   if (trainingRepo.all().length === 0) {
     // Built here rather than at module load: the descriptions carry the
     // village's own name and the brand overlay is only readable once the
@@ -1940,6 +1930,7 @@ async function ensureDataFiles() {
   });
   await runOnce("currency-name-into-tokens-2026-08-14", migrateCurrencyNameIntoTokens);
   await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
+  await runOnce("cash-pay-to-treasury-2026-10-30", () => grantCashPayToTreasury(rolesRepo).then(() => undefined)); // Rye, 2026-10-30
   await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
