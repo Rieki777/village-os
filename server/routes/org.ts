@@ -90,6 +90,8 @@ import {
 } from "../lib/orgRelations";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 import { submissionStatusNotice } from "../lib/submissionNotices";
+import { isTombstone } from "../lib/oauthAccounts";
+import { SEAT_JOURNAL_LINE } from "../repos/orgSeatErasure";
 import { BALLOT_OPEN_REFUSAL, holderMayPublish, launchedByVote, openDraftBallot, publishOrgDraft } from "../lib/orgDraftDecide";
 import { resolveSeatTerm } from "../../shared/seatTerms";
 import { payLineProblem, rolePayRules } from "../lib/workPay";
@@ -194,6 +196,21 @@ export function register(app: Express, deps: Deps): void {
     (submissionsRepo.all() as any[]).filter(
       (s) => s.type === SEAT_CLAIM_TYPE && !CLOSED_STATUSES.has(String(s.status ?? "")),
     );
+
+  /**
+   * A MEMBER WHO HAS LEFT IS NEVER SEATED. An erasure keeps the user row as a
+   * tombstone, so "is there a member by that id" answers yes for somebody who
+   * has gone, and a seating made for them is paid by the moon settlement and
+   * never released, because the erasure's seating steps have already run.
+   * `claimSeating` refuses one as well, in the statement that writes; this is
+   * the sentence for it. A member with no row at all is left to the checks
+   * each door already had.
+   */
+  const LEFT_THE_VILLAGE = "That member has left the village, so the role stays as it was recorded.";
+  const hasLeft = async (userId: string): Promise<boolean> => {
+    const who = await members.byId(userId);
+    return !!who && isTombstone({ email: String(who.email ?? "") });
+  };
 
   /**
    * Close one ask, through the one repository the admin inbox reads.
@@ -695,9 +712,12 @@ export function register(app: Express, deps: Deps): void {
       submittedAt: new Date().toISOString(),
     };
     await submissionsRepo.insert(entry as any);
+    // No name in the words: the journal's own `by` says who asked, read live,
+    // and the recorded name is on the seating at its own tier. A name written
+    // into a line outlives the person (server/repos/orgSeatErasure.ts).
     await recordEvent(getPool(), {
       kind: "role",
-      text: `${firstName(user.name)} asks to be confirmed as the holder recorded "${wanted.displayName ?? ""}"`,
+      text: SEAT_JOURNAL_LINE.ask,
       actorUserId: user.id,
       entityType: "org_role",
       entityRef: wanted.orgRoleId,
@@ -769,6 +789,7 @@ export function register(app: Express, deps: Deps): void {
     }
     const userId = String(req.body?.userId ?? "").trim();
     if (!userId) return res.status(400).json({ error: "Name the member this role is being confirmed for" });
+    if (await hasLeft(userId)) return res.status(409).json({ error: LEFT_THE_VILLAGE });
     // Read for the seat's NAME, before the flip, and never to decide the
     // outcome: `claimSeating`'s own WHERE clause is what refuses a seating
     // that has ended, is an example, belongs to an agent or is already held.
@@ -780,7 +801,7 @@ export function register(app: Express, deps: Deps): void {
     const actor = await authedUser(req);
     await recordEvent(getPool(), {
       kind: "role",
-      text: `confirmed: the holder recorded "${before?.displayName ?? ""}" is a member here`,
+      text: SEAT_JOURNAL_LINE.confirm,
       actorUserId: actor?.id ?? null,
       entityType: "org_role",
       entityRef: before?.orgRoleId ?? req.params.id,
@@ -816,7 +837,7 @@ export function register(app: Express, deps: Deps): void {
     const actor = await authedUser(req);
     await recordEvent(getPool(), {
       kind: "role",
-      text: `declined: the role stays recorded under "${String(closed.data?.recordedName ?? "")}"`,
+      text: SEAT_JOURNAL_LINE.decline,
       actorUserId: actor?.id ?? null,
       entityType: "org_role",
       entityRef: String(closed.data?.roleId ?? ""),
@@ -941,6 +962,9 @@ export function register(app: Express, deps: Deps): void {
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
     if (!role) return res.status(404).json({ error: "Role not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    if (req.body?.userId && (await hasLeft(String(req.body.userId)))) {
+      return res.status(409).json({ error: LEFT_THE_VILLAGE });
+    }
     const actor = await authedUser(req);
     /*
      * THE TERM, WHICH EVERY SEATING NOW CARRIES (0199).
@@ -988,10 +1012,12 @@ export function register(app: Express, deps: Deps): void {
     // only edits to the seat's card were. Names are not written into the line;
     // the journal is admin-audience and the seat's holders are already
     // readable at their own tier, so the event says that the seat changed
-    // hands and lets the reader look.
+    // hands and lets the reader look. A documented holder's line once carried
+    // the name, and the journal serves every line to the guest rung, so a
+    // forgotten person stayed in it (adversarial round 3, finding 12).
     void recordEvent(getPool(), {
       kind: "org",
-      text: req.body?.userId ? "seated a member" : `seated ${String(req.body?.displayName ?? "someone")}`,
+      text: req.body?.userId ? "seated a member" : SEAT_JOURNAL_LINE.seated,
       actorUserId: actor?.id ?? null,
       entityType: "org_role", entityRef: req.params.id, audience: "admin",
     });

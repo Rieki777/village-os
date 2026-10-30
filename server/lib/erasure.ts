@@ -169,6 +169,9 @@ import { forgetVenturesOf } from "../repos/ventures";
 import { forgetFactWordsOf } from "../repos/investorPath";
 import { forgetStayNotesOf } from "../repos/stays";
 import { forgetPayerEmailOf } from "../repos/productPurchases";
+import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
+import { leaveEveryCrewOf } from "../repos/questCrewErasure";
+import { forgetReportReasonsOf } from "../repos/placePhotos";
 import { heldByAnotherAccount } from "../repos/users";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
@@ -231,6 +234,12 @@ export interface SweepResult {
 }
 
 const ANON = "A departed member";
+
+/** What a scrubbed key of a submission reads as. */
+const REMOVED = "[removed at member's request]";
+
+/** The inbox's word for an ask to be confirmed in a documented seating (server/routes/org.ts). */
+const SEAT_CLAIM_TYPE = "seat-claim";
 
 /** The address the tombstone carries, and the one a scrubbed row is given in place of theirs. */
 const tombstoneAddress = (id: string): string => `deleted-${id}@anonymized.invalid`;
@@ -346,6 +355,23 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
   const { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders } = deps;
   const submissionIdsOf = (userId: string): string[] =>
     (submissionsRepo.all() as any[]).filter((s) => s?.userId === userId).map((s) => String(s.id));
+  /*
+   * The names a seat's journal may quote for this member, and the rewrite
+   * (server/repos/orgSeatErasure.ts says how each is found). Their own name
+   * comes from `target`, which holds it on a resume too (`asTheyWere`), and
+   * from nothing when the row is still a tombstone, whose name is nobody's.
+   */
+  const forgetSeatJournal = async (): Promise<void> => {
+    const name = isTombstone({ email: String(target.email ?? "") }) ? "" : String(target.name ?? "").trim();
+    await forgetSeatJournalNames(pool, {
+      userId: target.id,
+      ownNames: name ? [name, name.split(/\s+/)[0]] : [],
+      claims: (submissionsRepo.all() as any[])
+        .filter((s) => s?.type === SEAT_CLAIM_TYPE && s?.userId === target.id)
+        .map((s) => ({ roleId: String(s.data?.roleId ?? ""), name: String(s.data?.recordedName ?? ""), held: s.status === "accepted" }))
+        .filter((c) => c.name !== REMOVED),
+    });
+  };
   return [
     {
       // Ledger descriptions first, while gratitude_log still links names to refs.
@@ -468,8 +494,14 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       // plane called "role" (ARCHITECTURE 3.15) and shares nothing with it, so
       // it went on holding a departed member's seat under their real user id
       // while /api/org republished it to everyone with map.viewPeople.
+      //
+      // The seat's journal first: its lines quote the names the release takes
+      // off the seatings, and once they are off, a seating a steward confirmed
+      // under some other spelling has nothing left to find its lines by. It
+      // runs again after the tombstone, for the reason that step gives.
       name: "org-seatings",
       run: async () => {
+        await forgetSeatJournal();
         await releaseSeatingsForUser(pool, target.id, "member left the village");
       },
     },
@@ -1121,6 +1153,88 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         await forgetMemberProposals(pool, target.id);
       },
     },
+    /*
+     * WHAT A SEAT STILL HELD FOR THEM (adversarial round 2, findings 8 to 10).
+     * Four steps, each after the tombstone for the reason the needs step gives:
+     * a claim, a confirm, a seating and a carried seat vote can each land while
+     * the member's sessions live, behind the steps that ran before it. Each has
+     * a new name, so a resume of an older record runs it. The org chart's doors
+     * refuse a tombstone on their own as well (`claimSeating`, the confirm and
+     * admin seat routes, the role_seat closer and the seat vote opener).
+     */
+    {
+      /*
+       * A seat's journal: the lines that quote the name a seating was recorded
+       * under, which `GET /api/org/:kind/:id/journal` serves to every account
+       * holding `map.viewPeople`, keep their act and date and lose the name.
+       * BEFORE the seat claims are scrubbed, because a claim's recorded name
+       * is one of the ways the lines are found.
+       */
+      name: "seat-journal-after-tombstone",
+      run: forgetSeatJournal,
+    },
+    {
+      /*
+       * Their seat claims. An open one goes on asking a steward to confirm a
+       * member who has gone, with their recorded name beside "A departed
+       * member", so it closes the way a decline closes it, with nobody told.
+       * Every one of theirs, open or answered, loses the recorded name and the
+       * words the submissions step takes, which a claim filed while the sweep
+       * ran still carries.
+       */
+      name: "seat-claims-after-tombstone",
+      run: async () => {
+        const rows = submissionsRepo.all() as any[];
+        let changed = false;
+        for (const s of rows) {
+          if (s?.type !== SEAT_CLAIM_TYPE || s.userId !== target.id) continue;
+          if (s.status !== "accepted" && s.status !== "declined") {
+            s.status = "declined";
+            changed = true;
+          }
+          if (s.userName !== ANON) {
+            s.userName = ANON;
+            changed = true;
+          }
+          if (s.data && typeof s.data === "object") {
+            for (const k of ["recordedName", "name", "firstName", "lastName", "email", "phone", "whatsapp", "telegram"]) {
+              if (k in s.data && s.data[k] !== REMOVED) {
+                s.data[k] = REMOVED;
+                changed = true;
+              }
+            }
+          }
+        }
+        if (changed) await submissionsRepo.replaceAll(rows);
+      },
+    },
+    {
+      /*
+       * A seating confirmed for them after "org-seatings" ran: a steward
+       * pressing Confirm, or an admin seating them, while the account still
+       * worked. Released the way that step releases one, and its journal
+       * lines first, while the seating still carries the recorded name that
+       * finds them.
+       */
+      name: "org-seatings-after-tombstone",
+      run: async () => {
+        await forgetSeatJournal();
+        await releaseSeatingsForUser(pool, target.id, "member left the village");
+      },
+    },
+    {
+      /*
+       * A permission holding that landed after "role-holdings" ran: a carried
+       * role_seat vote coming due, or an appointment, while they were not yet
+       * a tombstone. The closer and the appoint route refuse a tombstone, so
+       * after this nothing seats them again. The same call as "role-holdings"
+       * and the former-member resolve, so the three end a holding one way.
+       */
+      name: "role-holdings-after-tombstone",
+      run: async () => {
+        await endPermissionHoldings(target.id, { roleHoldersRepo, withRoleHolderLock, loadRoleHolders });
+      },
+    },
     {
       /*
        * Live Sessions (0238): the member leaves every room. Their people rows,
@@ -1153,6 +1267,38 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "gene-keys-after-tombstone",
       run: async () => {
         await forgetMemberGeneKeys(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Quest crews (0067): they leave every crew they are in, the way
+       * `crewsRepo.leave` lets a member walk out, and a crew left with nobody
+       * in it disbands. Kept, a full crew refused the next person in their
+       * name and every roster listed them as "A". The founder id stays as a
+       * historical id: crews have no handover (server/repos/questCrewErasure.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the join
+       * door writes for anybody signed in until the sessions die.
+       */
+      name: "quest-crews-after-tombstone",
+      run: async () => {
+        await leaveEveryCrewOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Place-photo reports (0093): the words they typed go, the reports stay.
+       * The curators' queue serves them to every holder of `map.curatePhotos`,
+       * a role or badge power, and a subject request often names the person.
+       * The photograph is not touched, so a picture they asked to come down
+       * stays dark.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the report
+       * doors write for anybody signed in until the sessions die.
+       */
+      name: "photo-report-reasons-after-tombstone",
+      run: async () => {
+        await forgetReportReasonsOf(pool, target.id);
       },
     },
     {
