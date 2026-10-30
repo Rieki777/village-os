@@ -22161,7 +22161,7 @@ ${inner}
         return out;
       }
       const member = await members.byId(asked.userId);
-      if (!member) {
+      if (!holderStands(member)) { // an erased member is a tombstone row: seating one puts "A departed member" in the role, counted as a holder
         out.held = `The person this vote named (${asked.userId}) left the village while the vote was running, so nobody was seated in ${role.name ?? asked.roleId}.`;
         await notifyAdmins("governance", `A carried seating could not land: ${b.title}`, `bal:${b.id}:seat-held`);
         return out;
@@ -25774,7 +25774,7 @@ ${inner}
       return res.status(400).json({ error: "userId and action (add|remove) are required" });
     }
     const member = await members.byId(userId);
-    if (!member) return res.status(404).json({ error: "Member not found" });
+    if (!member || (action === "add" && !holderStands(member))) return res.status(404).json({ error: "Member not found" }); // a tombstone is nobody to appoint, and a stray holding of one can still be removed
 
     // A role can require a minimum stage: appointments respect the ladder too.
     if (action === "add" && role.minStage) {

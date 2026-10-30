@@ -627,3 +627,76 @@ describe.skipIf(!DB_CONFIGURED)("what these votes deliberately cannot do", () =>
     expect(String(thin.json?.error)).toContain("The whole roll reads this");
   });
 });
+
+/*
+ * THE PERSON A SEAT VOTE NAMES LEAVES BEFORE IT LANDS (adversarial round 2,
+ * finding 10).
+ *
+ * An erasure keeps the member row as a tombstone, "A departed member", so the
+ * closer's "no such member" hold never fired: a vote that carried after its
+ * subject was erased pushed a holding for the tombstone, recorded a term, and
+ * wrote "A sits in Game Steward" to the public pulse. The role-holdings step
+ * had already run, so the holding stood, and every count of seated holders
+ * counted it. The role here was declared by vote, so it has no stage floor,
+ * which is the shape every village-declared role has.
+ *
+ * LAST IN THE FILE ON PURPOSE: Tam is erased here, and every case above signs
+ * in as Tam.
+ */
+describe.skipIf(!DB_CONFIGURED)("the person a seat vote names leaves before it lands", () => {
+  let ballotId = "";
+
+  it("carries, seats nobody, and says why", async () => {
+    const opened = await call("POST", "/api/governance/role-seats", {
+      token: rhodaToken,
+      body: { userId: tamId, roleId: ROLE_ID, reason: "Tam has kept the lending shelf in order all season and offered to carry it on." },
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    ballotId = String(opened.json?.ballot?.id ?? "");
+    for (const t of [founderToken, rhodaToken, solToken, tamToken]) {
+      const r = await call("POST", `/api/governance/ballots/${ballotId}/vote`, { token: t, body: { choice: "yes" } });
+      expect(r.status, JSON.stringify(r.json)).toBe(200);
+    }
+    // Tam leaves while the vote runs.
+    const erased = await call("DELETE", `/api/admin/players/${tamId}`);
+    expect(erased.status, JSON.stringify(erased.json)).toBe(200);
+
+    await expire(ballotId);
+    const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, {
+      token: rhodaToken,
+      body: { outcomeNote: "The village wanted Tam, and Tam has gone." },
+    });
+    expect(closed.status, JSON.stringify(closed.json)).toBe(200);
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) " +
+        "WHERE id = ? AND lands_at IS NOT NULL",
+      [ballotId],
+    );
+    const landed = await call("POST", "/api/admin/cycles/close", { body: {} });
+
+    expect(await seatedIn(ROLE_ID), "nobody sits in the role for a member who has gone").toEqual([]);
+    expect(
+      JSON.stringify([closed.json, landed.json]),
+      "the village is told why its vote seated nobody",
+    ).toContain("left the village while the vote was running");
+    const pulse = await publicPulse();
+    expect(pulse.some((t) => t.includes("sits in Game Steward") && t.startsWith("A ")), "and the pulse never says a departed member sits in it").toBe(false);
+  });
+
+  it("will not open a seat vote for an account that has left", async () => {
+    const refused = await call("POST", "/api/governance/role-seats", {
+      token: rhodaToken,
+      body: { userId: tamId, roleId: ROLE_ID, reason: "A seat vote naming an account that has already left the village." },
+    });
+    expect(refused.status, JSON.stringify(refused.json)).toBe(404);
+    expect(String(refused.json?.error)).toContain("There is no member by that id");
+  });
+
+  it("will not let an administrator appoint an account that has left", async () => {
+    const refused = await call("POST", `/api/admin/roles/${ROLE_ID}/holders`, {
+      body: { userId: tamId, action: "add" },
+    });
+    expect(refused.status, JSON.stringify(refused.json)).toBe(404);
+    expect(await seatedIn(ROLE_ID)).toEqual([]);
+  });
+});

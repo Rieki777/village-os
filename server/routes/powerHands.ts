@@ -101,6 +101,7 @@ import type { LandingDeps } from "../lib/applyDue";
 import type { RollNotice } from "../lib/ballotNotices";
 import { openBallot, type BallotRow } from "../lib/ballots";
 import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "../lib/examples";
+import { isTombstone } from "../lib/oauthAccounts";
 import type { WeightModeSnapshot } from "../lib/governanceWeights";
 import { seatVoteLandsAt } from "../lib/seatTermLanding";
 import { STEWARD_VETO } from "../lib/stewardship";
@@ -619,7 +620,10 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): OpenSeatVote
       });
     }
     const member = await members.byId(userId);
-    if (!member) return no(404, { error: "There is no member by that id." });
+    // A member who has left is a tombstone row, and a vote to seat one would
+    // carry and seat "A departed member", whom every count of the role's
+    // holders would then count.
+    if (!member || isTombstone({ email: String(member.email ?? "") })) return no(404, { error: "There is no member by that id." });
     if (isExampleUser(member)) return no(409, EXAMPLE_REFUSAL_BODY);
     if (loadRoleHolders().some((h) => h.roleId === roleId && h.userId === userId)) {
       return no(409, {

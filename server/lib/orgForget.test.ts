@@ -15,6 +15,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
 import { forgetDocumentedHolder, releaseSeatingsForUser } from "./orgChart";
 import { forgetMemberInDrafts } from "./orgDrafts";
+import { SEAT_JOURNAL_LINE } from "../repos/orgSeatErasure";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
@@ -174,6 +175,126 @@ describe.skipIf(!configured)("taking a person off the org chart", () => {
       expect(d2.display_name).toBe("Ada Vance");
       expect(d2.ended_at).toBeNull();
       expect(d2.holder_key).toBe("doc:ada-vance");
+    });
+  });
+
+  /*
+   * THE SEAT'S JOURNAL (adversarial round 3, finding 12).
+   *
+   * The admin door that documents a holder wrote "seated <name>" into the
+   * seat's journal, and the seat-claim doors used to quote the recorded name
+   * in their ask, confirm and decline lines. `GET /api/org/:kind/:id/journal`
+   * serves every one of those rows to any account holding `map.viewPeople`,
+   * which opens at the guest rung. Taking the name off the seatings and
+   * leaving it in the journal is not forgetting the person.
+   *
+   * Read at the ROW: a line is a `health_events` row, and every one of these
+   * was written before the routes stopped writing names, so only a seeded row
+   * can stand for it.
+   */
+  describe("the journal of a seat a documented holder is forgotten from", () => {
+    beforeEach(async () => {
+      await pool.query("DELETE FROM health_events"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+    });
+
+    /** One journal line, dated, so the test can see the date survive. */
+    const line = (id: string, roleId: string, text: string, actor: string) =>
+      pool.query( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+        "INSERT INTO health_events (id, kind, text, actor_user_id, entity_type, entity_ref, audience, at) " +
+          "VALUES (?, 'org', ?, ?, 'org_role', ?, 'admin', '2026-03-01 10:00:00')",
+        [id, text, actor, roleId],
+      );
+
+    const journal = async (): Promise<Array<{ id: string; text: string; actor_user_id: string; entity_ref: string; at: unknown }>> => {
+      const [rows] = await pool.query<any[]>( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+        "SELECT id, text, actor_user_id, entity_ref, at FROM health_events ORDER BY id",
+      );
+      return rows.map((r) => ({ ...r, at: String(r.at) }));
+    };
+
+    const NEIGHBOUR: Array<[string, string, string]> = [
+      ["n1", "seated Ash Grey", "u-admin"],
+      ["n2", 'Wren asks to be confirmed as the holder recorded "Ash Grey"', "u-wren"],
+      ["n3", 'declined: the role stays recorded under "Ash Grey"', "u-steward"],
+      ["n4", "Seat A: aim updated", "u-admin"],
+    ];
+
+    it("takes the name out of every line on every seat they were recorded on, and leaves a neighbour's lines alone", async () => {
+      await seat({ id: "j1", roleId: "seat-a", kind: "documented", displayName: "Maria Lopez", holderKey: "doc:maria-lopez" });
+      await seat({ id: "j2", roleId: "seat-b", kind: "documented", displayName: "Maria Lopez", holderKey: "doc:maria-lopez" });
+      // `documentedKey` slugs both spellings to one key, so an ended seating
+      // under the other spelling is the same person.
+      await seat({ id: "j3", roleId: "seat-a", kind: "documented", displayName: "maria lopez",
+        holderKey: "doc:maria-lopez", endedAt: "2026-01-01 00:00:00" });
+      await seat({ id: "j4", roleId: "seat-a", kind: "documented", displayName: "Ash Grey", holderKey: "doc:ash-grey" });
+
+      await line("e1", "seat-a", "seated Maria Lopez", "u-admin");
+      await line("e2", "seat-b", "seated Maria Lopez", "u-admin");
+      await line("e3", "seat-a", "seated maria lopez", "u-admin");
+      // An ask starts with the ASKER's first name, who is somebody else, so
+      // no whole-text match for her name can find it.
+      await line("e4", "seat-a", 'Wren asks to be confirmed as the holder recorded "Maria Lopez"', "u-wren");
+      await line("e5", "seat-a", 'declined: the role stays recorded under "Maria Lopez"', "u-steward");
+      await line("e6", "seat-b", 'confirmed: the holder recorded "Maria Lopez" is a member here', "u-steward");
+      for (const [id, text, actor] of NEIGHBOUR) await line(id, "seat-a", text, actor);
+
+      const before = await journal();
+      expect(before.filter((r) => /maria lopez/i.test(r.text)), "the leftover is there to find").toHaveLength(6);
+
+      await forgetDocumentedHolder(pool, "j1", "forgotten at their request");
+
+      const after = await journal();
+      expect(after.filter((r) => /maria lopez/i.test(r.text)).map((r) => r.text), "no journal line names her").toEqual([]);
+      // Every line stays, with its seat, its actor and its date, in the words
+      // the routes write today, so the journal still says what happened.
+      const now = new Map(after.map((r) => [r.id, r]));
+      const was = new Map(before.map((r) => [r.id, r]));
+      const expected: Record<string, string> = {
+        e1: SEAT_JOURNAL_LINE.seated,
+        e2: SEAT_JOURNAL_LINE.seated,
+        e3: SEAT_JOURNAL_LINE.seated,
+        e4: SEAT_JOURNAL_LINE.ask,
+        e5: SEAT_JOURNAL_LINE.decline,
+        e6: SEAT_JOURNAL_LINE.confirm,
+      };
+      for (const [id, text] of Object.entries(expected)) {
+        expect(now.get(id), `${id} is kept`).toEqual({ ...was.get(id), text });
+      }
+      for (const [id, text, actor] of NEIGHBOUR) {
+        expect(now.get(id), `the neighbour's ${id} is untouched`).toEqual({ ...was.get(id), text, actor_user_id: actor });
+      }
+
+      // A second run finds nothing left to change.
+      await forgetDocumentedHolder(pool, "j1", "forgotten at their request");
+      expect(await journal()).toEqual(after);
+    });
+
+    it("rewrites the journal before it lets go of the names, so a failure part way leaves them to be found again", async () => {
+      // The forget runs no transaction. Nulling the names first and then
+      // failing on the journal would leave lines nothing could ever match.
+      await seat({ id: "j1", roleId: "seat-a", kind: "documented", displayName: "Maria Lopez", holderKey: "doc:maria-lopez" });
+      await line("e1", "seat-a", "seated Maria Lopez", "u-admin");
+
+      const failing = new Proxy(pool, {
+        get(target, prop) {
+          if (prop === "query") {
+            return (sql: unknown, ...rest: unknown[]) =>
+              /^\s*UPDATE health_events/i.test(String(sql))
+                ? Promise.reject(new Error("the journal write failed"))
+                : (target.query as any)(sql, ...rest);
+          }
+          const v = Reflect.get(target, prop);
+          return typeof v === "function" ? v.bind(target) : v;
+        },
+      });
+      await expect(forgetDocumentedHolder(failing, "j1", "forgotten at their request")).rejects.toThrow("the journal write failed");
+      const kept = await read("j1");
+      expect(kept.display_name, "the name is still on the seating for the retry to find").toBe("Maria Lopez");
+      expect(kept.ended_at, "nothing was ended either").toBeNull();
+
+      await forgetDocumentedHolder(pool, "j1", "forgotten at their request");
+      expect((await journal()).map((r) => r.text)).toEqual([SEAT_JOURNAL_LINE.seated]);
+      expect((await read("j1")).display_name).toBeNull();
     });
   });
 
