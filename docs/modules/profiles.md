@@ -334,6 +334,17 @@ existed since `drizzle/0003_variables_and_stage_events.sql`, and `drizzle/0070_p
 released any empty-string handles to NULL, because an empty string occupies a unique index once and
 then refuses every later member who saves a blank one.
 
+**No living member takes a `departed-` handle.** That prefix is what tombstones wore before round 2,
+and `handle-after-tombstone` frees each one, so a living member holding `departed-xxxxxxxx` would be
+who every old link to the departed member's page reached. `PUT /api/profile` refuses a new handle
+starting with `departed-` in `DEPARTED_HANDLE_REFUSAL`'s words (`server/lib/profile.ts`); a member
+already wearing one from before the rule keeps saving their profile with it. A handle a NAME gives
+(sign-up, Google sign-up, the founder's bootstrap and the boot backfill below, all through
+`slugifyHandle`) drops the prefix through `livingHandle`, so "Departed Fern" joins as `fern`. No admin
+route edits a handle. Pinned by `server/routes/profile.handle.test.ts`, the sign-up case in
+`server/needsTombstone.routes.e2e.test.ts` and the Google case in
+`server/authGoogle.routes.e2e.test.ts`.
+
 **There is a third handle-assignment path and it runs at boot.** `startServer` calls
 `runOnce("backfill-member-handles", backfillMemberHandles)`, which loads the whole roster and mints a
 handle from `u.name` for every member without one. For a fork that imports an existing membership
@@ -548,13 +559,15 @@ is the platform's one public identity URL.
 **A departed member's title and home still survive the tombstone. Their characters and portraits do
 not, any more.** `anonymizeMember` writes through `members.update`, so it can only clear columns the
 users repository owns, and `title` and `home_structure_key` are not among them. A member erased
-before round 2 of the erasure review carries a deterministic tombstone handle (`departed-` plus the
-last eight characters of the user id) on their forum bylines, so `GET /api/profiles/<that handle>`
-still answers with their remaining standing chips, whatever `title` they carried and wherever
-`home_structure_key` says they sleep. A tombstone written since holds no handle at all: a living
-member could take that handle first and block the erasure for good (finding 5), so that door is
-closed for new departures and open for old ones. Both columns
-are READ (`server/lib/profile.ts` names them in its SELECT and publishes them) and NEITHER is
+before round 2 of the erasure review kept a deterministic tombstone handle (`departed-` plus the
+last eight characters of the user id), which their forum bylines print, and `GET /api/profiles/<that
+handle>` needs no sign-in, so it answered with their join date, moons, standing chips and gratitude
+counts, whatever `title` they carried and wherever `home_structure_key` says they sleep. A tombstone
+written since holds no handle at all: a living member could take that handle first and block the
+erasure for good (finding 5). The sweep's `handle-after-tombstone` step takes the old handle off, and
+the boot backfill gives the step to every erasure that finished before it existed (adversarial round
+3, finding 13). A tombstone then has no page, and the gratitude form finds no tombstone by handle.
+Both columns are READ (`server/lib/profile.ts` names them in its SELECT and publishes them) and NEITHER is
 written by anything in the tree: no route, no repository and no migration sets either one. So the
 exposure is latent rather than live, and it is latent in the way that ends in one commit. A fork
 that adds a title editor, or a "where I sleep" control, without also adding a line to the erasure

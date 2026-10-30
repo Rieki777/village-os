@@ -49,6 +49,7 @@ import { rewardMultipliersFor } from "../lib/seasonPatterns";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { issuanceRefusal } from "../lib/gameStart";
+import { departedById } from "../lib/departed";
 import { tokenDef } from "../lib/ledger";
 import { questPay, questPayRules } from "../lib/workPay";
 import { STAY_CREDIT } from "../lib/stays";
@@ -393,6 +394,15 @@ export function register(app: Express, deps: Deps): void {
     // clearable, and declining creates nothing.
     if (approve !== false && (await isExampleRow(getPool(), "quests", claim.questId))) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    }
+    // NOR IS WORK PAID TO A MEMBER WHO HAS LEFT (round 4, finding 3). A claim
+    // submitted before the member left survives the erasure, renamed, and a
+    // consent here minted its tokens into the tombstone's account and wrote
+    // cash owed to nobody. Refused before anything is recorded, ahead of the
+    // launch question so the steward hears the reason that will not change;
+    // the decline stays open, because that is how the claim is cleared.
+    if (approve !== false && (await departedById(getPool(), claim.userId))) {
+      return res.status(409).json({ error: "That member has left the village, so nothing can be paid to them. Decline the claim to clear it." });
     }
     // NO SELF-CONSENT — load-bearing, not decorative. Consent mints
     // recognition from the faucet, grants stay credits and advances stages;

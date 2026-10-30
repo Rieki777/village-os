@@ -44,6 +44,7 @@ import {
 } from "../repos/cashOwed";
 import { CASH_GIVE_UP_FIELD, CASH_ON_DELETION, CASH_PAID_NOTE_MAX, cashStillOwedWords, type CashOwedEntry, type CashWorkKind } from "../../shared/cashOwed";
 import { readWorkValue, readWorkValueInput, type WorkValue } from "../../shared/workValue";
+import { departedById } from "./departed";
 
 const newId = () => `cash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -76,6 +77,10 @@ interface OweInput {
 async function owe(db: Pool | PoolConnection, p: OweInput): Promise<boolean> {
   const cash = p.cash ? readWorkValue(p.cash.minor, p.cash.currency) : null;
   if (!cash || cash.minor <= 0) return false;
+  // No cash is owed to a member who has left (round 4, finding 3): the
+  // treasurer's queue would carry a line nobody can claim. This is the one
+  // writer of `cash_owed`, so a quest, a proposal and a role all stop here.
+  if (await departedById(db, p.userId)) return false;
   const id = newId();
   await insertCashOwedRow(db, {
     id,

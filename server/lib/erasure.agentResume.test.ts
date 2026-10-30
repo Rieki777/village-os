@@ -62,14 +62,24 @@ let uploadsDir: string;
 const NONE: AgentSweepCounts = { deliveries: 0, inboxes: 0, keys: 0, drafts: 0, tokens: 0, profiles: 0, statements: 0 };
 const ONE_OF_EACH: AgentSweepCounts = { deliveries: 1, inboxes: 1, keys: 1, drafts: 1, tokens: 1, profiles: 1, statements: 1 };
 
-/** The real users repository, so the tombstone is a real write; one seam for "the last instant a session lives". */
+/**
+ * The real users repository, so the tombstone is a real write; one seam for
+ * "the last instant a session lives", which is before the sweep's FIRST write
+ * to the user row. That write is the tombstone; a later one
+ * ("handle-after-tombstone") comes after the sessions died, so the seam does
+ * not fire again.
+ */
 function deps(beforeTombstone?: () => Promise<void>): ErasureDeps {
   const real = usersRepo(pool);
+  let lived = true;
   return {
     members: {
       byId: (id: string) => real.byId(id),
       update: async (id: string, fn: (u: any) => void) => {
-        await beforeTombstone?.();
+        if (lived) {
+          lived = false;
+          await beforeTombstone?.();
+        }
         return real.update(id, fn);
       },
     },

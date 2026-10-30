@@ -128,6 +128,18 @@ survive, because deleting a value row would break the conservation proof. So set
 untouched by an erasure, a departed member's sends still count toward their recipients'
 `received`, and a pool share still posts to `mem:<their id>`.
 
+**Nothing new is sent to a member who has left.** The tombstone keeps an address,
+`deleted-<id>@anonymized.invalid`, and the send doors looked recipients up by address or id and
+refused only the standing examples, so typing that address or hearting a departed member's old post
+issued Gratitude into an account nobody holds. `departedRecipient` in `server/lib/gratitude.ts`
+answers for three doors: `sendGratitude` (the wall, by address, id, typed address or old handle, and
+forum hearts), the Hearts give (`POST /api/gratitude`) and member token sends
+(`POST /api/wallet/send`). Each refuses with 404 and `DEPARTED_RECIPIENT`, before anything is written.
+The admin hand-mint and its co-signed approval ask the same question through `mintRecipientRefusal`,
+which also refuses a standing example with 409, so a steward mints nothing to either.
+Pinned by `server/lib/gratitude.tombstone.test.ts` and the last two cases of
+`server/needsTombstone.routes.e2e.test.ts`.
+
 `GET /api/profile/export` is the "everything the village holds about me" document and carries
 `gratitudeSent` and `gratitudeReceived` out of `gratitudeRepo.all()`. It carries no
 `gratitude_distributions` rows, so a member's own settled totals, their distinct-sender count

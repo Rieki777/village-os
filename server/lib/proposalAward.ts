@@ -18,6 +18,7 @@ import { canConfirm, faucetFor, humanAtScale, mint, quoteWorkPay, rulesFor, type
 import { oweProposalCash } from "./cashOwed";
 import type { WorkValue } from "../../shared/workValue";
 import { tokenDef } from "./ledger";
+import { DEPARTED_RECIPIENT, departedRecipient } from "./departed";
 
 /** The trigger an accepted proposal fires, in the dotted spelling of `mint_rules`. */
 export const PROPOSAL_TRIGGER = "proposal.accepted";
@@ -120,6 +121,9 @@ export async function applyAcceptReward(
     (entry.userId ? await members.byId(entry.userId) : null) ??
     (email ? await members.byEmail(email) : null);
   if (!match) return { rewarded: false }; // not a registered member; nothing to fold in
+  // A proposal sent before its author left pays and owes their tombstone
+  // nothing, and nothing is written on its row (round 4, finding 3).
+  if (departedRecipient(match)) return { rewarded: false, refused: DEPARTED_RECIPIENT };
   // The same rule the mint already enforces, restated where this mint happens
   // so a new caller cannot route around it.
   //
