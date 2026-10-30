@@ -3106,6 +3106,16 @@ forever. Re-running it moves nothing.
   still hold anything of value? Either way their roles are vacated and the
   stewards are told which. Value rows are never deleted, so conservation holds
   through every departure.
+- **An admin can cancel** ("They're staying", `POST /api/admin/exits/:id/cancel`,
+  which calls `cancelExit` in `server/lib/exit.ts`): the exit closes without a
+  tombstone and moves no value. A balance an earlier settle already swept stays
+  where that sweep posted it; nothing in the cancel gives it back. If a resolve
+  on the tombstone path (below) had begun the erasure and stopped before the
+  account closed, the cancel ends
+  that erasure record first, so no later resume closes the account of a member
+  who stayed, and it names the steps the stopped sweep had already run (role
+  holdings, skill tags and the like), which it does not undo. Once the account
+  is closed the cancel is refused (round 2 of the erasure review, finding 1).
 
 ### A former member, or a tombstone (the ruling of 2026-10-23)
 

@@ -51,3 +51,37 @@ export const CASH_WORK_WORDS: Record<CashWorkKind, string> = {
   role: "Role",
   proposal: "Proposal",
 };
+
+/*
+ * CASH ON THE WAY OUT (round 4, finding R4-4), to Rye's ruling of 2026-10-23:
+ * "a if b hasn't already happened". A leaver the village still owes cash stays
+ * on as a former member who can claim later, exactly as one holding tokens
+ * does, and deleting the account gives the cash up. The words below are what
+ * the member reads before either door, and what the exit desk reads.
+ *
+ * Always a COUNT, never the amount or the work: the exit desk is read by
+ * admins who may not hold `cash.pay`, and the line a resolve writes onto the
+ * exit is kept after an erasure.
+ */
+
+/** Whether a row in this state is cash the village still owes. */
+export function isUnpaidCash(state: CashOwedState): boolean {
+  return state === "owed" || state === "claimed";
+}
+
+/** The count, as the member and the exit desk read it. */
+export function cashStillOwedWords(count: number): string {
+  return `${count} cash payment(s) the village still owes you`;
+}
+
+/** What leaving does with it, a sentence with no full stop so a list can add one: the departure keeps the account on, so the cash can still be paid. */
+export const CASH_ON_DEPARTURE =
+  "Leaving keeps you on as a former member, so you can still claim it and be paid";
+
+/** What deleting does with it. */
+export const CASH_ON_DELETION =
+  "Deleting your account gives them up: once the account is gone there is nobody for the treasurer to pay";
+
+/** The tick the delete panel shows, and the body field that carries it. Only an explicit true counts. */
+export const CASH_GIVE_UP_FIELD = "giveUpCash";
+export const CASH_GIVE_UP_LABEL = "I give up the cash the village still owes me.";

@@ -383,6 +383,46 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(submissions.find((s) => s.id === idea.id).data.email).toBe("[removed at member's request]");
   });
 
+  /*
+   * THE LOST NOTE (round 3's open problem, closed in round 5). The step's write
+   * commits, then the UPDATE that notes it done fails: a dropped connection, a
+   * deploy's SIGTERM. `noteStepDone` sat outside the step's try, so nothing
+   * recorded the failure, and the record read as possibly running for ten
+   * minutes with no failed step until somebody pressed Finish them.
+   *
+   * The pool here is the real one with one statement refused: the note for
+   * "skill-tags". Everything else, the step's own write included, lands.
+   */
+  it("a step whose note is lost is recorded as the failed step, at once", async () => {
+    const id = "er-lost-note-1";
+    const target = await seedMember(id);
+    const losing = new Proxy(pool, {
+      get(t, p) {
+        const v = Reflect.get(t, p, t);
+        if (p !== "query") return typeof v === "function" ? v.bind(t) : v;
+        return (sql: unknown, params?: unknown) =>
+          typeof sql === "string" && sql.includes("JSON_ARRAY_APPEND") && Array.isArray(params) && params[0] === "skill-tags"
+            ? Promise.reject(new Error("the connection dropped before the note landed"))
+            : (t.query as any)(sql, params);
+      },
+    }) as mysql.Pool;
+
+    await expect(anonymizeMember(losing, target, null, deps())).rejects.toThrow(/before the note landed/);
+
+    const record = await erasureRecord(pool, id);
+    // The step ran, and its write is there.
+    expect(await q("SELECT `id` FROM `skill_tags` WHERE `user_id` = ?", [id])).toHaveLength(0);
+    // And the record says where it stopped, which is what makes it truthful now and not in ten minutes.
+    expect(record!.finishedAt).toBeNull();
+    expect(record!.failedStep).toBe("skill-tags");
+    expect(record!.lastError).toContain("before the note landed");
+    expect(record!.stepsDone).not.toContain("skill-tags");
+
+    const out = await resumeErasure(pool, id, deps());
+    expect(out.finished).toBe(true);
+    expect((await erasureRecord(pool, id))!.failedStep).toBeNull();
+  });
+
   it("records a break AFTER the tombstone, where the account is already gone", async () => {
     const id = "er-late-1";
     const target = await seedMember(id);
