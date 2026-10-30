@@ -35,7 +35,6 @@ import {
   PRIORITY_OUTCOMES,
   PRIORITY_OUTCOME_LABEL,
   SEASON_COPY,
-  SEASON_VIEW_PATH,
   SECTION_KIND_DEFS,
   SHARE_KIND_LABEL,
   STICK_SHARE_KINDS,
@@ -217,7 +216,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
         <div className="space-y-2 rounded-xl border border-notice/50 px-4 py-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className={LABEL_CAPS}>{seasonSection.title}</h3>
-            <Link href={SEASON_VIEW_PATH} className={BTN_QUIET}>
+            <Link href="/sessions/season" className={BTN_QUIET}>
               {SEASON_COPY.link}
             </Link>
           </div>
