@@ -170,6 +170,8 @@ import { forgetFactWordsOf } from "../repos/investorPath";
 import { forgetStayNotesOf } from "../repos/stays";
 import { forgetPayerEmailOf } from "../repos/productPurchases";
 import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
+import { leaveEveryCrewOf } from "../repos/questCrewErasure";
+import { forgetReportReasonsOf } from "../repos/placePhotos";
 import { heldByAnotherAccount } from "../repos/users";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
@@ -1265,6 +1267,38 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "gene-keys-after-tombstone",
       run: async () => {
         await forgetMemberGeneKeys(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Quest crews (0067): they leave every crew they are in, the way
+       * `crewsRepo.leave` lets a member walk out, and a crew left with nobody
+       * in it disbands. Kept, a full crew refused the next person in their
+       * name and every roster listed them as "A". The founder id stays as a
+       * historical id: crews have no handover (server/repos/questCrewErasure.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the join
+       * door writes for anybody signed in until the sessions die.
+       */
+      name: "quest-crews-after-tombstone",
+      run: async () => {
+        await leaveEveryCrewOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Place-photo reports (0093): the words they typed go, the reports stay.
+       * The curators' queue serves them to every holder of `map.curatePhotos`,
+       * a role or badge power, and a subject request often names the person.
+       * The photograph is not touched, so a picture they asked to come down
+       * stays dark.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the report
+       * doors write for anybody signed in until the sessions die.
+       */
+      name: "photo-report-reasons-after-tombstone",
+      run: async () => {
+        await forgetReportReasonsOf(pool, target.id);
       },
     },
     {
