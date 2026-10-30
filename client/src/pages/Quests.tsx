@@ -33,6 +33,7 @@ import {
   type Ring,
 } from "@/lib/questBoard";
 import { useBrochurePages } from "@/lib/brochure";
+import MaiaTypeLine from "@/components/geneKeys/MaiaTypeLine";
 
 type Difficulty = "Beginner" | "Intermediate" | "Advanced";
 
@@ -296,6 +297,7 @@ export default function Quests() {
                   <ArrowRight className="w-4 h-4 text-teal-deep shrink-0" />
                 </Link>
               ) : null}
+              {!inFlight.length && suggestion ? <MaiaTypeLine className="mt-3" /> : null}
             </div>
           </div>
         </section>

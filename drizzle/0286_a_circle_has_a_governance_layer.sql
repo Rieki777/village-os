@@ -1,0 +1,26 @@
+-- 0286: a circle has a governance layer.
+--
+-- One new nullable column, so this file is expand-only: the previous release
+-- neither reads nor writes it, and rolling an image back over a migrated
+-- database leaves a column nobody asks about.
+--
+-- WHAT IT SAYS. Which part of the village's governance a circle is: the
+-- circle that links the others, the lead circle, a circle doing the work, one
+-- that advises, or a council. The circles map reads it to decide which circle
+-- holds the middle of its container (a link or lead circle) and the order the
+-- rest ring it, so the middle stops going to whichever circle has the most
+-- rows (Rye, 2026-10-23: a governance layer field, set by org designers and
+-- the founder and steward roles, who drag circles into place).
+--
+-- NULL is "not set", and the map draws it as an operating circle, so every
+-- village keeps the picture it has until somebody sets a layer.
+--
+-- A VARCHAR CHECKED IN CODE, NEVER AN ENUM, the house style for a vocabulary
+-- (0083's header). The words are CIRCLE_LAYERS in shared/circleView.ts; a
+-- value this build does not know reads as no layer at all.
+--
+-- `circlesRepo` in server/index.ts lists this column in its spec, because
+-- `replaceAll` re-inserts exactly the columns it names and would reset an
+-- unlisted one on the next admin circle edit.
+
+ALTER TABLE `circles` ADD COLUMN `layer` varchar(16) NULL;
