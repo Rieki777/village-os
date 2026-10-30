@@ -39,7 +39,7 @@
  * (reserved rows count toward a hamlet's homes taken) and loses the name,
  * address, phone and notes on it.
  *
- * Three more things stay on purpose, each for its own reason:
+ * Five more things stay on purpose, each for its own reason:
  *
  *   MESSAGES. What they wrote in a conversation stays in it, read as "A
  *   departed member" through the join to the tombstone, the way a forum post
@@ -60,6 +60,23 @@
  *   it must is a legal question for each village. The fact and its dates stay,
  *   de-attributed; the free text beside it goes. Rye decides whether a village
  *   should be able to delete them outright (raised 2026-10-22).
+ *   SUBMISSIONS, AS ROWS. A raised hand, a seat claim, a signing, a quest idea
+ *   or a form they sent, on their account or signed out under their address,
+ *   keeps its row, type, status and time: the inbox is the village's record of
+ *   what was asked and what it decided. Inside it every value goes, their
+ *   words and their name, except what another person relies on: which of the
+ *   village's seats, powers, emails or documents it was about (the stewards'
+ *   queues find a claim or a hand by them), the letter version a signing was
+ *   made against and its acknowledgements (an admission stands on them), a
+ *   quest idea's words (the idea in review is the village's, by the rule the
+ *   quest-proposals step follows), and an investor's declared accreditation,
+ *   for the reason given just above. `KEPT_BY_TYPE` in
+ *   server/lib/submissionWords.ts is the list, with the reason beside each.
+ *   PULSE LINES SOMEBODY ELSE WROTE ABOUT THEM. "Ann appreciated Wren" stays
+ *   Ann's line and reads "Ann appreciated a departed member". The village
+ *   counts its active members and each holder's activity by the actors of
+ *   these lines, so deleting the row would take a living member's activity
+ *   out of every count it sits in. Only the name goes.
  *
  * ORDER IS LOAD-BEARING. The local sweep runs to completion FIRST, then the
  * outside stores are asked, so a slow or refusing vendor never delays the one
@@ -174,6 +191,8 @@ import { forgetStayNotesOf } from "../repos/stays";
 import { forgetPayerEmailOf } from "../repos/productPurchases";
 import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
 import { heldByAnotherAccount } from "../repos/users";
+import { forgetPulseLinesNaming } from "../repos/pulseLines";
+import { forgetSubmissionWords } from "./submissionWords";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
 import { isTombstone } from "./oauthAccounts";
@@ -202,7 +221,7 @@ export type ErasureDeps = {
     byId(id: string): Promise<any>;
     update(id: string, fn: (u: any) => void, opts?: { erasure?: boolean }): Promise<unknown>;
   };
-  /** Submissions, scrubbed of PII keys while the proposal content stays. */
+  /** Submissions, which keep their rows and lose the member's words and name (server/lib/submissionWords.ts). */
   submissionsRepo: { all(): unknown[]; replaceAll(rows: unknown[]): Promise<unknown> };
   /** Permission holdings, which end here. The org chart is a different plane. */
   roleHoldersRepo: { remove(ids: string[]): Promise<unknown> };
@@ -266,6 +285,24 @@ const tombstoneAddress = (id: string): string => `deleted-${id}@anonymized.inval
 const realEmailKey = (target: any): string => {
   const email = String(target?.email ?? "");
   return email && !isTombstone({ email }) ? emailKeyOf(email) : "";
+};
+
+/**
+ * The member's real name, or null for a target that is still a tombstone and
+ * names nobody. A resume whose old address somebody else holds now comes back
+ * with no address and its real name (`asTheyWere`), and the name still counts.
+ * For the steps that can only find a line or an alert by the name it printed.
+ */
+const realName = (target: any): string | null => {
+  if (isTombstone({ email: String(target?.email ?? "") })) return null;
+  const name = String(target?.name ?? "").trim();
+  return name && name !== ANON ? name : null;
+};
+
+/** The real name and the real address, whichever of the two the sweep still knows. */
+const knownAs = (target: any): string[] => {
+  const email = String(target?.email ?? "");
+  return [realName(target) ?? "", email && !isTombstone({ email }) ? email : ""].filter(Boolean);
 };
 
 /**
@@ -510,23 +547,20 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
-      // Scrub PII keys inside submissions they authored; the proposal content
-      // itself stays part of the village record.
+      // Their submissions keep their rows and lose their words and name: every
+      // row on their account and every row sent signed out under their
+      // address, with the team alerts those set off blanked first, while the
+      // rows still say what the alerts said. A quest idea's words and the
+      // other values `KEPT_BY_TYPE` lists stay (server/lib/submissionWords.ts).
+      // Before any of that, a Work With Us file only their rows name comes off
+      // the volume through `unlink`, so a file that will not come off stops
+      // this step with the rows still naming it.
+      // This pass ran first with seven contact keys and the account match
+      // alone; a record that already holds this name gets the rest from
+      // "submission-words-after-tombstone", which every record runs.
       name: "submissions",
       run: async () => {
-        const submissions = submissionsRepo.all();
-        let scrubbed = false;
-        for (const s of submissions as any[]) {
-          if (s.userId !== target.id) continue;
-          s.userName = ANON;
-          if (s.data && typeof s.data === "object") {
-            for (const k of ["name", "firstName", "lastName", "email", "phone", "whatsapp", "telegram"]) {
-              if (k in s.data) s.data[k] = "[removed at member's request]";
-            }
-          }
-          scrubbed = true;
-        }
-        if (scrubbed) await submissionsRepo.replaceAll(submissions);
+        await forgetSubmissionWords(pool, submissionsRepo, { userId: target.id, emailKey: realEmailKey(target), knownAs: knownAs(target) }, (file) => unlink(deps.uploadsDir, file));
       },
     },
     {
@@ -1064,6 +1098,37 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "checkin-notes-after-tombstone",
       run: async () => {
         await forgetCheckinNotesOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The public pulse lines that name them. "public-health-events" took
+       * the lines they wrote, and only while their sessions lived; this takes
+       * those again, and the lines that name them with somebody else as the
+       * actor: "Ann appreciated Wren", "Wren joined the Stewards", "Wren sits
+       * in Steward, by a vote of the whole village." A signed-out visitor
+       * reads every one at `GET /api/game/pulse`. Those rows stay with the
+       * living actor and lose the name, so nobody's activity count moves.
+       * Lines recording them as their subject are found by id; older role
+       * lines by the audit row beside a vote, or by their words when no
+       * living member shares the first name (server/repos/pulseLines.ts).
+       */
+      name: "pulse-lines-naming-after-tombstone",
+      run: async () => {
+        await forgetPulseLinesNaming(pool, { userId: target.id, name: realName(target) });
+      },
+    },
+    {
+      /*
+       * Their submissions again, once nothing can file one: a hand raised,
+       * a seat claimed or a form sent between the first pass and the
+       * tombstone keeps its words otherwise, and a record that holds
+       * "submissions" from before that pass took words never ran it. The
+       * files only their rows name come off the volume first, as above.
+       */
+      name: "submission-words-after-tombstone",
+      run: async () => {
+        await forgetSubmissionWords(pool, submissionsRepo, { userId: target.id, emailKey: realEmailKey(target), knownAs: knownAs(target) }, (file) => unlink(deps.uploadsDir, file));
       },
     },
     {
