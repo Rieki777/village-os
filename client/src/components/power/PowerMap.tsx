@@ -831,8 +831,6 @@ export default function PowerMap({
                 pxPerWorld={pxPerWorld}
                 morph={morph}
                 roles={data.roles}
-                cy={pos.y}
-                r={pos.r}
               />
             </motion.g>
           );

@@ -123,8 +123,11 @@ Every surface wears the profile's night world (`sheet-night`) and renders nothin
   reproduced; the card links to genekeys.com.
 - **Maia speaks your type** (`MaiaTypeLine.tsx`) under the quest board's first suggestion, only with Maia's yes
   and not while the member asked for plain talk; her note (`assistantNoteFor`) says when she shapes something.
-- **The living map of the circles** (`CircleGlyph.tsx` in `CircleLabel`, `/map/circles`): six bars under each
-  circle's name, solid for a line someone shows, a dashed gold outline for a gap. One batched read per map.
+- **On the living map of the circles** (`/map/circles`), mounted by the map lane on its renderer, which this module
+  does not edit: `CircleGlyph` (`{ cx, cy, r, px, holderIds }`: six bars on a plate outside a circle's rim, solid for
+  a line someone shows, a dashed gold outline for a gap) and `HolderGeneKeys` (`{ userId, name, size? }`: a role
+  holder's seal, opening their lines card). Both draw nothing while the module is off or for hidden lines, and every
+  use on a page joins one batched read (`shownLines.ts`).
 
 ## Not built yet
 

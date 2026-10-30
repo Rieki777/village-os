@@ -19,7 +19,6 @@
  * smear on the next.
  */
 import { motion } from "framer-motion";
-import CircleGlyph from "@/components/geneKeys/CircleGlyph";
 import { captionSize } from "./labelFit";
 import type { PowerSeat } from "./types";
 
@@ -41,8 +40,6 @@ export default function CircleLabel({
   pxPerWorld,
   morph,
   roles,
-  cy,
-  r,
 }: {
   circleId: string;
   x: number;
@@ -58,9 +55,6 @@ export default function CircleLabel({
   pxPerWorld: number;
   morph: object;
   roles: PowerSeat[];
-  /** The circle's centre and radius, for the Gene Keys glyph that sits outside its rim. */
-  cy?: number;
-  r?: number;
 }) {
   const halo = {
     paintOrder: "stroke" as const,
@@ -128,17 +122,6 @@ export default function CircleLabel({
         >
           forming
         </text>
-      )}
-
-      {/* The circle's six Gene Keys lines, outside its rim; nothing until a holder shows theirs. */}
-      {cy !== undefined && r !== undefined && pxPerWorld > 0 && (
-        <CircleGlyph
-          cx={x}
-          cy={cy}
-          r={r}
-          px={1 / pxPerWorld}
-          holderIds={roles.filter((s) => s.circleId === circleId).flatMap((s) => (s.holders ?? []).filter((h) => h.userId && !h.lapsed).map((h) => h.userId!))}
-        />
       )}
 
       {/* WHAT HOVER ACTUALLY ANSWERS: is this the circle I want. Name plus the

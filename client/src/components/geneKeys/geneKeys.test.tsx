@@ -50,6 +50,7 @@ import { PARTS } from "@/pages/GeneKeys";
 import { GeneKeysLines } from "./GeneKeysLines";
 import GeneKeysComplements, { COMPLEMENTS_WORDS } from "./GeneKeysComplements";
 import CircleGlyph from "./CircleGlyph";
+import HolderGeneKeys from "./HolderGeneKeys";
 import MaiaTypeLine, { maiaTypeLine } from "./MaiaTypeLine";
 import { setMyGeneKeys } from "./useMyGeneKeys";
 import { forgetShownLines, heldLines, shownLinesOf } from "./shownLines";
@@ -322,5 +323,21 @@ describe("the glyph on the living map", () => {
     const hidden = render(<svg><CircleGlyph cx={0} cy={0} r={40} px={1} holderIds={["m-ash"]} /></svg>);
     await waitFor(() => expect(api.asked.flat()).toContain("m-ash"));
     expect(hidden.container.querySelectorAll("rect")).toHaveLength(0);
+  });
+});
+
+describe("a role holder's seal, for the map's seat card", () => {
+  it("shows a shown member's seal by id, and nothing for a hidden one or with the module off", async () => {
+    api.people = { "m-kai": KAI };
+    inRouter(<HolderGeneKeys userId="m-kai" name="Kai Moss" />);
+    expect((await screen.findByRole("button", { name: /Gene Keys lines 3 and 6/ })).textContent).toBe("3/6");
+    cleanup();
+    const hidden = inRouter(<HolderGeneKeys userId="m-ash" name="Ash" />);
+    await waitFor(() => expect(api.asked.flat()).toContain("m-ash"));
+    expect(hidden.container.innerHTML).toBe("");
+    cleanup();
+    modules.on = false;
+    const off = inRouter(<HolderGeneKeys userId="m-kai" name="Kai Moss" />);
+    expect(off.container.innerHTML).toBe("");
   });
 });

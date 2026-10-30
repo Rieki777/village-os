@@ -38,6 +38,7 @@ import {
 } from "../../shared/capabilities";
 import { liveConsequence } from "./capabilityConsequence";
 import { shownGeneKeysUserIds } from "../repos/geneKeys";
+import { recordBadgeTier } from "../repos/badgeEvents";
 // The sentence that names where the seat is actually filled, borrowed rather
 // than re-spelled: the roles routes and the badge panel are two doors onto
 // one rule, and a second wording of it is a twin that drifts.
@@ -519,15 +520,7 @@ async function metricValues(pool: Pool, metric: string): Promise<Map<string, num
 export async function awardFirstTierNow(pool: Pool, badgeId: string, userId: string): Promise<boolean> {
   const badge = await badgeById(pool, badgeId);
   if (!badge || !badge.active || badge.kind !== "earned" || badge.isExample) return false;
-  try {
-    await pool.query(
-      "INSERT INTO badge_events (id, badge_id, user_id, tier, idempotency_key) VALUES (?,?,?,?,?)",
-      [`be-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, badgeId, userId, 1, `rule:${badgeId}:${userId}:tier-1`],
-    );
-  } catch (e: any) {
-    if (e?.code === "ER_DUP_ENTRY") return false;
-    throw e;
-  }
+  if (!(await recordBadgeTier(pool, badgeId, userId, 1))) return false;
   await upsertAward(pool, { badgeId, userId, count: 1, awardedBy: null });
   return true;
 }
