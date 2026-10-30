@@ -46,6 +46,17 @@ describe("Login", () => {
     expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
   });
 
+  it("shows and hides the password with the eye in the field", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+    const field = screen.getByLabelText(/^password$/i);
+    expect(field).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(field).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(field).toHaveAttribute("type", "password");
+  });
+
   it("submits the entered credentials to AuthContext's login", async () => {
     loginMock.mockResolvedValueOnce(undefined);
     const user = userEvent.setup();
