@@ -11,14 +11,14 @@
  * newest row naming it is a by-hand one. Nothing else records it, and the
  * erasure record's `steps_done` is left as it is.
  *
- * WRITTEN THROUGH `recordEventOrThrow`, never `recordEvent`. That writer
- * swallows a failed insert, which is right for a log line and wrong for an
+ * WRITTEN THROUGH `recordEvent` WITH `throwOnFailure`. By default that
+ * writer swallows a failed insert, which is right for a log line and wrong for an
  * obligation: a by-hand row that silently failed to land is a cancel nobody
  * will ever be asked for. This one throws, so the erasure step stops and is
  * resumed, and a webhook is redelivered.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { recordEventOrThrow } from "../lib/events";
+import { recordEvent } from "../lib/events";
 
 export const CANCEL_BY_HAND = "member:subscriptions-cancel-by-hand:";
 export const CANCELLED = "member:subscriptions-cancelled:";
@@ -43,14 +43,14 @@ export async function recordSubscriptionCancels(
   const ids = Array.from(new Set(row.subscriptionIds.map(String).filter(Boolean)));
   if (!ids.length) return;
   const text = `${row.kind === "by-hand" ? CANCEL_BY_HAND : CANCELLED}${ids.length}:${ids.join(",")}`;
-  await recordEventOrThrow(pool, {
+  await recordEvent(pool, {
     kind: "audit",
     text,
     actorUserId: row.actorUserId,
     entityType: "user",
     entityRef: row.userId,
     audience: "admin",
-  });
+  }, { throwOnFailure: true });
 }
 
 /** Parse one row's text, or null for a line that is not one of the two. */
