@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import type { OwnGeneKeysView } from "@shared/geneKeys";
-import { useModuleOn } from "@/modules/ModuleProvider";
+import { useModule } from "@/modules/ModuleProvider";
 import { readMyGeneKeys } from "@/lib/geneKeysApi";
 
 type State = OwnGeneKeysView | null | undefined;
@@ -40,7 +40,10 @@ function readOnce(): void {
 }
 
 export function useMyGeneKeys(): { on: boolean; mine: State } {
-  const on = useModuleOn("gene-keys");
+  // `useModule`, the read every profile surface already makes (StartHereCard checks the map
+  // the same way), so a page that mounts this hook needs nothing new from the provider.
+  const mod = useModule("gene-keys");
+  const on = !!mod && mod.lifecycle !== "off";
   const [mine, setMine] = useState<State>(current);
   useEffect(() => {
     if (!on) return;

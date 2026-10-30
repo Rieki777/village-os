@@ -46,6 +46,8 @@ export interface NextActionFacts {
   joining: Joining;
   claims: ReadonlyArray<{ status?: unknown }>;
   budget: { remaining: number; total: number };
+  /** True only while the gene-keys module is on and this member has saved no lines. Absent means "not asked". */
+  geneKeysMissing?: boolean;
 }
 
 /** True when this rule is the member's step, given their facts. */
@@ -55,6 +57,7 @@ function applies(when: NextActionRule["when"], f: NextActionFacts): boolean {
     case "membership-waiting": return f.joining === "waiting";
     case "no-membership": return f.joining === "unsigned";
     case "no-quest-claimed": return f.claims.length === 0;
+    case "no-gene-keys": return f.geneKeysMissing === true;
     case "quest-in-progress": return f.claims.some((c) => c.status === "claimed" || c.status === "submitted");
     case "gratitude-unspent": return f.budget.remaining > 0 && f.budget.total > 0;
     case "always": return true;
