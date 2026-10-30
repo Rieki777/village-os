@@ -173,6 +173,14 @@ export async function geneKeysForAssistant(pool: Pool, userId: string): Promise<
   );
 }
 
+// ── The Trail ───────────────────────────────────────────────────────────────
+
+/** For the next-step rule `no-gene-keys`: the module is on and this member has nothing saved. */
+export async function geneKeysMissing(pool: Pool, userId: string): Promise<boolean> {
+  if (effectiveLifecycle("gene-keys") === "off") return false;
+  return (await readGeneKeys(pool, String(userId))) === null;
+}
+
 // ── Erasure and export ──────────────────────────────────────────────────────
 
 /** The `gene-keys-after-tombstone` step of the erasure sweep (server/lib/erasure.ts). */
