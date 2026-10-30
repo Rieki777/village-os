@@ -576,7 +576,7 @@ describe.skipIf(!DB_CONFIGURED)("messaging routes: shared work chats", () => {
   const workChat = (list: any[], kind: string, id: string) =>
     list.find((c: any) => c.contextType === kind && c.contextId === id && c.kind === "group");
   const claim = (userId: string, status = "claimed") =>
-    pool.query("INSERT INTO quest_claims (id, quest_id, quest_title, user_id, status) VALUES (?,?,?,?,?)", [
+    pool.query("INSERT INTO quest_claims (id, quest_id, quest_title, user_id, status) VALUES (?,?,?,?,?)", [ // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
       `claim-${userId}-${Math.random().toString(36).slice(2, 8)}`,
       QUEST,
       "Mend the long fence",
@@ -586,7 +586,7 @@ describe.skipIf(!DB_CONFIGURED)("messaging routes: shared work chats", () => {
   let chatId = "";
 
   it("opens no chat while only one person is on a quest", async () => {
-    await pool.query("INSERT INTO quests (id, title, status) VALUES (?,?,'Open')", [QUEST, "Mend the long fence"]);
+    await pool.query("INSERT INTO quests (id, title, status) VALUES (?,?,'Open')", [QUEST, "Mend the long fence"]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
     await claim(anaId);
     const asked = await call("GET", `/api/messages/work/quest/${QUEST}`, undefined, anaToken);
     expect(asked.status).toBe(200);
@@ -645,7 +645,7 @@ describe.skipIf(!DB_CONFIGURED)("messaging routes: shared work chats", () => {
   });
 
   it("takes a declined claimant out on their next request, and back in when they claim again", async () => {
-    await pool.query("UPDATE quest_claims SET status = 'declined' WHERE quest_id = ? AND user_id = ?", [QUEST, benId]);
+    await pool.query("UPDATE quest_claims SET status = 'declined' WHERE quest_id = ? AND user_id = ?", [QUEST, benId]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
     expectHidden(await call("GET", `/api/messages/${chatId}`, undefined, benToken), "the chat to a declined claimant");
     expectHidden(
       await call("POST", `/api/messages/${chatId}/messages`, { body: "still here?" }, benToken),
@@ -662,22 +662,22 @@ describe.skipIf(!DB_CONFIGURED)("messaging routes: shared work chats", () => {
   });
 
   it("follows the quest's name", async () => {
-    await pool.query("UPDATE quests SET title = ? WHERE id = ?", ["Mend the north fence", QUEST]);
+    await pool.query("UPDATE quests SET title = ? WHERE id = ?", ["Mend the north fence", QUEST]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
     const read = await call("GET", `/api/messages/${chatId}`, undefined, anaToken);
     expect(read.json?.title).toBe("Mend the north fence");
   });
 
   it("gives a task its chat: the person holding it and everyone in its seat", async () => {
     const seat = `seat-shared-${PORT}`;
-    await pool.query("INSERT IGNORE INTO live_session_members (user_id) VALUES (?), (?)", [anaId, benId]);
-    const [nos]: any = await pool.query("SELECT no, user_id FROM live_session_members WHERE user_id IN (?,?)", [anaId, benId]);
+    await pool.query("INSERT IGNORE INTO live_session_members (user_id) VALUES (?), (?)", [anaId, benId]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+    const [nos]: any = await pool.query("SELECT no, user_id FROM live_session_members WHERE user_id IN (?,?)", [anaId, benId]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
     const anaNo = Number(nos.find((r: any) => r.user_id === anaId).no);
-    const [entry]: any = await pool.query(
+    const [entry]: any = await pool.query( // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
       "INSERT INTO live_session_entries (session_id, kind, text, author_no, owner_no, owner_seat_id) VALUES (1,'action',?,?,?,?)",
       ["Order the seed for the south beds", anaNo, anaNo, seat],
     );
     const entryId = String(entry.insertId);
-    await pool.query(
+    await pool.query( // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
       "INSERT INTO live_session_task_state (entry_id, session_id, status, owner_no, owner_seat_id) VALUES (?,1,'open',?,?)",
       [entryId, anaNo, seat],
     );
@@ -686,7 +686,7 @@ describe.skipIf(!DB_CONFIGURED)("messaging routes: shared work chats", () => {
     expect((await call("GET", `/api/messages/work/task/${entryId}`, undefined, anaToken)).json?.available).toBe(false);
 
     // Ben takes the seat that holds it.
-    await pool.query(
+    await pool.query( // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
       "INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES (?,?,'member',?,?)",
       [`asg-${PORT}`, seat, benId, benId],
     );
@@ -698,7 +698,7 @@ describe.skipIf(!DB_CONFIGURED)("messaging routes: shared work chats", () => {
     expectHidden(await call("GET", `/api/messages/${taskChat}`, undefined, caraToken), "a task chat to someone not holding it");
 
     // Ben leaves the seat: he is out of the chat on his next request.
-    await pool.query("UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP WHERE id = ?", [`asg-${PORT}`]);
+    await pool.query("UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP WHERE id = ?", [`asg-${PORT}`]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
     expectHidden(await call("GET", `/api/messages/${taskChat}`, undefined, benToken), "the task chat once out of the seat");
     expect((await call("GET", `/api/messages/${taskChat}`, undefined, anaToken)).status).toBe(200);
   });

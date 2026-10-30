@@ -40,10 +40,11 @@
  * are refused by the routes for these threads, and so is leaving (the next read
  * would only put the member back). Muting is how a member quiets one.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
 import { liveHoldersOf, liveSeatIdsFor } from "../../shared/sessionTasks";
 import { conversationById, type Conversation } from "./messaging";
 import { listOrgAssignments, type LapseContext } from "./orgChart";
+import * as repo from "../repos/sharedWork";
 
 export type WorkKind = "quest" | "task";
 export const WORK_KINDS: readonly WorkKind[] = ["quest", "task"];
@@ -89,45 +90,31 @@ export interface WorkDeps {
 // ── Who is on the work ───────────────────────────────────────────────────────
 
 async function questWork(pool: Pool, questId: string): Promise<Work | null> {
-  const [quests] = await pool.query<RowDataPacket[]>("SELECT id, title FROM quests WHERE id = ?", [questId]);
-  if (!quests[0]) return null;
-  const [claims] = await pool.query<RowDataPacket[]>(
-    "SELECT user_id, MIN(claimed_at) AS first_at FROM quest_claims WHERE quest_id = ? AND status <> 'declined' " +
-      "GROUP BY user_id ORDER BY first_at, user_id",
-    [questId],
-  );
+  const quest = await repo.questRow(pool, questId);
+  if (!quest) return null;
   return {
     kind: "quest",
-    id: String(quests[0].id),
-    title: workTitle(String(quests[0].title ?? "")) || "Quest",
-    people: claims.map((r) => String(r.user_id)),
+    id: quest.id,
+    title: workTitle(quest.title) || "Quest",
+    people: await repo.questClaimants(pool, questId),
   };
 }
 
 async function taskWork(pool: Pool, entryId: string, deps: Pick<WorkDeps, "lapseContext">): Promise<Work | null> {
   const n = Number(entryId);
   if (!Number.isInteger(n) || n <= 0) return null;
-  // The state row says who holds it now; an entry still in an open session has none yet.
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT e.id, e.kind, e.text, COALESCE(t.owner_no, e.owner_no) AS owner_no, " +
-      "IF(t.entry_id IS NULL, e.owner_seat_id, t.owner_seat_id) AS owner_seat_id " +
-      "FROM live_session_entries e LEFT JOIN live_session_task_state t ON t.entry_id = e.id WHERE e.id = ?",
-    [n],
-  );
-  const r = rows[0];
-  if (!r || String(r.kind) !== "action") return null;
+  const r = await repo.taskRow(pool, n);
+  if (!r || r.kind !== "action") return null;
   const people: string[] = [];
-  const ownerNo = r.owner_no == null ? null : Number(r.owner_no);
-  if (ownerNo != null && ownerNo > 0) {
-    const [owner] = await pool.query<RowDataPacket[]>("SELECT user_id FROM live_session_members WHERE no = ?", [ownerNo]);
-    if (owner[0]) people.push(String(owner[0].user_id));
+  if (r.ownerNo != null && r.ownerNo > 0) {
+    const owner = await repo.liveSessionUserFor(pool, r.ownerNo);
+    if (owner) people.push(owner);
   }
-  const seat = r.owner_seat_id == null || r.owner_seat_id === "" ? null : String(r.owner_seat_id);
-  if (seat) {
+  if (r.ownerSeatId) {
     const seatings = await listOrgAssignments(pool, deps.lapseContext?.());
-    for (const uid of liveHoldersOf(seatings, seat)) if (!people.includes(uid)) people.push(uid);
+    for (const uid of liveHoldersOf(seatings, r.ownerSeatId)) if (!people.includes(uid)) people.push(uid);
   }
-  return { kind: "task", id: String(r.id), title: workTitle(String(r.text ?? "")) || "Task", people };
+  return { kind: "task", id: r.id, title: workTitle(r.text) || "Task", people };
 }
 
 /** The work and the people on it, or null when there is no such quest or task. */
@@ -143,34 +130,12 @@ export async function workFor(kind: WorkKind, id: string, deps: Pick<WorkDeps, "
 export async function workOf(userId: string, deps: Pick<WorkDeps, "getPool" | "lapseContext">, cap = 40): Promise<Array<{ kind: WorkKind; id: string }>> {
   const pool = deps.getPool();
   const out: Array<{ kind: WorkKind; id: string }> = [];
-  const [quests] = await pool.query<RowDataPacket[]>(
-    "SELECT DISTINCT quest_id FROM quest_claims WHERE user_id = ? AND status IN ('claimed','submitted') LIMIT ?",
-    [userId, cap],
-  );
-  for (const q of quests) out.push({ kind: "quest", id: String(q.quest_id) });
+  for (const id of await repo.liveClaimedQuestIds(pool, userId, cap)) out.push({ kind: "quest", id });
 
-  const [mine] = await pool.query<RowDataPacket[]>("SELECT no FROM live_session_members WHERE user_id = ?", [userId]);
-  const no = mine[0] ? Number(mine[0].no) : null;
+  const no = await repo.liveSessionNoFor(pool, userId);
   const seatings = await listOrgAssignments(pool, deps.lapseContext?.());
   const seats = liveSeatIdsFor(seatings, userId);
-  if (no != null || seats.length) {
-    const clauses: string[] = [];
-    const params: unknown[] = [];
-    if (no != null) {
-      clauses.push("owner_no = ?");
-      params.push(no);
-    }
-    if (seats.length) {
-      clauses.push(`owner_seat_id IN (${seats.map(() => "?").join(",")})`);
-      params.push(...seats);
-    }
-    const [tasks] = await pool.query<RowDataPacket[]>(
-      `SELECT entry_id FROM live_session_task_state WHERE status <> 'let_go' AND (${clauses.join(" OR ")}) ` +
-        `ORDER BY changed_at DESC LIMIT ${Math.max(1, Math.trunc(cap))}`,
-      params,
-    );
-    for (const t of tasks) out.push({ kind: "task", id: String(t.entry_id) });
-  }
+  for (const id of await repo.heldTaskIds(pool, no, seats, cap)) out.push({ kind: "task", id });
   return out.slice(0, cap);
 }
 
@@ -178,17 +143,21 @@ export async function workOf(userId: string, deps: Pick<WorkDeps, "getPool" | "l
 
 /** The chat for this work, if one was ever opened. */
 export async function workConversation(pool: Pool, kind: WorkKind, id: string): Promise<Conversation | null> {
-  const [rows] = await pool.query<RowDataPacket[]>("SELECT id FROM conversations WHERE direct_key = ?", [workKeyFor(kind, id)]);
-  return rows[0] ? conversationById(pool, String(rows[0].id)) : null;
+  const found = await repo.conversationIdByKey(pool, workKeyFor(kind, id));
+  return found ? conversationById(pool, found) : null;
 }
 
 async function createWorkConversation(pool: Pool, work: Work, attemptsLeft = 2): Promise<Conversation> {
   const id = `cnv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   try {
-    await pool.query(
-      "INSERT INTO conversations (id, kind, name, context_type, context_id, created_by, direct_key) VALUES (?,?,?,?,?,?,?)",
-      [id, "group", work.title, work.kind, work.id, work.people[0], workKeyFor(work.kind, work.id)],
-    );
+    await repo.insertWorkConversation(pool, {
+      id,
+      name: work.title,
+      contextType: work.kind,
+      contextId: work.id,
+      createdBy: work.people[0],
+      directKey: workKeyFor(work.kind, work.id),
+    });
   } catch (e: any) {
     // Two people opened it at once. The unique key decided; read the winner back.
     if (e?.code === "ER_DUP_ENTRY" && attemptsLeft > 0) {
@@ -225,34 +194,22 @@ export async function syncWorkConversation(work: Work, deps: Pick<WorkDeps, "get
     conversation = await createWorkConversation(pool, { ...work, people });
   } else if (conversation.name !== work.title && work.title) {
     // The quest was renamed: the chat follows its name.
-    await pool.query("UPDATE conversations SET name = ? WHERE id = ?", [work.title, conversation.id]);
+    await repo.renameConversation(pool, conversation.id, work.title);
     conversation = { ...conversation, name: work.title };
   }
 
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT user_id FROM conversation_members WHERE conversation_id = ? AND left_at IS NULL",
-    [conversation.id],
-  );
-  const current = new Set(rows.map((r) => String(r.user_id)));
+  const current = new Set(await repo.liveMemberIds(pool, conversation.id));
   const wanted = new Set(people);
   const added: string[] = [];
   const removed: string[] = [];
   for (const uid of people) {
     if (current.has(uid)) continue;
-    // A returning member gets their old row back, history and read mark with it.
-    await pool.query(
-      "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES (?,?,'member') " +
-        "ON DUPLICATE KEY UPDATE left_at = NULL, role = 'member'",
-      [conversation.id, uid],
-    );
+    await repo.joinAsMember(pool, conversation.id, uid);
     added.push(uid);
   }
   for (const uid of Array.from(current)) {
     if (wanted.has(uid)) continue;
-    await pool.query(
-      "UPDATE conversation_members SET left_at = CURRENT_TIMESTAMP, role = 'member' WHERE conversation_id = ? AND user_id = ? AND left_at IS NULL",
-      [conversation.id, uid],
-    );
+    await repo.markLeft(pool, conversation.id, uid);
     removed.push(uid);
   }
   return { conversation, added, removed };

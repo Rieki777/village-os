@@ -38,6 +38,7 @@ const ctl = vi.hoisted(() => ({ quest: {} as Record<string, unknown> }));
 
 vi.mock("@/lib/gameApi", () => ({
   fetchGameMe: async () => null,
+  authToken: () => null,
   gameFetch: async () => ({ ok: true, status: 200, json: async () => ({ quest: ctl.quest, related: [] }) }),
   useGameConfig: () => ({ stages: [{ id: "member", name: "Member", description: "" }] }),
 }));
