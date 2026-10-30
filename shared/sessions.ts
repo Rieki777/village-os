@@ -37,6 +37,7 @@
  * COPY RULES. Platform code carries no village's name. No em-dashes, and every
  * string a member reads lives in this file so the voice gate reads it.
  */
+import type { FilledIn } from "./sessionOnBehalf";
 import type { TaskCard } from "./sessionTasks";
 
 // ── Stages ───────────────────────────────────────────────────────────────────
@@ -791,6 +792,8 @@ export interface SessionPerson {
    * village's own art, and nothing they uploaded leaves their profile this way.
    */
   avatar?: string | null;
+  /** While open: the facilitator gave this arrival for them (0288, shared/sessionOnBehalf.ts). */
+  arrivalFilledIn?: FilledIn | null;
 }
 
 export interface SessionItem {
@@ -815,6 +818,8 @@ export interface SessionItem {
    */
   libraryId?: number | null;
   broughtBy?: string | null;
+  /** The latest fill-in on it that still stands (0288, shared/sessionOnBehalf.ts). */
+  filledIn?: FilledIn | null;
 }
 
 export interface SessionEntry {
@@ -830,6 +835,8 @@ export interface SessionEntry {
   ownerSeatName: string | null;
   dueOn: string | null;
   createdAt: string;
+  /** The latest fill-in on it that still stands (0288, shared/sessionOnBehalf.ts). */
+  filledIn?: FilledIn | null;
 }
 
 /**
@@ -967,7 +974,8 @@ export interface SessionListRow {
  *   POST   /api/sessions/:id/entries              { kind, text, itemId?, ownerSeatId?, dueOn? } -> { id }
  *   PATCH  /api/sessions/:id/entries/:entryId     { claim?, release?, ownerSeatId?, text?, dueOn?, status? } -> { ok }
  *   DELETE /api/sessions/:id/entries/:entryId     { ok }
- *   POST   /api/sessions/:id/respond              { target, value, text? } -> { ok }
+ *   POST   /api/sessions/:id/respond              { target, value, text? } -> { ok } (never for someone else)
+ *   POST   /api/sessions/:id/on-behalf/:fillId/undo   {} -> { ok } (shared/sessionOnBehalf.ts)
  *   POST   /api/sessions/:id/act                  { action: SessionAction } -> { ok, state }
  *   POST   /api/sessions/:id/hosts                { facilitatorUserId?, secretaryUserId? } -> { ok }
  *   POST   /api/sessions/:id/close                {} -> { ok } or 409 { error, unowned: number[] }

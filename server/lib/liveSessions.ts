@@ -93,6 +93,9 @@ import { exportRhythmsFor, forgetRhythmsFor } from "./sessionRhythm";
 import { exportFollowsFor, forgetFollowsFor } from "./sessionCalendar";
 import { exportReviewsFor, forgetReviewsFor } from "./sessionDecisions";
 import { exportAdviceFor, forgetAdviceFor } from "./sessionAdvice";
+import { fillFor, filledInOut, fillKey, keepFills, latestStanding, mapFill, mayUndo, readFor, recordFill, standingFills } from "./sessionOnBehalf";
+import * as fillsRepo from "../repos/sessionOnBehalf";
+import { ON_BEHALF_REFUSALS as OB } from "../../shared/sessionOnBehalf";
 import { taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
 import { LIBRARY_REFUSALS, cleanIds } from "../../shared/sessionLibrary";
 import { numberVar, stringVar } from "./variables";
@@ -948,8 +951,33 @@ export async function saveArrival(pool: Pool, sessionId: number, actor: Actor, r
   if (!isArrivalScore(b.score)) return refuse(400, R.arrivalScore);
   const score = b.score;
   const wish = cleanLine(b.wish, SESSION_LIMITS.wish);
-  return inRoom(pool, sessionId, actor, async ({ conn }) => {
-    await repo.writeArrival(conn, sessionId, actor.no, score, wish, now);
+  const forNo = readFor(b);
+  if (!forNo.ok) return forNo;
+  return inRoom(pool, sessionId, actor, async ({ conn, roles }) => {
+    const who = await fillFor(conn, sessionId, roles.facilitates, actor.no, forNo.value);
+    if (!who.ok) return who;
+    if (who.value == null) {
+      await repo.writeArrival(conn, sessionId, actor.no, score, wish, now);
+      await keepFills(conn, sessionId, "arrival", actor.no, actor.no, now);
+      return done(null);
+    }
+    // Given for somebody else (0288): what they had goes in the row, so an undo can put it back.
+    const had = mapPerson((await repo.personRow(conn, sessionId, who.value))[0]);
+    await fillsRepo.writeArrivalFor(conn, sessionId, who.value, score, wish);
+    await recordFill(
+      conn,
+      {
+        sessionId,
+        actorNo: actor.no,
+        personNo: who.value,
+        target: "arrival",
+        // An arrival is keyed by whose it is.
+        targetId: who.value,
+        act: had.arrival == null ? "added" : "changed",
+        before: had.arrival == null ? null : { score: had.arrival, wish: had.wish },
+      },
+      now,
+    );
     return done(null);
   });
 }
@@ -992,7 +1020,11 @@ export async function addItem(pool: Pool, sessionId: number, actor: Actor, raw: 
     fromSessionId = posInt(b.fromSessionId);
     if (fromSessionId == null) return refuse(400, R.fromSession);
   }
-  return inRoom(pool, sessionId, actor, async ({ conn, s }) => {
+  const forNo = readFor(b);
+  if (!forNo.ok) return forNo;
+  return inRoom(pool, sessionId, actor, async ({ conn, s, roles }) => {
+    const who = await fillFor(conn, sessionId, roles.facilitates, actor.no, forNo.value);
+    if (!who.ok) return who;
     const items = (await repo.itemRows(conn, sessionId)).map(mapItem);
     if (items.length >= SESSION_LIMITS.maxAgenda) return refuse(409, R.agendaFull);
     if (fromSessionId != null) {
@@ -1005,7 +1037,9 @@ export async function addItem(pool: Pool, sessionId: number, actor: Actor, raw: 
       if (items.some((i) => i.fromSessionId === fromSessionId && i.title.toLowerCase() === key)) return refuse(409, R.alreadyOnAgenda);
     }
     const position = items.reduce((m, i) => Math.max(m, i.position), 0) + 1;
-    const id = await repo.insertItem(conn, { sessionId, title, aim, minutes, position, addedByNo: actor.no, fromSessionId, now });
+    const addedByNo = who.value ?? actor.no;
+    const id = await repo.insertItem(conn, { sessionId, title, aim, minutes, position, addedByNo, fromSessionId, now });
+    if (who.value != null) await recordFill(conn, { sessionId, actorNo: actor.no, personNo: who.value, target: "item", targetId: id, act: "added" }, now);
     return done({ id });
   });
 }
@@ -1077,6 +1111,25 @@ export async function patchItem(
     if (words.presenter != null && !(await repo.personRow(conn, sessionId, words.presenter)).length) return refuse(400, R.hostsPerson);
 
     if (titleMoves || planMoves) {
+      // The facilitator changing what somebody else added is a fill-in (0288);
+      // the person changing it themselves makes it theirs again.
+      if (roles.facilitates && item.addedBy !== actor.no && item.addedBy > 0) {
+        await recordFill(
+          conn,
+          {
+            sessionId,
+            actorNo: actor.no,
+            personNo: item.addedBy,
+            target: "item",
+            targetId: item.id,
+            act: "changed",
+            before: { title: item.title, aim: item.aim, minutes: item.minutes, presenterNo: item.presenterUserId },
+          },
+          now,
+        );
+      } else if (item.addedBy === actor.no) {
+        await keepFills(conn, sessionId, "item", item.id, actor.no, now);
+      }
       await repo.writeItemWords(conn, item.id, {
         title: words.title ?? item.title,
         aim: words.aim ?? item.aim,
@@ -1218,9 +1271,15 @@ export async function addEntry(pool: Pool, sessionId: number, actor: Actor, raw:
   const due = readDue(b);
   if (!due.ok) return due;
   if (seat.value && !(await seatBook(pool, null)).active.has(seat.value)) return refuse(400, R.seatUnknown);
-  return inRoom(pool, sessionId, actor, async ({ conn }) => {
+  const forNo = readFor(b);
+  if (!forNo.ok) return forNo;
+  return inRoom(pool, sessionId, actor, async ({ conn, roles }) => {
+    const who = await fillFor(conn, sessionId, roles.facilitates, actor.no, forNo.value);
+    if (!who.ok) return who;
+    const authorNo = who.value ?? actor.no;
     if (itemId != null && !(await repo.itemRows(conn, sessionId)).some((r) => Number(r.id) === itemId)) return refuse(404, R.itemUnknown);
-    const counts = await repo.entryCounts(conn, sessionId, actor.no);
+    // Written in their name, it counts against their share of the session.
+    const counts = await repo.entryCounts(conn, sessionId, authorNo);
     if (counts.all >= SESSION_LIMITS.maxEntries) return refuse(409, R.entriesFull);
     if (counts.mine >= SESSION_LIMITS.maxEntriesPerPerson) return refuse(409, R.yoursFull);
     const id = await repo.insertEntry(conn, {
@@ -1228,11 +1287,12 @@ export async function addEntry(pool: Pool, sessionId: number, actor: Actor, raw:
       itemId,
       kind,
       text,
-      authorNo: actor.no,
+      authorNo,
       ownerSeatId: seat.value ?? null,
       dueOn: due.value ?? null,
       now,
     });
+    if (who.value != null) await recordFill(conn, { sessionId, actorNo: actor.no, personNo: who.value, target: "entry", targetId: id, act: "added" }, now);
     return done({ id });
   });
 }
@@ -1260,6 +1320,13 @@ export async function patchEntry(
   const b = bodyOf(raw);
   const claim = b.claim === true;
   const release = b.release === true;
+  // The facilitator hands an action to somebody in the room (0288).
+  let handTo: number | undefined;
+  if (has(b, "ownerUserId")) {
+    const n = posInt(b.ownerUserId);
+    if (n == null) return refuse(400, OB.personNotHere);
+    handTo = n;
+  }
   let text: string | undefined;
   if (has(b, "text")) {
     const t = cleanText(b.text, SESSION_LIMITS.text);
@@ -1284,6 +1351,16 @@ export async function patchEntry(
     const may = entryRights(e, actor.no, roles);
     const next = { text: e.text, status: e.status, ownerNo: e.ownerNo, ownerSeatId: e.ownerSeatId, dueOn: e.dueOn, claimedAt: e.claimedAt ? new Date(e.claimedAt) : null };
 
+    if (handTo !== undefined) {
+      if (e.kind !== "action") return refuse(400, OB.holderNotAction);
+      if (handTo !== actor.no) {
+        const who = await fillFor(conn, sessionId, roles.facilitates, actor.no, handTo);
+        if (!who.ok) return who;
+      }
+      if (e.ownerNo != null && e.ownerNo !== handTo) return refuse(409, R.heldAlready);
+      next.ownerNo = handTo;
+      next.claimedAt = e.ownerNo === handTo ? next.claimedAt : now;
+    }
     if (claim || release) {
       if (e.kind !== "action") return refuse(400, R.notAction);
       if (claim) {
@@ -1325,6 +1402,32 @@ export async function patchEntry(
       }
       next.status = status;
     }
+    // Whose it is: an action's holder, or else whoever wrote it. The facilitator
+    // filling in its holder, words, role or date for them is a fill-in (0288),
+    // and what it replaced goes in the row for an undo. Its status is running
+    // the room, and is not.
+    const filled =
+      next.text !== e.text || next.ownerNo !== e.ownerNo || next.ownerSeatId !== e.ownerSeatId || next.dueOn !== e.dueOn;
+    if (filled) {
+      const whose = e.kind === "action" && next.ownerNo != null ? next.ownerNo : e.authorNo;
+      if (roles.facilitates && whose !== actor.no && whose > 0) {
+        await recordFill(
+          conn,
+          {
+            sessionId,
+            actorNo: actor.no,
+            personNo: whose,
+            target: "entry",
+            targetId: e.id,
+            act: "changed",
+            before: { text: e.text, ownerNo: e.ownerNo, ownerSeatId: e.ownerSeatId, dueOn: e.dueOn, claimedAt: e.claimedAt },
+          },
+          now,
+        );
+      } else if (whose === actor.no || e.authorNo === actor.no || e.ownerNo === actor.no) {
+        await keepFills(conn, sessionId, "entry", e.id, actor.no, now);
+      }
+    }
     await repo.writeEntry(conn, e.id, next);
     if (e.kind === "decision" && newWords) await repo.deleteResponsesForTargets(conn, sessionId, [`decision:${e.id}`]);
     return done(null);
@@ -1344,10 +1447,86 @@ export async function removeEntry(pool: Pool, sessionId: number, actor: Actor, e
   });
 }
 
+// ── Filled in for somebody: the undo (0288) ─────────────────────────────────
+
+/**
+ * Take back a fill-in: the person it was for, or whoever filled it in, while
+ * the room is open. It puts back what was there, and only the latest fill-in
+ * still standing on a thing can be taken back, so a run of them unwinds in
+ * order. Something talked about or decided since stays as it is.
+ */
+export async function undoFill(pool: Pool, sessionId: number, actor: Actor, fillId: number, now = new Date()): Promise<Outcome<null>> {
+  return inRoom(pool, sessionId, actor, async ({ conn, s }) => {
+    const rows = (await fillsRepo.fillRows(conn, sessionId)).map(mapFill);
+    const f = rows.find((r) => r.id === fillId);
+    if (!f) return refuse(404, OB.fillUnknown);
+    if (!mayUndo(f, actor.no, true)) return refuse(403, OB.undoNotYours);
+    if (f.undone) return refuse(409, OB.undoneAlready);
+    if (f.kept || latestStanding(rows, f)?.id !== f.id) return refuse(409, OB.pastUndoing);
+    const before = f.before ?? {};
+
+    if (f.target === "arrival") {
+      const score = before.score;
+      if (f.act === "changed" && isArrivalScore(score)) {
+        await fillsRepo.writeArrivalFor(conn, sessionId, f.personNo, score, typeof before.wish === "string" ? before.wish : null);
+      } else {
+        await fillsRepo.clearArrival(conn, sessionId, f.personNo);
+      }
+    } else if (f.target === "item") {
+      const item = (await repo.itemRows(conn, sessionId)).map(mapItem).find((i) => i.id === f.targetId);
+      if (!item) return refuse(409, OB.pastUndoing);
+      if (f.act === "added") {
+        // Only an item still waiting goes: one the room has started has a clock and a record.
+        if (item.status !== "waiting" || s.state.activeItemId === item.id) return refuse(409, OB.pastUndoing);
+        await fillsRepo.deleteItemRow(conn, sessionId, item.id);
+      } else {
+        if (item.status === "done") return refuse(409, OB.pastUndoing);
+        const title = typeof before.title === "string" && before.title ? before.title : item.title;
+        const presenter = before.presenterNo;
+        await repo.writeItemWords(conn, item.id, {
+          title,
+          aim: isItemAim(before.aim) ? before.aim : item.aim,
+          minutes: typeof before.minutes === "number" ? before.minutes : item.minutes,
+          presenterNo: typeof presenter === "number" ? presenter : null,
+        });
+      }
+    } else {
+      const rowsE = await repo.entryRow(conn, sessionId, f.targetId);
+      if (!rowsE.length) return refuse(409, OB.pastUndoing);
+      const e = mapEntry(rowsE[0]);
+      if (e.kind === "decision" && e.status === "done") return refuse(409, OB.pastUndoing);
+      if (f.act === "added") {
+        await repo.deleteEntryRow(conn, e.id);
+        if (e.kind === "decision") await repo.deleteResponsesForTargets(conn, sessionId, [`decision:${e.id}`]);
+      } else {
+        const text = typeof before.text === "string" && before.text ? before.text : e.text;
+        const claimedAt = typeof before.claimedAt === "string" ? new Date(before.claimedAt) : null;
+        await repo.writeEntry(conn, e.id, {
+          text,
+          status: e.status,
+          ownerNo: typeof before.ownerNo === "number" ? before.ownerNo : null,
+          ownerSeatId: typeof before.ownerSeatId === "string" ? before.ownerSeatId : null,
+          dueOn: typeof before.dueOn === "string" ? before.dueOn : null,
+          claimedAt,
+        });
+        // Its words back where they were, the consent round on them starts again.
+        if (e.kind === "decision" && text !== e.text) await repo.deleteResponsesForTargets(conn, sessionId, [`decision:${e.id}`]);
+      }
+    }
+    await fillsRepo.markUndone(conn, f.id, now);
+    return done(null);
+  });
+}
+
 // ── Answers ─────────────────────────────────────────────────────────────────
 
 export async function respond(pool: Pool, sessionId: number, actor: Actor, raw: unknown, now = new Date()): Promise<Outcome<null>> {
   const b = bodyOf(raw);
+  // Every answer is the answerer's own (0288): a consent, a concern, an
+  // objection, a night or a word is never given for somebody else, by the
+  // facilitator or anybody. Naming anyone but yourself is refused outright.
+  const forNo = readFor(b);
+  if (!forNo.ok || (forNo.value !== undefined && forNo.value !== actor.no)) return refuse(403, OB.ownAnswer);
   const target = parseResponseTarget(b.target);
   if (!target) return refuse(400, R.targetUnknown);
   let value: string;
@@ -1501,6 +1680,8 @@ async function closeLocked(conn: PoolConnection, s: SessionRec, ctx: RoomContext
   }
   items = (await repo.itemRows(conn, sessionId)).map(mapItem);
   await repo.eraseArrivals(conn, sessionId);
+  // Nothing is undone after the close, so what an undo would put back goes too (0288).
+  await fillsRepo.forgetBefores(conn, sessionId);
 
   const closedState = applySessionAction(s.state, { type: "item", itemId: null }, nowMs);
   const closed: SessionRec = { ...s, status: "closed", closedAt: now.toISOString(), state: closedState };
@@ -1863,6 +2044,7 @@ export async function discardSession(pool: Pool, sessionId: number, viewer: View
     // The agenda library (0264): an open session's items wait again; a deleted record's keep their status and lose the link.
     await releaseForDiscard(conn, sessionId, s.status);
     await deleteTaskRowsForSession(conn, sessionId, await repo.sessionEntryIds(conn, sessionId));
+    await fillsRepo.deleteFillsForSession(conn, sessionId);
     if (!(await repo.deleteSessionRows(conn, sessionId))) return refuse(404, R.notFound);
     return done({ status: s.status });
   });
@@ -2124,11 +2306,14 @@ export async function buildView(
   now = Date.now(),
 ): Promise<SessionView> {
   const roles = rolesIn(s, viewer);
-  const [peopleRaw, itemsRaw, entriesRaw] = await Promise.all([
+  const [peopleRaw, itemsRaw, entriesRaw, fillsRaw] = await Promise.all([
     repo.peopleRows(pool, s.id),
     repo.itemRows(pool, s.id),
     repo.entryRows(pool, s.id),
+    fillsRepo.fillRows(pool, s.id),
   ]);
+  // What the facilitator filled in for somebody and still stands (0288): marked for everyone who reads the room.
+  const standing = standingFills(fillsRaw.map(mapFill));
   const people = peopleRaw.map(mapPerson);
   const items = itemsRaw.map(mapItem);
   const entries = entriesRaw.map(mapEntry);
@@ -2172,6 +2357,10 @@ export async function buildView(
   const faces = await facesFor(pool, people.map((p) => names.get(p.no)?.userId ?? null));
 
   const open = s.status === "open";
+  const markOf = (target: "arrival" | "item" | "entry", id: number) => {
+    const f = standing.get(fillKey(target, id));
+    return f ? filledInOut(f, viewer.no, open) : null;
+  };
   const peopleOut: SessionPerson[] = people.map((p) => ({
     userId: p.no,
     name: nameIn(names, p.no) ?? SESSION_SOMEONE,
@@ -2181,6 +2370,8 @@ export async function buildView(
     // The arrival round is heard by the people in the room, and only while it is open.
     arrival: open && joined ? p.arrival : null,
     wish: open && joined ? p.wish : null,
+    // An arrival is erased by the close, and so is the mark on it.
+    arrivalFilledIn: open && joined ? markOf("arrival", p.no) : null,
   }));
   const responsesOut: SessionResponse[] = responses
     .map((r): Omit<SessionResponse, "target"> & { target: ResponseTarget | null } => ({
@@ -2237,9 +2428,9 @@ export async function buildView(
     people: peopleOut,
     items: items.map((i) => {
       const from = brought.get(i.id);
-      return { ...itemOut(i), libraryId: from?.libraryId ?? null, broughtBy: from?.broughtBy ?? null };
+      return { ...itemOut(i), libraryId: from?.libraryId ?? null, broughtBy: from?.broughtBy ?? null, filledIn: markOf("item", i.id) };
     }),
-    entries: entries.map((e) => entryOut(e, names, seats)),
+    entries: entries.map((e) => ({ ...entryOut(e, names, seats), filledIn: markOf("entry", e.id) })),
     responses: responsesOut,
     nights: nightRoundsFor(s, entries, responses, viewer, now),
     facilitation,
@@ -2316,9 +2507,11 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   /** The advice process (0284): the requests they made, and the advice they gave. */
   adviceAsked: Record<string, unknown>[];
   adviceGiven: Record<string, unknown>[];
+  /** Filled in by the facilitator (0288): what was filled in for them, and what they filled in for somebody, with nobody else's number. */
+  filledIn: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [], adviceAsked: [], adviceGiven: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [], adviceAsked: [], adviceGiven: [], filledIn: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -2397,7 +2590,16 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   const { circlesFollowed, calendarAddress, ownCalendarsAttached } = await exportFollowsFor(pool, no);
   const reviewsSet = await exportReviewsFor(pool, no);
   const { adviceAsked, adviceGiven } = await exportAdviceFor(pool, no);
-  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet, adviceAsked, adviceGiven };
+  const filledIn = (await fillsRepo.memberFillRows(pool, no)).map((r) => ({
+    sessionId: Number(r.session_id),
+    target: String(r.target),
+    act: String(r.act),
+    forYou: Number(r.for_me) === 1,
+    byYou: Number(r.by_me) === 1,
+    at: toIso(r.created_at),
+    undoneAt: toIso(r.undone_at),
+  }));
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet, adviceAsked, adviceGiven, filledIn };
 }
 
 /**
@@ -2490,6 +2692,8 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
     );
     // The advice process (0284): the requests they made go with every answer to them, and their own advice goes.
     await forgetAdviceFor(conn, no);
+    // Filled in by the facilitator (0288): what was filled in for them goes; what they filled in says nobody did.
+    await fillsRepo.forgetFillsFor(conn, no);
   });
   await repo.deleteMemberNo(pool, no);
 }

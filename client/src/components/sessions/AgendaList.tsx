@@ -37,6 +37,7 @@ import {
 } from "@shared/sessions";
 import { LIBRARY_COPY } from "@shared/sessionLibrary";
 import GrowingText from "./GrowingText";
+import FilledInNote from "./FilledInNote";
 import {
   BTN_ICON,
   BTN_PRIMARY,
@@ -299,6 +300,7 @@ function ItemRow({
             nameOf(view, item.addedBy) && <span>· {nameOf(view, item.addedBy)}</span>
           )}
         </p>
+        <FilledInNote filled={item.filledIn} actions={actions} />
       </div>
       <div className="flex flex-wrap items-center gap-1">
         {mayRun && !parked && (

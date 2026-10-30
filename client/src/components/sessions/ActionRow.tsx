@@ -31,6 +31,7 @@
  * date shared one row with the box, and the box was squeezed to one letter.
  */
 import { useEffect, useRef, useState } from "react";
+import { ON_BEHALF_COPY } from "@shared/sessionOnBehalf";
 import {
   ROOM_COPY,
   SESSION_COPY,
@@ -119,7 +120,9 @@ export function ActionRow({
     }
   };
 
-  const controls = open && (may.claim || may.release || may.seat || may.dueOn || may.status);
+  // The facilitator hands an action nobody holds to somebody in the room (0288).
+  const handable = open && view.me.facilitates && !held && !parked ? view.people.filter((p) => p.userId !== view.me.userId) : [];
+  const controls = open && (may.claim || may.release || may.seat || may.dueOn || may.status || handable.length > 0);
 
   const extra = (
     <>
@@ -135,6 +138,28 @@ export function ActionRow({
             <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void run(() => actions.patchEntry(entry.id, { claim: true }))}>
               {SESSION_COPY.claim}
             </button>
+          )}
+          {handable.length > 0 && (
+            <label htmlFor={`${fieldBase}-hand`} className="block min-w-0">
+              <span className={`${LABEL} text-xs`}>{ON_BEHALF_COPY.handActionTo}</span>
+              <select
+                id={`${fieldBase}-hand`}
+                className={`${SELECT_CAPPED} mt-1`}
+                value=""
+                disabled={busy}
+                onChange={(e) => {
+                  const to = Number(e.target.value);
+                  if (to) void run(() => actions.patchEntry(entry.id, { ownerUserId: to }));
+                }}
+              >
+                <option value="">{ON_BEHALF_COPY.handActionNobody}</option>
+                {handable.map((p) => (
+                  <option key={p.userId} value={p.userId}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
           {may.release && !parked && (
             <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void run(() => actions.patchEntry(entry.id, { release: true }))}>
