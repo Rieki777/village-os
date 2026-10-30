@@ -483,6 +483,10 @@ describe.skipIf(!DB_CONFIGURED)("what a resolved exit does to the needs card", (
       );
       return Number(rows[0]?.n ?? 0);
     };
+    // The map ships off in a fresh village, and its hidden-module answer is a
+    // 404 too, so without this the refusal below would pass for the wrong reason.
+    const opened = await call("PUT", "/api/admin/modules/map/lifecycle", { lifecycle: "public" });
+    expect(opened.status, `the map is switched on: ${opened.text}`).toBe(200);
     const gone = await call("POST", "/api/map/contact", { toUserId: GONE, message: "Are you still building the oven?" });
     expect(gone.status, `the relay refuses a tombstone: ${gone.text}`).toBe(404);
     expect(String(gone.json?.error), "the sender is told why").toMatch(/left the village/);
