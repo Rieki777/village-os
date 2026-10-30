@@ -629,6 +629,48 @@ export async function forgetMailRepliedTo(pool: Pool, who: { emailKeys: string[]
   return Number(res.affectedRows ?? 0);
 }
 
+/** One team alert a submission set off: who it went from, how its subject ends, and when it was sent. */
+export interface TeamAlertOf {
+  origin: string;
+  subjectEndsWith: string;
+  /** The submission's own time, in epoch seconds. The alert goes out right after it. */
+  around: number;
+}
+
+/**
+ * The team alerts a person's submissions set off lose their subjects, and
+ * answers how many it blanked.
+ *
+ * A public form tells the village's own inbox "New membership-request
+ * submission from Wren Halloway", and the investor packet "New investor doc
+ * request from Wren Halloway". Neither carries the person's address or a
+ * reply-to, so `forgetCommsPerson` and `forgetMailRepliedTo` cannot find
+ * them, and the name rides in the subject Sent mail lists. Each is found by
+ * its origin, the exact end of its subject as the route built it, and the
+ * hour after the submission it was sent for (five minutes before, for a
+ * database clock that runs ahead of the server's), so a namesake who wrote in
+ * on another day keeps their alert. Essential mail stores no words; the body
+ * columns are cleared anyway, the way `forgetMailRepliedTo` clears them.
+ *
+ * The caller reads `alerts` off the submissions BEFORE it scrubs them, since
+ * afterwards nothing says which alert was whose. The UPDATE writes a constant,
+ * so a second run writes the same value again.
+ */
+export async function forgetTeamAlerts(pool: Pool, alerts: readonly TeamAlertOf[]): Promise<number> {
+  let blanked = 0;
+  for (const a of alerts) {
+    const ending = String(a.subjectEndsWith ?? "");
+    if (!ending.trim() || !Number.isFinite(a.around)) continue;
+    const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the erasure step's alert subjects, keyed on one submission's origin, subject and hour
+      "UPDATE comms_messages SET subject = ?, body_html = NULL, body_text = NULL, headers = NULL, attachments = NULL, updated_at = CURRENT_TIMESTAMP " +
+        "WHERE village_id = ? AND origin = ? AND subject LIKE ? AND UNIX_TIMESTAMP(created_at) BETWEEN ? AND ?",
+      [ERASED_SUBJECT, VILLAGE, a.origin, `%${likeEscape(ending)}`, a.around - 5 * 60, a.around + 60 * 60],
+    );
+    blanked += Number(res.affectedRows ?? 0);
+  }
+  return blanked;
+}
+
 /**
  * The addresses a signed-in member typed into their own housing requests,
  * lower-cased the way a reply-to is matched. Read-only.

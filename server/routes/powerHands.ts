@@ -346,10 +346,10 @@ export function register(app: Express, deps: Deps): void {
    * as it leaves the member's own profile. Its note stays where every
    * submission's note has always been, in the founders' inbox.
    *
-   * A MEMBER WHO ASKED TO BE FORGOTTEN IS NOT LISTED EITHER. The erasure step
-   * anonymises an inbox row and keeps it, and `note` is not among the fields it
-   * scrubs, so their writing survives. It survives in the admin inbox where it
-   * always was; it does not join a list members read.
+   * A MEMBER WHO ASKED TO BE FORGOTTEN IS NOT LISTED EITHER. The erasure keeps
+   * an inbox row and takes their words off it, the note among them
+   * (server/lib/submissionWords.ts), and a hand whose member is gone is not
+   * one anybody can still answer, so it does not join a list members read.
    */
   app.get("/api/powers/hands", async (req, res) => {
     const user = await authedUser(req);
