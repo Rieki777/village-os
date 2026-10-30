@@ -158,7 +158,7 @@ import { register as registerBrandPreviewRoutes } from "./routes/brandPreview";
 import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
-import { exportMemberGeneKeys, geneKeysForAssistant, register as registerGeneKeysRoutes } from "./routes/geneKeys";
+import { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing, register as registerGeneKeysRoutes } from "./routes/geneKeys";
 import { register as registerGuideChoiceRoutes } from "./routes/guideChoice";
 import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./routes/liveSessions";
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
@@ -4612,7 +4612,7 @@ async function nextActionFor(user: any): Promise<{ id: string; label: string; hr
   // The letter is a guest's step only where the village serves it; a signing it has not answered is its own step (lib/nextAction.ts).
   const joining = brochurePagesOn() && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
   return pickNextAction(GAME_CONFIG.nextActions, {
-    trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user),
+    trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)),
   });
 }
 
