@@ -31,6 +31,7 @@ import { exportMemberSessions, register as registerRoom } from "./routes/liveSes
 import { register as registerLibrary } from "./routes/sessionLibrary";
 import { liveCircles, register as registerRhythm } from "./routes/sessionRhythm";
 import { register as registerCalendar } from "./routes/sessionCalendar";
+import { usersRepo } from "./repos/users";
 import { CIRCLE_FEED_PATH, OWN_CALENDAR_COPY, OWN_CALENDAR_REFUSALS } from "../shared/sessionCalendar";
 import type { ComingUpPayload, ComingUpRow } from "../shared/sessionRhythm";
 
@@ -144,6 +145,10 @@ describe.skipIf(!configured)("a circle's own calendar against a real schema", ()
     pool = testPool(db, { connectionLimit: 4 });
     await q("INSERT INTO `module_settings` (`module_id`, `lifecycle`) VALUES ('sessions', 'members')"); // module-review-ok: turns Live Sessions on in the scratch schema this suite provisioned, since the feed measures the module's state
     await loadModuleSettings(pool);
+    // Each person stands in the users table too: the address is written under
+    // the member's own row, at the tokenVersion a session signed now carries
+    // (`whileSessionHolds`), and a member with no row is refused.
+    for (const p of Object.values(PEOPLE)) await usersRepo(pool).add({ id: p.id, name: p.name, email: p.email, passwordHash: "x", paths: [] });
     process.env.VILLAGE_SECRETS_KEY = "d5".repeat(32);
     await loadSecrets(pool);
     const c = collect();

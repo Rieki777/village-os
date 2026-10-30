@@ -38,7 +38,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import mysql from "mysql2/promise";
-import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, untilALockIsAwaited, type TestDb } from "../db/testDb";
 import { agentRowsRemaining, type AgentSweepCounts } from "../repos/memberAgent";
 import { anonymizeMember, resumeErasure, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
@@ -373,16 +373,16 @@ describe.skipIf(!configured)("a member's agent written while an erasure is stopp
       // test never reaches the network. TEST-NET-1 passes the range check.
       const url = "https://192.0.2.10/hook";
 
-      const late = await setInbox(pool, gone, url, SECRETS_ENV);
+      const late = await setInbox(pool, gone, url, SECRETS_ENV, 0);
       expect(late, "the write that landed after the sweep must refuse itself and hand back no secret").toMatchObject({
         ok: false,
         status: 403,
       });
       expect(await agentRowsRemaining(pool, gone)).toEqual(NONE);
-      expect((await setInbox(pool, ghost, url, SECRETS_ENV)).ok).toBe(false);
+      expect((await setInbox(pool, ghost, url, SECRETS_ENV, 0)).ok).toBe(false);
       expect(await agentRowsRemaining(pool, ghost)).toEqual(NONE);
 
-      const living = await setInbox(pool, alive, url, SECRETS_ENV);
+      const living = await setInbox(pool, alive, url, SECRETS_ENV, 0);
       expect(living.ok, "a living member still sets an inbox").toBe(true);
       expect((await agentRowsRemaining(pool, alive)).inboxes).toBe(1);
     });
@@ -394,61 +394,112 @@ describe.skipIf(!configured)("a member's agent written while an erasure is stopp
       await seedLiving(alive);
       const input = { provider: "anthropic" as const, key: "sk-ant-example-0000" };
 
-      const late = await storeMemberKey(pool, gone, input, SECRETS_ENV);
+      const late = await storeMemberKey(pool, gone, input, SECRETS_ENV, 0);
       expect(late.ok, "a third-party credential must not be stored for a tombstone").toBe(false);
       expect(await memberKeyView(pool, gone)).toBeNull();
       expect(await agentRowsRemaining(pool, gone)).toEqual(NONE);
 
-      expect((await storeMemberKey(pool, alive, input, SECRETS_ENV)).ok, "a living member still stores a key").toBe(true);
+      expect((await storeMemberKey(pool, alive, input, SECRETS_ENV, 0)).ok, "a living member still stores a key").toBe(true);
       expect(await memberKeyView(pool, alive)).not.toBeNull();
     });
 
     /**
-     * A pool whose first INSERT into `table` waits for the whole sweep first.
-     * The request read whatever it read while the member was alive, and its
-     * write lands after the sweep's last delete: the order a write-time check
-     * has to survive. A check made before the write passes a living member and
-     * lets the row stand; only a check made after it sees the tombstone.
+     * A pool that calls `hook` on each statement before passing it to this
+     * suite's pool, including statements on a connection it hands out: the
+     * inbox and key writes run inside a transaction that holds the member's
+     * row (`whileSessionHolds`, server/lib/sessionHold.ts).
      */
-    function sweepJustBefore(table: string, target: any): { pool: mysql.Pool; swept: () => boolean } {
-      let swept = false;
-      const racing = {
+    function hooked(hook: (sql: string) => Promise<void>): mysql.Pool {
+      return {
         query: async (sql: string, params?: unknown[]) => {
-          if (!swept && new RegExp(`^INSERT INTO ${table}\\b`).test(sql)) {
-            swept = true;
-            await anonymizeMember(pool, target, null, deps());
-          }
+          await hook(sql);
           return pool.query(sql, params); // module-review-ok: passes the code under test's own SQL through to this suite's scratch schema, and writes none of its own
         },
+        getConnection: async () => {
+          const conn = await pool.getConnection();
+          return new Proxy(conn, {
+            get(target, prop) {
+              if (prop === "query") {
+                return async (sql: string, params?: unknown[]) => {
+                  await hook(sql);
+                  return target.query(sql, params); // module-review-ok: passes the code under test's own SQL through on the connection it asked for
+                };
+              }
+              const value = Reflect.get(target, prop, target);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          });
+        },
       } as unknown as mysql.Pool;
+    }
+
+    /**
+     * A pool on which the whole sweep runs just before the write's first
+     * statement: after the request's session check and its DNS wait, and
+     * before it has read, locked or written anything. A check made at the
+     * start of the request passes a living member and lets the row stand;
+     * only one made at the write sees the tombstone.
+     */
+    function sweepJustBefore(target: any): { pool: mysql.Pool; swept: () => boolean } {
+      let swept = false;
+      const racing = hooked(async () => {
+        if (swept) return;
+        swept = true;
+        await anonymizeMember(pool, target, null, deps());
+      });
       return { pool: racing, swept: () => swept };
     }
 
-    it("setInbox reads its holder after the write, so a sweep that runs just before its INSERT still leaves no row", async () => {
+    it("setInbox asks for its holder at the write, so a sweep that runs just before it still leaves no row", async () => {
       const id = "er-agent-race-set";
-      const race = sweepJustBefore("agent_inboxes", await seedMember(id));
+      const race = sweepJustBefore(await seedMember(id));
 
-      const out = await setInbox(race.pool, id, "https://192.0.2.10/hook", SECRETS_ENV);
+      const out = await setInbox(race.pool, id, "https://192.0.2.10/hook", SECRETS_ENV, 0);
 
       expect(race.swept(), "the sweep must run inside the write, or this is the after-the-sweep case again").toBe(true);
       expect((await erasureRecord(pool, id))!.finishedAt).not.toBeNull();
-      expect(out, "a write that lands after the sweep's last delete must still refuse itself").toMatchObject({
+      expect(out, "a write that comes after the sweep's last delete must still refuse itself").toMatchObject({
         ok: false,
         status: 403,
       });
       expect(await agentRowsRemaining(pool, id)).toEqual(NONE);
     });
 
-    it("storeMemberKey reads its holder after the write, so a sweep that runs just before its INSERT still leaves no key", async () => {
+    it("storeMemberKey asks for its holder at the write, so a sweep that runs just before it still leaves no key", async () => {
       const id = "er-agent-race-key";
-      const race = sweepJustBefore("member_llm_keys", await seedMember(id));
+      const race = sweepJustBefore(await seedMember(id));
 
-      const out = await storeMemberKey(race.pool, id, { provider: "anthropic", key: "sk-ant-example-0000" }, SECRETS_ENV);
+      const out = await storeMemberKey(race.pool, id, { provider: "anthropic", key: "sk-ant-example-0000" }, SECRETS_ENV, 0);
 
       expect(race.swept(), "the sweep must run inside the write, or this is the after-the-sweep case again").toBe(true);
       expect((await erasureRecord(pool, id))!.finishedAt).not.toBeNull();
-      expect(out.ok, "a key that lands after the sweep's last delete must still be taken back").toBe(false);
+      expect(out.ok, "a key that comes after the sweep's last delete must still refuse itself").toBe(false);
       expect(await memberKeyView(pool, id)).toBeNull();
+    });
+
+    /**
+     * The other order: the write holds the member's row when the sweep
+     * arrives. The tombstone waits for the write's commit, and the sweep's
+     * step after the tombstone then removes what the write left.
+     */
+    it("a sweep that arrives while setInbox holds the member's row waits for it, and still leaves no row", async () => {
+      const id = "er-agent-race-held";
+      const target = await seedMember(id);
+      const race: { sweeping: Promise<unknown> | null } = { sweeping: null };
+      const racing = hooked(async (sql) => {
+        if (race.sweeping || !/^INSERT INTO `?agent_inboxes\b/.test(sql)) return;
+        race.sweeping = anonymizeMember(pool, target, null, deps());
+        // The sweep has to wait on the row this write holds, or nothing here is serialised.
+        await untilALockIsAwaited(pool);
+      });
+
+      const out = await setInbox(racing, id, "https://192.0.2.10/hook", SECRETS_ENV, 0);
+      expect(race.sweeping, "the sweep must start inside the write").not.toBeNull();
+      await race.sweeping;
+
+      expect(out.ok, "the write held the row first, so it landed before the tombstone").toBe(true);
+      expect((await erasureRecord(pool, id))!.finishedAt).not.toBeNull();
+      expect(await agentRowsRemaining(pool, id), "the inbox the write left outlived the sweep").toEqual(NONE);
     });
   });
 });
