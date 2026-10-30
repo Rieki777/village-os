@@ -5292,6 +5292,8 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const blob = JSON.stringify(org.json);
     expect(blob).not.toContain("mornings only");
     expect(blob).not.toContain("Ada Vance");
+    // Members read "Water Steward (Ada)" (Rye, 2026-10-30); the public export never does.
+    expect(blob).not.toContain("(Ada");
     expect(blob).not.toContain("Away and inactive");
     expect(blob).not.toContain(founderId);
     // Structurally, not by substring: a seat really is accountable for

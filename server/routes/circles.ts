@@ -35,9 +35,18 @@ import { listOrgRoles } from "../lib/orgChart";
 import { circleDeleteProblem, onCircleStatusChange } from "../lib/circleTreasury";
 import { listBudgets } from "../lib/resources";
 import { CIRCLE_STATUSES } from "../../shared/draftKinds";
-import { parentingRefusal } from "../../shared/circleView";
+import { parentingRefusal, CIRCLE_LAYERS, isCircleLayer } from "../../shared/circleView";
 
 type Deps = Pick<AppDeps, "isAdmin" | "adminActor" | "circlesRepo" | "getPool" | "loadRoles">;
+
+/** A layer the admin form sent that is none of CIRCLE_LAYERS (0286), in words. */
+export function layerRefusal(layer: unknown): { error: string; message: string } | null {
+  if (layer === null || layer === "" || isCircleLayer(layer)) return null;
+  return {
+    error: "unknown_layer",
+    message: `A circle's governance layer is one of ${CIRCLE_LAYERS.join(", ")}, or none. "${String(layer)}" is none of those.`,
+  };
+}
 
 /** The refusal an admin meets changing a circle's purpose directly. */
 export const PURPOSE_BY_CONSENT = (circleId: string): string =>
@@ -68,6 +77,8 @@ export function register(app: Express, deps: Deps): void {
     const parentId = req.body?.parentCircleId ? String(req.body.parentCircleId) : null;
     const parentRefused = parentingRefusal(circlesRepo.all() as any[], slug, parentId);
     if (parentRefused) return res.status(400).json(parentRefused);
+    const layerRefused = layerRefusal(req.body?.layer ?? null);
+    if (layerRefused) return res.status(400).json(layerRefused);
     const circle = {
       id: slug,
       name: String(name).trim().slice(0, 120),
@@ -79,6 +90,7 @@ export function register(app: Express, deps: Deps): void {
       color: req.body.color ?? null,
       status: (CIRCLE_STATUSES as readonly string[]).includes(req.body.status) ? req.body.status : "active",
       order: circlesRepo.all().length + 1,
+      layer: req.body.layer || null,
     };
     await circlesRepo.insert(circle);
     onRealItemPublished(getPool(), "map", adminActor(req)?.id ?? null);
@@ -109,6 +121,12 @@ export function register(app: Express, deps: Deps): void {
       if (!name) return res.status(400).json({ error: "blank_name", message: "A circle needs a name. It is the heading /circles, /roles and /team print." });
       if (name.length > 120) return res.status(400).json({ error: "name_too_long", message: "A circle name is at most 120 characters." });
       req.body.name = name;
+    }
+    // 0286: a layer is one of CIRCLE_LAYERS or none, and "" from the form's "None" is none.
+    if (req.body?.layer !== undefined) {
+      const refused = layerRefusal(req.body.layer);
+      if (refused) return res.status(400).json(refused);
+      req.body.layer = req.body.layer || null;
     }
     if (req.body?.status !== undefined && !(CIRCLE_STATUSES as readonly string[]).includes(String(req.body.status))) {
       return res.status(400).json({
