@@ -67,10 +67,13 @@ import { forgetMemberEverywhere } from "../lib/memberDrivers";
 import { resumeErasure, type ErasureDeps } from "../lib/erasure";
 import { countUnfinishedErasures, unfinishedErasures } from "../repos/memberErasure";
 import { halfErasedMembers, pendingErasureUserIds } from "../lib/subjectRefs";
+import { confirmOwedCancelsByHand, finishOwedCancels, owedCancelsSummary } from "../lib/owedCancels";
 
 type Deps = Pick<AppDeps, "guardCapability" | "getPool"> & {
   /** The module-local singletons the sweep cannot import. See server/lib/erasure.ts. */
   erasureDeps: ErasureDeps;
+  /** Who confirmed a by-hand cancel, for the audit row. Optional so a harness may leave it out. */
+  authedUser?: AppDeps["authedUser"];
 };
 
 /**
@@ -116,7 +119,10 @@ export function register(app: Express, deps: Deps): void {
     try {
       const pool = getPool();
       const external = await halfErasedMembers(pool);
-      res.json({ ...external, external, local: await unfinishedSweeps(pool) });
+      // The third kind: a recurring payment of a departed member that a
+      // person still has to cancel in Stripe (server/lib/owedCancels.ts).
+      // Counted, aged, and naming nobody, like the other two.
+      res.json({ ...external, external, local: await unfinishedSweeps(pool), subscriptions: await owedCancelsSummary(pool) });
     } catch (e: any) {
       // An error, never an empty count. Zero outstanding obligations and a
       // failed read look identical to a reader, and one of them is a village
@@ -167,6 +173,16 @@ export function register(app: Express, deps: Deps): void {
         }
       }
 
+      // With Stripe connected, the cancels a departed member's payments still
+      // owe are made now, and each one settled writes its cancelled row.
+      let actorId: string | null = null;
+      try {
+        actorId = deps.authedUser ? ((await deps.authedUser(req))?.id ?? null) : null;
+      } catch {
+        actorId = null;
+      }
+      const cancels = await finishOwedCancels(pool, { actorUserId: actorId == null ? null : String(actorId) });
+
       const ids = await pendingErasureUserIds(pool);
       let finished = 0;
       for (const userId of ids) {
@@ -184,9 +200,35 @@ export function register(app: Express, deps: Deps): void {
         stayed,
         remaining: await halfErasedMembers(pool),
         local: await unfinishedSweeps(pool),
+        cancels,
+        subscriptions: await owedCancelsSummary(pool),
       });
     } catch (e: any) {
       res.status(500).json({ error: "retry_failed", detail: String(e?.message ?? e).slice(0, 200) });
+    }
+  });
+
+  /**
+   * "I cancelled these by hand": a person who cancelled a departed member's
+   * owed subscriptions in the Stripe dashboard says so, and the obligation is
+   * settled with their id on the audit row (`confirmOwedCancelsByHand`).
+   *
+   * `asOf` is the `subscriptions.asOf` the card was read with, so a hand-off
+   * that landed after the person read it stays owed. A stale or missing one is
+   * refused, and the card reads again.
+   */
+  app.post("/api/review/erasure/subscriptions-cancelled", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const asOf = typeof req.body?.asOf === "string" ? req.body.asOf : "";
+    if (!asOf) return res.status(400).json({ error: "as_of_required" });
+    try {
+      const pool = getPool();
+      const actor = deps.authedUser ? await deps.authedUser(req) : null;
+      const out = await confirmOwedCancelsByHand(pool, actor?.id == null ? null : String(actor.id), asOf);
+      if (!out) return res.status(409).json({ error: "queue_changed", subscriptions: await owedCancelsSummary(pool) });
+      res.json({ cleared: out.cleared, subscriptions: await owedCancelsSummary(pool) });
+    } catch (e: any) {
+      res.status(500).json({ error: "confirm_failed", detail: String(e?.message ?? e).slice(0, 200) });
     }
   });
 }

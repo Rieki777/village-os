@@ -55,6 +55,7 @@
 import Layout from "@/components/Layout";
 import ConsentQueue, { useConsentClaims } from "@/components/review/ConsentQueue";
 import OwedPostings from "@/components/review/OwedPostings";
+import OwedCancels, { announceOwedCancels, type OwedCancelPass, type OwedCancelsSummary } from "@/components/review/OwedCancels";
 import ProposedSeatPreview from "@/components/power/ProposedSeatPreview";
 import { blockedReasons, NOTHING_LEFT_OUT, notReadLines, type NotRead } from "@/components/review/draftNotes";
 import { useCallback, useEffect, useState } from "react";
@@ -251,6 +252,8 @@ export default function Review() {
      * crash on the queue screen.
      */
     local?: { count: number; oldestSince: string | null; stoppedAt: Record<string, number> };
+    /** The third kind: a departed member's recurring payment a person still has to cancel. Optional for the same reason. */
+    subscriptions?: OwedCancelsSummary;
   } | null>(null);
   const [asking, setAsking] = useState(false);
 
@@ -275,6 +278,7 @@ export default function Review() {
         swept?: number;
         stillStuck?: number;
         stayed?: number;
+        cancels?: OwedCancelPass;
         error?: string;
       };
       if (!r.ok) {
@@ -304,7 +308,8 @@ export default function Review() {
       }
       // A press that found nothing to do still says so. A silent button is one
       // a steward presses again, and again.
-      if (!d.resumed && !d.asked) toast.success("Nothing was outstanding.");
+      announceOwedCancels(d.cancels);
+      if (!d.resumed && !d.asked && !d.cancels?.owed) toast.success("Nothing was outstanding.");
       await load();
     } catch {
       toast.error("Could not reach the server");
@@ -727,6 +732,10 @@ export default function Review() {
             </button>
           </div>
         )}
+
+        {/* A recurring payment a departed member's erasure could not cancel. */}
+        <OwedCancels summary={owed?.subscriptions} aged={agedFor(owed?.subscriptions?.oldestSince ?? null)} busy={asking}
+          onFinish={() => void askAgain()} headers={headers} onChanged={() => void load()} />
 
         {/* What the village still owes somebody who left. The only item on
             this screen about a person already gone, and it is here because

@@ -517,6 +517,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "quest-crews-after-tombstone",
       "photo-report-reasons-after-tombstone",
       "audit",
+      "product-subscriptions-after-tombstone",
       "external-stores",
     ]);
     expect((await usersRepo(pool).byId(id))!.name).toBe("A departed member");

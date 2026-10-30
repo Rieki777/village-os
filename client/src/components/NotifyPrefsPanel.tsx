@@ -11,6 +11,7 @@ import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm }
 import LeavingEnds, { leftEndedWords, useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
 import { CashOwedNotice, VotesCastNotice, useUnpaidCash } from "@/components/LeavingKeeps";
 import { CASH_GIVE_UP_FIELD } from "@shared/cashOwed";
+import LeavingNotices, { useLeavingNotices } from "@/components/LeavingNotices";
 import EmailFromVillage from "@/components/EmailFromVillage";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { TASK_COPY, TASK_EMAIL_PREFS, isTaskEmailPref } from "@shared/sessionTasks";
@@ -97,6 +98,8 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
   // Cash the village still owes (round 4, R4-4): named before they confirm, and given up only with the tick.
   const cashOwed = useUnpaidCash(confirming);
   const [giveUpCash, setGiveUpCash] = useState(false);
+  // What deleting cancels (round 3, finding 5): their recurring payments, named before they confirm.
+  const leavingNotices = useLeavingNotices(confirming);
   /** Task emails belong to Live Sessions, so the choice is offered only where the village runs it. */
   const sessionsOn = useModuleOn("sessions");
   const deletePanel = useRef<HTMLDivElement | null>(null);
@@ -379,6 +382,7 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
             <LeavingEnds titles={endingTerms} />
             <CashOwedNotice count={cashOwed} door="deletion" givenUp={giveUpCash} onGiveUp={setGiveUpCash} />
             <VotesCastNotice />
+            <LeavingNotices notices={leavingNotices} />
             <div className="flex flex-wrap items-center gap-2">
               <IdentityConfirmField
                 state={identity}

@@ -11,6 +11,7 @@ import { DoorOpen, HeartHandshake, ShieldQuestion } from "lucide-react";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import LeavingEnds, { useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
 import { CashOwedNotice, VotesCastNotice, useUnpaidCash } from "@/components/LeavingKeeps";
+import LeavingNotices, { useLeavingNotices } from "@/components/LeavingNotices";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -31,6 +32,9 @@ export default function ExitPolicy() {
   const endingTerms = useTermsLeavingEnds(!!user);
   // Cash the village still owes keeps a leaver on as a former member (round 4, R4-4). Signed in only.
   const cashOwed = useUnpaidCash(!!user);
+  // And their recurring payments: cancelled when the departure erases the account, still
+  // renewing when holding tokens keeps them a former member. The server says which. Signed in only.
+  const leavingNotices = useLeavingNotices(!!user, "exit");
 
   useEffect(() => {
     fetch("/api/exit-policy").then((r) => r.json()).then(setData).catch(() => {});
@@ -177,6 +181,7 @@ export default function ExitPolicy() {
               <LeavingEnds titles={endingTerms} />
               <CashOwedNotice count={cashOwed} door="departure" />
               <VotesCastNotice />
+              <LeavingNotices notices={leavingNotices} />
               <div className="space-y-2">
                 <IdentityConfirmField state={identity} action="request-exit"
                   password={password} onPassword={setPassword}
