@@ -247,8 +247,8 @@ describe("a contemplation each moon", () => {
 
 describe("the share card", () => {
   it("prints the profile, its words, the type, the four keys and Richard's credit, and no birth detail", () => {
-    const w = shareCardWords(WREN, "Amora");
-    expect(w.eyebrow).toBe("MY LINES IN AMORA");
+    const w = shareCardWords(WREN, "Willowbrook");
+    expect(w.eyebrow).toBe("MY LINES IN WILLOWBROOK");
     expect([w.profile, w.names, w.type]).toEqual(["2/5", "Dancer · Fixer", "A Manifestor · Inform"]);
     expect(w.keys.map((k) => `${k.name} ${k.keyLine}`)).toEqual(["Life's Work 12.2", "Evolution 11.2", "Radiance 36.5", "Purpose 6.5"]);
     expect(w.footer).toMatch(/Richard Rudd/);
@@ -310,12 +310,16 @@ describe("the glyph on the living map", () => {
 
   it("draws six bars, solid where a line is shown and dashed where it is open, and nothing for a hidden circle", async () => {
     api.people = { "m-juno": JUNO };
-    const { container } = render(<svg><CircleGlyph x={0} top={0} unit={10} holderIds={["m-juno", "m-ash"]} /></svg>);
-    await waitFor(() => expect(container.querySelectorAll("rect")).toHaveLength(6));
+    const { container } = render(<svg><CircleGlyph cx={0} cy={0} r={40} px={1} holderIds={["m-juno", "m-ash"]} /></svg>);
+    await waitFor(() => expect(container.querySelectorAll("rect")).toHaveLength(7));
     expect(screen.getByRole("img", { name: "2 of 6 lines shown in this circle" })).toBeTruthy();
     expect(container.querySelectorAll("rect.fill-foreground")).toHaveLength(2);
+    expect(container.querySelectorAll("rect.stroke-notice")).toHaveLength(4);
+    // The plate sits outside the rim, lower right: its corner is past r / sqrt 2 on both axes.
+    const plate = container.querySelector("rect.fill-background")!;
+    expect(Number(plate.getAttribute("x"))).toBeGreaterThan(40 * Math.SQRT1_2);
     cleanup();
-    const hidden = render(<svg><CircleGlyph x={0} top={0} unit={10} holderIds={["m-ash"]} /></svg>);
+    const hidden = render(<svg><CircleGlyph cx={0} cy={0} r={40} px={1} holderIds={["m-ash"]} /></svg>);
     await waitFor(() => expect(api.asked.flat()).toContain("m-ash"));
     expect(hidden.container.querySelectorAll("rect")).toHaveLength(0);
   });

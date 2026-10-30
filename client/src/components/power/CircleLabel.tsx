@@ -41,6 +41,8 @@ export default function CircleLabel({
   pxPerWorld,
   morph,
   roles,
+  cy,
+  r,
 }: {
   circleId: string;
   x: number;
@@ -56,6 +58,9 @@ export default function CircleLabel({
   pxPerWorld: number;
   morph: object;
   roles: PowerSeat[];
+  /** The circle's centre and radius, for the Gene Keys glyph that sits outside its rim. */
+  cy?: number;
+  r?: number;
 }) {
   const halo = {
     paintOrder: "stroke" as const,
@@ -125,13 +130,14 @@ export default function CircleLabel({
         </text>
       )}
 
-      {/* The circle's six Gene Keys lines, under its name; nothing until a holder shows theirs. */}
-      {show && !drop && !hovered && (
+      {/* The circle's six Gene Keys lines, outside its rim; nothing until a holder shows theirs. */}
+      {cy !== undefined && r !== undefined && pxPerWorld > 0 && (
         <CircleGlyph
-          x={x}
-          top={captionY + (forming ? 30 : 10)}
-          unit={label.fontSize}
-          holderIds={roles.filter((r) => r.circleId === circleId).flatMap((r) => (r.holders ?? []).filter((h) => h.userId && !h.lapsed).map((h) => h.userId!))}
+          cx={x}
+          cy={cy}
+          r={r}
+          px={1 / pxPerWorld}
+          holderIds={roles.filter((s) => s.circleId === circleId).flatMap((s) => (s.holders ?? []).filter((h) => h.userId && !h.lapsed).map((h) => h.userId!))}
         />
       )}
 

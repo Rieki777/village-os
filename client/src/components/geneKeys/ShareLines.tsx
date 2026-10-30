@@ -25,10 +25,7 @@ export default function ShareLines({ view }: { view: GeneKeysView }) {
       const blob = await shareCardBlob(view, village);
       if (!blob) return setSaid("This browser cannot draw the card.");
       const file = new File([blob], "my-lines.png", { type: "image/png" });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], text: shareCardWords(view, village).text });
-        setSaid("Shared.");
-      } else {
+      const download = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -36,9 +33,21 @@ export default function ShareLines({ view }: { view: GeneKeysView }) {
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         setSaid("Saved as an image. Post it wherever you like.");
+      };
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], text: shareCardWords(view, village).text });
+          setSaid("Shared.");
+        } catch (e) {
+          // A share sheet the member closed is not an error. A browser that says it can share files
+          // and then refuses (desktop Chrome without a share target does) still owes them the card.
+          if ((e as { name?: string })?.name !== "AbortError") download();
+        }
+      } else {
+        download();
       }
     } catch {
-      // A share sheet the member closed is not an error.
+      setSaid("The card could not be drawn. Try again.");
     } finally {
       setBusy(false);
     }
