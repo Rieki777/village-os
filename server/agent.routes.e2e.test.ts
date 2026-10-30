@@ -30,7 +30,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, untilALockIsAwaited, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -810,5 +810,82 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     expect(again.status, JSON.stringify(again.json)).toBe(200);
     expect(again.json.agentTokensRevoked).toBe(1);
     await expectRevoked([laptop], "the second press");
+  });
+});
+
+/**
+ * THE TWO MINTS ASK FOR THE SESSION'S OWN VERSION, OVER HTTP (adversarial
+ * round 4, carried). `POST /api/agent/tokens` and `POST /api/events/feed/token`
+ * pass the tokenVersion the request's session was checked at, and the mint
+ * writes only while the member's row still carries it (`whileSessionHolds`).
+ * The database tests in server/lib/agentTokens.reset.test.ts pin the mint
+ * function; these pin that each route hands it the real version.
+ *
+ * The bump has to land AFTER the session check, or the session check refuses
+ * it first and the mint's own question is never asked. So this suite holds
+ * the member's row FOR UPDATE, sends the request (the session check is a
+ * plain read and passes), waits until the mint stands behind that lock, and
+ * then bumps the version the way a new password does and lets go. The mint
+ * then reads a version its session no longer has and must refuse 401 with
+ * nothing written. A route that handed the mint any other number than the
+ * session's own would make the token or the address here.
+ */
+describe.skipIf(!DB_CONFIGURED)("the two mints refuse a session a new password ended after its check", () => {
+  const SCOPES = ["me.read"];
+
+  async function liveTokens(userId: string): Promise<number> {
+    const [[row]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND revoked_at IS NULL", [userId]); // module-review-ok: reading back what the route wrote
+    return Number(row.n);
+  }
+  async function liveFeeds(userId: string): Promise<number> {
+    const [[row]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM calendar_feed_tokens WHERE user_id = ? AND revoked_at IS NULL", [userId]); // module-review-ok: reading back what the route wrote
+    return Number(row.n);
+  }
+
+  /** Send `send` while the member's row is held, bump the version behind the waiting mint, and return its answer. */
+  async function bumpedBehindTheMint(userId: string, send: () => Promise<{ status: number; json: any }>) {
+    const conn = await pool.getConnection();
+    let answered = false;
+    try {
+      await conn.beginTransaction();
+      await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [userId]); // module-review-ok: holding the member's row on this suite's scratch schema, as a reset's bump would
+      const sent = send().then((r) => { answered = true; return r; });
+      await untilALockIsAwaited(pool);
+      // A lock wait on this schema can be a stale row on a local MariaDB, so
+      // also give a mint nothing holds back time to answer, and fail by name if it did.
+      await new Promise((r) => setTimeout(r, 400));
+      expect(answered, "the mint answered without waiting for the member's row, so the bump below is not after its check").toBe(false);
+      await conn.query("UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = ?", [userId]); // module-review-ok: the bump a new password makes, on this suite's scratch schema
+      await conn.commit();
+      return await sent;
+    } catch (err) {
+      await conn.rollback().catch(() => undefined);
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  it("POST /api/agent/tokens: a session the bump ended after its check gets 401 and no token", async () => {
+    const ivo = await register("Ivo Marsh", "agent-ivo");
+    expect(await liveTokens(ivo.id)).toBe(0);
+
+    const out = await bumpedBehindTheMint(ivo.id, () => call("POST", "/api/agent/tokens", { name: "ivo race", scopes: SCOPES }, ivo.token));
+
+    expect(out.status, `the mint wrote for a session the bump ended: ${JSON.stringify(out.json)}`).toBe(401);
+    expect(out.json?.token, "a refused mint carried a token").toBeUndefined();
+    expect(await liveTokens(ivo.id), "a token outlived the bump that ended its session").toBe(0);
+    expect((await call("GET", "/api/profile", undefined, ivo.token)).status, "the old session itself still answers").toBe(401);
+  });
+
+  it("POST /api/events/feed/token: a session the bump ended after its check gets 401 and no address", async () => {
+    const una = await register("Una Fell", "agent-una");
+    expect(await liveFeeds(una.id)).toBe(0);
+
+    const out = await bumpedBehindTheMint(una.id, () => call("POST", "/api/events/feed/token", {}, una.token));
+
+    expect(out.status, `the mint wrote for a session the bump ended: ${JSON.stringify(out.json)}`).toBe(401);
+    expect(out.json?.url, "a refused mint carried an address").toBeUndefined();
+    expect(await liveFeeds(una.id), "a private calendar address outlived the bump that ended its session").toBe(0);
   });
 });
