@@ -20,7 +20,7 @@ import { endAgentReach, listTokens, mintToken, revokeAllTokens, revokeToken, ver
 import { enqueueAgentDelivery, getInbox, setInbox } from "./agentInbox";
 import { feedTokenStatus, mintFeedToken, resolveFeedToken } from "./icsFeed";
 import { makeInviteDoor } from "./inviteDoor";
-import { INVITE_REFUSALS } from "./invites";
+import { INVITE_REFUSALS, OPEN_INVITES_CAP } from "./invites";
 import { MEMBER_SECRETS_ENV, memberKeyView, storeMemberKey } from "./memberSecrets";
 import { makeSetPasswordToken, readSetPasswordToken, setPasswordLinkRefusal } from "./memberTokens";
 import { feedFor, makeAddress } from "./sessionCalendar";
@@ -690,6 +690,38 @@ describe.skipIf(!configured)("a write already past its session check when the cr
       expect(Number((await usersRepo(pool).byId(id))!.tokenVersion)).toBe(version + 1);
     });
   }
+
+  /*
+   * THE CAP, ASKED UNDER THE SAME LOCK (adversarial round 4, carried). A
+   * member may hold OPEN_INVITES_CAP open links. The count was read before the
+   * row lock, so two makes at the same moment by a member one short of the
+   * cap both read one short, both passed, and the member held one past it.
+   * The count is now read inside the hold, after the member's row is locked,
+   * so the second make reads the first one's link and is refused.
+   */
+  it("two links made at the same moment by a member one short of the cap: one is made, one is refused at the cap", async () => {
+    const id = "usr-race-cap";
+    const version = await seedMember(id);
+    for (let i = 0; i < OPEN_INVITES_CAP - 1; i++) {
+      await q(
+        "INSERT INTO member_invites (id, village_id, token_hash, inviter_user_id, expires_at) VALUES (?, 'local', ?, ?, CURRENT_TIMESTAMP + INTERVAL 14 DAY)",
+        [`inv-cap-${i}`, `hash-cap-${i}`, id],
+      );
+    }
+    expect(await openInviteCount(pool, id), "the member must start one short of the cap").toBe(OPEN_INVITES_CAP - 1);
+
+    // Each make's insert waits a moment once it reaches the database, so the
+    // other make has every chance to read the count while the first link is
+    // not yet written. Under the lock the other make waits on the row instead.
+    const slowInsert = hooked(async (sql) => {
+      if (/^INSERT INTO `?member_invites\b/.test(sql)) await new Promise((r) => setTimeout(r, 250));
+    });
+    const both = await Promise.all([makeInvite(slowInsert, id, version), makeInvite(slowInsert, id, version)]);
+
+    expect(both.filter((m) => m.ok), "exactly one of the two links is made").toHaveLength(1);
+    expect(both.filter((m) => !m.ok).map((m) => (m.ok ? null : m.status)), "the other is refused at the cap").toEqual([409]);
+    expect(await openInviteCount(pool, id), "the member holds more open links than the cap allows").toBe(OPEN_INVITES_CAP);
+  });
 });
 
 /*

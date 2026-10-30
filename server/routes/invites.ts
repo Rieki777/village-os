@@ -72,16 +72,21 @@ export type MakeInviteResult = { ok: true; id: string; token: string } | { ok: f
  * carries that version (`whileSessionHolds`): a change that committed first
  * is refused with 401 and nothing written, and one that comes later waits
  * for the commit, and the end after the bump withdraws the link. An
- * erasure's tombstone is refused the same way.
+ * erasure's tombstone is refused the same way. The cap is asked under that
+ * lock too, so two makes at the same moment cannot both pass it.
  */
 export async function makeInvite(pool: Pool, inviterUserId: string, sessionVersion: number): Promise<MakeInviteResult> {
-  if ((await openInviteCount(pool, inviterUserId)) >= OPEN_INVITES_CAP) return { ok: false, status: 409, error: AT_THE_CAP };
   const token = mintInviteToken();
   const id = `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const held = await whileSessionHolds(pool, inviterUserId, sessionVersion, (conn) =>
-    createInviteOn(conn, { id, tokenHash: hashInviteToken(token), inviterUserId, days: INVITE_DAYS }),
-  );
+  const held = await whileSessionHolds(pool, inviterUserId, sessionVersion, async (conn) => {
+    // The cap is read under the same row lock, so two makes at the same
+    // moment cannot both read one short of it (adversarial round 4, carried).
+    if ((await openInviteCount(conn, inviterUserId)) >= OPEN_INVITES_CAP) return "at_the_cap" as const;
+    await createInviteOn(conn, { id, tokenHash: hashInviteToken(token), inviterUserId, days: INVITE_DAYS });
+    return "made" as const;
+  });
   if (!held.ok) return { ok: false, status: 401, error: "auth_required" };
+  if (held.value === "at_the_cap") return { ok: false, status: 409, error: AT_THE_CAP };
   return { ok: true, id, token };
 }
 

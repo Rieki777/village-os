@@ -82,8 +82,17 @@ export async function invitesBy(pool: Pool, inviterUserId: string, limit = 50): 
   return rows.map(toRow);
 }
 
-/** How many of one person's links could still be used. */
-export async function openInviteCount(pool: Pool, inviterUserId: string): Promise<number> {
+/**
+ * How many of one person's links could still be used.
+ *
+ * Takes a connection too: `makeInvite` (server/routes/invites.ts) asks it
+ * inside the transaction that holds the inviter's row (`whileSessionHolds`),
+ * so two makes at the same moment read the count one after the other and
+ * the cap holds. A plain read after the row lock is the first consistent
+ * read of that transaction, so it sees every link committed before the lock
+ * was granted.
+ */
+export async function openInviteCount(pool: Pool | PoolConnection, inviterUserId: string): Promise<number> {
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: one table, no cache above it
     "SELECT COUNT(*) AS n FROM member_invites WHERE village_id = ? AND inviter_user_id = ? " +
       "AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP",
