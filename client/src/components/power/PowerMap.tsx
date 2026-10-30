@@ -797,7 +797,8 @@ export default function PowerMap({
               if (!containerId) return layout.village.y - layout.village.r + 30 + 14 * unit;
               const named = labelPlan.get(containerId);
               if (!named || !showLabel(containerId)) return null;
-              return named.top + (named.lines.length - 1) * named.lineHeight + named.fontSize * 0.25 + 14 * unit;
+              // Below the hover line, when the container is hovered, so the two never sit on each other.
+              return named.top + (named.lines.length - 1) * named.lineHeight + named.fontSize * 0.25 + (hoverId === containerId ? 34 : 14) * unit;
             }}
             opacityFor={(id) => {
               const dimForFocus = focusId !== null && !isInteractive(id) && !chain.has(id) ? 0.3 : 1;
