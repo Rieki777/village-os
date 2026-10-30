@@ -169,10 +169,29 @@ every half minute while its tab is visible.
   Village Pulse reads public events.
 - **The shareable minutes name no person at all** (below).
 
+## Filled in by the Facilitator
+
+Rye, 2026-10-30: "Facilitator can fill other people's stuff out", live sessions first, with a notice to
+the person. The contract is `shared/sessionOnBehalf.ts`.
+
+- **Who.** Only the person facilitating the session, while it is open, for somebody who has joined the
+  room. Not the secretary, and not an admin unless they take the facilitation.
+- **What.** On their bar the facilitator chooses "Filling in for" a person. Until they choose Myself
+  again, the arrival, a new agenda item and a new entry (a tension, a proposal, an action, any kind) go
+  in as that person's (`forUserId`). They can also hand an action nobody holds to somebody
+  (`ownerUserId`). Changing the words, plan, role or date on something a member added is a fill-in too.
+- **Never an answer.** Consent, a concern, an objection, a night, the closing word and the feedback on
+  the facilitation stay each person's own. `/respond` refuses any `forUserId` but the answerer's own.
+- **Seen and heard.** The room marks it "Filled in by the Facilitator", by the role and never the
+  facilitator's name, and the person gets one notice. The person, or the facilitator, can undo it from the
+  room while it is open (`POST /api/sessions/:id/on-behalf/:fillId/undo`); the person changing it
+  themselves makes it theirs, and the mark goes.
+
 ## What the record holds
 
-Nineteen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other eighteen holds that number. Three
+Twenty tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other nineteen holds that number. One
+(0288) is what the facilitator filled in for somebody, described under "Filled in by the Facilitator". Three
 (0255) are the task layer, described under "After the call: tasks", one (0280) is a decision's review
 date, described under "After the call: a circle's decisions and their reviews", two (0284) are the advice
 process, described under "Before deciding: the advice process", two (0264) are the agenda
@@ -201,6 +220,7 @@ its own, both described under "Circle meetings on a calendar".
 | `live_session_decision_reviews` | One per decision with a review date: the village date, who set it, and the agenda item its review became once it was made. |
 | `live_session_advice_requests` | One per request for advice: the circle asked, who asked, what they mean to decide and why, the decide-by date, and once settled whether it was decided or withdrawn and what was decided. |
 | `live_session_advice_asks` | One per person asked on a request, with their advice once they give it. |
+| `live_session_on_behalf` | One per thing the facilitator filled in or changed for somebody (0288): who wrote it, whose it is, what (an arrival, an item, an entry) and whether it was added or changed, what it replaced (emptied at the close), when the person was told, and whether it was undone or made theirs since. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an

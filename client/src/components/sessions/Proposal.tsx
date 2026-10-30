@@ -21,6 +21,7 @@
  * (components/natural/moments.ts, `useArrival`).
  */
 import { useState } from "react";
+import FilledInNote from "./FilledInNote";
 import { Lock, X } from "lucide-react";
 import { ROOM_COPY, SESSION_LIMITS, SESSION_REFUSALS, cleanText, type SessionEntry } from "@shared/sessions";
 import Celebration from "@/components/natural/Celebration";
@@ -139,6 +140,7 @@ export default function Proposal({ view, actions, entry, now }: Omit<StageProps,
               </div>
             )}
           />
+          <FilledInNote filled={entry.filledIn} actions={actions} />
         </div>
         {decided && (
           <span className={DECIDED_CHIP}>
