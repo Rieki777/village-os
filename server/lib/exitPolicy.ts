@@ -89,9 +89,10 @@ export interface ExitPolicy {
  * AND WHAT THE ANSWERS OF 2026-10-30 ADDED. Rye approved every exit suggestion
  * put to him that day, and two of them belong in the words a leaver reads
  * before they go. Voice a former member keeps wanes under the same rule as
- * everyone's ("keep it, the same rule as for everyone. The platform's default
- * exit policy text should say so"), and cash the village still owes keeps the
- * account exactly as tokens do (`resolveExit`). The wording of 2026-10-23
+ * everyone's (the suggestion he approved: "keep it, the same rule as for
+ * everyone. The platform's default exit policy text should say so"), and
+ * cash the village still owes keeps the account exactly as tokens do
+ * (`resolveExit`). The wording of 2026-10-23
  * joined `RETIRED_DEFAULT_TERMS` the same day.
  */
 export const DEFAULT_EXIT_POLICY: ExitPolicy = {

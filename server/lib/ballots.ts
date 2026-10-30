@@ -560,11 +560,12 @@ export interface VoterStanding {
 }
 
 /**
- * WHAT A FORMER MEMBER IS TOLD, ON A ROLL OR OFF IT (Rye, 2026-10-30).
+ * WHAT A FORMER MEMBER IS TOLD, ON A ROLL OR OFF IT (Rye, 2026-10-30: "yes
+ * build all the exit suggestions!").
  *
- * "Votes a leaver cast before leaving stand. After they leave they cannot cast
- * new ones. The ballot's frozen roll stays as it is, so the quorum does not
- * shift mid-vote." So a ballot that opened before they left still counts them
+ * The suggestion he approved: "Votes a leaver cast before leaving stand. After
+ * they leave they cannot cast new ones. The ballot's frozen roll stays as it
+ * is, so the quorum does not shift mid-vote." So a ballot that opened before they left still counts them
  * on its roll and still holds whatever they cast, and nothing here rewrites
  * either. What stops is the act: a first vote, a changed vote, and an
  * objection filed directly, which on a consent ballot carries a no's weight.

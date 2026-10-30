@@ -772,9 +772,10 @@ because their balances are being settled and a notice period has been quoted to
 them. A member who is simply away wanes like anybody else, which is the whole
 mechanism. **So does a former member** (section 14): the exemption reads an OPEN
 exit through `openExitFor`, and a resolved exit is not one, so Voice a leaver kept
-under the ruling of 2026-10-23 wanes each moon like any other holding. The founder
-answered whether it should on 2026-10-30: "keep it, the same rule as for everyone",
-and the platform's default exit terms now say so (`DEFAULT_EXIT_POLICY`, section 14),
+under the ruling of 2026-10-23 wanes each moon like any other holding. On 2026-10-30
+the founder approved the suggestion that it should, "keep it, the same rule as for
+everyone" ("yes build all the exit suggestions!"), and the platform's default exit
+terms now say so (`DEFAULT_EXIT_POLICY`, section 14),
 so a leaver reads it before they go.
 
 `SettlementResult` carries a field named `decay`, always present and filled with
