@@ -303,7 +303,7 @@ export default function VillageMap() {
         {lensOn && <DecideLens layout={layout} circles={data.circles} power={data.power} domain={lensDomain} />}
         {resourcesOn && resources && <ResourcesLens layout={layout} circles={data.circles} resources={resources} />}
         {mode === "vision" && <VisionGhosts layout={layout} drafts={vision.drafts} />}
-        {arranging && <ArrangeLens layout={layout} picked={arrange.picked} target={arrange.target} refused={!!arrange.refusal} />}
+        {arranging && <ArrangeLens layout={layout} circles={(shown ?? data).circles} picked={arrange.picked} target={arrange.target} refused={!!arrange.refusal} onSlot={arrange.dropOn} />}
       </>
     ) : null;
 
@@ -701,6 +701,7 @@ export default function VillageMap() {
                         onPropose={arrange.propose}
                         onSettled={arrange.settle}
                         onDiscard={arrange.clear}
+                        onApply={arrange.apply}
                         door={data.viewer.arrangeDoor === "power" ? "power" : "admin"}
                       />
                     )}

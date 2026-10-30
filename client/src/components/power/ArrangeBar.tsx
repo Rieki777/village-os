@@ -49,10 +49,10 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { gameFetch } from "@/lib/gameApi";
-import { parentChoicesFor } from "@shared/circleView";
-import { describeMove, publishOrder, settleAgainst, withMoves, type PendingMove } from "./arrange";
+import { CIRCLE_LAYERS, parentChoicesFor, type CircleLayer } from "@shared/circleView";
+import { describeMove, middleMoves, nudgeMoves, publishOrder, settleAgainst, withMoves, type PendingMove } from "./arrange";
 
-type Circle = { id: string; name: string; parentCircleId?: string | null; isExample?: boolean };
+type Circle = { id: string; name: string; parentCircleId?: string | null; isExample?: boolean; order?: number; layer?: string | null };
 
 /** One call to the village. Throws with the village's own words unless the answer was ok. */
 async function send(path: string, init: { method?: string; body?: unknown } = {}): Promise<any> {
@@ -70,6 +70,20 @@ async function send(path: string, init: { method?: string; body?: unknown } = {}
   return json;
 }
 
+/** The order and layer a move carries, and nothing it does not (0286). */
+const placementOf = (m: PendingMove) => ({
+  ...(m.order !== undefined ? { order: m.order } : {}),
+  ...(m.layer !== undefined ? { layer: m.layer } : {}),
+});
+
+const LAYER_WORDS: Record<CircleLayer, string> = {
+  link: "Link: links the others",
+  lead: "Lead: holds the middle",
+  operating: "Operating: does the work",
+  advisory: "Advisory: counsels",
+  council: "Council",
+};
+
 const selectCls =
   "mt-1 w-full rounded-md border border-border bg-card text-foreground text-sm px-2 py-1.5 disabled:opacity-40";
 
@@ -83,8 +97,11 @@ export default function ArrangeBar({
   onPropose,
   onSettled,
   onDiscard,
+  onApply,
   door = "admin",
 }: {
+  /** Record moves that set order or layer (0286), from the picker. */
+  onApply?: (moves: PendingMove[], words: string) => void;
   /** Which door publishes: the admin panel's, or the holder's power (0286). */
   door?: "power" | "admin";
   /** The circles as published. */
@@ -156,7 +173,7 @@ export default function ArrangeBar({
       let made: any = null;
       try {
         made = await send("/api/org/arrangements", {
-          body: { moves: publishOrder(fresh.circles, kept).map((m) => ({ circleId: m.circleId, parentCircleId: m.parentId })) },
+          body: { moves: publishOrder(fresh.circles, kept).map((m) => ({ circleId: m.circleId, parentCircleId: m.parentId, ...placementOf(m) })) },
         });
       } catch (e: any) {
         return refuse(String(e?.message ?? e));
@@ -185,7 +202,7 @@ export default function ArrangeBar({
       const id = encodeURIComponent(draftId);
       for (const m of publishOrder(fresh.circles, kept)) {
         await send(`/api/admin/org/drafts/${id}/changes`, {
-          body: { op: "move_circle", orgRoleId: `circle:${m.circleId}`, payload: { parentCircleId: m.parentId } },
+          body: { op: "move_circle", orgRoleId: `circle:${m.circleId}`, payload: { parentCircleId: m.parentId, ...placementOf(m) } },
         });
       }
       const preview = await send(`/api/admin/org/drafts/${id}/preview`, { method: "GET" });
@@ -212,6 +229,7 @@ export default function ArrangeBar({
   };
 
   const picture = withMoves(live, moves);
+  const nameIn = (id: string) => picture.find((c) => c.id === id)?.name ?? id;
   const movable = picture.filter((c) => !c.isExample).sort((a, b) => a.name.localeCompare(b.name));
   const choices = pickId ? parentChoicesFor(picture, pickId) : [];
   const count = moves.length;
@@ -222,8 +240,10 @@ export default function ArrangeBar({
         Arranging circles
       </h3>
       <p className="mt-1 text-muted-foreground">
-        Drag a circle onto the circle it belongs inside. Ground outside every circle is the top of the village. With a
-        keyboard, press M on a circle to pick it up, then M on the circle it belongs inside.
+        Drag a circle onto the circle it belongs inside, or onto a marked place: the middle makes it the lead, and a
+        place between two circles puts it there in the ring. Ground outside every circle is the top of the village.
+        With a keyboard, press M on a circle to pick it up, then M on the circle it belongs inside, or use the
+        controls below.
       </p>
       {count > 0 ? (
         <ul className="mt-2 space-y-0.5 text-foreground" data-arrange-moves>
@@ -311,6 +331,52 @@ export default function ArrangeBar({
         >
           Add move
         </button>
+        {/* WHERE IT SITS IN ITS RING, AND ITS LAYER (0286): the keyboard path for
+            what the map's drop targets do, for the circle chosen above. */}
+        {onApply && (
+          <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Its place in the ring">
+            {(
+              [
+                ["Earlier in the ring", () => onApply(nudgeMoves(picture, pickId, -1), `${nameIn(pickId)} moves earlier in the ring.`)],
+                ["Later in the ring", () => onApply(nudgeMoves(picture, pickId, 1), `${nameIn(pickId)} moves later in the ring.`)],
+                ["Give it the middle", () => onApply(middleMoves(picture, pickId), `${nameIn(pickId)} now holds the middle.`)],
+              ] as Array<[string, () => void]>
+            ).map(([label, act]) => (
+              <button
+                key={label}
+                type="button"
+                disabled={busy || !pickId}
+                onClick={act}
+                className="text-xs px-3 py-1.5 rounded-full border border-border bg-card text-foreground disabled:opacity-40"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {onApply && (
+          <label className="mt-2 block text-xs text-muted-foreground">
+            Governance layer
+            <select
+              value={(picture.find((c) => c.id === pickId)?.layer as string | null | undefined) ?? ""}
+              disabled={busy || !pickId}
+              onChange={(e) => {
+                const layer = (e.target.value || null) as CircleLayer | null;
+                const at = picture.find((c) => c.id === pickId);
+                if (!at) return;
+                onApply([{ circleId: pickId, parentId: at.parentCircleId ?? null, layer }], layer ? `${at.name} becomes ${layer}.` : `${at.name} has no layer now.`);
+              }}
+              className={selectCls}
+            >
+              <option value="">None set</option>
+              {CIRCLE_LAYERS.map((l) => (
+                <option key={l} value={l}>
+                  {LAYER_WORDS[l]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
     </section>
   );
