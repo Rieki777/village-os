@@ -40,6 +40,9 @@ import { Link } from "wouter";
 import { loadOrg } from "@/components/governance/pickSources";
 import { MAX_SEATS } from "@shared/seatApplications";
 import { applySeatsHref } from "@shared/seatApplyLinks";
+import { lineWord, type GeneKeysView } from "@shared/geneKeys";
+import { readPeopleGeneKeys } from "@/lib/geneKeysApi";
+import { useMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
 
 export const ROLES_FIT_WORDS = {
   heading: "Roles that fit this character",
@@ -55,6 +58,11 @@ export const ROLES_FIT_WORDS = {
   membersOnly: "Applying for a role opens at the member rung. Once you reach it, you can apply here.",
   every: "See every role",
   places: (n: number) => (n === 1 ? "1 place open" : `${n} places open`),
+  /** Every suggestion says why (Rye, 2026-10-23): the character always, and a line the circle lacks when the member carries one. */
+  why: (character: string, circle: string | null, line: number | null) =>
+    line && circle
+      ? `Why you: it suits ${character}, and nobody in ${circle} holds line ${line} (${lineWord(line)}) yet.`
+      : `Why you: it suits ${character}.`,
 } as const;
 
 /** One seat as this section draws it. */
@@ -62,6 +70,8 @@ export interface FitSeat {
   id: string;
   name: string;
   circle: string | null;
+  /** The circle's id, so its holders' lines can be read for "Why you". */
+  circleId: string | null;
   aim: string | null;
   openPlaces: number;
 }
@@ -91,11 +101,39 @@ export function fittingSeats(org: { roles?: any[]; circles?: any[] } | null, fit
       id,
       name: String(r.name ?? id),
       circle: circle?.name ? String(circle.name) : null,
+      circleId: r.circleId ? String(r.circleId) : null,
       aim: r.aim ? String(r.aim) : r.description ? String(r.description) : null,
       openPlaces: openPlacesOf(r),
     });
   }
   return out;
+}
+
+/** Everyone holding a role in each circle, by id, as /api/org gives a signed-in member. */
+export function holdersByCircle(org: { roles?: any[] } | null): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const r of Array.isArray(org?.roles) ? org!.roles : []) {
+    const circle = r?.circleId ? String(r.circleId) : "";
+    if (!circle) continue;
+    for (const h of Array.isArray(r.holders) ? r.holders : []) {
+      if (!h?.userId || h?.lapsed) continue;
+      const list = out.get(circle) ?? [];
+      if (!list.includes(String(h.userId))) list.push(String(h.userId));
+      out.set(circle, list);
+    }
+  }
+  return out;
+}
+
+/**
+ * The member's line a circle has nobody holding, or null. Only lines its holders
+ * SHOW count as held, so a hidden member never shows up as a gap filled.
+ */
+export function lineThisCircleLacks(mine: readonly number[] | null, holders: readonly string[], people: Record<string, GeneKeysView>): number | null {
+  if (!mine) return null;
+  const held = new Set<number>();
+  for (const id of holders) for (const l of people[id]?.lines ?? []) held.add(l);
+  return mine.find((l) => !held.has(l)) ?? null;
 }
 
 /** True when the chart was read by somebody who reads terms (`termsOffer` is present). */
@@ -121,6 +159,24 @@ export default function RolesThatFit({ archetypeName, fits }: { archetypeName: s
   useEffect(() => setPicked([]), [fitKey]);
 
   const seats = useMemo(() => fittingSeats(org, fits ?? []), [org, fitKey]);
+  // "Why you" reads the circles' shown lines once, and only when the member has lines of their own.
+  const { on: linesOn, mine } = useMyGeneKeys();
+  const circleHolders = useMemo(() => holdersByCircle(org), [org]);
+  const [people, setPeople] = useState<Record<string, GeneKeysView>>({});
+  const askIds = useMemo(
+    () => Array.from(new Set(seats.flatMap((s) => (s.circleId ? circleHolders.get(s.circleId) ?? [] : [])))).sort().join(","),
+    [seats, circleHolders],
+  );
+  useEffect(() => {
+    if (!linesOn || !mine || !askIds) return;
+    let live = true;
+    readPeopleGeneKeys(askIds.split(","))
+      .then((p) => live && setPeople(p))
+      .catch(() => live && setPeople({}));
+    return () => {
+      live = false;
+    };
+  }, [linesOn, mine, askIds]);
   const mayPick = readsTerms(org);
   const atMost = picked.length >= MAX_SEATS;
   const toggle = (id: string) =>
@@ -160,6 +216,13 @@ export default function RolesThatFit({ archetypeName, fits }: { archetypeName: s
                   {s.circle && <p className="text-xs font-medium uppercase tracking-wide text-sage">{s.circle}</p>}
                   {s.aim && <p className="mt-2 line-clamp-3 text-sm text-stone-700">{s.aim}</p>}
                   <p className="mt-2 text-sm font-medium text-teal-deep">{ROLES_FIT_WORDS.places(s.openPlaces)}</p>
+                  <p className="mt-1 text-sm text-stone-700">
+                    {ROLES_FIT_WORDS.why(
+                      archetypeName,
+                      s.circle,
+                      linesOn && mine ? lineThisCircleLacks(mine.lines, s.circleId ? circleHolders.get(s.circleId) ?? [] : [], people) : null,
+                    )}
+                  </p>
                   <div className="mt-auto flex flex-wrap items-center gap-x-3 pt-2">
                     {mayPick && (
                       <label htmlFor={box} className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-stone-900">
