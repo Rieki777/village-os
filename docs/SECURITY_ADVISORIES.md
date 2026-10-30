@@ -56,13 +56,15 @@ argued:
   output by **zero bytes**: `scripts/check-dist-budget.mjs` reported 5660 KB
   block-charged before and 5660 KB after. It cost nothing at runtime and 32
   advisories on every audit.
-- **`recharts`** is imported by exactly one file, `client/src/components/ui/chart.tsx`,
+- **`recharts`** was imported by exactly one file, the `ui/chart` primitive (the path
+  is not spelled in full because the file no longer exists and the doc link guard
+  resolves every repo path a document names),
   and nothing imports that file. Neither `recharts` nor its `lodash` appears in
   any chunk under `dist/public/assets`, against a control string from React that
   appears five times in the main chunk.
 
-**`recharts` was removed on 2026-10-30**, with `client/src/components/ui/chart.tsx`
-and 38 other shadcn primitives that nothing imported, after Rye asked for
+**`recharts` was removed on 2026-10-30**, with the `ui/chart` primitive that was
+its only importer and 38 other shadcn files that nothing imported, after Rye asked for
 anything unused to go. Those three advisories leave the manifest with it. The
 paragraph above is kept because the MEASUREMENT still stands and is the reason
 the removal was safe: one importer, itself imported by nothing, absent from

@@ -110,7 +110,8 @@ reachable and was left alone on purpose.
   with no member on the other end. The admin GATE, which is a real full-screen
   spinner, and the settlement desk, which is one of the wired moments, are the
   two that changed.
-- **The dead `client/src/components/ui/spinner.tsx` primitive.** It had no
+- **The dead `ui/spinner` primitive** (path not spelled in full: the file is gone
+  and the doc link guard resolves every repo path a document names). It had no
   call sites at all. **Deleted on 2026-10-30** with 38 other unused shadcn
   primitives, which is the pruning this bullet was waiting for.
 
