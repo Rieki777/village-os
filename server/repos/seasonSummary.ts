@@ -1,6 +1,9 @@
 /**
  * A MEMBER'S SEASON, READ BACK FROM WHAT THE VILLAGE ALREADY RECORDED (idea 4).
  *
+ * In server/repos because every query here is raw SQL, and the burn-down
+ * register keeps a table's readers enumerable there.
+ *
  * Read only. Every figure comes from a table some other part of the platform
  * writes, inside the season's window [first day, turn day) in the village's
  * own zone:

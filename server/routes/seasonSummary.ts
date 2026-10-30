@@ -21,7 +21,7 @@
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
-import { seasonSummaryFor, type SummaryCalendar } from "../lib/seasonSummary";
+import { seasonSummaryFor, type SummaryCalendar } from "../repos/seasonSummary";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool"> & {
   /** The village's calendar: `seasonState` in server/index.ts. */

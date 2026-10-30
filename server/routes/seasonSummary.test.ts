@@ -175,7 +175,7 @@ describe.skipIf(!configured)("GET /api/me/season-summary", () => {
     // Badges: one earned, a warning and a self-declared skill that never show.
     for (const [id, name, kind] of [["bd-water", "Water Bearer", "earned"], ["bd-warn", "Warned", "warning"], ["bd-self", "Can Juggle", "self"]]) {
       await fixture("INSERT INTO badges (id, name, kind, active) VALUES (?, ?, ?, 1)", [id, name, kind]);
-      await fixture("INSERT INTO badge_awards (id, badge_id, user_id, count, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)", [`aw-${id}`, id, ME, IN_DRY, IN_DRY]);
+      await fixture("INSERT INTO badge_awards (id, badge_id, user_id, count, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)", [`aw-${id}`, id, ME, IN_DRY, IN_DRY]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     }
 
     const app = { get: (p: string, h: Handler) => handlers.set(`GET ${p}`, h) } as any;
