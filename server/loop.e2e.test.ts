@@ -4984,6 +4984,38 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const [lateTold] = await testDb.conn.query<any[]>("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`product-renewrefused:${lateBuy}:%`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(lateTold.length).toBeGreaterThan(0);
     expect(lateTold.every((n: any) => String(n.title).startsWith("Purchase charged but NOT delivered") && String(n.title).endsWith("Refund this payment."))).toBe(true);
+    // A RECURRING checkout opened before leaving and paid after (round 4, finding 2).
+    // The erasure's step ran before Stripe made the subscription, found nothing
+    // and finished, so nothing would ever cancel it. The renewal gate now asks
+    // on every refused charge: with no key here, it hands the cancel to a
+    // person on the audit trail, which is the obligation /review counts.
+    const lateSubBuy = `pp-lapsed-latesub-${Date.now()}`;
+    await testDb.conn.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO product_purchases (id, product_id, user_id, amount_minor, receipt_no) VALUES (?,?,?,500,9109)",
+      [lateSubBuy, lapsedProd.json.id, lapsedId],
+    );
+    expect((await hook({
+      id: "evt_lapsed_latesub", type: "checkout.session.completed",
+      data: { object: { id: "cs_lapsed_latesub", subscription: "sub_lapsed_late", invoice: "in_lapsed_late_1", metadata: { module: "commerce", orderId: lateSubBuy } } },
+    })).status).toBe(200);
+    expect(await grantLegs(lateSubBuy)).toBe(0);
+    const [lateSubTold] = await testDb.conn.query<any[]>("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`product-renewrefused:${lateSubBuy}:%`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(lateSubTold.length).toBeGreaterThan(0);
+    expect(lateSubTold.every((n: any) => String(n.title).startsWith("Purchase charged but NOT delivered")
+      && String(n.title).endsWith("Stripe is not connected: cancel the subscription in the Stripe dashboard and refund this period."))).toBe(true);
+    const [lapsedOwed] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT text, audience FROM health_events WHERE kind = 'audit' AND entity_ref = ? AND text LIKE 'member:subscriptions-cancel%' ORDER BY at, id",
+      [lapsedId],
+    );
+    // The erasure's hand-off, then one per refused charge: month two, its redelivery, and the late checkout.
+    expect(lapsedOwed).toEqual([
+      { text: "member:subscriptions-cancel-by-hand:1:sub_lapsed", audience: "admin" },
+      { text: "member:subscriptions-cancel-by-hand:1:sub_lapsed", audience: "admin" },
+      { text: "member:subscriptions-cancel-by-hand:1:sub_lapsed", audience: "admin" },
+      { text: "member:subscriptions-cancel-by-hand:1:sub_lapsed_late", audience: "admin" },
+    ]);
+    // Off the admins' bells again, for the reason given above ("Waves C+D").
+    await testDb.conn.query("DELETE FROM notifications WHERE dedupe_key LIKE ?", [`product-renewrefused:${lateSubBuy}:%`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
 
     // The books balance after payments, grants, renewals and a clawback.
     const rec2 = await api("GET", "/api/admin/ledger/reconciliation", undefined, founderToken);

@@ -399,7 +399,12 @@ by hand in the Stripe dashboard, naming the count and the ids, records that on t
 counts itself done, and the notice tells the member the admins will cancel it.
 The delete panel and the departure page say so before the member confirms
 (`GET /api/profile/leaving-notices`), in the sentence the exit desk shows, and a charge that lands
-after the account is gone is banked, delivers nothing, sends no receipt and tells the admins.
+after the account is gone is banked, delivers nothing, sends no receipt and tells the admins, and
+cancels that subscription in Stripe on every such charge (round 4). A cancel nobody could make is
+owed on `/review`, derived from the audit trail (`server/lib/owedCancels.ts`), until Finish, the
+hourly job or a person's "I cancelled these by hand" settles it. The departure page reads
+`?for=exit`: a member who holds tokens is told that resolving keeps them a former member and the
+payments keep renewing until an admin cancels them.
 
 **The sweep is a sequence and not a transaction, on purpose, and it resumes.** `server/lib/erasure.ts`
 opens no connection and calls no `beginTransaction`, and its header argues at length why it must

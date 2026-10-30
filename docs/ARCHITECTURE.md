@@ -783,7 +783,19 @@ The retention sweep never deletes an unstamped row, at any age.
   step for good, with the outside stores never asked. A charge that lands
   after the account is gone, a first period included, is banked and
   delivers nothing: `settleProductPurchase` refuses a buyer who has left,
-  sends no receipt, and tells the admins.
+  sends no receipt, and tells the admins. It also cancels the subscription
+  itself, on every such charge (`settleLeaversSubscription`,
+  `server/lib/owedCancels.ts`, round 4): a recurring checkout opened before
+  the delete and paid after it makes a subscription the erasure never saw.
+  **WHAT IS STILL OWED IS DERIVED, NOT STORED.** The by-hand audit row IS
+  the obligation; a later `member:subscriptions-cancelled:<n>:<ids>` row
+  settles it, and an id is owed while the newest row naming it is by-hand.
+  `steps_done` is untouched. `/review` counts the owed members, naming
+  nobody; Finish and the hourly failed-actions job cancel them once Stripe
+  is connected, and "I cancelled these by hand" records a person's
+  confirmation with their id. The row survives a re-erasure only because it
+  is audience `admin`: the erasure's public-row DELETE needs audience
+  `public`. The shape holds only for an id-only step.
   **AND IT RESUMES** (`member_erasures`, 0195). The sweep is a sequence of
   about twenty writes that cannot be one transaction: three participants
   are repositories on their own connections with their own caches, one
@@ -797,7 +809,9 @@ The retention sweep never deletes an unstamped row, at any age.
   semantics applied to a person. ENUMERATE every domain's open state
   (loans, stays, orders, debts block; balances, roles, warnings and
   recurring payments inform, the last because the erasure cancels them and
-  no door lets a member do it first);
+  no door lets a member do it first; on the exit desk and the departure page
+  a member who holds tokens is told instead that a former member's payments
+  keep renewing until an admin cancels them in Stripe);
   SETTLE through each domain's own terminals — exit adds exactly ONE move
   of its own, splitting each positive balance by the village's
   `exit.keep_pct.*` shares and sending the rest to

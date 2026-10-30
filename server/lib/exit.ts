@@ -303,7 +303,7 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     blocking: false,
   });
 
-  states.push(await subscriptionsState(pool, userId));
+  states.push(await subscriptionsState(pool, userId, "exit"));
 
   return states;
 }
@@ -326,11 +326,34 @@ const EVERY: Record<"month" | "year", string> = { month: "every month", year: "e
  * will: the step asks the admins to cancel each one by hand in the Stripe
  * dashboard and finishes. Promising an automatic cancel there would tell the
  * member something this village cannot do.
+ *
+ * WHICH PATH IS ASKING (round 4, finding 1). "delete" is the delete-account
+ * panel: a delete always erases, so the cancel sentence is true there. "exit"
+ * is the exit desk and the departure page, and a departure is resolved by
+ * `resolveExit` (server/lib/exitResolve.ts), which keeps a member who still
+ * holds tokens as a former member (Rye's ruling, #617). That path ends their
+ * membership and roles and leaves their purchases alone, so the payments keep
+ * renewing. A member who holds value today reads that, plainly, and so does
+ * the admin resolving them. Whether the former-member path should cancel
+ * them itself is a decision for Rye.
  */
-export async function subscriptionsState(pool: Pool, userId: string): Promise<ExitDomainState> {
+export async function subscriptionsState(pool: Pool, userId: string, path: "delete" | "exit"): Promise<ExitDomainState> {
   const subs = await liveSubscriptionsOf(pool, userId);
   if (!subs.length) return { domain: "subscriptions", count: 0, description: "no recurring payments", blocking: false };
   const named = subs.map((s) => `${s.productName || "A product no longer listed"}${s.interval ? ` (${EVERY[s.interval]})` : ""}`);
+  const renewing = `${subs.length} recurring payment(s) still renewing through Stripe: ${named.join(", ")}. `;
+  // Imported when asked: exitResolve imports the erasure, which imports this file.
+  if (path === "exit" && (await (await import("./exitResolve")).heldValueOf(pool, userId)).length) {
+    return {
+      domain: "subscriptions",
+      count: subs.length,
+      description:
+        renewing +
+        "Holding tokens when the departure is resolved keeps the account as a former member, and these keep renewing " +
+        "until an admin cancels them in Stripe",
+      blocking: false,
+    };
+  }
   // Read only when there is something to cancel: the secrets store throws
   // until boot has loaded it, and every departure reads this domain.
   const cancel = stripeConfigured()
@@ -339,9 +362,7 @@ export async function subscriptionsState(pool: Pool, userId: string): Promise<Ex
   return {
     domain: "subscriptions",
     count: subs.length,
-    description:
-      `${subs.length} recurring payment(s) still renewing through Stripe: ${named.join(", ")}. ` +
-      `${cancel}, and nothing already paid is refunded`,
+    description: `${renewing}${cancel}, and nothing already paid is refunded`,
     blocking: false,
   };
 }

@@ -48,6 +48,17 @@ import { blockingStates, exitOpenState } from "./exit";
 import { register as registerProfileRoutes } from "../routes/profile";
 import { loadSecrets } from "./secrets";
 import { BUYER_HAS_LEFT, refusedChargeAdvice } from "./payments";
+import { subscriptionsState } from "./exit";
+import { loadTokenRegistry, memberAccount, MINT_FAUCET, postTransfer } from "./ledger";
+import {
+  confirmOwedCancelsByHand,
+  finishOwedCancels,
+  finishOwedCancelsJob,
+  owedCancels,
+  owedCancelsSummary,
+  settleLeaversSubscription,
+} from "./owedCancels";
+import { register as registerErasureQueueRoutes } from "../routes/erasureQueue";
 
 const configured = testDbConfigured();
 const STEP = "product-subscriptions-after-tombstone";
@@ -91,7 +102,9 @@ const byHandKey = (userId: string) => `erasure-subscriptions-by-hand:${userId}`;
  * buyer who has left, word for word, one for each thing the erasure does with
  * the subscription: cancel it in Stripe, or hand it to the admins.
  */
-const ERASURE_CANCELS_ADVICE = "Their erasure cancels the subscription in Stripe; check it did, and refund this period there.";
+const CANCELLED_ADVICE = "The subscription is now cancelled in Stripe; refund this period there.";
+const ENDED_ADVICE = "The subscription had already ended in Stripe; refund this period there.";
+const FAILED_ADVICE = "Stripe did not cancel it: cancel the subscription in the Stripe dashboard and refund this period.";
 const BY_HAND_ADVICE = "Stripe is not connected: cancel the subscription in the Stripe dashboard and refund this period.";
 
 /**
@@ -346,7 +359,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       expect((await erasureRecord(pool, wren.id))?.finishedAt).not.toBeNull();
     });
 
-    it("tells the admins of a charge after the delete what the erasure did with the subscription, with the key and without", async () => {
+    it("tells the admins of a charge after the delete what became of the subscription, with the key and without", async () => {
       // No key: the erasure hands the cancel to the admins, and the
       // subscription is still live in Stripe, so a renewal can land. The alarm
       // for that renewal used to say the erasure cancels it in Stripe.
@@ -359,7 +372,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
         { text: "member:subscriptions-cancel-by-hand:1:sub_alarm_nokey", audience: "admin" },
       ]);
       expect(s.subs.sub_alarm_nokey, "nothing cancelled it, so a renewal can still land").toBe("active");
-      expect(refusedChargeAdvice(true, BUYER_HAS_LEFT)).toBe(BY_HAND_ADVICE);
+      expect(refusedChargeAdvice("by-hand-no-key", BUYER_HAS_LEFT)).toBe(BY_HAND_ADVICE);
 
       // The key: the erasure cancels it in Stripe, and the alarm says so.
       process.env.STRIPE_SECRET_KEY = KEY;
@@ -368,23 +381,23 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       const k = useStripe({ sub_alarm_key: "active" });
       await anonymizeMember(pool, ash, "admin-1", deps());
       expect(k.deletes()).toEqual(["sub_alarm_key"]);
-      expect(refusedChargeAdvice(true, BUYER_HAS_LEFT)).toBe(ERASURE_CANCELS_ADVICE);
+      expect(refusedChargeAdvice("cancelled", BUYER_HAS_LEFT)).toBe(CANCELLED_ADVICE);
 
       // Every other refusal reads as it always did, key or no key.
       for (const key of [KEY, undefined]) {
         if (key) process.env.STRIPE_SECRET_KEY = key;
         else delete process.env.STRIPE_SECRET_KEY;
-        expect(refusedChargeAdvice(false, BUYER_HAS_LEFT)).toBe("Refund this payment.");
-        expect(refusedChargeAdvice(false, "the product is no longer active")).toBe("Refund this payment.");
-        expect(refusedChargeAdvice(true, "the product is no longer active")).toBe("Cancel the subscription in Stripe and refund this period.");
-        expect(refusedChargeAdvice(true, "the buyer's purchasing is suspended")).toBe("Cancel the subscription in Stripe and refund this period.");
+        expect(refusedChargeAdvice("none", BUYER_HAS_LEFT)).toBe("Refund this payment.");
+        expect(refusedChargeAdvice("none", "the product is no longer active")).toBe("Refund this payment.");
+        expect(refusedChargeAdvice("kept", "the product is no longer active")).toBe("Cancel the subscription in Stripe and refund this period.");
+        expect(refusedChargeAdvice("kept", "the buyer's purchasing is suspended")).toBe("Cancel the subscription in Stripe and refund this period.");
       }
 
       // The whole alarm is the notice title, which the bell cuts at 255
       // characters, so the advice must survive a product name of 30 either way.
       const name = "Garden share and monthly meals";
       expect(name.length).toBe(30);
-      for (const advice of [ERASURE_CANCELS_ADVICE, BY_HAND_ADVICE]) {
+      for (const advice of [CANCELLED_ADVICE, ENDED_ADVICE, FAILED_ADVICE, BY_HAND_ADVICE]) {
         expect(refusedAlarm(name, advice).length, advice).toBeLessThanOrEqual(255);
       }
     });
@@ -499,6 +512,253 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
 
       signedIn = null;
       expect((await call()).status).toBe(401);
+    });
+  });
+  /** Every obligation row about one leaver, oldest first: what /review derives what is owed from. */
+  const cancelRows = (userId: string) =>
+    q(
+      "SELECT text, audience, actor_user_id FROM health_events WHERE kind = 'audit' AND entity_ref = ? " +
+        "AND (text LIKE 'member:subscriptions-cancel-by-hand:%' OR text LIKE 'member:subscriptions-cancelled:%') ORDER BY at, id",
+      [userId],
+    );
+  const owedOf = async (userId: string) => (await owedCancels(pool)).find((o) => o.userId === userId)?.subscriptionIds ?? [];
+
+  describe("a recurring checkout that completes after the account was erased (round 4, finding 2)", () => {
+    it("is cancelled in Stripe by the refused charge, and a redelivery only reads it", async () => {
+      const wren = await member("subs-late", "Wren Late");
+      // Opened before the delete: pending, and Stripe has not made the subscription yet.
+      await purchase("pp-late1", wren.id, "prod-month", { status: "pending", at: "2026-08-01 10:00:00" });
+      const s = useStripe({});
+      await anonymizeMember(pool, wren, wren.id, deps());
+      expect((await erasureRecord(pool, wren.id))?.stepsDone).toContain(STEP);
+      expect(s.calls, "the step found no subscription to cancel").toEqual([]);
+
+      // They pay after the delete. Stripe makes sub_late and the checkout completes.
+      s.subs.sub_late = "active";
+      const first = await settleLeaversSubscription(pool, { userId: wren.id, subscriptionId: "sub_late", refusal: BUYER_HAS_LEFT });
+      expect(first).toBe("cancelled");
+      expect(s.deletes()).toEqual(["sub_late"]);
+      expect(s.subs.sub_late).toBe("canceled");
+      expect(refusedChargeAdvice(first, BUYER_HAS_LEFT)).toBe(CANCELLED_ADVICE);
+      expect(await cancelRows(wren.id)).toEqual([{ text: "member:subscriptions-cancelled:1:sub_late", audience: "admin", actor_user_id: null }]);
+
+      // The first period's other event (invoice.paid) lands too: a read, no second cancel.
+      s.calls.length = 0;
+      expect(await settleLeaversSubscription(pool, { userId: wren.id, subscriptionId: "sub_late", refusal: BUYER_HAS_LEFT })).toBe("ended");
+      expect(s.calls.map((c) => `${c.method} ${c.path}`)).toEqual(["GET /v1/subscriptions/sub_late"]);
+      expect(await owedOf(wren.id)).toEqual([]);
+    });
+
+    it("never throws for a failing Stripe: the charge hands the cancel to a person, and the next charge asks again", async () => {
+      const wren = await member("subs-late-down", "Wren Late Down");
+      await anonymizeMember(pool, wren, wren.id, deps());
+      const s = useStripe({ sub_late_down: "active" });
+      s.failNext(500);
+      const out = await settleLeaversSubscription(pool, { userId: wren.id, subscriptionId: "sub_late_down", refusal: BUYER_HAS_LEFT });
+      expect(out).toBe("by-hand-failed");
+      expect(refusedChargeAdvice(out, BUYER_HAS_LEFT)).toBe(FAILED_ADVICE);
+      expect(await owedOf(wren.id)).toEqual(["sub_late_down"]);
+
+      // Next period: Stripe answers, the cancel lands, and nothing is owed.
+      expect(await settleLeaversSubscription(pool, { userId: wren.id, subscriptionId: "sub_late_down", refusal: BUYER_HAS_LEFT })).toBe("cancelled");
+      expect(s.subs.sub_late_down).toBe("canceled");
+      expect(await owedOf(wren.id)).toEqual([]);
+    });
+
+    it("with no key, says so and leaves the cancel owed; any other refusal leaves the subscription alone", async () => {
+      delete process.env.STRIPE_SECRET_KEY;
+      const wren = await member("subs-late-nokey", "Wren Late Unconnected");
+      await anonymizeMember(pool, wren, wren.id, deps());
+      const s = useStripe({ sub_late_nokey: "active" });
+      const out = await settleLeaversSubscription(pool, { userId: wren.id, subscriptionId: "sub_late_nokey", refusal: BUYER_HAS_LEFT });
+      expect(out).toBe("by-hand-no-key");
+      expect(refusedChargeAdvice(out, BUYER_HAS_LEFT)).toBe(BY_HAND_ADVICE);
+      expect(await owedOf(wren.id)).toEqual(["sub_late_nokey"]);
+      expect(s.calls).toEqual([]);
+
+      process.env.STRIPE_SECRET_KEY = KEY;
+      const ash = await member("subs-late-other", "Ash Suspended");
+      expect(await settleLeaversSubscription(pool, { userId: ash.id, subscriptionId: "sub_other", refusal: "the buyer's purchasing is suspended" })).toBe("kept");
+      expect(await settleLeaversSubscription(pool, { userId: wren.id, subscriptionId: null, refusal: BUYER_HAS_LEFT })).toBe("none");
+      expect(s.calls).toEqual([]);
+    });
+  });
+
+  describe("the cancels a no-key erasure owes, derived from the audit trail", () => {
+    /** The erasure queue's routes, on a fake app, as a steward holding intake.moderate. */
+    function queue(actor: any) {
+      const handlers = new Map<string, (req: any, res: any) => Promise<unknown>>();
+      const app: any = {
+        get: (p: string, h: any) => handlers.set(`GET ${p}`, h),
+        post: (p: string, h: any) => handlers.set(`POST ${p}`, h),
+      };
+      registerErasureQueueRoutes(app, {
+        guardCapability: (async () => true) as any,
+        getPool: () => pool,
+        erasureDeps: deps(),
+        authedUser: async () => actor,
+      });
+      return async (key: string, body: unknown = {}) => {
+        const out: { status: number; body: any } = { status: 200, body: undefined };
+        const res: any = { status(c: number) { out.status = c; return res; }, json(b: unknown) { out.body = b; return res; } };
+        await handlers.get(key)!({ headers: {}, body }, res);
+        return out;
+      };
+    }
+
+    /** Settle every other case's owed cancels, so a case reads only its own. */
+    async function settleOthers(except: string) {
+      const asOf = (await owedCancelsSummary(pool)).asOf;
+      if (asOf) await confirmOwedCancelsByHand(pool, "subs-admin-ada", asOf);
+      expect(await owedCancels(pool), `nothing owed before ${except} begins`).toEqual([]);
+    }
+
+    it("counts a no-key erasure as owed, and a re-erasure and its public-row delete leave the row", async () => {
+      await settleOthers("subs-owed");
+      delete process.env.STRIPE_SECRET_KEY;
+      const wren = await member("subs-owed", "Wren Owed");
+      await purchase("pp-ow1", wren.id, "prod-month", { status: "paid", sub: "sub_owed", at: "2026-09-01 10:00:00" });
+      useStripe({ sub_owed: "active" });
+      // A self-delete: the leaver is the by-hand row's actor, which is exactly
+      // the row shape the erasure's public-row DELETE matches on actor.
+      await anonymizeMember(pool, wren, wren.id, deps());
+      expect(await cancelRows(wren.id)).toEqual([{ text: "member:subscriptions-cancel-by-hand:1:sub_owed", audience: "admin", actor_user_id: wren.id }]);
+      expect(await owedOf(wren.id)).toEqual(["sub_owed"]);
+      expect((await erasureRecord(pool, wren.id))?.finishedAt, "the record still reads finished").not.toBeNull();
+
+      // A second erasure runs every step again, `public-health-events` among
+      // them, BEFORE this step writes its own row. The first row is still
+      // there: audience admin is what keeps it. The re-run's row would hide a
+      // loss for an id `liveSubscriptionsOf` still finds, so the first row is
+      // read by its id, and a late charge's row (actor null) has no re-run at all.
+      const [firstRow] = await q("SELECT id FROM health_events WHERE entity_ref = ? AND text LIKE 'member:subscriptions-cancel-by-hand:%'", [wren.id]);
+      await anonymizeMember(pool, await usersRepo(pool).byId(wren.id), wren.id, deps());
+      expect(await q("SELECT text, audience, actor_user_id FROM health_events WHERE id = ?", [firstRow.id]), "audience admin is what keeps it").toEqual([
+        { text: "member:subscriptions-cancel-by-hand:1:sub_owed", audience: "admin", actor_user_id: wren.id },
+      ]);
+      expect((await cancelRows(wren.id)).length, "the re-run's own hand-off joins it").toBe(2);
+      expect(await owedOf(wren.id)).toEqual(["sub_owed"]);
+
+      // /review counts it, naming nobody, and Finish with no key leaves it owed.
+      const call = queue({ id: "subs-admin-ada" });
+      const read = await call("GET /api/review/erasure");
+      expect(read.status).toBe(200);
+      expect(read.body.subscriptions).toMatchObject({ count: 1 });
+      expect(JSON.stringify(read.body)).not.toContain(wren.id);
+      expect(JSON.stringify(read.body)).not.toContain("sub_owed");
+      const pressed = await call("POST /api/review/erasure/retry");
+      expect(pressed.body.cancels).toEqual({ owed: 1, cleared: 0, connected: false });
+      expect(await finishOwedCancelsJob(pool, Date.now() + 60_000)).toBeNull();
+      expect(await owedOf(wren.id)).toEqual(["sub_owed"]);
+    });
+
+    it("with the key connected, Finish cancels what is owed and clears it", async () => {
+      await settleOthers("subs-owed-finish");
+      delete process.env.STRIPE_SECRET_KEY;
+      const wren = await member("subs-owed-finish", "Wren Finished");
+      await purchase("pp-of1", wren.id, "prod-month", { status: "paid", sub: "sub_owed_finish", at: "2026-09-02 10:00:00" });
+      await anonymizeMember(pool, wren, "admin-1", deps());
+      expect(await owedOf(wren.id)).toEqual(["sub_owed_finish"]);
+
+      process.env.STRIPE_SECRET_KEY = KEY;
+      const s = useStripe({ sub_owed_finish: "active" });
+      const call = queue({ id: "subs-admin-ada" });
+      const pressed = await call("POST /api/review/erasure/retry");
+      expect(pressed.status).toBe(200);
+      expect(pressed.body.cancels).toEqual({ owed: 1, cleared: 1, connected: true });
+      expect(s.subs.sub_owed_finish).toBe("canceled");
+      expect(await owedOf(wren.id)).toEqual([]);
+      expect((await cancelRows(wren.id)).at(-1)).toEqual({
+        text: "member:subscriptions-cancelled:1:sub_owed_finish", audience: "admin", actor_user_id: "subs-admin-ada",
+      });
+      expect(pressed.body.subscriptions.count).toBe(0);
+    });
+
+    it("the hourly job does the same with nobody pressing, and a Stripe failure stays owed", async () => {
+      await settleOthers("subs-owed-hourly");
+      delete process.env.STRIPE_SECRET_KEY;
+      const wren = await member("subs-owed-hourly", "Wren Hourly");
+      await purchase("pp-oh1", wren.id, "prod-month", { status: "paid", sub: "sub_owed_hourly", at: "2026-09-03 10:00:00" });
+      await anonymizeMember(pool, wren, "admin-1", deps());
+
+      process.env.STRIPE_SECRET_KEY = KEY;
+      const s = useStripe({ sub_owed_hourly: "active" });
+      s.failNext(500);
+      expect(await finishOwedCancelsJob(pool, Date.now() + 60_000)).toBe("cancelled the owed subscriptions of 0 of 1 departed members");
+      expect(await owedOf(wren.id), "a failure stays owed").toEqual(["sub_owed_hourly"]);
+      expect(await finishOwedCancelsJob(pool, Date.now() + 60_000)).toBe("cancelled the owed subscriptions of 1 of 1 departed members");
+      expect(s.subs.sub_owed_hourly).toBe("canceled");
+      expect(await owedOf(wren.id)).toEqual([]);
+      expect((await cancelRows(wren.id)).at(-1)?.actor_user_id, "the job is nobody").toBeNull();
+      expect(await finishOwedCancelsJob(pool, Date.now() + 60_000), "nothing owed, nothing said").toBeNull();
+    });
+
+    it("a person's confirm clears what they saw, with their id, and never what arrived after", async () => {
+      await settleOthers("subs-owed-confirm");
+      delete process.env.STRIPE_SECRET_KEY;
+      const wren = await member("subs-owed-confirm", "Wren Confirmed");
+      await purchase("pp-oc1", wren.id, "prod-month", { status: "paid", sub: "sub_owed_confirm", at: "2026-09-04 10:00:00" });
+      await anonymizeMember(pool, wren, "admin-1", deps());
+      const call = queue({ id: "subs-admin-fen" });
+      const seen = (await call("GET /api/review/erasure")).body.subscriptions;
+      expect(seen.count).toBe(1);
+
+      // A late charge for another leaver lands after the card was read.
+      const ash = await member("subs-owed-after", "Ash After");
+      await anonymizeMember(pool, ash, ash.id, deps());
+      await settleLeaversSubscription(pool, { userId: ash.id, subscriptionId: "sub_owed_after", refusal: BUYER_HAS_LEFT });
+
+      expect((await call("POST /api/review/erasure/subscriptions-cancelled", {})).status, "no asOf, no confirm").toBe(400);
+      expect((await call("POST /api/review/erasure/subscriptions-cancelled", { asOf: "evt-0-none" })).status).toBe(409);
+      const confirmed = await call("POST /api/review/erasure/subscriptions-cancelled", { asOf: seen.asOf });
+      expect(confirmed.status).toBe(200);
+      expect(confirmed.body.cleared).toBe(1);
+      expect(await owedOf(wren.id)).toEqual([]);
+      expect((await cancelRows(wren.id)).at(-1)).toEqual({
+        text: "member:subscriptions-cancelled:1:sub_owed_confirm", audience: "admin", actor_user_id: "subs-admin-fen",
+      });
+      expect(await owedOf(ash.id), "arrived after the card was read, so still owed").toEqual(["sub_owed_after"]);
+      expect(confirmed.body.subscriptions.count).toBe(1);
+    });
+  });
+
+  describe("the departure's notice for a member who holds tokens (round 4, finding 1)", () => {
+    it("says on the exit path that the payments keep renewing, and the delete panel keeps its cancel sentence", async () => {
+      await loadTokenRegistry(pool);
+      const kit = await member("subs-holder", "Kit Holder");
+      await purchase("pp-hd1", kit.id, "prod-month", { status: "paid", sub: "sub_holder", at: "2026-10-01 10:00:00" });
+      const seeded = await postTransfer(pool, {
+        from: MINT_FAUCET, to: memberAccount(kit.id), tokenType: "credits", amount: 5_000,
+        source: "test_seed", idempotencyKey: `subs-holder:seed:${kit.id}`,
+      });
+      expect(seeded.ok, String(seeded.error)).toBe(true);
+      const renewing = "1 recurring payment(s) still renewing through Stripe: Monthly membership (every month). ";
+      const deleting = `${renewing}Deleting the account cancels each one in Stripe, and nothing already paid is refunded`;
+
+      const exit = await subscriptionsState(pool, kit.id, "exit");
+      expect(exit.description).toBe(
+        renewing +
+          "Holding tokens when the departure is resolved keeps the account as a former member, and these keep renewing " +
+          "until an admin cancels them in Stripe",
+      );
+      expect(exit.blocking).toBe(false);
+      // The exit desk reads the exit path.
+      expect((await exitOpenState(pool, kit.id, [])).find((st) => st.domain === "subscriptions")).toEqual(exit);
+      // A delete always erases, and the erasure cancels: that sentence stays.
+      expect((await subscriptionsState(pool, kit.id, "delete")).description).toBe(deleting);
+
+      // The departure page's read of the same route, and the delete panel's.
+      const handlers = new Map<string, (req: any, res: any) => Promise<unknown>>();
+      const app: any = { get: (p: string, h: any) => handlers.set(`GET ${p}`, h), put: () => undefined, post: () => undefined };
+      registerProfileRoutes(app, { authedUser: async () => kit, members: usersRepo(pool) as any, publicUser: (u: any) => u, getPool: () => pool } as any);
+      const read = async (query: Record<string, string>) => {
+        const out: { body: any } = { body: undefined };
+        const res: any = { status() { return res; }, json(b: unknown) { out.body = b; return res; } };
+        await handlers.get("GET /api/profile/leaving-notices")!({ headers: {}, query }, res);
+        return out.body.notices.map((n: any) => n.description);
+      };
+      expect(await read({ for: "exit" })).toEqual([exit.description]);
+      expect(await read({})).toEqual([deleting]);
     });
   });
 });

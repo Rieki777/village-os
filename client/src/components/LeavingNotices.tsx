@@ -24,13 +24,20 @@ export interface LeavingNotice {
   description: string;
 }
 
-/** The member's own notices, once read; null until then, or when the read fails. */
-export function useLeavingNotices(enabled: boolean): LeavingNotice[] | null {
+/**
+ * The member's own notices, once read; null until then, or when the read fails.
+ *
+ * `path` says which door the member is at. "delete" is the delete panel, and a
+ * delete always cancels. "exit" is the departure page: a departure keeps a
+ * member who still holds tokens as a former member, and the server says then
+ * that the payments keep renewing (round 4, finding 1).
+ */
+export function useLeavingNotices(enabled: boolean, path: "delete" | "exit" = "delete"): LeavingNotice[] | null {
   const [notices, setNotices] = useState<LeavingNotice[] | null>(null);
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
-    fetch("/api/profile/leaving-notices", { headers: { Authorization: `Bearer ${authToken()}` } })
+    fetch(path === "exit" ? "/api/profile/leaving-notices?for=exit" : "/api/profile/leaving-notices", { headers: { Authorization: `Bearer ${authToken()}` } })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (alive && d && Array.isArray(d.notices)) setNotices(d.notices);
@@ -39,7 +46,7 @@ export function useLeavingNotices(enabled: boolean): LeavingNotice[] | null {
     return () => {
       alive = false;
     };
-  }, [enabled]);
+  }, [enabled, path]);
   return notices;
 }
 

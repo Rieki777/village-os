@@ -62,24 +62,42 @@ export interface EventRow {
 
 export async function recordEvent(pool: Pool, e: EventInput): Promise<void> {
   try {
-    await pool.query(
-      "INSERT INTO health_events (id, kind, text, actor_user_id, actor_kind, origin_module_id, entity_type, entity_ref, audience) " +
-        "VALUES (?,?,?,?,?,?,?,?,?)",
-      [
-        `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        e.kind,
-        e.text,
-        e.actorUserId ?? null,
-        e.actorKind ?? "human",
-        e.originModuleId ?? null,
-        e.entityType ?? null,
-        e.entityRef ?? null,
-        e.audience ?? "public",
-      ],
-    );
+    await recordEventOrThrow(pool, e);
   } catch (err) {
     console.error("[events] recordEvent failed (mutation unaffected)", err);
   }
+}
+
+// Ids sort in write order inside one process: the millisecond, never less
+// than one past the previous id's, then a random tail. A reader that orders
+// rows written in the same millisecond (`subscriptionCancelRows`) reads them
+// in the order they were written.
+let lastEventMs = 0;
+
+/**
+ * The same write, for the one kind of row that is not a trace: a row that IS
+ * a record somebody acts on later (the by-hand cancel a departed member's
+ * subscriptions owe, server/repos/subscriptionCancels.ts). A failed insert
+ * there is an obligation nobody will ever be asked for, so it throws and the
+ * caller's own retry (a resumed erasure step, a redelivered webhook) writes it.
+ */
+export async function recordEventOrThrow(pool: Pool, e: EventInput): Promise<void> {
+  lastEventMs = Math.max(Date.now(), lastEventMs + 1);
+  await pool.query(
+    "INSERT INTO health_events (id, kind, text, actor_user_id, actor_kind, origin_module_id, entity_type, entity_ref, audience) " +
+      "VALUES (?,?,?,?,?,?,?,?,?)",
+    [
+      `evt-${lastEventMs}-${Math.random().toString(36).slice(2, 6)}`,
+      e.kind,
+      e.text,
+      e.actorUserId ?? null,
+      e.actorKind ?? "human",
+      e.originModuleId ?? null,
+      e.entityType ?? null,
+      e.entityRef ?? null,
+      e.audience ?? "public",
+    ],
+  );
 }
 
 function rowToEvent(r: RowDataPacket): EventRow {

@@ -29,8 +29,9 @@ export default function ExitPolicy() {
   const identity = useIdentityConfirm("request-exit");
   // The aligned terms a departure ends when it is resolved (seat settings PR8). Signed in only.
   const endingTerms = useTermsLeavingEnds(!!user);
-  // And what the departure cancels when it is resolved: their recurring payments. Signed in only.
-  const leavingNotices = useLeavingNotices(!!user);
+  // And their recurring payments: cancelled when the departure erases the account, still
+  // renewing when holding tokens keeps them a former member. The server says which. Signed in only.
+  const leavingNotices = useLeavingNotices(!!user, "exit");
 
   useEffect(() => {
     fetch("/api/exit-policy").then((r) => r.json()).then(setData).catch(() => {});

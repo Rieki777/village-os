@@ -21,8 +21,8 @@ const SENTENCE =
   "1 recurring payment(s) still renewing through Stripe: Monthly membership (every month). " +
   "Deleting the account cancels each one in Stripe, and nothing already paid is refunded";
 
-function Probe({ enabled = true }: { enabled?: boolean }) {
-  return <LeavingNotices notices={useLeavingNotices(enabled)} />;
+function Probe({ enabled = true, path }: { enabled?: boolean; path?: "delete" | "exit" }) {
+  return <LeavingNotices notices={useLeavingNotices(enabled, path)} />;
 }
 
 describe("the notice before the delete", () => {
@@ -37,6 +37,16 @@ describe("the notice before the delete", () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/profile/leaving-notices");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok-member");
+  });
+
+  it("asks for the departure's sentence on the departure page (round 4, finding 1)", async () => {
+    // A departure keeps a member who holds tokens as a former member, and the
+    // payments keep renewing; only the server knows which, so the page says where it is.
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ notices: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Probe path="exit" />);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("/api/profile/leaving-notices?for=exit");
   });
 
   it("reads nothing until the panel opens", () => {

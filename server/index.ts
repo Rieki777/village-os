@@ -812,7 +812,7 @@ import {
   registerPaymentHandlers,
   stripeConfigured,
   webhookSecretConfigured,
-} from "./lib/payments";
+} from "./lib/payments"; import { settleLeaversSubscription } from "./lib/owedCancels"; // a leaver's subscription, cancelled on a refused charge
 import {
   LIFECYCLE_RANK, MODULES, MODULES_BY_ID, modulesOwning, priceLine, supportRoute, vendorModules,
   type ModuleLifecycle,
@@ -5929,12 +5929,11 @@ async function startServer() {
       amountMinor: Number(row.amount_minor), paymentIntentId: chargeRef,
     });
     if (refusal) {
-      // Banked, not delivered. Loud, and settled below so Stripe stops
-      // retrying a decision rather than a failure.
-      if (firstTimeForThisPeriod) await notifyAdmins(
-        "payment",
+      // Banked, not delivered, settled below so Stripe stops retrying a decision. A leaver's subscription is cancelled on every such charge (server/lib/owedCancels.ts).
+      const held = await settleLeaversSubscription(pool, { userId: row.user_id ? String(row.user_id) : null, subscriptionId: subId ?? row.stripe_subscription_id, refusal });
+      if (firstTimeForThisPeriod) await notifyAdmins("payment",
         `${isRenewal ? "Renewal" : "Purchase"} charged but NOT delivered: ${row.product_name} (${purchaseId}, ${periodKey}), ${refusal}. ` +
-          refusedChargeAdvice(Boolean(subId ?? row.stripe_subscription_id), refusal),
+          refusedChargeAdvice(held, refusal),
         `product-renewrefused:${purchaseId}:${periodKey}`,
       );
     } else if (row.token_slug && row.token_amount && row.user_id) {
@@ -25565,7 +25564,7 @@ ${inner}
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerSaberraRoutes(app, { guardCapability, getPool, authedUser });
-  registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
+  registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps, authedUser });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
   // ── Season patterns (0050) ───────────────────────────────────────────────

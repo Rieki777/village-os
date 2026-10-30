@@ -169,6 +169,7 @@ import { forgetVenturesOf } from "../repos/ventures";
 import { forgetFactWordsOf } from "../repos/investorPath";
 import { forgetStayNotesOf } from "../repos/stays";
 import { forgetPayerEmailOf, liveSubscriptionsOf } from "../repos/productPurchases";
+import { recordSubscriptionCancels } from "../repos/subscriptionCancels";
 import { cancelSubscription, stripeConfigured } from "./payments";
 import { heldByAnotherAccount, usersRepo } from "../repos/users";
 import { emailKeyOf } from "../../shared/comms/address";
@@ -1209,6 +1210,9 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         for (const sub of subs) {
           await cancelSubscription(sub.subscriptionId);
         }
+        // Settles anything an earlier run, or the renewal gate, handed to a
+        // person (server/lib/owedCancels.ts): the newest row naming an id wins.
+        await recordSubscriptionCancels(pool, { userId: target.id, kind: "cancelled", subscriptionIds: subs.map((s) => s.subscriptionId), actorUserId: actorId });
       },
     },
   ];
@@ -1257,14 +1261,24 @@ async function askAdminsToCancelByHand(
       dedupeKey: `erasure-subscriptions-by-hand:${userId}:${admin.id}`,
     });
   }
-  await recordEvent(pool, {
-    kind: "audit",
-    text: `member:subscriptions-cancel-by-hand:${subscriptionIds.length}:${subscriptionIds.join(",")}`,
-    actorUserId: actorId,
-    entityType: "user",
-    entityRef: userId,
-    audience: "admin",
-  });
+  /*
+   * THIS ROW IS THE OBLIGATION. Nothing else records that these cancels are
+   * owed: the step counts itself done, `steps_done` keeps it, and /review,
+   * Finish and the hourly job derive what is owed from this row and the
+   * cancelled row that later settles it (server/lib/owedCancels.ts).
+   *
+   * It survives only because it is audience 'admin'. The erasure's own
+   * `public-health-events` step deletes rows with audience = 'public' whose
+   * actor is the leaver, and on a self-delete the leaver IS this row's actor,
+   * so a re-erasure runs that DELETE over it. Widening that DELETE to admin
+   * rows would silently drop every owed cancel. Pinned by
+   * server/lib/erasure.subscriptions.test.ts.
+   *
+   * The shape works only because this step is id-only: its re-run needs
+   * `liveSubscriptionsOf(pool, userId)` and a Stripe id, never the identity
+   * the erasure cleared.
+   */
+  await recordSubscriptionCancels(pool, { userId, kind: "by-hand", subscriptionIds, actorUserId: actorId });
   console.error(
     `[erasure] Stripe is not connected, so ${subscriptionIds.length} subscription(s) of ${userId} were handed to the admins to cancel by hand`,
   );

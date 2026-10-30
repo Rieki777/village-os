@@ -148,11 +148,17 @@ export function register(app: Express, deps: Deps): void {
    * (`subscriptionsState`, server/lib/exit.ts), so the admin and the member
    * read the same words. Only the member's own, and only notices that say
    * something: a member with nothing to cancel gets an empty list.
+   *
+   * `?for=exit` is the departure page (ExitPolicy): a departure keeps a
+   * member who holds tokens as a former member, and their payments keep
+   * renewing, so that page reads the exit desk's sentence. Anything else is
+   * the delete panel, where a delete always erases and cancels.
    */
   app.get("/api/profile/leaving-notices", async (req, res) => {
     const authed = await authedUser(req);
     if (!authed) return res.status(401).json({ error: "auth_required" });
-    const subscriptions = await subscriptionsState(getPool(), String(authed.id));
+    const path = req.query?.for === "exit" ? "exit" : "delete";
+    const subscriptions = await subscriptionsState(getPool(), String(authed.id), path);
     res.json({ notices: subscriptions.count > 0 ? [subscriptions] : [] });
   });
 }
