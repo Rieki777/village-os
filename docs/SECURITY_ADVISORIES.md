@@ -41,7 +41,7 @@ so here is the split as measured on 2026-08-31, before any of the fixes:
 | Bucket | Records | What it means |
 |---|---|---|
 | Reachable from production code | **5** | `express` and its `qs`, `path-to-regexp` and `body-parser`. Express answers every request a village makes. |
-| In the production dependency graph, absent from the shipped bundle | **35** | `streamdown` (32) and `recharts` (3). Both are installed, neither is imported by anything that reaches a bundle. |
+| In the production dependency graph, absent from the shipped bundle | **35** | `streamdown` (32) and `recharts` (3). BOTH ARE NOW REMOVED; see below. |
 | Dev-only | **58** | Never installed on a village's server. |
 
 Of the five genuinely reachable ones, exactly **one** was a high, and it was
@@ -61,9 +61,12 @@ argued:
   any chunk under `dist/public/assets`, against a control string from React that
   appears five times in the main chunk.
 
-`recharts` is still installed, because deleting it means deleting
-`client/src/components/ui/chart.tsx` with it and that file belongs to another
-lane. It is the next cheapest removal in this manifest.
+**`recharts` was removed on 2026-10-30**, with `client/src/components/ui/chart.tsx`
+and 38 other shadcn primitives that nothing imported, after Rye asked for
+anything unused to go. Those three advisories leave the manifest with it. The
+paragraph above is kept because the MEASUREMENT still stands and is the reason
+the removal was safe: one importer, itself imported by nothing, absent from
+every chunk.
 
 ### Both accepted advisories had upstream fixes, and this page said they did not
 
