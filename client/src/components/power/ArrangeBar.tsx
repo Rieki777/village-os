@@ -34,6 +34,14 @@
  * circle would do; a refusal from Publish sits beside it as an alert until the
  * next Publish or Discard.
  *
+ * TWO DOORS, ONE GESTURE (0286). Whoever may publish an org draft may arrange
+ * (`arrangeViewer`, server/routes/orgDraftDecide.ts). An admin before launch
+ * goes through the admin panel's draft routes, below, and keeps Undo. A holder
+ * of `org.decide` sends the whole arrangement to `/api/org/arrangements`,
+ * which makes the same one draft, previews it and publishes it by power. There
+ * is no member revert, so a holder's publish offers no Undo button; the draft
+ * is on the record and an admin can revert it.
+ *
  * THE ROUTES ARE WRITTEN OUT IN FULL at each call, never assembled from a
  * helper, because `check-admin-reach` reads these literals to learn which admin
  * writes a founder can reach, and a path built from parts is invisible to it.
@@ -75,7 +83,10 @@ export default function ArrangeBar({
   onPropose,
   onSettled,
   onDiscard,
+  door = "admin",
 }: {
+  /** Which door publishes: the admin panel's, or the holder's power (0286). */
+  door?: "power" | "admin";
   /** The circles as published. */
   live: Circle[];
   moves: PendingMove[];
@@ -138,6 +149,29 @@ export default function ArrangeBar({
       onSettled(batch);
       onBusy(false);
       toast.success("The village already sits this way, so there was nothing to publish.");
+      return;
+    }
+
+    if (door === "power") {
+      let made: any = null;
+      try {
+        made = await send("/api/org/arrangements", {
+          body: { moves: publishOrder(fresh.circles, kept).map((m) => ({ circleId: m.circleId, parentCircleId: m.parentId })) },
+        });
+      } catch (e: any) {
+        return refuse(String(e?.message ?? e));
+      }
+      const redrawn = !!(await reload());
+      onSettled(batch);
+      onBusy(false);
+      toast.success(
+        redrawn && made?.reloaded !== false
+          ? kept.length === 1
+            ? "Published. The map shows the move."
+            : `Published. The map shows all ${kept.length} moves.`
+          : "Published. The map is still catching up, so reload the page in a moment to see the new shape.",
+        { duration: 12000 },
+      );
       return;
     }
 
