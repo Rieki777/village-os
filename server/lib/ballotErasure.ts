@@ -46,11 +46,15 @@
 import type { Pool } from "mysql2/promise";
 import {
   ballotWordsAbout,
+  ballotWordsOfProposalsBy,
   ballotWordsOpenedBy,
+  ballotWordsOpenedOf,
   forgetPublicLinesOn,
   rewriteBallotWords,
+  slatesHolding,
   type BallotWords,
 } from "../repos/ballotWords";
+import { SUBJECT_FOR_ITEM_KIND, VILLAGE_LAUNCH } from "../../shared/ballotSubjects";
 import { HAND_NOTE_OPENS, HAND_RAISED_LINE, SEAT_VOTE_REASON_HEADING } from "../../shared/powerHands";
 import { isTombstone } from "./oauthAccounts";
 
@@ -226,6 +230,154 @@ export async function forgetBallotWordsOf(
   for (const b of await ballotWordsOpenedBy(pool, who.id)) {
     const doc = scrubAskedBy(b.docMarkdown);
     if (doc !== b.docMarkdown && (await rewriteBallotWords(pool, b.id, { title: b.title, docMarkdown: doc, outcomeNote: b.outcomeNote }))) counts.opened += 1;
+  }
+  return counts;
+}
+
+/*
+ * ROUND 4, FINDING 9: THREE TEMPLATES THE STEP ABOVE NEVER KNEW, for the
+ * erasure's "proposal-ballot-words-after-tombstone" step. Each is matched by
+ * the template's own fixed wording and found by the member's id, so the step
+ * needs no name and cleans an old tombstone the same way it cleans a fresh
+ * one.
+ *
+ *   1. A GAME-MECHANICS PROPOSAL'S VOTE (mechanics, mint_rule or
+ *      governance_mode, every subject a proposal can be priced at) freezes
+ *      "Proposed by <first name> on <date>; ..." (proposalMarkdown,
+ *      server/lib/mechanics.ts) into its header, above the first "## ". Only
+ *      that header line is touched, so the proposer's rationale below keeps
+ *      every word.
+ *   2. A LAUNCH VOTE THEY OPENED names them in three fixed sentences
+ *      (launchProposalDoc, server/lib/launchProposal.ts), each of which only
+ *      ever holds the opener.
+ *   3. A LAUNCH VOTE'S STEWARD SLATE lists one "- <first name>" line per
+ *      `ballot_steward_slate` row, in the opener's order, which the table does
+ *      not keep. So the lines are matched against the slate: every LIVING
+ *      person on it claims the line that reads their first name, and when all
+ *      of them have, every line left belongs to somebody who has gone and
+ *      reads "- A departed member". A living namesake therefore keeps their
+ *      own line. When a living person's line no longer reads their name (a
+ *      rename since), or the lines and the rows do not agree in number, no
+ *      line is guessed at: the member's own line goes only if their first
+ *      name is still known, and otherwise the slate is left and counted.
+ */
+
+/** Every subject a game-mechanics proposal's vote can be opened under. */
+const PROPOSAL_SUBJECTS: readonly string[] = Array.from(new Set(Object.values(SUBJECT_FOR_ITEM_KIND)));
+
+const PROPOSED_BY = /^Proposed by .+ on (\d{4}-\d{2}-\d{2}); /;
+
+/** A proposal vote's document with its header's "Proposed by" line naming nobody. */
+export function scrubProposedBy(doc: string): string {
+  const lines = doc.split("\n");
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i].startsWith("## ")) break;
+    if (PROPOSED_BY.test(lines[i])) lines[i] = lines[i].replace(PROPOSED_BY, `Proposed by ${DEPARTED_IN_A_BALLOT} on $1; `);
+  }
+  return lines.join("\n");
+}
+
+/** The three sentences a launch vote names its opener in, and what each reads instead. */
+const LAUNCH_OPENER: ReadonlyArray<[RegExp, string]> = [
+  [/^.+ (opened this vote and chose who it puts forward\. )/, `${DEPARTED_OPENS_A_SENTENCE} $1`],
+  [/^.+ (named nobody for the steward role, so the village starts with it empty\. )/, `${DEPARTED_OPENS_A_SENTENCE} $1`],
+  [/^(Every item on the journey to launch read done when ).+( opened this, on \d{4}-\d{2}-\d{2}\.\r?)$/, `$1${DEPARTED_IN_A_BALLOT}$2`],
+];
+
+/** A launch vote's document with its opener named nowhere. */
+export function scrubLaunchOpener(doc: string): string {
+  return doc
+    .split("\n")
+    .map((line) => {
+      for (const [re, to] of LAUNCH_OPENER) if (re.test(line)) return line.replace(re, to);
+      return line;
+    })
+    .join("\n");
+}
+
+/** The heading the launch document lists its slate under. */
+const SLATE_HEADING = "## Who carries the steward role";
+
+/** Where a launch document's "- <name>" lines are, and what each reads. */
+function slateLinesOf(lines: string[]): Array<{ at: number; name: string }> {
+  const heading = lines.findIndex((l) => l.replace(/\r$/, "") === SLATE_HEADING);
+  if (heading < 0) return [];
+  let i = heading + 1;
+  while (i < lines.length && !lines[i].startsWith("- ") && !lines[i].startsWith("## ")) i += 1;
+  const out: Array<{ at: number; name: string }> = [];
+  for (; i < lines.length && lines[i].startsWith("- "); i += 1) out.push({ at: i, name: lines[i].replace(/\r$/, "").slice(2) });
+  return out;
+}
+
+/**
+ * A launch document's slate with the lines of everybody on it who has gone
+ * reading "- A departed member". `living` is the first name of every living
+ * person on the slate; `rows` is how many people the slate holds; `known` is
+ * the departing member's own first name, when it is still known. Null when no
+ * line can be told apart (see the header).
+ */
+export function forgetSlateLinesIn(doc: string, slate: { rows: number; living: readonly string[]; known: string | null }): { doc: string; changed: number } | null {
+  const lines = doc.split("\n");
+  const found = slateLinesOf(lines);
+  const departedLine = (i: number) => `- ${DEPARTED_OPENS_A_SENTENCE}${lines[i].endsWith("\r") ? "\r" : ""}`;
+  const open = found.filter((l) => l.name !== DEPARTED_OPENS_A_SENTENCE);
+  const unclaimed = [...open];
+  let allClaimed = found.length === slate.rows;
+  for (const first of slate.living) {
+    const k = unclaimed.findIndex((l) => l.name === first);
+    if (k < 0) allClaimed = false;
+    else unclaimed.splice(k, 1);
+  }
+  let targets = allClaimed ? unclaimed : [];
+  if (!allClaimed && slate.known) {
+    const own = unclaimed.find((l) => l.name === slate.known);
+    if (own) targets = [own];
+  }
+  if (!targets.length) return allClaimed || found.length === 0 || open.length === 0 ? { doc, changed: 0 } : null;
+  for (const t of targets) lines[t.at] = departedLine(t.at);
+  return { doc: lines.join("\n"), changed: targets.length };
+}
+
+export interface ProposalBallotErasureCounts {
+  /** Proposal votes whose "Proposed by" line changed. */
+  proposals: number;
+  /** Launch votes they opened whose opener sentences changed. */
+  launchesOpened: number;
+  /** Slate lines that now read "- A departed member". */
+  slateLines: number;
+  /** Launch votes whose slate could not be read safely, left as they were. */
+  slatesLeft: number;
+}
+
+/** Take a departed member's name out of the proposal and launch ballots that carry it. See the block above. */
+export async function forgetProposalBallotWordsOf(
+  pool: Pool,
+  who: { id: string; name?: string | null; handle?: string | null; email?: string | null },
+): Promise<ProposalBallotErasureCounts> {
+  const counts: ProposalBallotErasureCounts = { proposals: 0, launchesOpened: 0, slateLines: 0, slatesLeft: 0 };
+  if (!who.id) return counts;
+  const save = (b: BallotWords, docMarkdown: string) =>
+    docMarkdown !== b.docMarkdown && rewriteBallotWords(pool, b.id, { title: b.title, docMarkdown, outcomeNote: b.outcomeNote });
+
+  for (const b of await ballotWordsOfProposalsBy(pool, who.id, PROPOSAL_SUBJECTS)) {
+    if (await save(b, scrubProposedBy(b.docMarkdown))) counts.proposals += 1;
+  }
+  for (const b of await ballotWordsOpenedOf(pool, who.id, VILLAGE_LAUNCH)) {
+    if (await save(b, scrubLaunchOpener(b.docMarkdown))) counts.launchesOpened += 1;
+  }
+  const known = !isTombstone({ email: String(who.email ?? "") }) && !!String(who.name ?? "").trim() && String(who.name).trim() !== DEPARTED_OPENS_A_SENTENCE;
+  // The slate's lines are written with the launch door's firstName, "Someone" for a member with no name.
+  const slateName = (name: string) => firstNameOf(name) || "Someone";
+  for (const { ballot, slate } of await slatesHolding(pool, who.id)) {
+    const living = slate
+      .filter((s) => s.userId !== who.id && s.name != null && !isTombstone({ email: String(s.email ?? "") }))
+      .map((s) => slateName(String(s.name)));
+    const out = forgetSlateLinesIn(ballot.docMarkdown, { rows: slate.length, living, known: known ? slateName(String(who.name)) : null });
+    if (!out) {
+      counts.slatesLeft += 1;
+      continue;
+    }
+    if (await save(ballot, out.doc)) counts.slateLines += out.changed;
   }
   return counts;
 }

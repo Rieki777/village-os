@@ -156,7 +156,7 @@ import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
 import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
 import { pathHandoffKey } from "./comms/notices";
-import { forgetBallotWordsOf } from "./ballotErasure";
+import { forgetBallotWordsOf, forgetProposalBallotWordsOf } from "./ballotErasure";
 import { forgetMeetMeWindowsOf } from "./gatherings";
 import { forgetOwnExitNotes } from "./exit";
 import { forgetCheckinNotesOf } from "./economy";
@@ -930,6 +930,22 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "ballot-words-after-tombstone",
       run: async () => {
         await forgetBallotWordsOf(pool, { id: target.id, name: target.name, handle: target.handle, email: target.email });
+      },
+    },
+    {
+      /*
+       * Three ballot templates the step above never knew (round 4, finding 9):
+       * a game-mechanics vote's "Proposed by <first name>" line, found through
+       * the proposal the member made whoever opened the vote, a launch vote's
+       * three opener sentences, and their "- <first name>" line on a launch
+       * vote's steward slate. A new name, because old records already hold
+       * the step above as done, and found by the member's id alone, so a
+       * tombstone with no name left is cleaned the same way.
+       * server/lib/ballotErasure.ts, forgetProposalBallotWordsOf, says how.
+       */
+      name: "proposal-ballot-words-after-tombstone",
+      run: async () => {
+        await forgetProposalBallotWordsOf(pool, { id: target.id, name: target.name, handle: target.handle, email: target.email });
       },
     },
     {

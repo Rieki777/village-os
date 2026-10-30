@@ -77,6 +77,82 @@ export async function ballotWordsOpenedBy(pool: Pool, userId: string): Promise<B
   return rows.map(wordsOf);
 }
 
+/*
+ * THREE MORE WAYS A BALLOT NAMES A MEMBER (round 4, finding 9), for the
+ * erasure's "proposal-ballot-words-after-tombstone" step
+ * (server/lib/ballotErasure.ts, forgetProposalBallotWordsOf). Each is found
+ * by the member's id alone, so a tombstone whose name is long gone is found
+ * the same way.
+ *
+ *   3. THEY PROPOSED IT. A game-mechanics proposal taken to the vote freezes
+ *      "Proposed by <first name> on <date>; ..." into the ballot, whoever
+ *      opened it, and `subject_ref` is the proposal's id. So the proposer is
+ *      `mechanics_proposals.proposer_user_id`, never `opened_by`.
+ *   4. THEY OPENED THE LAUNCH VOTE. Its document names whoever opened it.
+ *   5. THEY ARE ON A LAUNCH VOTE'S STEWARD SLATE, one row each in
+ *      `ballot_steward_slate`, one "- <first name>" line each in the document.
+ *
+ * Two plain reads, never a join, so the ballot tables and the proposal and
+ * user tables never need to share a collation.
+ */
+
+/** The words of every ballot opened on a game-mechanics proposal this member made, of these subjects. */
+export async function ballotWordsOfProposalsBy(pool: Pool, userId: string, subjects: readonly string[]): Promise<BallotWords[]> {
+  if (!userId || !subjects.length) return [];
+  const [props] = await pool.query<RowDataPacket[]>("SELECT id FROM mechanics_proposals WHERE proposer_user_id = ?", [userId]);
+  const ids = props.map((r) => String(r.id));
+  if (!ids.length) return [];
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, subject_type, title, doc_markdown, outcome_note FROM ballots WHERE subject_type IN (?) AND subject_ref IN (?) ORDER BY id",
+    [subjects, ids],
+  );
+  return rows.map(wordsOf);
+}
+
+/** The words of every ballot of this subject the member opened. */
+export async function ballotWordsOpenedOf(pool: Pool, userId: string, subjectType: string): Promise<BallotWords[]> {
+  if (!userId) return [];
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, subject_type, title, doc_markdown, outcome_note FROM ballots WHERE opened_by = ? AND subject_type = ? ORDER BY id",
+    [userId, subjectType],
+  );
+  return rows.map(wordsOf);
+}
+
+/** One person on a launch vote's steward slate, with the name and address their account carries now. */
+export interface SlateSeat {
+  ballotId: string;
+  userId: string;
+  /** Null when no account answers to the id. */
+  name: string | null;
+  email: string | null;
+}
+
+/** Every launch ballot whose slate holds this member: its words and its whole slate. */
+export async function slatesHolding(pool: Pool, userId: string): Promise<Array<{ ballot: BallotWords; slate: SlateSeat[] }>> {
+  if (!userId) return [];
+  const [mine] = await pool.query<RowDataPacket[]>("SELECT ballot_id FROM ballot_steward_slate WHERE user_id = ?", [userId]);
+  const ballotIds = Array.from(new Set(mine.map((r) => String(r.ballot_id))));
+  if (!ballotIds.length) return [];
+  const [ballots] = await pool.query<RowDataPacket[]>(
+    "SELECT id, subject_type, title, doc_markdown, outcome_note FROM ballots WHERE id IN (?) ORDER BY id",
+    [ballotIds],
+  );
+  const [seats] = await pool.query<RowDataPacket[]>("SELECT ballot_id, user_id FROM ballot_steward_slate WHERE ballot_id IN (?)", [ballotIds]);
+  const userIds = Array.from(new Set(seats.map((r) => String(r.user_id))));
+  const [users] = await pool.query<RowDataPacket[]>("SELECT id, name, email FROM users WHERE id IN (?)", [userIds]);
+  const byId = new Map(users.map((u) => [String(u.id), u]));
+  return ballots.map((b) => ({
+    ballot: wordsOf(b),
+    slate: seats
+      .filter((s) => String(s.ballot_id) === String(b.id))
+      .map((s) => {
+        const u = byId.get(String(s.user_id));
+        return { ballotId: String(s.ballot_id), userId: String(s.user_id), name: u ? String(u.name ?? "") : null, email: u ? String(u.email ?? "") : null };
+      }),
+  }));
+}
+
 /** Write a ballot's words back, and nothing else on the row. True when the row changed. */
 export async function rewriteBallotWords(
   pool: Pool,
