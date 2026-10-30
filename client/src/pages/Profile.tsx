@@ -485,7 +485,7 @@ export default function Profile() {
 
               {/* The journal's door on the profile; renders nothing while it is off. */}
               <div className="scroll-mt-28"><ProfileJournalCard /></div>
-              <div className="scroll-mt-28"><ProfileGeneKeysCard /></div>
+              <div className="scroll-mt-28"><ProfileGeneKeysCard owner={user?.id ? String(user.id) : null} /></div>
 
               {/* R20: what this member needs, and how they are doing on it.
                   Private to them; the village only ever reads counts. */}

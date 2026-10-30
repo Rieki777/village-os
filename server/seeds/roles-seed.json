@@ -34,11 +34,12 @@
   {
     "id": "treasury",
     "name": "Treasury",
-    "description": "Keeps the money legible: tracks budgets and allocations, lists tokens and posts their prices, and carries the cycle report to Hypha where the equity and voice tokens are governed.",
+    "description": "Keeps the money legible: tracks budgets and allocations, lists tokens and posts their prices, marks the cash the village owes as paid, and carries the cycle report to Hypha where the equity and voice tokens are governed.",
     "capabilities": [
       "proposal.open",
       "forum.post",
-      "exchange.manage"
+      "exchange.manage",
+      "cash.pay"
     ],
     "minStage": "member",
     "order": 3

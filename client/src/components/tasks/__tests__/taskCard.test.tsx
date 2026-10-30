@@ -54,6 +54,8 @@ describe("the card", () => {
 
     rerender(<TaskCard task={makeTask({ heldAs: "seat", seat: { id: "s1", name: "Water steward", holders: ["Ada", "Lin"] } })} today={TODAY} />);
     expect(screen.getByText(TASK_COPY.heldSeat("Water steward", ["Ada", "Lin"]))).toBeInTheDocument();
+    // The role first, who sits there by first name after it (Rye, 2026-10-30).
+    expect(screen.getByText("Held by Water steward (Ada, Lin)")).toBeInTheDocument();
 
     rerender(<TaskCard task={makeTask({ heldAs: "seat", seat: { id: "s1", name: "Water steward", holders: [] } })} today={TODAY} />);
     expect(screen.getByText(TASK_COPY.heldSeatVacant("Water steward"))).toBeInTheDocument();

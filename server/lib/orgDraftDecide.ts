@@ -58,6 +58,7 @@
  * record.
  */
 import type { Pool } from "mysql2/promise";
+import { placementOf } from "./circlePlacement";
 import { dialsForSubject, ORG_DRAFT, thresholdSettingsFrom } from "../../shared/ballotSubjects";
 import { isVillageHeld, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import type { BallotMethod } from "../../shared/governanceEngine";
@@ -277,9 +278,18 @@ export function publicDraftLines(draft: Pick<Draft, "changes">, context: Pick<Pr
         return `End a holding on ${seat(c.orgRoleId)}`;
       case "move_circle": {
         const parent = text(c.payload?.parentCircleId);
-        return parent
+        const where = parent
           ? `Move the circle ${circle(bare(c.orgRoleId))} inside ${circle(parent)}`
           : `Move the circle ${circle(bare(c.orgRoleId))} to the top of the village`;
+        // 0286: the order and layer it sets, when it sets them.
+        const placed = placementOf(c.payload);
+        if (!placed.ok) return where;
+        const { order, layer } = placed.placement;
+        return (
+          where +
+          (order !== undefined ? `, at place ${order + 1} among the circles beside it` : "") +
+          (layer !== undefined ? (layer ? `, as ${/^[aeiou]/.test(layer) ? "an" : "a"} ${layer} circle` : ", with no governance layer") : "")
+        );
       }
       case "rest_circle":
         return `Retire the circle ${circle(bare(c.orgRoleId))}, so it rests as dormant`;
