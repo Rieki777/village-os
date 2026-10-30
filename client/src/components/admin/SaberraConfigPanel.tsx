@@ -44,7 +44,7 @@ import type { SyncFailureWhy } from "@shared/saberraSyncLog";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { useModuleConfig } from "./ModuleConfigPanels";
 import SaberraOutboxPanel from "./SaberraOutboxPanel";
-import { ScheduleControl, SyncRunLog, WHY_WORDS } from "./SaberraSyncSchedule";
+import { ReviewQueueButton, ScheduleControl, SyncRunLog, WHY_WORDS } from "./SaberraSyncSchedule";
 
 const MODULE_ID = "saberra";
 
@@ -398,10 +398,8 @@ function SyncAnswer({ result }: { result: SyncResult }) {
 
   return (
     <div className="mt-3 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700 space-y-2" role="status">
-      <p>
-        {count(result.landed, "suggestion")} reached the review queue.{" "}
-        <a href="/review" className="text-teal-deep underline">Open the review queue</a>
-      </p>
+      <p>{count(result.landed, "suggestion")} reached the review queue.</p>
+      {result.landed > 0 && <ReviewQueueButton waiting={result.landed} />}
       <p>This sync stored {count(result.facts, "fact")} from the service.</p>
       {nothing && <p>The service answered with nothing to suggest.</p>}
 
