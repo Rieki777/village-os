@@ -41,7 +41,7 @@ import { AdminGoLive } from "@/components/modules/GoLiveCard";
 import type { ModuleLifecycle } from "@shared/modules";
 import type { UploadsSweepReport } from "@shared/uploadsSweep";
 import { CIRCLE_STATUSES } from "@shared/draftKinds";
-
+import CashPayoutsTab from "@/components/admin/CashPayoutsTab";
 import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
@@ -8210,10 +8210,10 @@ export default function Admin() {
           {activeTab === "exits-admin" && <ExitsAdminTab password={password} />}
           {activeTab === "calls-admin" && <CallsAdminTab password={password} />}
           {activeTab === "intents-admin" && <IntentsAdminTab password={password} />}
-          {/* The same lifecycle map the nav filters on, so the registry and the
-              rail can never disagree about which modules this village runs. */}
+          {/* The nav's own lifecycle map, so the registry and the rail never disagree on which modules run. */}
           {activeTab === "tokens" && <TokensTab password={password} lifecycles={moduleLifecycles} />}
           {activeTab === "ledger" && <LedgerTab password={password} />}
+          {activeTab === "cash-payouts" && <CashPayoutsTab password={password} />}
           {activeTab === "cycles" && <CyclesTab password={password} />}
           {activeTab === "variables" && <VariablesTab password={password} />}
           {activeTab === "season" && <SeasonTab password={password} />}
