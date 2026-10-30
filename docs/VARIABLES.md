@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 189 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 190 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 207 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 208 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-234 dials in 35 categories. 139 carry a minimum and a maximum. By type: 103 integer, 19 decimal, 18 percentage, 27 boolean, 29 choice, 37 text, 1 longtext.
+235 dials in 35 categories. 139 carry a minimum and a maximum. By type: 103 integer, 19 decimal, 18 percentage, 27 boolean, 30 choice, 37 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -44,7 +44,7 @@ Each dial also says WHEN a change lands. 207 of them as soon as it is saved, and
 | Gratitude | 10 | 10 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
-| Progression | 29 | 29 | 0 |
+| Progression | 30 | 30 | 0 |
 | Quests | 2 | 2 | 0 |
 | Governance | 44 | 40 | 4 |
 | Tokens | 4 | 1 | 3 |
@@ -148,6 +148,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Stage that unlocks: ballot.vote | `progression.unlock.ballot.vote` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: member.vouch | `progression.unlock.member.vouch` | Progression | choice | `contributor` | the whole village |
 | Stage that unlocks: map.photograph | `progression.unlock.map.photograph` | Progression | choice | `member` | the whole village |
+| Stage that unlocks: session.template | `progression.unlock.session.template` | Progression | choice | `member` | the whole village |
 | Require submitted work before consent | `quest.require_submission_before_consent` | Quests | boolean | `true` | the whole village |
 | Founder may self-consent below this many members | `quest.self_consent_until_members` | Quests | integer | `6` | the whole village |
 | How sensing is weighted | `governance.voice_weighting` | Governance | choice | `equal` | the whole village |
@@ -887,7 +888,7 @@ What it may be set to:
 
 ## Progression
 
-29 dials. 29 for the whole village.
+30 dials. 30 for the whole village.
 
 ### How often every role reopens
 
@@ -1517,6 +1518,36 @@ Which rung of the ladder grants "map.photograph" by progression alone. Roles and
 | Fact | Value |
 | --- | --- |
 | Key | `progression.unlock.map.photograph` |
+| Type | choice, one of a fixed list |
+| Default | `member` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `visitor` Visitor.
+- `guest` Guest.
+- `immersant` Immersant.
+- `participant` Participant.
+- `member` Member.
+- `contributor` Contributor.
+- `quest-seeker` Quest Seeker.
+- `initiate` Initiate.
+- `co-creator` Co-Creator.
+- `role-holder` Role Holder.
+- `guide` Guide.
+- `sage` Sage.
+- `none` Never by stage (role or badge only).
+
+### Stage that unlocks: session.template
+
+Which rung of the ladder grants "session.template" by progression alone. Roles and badges can still grant it at any stage; "never by stage" makes it role/badge-only. This is the constitution's parameter table, so move rungs deliberately.
+
+| Fact | Value |
+| --- | --- |
+| Key | `progression.unlock.session.template` |
 | Type | choice, one of a fixed list |
 | Default | `member` |
 | Range | one of the choices below |

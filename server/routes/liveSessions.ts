@@ -122,6 +122,7 @@ import { registerJob } from "../lib/scheduler";
 import { libraryFor, noticesAfterTakes, reconcileLibrary } from "../lib/sessionLibrary";
 import { noticesAfterFills } from "../lib/sessionOnBehalf";
 import { comingUpFor } from "../lib/sessionRhythm";
+import { linkSession, templateForStart } from "../lib/sessionTemplates";
 import { queueCloseMail } from "../lib/sessionTaskMail";
 import {
   SESSION_COPY,
@@ -349,9 +350,13 @@ export function register(app: Express, deps: Deps): void {
     const input = cleanStart(req.body, new Set(circles().map((c) => c.id)));
     if (!input.ok) return res.status(input.status).json({ error: input.error });
     const pool = getPool();
+    // A meeting template (0291, shared/sessionTemplates.ts): checked before the room opens, linked once it has.
+    const template = await templateForStart(pool, req.body?.templateId);
+    if (!template.ok) return res.status(template.status).json({ error: template.error });
     const no = await ensureMemberNo(pool, uid);
     const out = await openSession(pool, { no, userId: uid, admin: await isAdmin(req) }, input.value, req.body?.libraryIds, ctx);
     if (!out.ok) return res.status(out.status).json({ error: out.error });
+    if (template.value) await linkSession(pool, out.value.id, template.value.id);
     await noticesAfterTakes(pool, { notify }, { sessionTitle: input.value.title, takerNo: no, taken: out.value.taken });
     res.json({ id: out.value.id });
   });

@@ -90,6 +90,7 @@ import {
   type TakenRecord,
 } from "./sessionLibrary";
 import { exportRhythmsFor, forgetRhythmsFor } from "./sessionRhythm";
+import { exportTemplatesFor, forgetTemplatesFor } from "./sessionTemplates";
 import { exportFollowsFor, forgetFollowsFor } from "./sessionCalendar";
 import { exportReviewsFor, forgetReviewsFor } from "./sessionDecisions";
 import { exportAdviceFor, forgetAdviceFor } from "./sessionAdvice";
@@ -2607,9 +2608,12 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   /** Filled in by the facilitator (0288): what was filled in for them, and what they filled in for somebody, with nobody else's number. */
   filledIn: Record<string, unknown>[];
   agendaVotes: Record<string, unknown>[];
+  /** Meeting templates (0291): what they shared around the talking stick, and the priorities they wrote. */
+  heartShares: Record<string, unknown>[];
+  prioritiesWritten: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [], adviceAsked: [], adviceGiven: [], filledIn: [], agendaVotes: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [], adviceAsked: [], adviceGiven: [], filledIn: [], agendaVotes: [], heartShares: [], prioritiesWritten: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -2703,7 +2707,9 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
     vote: Number(r.vote),
     at: toIso(r.updated_at),
   }));
-  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet, adviceAsked, adviceGiven, filledIn, agendaVotes };
+  // Meeting templates (0291): what they shared around the talking stick, and the priorities they wrote.
+  const { shares: heartShares, priorities: prioritiesWritten } = await exportTemplatesFor(pool, no);
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet, adviceAsked, adviceGiven, filledIn, agendaVotes, heartShares, prioritiesWritten };
 }
 
 /**
@@ -2800,6 +2806,8 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
     await fillsRepo.forgetFillsFor(conn, no);
     // The agenda vote (0290): their votes go.
     await votesRepo.forgetVotesFor(conn, no);
+    // Meeting templates (0291): what they shared around the stick goes; a priority they wrote stays the circle's, by nobody.
+    await forgetTemplatesFor(conn, no);
   });
   await repo.deleteMemberNo(pool, no);
 }

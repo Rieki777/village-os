@@ -164,6 +164,7 @@ import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerSessionLibraryRoutes } from "./routes/sessionLibrary";
 import { register as registerSessionRhythmRoutes } from "./routes/sessionRhythm";
+import { register as registerSessionTemplateRoutes } from "./routes/sessionTemplates";
 import { register as registerSessionCalendarRoutes } from "./routes/sessionCalendar";
 import { register as registerSessionDecisionRoutes } from "./routes/sessionDecisions";
 import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
@@ -18338,6 +18339,7 @@ ${inner}
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
   registerSessionRhythmRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify, lapseContext });
+  registerSessionTemplateRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, guardCapability, mayAct, lapseContext });
   registerSessionCalendarRoutes(app, { authedUser, getPool, overLimit, members, circlesRepo, clientIp, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionDecisionRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, lapseContext, members, notify });
   registerRoleTensionRoutes(app, { authedUser, isAdmin, getPool, overLimit, notify, seasonState });

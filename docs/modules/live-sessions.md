@@ -769,6 +769,49 @@ built to name nobody.
 The `people` audience, with names on actions and who was present, is for the people who were there
 and the admins.
 
+## Meeting templates: the meetings a village holds again and again
+
+Contract `shared/sessionTemplates.ts`; doors `server/routes/sessionTemplates.ts` under their own
+prefix, `/api/session-templates`; rules `server/lib/sessionTemplates.ts`; statements
+`server/repos/sessionTemplates.ts`; schema `drizzle/0291_a_circle_keeps_its_meeting_templates.sql`.
+Rye, 2026-10-30: "need to be able to create/select templates and to sort those of the same
+category (like our friday and monday sessions)", and feedback on each template over time should
+keep changing what it looks like and how its meeting flows.
+
+- **A template is a row, never code.** Name, category, a sentence on what it is for, the usual
+  circle and length, and an ordered FLOW of sections. Each section has a kind, a title, a prompt
+  and minutes. The kinds are `round`, `talking_stick`, `wins`, `agenda`, `priority_vote`,
+  `priorities_set`, `priorities_review`, `carried_over` and `close`; the words a member reads are
+  always the section's own title and prompt.
+- **Who keeps them.** Every admitted member reads them. Making, changing, duplicating, ordering
+  and archiving ask the one gate for `session.template`, which opens at the member rung, the same
+  people who may open a room. A template is archived, never deleted, because a series still names
+  it.
+- **Three seeds, written once.** Heart share (category "Heart share"), Monday planning and Friday
+  check-in (category "Weekly rhythm", Monday first). A seed row that exists is never written over,
+  so the feedback a village gives a seed stays.
+- **The start card's "Meeting type".** The templates grouped by category in their keepers' order.
+  Picking one fills the title, circle and length and shows the flow; "No template" stays first.
+  `POST /api/sessions` takes `templateId`, checks it is an active template before the room opens,
+  and links the new session to it.
+- **A series feeds itself.** Each template may name another it reads back from. Friday reads back
+  from Monday: under its `priorities_review` section ("Last Monday's priorities") the room sees the
+  priorities the latest Monday opened before it chose, and the facilitator marks each done, partly
+  or carried over. Monday reads back from Friday: under its `carried_over` section ("Carried over
+  from Friday") come the priorities that Friday marked partly or carried, each one a tap from being
+  this week's priority again, and gone from the list once taken up. Monday's `priorities_set`
+  section keeps this week's priorities, and can take the agenda's top items once the room has voted
+  them into order.
+- **The talking stick.** A `talking_stick` section passes a visible stick around the people here,
+  in the order the facilitator starts it with: the room sees who holds it, who is next and the
+  round. The facilitator passes it on, steps back one, or gives it to somebody. Anyone in the room
+  keeps a line of what was shared (grateful for, what's working, what's not working, a tension),
+  and a line can be brought to a later session: it becomes an item in the agenda library for the
+  session's circle, a tension as an Explore and anything else as a Report, once only.
+- **Who writes in the room.** Moving the stick and setting or marking priorities is the
+  facilitator, the secretary or a joined admin, while the room is open. Capturing a share and
+  bringing one to a later session is anybody in the room.
+
 ## How it rhymes with the rest of the game
 
 - **Roles.** An action can be held by a role from the org chart, so the work stays with the role
@@ -813,9 +856,9 @@ and the admins.
 
 | Declared | Value |
 |---|---|
-| API prefixes | `/api/sessions` |
+| API prefixes | `/api/sessions`, `/api/session-templates` |
 | Data class | `member-pii`: every row names a person |
-| Capabilities | none: each door is a member's own, and facilitation belongs to the session |
+| Capabilities | `session.template`, for keeping the meeting templates; every room door is a member's own, and facilitation belongs to the session |
 | Variables | `sessions.place_line`, `sessions.default_minutes`, `calendar.seasons` |
 | Recommends | `gratitude` |
 | Open state | none: a session holds no value anybody is owed |
@@ -829,7 +872,7 @@ and the admins.
 - **No guests.** Members only, with no link a non-member can open and no public minutes.
 - **No village-wide decisions.** A consent round in the room decides for the circle in the room.
   Anything for the whole village goes to governance.
-- **No events on the public spine,** and no capability of its own.
+- **No events on the public spine.** Its one capability keeps the meeting templates.
 
 ## Leaving
 
@@ -845,6 +888,10 @@ and every answer to them. A task they held goes back to the circle. Where they g
 answer, the answer keeps its kind and loses their number and their words, and every answer they
 gave reads as a member's with its note removed. A send they pressed reads as sent by nobody.
 `sessionIdsNaming` reads the three task tables too, so every record that named them is rebuilt.
+
+Meeting templates go in the same transaction (`forgetTemplatesFor`): what they said or kept around a
+talking stick is deleted, since its words are theirs, and a priority they wrote stays the circle's
+plan with its author set to 0.
 
 The agenda library goes in the same transaction too, after every session row is held: the items they
 brought go (their takes stay, holding no words), a take they made reads as taken by nobody, where they

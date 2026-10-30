@@ -1006,6 +1006,7 @@ export interface SessionListRow {
  *
  *   GET    /api/sessions                          { open: SessionListRow[], recent: SessionListRow[], circles: {id,name}[], library }
  *   POST   /api/sessions                          { title, circleId?, durationMin?, libraryIds? } -> { id }
+ *     (`templateId?` opens it from a meeting template and links it to that series: shared/sessionTemplates.ts)
  *          (the agenda library's own doors are listed in shared/sessionLibrary.ts)
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
  *   PATCH  /api/sessions/:id                      SessionPatch { title } -> { ok }

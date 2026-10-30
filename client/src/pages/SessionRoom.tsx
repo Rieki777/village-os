@@ -52,6 +52,7 @@ import DiscardSession from "@/components/sessions/DiscardSession";
 import FacilitatorBar from "@/components/sessions/FacilitatorBar";
 import NextStepBar from "@/components/sessions/NextStepBar";
 import RoomHeader from "@/components/sessions/RoomHeader";
+import TemplatePanel from "@/components/sessions/TemplatePanel";
 import StageActions from "@/components/sessions/StageActions";
 import StageAgenda from "@/components/sessions/StageAgenda";
 import StageArrival from "@/components/sessions/StageArrival";
@@ -236,6 +237,9 @@ export default function SessionRoom() {
                     </button>
                   </div>
                 )}
+
+                {/* A session opened from a meeting template: its flow, and what the flow asks for (shared/sessionTemplates.ts). */}
+                <TemplatePanel sessionId={view.id} agenda={view.items} />
 
                 <motion.section
                   key={shown}
