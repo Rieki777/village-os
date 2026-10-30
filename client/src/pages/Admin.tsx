@@ -4920,7 +4920,7 @@ function BadgesAdminTab({ password }: { password: string }) {
   // or denied from here at all. Reading the registry means a new capability
   // shows up the moment it is added.
   const CAPS = ALL_CAPABILITIES;
-  const METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth"];
+  const METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth", "gene_keys_shown"];
   const [data, setData] = useState<any>(null);
   const [off, setOff] = useState(false);
   const [loading, setLoading] = useState(true);

@@ -19,6 +19,7 @@
  * smear on the next.
  */
 import { motion } from "framer-motion";
+import CircleGlyph from "@/components/geneKeys/CircleGlyph";
 import { captionSize } from "./labelFit";
 import type { PowerSeat } from "./types";
 
@@ -122,6 +123,16 @@ export default function CircleLabel({
         >
           forming
         </text>
+      )}
+
+      {/* The circle's six Gene Keys lines, under its name; nothing until a holder shows theirs. */}
+      {show && !drop && !hovered && (
+        <CircleGlyph
+          x={x}
+          top={captionY + (forming ? 30 : 10)}
+          unit={label.fontSize}
+          holderIds={roles.filter((r) => r.circleId === circleId).flatMap((r) => (r.holders ?? []).filter((h) => h.userId && !h.lapsed).map((h) => h.userId!))}
+        />
       )}
 
       {/* WHAT HOVER ACTUALLY ANSWERS: is this the circle I want. Name plus the
