@@ -13,6 +13,8 @@
  *   POST   /api/sessions/:id/arrival              { score, wish? } -> { ok }
  *   POST   /api/sessions/:id/items                { title, aim, minutes, fromSessionId? } -> { id }
  *   PATCH  /api/sessions/:id/items/:itemId        { title?, aim?, minutes?, position?, status?, presenterUserId? } -> { ok }
+ *   POST   /api/sessions/:id/items/:itemId/vote   { vote: 1 | -1 | 0 } -> { ok }, never for someone else
+ *   POST   /api/sessions/:id/agenda/order         { set } -> { ok, state }: the facilitator sets the voted order
  *   POST   /api/sessions/:id/entries              { kind, text, itemId?, ownerSeatId?, dueOn? } -> { id }
  *   PATCH  /api/sessions/:id/entries/:entryId     { claim?, release?, ownerSeatId?, text?, dueOn?, status? } -> { ok }
  *   DELETE /api/sessions/:id/entries/:entryId     { ok }
@@ -108,6 +110,8 @@ import {
   setHosts,
   settleNights,
   undoFill,
+  voteOnItem,
+  setAgendaOrder,
   type Actor,
   type MemberLookup,
   type Outcome,
@@ -452,6 +456,21 @@ export function register(app: Express, deps: Deps): void {
     const itemId = parseId(req.params?.itemId);
     if (itemId == null) return res.status(404).json({ error: R.itemUnknown });
     await answerFilled(res, w, await patchItem(w.pool, w.id, w.actor, itemId, req.body), () => ({ ok: true }));
+  });
+
+  /** The room votes its agenda (0290): one vote per person per waiting item, their own. */
+  app.post("/api/sessions/:id/items/:itemId/vote", async (req, res) => {
+    const w = await writer(req, res, { key: "sessions-respond", max: RESPONSES_PER_HOUR });
+    if (!w) return;
+    const itemId = parseId(req.params?.itemId);
+    if (itemId == null) return res.status(404).json({ error: R.itemUnknown });
+    answer(res, await voteOnItem(w.pool, w.id, w.actor, itemId, req.body), () => ({ ok: true }));
+  });
+
+  app.post("/api/sessions/:id/agenda/order", async (req, res) => {
+    const w = await writer(req, res);
+    if (!w) return;
+    answer(res, await setAgendaOrder(w.pool, w.id, w.actor, req.body), (v) => ({ ok: true, state: v.state }));
   });
 
   // ── Entries ───────────────────────────────────────────────────────────────

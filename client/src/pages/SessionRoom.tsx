@@ -50,6 +50,7 @@ import { useModules } from "@/modules/ModuleProvider";
 import ClosedRecord from "@/components/sessions/ClosedRecord";
 import DiscardSession from "@/components/sessions/DiscardSession";
 import FacilitatorBar from "@/components/sessions/FacilitatorBar";
+import NextStepBar from "@/components/sessions/NextStepBar";
 import RoomHeader from "@/components/sessions/RoomHeader";
 import StageActions from "@/components/sessions/StageActions";
 import StageAgenda from "@/components/sessions/StageAgenda";
@@ -258,6 +259,8 @@ export default function SessionRoom() {
                   {shown === "actions" && <StageActions {...stageProps} highlight={highlight} refusal={refusal} />}
                   {shown === "close" && <StageClose view={view} actions={actions} onRefused={onRefused} />}
                 </motion.section>
+
+                {view.me.facilitates && <NextStepBar view={view} now={now} actions={actions} shown={shown} onMoved={() => setBrowsing(null)} />}
 
                 <TensionCatcher view={view} actions={actions} />
               </>

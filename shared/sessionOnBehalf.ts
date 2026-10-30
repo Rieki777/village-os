@@ -107,6 +107,7 @@ export const ON_BEHALF_KIND_WORDS: Record<EntryKind, string> = {
   decision: "a proposal",
   action: "an action",
   tension: "a tension",
+  win: "a win",
 };
 
 /** What was filled in, in the notice's words: "your arrival", "an agenda item", "a tension". */

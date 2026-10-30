@@ -58,13 +58,40 @@ screen and is shown where the room is, with one tap back to it.
 | **Drop in** | The village's place line, the moon and the season. A shared breath that every screen in the room takes at the same pace, from one start time the server holds. Who is here. | Reads the place line or asks someone to, starts the breath, names who is here and who sent word. |
 | **Arrival** | Each person gives one number from 1 to 11 for how they are arriving and, if they like, what would make it an 11+. Nobody fixes anybody's answer. | Goes first, calls names two at a time. When the room arrives low (two or more numbers and a median of 5 or below), offers a lighter agenda and asks for consent. The tool suggests; it never trims. |
 | **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, object, or sleep on it, and a concern or an objection is said in one sentence. Sleeping on it (Rye, 2026-10-22) is for someone who decides best after a night: it needs no sentence, it is never an objection, and the round, here and on every proposal, stays open and says so. Since 2026-10-23 a night names when it ends (see "A night on a proposal" below). | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
-| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round (and, folded under it, the regenerative lens: four questions for a room that wants to look at it whole first), a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a role, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
+| **Items** | One live page per agenda item with its own clock, notes, ideas, wins and celebrations, a proposal with a consent round (and, folded under it, the regenerative lens: four questions for a room that wants to look at it whole first), a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a role, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
 | **Actions** | Every action is claimed by a person or a role, here and now, or parked. | Reads each action out and waits for a claim. |
 | **Close** | Gratitude, one word each, feedback on the facilitation, and an idea for the tool. | Closes the session, which keeps the record. |
 
 **The item's clock has grace.** It stays calm until four fifths of its minutes are gone, then
 shifts softly, and when time is up it rings a quiet bell and offers three choices: add five minutes
 with the room's consent (up to sixty extra on one item), park it, or wrap it up.
+
+**The room votes its agenda** (0290, Rye 2026-10-30: "In sessions this should be a vote (where we
+can crowd vote ones up and down and together select the priority)"). Everyone in the room votes each
+waiting item up or down, one vote per person per item; pressing the same vote again takes it back,
+and the other vote changes it. While the vote is open the agenda sorts itself by the score (ups less
+downs) at every vote and every new item, ties keeping their order, items already talked about at the
+top and parked ones at the end, so the positions themselves are the room's choice. The tallies are the
+room's to see. Whoever runs the room sets the order once the room has voted (`POST
+/api/sessions/:id/agenda/order { set: true }`), which closes the vote; only then do the arrows show, to
+move an item by hand, and opening the vote again sorts by the score once more. A vote is the person's
+own, like a consent answer: nobody votes for anybody else, the facilitator filling in included. The
+contract is `shared/sessionVotes.ts`.
+
+**Wins and celebrations** (Rye, 2026-10-30: "add a section for 'wins and celebrations' to share about
+things they've won at!"). Each item's page has a section where anyone shares a win, with the mic like
+every box. A win is the entry kind `win` and goes into the record under its item. Every section on the
+item's page has a name (`ITEM_SECTIONS`: `notes`, `ideas`, `wins`, `proposal`, `learned`, `actions`),
+so a meeting template switches each on or off by name through the view's `itemSections`; a view that
+names none shows them all.
+
+**The next step is always in sight** (Rye, 2026-10-30: "make the next step more obvious and easy for
+other facilitators to find"). On the agenda, the items and the close, the facilitator sees one bar
+under the stage, held to the bottom of the screen (above the tab bar on a phone). It names the next
+thing and does it in one tap: start the first item, wrap this one up and start the next, on to the
+actions once every item is done, and on the close, the way to the close button. When an item's time
+is up the bar says so and offers five more minutes beside the wrap up. On the item's page the wrap up
+is a strong button beside the clock.
 
 **Speaking rounds.** The facilitator sets an order and the room shows who speaks now and who is
 ready next, two names at a time.
@@ -189,9 +216,10 @@ the person. The contract is `shared/sessionOnBehalf.ts`.
 
 ## What the record holds
 
-Twenty tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other nineteen holds that number. One
-(0288) is what the facilitator filled in for somebody, described under "Filled in by the Facilitator". Three
+Twenty-one tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other twenty holds that number. One
+(0288) is what the facilitator filled in for somebody, described under "Filled in by the Facilitator", and
+one (0290) is the room's vote on its agenda, described under "The six stages". Three
 (0255) are the task layer, described under "After the call: tasks", one (0280) is a decision's review
 date, described under "After the call: a circle's decisions and their reviews", two (0284) are the advice
 process, described under "Before deciding: the advice process", two (0264) are the agenda
@@ -220,6 +248,7 @@ its own, both described under "Circle meetings on a calendar".
 | `live_session_decision_reviews` | One per decision with a review date: the village date, who set it, and the agenda item its review became once it was made. |
 | `live_session_advice_requests` | One per request for advice: the circle asked, who asked, what they mean to decide and why, the decide-by date, and once settled whether it was decided or withdrawn and what was decided. |
 | `live_session_advice_asks` | One per person asked on a request, with their advice once they give it. |
+| `live_session_item_votes` | One per person per agenda item they voted on (0290): up (1) or down (-1), and when. Taking a vote back deletes its row. |
 | `live_session_on_behalf` | One per thing the facilitator filled in or changed for somebody (0288): who wrote it, whose it is, what (an arrival, an item, an entry) and whether it was added or changed, what it replaced (emptied at the close), when the person was told, and whether it was undone or made theirs since. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
@@ -827,7 +856,8 @@ nothing from then on. A circle's own calendar they attached says it was attached
 and so does a decision's review date they set. A decision they wrote went with the rest of their words,
 so its review date goes too, with every "Review:" item made from it, since those carried the words.
 The requests for advice they made go, with every ask and every word of advice on them, since those
-answered their words; and their own advice on anybody else's request goes.
+answered their words; and their own advice on anybody else's request goes. Their votes on agenda items
+go (0290).
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
@@ -842,4 +872,5 @@ the circles they follow (`*` for every circle) and since when, `calendarAddress`
 address was made and last read, never its key, and `ownCalendarsAttached`, the circles whose own
 calendar they attached, never its address. From decisions it carries `reviewsSet`, the review dates they
 set last. From the advice process it carries `adviceAsked`, the requests they made in their own words,
-and `adviceGiven`, the advice they gave, each with the request's id and nothing else of it.
+and `adviceGiven`, the advice they gave, each with the request's id and nothing else of it. From the
+agenda vote it carries `agendaVotes`, each vote they gave with its session, item and date.

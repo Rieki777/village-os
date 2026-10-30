@@ -66,6 +66,7 @@ import {
 } from "@shared/sessions";
 import { LIBRARY_TENSION_API, type LibraryCard } from "@shared/sessionLibrary";
 import { onBehalfUndoPath } from "@shared/sessionOnBehalf";
+import { agendaOrderPath, itemVotePath, type AgendaVote } from "@shared/sessionVotes";
 
 export type RoomStatus = "loading" | "ready" | "signed-out" | "refused" | "missing" | "gone" | "failed";
 
@@ -161,6 +162,14 @@ export interface RoomActions {
   fillFor?(userId: number | null): void;
   /** Take back something filled in: the person it was for, or the facilitator who filled it in. */
   undoFill?(fillId: number, opts?: WriteOptions): Promise<WriteResult>;
+  /**
+   * THE ROOM VOTES ITS AGENDA (0290, shared/sessionVotes.ts). The viewer's own
+   * vote on a waiting item, 0 to take it back; never for somebody else, even
+   * while filling in. Optional so a fixture that predates it still types.
+   */
+  vote?(itemId: number, vote: AgendaVote, opts?: WriteOptions): Promise<WriteResult>;
+  /** Whoever runs the room sets the voted order (true), or opens the vote again (false). */
+  setOrder?(set: boolean, opts?: WriteOptions): Promise<WriteResult<{ state?: SessionState }>>;
 }
 
 export interface SessionRoom {
@@ -455,6 +464,8 @@ export function useSessionRoom(
     fillingFor,
     fillFor: (userId) => setFillingFor(userId),
     undoFill: (fillId, opts) => write("POST", "", {}, opts, id == null ? undefined : onBehalfUndoPath(id, fillId)),
+    vote: (itemId, vote, opts) => write("POST", "", { vote }, opts, id == null ? undefined : itemVotePath(id, itemId)),
+    setOrder: (set, opts) => write<{ state?: SessionState }>("POST", "", { set }, opts, id == null ? undefined : agendaOrderPath(id)),
   }), [write, base, withFor, fillingFor, id]);
 
   return { view, status, lagging, offset, refresh, actions };
