@@ -828,6 +828,12 @@ export interface SessionEntry {
   ownerName: string | null;
   ownerSeatId: string | null;
   ownerSeatName: string | null;
+  /**
+   * First names of the people who sit in the owning seat now, read from the roster when the
+   * room is read, so a line can say "Treasurer (Rick)" (Rye, 2026-10-30). Only the signed-in
+   * room view fills it; the minutes and anything that leaves the village never carry it.
+   */
+  ownerSeatHolders?: string[];
   dueOn: string | null;
   createdAt: string;
 }
