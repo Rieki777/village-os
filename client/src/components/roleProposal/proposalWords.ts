@@ -7,7 +7,9 @@
  *
  * Plain words. "Role", never "seat", for a role (Rye, 2026-10-21). A role is
  * named, never the person who holds it (Rye, 2026-10-22): who holds or applies
- * is a count.
+ * is a count. The 2026-10-30 amendment ("Treasurer (Rick)" on member views,
+ * `shared/roleHolderLabel.ts`) does not reach here: a proposal's shared link
+ * is read by anyone holding it, so it stays counts and role titles.
  */
 import type { ConsentState } from "@shared/roleProposalConsent";
 
