@@ -7,7 +7,7 @@
  * NO BIRTH DATA IS EVER SENT FROM HERE. A save carries a chart (26 activations)
  * read from the sky in this browser by shared/geneKeysSky.ts.
  */
-import type { Chart, GeneKeysSource, GeneKeysView, GeneKeysVisibility, OwnGeneKeysView } from "@shared/geneKeys";
+import type { Chart, ComplementsAnswer, GeneKeysSource, GeneKeysView, GeneKeysVisibility, OwnGeneKeysView } from "@shared/geneKeys";
 import { gameFetch } from "./gameApi";
 
 /** A refusal the member can act on, in the server's own sentence. */
@@ -36,13 +36,27 @@ export async function saveMyGeneKeys(save: {
   source: GeneKeysSource;
   visibility: GeneKeysVisibility;
   maia: boolean;
-}): Promise<OwnGeneKeysView> {
-  const got = await call<{ geneKeys: OwnGeneKeysView }>("/api/gene-keys/me", { method: "PUT", body: JSON.stringify(save) });
-  return got.geneKeys;
+}): Promise<{ mine: OwnGeneKeysView; badgeEarned: string | null }> {
+  const got = await call<{ geneKeys: OwnGeneKeysView; badgeEarned?: string | null }>("/api/gene-keys/me", { method: "PUT", body: JSON.stringify(save) });
+  return { mine: got.geneKeys, badgeEarned: got.badgeEarned ?? null };
 }
 
-export async function changeMyGeneKeys(patch: { visibility?: GeneKeysVisibility; maia?: boolean }): Promise<OwnGeneKeysView> {
+export interface GeneKeysSettings {
+  visibility?: GeneKeysVisibility;
+  maia?: boolean;
+  /** "Who complements me" (opt-in on both sides). */
+  complement?: boolean;
+  /** "Talk to me plainly". */
+  maiaPlain?: boolean;
+}
+
+export async function changeMyGeneKeys(patch: GeneKeysSettings): Promise<OwnGeneKeysView> {
   return (await call<{ geneKeys: OwnGeneKeysView }>("/api/gene-keys/me", { method: "PATCH", body: JSON.stringify(patch) })).geneKeys;
+}
+
+/** "Who complements me": opted-in members whose lines fill the asker's gaps. */
+export async function readComplements(): Promise<ComplementsAnswer> {
+  return call<ComplementsAnswer>("/api/gene-keys/complements");
 }
 
 export async function removeMyGeneKeys(): Promise<boolean> {
