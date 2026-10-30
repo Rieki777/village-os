@@ -26,6 +26,23 @@ export interface OwedCancelsSummary {
   asOf: string | null;
 }
 
+/** `cancels` on `POST /api/review/erasure/retry`: what Finish did about them. */
+export interface OwedCancelPass {
+  owed: number;
+  cleared: number;
+  connected: boolean;
+}
+
+/** What Finish says about the owed cancels: their own work, said on its own. */
+export function announceOwedCancels(pass: OwedCancelPass | undefined): void {
+  if (!pass?.owed) return;
+  toast.success(
+    !pass.connected
+      ? "Stripe is not connected, so the owed cancels still need a person in the Stripe dashboard."
+      : `${pass.cleared} of ${pass.owed} owed recurring payments are now cancelled in Stripe.`,
+  );
+}
+
 export default function OwedCancels({
   summary,
   aged,

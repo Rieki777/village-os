@@ -55,7 +55,7 @@
 import Layout from "@/components/Layout";
 import ConsentQueue, { useConsentClaims } from "@/components/review/ConsentQueue";
 import OwedPostings from "@/components/review/OwedPostings";
-import OwedCancels, { type OwedCancelsSummary } from "@/components/review/OwedCancels";
+import OwedCancels, { announceOwedCancels, type OwedCancelPass, type OwedCancelsSummary } from "@/components/review/OwedCancels";
 import ProposedSeatPreview from "@/components/power/ProposedSeatPreview";
 import { blockedReasons, NOTHING_LEFT_OUT, notReadLines, type NotRead } from "@/components/review/draftNotes";
 import { useCallback, useEffect, useState } from "react";
@@ -276,7 +276,7 @@ export default function Review() {
         finished?: number;
         resumed?: number;
         swept?: number;
-        cancels?: { owed: number; cleared: number; connected: boolean };
+        cancels?: OwedCancelPass;
         error?: string;
       };
       if (!r.ok) {
@@ -304,14 +304,7 @@ export default function Review() {
       }
       // A press that found nothing to do still says so. A silent button is one
       // a steward presses again, and again.
-      // The owed cancels are their own work too, and say so on their own.
-      if (d.cancels?.owed) {
-        toast.success(
-          !d.cancels.connected
-            ? "Stripe is not connected, so the owed cancels still need a person in the Stripe dashboard."
-            : `${d.cancels.cleared} of ${d.cancels.owed} owed recurring payments are now cancelled in Stripe.`,
-        );
-      }
+      announceOwedCancels(d.cancels);
       if (!d.resumed && !d.asked && !d.cancels?.owed) toast.success("Nothing was outstanding.");
       await load();
     } catch {
@@ -737,14 +730,8 @@ export default function Review() {
         )}
 
         {/* A recurring payment a departed member's erasure could not cancel. */}
-        <OwedCancels
-          summary={owed?.subscriptions}
-          aged={agedFor(owed?.subscriptions?.oldestSince ?? null)}
-          busy={asking}
-          onFinish={() => void askAgain()}
-          headers={headers}
-          onChanged={() => void load()}
-        />
+        <OwedCancels summary={owed?.subscriptions} aged={agedFor(owed?.subscriptions?.oldestSince ?? null)} busy={asking}
+          onFinish={() => void askAgain()} headers={headers} onChanged={() => void load()} />
 
         {/* What the village still owes somebody who left. The only item on
             this screen about a person already gone, and it is here because
