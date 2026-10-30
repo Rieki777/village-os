@@ -615,7 +615,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
  * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 22 keys
- * today. The other 17 are not withheld from anybody: they are personal acts
+ * today. The other 18 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and one power
  * waiting on the founder's word (`cash.pay`, below), which an admin holds
  * meanwhile. `TRANSFERABLE` carries the reasoning key by key.
@@ -643,7 +643,8 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * the pair to 22 and 16. A new key born transferable moves the first number
  * and leaves the second; a key RECLASSIFIED from withheld to transferable would
  * move both, in opposite directions. `cash.pay` (0285) was born held back, so
- * it moved only the second, and the pair today is 22 and 17.
+ * it moved only the second, to 17. `session.template` (0291) was born held
+ * back too, a member-rung act, and the pair today is 22 and 18.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed

@@ -171,22 +171,31 @@ export function register(app: Express, deps: Deps): void {
   const sessionOf = (req: Request) => parseId(req.params?.sessionId);
 
   /** Answer a room write with the panel as it now stands. */
-  const afterWrite = async (req: Request, res: Response, sessionId: number, asker: { no: number | null; admin: boolean }, out: Outcome<null>) => {
+  const afterWrite = async (res: Response, sessionId: number, asker: { no: number | null; admin: boolean }, out: Outcome<null>) => {
     if (!out.ok) return res.status(out.status).json({ error: out.error });
     const view = await roomView(getPool(), sessionId, asker, lookup);
     if (!view) return res.status(404).json({ error: R.roomNotFound });
     res.json(view);
   };
 
+  /** A writer in a room: signed in (or a 401 sent) and within the room bucket (or a 429 sent). */
   const roomWriter = async (req: Request, res: Response) => {
-    const who = await signedIn(req, res, { key: "session-templates-room", max: TEMPLATE_LIMITS.roomWritesPerHour });
-    if (!who) return null;
+    const user = await authedUser(req);
+    if (!user) {
+      res.status(401).json({ error: "auth_required" });
+      return null;
+    }
+    const userId = String(user.id);
+    if (await overLimit(`session-templates-room:${userId}`, TEMPLATE_LIMITS.roomWritesPerHour, HOUR_MS)) {
+      res.status(429).json({ error: R.slowDown });
+      return null;
+    }
     const sessionId = sessionOf(req);
     if (sessionId == null) {
       res.status(404).json({ error: R.roomNotFound });
       return null;
     }
-    return { sessionId, userId: who.userId, asker: { no: await memberNo(getPool(), who.userId), admin: who.admin } };
+    return { sessionId, userId, asker: { no: await memberNo(getPool(), userId), admin: await isAdmin(req) } };
   };
 
   app.get(ROOM, async (req, res) => {
@@ -203,13 +212,13 @@ export function register(app: Express, deps: Deps): void {
   app.post(`${ROOM}/stick`, async (req, res) => {
     const w = await roomWriter(req, res);
     if (!w) return;
-    await afterWrite(req, res, w.sessionId, w.asker, await stickAct(getPool(), w.sessionId, w.asker, req.body));
+    await afterWrite(res, w.sessionId, w.asker, await stickAct(getPool(), w.sessionId, w.asker, req.body));
   });
 
   app.post(`${ROOM}/priorities`, async (req, res) => {
     const w = await roomWriter(req, res);
     if (!w) return;
-    await afterWrite(req, res, w.sessionId, w.asker, await addPriority(getPool(), w.sessionId, w.asker, req.body));
+    await afterWrite(res, w.sessionId, w.asker, await addPriority(getPool(), w.sessionId, w.asker, req.body));
   });
 
   app.patch(`${ROOM}/priorities/:pid`, async (req, res) => {
@@ -217,13 +226,13 @@ export function register(app: Express, deps: Deps): void {
     if (!w) return;
     const pid = parseId(req.params?.pid);
     if (pid == null) return res.status(404).json({ error: R.priorityNotFound });
-    await afterWrite(req, res, w.sessionId, w.asker, await patchPriority(getPool(), w.sessionId, w.asker, pid, req.body));
+    await afterWrite(res, w.sessionId, w.asker, await patchPriority(getPool(), w.sessionId, w.asker, pid, req.body));
   });
 
   app.post(`${ROOM}/shares`, async (req, res) => {
     const w = await roomWriter(req, res);
     if (!w) return;
-    await afterWrite(req, res, w.sessionId, w.asker, await addShare(getPool(), w.sessionId, w.asker, req.body));
+    await afterWrite(res, w.sessionId, w.asker, await addShare(getPool(), w.sessionId, w.asker, req.body));
   });
 
   app.post(`${ROOM}/shares/:shareId/bring`, async (req, res) => {
@@ -236,6 +245,6 @@ export function register(app: Express, deps: Deps): void {
       const brought = await bringItem(pool, { userId: w.userId, admin: w.asker.admin }, input, circleIds(), { lookup, circleName, lapseContext: deps.lapseContext });
       return brought.ok ? { ok: true, value: { id: brought.value.item.id } } : brought;
     });
-    await afterWrite(req, res, w.sessionId, w.asker, out);
+    await afterWrite(res, w.sessionId, w.asker, out);
   });
 }
