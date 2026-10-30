@@ -18341,7 +18341,7 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
-  registerGeneKeysRoutes(app, { authedUser, getPool, overLimit });
+  registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
