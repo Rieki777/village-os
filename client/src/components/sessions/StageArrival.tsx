@@ -36,7 +36,6 @@ import {
 import Figure from "@/components/sheet/Figure";
 import GrowingText from "./GrowingText";
 import FilledInNote from "./FilledInNote";
-import { ON_BEHALF_COPY } from "@shared/sessionOnBehalf";
 import PersonDisc from "./PersonDisc";
 import {
   BTN_PRIMARY,
@@ -123,7 +122,6 @@ export default function StageArrival({ view, actions }: StageProps) {
         <h3 id="arrival-mine" className={H3}>
           {SESSION_COPY.arrivalPrompt}
         </h3>
-        {joined && forNo != null && me && <p className={`${HINT} mt-1`}>{ON_BEHALF_COPY.fillingForLine(me.name)}</p>}
         {joined ? (
           <div className="mt-3 space-y-4">
             <div role="radiogroup" aria-labelledby="arrival-mine" className="grid grid-cols-6 gap-2 sm:grid-cols-11">
