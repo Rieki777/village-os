@@ -43,6 +43,8 @@ import GratitudeRound from "./GratitudeRound";
 import ItemPage from "./ItemPage";
 import { forgetDrafts } from "./roomUi";
 import { breathEndsAt, breathScale } from "./SharedBreath";
+import { bellFor } from "./SharedSit";
+import { chakraLight, WAVE_SECS } from "./ChakraFigure";
 import StageActions from "./StageActions";
 import StageArrival from "./StageArrival";
 import StageClose from "./StageClose";
@@ -403,6 +405,41 @@ describe("the shared breath", () => {
     expect(breathScale(breathAt(b, T0 + 10_000))).toBeCloseTo(0.775);
     expect(breathScale(breathAt(b, T0 + 13_000))).toBe(0.55);
     expect(breathScale({ state: "idle" })).toBe(0.7);
+  });
+});
+
+describe("the shared sit", () => {
+  const sitting = (elapsed: number) => ({ state: "sitting" as const, elapsed, progress: 0, secondsLeft: 60 });
+
+  it("rings softly as a sit starts and fully as it ends, and never for a moment already past", () => {
+    expect(bellFor("idle", sitting(1))).toBe("start");
+    expect(bellFor("done", sitting(2))).toBe("start");
+    expect(bellFor("idle", sitting(40))).toBeNull();
+    expect(bellFor("sitting", { state: "done", sinceEnd: 0.3 })).toBe("end");
+    expect(bellFor("idle", { state: "done", sinceEnd: 0.3 })).toBeNull();
+    expect(bellFor("sitting", { state: "done", sinceEnd: 30 })).toBeNull();
+    expect(bellFor("sitting", sitting(10))).toBeNull();
+  });
+
+  it("the light climbs from the root to the crown and falls back", () => {
+    const brightest = (l: number[]) => l.indexOf(Math.max(...l));
+    expect(brightest(chakraLight(sitting(0), false))).toBe(0);
+    expect(brightest(chakraLight(sitting(WAVE_SECS / 2), false))).toBe(6);
+    expect(brightest(chakraLight(sitting(WAVE_SECS), false))).toBe(0);
+  });
+
+  it("when the bowl rings the body fills from the root up, a pulse falls from the crown, and all seven rest lit", () => {
+    const filling = chakraLight({ state: "done", sinceEnd: 2 }, false);
+    expect(filling[0]).toBe(1);
+    expect(filling[6]).toBeLessThan(0.5);
+    const falling = chakraLight({ state: "done", sinceEnd: 4.2 }, false);
+    expect(falling.indexOf(Math.max(...falling))).toBe(6);
+    expect(new Set(chakraLight({ state: "done", sinceEnd: 60 }, false)).size).toBe(1);
+  });
+
+  it("holds still under reduced motion", () => {
+    expect(new Set(chakraLight(sitting(3), true)).size).toBe(1);
+    expect(new Set(chakraLight(sitting(9), true))).toEqual(new Set(chakraLight(sitting(3), true)));
   });
 });
 
