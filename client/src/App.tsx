@@ -230,6 +230,7 @@ const CrowdpoolCampaign = lazyPage(() => import("./pages/CrowdpoolCampaign"));
 const Journal = lazyPage(() => import("./pages/Journal"));
 const Sessions = lazyPage(() => import("./pages/Sessions"));
 const SessionRoom = lazyPage(() => import("./pages/SessionRoom"));
+const SessionSeason = lazyPage(() => import("./pages/SessionSeason"));
 
 /**
  * Shown while a page chunk arrives. Deliberately quiet: on a slow link this
@@ -386,6 +387,7 @@ function Router() {
           ModuleGate("sessions") and sign-in; members only, no guests. The
           list is declared before the room for the reason /decisions gives. */}
       <Route path="/sessions" component={Sessions} />
+      <Route path="/sessions/season" component={SessionSeason} />
       <Route path="/sessions/:id" component={SessionRoom} />
       <Route path="/work-with-us" component={WorkWithUs} />
       <Route path="/404" component={NotFound} />

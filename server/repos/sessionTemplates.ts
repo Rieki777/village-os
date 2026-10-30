@@ -156,7 +156,7 @@ export async function usesFor(q: Queryable, sessionIds: readonly number[]): Prom
 
 // ── Priorities ──────────────────────────────────────────────────────────────
 
-const PRIORITY_COLUMNS = "`id`, `session_id`, `position`, `text`, `outcome`, `outcome_session_id`, `carried_from_id`";
+const PRIORITY_COLUMNS = "`id`, `session_id`, `position`, `text`, `outcome`, `outcome_session_id`, `carried_from_id`, `serves_goal`";
 
 export async function priorityRows(q: Queryable, sessionId: number): Promise<RowDataPacket[]> {
   return rowsOf(q, `SELECT ${PRIORITY_COLUMNS} FROM \`live_session_priorities\` WHERE \`session_id\` = ? ORDER BY \`position\`, \`id\``, [sessionId]);
@@ -175,14 +175,18 @@ export async function markedBy(q: Queryable, outcomeSessionId: number): Promise<
 
 export async function insertPriority(
   q: Queryable,
-  row: { sessionId: number; position: number; text: string; authorNo: number; carriedFromId: number | null; now: Date },
+  row: { sessionId: number; position: number; text: string; authorNo: number; carriedFromId: number | null; servesGoal: string | null; now: Date },
 ): Promise<number> {
   const [r] = await q.query<any>(
-    "INSERT INTO `live_session_priorities` (`session_id`, `position`, `text`, `author_no`, `outcome`, `outcome_session_id`, `outcome_by_no`, `carried_from_id`, `created_at`, `updated_at`) " +
-      "VALUES (?, ?, ?, ?, NULL, NULL, 0, ?, ?, ?)",
-    [row.sessionId, row.position, row.text, row.authorNo, row.carriedFromId, row.now, row.now],
+    "INSERT INTO `live_session_priorities` (`session_id`, `position`, `text`, `author_no`, `outcome`, `outcome_session_id`, `outcome_by_no`, `carried_from_id`, `serves_goal`, `created_at`, `updated_at`) " +
+      "VALUES (?, ?, ?, ?, NULL, NULL, 0, ?, ?, ?, ?)",
+    [row.sessionId, row.position, row.text, row.authorNo, row.carriedFromId, row.servesGoal, row.now, row.now],
   );
   return Number(r.insertId);
+}
+
+export async function writePriorityServes(q: Queryable, id: number, servesGoal: string | null, now: Date): Promise<void> {
+  await q.query("UPDATE `live_session_priorities` SET `serves_goal` = ?, `updated_at` = ? WHERE `id` = ?", [servesGoal, now, id]);
 }
 
 export async function writePriorityText(q: Queryable, id: number, text: string, now: Date): Promise<void> {
@@ -213,7 +217,7 @@ export async function carriedInto(q: Queryable, sessionId: number): Promise<RowD
 export async function shareRows(q: Queryable, sessionId: number): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
-    "SELECT `id`, `kind`, `text`, `speaker_no`, `author_no`, `library_id`, `created_at` FROM `live_session_shares` WHERE `session_id` = ? ORDER BY `id`",
+    "SELECT `id`, `kind`, `text`, `speaker_no`, `author_no`, `library_id`, `serves_goal`, `created_at` FROM `live_session_shares` WHERE `session_id` = ? ORDER BY `id`",
     [sessionId],
   );
 }
@@ -233,17 +237,62 @@ export async function shareCount(q: Queryable, sessionId: number): Promise<numbe
 
 export async function insertShare(
   q: Queryable,
-  row: { sessionId: number; kind: string; text: string; speakerNo: number; authorNo: number; now: Date },
+  row: { sessionId: number; kind: string; text: string; speakerNo: number; authorNo: number; servesGoal: string | null; now: Date },
 ): Promise<number> {
   const [r] = await q.query<any>(
-    "INSERT INTO `live_session_shares` (`session_id`, `kind`, `text`, `speaker_no`, `author_no`, `library_id`, `created_at`) VALUES (?, ?, ?, ?, ?, NULL, ?)",
-    [row.sessionId, row.kind, row.text, row.speakerNo, row.authorNo, row.now],
+    "INSERT INTO `live_session_shares` (`session_id`, `kind`, `text`, `speaker_no`, `author_no`, `library_id`, `serves_goal`, `created_at`) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
+    [row.sessionId, row.kind, row.text, row.speakerNo, row.authorNo, row.servesGoal, row.now],
   );
   return Number(r.insertId);
 }
 
+export async function writeShareServes(q: Queryable, id: number, servesGoal: string | null): Promise<void> {
+  await q.query("UPDATE `live_session_shares` SET `serves_goal` = ? WHERE `id` = ?", [servesGoal, id]);
+}
+
 export async function writeShareLibrary(q: Queryable, id: number, libraryId: number): Promise<void> {
   await q.query("UPDATE `live_session_shares` SET `library_id` = ? WHERE `id` = ?", [libraryId, id]);
+}
+
+// ── A season's window (0292) ────────────────────────────────────────────────
+
+/** Every priority set in a templated session opened inside a window, with its session. */
+export async function prioritiesInWindow(q: Queryable, from: Date, to: Date): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    "SELECT p.`id`, p.`text`, p.`outcome`, p.`serves_goal`, p.`session_id`, s.`title` AS `session_title`, s.`created_at` AS `session_at` " +
+      "FROM `live_session_priorities` p JOIN `live_sessions` s ON s.`id` = p.`session_id` " +
+      "WHERE s.`created_at` >= ? AND s.`created_at` < ? ORDER BY s.`created_at`, p.`position`, p.`id`",
+    [from, to],
+  );
+}
+
+/** Wins and tensions captured in sessions opened inside a window. */
+export async function sharesInWindow(q: Queryable, kinds: readonly string[], from: Date, to: Date): Promise<RowDataPacket[]> {
+  if (!kinds.length) return [];
+  return rowsOf(
+    q,
+    "SELECT sh.`kind`, sh.`text`, sh.`serves_goal`, sh.`session_id`, sh.`created_at`, s.`title` AS `session_title` " +
+      "FROM `live_session_shares` sh JOIN `live_sessions` s ON s.`id` = sh.`session_id` " +
+      "WHERE sh.`kind` IN (?) AND s.`created_at` >= ? AND s.`created_at` < ? ORDER BY sh.`created_at`, sh.`id`",
+    [kinds, from, to],
+  );
+}
+
+/** Wins written on the room's item pages (entry kind `win`), per session, inside a window. */
+export async function itemWinsInWindow(q: Queryable, from: Date, to: Date): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    "SELECT e.`created_at` FROM `live_session_entries` e JOIN `live_sessions` s ON s.`id` = e.`session_id` " +
+      "WHERE e.`kind` = 'win' AND s.`created_at` >= ? AND s.`created_at` < ?",
+    [from, to],
+  );
+}
+
+/** Which of some sessions a member was in. */
+export async function sessionsWith(q: Queryable, no: number, sessionIds: readonly number[]): Promise<RowDataPacket[]> {
+  if (!sessionIds.length) return [];
+  return rowsOf(q, "SELECT `session_id` FROM `live_session_people` WHERE `member_no` = ? AND `session_id` IN (?)", [no, sessionIds]);
 }
 
 // ── One member: the export and the erasure ──────────────────────────────────

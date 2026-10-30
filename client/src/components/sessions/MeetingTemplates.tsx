@@ -13,8 +13,11 @@
  * the server's own sentence.
  */
 import { useState } from "react";
+import { Link } from "wouter";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import {
+  SEASON_COPY,
+  SEASON_VIEW_PATH,
   SECTION_KINDS,
   SECTION_KIND_DEFS,
   TEMPLATES_API,
@@ -197,6 +200,9 @@ export default function MeetingTemplates({
             {TEMPLATE_COPY.manageHeading}
           </h2>
           <p className={`mt-1 ${HINT}`}>{TEMPLATE_COPY.manageLede}</p>
+          <Link href={SEASON_VIEW_PATH} className={`mt-1 ${BTN_QUIET}`}>
+            {SEASON_COPY.link}
+          </Link>
         </div>
         {mayKeep && !draft && (
           <button type="button" className={LIST_UI.secondary} onClick={() => setDraft(draftOf(null))}>

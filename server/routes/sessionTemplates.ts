@@ -15,6 +15,8 @@
  *   PATCH  /api/session-templates/rooms/:sessionId/priorities/:pid
  *   POST   /api/session-templates/rooms/:sessionId/shares
  *   POST   /api/session-templates/rooms/:sessionId/shares/:shareId/bring
+ *   PATCH  /api/session-templates/rooms/:sessionId/shares/:shareId
+ *   GET    /api/session-templates/season?season=<id>       SeasonView (0292)
  *
  * The session's own create door (`POST /api/sessions`, server/routes/
  * liveSessions.ts) takes `templateId` and links the new session here.
@@ -47,19 +49,25 @@ import {
   listTemplates,
   moveTemplate,
   patchPriority,
+  patchShare,
   roomView,
+  seasonRefOf,
+  seasonView,
   stickAct,
 } from "../lib/sessionTemplates";
 import { liveCircles } from "./sessionRhythm";
-import { TEMPLATES_API, TEMPLATE_LIMITS, TEMPLATE_REFUSALS as R } from "../../shared/sessionTemplates";
+import { SEASON_VIEW_API, TEMPLATES_API, TEMPLATE_LIMITS, TEMPLATE_REFUSALS as R } from "../../shared/sessionTemplates";
 
-type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "members" | "circlesRepo" | "guardCapability" | "mayAct" | "lapseContext">;
+type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "members" | "circlesRepo" | "guardCapability" | "mayAct" | "lapseContext" | "seasonState">;
 
 const HOUR_MS = 60 * 60 * 1000;
 const NAME_TTL_MS = 60_000;
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, guardCapability, mayAct } = deps;
+  const { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, guardCapability, mayAct, seasonState } = deps;
+  /** The running season's priorities, the only words a priority or a win may name as the one it serves. */
+  const season = () => seasonRefOf(seasonState().current);
+  const goals = () => season()?.goals ?? [];
 
   app.use(TEMPLATES_API, requireModule("sessions"));
   app.use(TEMPLATES_API, async (req: Request, res: Response, next: NextFunction) => {
@@ -165,6 +173,19 @@ export function register(app: Express, deps: Deps): void {
     answer(res, await moveTemplate(getPool(), id, req.body), (v) => v);
   });
 
+  // ── The season so far (0292) ──────────────────────────────────────────────
+
+  app.get(SEASON_VIEW_API, async (req, res) => {
+    const who = await signedIn(req, res, null);
+    if (!who) return;
+    const raw = req.query?.season;
+    const seasonId = typeof raw === "string" && raw ? raw.slice(0, 64) : null;
+    const out = await seasonView(getPool(), seasonState(), seasonId, { no: await memberNo(getPool(), who.userId), admin: who.admin });
+    if (!out.ok) return res.status(out.status).json({ error: out.error });
+    res.setHeader("Cache-Control", "private, no-cache");
+    res.json({ view: out.value });
+  });
+
   // ── The room's panel ──────────────────────────────────────────────────────
 
   const ROOM = `${TEMPLATES_API}/rooms/:sessionId`;
@@ -173,7 +194,7 @@ export function register(app: Express, deps: Deps): void {
   /** Answer a room write with the panel as it now stands. */
   const afterWrite = async (res: Response, sessionId: number, asker: { no: number | null; admin: boolean }, out: Outcome<null>) => {
     if (!out.ok) return res.status(out.status).json({ error: out.error });
-    const view = await roomView(getPool(), sessionId, asker, lookup);
+    const view = await roomView(getPool(), sessionId, asker, lookup, season());
     if (!view) return res.status(404).json({ error: R.roomNotFound });
     res.json(view);
   };
@@ -203,7 +224,7 @@ export function register(app: Express, deps: Deps): void {
     if (!who) return;
     const sessionId = sessionOf(req);
     if (sessionId == null) return res.status(404).json({ error: R.roomNotFound });
-    const view = await roomView(getPool(), sessionId, { no: await memberNo(getPool(), who.userId), admin: who.admin }, lookup);
+    const view = await roomView(getPool(), sessionId, { no: await memberNo(getPool(), who.userId), admin: who.admin }, lookup, season());
     if (!view) return res.status(404).json({ error: R.roomNotFound });
     res.setHeader("Cache-Control", "private, no-cache");
     res.json(view);
@@ -218,7 +239,7 @@ export function register(app: Express, deps: Deps): void {
   app.post(`${ROOM}/priorities`, async (req, res) => {
     const w = await roomWriter(req, res);
     if (!w) return;
-    await afterWrite(res, w.sessionId, w.asker, await addPriority(getPool(), w.sessionId, w.asker, req.body));
+    await afterWrite(res, w.sessionId, w.asker, await addPriority(getPool(), w.sessionId, w.asker, req.body, goals()));
   });
 
   app.patch(`${ROOM}/priorities/:pid`, async (req, res) => {
@@ -226,13 +247,21 @@ export function register(app: Express, deps: Deps): void {
     if (!w) return;
     const pid = parseId(req.params?.pid);
     if (pid == null) return res.status(404).json({ error: R.priorityNotFound });
-    await afterWrite(res, w.sessionId, w.asker, await patchPriority(getPool(), w.sessionId, w.asker, pid, req.body));
+    await afterWrite(res, w.sessionId, w.asker, await patchPriority(getPool(), w.sessionId, w.asker, pid, req.body, goals()));
   });
 
   app.post(`${ROOM}/shares`, async (req, res) => {
     const w = await roomWriter(req, res);
     if (!w) return;
-    await afterWrite(res, w.sessionId, w.asker, await addShare(getPool(), w.sessionId, w.asker, req.body));
+    await afterWrite(res, w.sessionId, w.asker, await addShare(getPool(), w.sessionId, w.asker, req.body, goals()));
+  });
+
+  app.patch(`${ROOM}/shares/:shareId`, async (req, res) => {
+    const w = await roomWriter(req, res);
+    if (!w) return;
+    const shareId = parseId(req.params?.shareId);
+    if (shareId == null) return res.status(404).json({ error: R.shareNotFound });
+    await afterWrite(res, w.sessionId, w.asker, await patchShare(getPool(), w.sessionId, w.asker, shareId, req.body, goals()));
   });
 
   app.post(`${ROOM}/shares/:shareId/bring`, async (req, res) => {
