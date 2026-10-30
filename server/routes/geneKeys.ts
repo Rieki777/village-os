@@ -28,7 +28,7 @@ import {
 import { requireModule } from "../lib/modules";
 
 /** Re-exported so server/index.ts reaches them on its one exempt import line for this module. */
-export { exportMemberGeneKeys, geneKeysForAssistant } from "../lib/geneKeys";
+export { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing } from "../lib/geneKeys";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit">;
 
