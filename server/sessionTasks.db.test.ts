@@ -268,7 +268,9 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     const cai = await board("m-cai");
     expect(ids(cai.body.holding)).toEqual([]);
     expect(ids(cai.body.seatsHold)).toEqual([tank]);
-    expect(cai.body.seatsHold[0]).toMatchObject({ heldAs: "seat", seat: { id: "seat-water", name: "Water keeper", holders: ["Cai Moreno"] }, canAnswer: true, recordLink: false });
+    // First names only, for "Held by Water keeper (Cai)" (Rye, 2026-10-30): the surname is never sent.
+    expect(cai.body.seatsHold[0]).toMatchObject({ heldAs: "seat", seat: { id: "seat-water", name: "Water keeper", holders: ["Cai"] }, canAnswer: true, recordLink: false });
+    expect(JSON.stringify(cai.body)).not.toContain("Moreno");
     // Dee's term ran out: the bee seat's task is not on her board.
     const dee = await board("m-dee");
     expect(dee.body).toMatchObject({ holding: [], seatsHold: [], finished: [], earlierCount: 0 });
