@@ -66,8 +66,12 @@ export const KEPT_BY_TYPE: Readonly<Record<string, readonly string[]>> = {
   // words, and the inbox reads them to say what was asked.
   "role-application": ["roleId", "roleName", "termEndsOn", "followsSeason", "caution"],
   // A seat claim names the village's seating. The steward's queue finds an
-  // open claim by `assignmentId`; the recorded name was theirs and goes.
-  [SEAT_CLAIM]: ["assignmentId", "roleId", "roleName"],
+  // open claim by `assignmentId`. The recorded name was theirs and goes, in
+  // the erasure's "seat-claims-after-tombstone" step: the seat journal steps
+  // before it ("org-seatings", "seat-journal-after-tombstone") find the lines
+  // that quote it through the claim (server/repos/orgSeatErasure.ts, way 3),
+  // so this pass leaves it for them to read.
+  [SEAT_CLAIM]: ["assignmentId", "roleId", "roleName", "recordedName"],
   // A hand for a power names the village's power and the roles it suits; the
   // list of hands members read is built from them (shared/powerHands.ts).
   [POWER_APPLICATION]: ["capability", "powerLabel", "suits"],

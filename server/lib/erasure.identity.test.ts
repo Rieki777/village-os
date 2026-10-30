@@ -833,9 +833,9 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
     const squatter = "er-squatter-1";
     const target = await seedMember(id, "wrenh17");
     await seedNeighbour(squatter);
-    // Through the member's own profile, which reserves nothing.
-    const took = await profileRoutes(async () => usersRepo(pool).byId(squatter))("PUT /api/profile", { handle: `departed-${id.slice(-8)}` });
-    expect(took.status, "the squat must land, or this is a different case").toBe(200);
+    // Written straight to the row: PUT /api/profile now refuses a departed- handle, and a database from before that refusal can hold one.
+    await q("UPDATE users SET handle = ? WHERE id = ?", [`departed-${id.slice(-8)}`, squatter]);
+    expect((await usersRepo(pool).byId(squatter))!.handle, "the squat must land, or this is a different case").toBe(`departed-${id.slice(-8)}`);
 
     await anonymizeMember(pool, target, null, deps());
 
