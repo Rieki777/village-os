@@ -807,12 +807,12 @@ import {
   ceilMinor,
   createCheckout,
   handleStripeEvent,
-  isSuspended,
-  recordFiatCharge,
+  isSuspended, buyerHasLeft, BUYER_HAS_LEFT,
+  recordFiatCharge, refusedChargeAdvice,
   registerPaymentHandlers,
   stripeConfigured,
   webhookSecretConfigured,
-} from "./lib/payments";
+} from "./lib/payments"; import { settleLeaversSubscription } from "./lib/owedCancels"; // a leaver's subscription, cancelled on a refused charge
 import {
   LIFECYCLE_RANK, MODULES, MODULES_BY_ID, modulesOwning, priceLine, supportRoute, vendorModules,
   type ModuleLifecycle,
@@ -5879,10 +5879,10 @@ async function startServer() {
      * the goods, and put a human on it.
      */
     const isRenewal = firstTimeForThisPeriod && Number(row.periods_paid) >= 1;
-    let refusal: string | null = null;
+    let refusal: string | null = row.user_id && buyerHasLeft(await members.byId(String(row.user_id))) ? BUYER_HAS_LEFT : null;
     if (isRenewal) {
-      if (!row.active) refusal = "the product is no longer active";
-      else if (row.token_slug) refusal = purchaseProblem(String(row.token_slug));
+      if (!refusal && !row.active) refusal = "the product is no longer active";
+      else if (!refusal && row.token_slug) refusal = purchaseProblem(String(row.token_slug));
       if (!refusal && row.user_id && await isSuspended(pool, String(row.user_id))) {
         refusal = "the buyer's purchasing is suspended";
       }
@@ -5929,12 +5929,11 @@ async function startServer() {
       amountMinor: Number(row.amount_minor), paymentIntentId: chargeRef,
     });
     if (refusal) {
-      // Banked, not delivered. Loud, and settled below so Stripe stops
-      // retrying a decision rather than a failure.
-      await notifyAdmins(
-        "payment",
-        `Renewal charged but NOT delivered: ${row.product_name} (${purchaseId}, ${periodKey}), ${refusal}. ` +
-          `Cancel the subscription in Stripe and refund this period.`,
+      // Banked, not delivered, settled below so Stripe stops retrying a decision. A leaver's subscription is cancelled on every such charge (server/lib/owedCancels.ts).
+      const held = await settleLeaversSubscription(pool, { userId: row.user_id ? String(row.user_id) : null, subscriptionId: subId ?? row.stripe_subscription_id, refusal });
+      if (firstTimeForThisPeriod) await notifyAdmins("payment",
+        `${isRenewal ? "Renewal" : "Purchase"} charged but NOT delivered: ${row.product_name} (${purchaseId}, ${periodKey}), ${refusal}. ` +
+          refusedChargeAdvice(held, refusal),
         `product-renewrefused:${purchaseId}:${periodKey}`,
       );
     } else if (row.token_slug && row.token_amount && row.user_id) {
@@ -5971,7 +5970,7 @@ async function startServer() {
         [periodKey, purchaseId, periodKey],
       );
     }
-    if (row.user_id) {
+    if (row.user_id && refusal !== BUYER_HAS_LEFT) {
       await notify({
         userId: String(row.user_id), type: "payment",
         title: `Receipt #${row.receipt_no}: ${row.product_name}`,
@@ -17181,7 +17180,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   // A member's own account record: read, update, and the contribution journal.
   // Registered at exactly the point those three routes used to sit.
-  registerProfileRoutes(app, { authedUser, members, publicUser });
+  registerProfileRoutes(app, { authedUser, members, publicUser, getPool });
 
   // Where the member stands on each path they walk. Beside the profile routes
   // because it answers only to the account behind the token, and derived from
@@ -25565,7 +25564,7 @@ ${inner}
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerSaberraRoutes(app, { guardCapability, getPool, authedUser });
-  registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
+  registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps, authedUser });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
   // ── Season patterns (0050) ───────────────────────────────────────────────

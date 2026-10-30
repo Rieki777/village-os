@@ -3106,6 +3106,21 @@ forever. Re-running it moves nothing.
   still hold anything of value? Either way their roles are vacated and the
   stewards are told which. Value rows are never deleted, so conservation holds
   through every departure.
+- **A recurring payment informs and never blocks** (round 3, finding 5). The
+  enumeration's `subscriptions` domain (`subscriptionsState`) names each Stripe
+  subscription the member's purchases hold, and says the deletion cancels it in
+  Stripe and refunds nothing already paid. It cannot block, because no door lets
+  a member cancel one first. The erasure's `product-subscriptions-after-tombstone`
+  step does the cancelling and moves no token; with no Stripe key it asks the
+  admins to cancel each one by hand and finishes. A charge that lands after the
+  account is gone posts no `product_grant` from the treasury: `settleProductPurchase`
+  refuses a buyer who has left on every period, banks the money in `fiat_charges`
+  as it does for any refused renewal, and asks the admins to refund it. That
+  refusal also cancels the subscription (round 4), so a checkout paid after the
+  delete stops charging; with no key, or a failing Stripe, the cancel is owed
+  on `/review` until Finish, the hourly job or a person settles it. On the exit
+  path a member who holds tokens reads that resolving keeps them a former
+  member and the payments keep renewing until an admin cancels them.
 
 ### A former member, or a tombstone (the ruling of 2026-10-23)
 

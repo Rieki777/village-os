@@ -10,6 +10,7 @@ import { authToken } from "@/lib/gameApi";
 import { DoorOpen, HeartHandshake, ShieldQuestion } from "lucide-react";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import LeavingEnds, { useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
+import LeavingNotices, { useLeavingNotices } from "@/components/LeavingNotices";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -28,6 +29,9 @@ export default function ExitPolicy() {
   const identity = useIdentityConfirm("request-exit");
   // The aligned terms a departure ends when it is resolved (seat settings PR8). Signed in only.
   const endingTerms = useTermsLeavingEnds(!!user);
+  // And their recurring payments: cancelled when the departure erases the account, still
+  // renewing when holding tokens keeps them a former member. The server says which. Signed in only.
+  const leavingNotices = useLeavingNotices(!!user, "exit");
 
   useEffect(() => {
     fetch("/api/exit-policy").then((r) => r.json()).then(setData).catch(() => {});
@@ -172,6 +176,7 @@ export default function ExitPolicy() {
                 member and keep your account and balances. Otherwise your identity is removed at the end and your contributions stay part of the village's record.
               </p>
               <LeavingEnds titles={endingTerms} />
+              <LeavingNotices notices={leavingNotices} />
               <div className="space-y-2">
                 <IdentityConfirmField state={identity} action="request-exit"
                   password={password} onPassword={setPassword}
