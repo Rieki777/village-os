@@ -13,11 +13,12 @@
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { boolVar, numberVar } from "./variables";
 import { parseCycleId } from "./gratitude-cycles";
-import { isExampleUser } from "./examples";
+import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "./examples";
 import { issuanceRefusal } from "./gameStart";
 import { PLATFORM_TOKEN, lockLedgerAccounts, memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
 import { allowanceFor, writeGratitudeRow, shareCapFor, fullSendsIn, recognitionName, toLedgerUnits, type Allowance } from "./economy";
 import { userIdForHandle } from "./profile";
+import { isTombstone } from "./oauthAccounts";
 import type { GratitudeLogRepo, GratitudeEntry } from "../repos/gratitude";
 import type { UsersRepo } from "../repos/users";
 
@@ -140,6 +141,56 @@ export interface SendInput {
   contextRef?: string;
 }
 
+/**
+ * NOTHING IS SENT TO A MEMBER WHO HAS LEFT.
+ *
+ * An erased member's row stays, as "A departed member" at
+ * `deleted-<id>@anonymized.invalid`, so history keeps somebody to point at.
+ * Every door that pays a recipient a member names looked that row up by
+ * address or by id and refused only the standing examples, so typing the
+ * address, or hearting a departed member's old post, issued tokens into an
+ * account nobody holds: the sender's allowance or balance spent, and
+ * Gratitude, the voting-weight token by default, piling up in the name of
+ * somebody who is gone.
+ *
+ * The three doors ask this one question: `sendGratitude` below (the wall and
+ * forum hearts), and in server/index.ts the Hearts give (`POST /api/gratitude`)
+ * and member sends (`POST /api/wallet/send`). The admin hand-mint asks it
+ * through `mintRecipientRefusal` below.
+ */
+export const DEPARTED_RECIPIENT = "That member has left the village, so nothing can be sent to them.";
+
+export function departedRecipient(member: { email?: unknown } | null | undefined): boolean {
+  return !!member && isTombstone({ email: String(member.email ?? "") });
+}
+
+/**
+ * NOR DOES A STEWARD MINT TO THEM, OR TO A STANDING EXAMPLE.
+ *
+ * The admin hand-mint (`POST /api/admin/tokens/:slug/mint`) and its co-signed
+ * approval (`POST /api/admin/mint-requests/:id/approve`) looked the recipient
+ * up by id and refused only a missing row. So a steward could issue any
+ * platform token from `sys:mint` into a tombstone's account, where nobody can
+ * spend or claim it and Village Voice counts as weight for nobody, or into a
+ * standing example's, which `sendGratitude` above already refuses. The
+ * approval reads the recipient again when the second steward signs, so a grant
+ * asked for while a member was here is refused once they have left, and stays
+ * pending for a steward to decline.
+ *
+ * Both routes ask this before anything is recorded or moved: a tombstone gets
+ * the sentence every send door gives, a standing example the refusal every
+ * admin door gives. A missing row answers null, and the route keeps its own
+ * 404 for it. A former member keeps their address and is not a tombstone, so
+ * they can still be minted to.
+ */
+export function mintRecipientRefusal(
+  member: { email?: unknown; isExample?: unknown } | null | undefined,
+): { status: 404 | 409; body: { error: string; code?: string } } | null {
+  if (departedRecipient(member)) return { status: 404, body: { error: DEPARTED_RECIPIENT } };
+  if (isExampleUser(member)) return { status: 409, body: EXAMPLE_REFUSAL_BODY };
+  return null;
+}
+
 export type SendOutcome =
   | { ok: true; entry: GratitudeEntry; recipient: any; budget: GratitudeBudget }
   | { ok: false; status: number; error: string };
@@ -237,6 +288,7 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
       error: who.toId ? "No member here with that id" : "No member found with that email",
     };
   }
+  if (departedRecipient(recipient)) return { ok: false, status: 404, error: DEPARTED_RECIPIENT };
   if (recipient.id === user.id) return { ok: false, status: 400, error: `Send ${recognitionName()} to others` };
   // The example identities have fixed, public @examples.invalid addresses, so
   // without this any member can send to one: the sender's real budget is spent
