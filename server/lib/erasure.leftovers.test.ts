@@ -40,7 +40,8 @@ import { anonymizeMember, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
 import { erasureRecord } from "../repos/memberErasure";
-import { createMeetMe } from "./calendarCommunity";
+import { cancelMeetMe, createMeetMe } from "./calendarCommunity";
+import { CLOSED_WINDOW_SUBJECT } from "../repos/meetMeWindows";
 import { listCalendarItems } from "./calendar";
 import { rsvp } from "./gatherings";
 import { insertNotification, type NotifyDeps } from "./notify";
@@ -50,6 +51,18 @@ import { CREDITS, checkIn, checkinCount } from "./economy";
 import { ERASED_SUBJECT } from "../repos/commsPeople";
 import { backfillContacts } from "./comms/backfill";
 import { register as registerStays } from "../routes/stays";
+import { createReservation } from "./housing";
+import { ensureContact } from "./comms/contacts";
+import { handlePathTrigger } from "./comms/paths";
+import { noticePathHandoff } from "./comms/notices";
+import { handleGatheringTrigger, type EventEmailDeps } from "./comms/eventEmails";
+import type { CommsMode, PostOfficeDeps } from "./comms/postOffice";
+import type { Transport } from "./comms/transport";
+import { castVote, openBallot } from "./ballots";
+import { notifyRollRows } from "./ballotNotices";
+import { recordEvent } from "./events";
+import { HAND_NOTE_WENT } from "./ballotErasure";
+import { handVoteReason, SEAT_VOTE_REASON_HEADING } from "../../shared/powerHands";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -102,6 +115,20 @@ const notifyDeps = (): NotifyDeps =>
     origin: () => "http://localhost",
     projectName: () => "Village",
   }) as unknown as NotifyDeps;
+
+/** A post office whose provider takes every message and keeps nothing, for the producers that post through one. */
+const transport: Transport = { name: "resend", send: async () => ({ ok: true, providerId: `prov_${Math.random().toString(36).slice(2)}` }) };
+const LIVE: CommsMode = { lifecycle: "members", paused: false, rehearsalTo: [] };
+const office = (): PostOfficeDeps => ({
+  getPool: () => pool,
+  transport,
+  sender: () => "Test Village <hello@village.example.test>",
+  hasApiKey: () => true,
+  origin: () => "http://localhost",
+  mode: async () => LIVE,
+  dial: (k) => (k === "comms.send_rate_per_second" ? 50 : k === "comms.daily_cap" ? 50 : 120),
+});
+const eventDeps = (): EventEmailDeps => ({ getPool: () => pool, postOffice: office(), timezone: () => "UTC", reminderMinutes: () => [1440] });
 
 /** A notification row exactly as a producer writes it, read back by id. */
 async function bell(input: { userId: string; type: string; title: string; body?: string | null; dedupeKey: string; actorUserId?: string | null }): Promise<string> {
@@ -217,6 +244,168 @@ describe.skipIf(!configured)("what an erased member left behind after the sweep"
       // their own place, which "event-places-after-tombstone" releases, so only the window is left.
       expect(await q("SELECT title, location_text FROM events WHERE id = ?", [theirsId])).toEqual([{ title: "Meet Bay", location_text: "the well" }]);
       expect(await q("SELECT user_id FROM event_rsvps WHERE event_id = ?", [theirsId])).toEqual([]);
+    });
+
+    /*
+     * ROUND 2, FINDING 13. The window went, and every guest's own copy of it
+     * stayed: the journey the yes enrolled them on keeps what they were told
+     * (the title and the place) in its facts, and the confirmation it posted
+     * keeps the title in its subject, the place, the note and the host's full
+     * name in its words, and all three again in the calendar file.
+     */
+    it("takes its title, place and note out of every guest's journey and every email about it, and sends nothing", async () => {
+      const leaver = "e2-mm2-wren";
+      const guest = "e2-mm2-bay";
+      const host = "e2-mm2-ida";
+      await person(leaver, "Wren Halloway");
+      await person(guest, "Bay Holt");
+      await person(host, "Ida Fenn");
+      await q("INSERT INTO comms_journeys (village_id, journey_key, state, version) VALUES (?, 'gathering.going', 'on', 1) ON DUPLICATE KEY UPDATE state = 'on'", [VILLAGE]);
+
+      const mine = await createMeetMe(pool, { userId: leaver, firstName: "Wren Halloway", layer: "village", place: "the bakery on Calle 3", note: "come say hi, I'll be in the red jacket", ...window() });
+      const theirs = await createMeetMe(pool, { userId: host, firstName: "Ida Fenn", layer: "village", place: "the old mill", note: "bring a mug", ...window() });
+      const mineId = (mine as { id: string }).id;
+      const theirsId = (theirs as { id: string }).id;
+      // The guest says yes to both, through the same door and the same trigger the server uses.
+      for (const id of [mineId, theirsId]) {
+        expect((await rsvp(pool, id, guest, "going")).ok).toBe(true);
+        const going: any = await handleGatheringTrigger(eventDeps(), { type: "rsvp_changed", eventId: id, occurrenceKey: "", personKey: guest, status: "going" });
+        expect(going.enrollmentId, `the yes to ${id} enrolled the guest`).toBeTruthy();
+      }
+      // A letter about the window that no journey owns (a time or place change), keyed on the evening.
+      await mail({ id: "msg-mm2-changed", key: `ev:${mineId}::changed:1:${guest}`, to: `${guest}@example.test`, kind: "events", origin: "gathering.changed", subject: "Meet Wren moved to the bakery on Calle 3", bodyHtml: "<p>Meet Wren is now at the bakery on Calle 3</p>" });
+      // One still waiting in the queue: a reminder held for later.
+      const [enr] = await q("SELECT id FROM comms_enrollments WHERE journey_key = 'gathering.going' AND subject_ref = ?", [`event:${mineId}:`]);
+      await q(
+        "INSERT INTO comms_messages (id, village_id, idempotency_key, to_email, email_key, kind, origin, subject, body_html, status, enrollment_id) VALUES ('msg-mm2-queued', ?, ?, ?, ?, 'events', 'journey', 'Tomorrow: Meet Wren', '<p>the bakery on Calle 3</p>', 'queued', ?)",
+        [VILLAGE, `j:gathering.going:remind:${enr.id}`, `${guest}@example.test`, `${guest}@example.test`, enr.id],
+      );
+
+      const facts = async (eventId: string) => (await q("SELECT CAST(facts AS CHAR) AS f FROM comms_enrollments WHERE subject_ref LIKE ?", [`event:${eventId}:%`])).map((r) => String(r.f));
+      const lettersAbout = async (eventId: string) =>
+        q(
+          "SELECT m.id, m.status, m.subject, m.body_html, m.body_text, CAST(m.attachments AS CHAR) AS attachments FROM comms_messages m " +
+            "WHERE m.idempotency_key LIKE ? OR m.enrollment_id IN (SELECT id FROM comms_enrollments WHERE subject_ref LIKE ?) ORDER BY m.id",
+          [`ev:${eventId}:%`, `event:${eventId}:%`],
+        );
+      // The control: today the guest's journey and their emails carry the window's words.
+      expect((await facts(mineId)).join(" ")).toContain("Meet Wren");
+      expect((await facts(mineId)).join(" ")).toContain("the bakery on Calle 3");
+      const before = await lettersAbout(mineId);
+      const confirmation = before.find((m) => m.attachments);
+      expect(confirmation?.subject, "the confirmation names the window").toContain("Meet Wren");
+      expect(confirmation?.body_html, "its words carry the place").toContain("the bakery on Calle 3");
+      expect(confirmation?.body_html, "and the note, in the calendar links").toContain("red%20jacket");
+      const ics = Buffer.from(String(JSON.parse(String(confirmation?.attachments))[0].contentBase64), "base64").toString("utf8");
+      expect(ics, "and the calendar file names the window").toContain("SUMMARY:Meet Wren");
+      const theirsBefore = { facts: await facts(theirsId), letters: await lettersAbout(theirsId) };
+      expect(theirsBefore.letters.length, "the bystander's window has its own confirmation").toBeGreaterThan(0);
+      const rowsBefore = Number((await q("SELECT COUNT(*) AS n FROM comms_messages"))[0].n);
+
+      await erase(leaver);
+
+      const left = await facts(mineId);
+      expect(left.length, "the guest's journey rows stay, as the record that they were on it").toBeGreaterThan(0);
+      for (const f of left) {
+        expect(f).not.toContain("Meet Wren");
+        expect(f).not.toContain("Calle 3");
+        expect(f).not.toContain('"told"');
+      }
+      expect(await q("SELECT state FROM comms_enrollments WHERE subject_ref LIKE ?", [`event:${mineId}:%`])).toEqual(left.map(() => ({ state: "stopped" })));
+      const after = await lettersAbout(mineId);
+      expect(after.map((m) => m.id).sort()).toEqual(before.map((m) => m.id).sort());
+      for (const m of after) {
+        expect(m, `${m.id} keeps no word of the window`).toMatchObject({ subject: ERASED_SUBJECT, body_html: null, body_text: null, attachments: null });
+      }
+      expect(after.find((m) => m.id === "msg-mm2-queued")?.status, "a reminder still waiting does not go").toBe("cancelled");
+      expect(Number((await q("SELECT COUNT(*) AS n FROM comms_messages"))[0].n), "nothing was sent about the erasure").toBe(rowsBefore);
+      // The bystander's window, its guest's journey and their confirmation, exactly as they were.
+      expect({ facts: await facts(theirsId), letters: await lettersAbout(theirsId) }).toEqual(theirsBefore);
+    });
+
+    /*
+     * ROUND 3, FINDING 15 (a decision, implemented as recommended). The
+     * erasure finds a window through its own row, so a window the member
+     * closed themselves (DELETE /api/events/meet-me/:id, cancelMeetMe) left
+     * every guest's journey and mail about it for good: nothing could find
+     * them any more. Closing a window now takes its words out of that mail,
+     * and only once the window is proven the closer's: the scrub is keyed on
+     * the id alone, so run first it would let any member blank the mail of a
+     * real gathering's guests by sending its id.
+     */
+    it("goes from its guests' mail when its owner closes it, and nobody else's close reaches any mail", async () => {
+      const owner = "e2-mm3-wren";
+      const guest = "e2-mm3-bay";
+      const other = "e2-mm3-ida";
+      const host = "e2-mm3-host";
+      await person(owner, "Wren Halloway");
+      await person(guest, "Bay Holt");
+      await person(other, "Ida Fenn");
+      await person(host, "Cal Moss");
+      await q("INSERT INTO comms_journeys (village_id, journey_key, state, version) VALUES (?, 'gathering.going', 'on', 1) ON DUPLICATE KEY UPDATE state = 'on'", [VILLAGE]);
+
+      const mine = await createMeetMe(pool, { userId: owner, firstName: "Wren Halloway", layer: "village", place: "the bakery on Calle 3", note: "come say hi, I'll be in the red jacket", ...window() });
+      const windowId = (mine as { id: string }).id;
+      // A real gathering, which is not a meet-me window, whose host is a living member.
+      const gatheringId = "e2-mm3-supper";
+      const starts = new Date(Date.now() + 30 * 3600 * 1000);
+      await q("INSERT INTO events (id, title, starts_at, ends_at, status, kind, layer, created_by, owner_user_id) VALUES (?,?,?,?,?,?,?,?,?)", [
+        gatheringId, "Harvest supper", starts, new Date(starts.getTime() + 2 * 3600 * 1000), "scheduled", "gathering", "village", host, host,
+      ]);
+      for (const id of [windowId, gatheringId]) {
+        expect((await rsvp(pool, id, guest, "going")).ok, `the guest says yes to ${id}`).toBe(true);
+        const going: any = await handleGatheringTrigger(eventDeps(), { type: "rsvp_changed", eventId: id, occurrenceKey: "", personKey: guest, status: "going" });
+        expect(going.enrollmentId, `the yes to ${id} enrolled the guest`).toBeTruthy();
+      }
+      // A reminder still waiting in the queue for the window's journey.
+      const [enr] = await q("SELECT id FROM comms_enrollments WHERE journey_key = 'gathering.going' AND subject_ref = ?", [`event:${windowId}:`]);
+      await q(
+        "INSERT INTO comms_messages (id, village_id, idempotency_key, to_email, email_key, kind, origin, subject, body_html, status, enrollment_id) VALUES ('msg-mm3-queued', ?, ?, ?, ?, 'events', 'journey', 'Tomorrow: Meet Wren', '<p>the bakery on Calle 3</p>', 'queued', ?)",
+        [VILLAGE, `j:gathering.going:remind:${enr.id}`, `${guest}@example.test`, `${guest}@example.test`, enr.id],
+      );
+
+      const journeys = async (eventId: string) => q("SELECT state, CAST(facts AS CHAR) AS f FROM comms_enrollments WHERE subject_ref LIKE ? ORDER BY id", [`event:${eventId}:%`]);
+      const lettersAbout = async (eventId: string) =>
+        q(
+          "SELECT m.id, m.status, m.subject, m.body_html, m.body_text, CAST(m.attachments AS CHAR) AS attachments FROM comms_messages m " +
+            "WHERE m.idempotency_key LIKE ? OR m.enrollment_id IN (SELECT id FROM comms_enrollments WHERE subject_ref LIKE ?) ORDER BY m.id",
+          [`ev:${eventId}:%`, `event:${eventId}:%`],
+        );
+      const mail = async () => ({ window: { journeys: await journeys(windowId), letters: await lettersAbout(windowId) }, gathering: { journeys: await journeys(gatheringId), letters: await lettersAbout(gatheringId) } });
+      const before = await mail();
+      // The control: both carry their words today, and the gathering's journey is live.
+      expect(before.window.journeys.map((j) => j.f).join(" ")).toContain("the bakery on Calle 3");
+      expect(before.window.letters.find((m) => m.attachments)?.subject).toContain("Meet Wren");
+      expect(before.gathering.letters.find((m) => m.attachments)?.subject).toContain("Harvest supper");
+      expect(before.gathering.journeys.length, "the gathering's guest is on its journeys").toBeGreaterThan(0);
+      expect(before.gathering.journeys.filter((j) => j.state !== "active"), "and every one of them is live").toEqual([]);
+      const rowsBefore = Number((await q("SELECT COUNT(*) AS n FROM comms_messages"))[0].n);
+
+      // Nobody but the owner closes anything, and a refused close reaches no mail: another member
+      // sending the gathering's id, its own host sending it through the meet-me door, another member
+      // sending the window's id.
+      expect(await cancelMeetMe(pool, gatheringId, other)).toBe(false);
+      expect(await cancelMeetMe(pool, gatheringId, host)).toBe(false);
+      expect(await cancelMeetMe(pool, windowId, other)).toBe(false);
+      expect(await mail(), "no refused close changed a word of anybody's mail").toEqual(before);
+      expect(await q("SELECT id FROM events WHERE id IN (?, ?) ORDER BY id", [gatheringId, windowId])).toHaveLength(2);
+
+      expect(await cancelMeetMe(pool, windowId, owner)).toBe(true);
+
+      const after = await journeys(windowId);
+      expect(after.length, "the journey rows stay, as the record that the guest was on them").toBe(before.window.journeys.length);
+      expect(after.map((j) => j.f).join(" "), "and they forget what they told the guest").not.toMatch(/"told"|Calle 3|Meet Wren/);
+      expect(after.map((j) => j.state), "and they stop, as a removed gathering's do").toEqual(after.map(() => "stopped"));
+      const letters = await lettersAbout(windowId);
+      expect(letters.map((m) => m.id).sort()).toEqual(before.window.letters.map((m) => m.id).sort());
+      for (const m of letters) {
+        expect(m, `${m.id} keeps no word of the window`).toMatchObject({ subject: CLOSED_WINDOW_SUBJECT, body_html: null, body_text: null, attachments: null });
+      }
+      expect(letters.find((m) => m.id === "msg-mm3-queued")?.status, "a reminder still waiting does not go").toBe("cancelled");
+      expect(Number((await q("SELECT COUNT(*) AS n FROM comms_messages"))[0].n), "nothing was sent about the close").toBe(rowsBefore);
+      expect(await q("SELECT id FROM events WHERE id = ?", [windowId]), "the window is closed").toEqual([]);
+      // The real gathering, its guest's journey and their confirmation, exactly as they were.
+      expect({ journeys: await journeys(gatheringId), letters: await lettersAbout(gatheringId) }).toEqual(before.gathering);
     });
   });
 
@@ -432,6 +621,62 @@ describe.skipIf(!configured)("what an erased member left behind after the sweep"
       expect(await q("SELECT id, subject, reply_to FROM comms_messages WHERE id IN ('msg-relay-b', 'msg-alert-b') ORDER BY id")).toEqual(neighbourBefore);
     });
 
+    /*
+     * ROUND 2, FINDINGS 3 AND 16. An address the leaver typed on a request of
+     * their own can be somebody else's too: a partner's account address, or a
+     * porch inbox a stranger's own public request also uses. Each of those
+     * people's own requests sent its own team alert, with the same reply-to,
+     * and the step blanked every alert at the address. The rule now reads the
+     * requests: an alert is the leaver's when nobody else asked under its
+     * address, or when its subject names what the leaver typed and nothing
+     * anybody else typed there. And at the leaver's own account address, a
+     * partner's household request (Ash typing the leaver's address for the
+     * two of them) loses the leaver's address and keeps Ash's name.
+     */
+    it("keeps a living person's own housing alert at an address the leaver also typed, and still blanks the leaver's own", async () => {
+      const leaver = "e2-mail2-wren";
+      const ash = "e2-mail2-ash";
+      const wrenMail = "wren.two@example.test";
+      const ashMail = "ash.two@example.test";
+      const porch = "porch.two@example.test";
+      await person(leaver, "Wren Halloway", wrenMail);
+      await person(ash, "Ash Moreno", ashMail);
+      const alert = (id: string, from: string, replyTo: string) =>
+        mail({ id, key: `essential:${id}`, to: "resident@village.test", kind: "essential", origin: "housing.team_alert", subject: `[Village] Home reservation request from ${from}`, replyTo });
+
+      // Ash's own request, signed in, and the stranger Ida's from the public form, each with its alert.
+      await createReservation(pool, { structureKey: null, homeType: "villa", name: "Ash Moreno", email: ashMail, phone: null, notes: null, userId: ash });
+      await alert("msg-a2-ash", "Ash Moreno", ashMail);
+      await createReservation(pool, { structureKey: null, homeType: "cabin", name: "Ida Fenn", email: porch, phone: null, notes: null });
+      await alert("msg-a2-ida", "Ida Fenn", porch.toUpperCase());
+      // The leaver, signed in, typed both of those addresses on requests of their own, and each sent its alert.
+      await createReservation(pool, { structureKey: null, homeType: "casita", name: "Wren Halloway", email: ashMail, phone: null, notes: null, userId: leaver });
+      await alert("msg-a2-wren-at-ash", "Wren Halloway", ashMail);
+      await createReservation(pool, { structureKey: null, homeType: "casita", name: "Wren Halloway", email: porch, phone: null, notes: null, userId: leaver });
+      await alert("msg-a2-wren-at-porch", "Wren Halloway", porch);
+      // Ash's household request, signed in, typed with the leaver's account address.
+      await createReservation(pool, { structureKey: null, homeType: "villa", name: "Ash Moreno", email: wrenMail, phone: null, notes: null, userId: ash });
+      await alert("msg-a2-ash-at-wren", "Ash Moreno", wrenMail);
+
+      const read = () => q("SELECT id, subject, reply_to FROM comms_messages WHERE id LIKE 'msg-a2-%' ORDER BY id");
+      const before = new Map((await read()).map((r) => [r.id, r]));
+      expect(before.size, "every alert landed").toBe(5);
+
+      await erase(leaver);
+
+      const after = new Map((await read()).map((r) => [r.id, r]));
+      expect(after.get("msg-a2-ash"), "Ash's own alert is Ash's").toEqual(before.get("msg-a2-ash"));
+      expect(after.get("msg-a2-ida"), "the stranger's own alert is hers").toEqual(before.get("msg-a2-ida"));
+      for (const id of ["msg-a2-wren-at-ash", "msg-a2-wren-at-porch"]) {
+        expect(after.get(id), `${id} was the leaver's`).toEqual({ id, subject: ERASED_SUBJECT, reply_to: null });
+      }
+      expect(after.get("msg-a2-ash-at-wren"), "the household alert loses the leaver's address and keeps Ash's request").toEqual({
+        id: "msg-a2-ash-at-wren",
+        subject: "[Village] Home reservation request from Ash Moreno",
+        reply_to: null,
+      });
+    });
+
     it("loses its words when it was the emailed copy of a notice the member caused", async () => {
       const leaver = "e2-mail-relay-wren";
       const recipient = "e2-mail-rowan";
@@ -494,6 +739,313 @@ describe.skipIf(!configured)("what an erased member left behind after the sweep"
         "SELECT email_key FROM comms_contacts WHERE email_key IN ('deleted-e2-bf-gone@anonymized.invalid', 'wren.backfill@example.test', 'juniper.guest@example.test') ORDER BY email_key",
       );
       expect(contacts.map((r) => r.email_key)).toEqual(["juniper.guest@example.test"]);
+    });
+  });
+
+  // ── Round 2, 12 ───────────────────────────────────────────────────────────
+  /*
+   * Day 21 on a path asks the path's contact person to write: "Wren has been
+   * on the resident path for three weeks. Write to them." On their bell with
+   * no actor, keyed on the walker's enrollment, emailed at once, or sent to
+   * their inbox as essential mail when they have no account. The comms step
+   * deleted the enrollment, the one thing that tied those rows to the walker,
+   * and left all three naming them.
+   */
+  describe("round 2, 12: the day-21 hand-off that names the member to the path's contact person", () => {
+    const notify = (input: any) => insertNotification(notifyDeps(), input);
+    const handoff = async (enrollmentId: string, firstName: string, contactId: string, to: string) => {
+      const r: any = await noticePathHandoff(notify, { contactUserId: to, enrollmentId, firstName, pathName: "resident", link: `/admin?tab=comms-people&person=${contactId}` });
+      expect(r.fresh, `the hand-off for ${enrollmentId} landed`).toBe(true);
+      return String(r.id);
+    };
+
+    it("loses its words, its link and its emailed copies, and the inbox copy keeps its living recipient", async () => {
+      const leaver = "e2-ho-wren";
+      const bystander = "e2-ho-bay";
+      const guide = "e2-ho-guide";
+      await person(leaver, "Wren Halloway");
+      await person(bystander, "Bay Holt");
+      await person(guide, "Juno Guide");
+      const contactOf = async (who: string, name: string) => (await ensureContact({ getPool: () => pool }, { email: `${who}@example.test`, name, userId: who, source: "account" }))!.id;
+      const mineContact = await contactOf(leaver, "Wren Halloway");
+      const theirsContact = await contactOf(bystander, "Bay Holt");
+      for (const [id, cid] of [["enr-ho-w", mineContact], ["enr-ho-b", theirsContact]]) {
+        await q("INSERT INTO comms_enrollments (id, journey_key, journey_version, contact_id, subject_ref) VALUES (?, 'path.resident', 1, ?, 'path:resident')", [id, cid]);
+      }
+      const mine = await handoff("enr-ho-w", "Wren", mineContact, guide);
+      const theirs = await handoff("enr-ho-b", "Bay", theirsContact, guide);
+      const [notice] = await q("SELECT title FROM notifications WHERE id = ?", [mine]);
+      await mail({ id: "msg-ho-imm-w", key: `notify:${mine}`, to: "juno@example.test", userId: guide, kind: "notices", origin: "notify.immediate", subject: notice.title, bodyHtml: `<h2>${notice.title}</h2>` });
+      await mail({ id: "msg-ho-imm-b", key: `notify:${theirs}`, to: "juno@example.test", userId: guide, kind: "notices", origin: "notify.immediate", subject: "Bay has been on the resident path for three weeks. Write to them.", bodyHtml: "<h2>Bay</h2>" });
+      // The essential copy a path contact with no account gets instead, linked to the enrollment and addressed to them.
+      await q(
+        "INSERT INTO comms_messages (id, village_id, idempotency_key, to_email, email_key, kind, origin, subject, status, enrollment_id) VALUES ('msg-ho-inbox-w', ?, 'comms_path_handoff:enr-ho-w', 'pathfolk@village.test', 'pathfolk@village.test', 'essential', 'comms.path_handoff', ?, 'sent', 'enr-ho-w')",
+        [VILLAGE, notice.title],
+      );
+      expect(notice.title, "the control: the hand-off names the walker").toContain("Wren");
+      const theirsBefore = await q("SELECT id, title, body, link FROM notifications WHERE id = ?", [theirs]);
+      const theirMailBefore = await q("SELECT id, subject, body_html FROM comms_messages WHERE id = 'msg-ho-imm-b'");
+
+      await erase(leaver);
+
+      expect(await q("SELECT title, body, link, actor_user_id FROM notifications WHERE id = ?", [mine])).toEqual([{ title: DEPARTED, body: null, link: null, actor_user_id: null }]);
+      expect(await q("SELECT id, to_email, subject, body_html, body_text FROM comms_messages WHERE id IN ('msg-ho-imm-w', 'msg-ho-inbox-w') ORDER BY id")).toEqual([
+        { id: "msg-ho-imm-w", to_email: "juno@example.test", subject: ERASED_SUBJECT, body_html: null, body_text: null },
+        { id: "msg-ho-inbox-w", to_email: "pathfolk@village.test", subject: ERASED_SUBJECT, body_html: null, body_text: null },
+      ]);
+      expect(await q("SELECT id, title, body, link FROM notifications WHERE id = ?", [theirs]), "the bystander's hand-off is theirs").toEqual(theirsBefore);
+      expect(await q("SELECT id, subject, body_html FROM comms_messages WHERE id = 'msg-ho-imm-b'")).toEqual(theirMailBefore);
+    });
+
+    it("loses its words when the walker was a second address the member typed into a housing request", async () => {
+      const leaver = "e2-ho2-wren";
+      const guide = "e2-ho2-guide";
+      const typed = "wren.walks@example.test";
+      await person(leaver, "Wren Halloway");
+      await person(guide, "Juno Guide");
+      const { id: reservationId } = await createReservation(pool, { structureKey: null, homeType: "casita", name: "Wren Halloway", email: typed, phone: null, notes: null, userId: leaver });
+      await handlePathTrigger({ getPool: () => pool, members: usersRepo(pool) } as any, { type: "housing_status", reservationId, status: "new", email: typed, name: "Wren Halloway", consentPaths: true } as any);
+      const [walker] = await q("SELECT e.id, e.contact_id FROM comms_enrollments e JOIN comms_contacts c ON c.id = e.contact_id WHERE c.email_key = ?", [typed]);
+      expect(walker, "the ticked box walked the typed address onto the resident path").toBeTruthy();
+      const notice = await handoff(String(walker.id), "Wren", String(walker.contact_id), guide);
+
+      await erase(leaver);
+
+      expect(await q("SELECT title, link FROM notifications WHERE id = ?", [notice])).toEqual([{ title: DEPARTED, link: null }]);
+    });
+  });
+
+  // ── Round 2, 6 ────────────────────────────────────────────────────────────
+  /*
+   * A ballot ABOUT a member (a vote to seat them, or to take a role back from
+   * them) names them in its title, its document, the roll's notices, those
+   * notices' emails and the public pulse, although `subject_ref` ties every
+   * one of them to the member. And a ballot a member OPENED ends "Asked by
+   * <first name> on <date>". The decision itself must come through whole.
+   */
+  describe("round 2, 6: a ballot about the member", () => {
+    it("stops naming them in its words, the roll's notices and the pulse, and what was decided stays", async () => {
+      const leaver = "e2-bal-wren";
+      const ann = "e2-bal-ann";
+      const bo = "e2-bal-bo";
+      const sage = "e2-bal-wren-2"; // the leaver's id is a prefix of this one, which must not match
+      await person(leaver, "Wren Halloway");
+      await person(ann, "Ann Pryor");
+      await person(bo, "Bo Lind");
+      await person(sage, "Sage Okafor");
+      const electorate = [ann, bo, sage].map((userId) => ({ userId, weight: 1 }));
+      const open = async (input: { subjectType: string; subjectRef: string; title: string; doc: string; openedBy: string }) => {
+        const r = await openBallot(pool, {
+          subjectType: input.subjectType, subjectRef: input.subjectRef, title: input.title, docMarkdown: input.doc, method: "majority",
+          weightMode: "equal", unityPct: 50, quorumPct: 10, durationDays: 7, openedBy: input.openedBy, electorate,
+        } as any);
+        if (!r.ok) throw new Error(`ballot refused to open: ${r.error}`);
+        return r.ballot;
+      };
+      // Exactly the words the two doors write (server/index.ts role-unseats, server/routes/powerHands.ts openSeatVote).
+      const unseatDoc = (first: string, asker: string) =>
+        [
+          `# Steward: the village asks to take the role back from ${first}`, "",
+          "## What changes if this carries", "",
+          `${first} stops sitting in Steward. The role carries no powers today, so nothing anybody can do changes.`, "",
+          "Steward keeps everything it carries, and anybody else sitting in it is untouched.", "",
+          "## Why now", "",
+          `${first} has missed the last four circles, and the Wrenfield orchard group asked for a new steward.`, "",
+          `Asked by ${asker} on 2026-10-01.`, "",
+        ].join("\n");
+      const about = await open({ subjectType: "role_unseat", subjectRef: `${leaver}@role-steward`, title: "Steward: the village asks to take the role back from Wren", doc: unseatDoc("Wren", "Ann"), openedBy: ann });
+      const seat = await open({
+        subjectType: "role_seat", subjectRef: `${leaver}@role-garden`, title: "Gardener: the village asks Wren to sit in it", openedBy: ann,
+        doc: ["# Gardener: the village asks Wren to sit in it", "", "## What Wren would be able to do", "", "Gardener carries no powers today.", "", "Asked by Ann on 2026-10-02.", ""].join("\n"),
+      });
+      const opened = await open({ subjectType: "advisory", subjectRef: "e2-bal-adv", title: "Should the orchard have a second gate?", doc: "# Should the orchard have a second gate?\n\nThe Wrenfield path floods.\n\nAsked by Wren on 2026-10-03.\n", openedBy: leaver });
+      const control = await open({ subjectType: "role_unseat", subjectRef: `${sage}@role-steward`, title: "Steward: the village asks to take the role back from Sage", doc: unseatDoc("Sage", "Ann"), openedBy: ann });
+      expect((await castVote(pool, about.id, bo, "yes")).ok, "a vote is cast on the ballot about the leaver").toBe(true);
+
+      // The roll's notices and the pulse lines, as the doors and the close write them.
+      const rollDeps = { pool, notify: (input: any) => insertNotification(notifyDeps(), input), link: () => "/governance" };
+      for (const [b, first] of [[about, "Wren"], [seat, "Wren"], [control, "Sage"]] as const) {
+        await notifyRollRows(rollDeps, b, { type: "ballot_opened", title: `The village is asked whether ${first} keeps the role in Steward`, keySuffix: "open", except: [ann], roll: [bo] });
+        await recordEvent(pool, { kind: "governance", text: `The village is deciding whether ${first} keeps the role in Steward.`, actorUserId: ann, entityType: "ballot", entityRef: b.id });
+        await recordEvent(pool, { kind: "governance", text: `A village vote carried: ${b.title}`, actorUserId: bo, entityType: "ballot", entityRef: b.id });
+      }
+      await notifyRollRows(rollDeps, about, { type: "ballot_carried", title: `Carried: ${about.title}`, keySuffix: "outcome", roll: [bo] });
+      const [boOpen] = await q("SELECT id, title FROM notifications WHERE dedupe_key = ?", [`bal:${about.id}:open:u${bo}`]);
+      await mail({ id: "msg-bal-open-w", key: `notify:${boOpen.id}`, to: "bo@example.test", userId: bo, kind: "notices", origin: "notify.immediate", subject: boOpen.title, bodyHtml: `<h2>${boOpen.title}</h2>` });
+
+      const decided = (id: string) => q("SELECT subject_type, subject_ref, status, opened_by, closes_at, electorate_count FROM ballots WHERE id = ?", [id]);
+      const decidedBefore = { about: await decided(about.id), seat: await decided(seat.id), opened: await decided(opened.id) };
+      const votesBefore = await q("SELECT user_id, choice FROM ballot_votes WHERE ballot_id = ?", [about.id]);
+      const ballot = async (id: string) => (await q("SELECT title, doc_markdown FROM ballots WHERE id = ?", [id]))[0];
+      const controlBefore = { ballot: await ballot(control.id), bell: await q("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`bal:${control.id}:%`]), pulse: await q("SELECT text FROM health_events WHERE entity_type = 'ballot' AND entity_ref = ? ORDER BY text", [control.id]) };
+      expect(JSON.stringify(await ballot(about.id)), "the control: the ballot names the leaver today").toMatch(/\bWren\b/);
+
+      await erase(leaver);
+
+      const names = /\bWren\b|Halloway/;
+      for (const b of [about, seat]) {
+        const row = await ballot(b.id);
+        expect(row.title, `${b.id}'s title`).not.toMatch(names);
+        expect(row.doc_markdown, `${b.id}'s document`).not.toMatch(names);
+        expect(await q("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`bal:${b.id}:%`]), `${b.id}'s notices`).toEqual(
+          (await q("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`bal:${b.id}:%`])).map(() => ({ title: DEPARTED })),
+        );
+        expect(await q("SELECT text FROM health_events WHERE audience = 'public' AND entity_type = 'ballot' AND entity_ref = ?", [b.id]), `${b.id}'s public lines`).toEqual([]);
+      }
+      expect((await ballot(about.id)).title).toBe("Steward: the village asks to take the role back from a departed member");
+      expect((await ballot(seat.id)).title).toBe("Gardener: the village asks a departed member to sit in it");
+      expect((await ballot(about.id)).doc_markdown, "a longer word that holds the name is not a name").toContain("the Wrenfield orchard group");
+      expect((await ballot(about.id)).doc_markdown, "the person who asked is still named").toContain("Asked by Ann on 2026-10-01.");
+      expect((await ballot(about.id)).doc_markdown).toContain("A departed member stops sitting in Steward.");
+      expect((await ballot(opened.id)).doc_markdown, "a ballot they opened no longer says so by name").toBe("# Should the orchard have a second gate?\n\nThe Wrenfield path floods.\n\nAsked by a departed member on 2026-10-03.\n");
+      expect(await q("SELECT subject, body_html FROM comms_messages WHERE id = 'msg-bal-open-w'")).toEqual([{ subject: ERASED_SUBJECT, body_html: null }]);
+      expect(await q("SELECT COUNT(*) AS n FROM notifications WHERE dedupe_key LIKE ?", [`bal:${about.id}:%`]), "the notices stay, as rows").toEqual([{ n: 2 }]);
+      // What was decided, and who voted how, came through whole.
+      expect({ about: await decided(about.id), seat: await decided(seat.id), opened: await decided(opened.id) }).toEqual(decidedBefore);
+      expect(await q("SELECT user_id, choice FROM ballot_votes WHERE ballot_id = ?", [about.id])).toEqual(votesBefore);
+      // The ballot about the member whose id begins with the leaver's, exactly as it was.
+      expect({ ballot: await ballot(control.id), bell: await q("SELECT title FROM notifications WHERE dedupe_key LIKE ?", [`bal:${control.id}:%`]), pulse: await q("SELECT text FROM health_events WHERE entity_type = 'ballot' AND entity_ref = ? ORDER BY text", [control.id]) }).toEqual(controlBefore);
+
+      // A second sweep finds nothing left to change.
+      const settled = { about: await ballot(about.id), seat: await ballot(seat.id), opened: await ballot(opened.id) };
+      await erase(leaver);
+      expect({ about: await ballot(about.id), seat: await ballot(seat.id), opened: await ballot(opened.id) }).toEqual(settled);
+    });
+
+    /*
+     * ROUND 3, THE GUARD FROM FINDING 0'S FIX. A door that opens a ballot about
+     * a member who is already a tombstone titles it with the tombstone's first
+     * name, which is "A" ("...take the role back from A"). Read back off the
+     * title as a spelling, "A" rewrites every standalone "A" in the words of a
+     * living member who opened it. A title written about a tombstone names
+     * nobody the sweep should look for.
+     */
+    it("reads no name off a title written about a tombstone, so the living opener's reason keeps every word", async () => {
+      const leaver = "e2-bal3-wren";
+      const ann = "e2-bal3-ann";
+      await person(leaver, "Wren Halloway");
+      await person(ann, "Ann Pryor");
+      await erase(leaver);
+      // Exactly the words the role-unseats door writes for a member whose name is the tombstone's.
+      const title = "Steward: the village asks to take the role back from A";
+      const doc = [
+        `# ${title}`, "",
+        "## What changes if this carries", "",
+        "A stops sitting in Steward. The role carries no powers today, so nothing anybody can do changes.", "",
+        "Steward keeps everything it carries, and anybody else sitting in it is untouched.", "",
+        "## Why now", "",
+        "A cleanup vote. A role held by nobody who lives here keeps the circle from filling it.", "",
+        "Asked by Ann on 2026-10-04.", "",
+      ].join("\n");
+      const r = await openBallot(pool, {
+        subjectType: "role_unseat", subjectRef: `${leaver}@role-steward`, title, docMarkdown: doc, method: "majority",
+        weightMode: "equal", unityPct: 50, quorumPct: 10, durationDays: 7, openedBy: ann, electorate: [{ userId: ann, weight: 1 }],
+      } as any);
+      if (!r.ok) throw new Error(`ballot refused to open: ${r.error}`);
+      const words = async () => (await q("SELECT title, doc_markdown, outcome_note FROM ballots WHERE id = ?", [r.ballot.id]))[0];
+      expect(await words(), "the control: the ballot is stored as the door wrote it").toEqual({ title, doc_markdown: doc, outcome_note: null });
+
+      // The erasure asked again, which is the sweep a tombstone target gets.
+      await erase(leaver);
+
+      expect(await words(), "the living opener's reason, every standalone A in it, is untouched").toEqual({ title, doc_markdown: doc, outcome_note: null });
+    });
+
+    /*
+     * ROUND 3, FINDING 11. A seat vote opened from a raised hand
+     * (POST /api/powers/hands/:id/put-to-village) quotes the hand's note under
+     * "## Why this person", after a line naming the hand's author by the full
+     * name they raised it under. The erasure takes the note off the hand and
+     * swapped only name spellings here, so the note stayed on a ballot anybody
+     * who can read ballots reads, and where the step knew only the first name
+     * off the title, the surname stayed beside it.
+     */
+    describe("round 3, 11: a seat vote opened from the member's raised hand", () => {
+      const NOTE = "I keep the bakery's books\n\nand live by the mill";
+      // The member putting it to the village writes their own words, a quote of their own among them.
+      const SAID = "> Ann's own line, from the circle's minutes.\nShe has kept the market float for a year.";
+      const RAISED = "A departed member raised a hand to keep the treasury on 2026-10-01.";
+      const gone = /mill|bakery|Halloway|\bWren\b/;
+      // Exactly the document openSeatVote writes around the reason the hand door builds.
+      const openFromHand = async (input: { userId: string; roleId: string; first: string; userName: string; note: string; openedBy: string; electorate: string[] }) => {
+        const title = `Treasurer: the village asks ${input.first} to sit in it`;
+        const reason = handVoteReason(
+          { userName: input.userName, note: input.note, powerLabel: "Keep the treasury", capability: "treasury.keep", submittedAt: "2026-10-01T09:00:00.000Z" },
+          SAID,
+          "Ann",
+        );
+        const doc = [
+          `# ${title}`, "",
+          "## The role", "",
+          "Treasurer. Keeps the village's books.", "",
+          `## What ${input.first} would be able to do`, "",
+          "Treasurer carries no powers today, so this seats somebody in a role that grants nothing yet.", "",
+          SEAT_VOTE_REASON_HEADING, "",
+          reason, "",
+          "## How long", "",
+          "Until 2027-03-01. When the term ends the role ends, and the village can seat them again.", "",
+          "## Taking it back", "",
+          "The village can vote this role back at any time, and that vote is an ordinary one.", "",
+          "Asked by Ann on 2026-10-02.", "",
+        ].join("\n");
+        const r = await openBallot(pool, {
+          subjectType: "role_seat", subjectRef: `${input.userId}@${input.roleId}`, title, docMarkdown: doc, method: "majority",
+          weightMode: "equal", unityPct: 50, quorumPct: 10, durationDays: 7, openedBy: input.openedBy,
+          electorate: input.electorate.map((userId) => ({ userId, weight: 1 })),
+        } as any);
+        if (!r.ok) throw new Error(`ballot refused to open: ${r.error}`);
+        return r.ballot.id as string;
+      };
+      const words = async (id: string) => (await q("SELECT title, doc_markdown, outcome_note FROM ballots WHERE id = ?", [id]))[0];
+      const reasonBlock = (raised: string, quoted: string) => `${SEAT_VOTE_REASON_HEADING}\n\n${raised}\n\n${quoted}\n\n${SAID}\n\nAnn put that hand to the village.\n\n## How long`;
+
+      it("loses the note and the full name while the step still knows the name, and the opener's own words stay", async () => {
+        const leaver = "e2-hand-wren";
+        const ann = "e2-hand-ann";
+        const sage = "e2-hand-sage";
+        await person(leaver, "Wren Halloway");
+        await person(ann, "Ann Pryor");
+        await person(sage, "Sage Okafor");
+        const theirs = await openFromHand({ userId: leaver, roleId: "role-treasurer", first: "Wren", userName: "Wren Halloway", note: NOTE, openedBy: ann, electorate: [ann, sage] });
+        const bystander = await openFromHand({ userId: sage, roleId: "role-treasurer", first: "Sage", userName: "Sage Okafor", note: "I balanced the mill's books", openedBy: ann, electorate: [ann, sage] });
+        const before = await words(theirs);
+        expect(before.doc_markdown, "the control: the ballot quotes the note today").toContain("> and live by the mill");
+        expect(before.doc_markdown, "and names its author in full").toContain("Wren Halloway raised a hand to keep the treasury on 2026-10-01.");
+        const bystanderBefore = await words(bystander);
+
+        await erase(leaver);
+
+        const after = await words(theirs);
+        expect(after.doc_markdown, "nothing of the note or the name is left").not.toMatch(gone);
+        expect(after.title).toBe("Treasurer: the village asks a departed member to sit in it");
+        expect(after.doc_markdown, "the hand reads as raised by a departed member, with the note gone and the opener's own words, quote and all, as they wrote them").toContain(
+          reasonBlock(RAISED, HAND_NOTE_WENT),
+        );
+        expect(await words(bystander), "a living member's seat vote from the same door, note and all").toEqual(bystanderBefore);
+
+        // A second sweep finds nothing left to change.
+        await erase(leaver);
+        expect(await words(theirs)).toEqual(after);
+      });
+
+      it("loses the surname too where the target is already a tombstone and only the title's first name is known", async () => {
+        const leaver = "e2-hand2-wren";
+        const ann = "e2-hand2-ann";
+        await person(leaver, "Wren Halloway");
+        await person(ann, "Ann Pryor");
+        await erase(leaver);
+        // A vote opened before the step existed, about a member erased since: the sweep that reaches it has a tombstone in hand.
+        const theirs = await openFromHand({ userId: leaver, roleId: "role-keeper", first: "Wren", userName: "Wren Halloway", note: NOTE, openedBy: ann, electorate: [ann] });
+        expect((await words(theirs)).doc_markdown, "the control").toContain("Wren Halloway raised a hand");
+
+        await erase(leaver);
+
+        const after = await words(theirs);
+        expect(after.doc_markdown, "no surname is left beside the first name the title gave").not.toMatch(gone);
+        expect(after.doc_markdown).toContain(reasonBlock(RAISED, HAND_NOTE_WENT));
+        await erase(leaver);
+        expect(await words(theirs), "and a third sweep changes nothing").toEqual(after);
+      });
     });
   });
 });

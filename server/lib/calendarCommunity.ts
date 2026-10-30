@@ -28,6 +28,7 @@ import { ledgerEntryExists } from "./ledger";
 import { civilDateKey } from "../../shared/lunar";
 import { villageTimezone } from "./villageReaders";
 import { answersOf, dropAnswer, dropQueuePlacesOf, dropSlotSignupsOf, lockGathering, openChargesOf } from "../repos/eventPlaces";
+import { CLOSED_WINDOW_SUBJECT, forgetWindowMail, ownsMeetMeWindow } from "../repos/meetMeWindows";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "./commsSink";
 import { isGuestKey } from "../../shared/comms/kinds";
@@ -759,9 +760,19 @@ export async function createMeetMe(
  * The owner closes their window. Nobody else can. When the owner leaves the
  * village, the erasure closes every window they ever opened through
  * `forgetMeetMeWindowsOf` (server/lib/gatherings.ts), which frees the answers
- * other members gave each one; this door deletes the window row alone.
+ * other members gave each one.
+ *
+ * THE WINDOW'S WORDS LEAVE ITS GUESTS' MAIL WITH IT (round 3, finding 15).
+ * The erasure finds a window only through its row, so once its owner closed
+ * it nothing could reach what it left in the journeys and mail of the people
+ * who said yes. `forgetWindowMail` takes it out here, before the row goes,
+ * and only once `ownsMeetMeWindow` has proven the window this member's: it is
+ * keyed on the id alone, so asked first it would let anybody blank a real
+ * gathering's guests' mail by sending its id. It sends nothing.
  */
 export async function cancelMeetMe(pool: Pool, id: string, userId: string): Promise<boolean> {
+  if (!(await ownsMeetMeWindow(pool, id, userId))) return false;
+  await forgetWindowMail(pool, id, CLOSED_WINDOW_SUBJECT);
   const [res] = await pool.query<any>(
     "DELETE FROM events WHERE id = ? AND kind = 'meet-me' AND (created_by = ? OR owner_user_id = ?)",
     [id, userId, userId],
