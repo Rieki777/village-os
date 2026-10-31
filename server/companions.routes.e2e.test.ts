@@ -79,7 +79,7 @@ async function register(name: string, slug: string): Promise<{ token: string; id
 async function item(companionId: string, owner: string, kind: string, payload: Record<string, unknown>, title = `A ${kind} draft`): Promise<string> {
   n += 1;
   const id = `citem-test-${n}`;
-  await pool.query(
+  await pool.query( // module-review-ok: a fixture item written the way landItem writes it, so each door is asked on its own
     "INSERT INTO companion_items (id, companion_id, owner_user_id, type, draft_kind, title, payload, quote, source_ref, origin, dedupe_key, day_key, status) " +
       "VALUES (?,?,?,'draft',?,?,?,?,?,'maia',?,CURDATE(),'open')",
     [id, companionId, owner, kind, title, JSON.stringify(payload), "the member asked for it", `chat:${n}`, `test:${id}`],
@@ -88,7 +88,7 @@ async function item(companionId: string, owner: string, kind: string, payload: R
 }
 
 async function itemRow(id: string): Promise<any> {
-  const [[row]] = await pool.query<any[]>("SELECT status, outcome_ref, edited_fields, payload FROM companion_items WHERE id = ?", [id]);
+  const [[row]] = await pool.query<any[]>("SELECT status, outcome_ref, edited_fields, payload FROM companion_items WHERE id = ?", [id]); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
   return row;
 }
 
@@ -176,7 +176,7 @@ describe.skipIf(!DB_CONFIGURED)("companions over HTTP", () => {
     expect(rsvp[0].source).toContain("the gathering's page");
     // Reading again drafts nothing new, and proposes no second member draft.
     await call("GET", "/api/me/companions", undefined, ana.token);
-    const [[{ c }]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM member_drafts WHERE user_id = ? AND kind = 'event_rsvp'", [ana.id]);
+    const [[{ c }]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM member_drafts WHERE user_id = ? AND kind = 'event_rsvp'", [ana.id]); // module-review-ok: reading back the member draft behind the RSVP, which the confirm route decided
     expect(Number(c)).toBe(1);
   });
 
@@ -185,17 +185,17 @@ describe.skipIf(!DB_CONFIGURED)("companions over HTTP", () => {
     const id = a.json.companions.find((c: any) => c.id === personal).drafts.find((d: any) => d.kind === "rsvp").id;
     const r = await yes(id);
     expect(r.status, JSON.stringify(r.json)).toBe(200);
-    const [rsvps] = await pool.query<any[]>("SELECT status FROM event_rsvps WHERE event_id = ? AND user_id = ?", [eventId, ana.id]);
+    const [rsvps] = await pool.query<any[]>("SELECT status FROM event_rsvps WHERE event_id = ? AND user_id = ?", [eventId, ana.id]); // module-review-ok: reading back the RSVP row the door wrote, to prove one yes made one answer
     expect(rsvps.map((x) => x.status)).toEqual(["going"]);
     const row = await itemRow(id);
     expect(row.status).toBe("confirmed");
     expect(String(row.outcome_ref)).toMatch(/^rsvp:mdr-/);
-    const [[md]] = await pool.query<any[]>("SELECT status FROM member_drafts WHERE user_id = ? AND kind = 'event_rsvp'", [ana.id]);
+    const [[md]] = await pool.query<any[]>("SELECT status FROM member_drafts WHERE user_id = ? AND kind = 'event_rsvp'", [ana.id]); // module-review-ok: reading back the member draft behind the RSVP, which the confirm route decided
     expect(md.status).toBe("confirmed");
     // Control: the second yes is refused and writes nothing.
     const again = await yes(id);
     expect(again.status).toBe(409);
-    const [after] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM event_rsvps WHERE event_id = ? AND user_id = ?", [eventId, ana.id]);
+    const [after] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM event_rsvps WHERE event_id = ? AND user_id = ?", [eventId, ana.id]); // module-review-ok: reading back the RSVP row the door wrote, to prove one yes made one answer
     expect(Number(after[0].c)).toBe(1);
   });
 
@@ -205,7 +205,7 @@ describe.skipIf(!DB_CONFIGURED)("companions over HTTP", () => {
     const broke = await yes(id);
     expect(broke.status).toBe(409);
     expect((await itemRow(id)).status, "a refused door gives the draft back").toBe("open");
-    const [none] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM token_ledger WHERE idempotency_key LIKE ?", [`send:${ana.id}:companion-${id}%`]);
+    const [none] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM token_ledger WHERE idempotency_key LIKE ?", [`send:${ana.id}:companion-${id}%`]); // module-review-ok: proving the refused send wrote no ledger row
     expect(Number(none[0].c)).toBe(0);
 
     expect((await call("POST", `/api/admin/tokens/${CREDITS}/mint`, { toUserId: ana.id, amount: 100, reason: "test float" })).status).toBe(200);
@@ -235,11 +235,11 @@ describe.skipIf(!DB_CONFIGURED)("companions over HTTP", () => {
 
   it("gratitude_note: the yes is the Gratitude send, and it counts only then", async () => {
     const id = await item(personal, ana.id, "gratitude_note", { amount: 5, message: "Thank you for the shelves.", toUserId: ben.id });
-    const [[before]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM gratitude_log WHERE to_id = ?", [ben.id]);
+    const [[before]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM gratitude_log WHERE to_id = ?", [ben.id]); // module-review-ok: reading back the Gratitude row the send door wrote, and that a draft wrote none
     expect(Number(before.c), "a draft sends nothing").toBe(0);
     const r = await yes(id);
     expect(r.status, JSON.stringify(r.json)).toBe(200);
-    const [rows] = await pool.query<any[]>("SELECT from_id, message FROM gratitude_log WHERE to_id = ?", [ben.id]);
+    const [rows] = await pool.query<any[]>("SELECT from_id, message FROM gratitude_log WHERE to_id = ?", [ben.id]); // module-review-ok: reading back the Gratitude row the send door wrote, and that a draft wrote none
     expect(rows).toHaveLength(1);
     expect(rows[0].from_id).toBe(ana.id);
     expect(rows[0].message).toBe("Thank you for the shelves.");
@@ -260,15 +260,15 @@ describe.skipIf(!DB_CONFIGURED)("companions over HTTP", () => {
   });
 
   it("quest: the yes puts the idea in the review inbox, and nothing goes on the board", async () => {
-    const [[q0]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM quests");
+    const [[q0]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM quests"); // module-review-ok: proving the quest idea did not reach the board, which only a steward's approval does
     const id = await item(personal, ana.id, "quest", { title: "Oven roof", description: "Build a small roof over the pizza oven.", firstStep: "Measure the oven." });
     const r = await yes(id);
     expect(r.status, JSON.stringify(r.json)).toBe(200);
     expect(r.json.outcome).toMatch(/^quest_proposal:qprop-/);
-    const [rows] = await pool.query<any[]>("SELECT title, status, proposed_by, module_id FROM quest_proposals WHERE source_ref = ?", [`companion:${id}`]);
+    const [rows] = await pool.query<any[]>("SELECT title, status, proposed_by, module_id FROM quest_proposals WHERE source_ref = ?", [`companion:${id}`]); // module-review-ok: reading back the review-inbox row the quest-idea door wrote
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ title: "Oven roof", status: "proposed", proposed_by: ana.id, module_id: "propose-quest" });
-    const [[q1]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM quests");
+    const [[q1]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM quests"); // module-review-ok: proving the quest idea did not reach the board, which only a steward's approval does
     expect(Number(q1.c), "one approval puts it live, and that is a steward's").toBe(Number(q0.c));
   });
 
@@ -315,7 +315,7 @@ describe.skipIf(!DB_CONFIGURED)("companions over HTTP", () => {
     const r = await call("POST", `/api/me/companions/${personal}/chat`, { message: "What is on this week?" }, ana.token);
     expect(r.status).toBe(409);
     expect(r.json.error).toContain("has no key in this village yet");
-    const [[m]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_messages WHERE owner_user_id = ?", [ana.id]);
+    const [[m]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_messages WHERE owner_user_id = ?", [ana.id]); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
     expect(Number(m.c)).toBe(0);
   });
 
@@ -324,11 +324,11 @@ describe.skipIf(!DB_CONFIGURED)("companions over HTTP", () => {
     expect(d.status).toBe(200);
     const deePersonal = d.json.companions.find((c: any) => c.scope === "personal").id;
     await item(deePersonal, dee.id, "message", { body: "a note", toUserId: ben.id });
-    await pool.query("INSERT INTO companion_messages (companion_id, owner_user_id, speaker, engine, body) VALUES (?,?,?,?,?)", [deePersonal, dee.id, "member", "village", "my words"]);
+    await pool.query("INSERT INTO companion_messages (companion_id, owner_user_id, speaker, engine, body) VALUES (?,?,?,?,?)", [deePersonal, dee.id, "member", "village", "my words"]); // module-review-ok: a chat line for the departed member, which this server cannot write without a model key
     const count = async (who: string) => {
-      const [[a]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companions WHERE owner_user_id = ?", [who]);
-      const [[b]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_items WHERE owner_user_id = ?", [who]);
-      const [[c]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_messages WHERE owner_user_id = ?", [who]);
+      const [[a]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companions WHERE owner_user_id = ?", [who]); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
+      const [[b]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_items WHERE owner_user_id = ?", [who]); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
+      const [[c]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_messages WHERE owner_user_id = ?", [who]); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
       return [Number(a.c), Number(b.c), Number(c.c)];
     };
     expect((await count(dee.id)).every((x) => x > 0)).toBe(true);

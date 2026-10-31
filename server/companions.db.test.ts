@@ -75,10 +75,10 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 });
     for (const [id, name, handle] of [["u-ana", "Ana Reyes", "ana"], ["u-ben", "Ben Ortiz", "ben"], ["u-rick", "Rick Moss", "rick"]]) {
-      await pool.query("INSERT INTO users (id, name, email, handle, password_hash, is_example) VALUES (?,?,?,?,'',0)", [id, name, `${handle}@example.test`, handle]);
+      await pool.query("INSERT INTO users (id, name, email, handle, password_hash, is_example) VALUES (?,?,?,?,'',0)", [id, name, `${handle}@example.test`, handle]); // module-review-ok: a fixture member, written straight to the scratch schema because this suite does not boot the auth routes
     }
-    await pool.query("INSERT INTO org_roles (id, circle_id, name, seats, active, represents_circle) VALUES ('r-treasurer', 'c-gen', 'Treasurer', 1, 1, 0)");
-    await pool.query("INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES ('a-1', 'r-treasurer', 'member', 'u-rick', 'member:u-rick')");
+    await pool.query("INSERT INTO org_roles (id, circle_id, name, seats, active, represents_circle) VALUES ('r-treasurer', 'c-gen', 'Treasurer', 1, 1, 0)"); // module-review-ok: a fixture role on the scratch schema, so the roster has a Treasurer to name
+    await pool.query("INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES ('a-1', 'r-treasurer', 'member', 'u-rick', 'member:u-rick')"); // module-review-ok: a fixture seating, so the role has a holder the companion can name
 
     const c = collect();
     register(c.app, {
@@ -136,7 +136,7 @@ describe.skipIf(!configured)("companions against a real schema", () => {
 
   it("a member's lower cap holds back sooner, and the village ceiling binds a member's higher one", async () => {
     const ben = (await syncArmy(env(), "u-ben")).find((c) => c.scope === "personal")!;
-    await pool.query("UPDATE companions SET daily_question_cap = 1 WHERE id = ?", [ben.id]);
+    await pool.query("UPDATE companions SET daily_question_cap = 1 WHERE id = ?", [ben.id]); // module-review-ok: a member's lowered cap, set directly so the cap rule is tested apart from the PATCH route
     const b = (await companionsOf(pool, "u-ben")).find((c) => c.id === ben.id)!;
     const one = await question(b, "First?");
     const two = await question(b, "Second?");
@@ -168,7 +168,7 @@ describe.skipIf(!configured)("companions against a real schema", () => {
 
   it("refuses at landing, never storing: no door, a fraction, an address, an unknown kind", async () => {
     const ana = (await companionsOf(pool, "u-ana")).find((c) => c.scope === "personal")!;
-    const [[before]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_items");
+    const [[before]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_items"); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
     for (const kind of ["cash_payment", "purchase", "ask"] as const) {
       const r = await landItem(env(), ana, { type: "draft", kind, title: "Pay it", payload: {}, quote: "q", sourceRef: "s", origin: "maia" });
       expect(r).toEqual({ ok: false, error: DRAFT_DOORS[kind].refusal });
@@ -179,7 +179,7 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     expect(address).toEqual({ ok: false, error: "A draft may not carry an email address or a phone number." });
     const unknown = await landItem(env(), ana, { type: "draft", kind: "mint_tokens", title: "Mint", payload: {}, quote: "q", sourceRef: "s", origin: "maia" });
     expect(unknown.ok).toBe(false);
-    const [[after]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_items");
+    const [[after]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_items"); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
     expect(Number(after.c)).toBe(Number(before.c));
     // Control: a whole amount with no address lands.
     const ok = await landItem(env(), ana, { type: "draft", kind: "token_payment", title: "Pay", payload: { tokenType: "credits", amountMinor: 25, toUserId: "u-ben" }, quote: "q", sourceRef: "s", origin: "maia" });
@@ -203,8 +203,8 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     await landItem(env(), ana, { type: "draft", kind: "gratitude_note", title: "Thank the treasurer", payload: { amount: 3, message: "Thanks for the books.", toRoleId: "r-treasurer" }, quote: "thank the treasurer", sourceRef: "chat:9", origin: "chat" });
     const detail = async () => (await armyView(env(), "u-ana", words)).find((c) => c.scope === "personal")!.drafts.find((d) => d.title === "Thank the treasurer")!.detail;
     expect(await detail()).toContain("to Treasurer (Rick).");
-    await pool.query("UPDATE org_role_assignments SET ended_at = NOW() WHERE id = 'a-1'");
-    await pool.query("INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES ('a-2', 'r-treasurer', 'member', 'u-ben', 'member:u-ben')");
+    await pool.query("UPDATE org_role_assignments SET ended_at = NOW() WHERE id = 'a-1'"); // module-review-ok: the role passes on, written the way the org chart ends a seating, to prove the name moves with it
+    await pool.query("INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES ('a-2', 'r-treasurer', 'member', 'u-ben', 'member:u-ben')"); // module-review-ok: a fixture seating, so the role has a holder the companion can name
     expect(await detail()).toContain("to Treasurer (Ben).");
   });
 
@@ -212,7 +212,7 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     const rickRole = (await companionsOf(pool, "u-rick")).find((c) => c.scope === "role")!;
     const q = await landItem(env(), rickRole, { type: "question", title: "Which budget pays for the shelves?", quote: "keep it off the kitchen money", sourceRef: "meeting:weekly", origin: "maia" });
     const decided = await landItem(env(), rickRole, { type: "question", title: "Report on Friday?", quote: "next report", sourceRef: "meeting:treasury", origin: "maia" });
-    await pool.query("UPDATE companion_items SET status = 'answered' WHERE id = ?", [(decided as any).item.id]);
+    await pool.query("UPDATE companion_items SET status = 'answered' WHERE id = ?", [(decided as any).item.id]); // module-review-ok: a decided item, set directly so hand-over is tested apart from the answer route
     // Rick let the role go (above); Ben holds it now.
     await syncArmy(env(), "u-rick");
     expect((await companionsOf(pool, "u-rick")).find((c) => c.id === rickRole.id)!.status).toBe("retired");
@@ -248,7 +248,7 @@ describe.skipIf(!configured)("companions against a real schema", () => {
       const refused = await as("u-ana", "POST /api/me/companions/:id/chat", { params: { id: personalId }, body: { message: "Hello" } });
       expect(refused.status).toBe(409);
       expect(refused.body.error).toBe("consent_required");
-      const [[m]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_messages WHERE owner_user_id = 'u-ana'");
+      const [[m]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_messages WHERE owner_user_id = 'u-ana'"); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
       expect(Number(m.c), "nothing is stored, nothing goes upstream").toBe(0);
 
       // A yes to Sera's line is not a yes to the village guide's.
@@ -287,8 +287,8 @@ describe.skipIf(!configured)("companions against a real schema", () => {
 
   it("forgets one member's companions whole, and nobody else's", async () => {
     const count = async (who: string) => {
-      const [[a]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companions WHERE owner_user_id = ?", [who]);
-      const [[b]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_items WHERE owner_user_id = ?", [who]);
+      const [[a]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companions WHERE owner_user_id = ?", [who]); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
+      const [[b]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_items WHERE owner_user_id = ?", [who]); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
       return Number(a.c) + Number(b.c);
     };
     const benBefore = await count("u-ben");
