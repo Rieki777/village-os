@@ -9,6 +9,11 @@
  * It waits a moment before asking, so the page the member came for paints
  * first, and asks at most once per browser session. Never on the profile
  * itself, where the summary already sits.
+ *
+ * IT TAKES ITS TURN (../../lib/onceDialogs.ts). Pay landing goes first: while
+ * the reward moment is deciding or open, this waits, and it opens a breath
+ * after that one is closed. The one ask per session is spent only once the
+ * card is actually on screen, so a reload while it waits brings it back.
  */
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -16,16 +21,29 @@ import { Sparkles, X } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
 import { useAuth } from "@/contexts/AuthContext";
 import type { SeasonSummary } from "@shared/seasonSummary";
+import { useFloorFree } from "@/lib/onceDialogs";
 import { markSeasonSeen, shouldOffer } from "./seen";
 
 const ASKED = "season-summary-asked";
 const WAIT_MS = 2500;
+/** The breath between one once dialog closing and this one opening. */
+const GAP_MS = 600;
+
+function markAsked(userId: string) {
+  try {
+    sessionStorage.setItem(ASKED, userId);
+  } catch {
+    /* ignore */
+  }
+}
 
 export default function SeasonSummaryOffer() {
   const { user } = useAuth();
   const [location] = useLocation();
   const [offer, setOffer] = useState<SeasonSummary | null>(null);
   const userId = user ? String(user.id) : "";
+  const free = useFloorFree("season");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -36,17 +54,14 @@ export default function SeasonSummaryOffer() {
     }
     let live = true;
     const timer = setTimeout(() => {
-      try {
-        sessionStorage.setItem(ASKED, userId);
-      } catch {
-        /* ignore */
-      }
       const t = authToken();
       fetch("/api/me/season-summary", { headers: t ? { Authorization: `Bearer ${t}` } : {} })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           const s: SeasonSummary | null = d?.summary ?? null;
-          if (live && shouldOffer(s, userId)) setOffer(s);
+          if (!live) return;
+          if (shouldOffer(s, userId)) setOffer(s);
+          else markAsked(userId);
         })
         .catch(() => undefined);
     }, WAIT_MS);
@@ -56,7 +71,19 @@ export default function SeasonSummaryOffer() {
     };
   }, [userId]);
 
-  if (!offer || location.startsWith("/profile")) return null;
+  useEffect(() => {
+    setReady(false);
+    if (!offer || !free) return;
+    const t = setTimeout(() => setReady(true), GAP_MS);
+    return () => clearTimeout(t);
+  }, [offer, free]);
+
+  const visible = !!offer && free && ready && !location.startsWith("/profile");
+  useEffect(() => {
+    if (visible) markAsked(userId);
+  }, [visible, userId]);
+
+  if (!offer || !visible) return null;
   const done = () => {
     markSeasonSeen(userId, offer.season.id);
     setOffer(null);
