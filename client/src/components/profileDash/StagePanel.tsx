@@ -125,7 +125,7 @@ export default function StagePanel({
           {rungStates(stages, stageIndex).map((r) => (
             <li key={r.id} aria-current={r.state === "current" ? "step" : undefined} className="flex flex-col items-center gap-1.5">
               <span className={`h-2 w-full rounded ${RUNG_FILL[r.state]}`} />
-              <span className={`w-full text-center text-[10px] leading-tight [hyphens:auto] ${RUNG_TEXT[r.state]}`}>{r.name}</span>
+              <span className={`w-full text-center text-[9px] leading-tight tracking-tight [overflow-wrap:anywhere] ${RUNG_TEXT[r.state]}`}>{r.name}</span>
             </li>
           ))}
         </ol>
