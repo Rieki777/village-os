@@ -61,7 +61,7 @@ export function useBrochureSwitches(password: string): BrochureSwitches {
           if (show) hidden.delete(p);
           else hidden.add(p);
         }
-        setState({ enabled: body.enabled ?? before.enabled, hidden: [...hidden] });
+        setState({ enabled: body.enabled ?? before.enabled, hidden: Array.from(hidden) });
       }
       setBusy(true);
       setError(null);
