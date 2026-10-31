@@ -434,6 +434,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "intents",
       "module-records",
       "member-agent",
+      "companions",
       "character-sheet",
       "portraits",
       "tombstone",
@@ -466,6 +467,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "role-proposals-after-tombstone",
       "sessions-after-tombstone",
       "gene-keys-after-tombstone",
+      "companions-after-tombstone",
       "audit",
       "external-stores",
     ]);
