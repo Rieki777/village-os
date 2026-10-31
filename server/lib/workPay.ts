@@ -33,6 +33,7 @@ import {
 } from "./economy";
 import { tokenDef } from "./ledger";
 import { MAX_BADGE_MULTIPLIER, readBadgeMultipliers } from "./badges";
+import { listBadgesWithMultipliers } from "../repos/badgeMultipliers";
 import {
   GRATITUDE_NEVER_PAYS,
   readWorkValue,
@@ -165,18 +166,12 @@ export interface BadgeBoost {
  * dormant this season. Public, like the badges themselves.
  */
 export async function payBadgeBoosts(pool: Pool | PoolConnection, dormant: readonly string[]): Promise<BadgeBoost[]> {
-  const [rows]: any = await pool.query(
-    `SELECT id, name, multipliers FROM badges
-      WHERE active = 1 AND multipliers IS NOT NULL AND is_example = 0
-        AND kind NOT IN ('self','hypha')
-      ORDER BY name`,
-  );
   const skip = new Set(dormant);
   const out: BadgeBoost[] = [];
-  for (const r of rows as any[]) {
-    if (skip.has(String(r.id))) continue;
+  for (const r of await listBadgesWithMultipliers(pool)) {
+    if (skip.has(r.id)) continue;
     const multipliers = readBadgeMultipliers(r.multipliers);
-    if (multipliers) out.push({ name: String(r.name), multipliers });
+    if (multipliers) out.push({ name: r.name, multipliers });
   }
   return out;
 }
