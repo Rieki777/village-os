@@ -36,6 +36,7 @@ what, where, what breaks without it.
 | `BREAK_GLASS_ADMIN_EMAIL` | (from S1) may re-elevate exactly that account at `/claim`, after a founder exists; it still needs `ADMIN_PASSWORD`. `fork-init` defaults it to `--admin-email` | No recovery if all admins are demoted |
 | `ANTHROPIC_API_KEY` | Maia guided proposals (`/api/assistant/*`), the launch guide, the map concierge tie-break, and call synthesis (S54). **S63: settable from Admin → Integrations instead** — an admin-typed key beats this env var; reads are masked (last4 only). | Assistant hides; forms still work; call synthesis refuses with an honest 503 while ingestion, transcripts and publishing keep working |
 | `ANTHROPIC_BASE_URL` | (optional, dev/CI) points the assistant at a stub instead of api.anthropic.com | Defaults to the real API |
+| `PLATFORM_ASSISTANT_OPERATOR` | (companions, optional) The name of whoever holds `PLATFORM_ASSISTANT_KEY`, as members should read it. Before a member's words first go to a model on the borrowed key, their companion shows one line naming the provider and this operator, and the member agrees or does not (`server/lib/companionConsent.ts`). Set it with the borrowed key, at provisioning. A yes is to one line, so changing this name asks every member again | The line says the shared key's operator "is not named on this deployment", which is true, and members decide on that |
 | `PLATFORM_ASSISTANT_KEY` | (S76, optional) A ReGen-provisioned key this deployment may BORROW until the village adds its own. Set at provisioning by whoever has deploy access, deliberately never an admin toggle: a screen that lets a deployment start spending someone else's money is a screen that eventually does. The village's own key (Admin → Integrations, or `ANTHROPIC_API_KEY`) always wins the moment it exists, with no restart. A borrowed key must not survive handoff, since the village loses Maia the day it rotates. | No borrowing: the assistant is simply unavailable until the village adds a key |
 | `PLATFORM_ASSISTANT_DAILY_CAP` | (S76, optional) Calls per day allowed against the borrowed key, counted separately from every per-mode budget so a demo fork cannot spend a production village's headroom. `0` means zero, never unlimited. | 100 |
 | `MEMBER_SECRETS_KEY` | (round 4, Your agent) 32 random bytes as 64 hex characters (`openssl rand -hex 32`), set at provisioning. Encrypts each member's own LLM key at rest (AES-256-GCM, `server/lib/memberSecrets.ts`) and derives each member's agent-inbox signing secret. **Rotating it makes every stored member key unreadable**: members re-enter theirs and re-save their inbox URL. Deliberately no per-process fallback: a random key would store credentials this deployment could never read again after its next restart. Agent tokens (`vat_`) do NOT depend on it; they are hashed. Optional flag beside it: `AGENT_INTENT_WRITE=1` opens `POST /api/agent/v1/intents` once the introductions module has landed (leave unset until then). | The profile's "Run the assistant on your key" and "Agent inbox" sections say "this deployment has no member-secrets key; ask your operator" and refuse to store anything; bring-your-agent tokens, the skills and every read still work |
@@ -176,6 +177,20 @@ above the size of a gathering, not to the size of one person's usage.
   ("Make This Yours"): identity, images (uploaded, sharp-compressed), dues,
   personas.
 - Game variables: only CHANGED values are stored; platform defaults inherit.
+- Finished erasures, given the steps they predate (no migration, no env var):
+  late in boot, once per list of steps (the runOnce id is
+  `erasure-steps-backfill-<digest>`), every finished `member_erasures` record
+  and every tombstone with no record at all is given the steps after the
+  tombstone that it lacks and that find their rows by user id
+  (`backfillFinishedErasures`, `server/lib/erasure.ts`). On a village that
+  erased somebody on an older release, this ends the agent token, open
+  invitation link, place at a gathering, vouch for somebody still waiting,
+  group ownership and delegation that outlived them, and takes off the
+  `departed-<id>` handle an old tombstone kept, so no profile page answers to
+  it (`handle-after-tombstone`). A fee for a place ahead
+  comes back once, and a freed seat goes to whoever was waiting, who is told.
+  Look for `[erasure] finished-erasure backfill:` in the boot log. A member it
+  stopped part way is counted there and tried again on the next boot.
 - Earned equity (0266, no env var): the migration seeds the `earned-equity`
   token with `sys:equity-mint`, `sys:equity-bridge` and `sys:equity-settled`,
   and `seedEconomy` adds its two mint rules (`quest.completed`, `role.cycle`)

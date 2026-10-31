@@ -73,6 +73,74 @@ export function sourceStatusOf(v: unknown): SourceStatus | null {
   return k === "active" || k === "proposed" || k === "vacant" || k === "archived" ? k : "other";
 }
 
+/**
+ * What a source's pay status means, in four standings, as the source's
+ * Operations role described its values on 2026-10-30: Active is settled,
+ * Proposed and Under Review are pending, and Deferred is decided and not
+ * paying yet (usually waiting on funding), which is NOT the same as proposed.
+ */
+export type SourcePayStanding = "settled" | "pending" | "agreed-not-paying" | "other";
+
+/**
+ * What the source holds a seat to pay. Information for the steward reading
+ * the structure: it is never written to a seat, and the review never offers
+ * it as this village's figure. `monthlyUsd` is ONE blended figure for the
+ * whole arrangement, not cash alone, because that is all the source holds.
+ */
+export interface SourcePay {
+  /** The source's model, as written ("Stipend", "Volunteer", "Hybrid"...). */
+  model: string | null;
+  standing: SourcePayStanding | null;
+  /** The status as the source wrote it. */
+  statusLabel: string | null;
+  /** The source's own words on the terms. Prose, shown to a steward only. */
+  terms: string | null;
+  /** US dollars a month, as the source holds it. */
+  monthlyUsd: number | null;
+}
+
+/** A source's pay status read into its standing. Null when none was sent. */
+export function sourcePayStandingOf(label: string | null): SourcePayStanding | null {
+  if (label === null) return null;
+  const k = label.trim().toLowerCase();
+  if (k === "active") return "settled";
+  if (k === "proposed" || k === "under review") return "pending";
+  if (k === "deferred") return "agreed-not-paying";
+  return "other";
+}
+
+/** A dollar figure from a number or a "$1,200.50" string. Null for anything else, negative, or absurd. */
+function dollarsOf(v: unknown): number | null {
+  let n: number | null = null;
+  if (typeof v === "number") n = v;
+  else if (typeof v === "string") {
+    const t = v.trim().replace(/^\$/, "").replace(/,/g, "");
+    if (/^\d+(\.\d{1,2})?$/.test(t)) n = Number(t);
+  }
+  return n !== null && Number.isFinite(n) && n >= 0 && n < 1e9 ? n : null;
+}
+
+/**
+ * The `sourcePay` a seat carries, read defensively: the payload may have been
+ * edited or sent by something other than this village's reader. Null when it
+ * says nothing at all.
+ */
+export function readSourcePay(v: unknown): SourcePay | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const str = (x: unknown, max: number): string | null =>
+    typeof x === "string" && x.trim() !== "" ? x.trim().slice(0, max) : null;
+  const statusLabel = str(o.status, 60);
+  const out: SourcePay = {
+    model: str(o.model, 60),
+    standing: sourcePayStandingOf(statusLabel),
+    statusLabel,
+    terms: str(o.terms, 600),
+    monthlyUsd: dollarsOf(o.monthlyUsd),
+  };
+  return out.model || out.statusLabel || out.terms || out.monthlyUsd !== null ? out : null;
+}
+
 /** The proposal kinds that change the chart. Everything else in a batch is a note. */
 export const STRUCTURE_KINDS = ["org.proposed", "role.proposed", "circle.proposed"] as const;
 
@@ -208,6 +276,8 @@ export interface PlanSeat {
   otherCircles: string[];
   /** The source pointed at a circle its own read did not hold. */
   circleUnresolvedAtSource: boolean;
+  /** What the source holds this seat to pay, or null. Never written to the seat. */
+  sourcePay: SourcePay | null;
   sent: Record<string, unknown>;
 }
 
@@ -396,6 +466,7 @@ export function planStructure(
           ? (sent.sourceOtherCircles as unknown[]).filter((x): x is string => typeof x === "string")
           : [],
         circleUnresolvedAtSource: sent.sourceCircleUnresolved === true,
+        sourcePay: readSourcePay(sent.sourcePay),
         sent,
       });
     });

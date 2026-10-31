@@ -227,6 +227,39 @@
      raised panel. Both clear AA on every surface either one lands on. */
   --color-notice: var(--sheet-notice, #8d5e19);
   --color-open: var(--sheet-open, #3d6e4a);
+
+  /* THE PROFILE DASHBOARD'S PURSES AND PANELS (approved design, 2026-10-30).
+     Only the dashboard under `.sheet-night` paints with these, so the
+     defaults are the night values. Each one rides a --sheet-* knob, so a
+     village re-tints the dashboard the way it re-tints the rest of the sheet.
+
+       dash-gold      the earned gold: buttons, the XP ring, the stage pill
+       dash-gold-lit  gold text and the bright end of a bar
+       dash-cash      cash owed, a real-money green
+       dash-voice     Voice
+       dash-thanks    Gratitude
+       dash-session   a live session
+       dash-raised    a card inside a panel
+       dash-warm      the stage-reached panel and its gold edge
+       dash-next      the next-step card
+       dash-track     an empty bar */
+  --color-dash-gold: var(--sheet-dash-gold, #d9b45a);
+  --color-dash-gold-lit: var(--sheet-dash-gold-lit, #f3d891);
+  --color-dash-gold-edge: var(--sheet-dash-gold-edge, #8a7334);
+  --color-dash-gold-ink: var(--sheet-dash-gold-ink, #1a1408);
+  --color-dash-cash: var(--sheet-dash-cash, #bfe3c9);
+  --color-dash-cash-ink: var(--sheet-dash-cash-ink, #10261a);
+  --color-dash-voice: var(--sheet-dash-voice, #8fc9a5);
+  --color-dash-thanks: var(--sheet-dash-thanks, #e79bb0);
+  --color-dash-thanks-ink: var(--sheet-dash-thanks-ink, #2a0f18);
+  --color-dash-session: var(--sheet-dash-session, #cfc8f2);
+  --color-dash-raised: var(--sheet-dash-raised, #1b2a23);
+  --color-dash-warm: var(--sheet-dash-warm, #1b2a20);
+  --color-dash-warm-edge: var(--sheet-dash-warm-edge, #6b5a2c);
+  --color-dash-next: var(--sheet-dash-next, #2a2614);
+  --color-dash-track: var(--sheet-dash-track, #24352d);
+  --color-dash-chip: var(--sheet-dash-chip, #20322a);
+  --color-dash-edge: var(--sheet-dash-edge, #2f4238);
 }
 
 :root {

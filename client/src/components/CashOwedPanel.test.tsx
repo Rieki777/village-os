@@ -44,6 +44,7 @@ describe("the cash card", () => {
     await waitFor(() => expect(calls.length).toBe(1));
     expect(container.innerHTML).toBe("");
     expect(calls.some((c) => c.url === "/api/cash-owed/queue")).toBe(false);
+    expect(container.querySelector('a[href="/cash-payouts"]')).toBeNull();
   });
 
   it("shows what a member is owed and claims it on their own row", async () => {
@@ -58,6 +59,19 @@ describe("the cash card", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/me/cash-owed/cash-1/claim")).toBe(true));
   });
 
+  it("offers a year of cash received for each year the member was paid in, and none while nothing is paid", async () => {
+    const paid = (id: string, paidAt: string) => ({ ...owed, id, state: "paid", paidAt, paidNote: "Bank transfer on 2026-01-02. Reference: X" });
+    routes({ "GET /api/me/cash-owed": { entries: [paid("p1", "2026-02-01T00:00:00.000Z"), paid("p2", "2025-06-01T00:00:00.000Z"), owed], mayPay: false } });
+    render(<CashOwedPanel />);
+    expect(await screen.findByRole("button", { name: "Download cash received in 2026" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download cash received in 2025" })).toBeTruthy();
+    vi.unstubAllGlobals();
+    routes({ "GET /api/me/cash-owed": { entries: [owed], mayPay: false } });
+    const { container } = render(<CashOwedPanel />);
+    await waitFor(() => expect(container.textContent).toContain("Rebuild the water tank"));
+    expect(container.textContent).not.toContain("Download cash received");
+  });
+
   it("gives the treasurer the village's list, and marks a row paid only with a note", async () => {
     const calls = routes({
       "GET /api/me/cash-owed": { entries: [], mayPay: true },
@@ -69,6 +83,8 @@ describe("the cash card", () => {
     });
     render(<CashOwedPanel />);
     expect(await screen.findByText("What the village owes")).toBeTruthy();
+    // A finance role holding cash.pay without admin reaches the full payout list from here.
+    expect(screen.getByRole("link", { name: "Record a bank transfer" }).getAttribute("href")).toBe("/cash-payouts");
     expect(screen.getByText(/to Ora/)).toBeTruthy();
     const mark = screen.getByRole("button", { name: "Mark paid" }) as HTMLButtonElement;
     expect(mark.disabled, "no note, no payment").toBe(true);

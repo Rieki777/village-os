@@ -25,6 +25,7 @@
  * direction this table must never fail in.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { isTombstone } from "../lib/oauthAccounts";
 
 /**
  * The longest error sentence this table stores.
@@ -222,10 +223,8 @@ export async function noteStepDone(pool: Pool, userId: string, step: string): Pr
  * The local sweep completed. The failure fields go with it, and so does who it
  * was for: in the same statement, so no finished record ever holds a name.
  *
- * The second statement clears any OTHER finished record still holding one.
- * Nothing in this release leaves one, but an image from before 0282 put back
- * over a migrated database finishes sweeps without knowing the column exists,
- * and this is where the first finish after it comes forward takes them.
+ * It then clears any OTHER finished record still holding one
+ * (`clearFinishedIdentities`, which says where those come from).
  */
 export async function noteErasureFinished(pool: Pool, userId: string): Promise<void> {
   await pool.query(
@@ -233,8 +232,170 @@ export async function noteErasureFinished(pool: Pool, userId: string): Promise<v
       "`erased_identity` = NULL WHERE `user_id` = ?",
     [userId],
   );
-  await pool.query(
+  await clearFinishedIdentities(pool);
+}
+
+/**
+ * Let go of who every FINISHED erasure was for, and say how many held one.
+ *
+ * Nothing in this release leaves a name on a finished record. An image from
+ * before 0282 put back over a migrated database does: it finishes sweeps
+ * without knowing the column exists, so a sweep this release opened and that
+ * one finished keeps the departed member's name, address and handle on a row
+ * that reads finished, and every nightly dump copies them.
+ *
+ * WHO CALLS IT. Every finish, and the hourly failed-actions pass
+ * (`resumeClosedErasures`), which runs whether or not anything is left to
+ * resume. The finish alone used to be the only clear, so a leftover waited for
+ * some other member's erasure, and a small village can go months without one
+ * (round 2, finding 2). Now it goes within an hour of the image coming forward.
+ * A village with the scheduler switched off still clears at its next finish.
+ *
+ * SAFE BESIDE AN OPEN SWEEP. It touches finished rows only, and `beginErasure`
+ * reopens a record and writes its identity in one statement, so a re-erasure
+ * never loses an identity it needs to this.
+ */
+export async function clearFinishedIdentities(pool: Pool): Promise<number> {
+  const [result] = await pool.query(
     "UPDATE `member_erasures` SET `erased_identity` = NULL WHERE `finished_at` IS NOT NULL AND `erased_identity` IS NOT NULL",
+  );
+  return Number((result as { affectedRows?: number }).affectedRows ?? 0);
+}
+
+/**
+ * How long after its last attempt began a sweep with no failing step may still
+ * be going. A sweep takes seconds, so this is generous. The failed-actions
+ * report reads it as "running", and `abandonErasure` refuses to end one inside it.
+ */
+export const MAY_STILL_BE_RUNNING_SECONDS = 10 * 60;
+
+/** What `abandonErasure` found, and whether it ended anything. */
+export type AbandonedErasure =
+  | { outcome: "none" }
+  | { outcome: "abandoned"; stepsDone: string[] }
+  | { outcome: "closed" }
+  | { outcome: "running" };
+
+/**
+ * End an unfinished erasure that never closed the account, because the member
+ * is staying (round 2, finding 1).
+ *
+ * THE ONE WRITER THAT REMOVES A RECORD, and it is narrow on purpose. One
+ * conditional DELETE, so a resume landing the tombstone between a read and
+ * this statement cannot be undone by it:
+ *
+ *   - only an UNFINISHED record: a finished one is the account's history;
+ *   - only one whose steps never reached "tombstone": past it the account is
+ *     closed and the sweep has to finish ("closed");
+ *   - only one that is not still going: a failing step recorded, or its last
+ *     attempt older than `MAY_STILL_BE_RUNNING_SECONDS` ("running").
+ *
+ * The identity it held goes with it. `stepsDone` is what the sweep had already
+ * removed by the time it stopped, read just before the delete: none of it comes
+ * back, and the caller says so to whoever is keeping the member.
+ */
+export async function abandonErasure(pool: Pool, userId: string): Promise<AbandonedErasure> {
+  const before = await erasureRecord(pool, userId);
+  const [result] = await pool.query(
+    "DELETE FROM `member_erasures` WHERE `user_id` = ? AND `finished_at` IS NULL " +
+      "AND NOT JSON_CONTAINS(COALESCE(`steps_done`, JSON_ARRAY()), '\"tombstone\"') " +
+      "AND (`failed_step` IS NOT NULL OR `last_attempt_at` IS NULL OR `last_attempt_at` <= CURRENT_TIMESTAMP - INTERVAL ? SECOND)",
+    [userId, MAY_STILL_BE_RUNNING_SECONDS],
+  );
+  if (Number((result as { affectedRows?: number }).affectedRows ?? 0) > 0) {
+    return { outcome: "abandoned", stepsDone: before?.stepsDone ?? [] };
+  }
+  const now = await erasureRecord(pool, userId);
+  if (!now || now.finishedAt) return { outcome: "none" };
+  return now.stepsDone.includes("tombstone") ? { outcome: "closed" } : { outcome: "running" };
+}
+
+/**
+ * Whether this member's unfinished erasure was overtaken by a departure that
+ * was CANCELLED at or after its last attempt began: the village decided they
+ * stay, after the sweep stopped.
+ *
+ * The case `abandonErasure` exists for, seen from the other side. The cancel
+ * route ends the record itself now, but a cancel made before it did left the
+ * record armed, and a resume reads this so it never closes the account of a
+ * member who stayed. An erasure asked for again AFTER the cancel (a self
+ * delete, an admin's) moves `last_attempt_at` past it, so it still runs.
+ * Compared in SQL, both columns TIMESTAMP, so no host offset enters it.
+ */
+export async function stayedSinceLastAttempt(pool: Pool, userId: string): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT EXISTS(SELECT 1 FROM `exits` WHERE `user_id` = ? AND `status` = 'cancelled' AND `resolved_at` IS NOT NULL " +
+      "AND `resolved_at` >= (SELECT COALESCE(`last_attempt_at`, `started_at`) FROM `member_erasures` " +
+      "WHERE `user_id` = ? AND `finished_at` IS NULL)) AS stayed",
+    [userId, userId],
+  );
+  return Number(rows[0]?.stayed ?? 0) === 1;
+}
+
+/**
+ * Every member a FINISHED erasure was for, for the backfill that gives a
+ * finished record the steps it predates (`backfillFinishedErasure`,
+ * server/lib/erasure.ts).
+ *
+ * Two kinds: a record whose sweep finished, and a tombstone with no record at
+ * all, which is an erasure from before this table (0195). An open record is
+ * left out on purpose: the queue and the hourly job finish those, and a resume
+ * already runs every step a record lacks. Example rows are left out too. Ids
+ * only, finished records first and oldest first; the sweep reads each member
+ * itself.
+ *
+ * Three reads joined here, never one statement across the two tables: their
+ * id columns are not promised one collation on every village's database
+ * (server/db/collation.ts), and comparing them in SQL is how a fork's boot
+ * would learn that.
+ */
+export async function finishedErasureSubjects(pool: Pool): Promise<string[]> {
+  const [finished] = await pool.query<RowDataPacket[]>(
+    "SELECT `user_id` FROM `member_erasures` WHERE `finished_at` IS NOT NULL ORDER BY `finished_at`, `user_id`",
+  );
+  const [recorded] = await pool.query<RowDataPacket[]>("SELECT `user_id` FROM `member_erasures`");
+  const [tombstones] = await pool.query<RowDataPacket[]>(
+    "SELECT `id` FROM `users` WHERE LOWER(`email`) LIKE '%@anonymized.invalid' AND COALESCE(`is_example`, 0) = 0 ORDER BY `id`",
+  );
+  const hasRecord = new Set(recorded.map((r) => String(r.user_id)));
+  return [
+    ...finished.map((r) => String(r.user_id)),
+    ...tombstones.map((r) => String(r.id)).filter((id) => !hasRecord.has(id)),
+  ];
+}
+
+/**
+ * Give a tombstone that has no record a FINISHED one, so the backfill can
+ * write down what it ran the way every other erasure does, and a second run
+ * reads it as done.
+ *
+ * No attempts and no attempt time: no sweep of this table's ever ran for the
+ * member, and the record says so. `started_at` takes the moment it was
+ * written, because the column cannot be empty and the first attempt's date is
+ * not known. `INSERT IGNORE`, so a record that exists already is never touched.
+ */
+export async function openBackfillRecord(pool: Pool, userId: string): Promise<void> {
+  await pool.query(
+    "INSERT IGNORE INTO `member_erasures` (`user_id`, `attempts`, `last_attempt_at`, `steps_done`, `finished_at`) " +
+      "VALUES (?, 0, NULL, JSON_ARRAY(), CURRENT_TIMESTAMP)",
+    [userId],
+  );
+}
+
+/**
+ * Record one step the backfill ran, on a record that is STILL finished.
+ *
+ * `finished_at` is not touched: the sweep finished when it did, and a step
+ * given afterwards does not move that. A record a new erasure opened in the
+ * meantime takes no note, because the fresh sweep runs every step itself and
+ * a note here would let a resume of it skip a step on the strength of a run
+ * that was not that sweep's.
+ */
+export async function noteBackfilledStep(pool: Pool, userId: string, step: string): Promise<void> {
+  await pool.query(
+    "UPDATE `member_erasures` SET `steps_done` = JSON_ARRAY_APPEND(COALESCE(`steps_done`, JSON_ARRAY()), '$', ?) " +
+      "WHERE `user_id` = ? AND `finished_at` IS NOT NULL",
+    [step, userId],
   );
 }
 
@@ -302,15 +463,23 @@ export async function unfinishedErasures(pool: Pool, limit = 200): Promise<Erasu
  * pool pins UTC (server/db/pool.ts), a test suite's pool does not, and there a
  * TIMESTAMP read into a Date shifts by the host's offset, so a backoff built on
  * it would fire hours early or late. Which of these the job may resume without a
- * person is the job's decision, and it is made on `stepsDone`, not here.
+ * person is the job's decision, and it is made on `stepsDone` and on
+ * `accountClosed`, not here.
+ *
+ * `accountClosed` reads the ACCOUNT, by the one rule `resumeErasure` uses
+ * (`isTombstone`), because a record can lack "tombstone" over an account that
+ * is one: the write committed and its note was lost, or a second resolve over
+ * the closed account emptied the steps and stopped early. The address is read
+ * only to answer that, and never leaves this function.
  */
 export async function unfinishedErasuresWithAge(
   pool: Pool,
   limit = 500,
-): Promise<Array<ErasureRecord & { sinceLastAttemptSeconds: number | null; sinceStartSeconds: number | null }>> {
+): Promise<Array<ErasureRecord & { sinceLastAttemptSeconds: number | null; sinceStartSeconds: number | null; accountClosed: boolean }>> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT ${COLUMNS}, TIMESTAMPDIFF(SECOND, \`last_attempt_at\`, CURRENT_TIMESTAMP) AS since_s, ` +
-      "TIMESTAMPDIFF(SECOND, `started_at`, CURRENT_TIMESTAMP) AS started_s " +
+      "TIMESTAMPDIFF(SECOND, `started_at`, CURRENT_TIMESTAMP) AS started_s, " +
+      "(SELECT u.`email` FROM `users` u WHERE u.`id` = `member_erasures`.`user_id`) AS account_email " +
       "FROM `member_erasures` WHERE `finished_at` IS NULL ORDER BY `started_at`, `user_id` LIMIT ?",
     [Math.max(1, Math.min(1000, Math.trunc(limit)))],
   );
@@ -318,6 +487,7 @@ export async function unfinishedErasuresWithAge(
     ...rowToRecord(r),
     sinceLastAttemptSeconds: r.since_s == null ? null : Math.max(0, Number(r.since_s)),
     sinceStartSeconds: r.started_s == null ? null : Math.max(0, Number(r.started_s)),
+    accountClosed: r.account_email != null && isTombstone({ email: String(r.account_email) }),
   }));
 }
 

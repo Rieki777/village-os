@@ -58,13 +58,40 @@ screen and is shown where the room is, with one tap back to it.
 | **Drop in** | The village's place line, the moon and the season. A shared breath that every screen in the room takes at the same pace, from one start time the server holds. Who is here. | Reads the place line or asks someone to, starts the breath, names who is here and who sent word. |
 | **Arrival** | Each person gives one number from 1 to 11 for how they are arriving and, if they like, what would make it an 11+. Nobody fixes anybody's answer. | Goes first, calls names two at a time. When the room arrives low (two or more numbers and a median of 5 or below), offers a lighter agenda and asks for consent. The tool suggests; it never trims. |
 | **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, object, or sleep on it, and a concern or an objection is said in one sentence. Sleeping on it (Rye, 2026-10-22) is for someone who decides best after a night: it needs no sentence, it is never an objection, and the round, here and on every proposal, stays open and says so. Since 2026-10-23 a night names when it ends (see "A night on a proposal" below). | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
-| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round (and, folded under it, the regenerative lens: four questions for a room that wants to look at it whole first), a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a role, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
+| **Items** | One live page per agenda item with its own clock, notes, ideas, wins and celebrations, a proposal with a consent round (and, folded under it, the regenerative lens: four questions for a room that wants to look at it whole first), a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a role, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
 | **Actions** | Every action is claimed by a person or a role, here and now, or parked. | Reads each action out and waits for a claim. |
 | **Close** | Gratitude, one word each, feedback on the facilitation, and an idea for the tool. | Closes the session, which keeps the record. |
 
 **The item's clock has grace.** It stays calm until four fifths of its minutes are gone, then
 shifts softly, and when time is up it rings a quiet bell and offers three choices: add five minutes
 with the room's consent (up to sixty extra on one item), park it, or wrap it up.
+
+**The room votes its agenda** (0290, Rye 2026-10-30: "In sessions this should be a vote (where we
+can crowd vote ones up and down and together select the priority)"). Everyone in the room votes each
+waiting item up or down, one vote per person per item; pressing the same vote again takes it back,
+and the other vote changes it. While the vote is open the agenda sorts itself by the score (ups less
+downs) at every vote and every new item, ties keeping their order, items already talked about at the
+top and parked ones at the end, so the positions themselves are the room's choice. The tallies are the
+room's to see. Whoever runs the room sets the order once the room has voted (`POST
+/api/sessions/:id/agenda/order { set: true }`), which closes the vote; only then do the arrows show, to
+move an item by hand, and opening the vote again sorts by the score once more. A vote is the person's
+own, like a consent answer: nobody votes for anybody else, the facilitator filling in included. The
+contract is `shared/sessionVotes.ts`.
+
+**Wins and celebrations** (Rye, 2026-10-30: "add a section for 'wins and celebrations' to share about
+things they've won at!"). Each item's page has a section where anyone shares a win, with the mic like
+every box. A win is the entry kind `win` and goes into the record under its item. Every section on the
+item's page has a name (`ITEM_SECTIONS`: `notes`, `ideas`, `wins`, `proposal`, `learned`, `actions`),
+so a meeting template switches each on or off by name through the view's `itemSections`; a view that
+names none shows them all.
+
+**The next step is always in sight** (Rye, 2026-10-30: "make the next step more obvious and easy for
+other facilitators to find"). On the agenda, the items and the close, the facilitator sees one bar
+under the stage, held to the bottom of the screen (above the tab bar on a phone). It names the next
+thing and does it in one tap: start the first item, wrap this one up and start the next, on to the
+actions once every item is done, and on the close, the way to the close button. When an item's time
+is up the bar says so and offers five more minutes beside the wrap up. On the item's page the wrap up
+is a strong button beside the clock.
 
 **Speaking rounds.** The facilitator sets an order and the room shows who speaks now and who is
 ready next, two names at a time.
@@ -169,10 +196,30 @@ every half minute while its tab is visible.
   Village Pulse reads public events.
 - **The shareable minutes name no person at all** (below).
 
+## Filled in by the Facilitator
+
+Rye, 2026-10-30: "Facilitator can fill other people's stuff out", live sessions first, with a notice to
+the person. The contract is `shared/sessionOnBehalf.ts`.
+
+- **Who.** Only the person facilitating the session, while it is open, for somebody who has joined the
+  room. Not the secretary, and not an admin unless they take the facilitation.
+- **What.** On their bar the facilitator chooses "Filling in for" a person. Until they choose Myself
+  again, the arrival, a new agenda item and a new entry (a tension, a proposal, an action, any kind) go
+  in as that person's (`forUserId`). They can also hand an action nobody holds to somebody
+  (`ownerUserId`). Changing the words, plan, role or date on something a member added is a fill-in too.
+- **Never an answer.** Consent, a concern, an objection, a night, the closing word and the feedback on
+  the facilitation stay each person's own. `/respond` refuses any `forUserId` but the answerer's own.
+- **Seen and heard.** The room marks it "Filled in by the Facilitator", by the role and never the
+  facilitator's name, and the person gets one notice. The person, or the facilitator, can undo it from the
+  room while it is open (`POST /api/sessions/:id/on-behalf/:fillId/undo`); the person changing it
+  themselves makes it theirs, and the mark goes.
+
 ## What the record holds
 
-Nineteen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other eighteen holds that number. Three
+Twenty-one tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other twenty holds that number. One
+(0288) is what the facilitator filled in for somebody, described under "Filled in by the Facilitator", and
+one (0290) is the room's vote on its agenda, described under "The six stages". Three
 (0255) are the task layer, described under "After the call: tasks", one (0280) is a decision's review
 date, described under "After the call: a circle's decisions and their reviews", two (0284) are the advice
 process, described under "Before deciding: the advice process", two (0264) are the agenda
@@ -201,6 +248,8 @@ its own, both described under "Circle meetings on a calendar".
 | `live_session_decision_reviews` | One per decision with a review date: the village date, who set it, and the agenda item its review became once it was made. |
 | `live_session_advice_requests` | One per request for advice: the circle asked, who asked, what they mean to decide and why, the decide-by date, and once settled whether it was decided or withdrawn and what was decided. |
 | `live_session_advice_asks` | One per person asked on a request, with their advice once they give it. |
+| `live_session_item_votes` | One per person per agenda item they voted on (0290): up (1) or down (-1), and when. Taking a vote back deletes its row. |
+| `live_session_on_behalf` | One per thing the facilitator filled in or changed for somebody (0288): who wrote it, whose it is, what (an arrival, an item, an entry) and whether it was added or changed, what it replaced (emptied at the close), when the person was told, and whether it was undone or made theirs since. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
@@ -720,6 +769,63 @@ built to name nobody.
 The `people` audience, with names on actions and who was present, is for the people who were there
 and the admins.
 
+## Meeting templates: the meetings a village holds again and again
+
+Contract `shared/sessionTemplates.ts`; doors `server/routes/sessionTemplates.ts` under their own
+prefix, `/api/session-templates`; rules `server/lib/sessionTemplates.ts`; statements
+`server/repos/sessionTemplates.ts`; schema `drizzle/0291_a_circle_keeps_its_meeting_templates.sql`.
+Rye, 2026-10-30: "need to be able to create/select templates and to sort those of the same
+category (like our friday and monday sessions)", and feedback on each template over time should
+keep changing what it looks like and how its meeting flows.
+
+- **A template is a row, never code.** Name, category, a sentence on what it is for, the usual
+  circle and length, and an ordered FLOW of sections. Each section has a kind, a title, a prompt
+  and minutes. The kinds are `round`, `talking_stick`, `wins`, `agenda`, `priority_vote`,
+  `priorities_set`, `priorities_review`, `carried_over` and `close`; the words a member reads are
+  always the section's own title and prompt.
+- **Who keeps them.** Every admitted member reads them. Making, changing, duplicating, ordering
+  and archiving ask the one gate for `session.template`, which opens at the member rung, the same
+  people who may open a room. A template is archived, never deleted, because a series still names
+  it.
+- **Three seeds, written once.** Heart share (category "Heart share"), Monday planning and Friday
+  check-in (category "Weekly rhythm", Monday first). A seed row that exists is never written over,
+  so the feedback a village gives a seed stays.
+- **The start card's "Meeting type".** The templates grouped by category in their keepers' order.
+  Picking one fills the title, circle and length and shows the flow; "No template" stays first.
+  `POST /api/sessions` takes `templateId`, checks it is an active template before the room opens,
+  and links the new session to it.
+- **A series feeds itself.** Each template may name another it reads back from. Friday reads back
+  from Monday: under its `priorities_review` section ("Last Monday's priorities") the room sees the
+  priorities the latest Monday opened before it chose, and the facilitator marks each done, partly
+  or carried over. Monday reads back from Friday: under its `carried_over` section ("Carried over
+  from Friday") come the priorities that Friday marked partly or carried, each one a tap from being
+  this week's priority again, and gone from the list once taken up. Monday's `priorities_set`
+  section keeps this week's priorities, and can take the agenda's top items once the room has voted
+  them into order.
+- **The talking stick.** A `talking_stick` section passes a visible stick around the people here,
+  in the order the facilitator starts it with: the room sees who holds it, who is next and the
+  round. The facilitator passes it on, steps back one, or gives it to somebody. Anyone in the room
+  keeps a line of what was shared (grateful for, what's working, what's not working, a tension),
+  and a line can be brought to a later session: it becomes an item in the agenda library for the
+  session's circle, a tension as an Explore and anything else as a Report, once only.
+- **The season's priorities stay at the centre** (0292, Rye 2026-10-30). A season's priorities are
+  its own `goals` (the season document, kept in the season settings). A `season_priorities` section
+  reads them out in the room; the weekly templates open with one. Every weekly priority and every
+  win may name the season priority it serves, chosen from that list and copied as written, the way
+  a member's season plan names its goal; a carried priority taken up again keeps the one it served.
+  Wins are shared under a `wins` section in the room's panel (the item page's own wins name none).
+- **The season so far**, at `/sessions/season` (`GET /api/session-templates/season?season=<id>`):
+  for each season priority, the weekly priorities that named it set against how each went, and the
+  wins that named it; wins over time, a row per week; and the tensions that keep coming up in
+  Heart share (what was named a tension or as not working), grouped when the same one comes back,
+  latest first. Counts and words only, no score, no ranking and no person's name. A tension's words
+  reach the people who were in a Heart share it came up in, and admins; everybody else reads that
+  it came up, and how often. The window is the season's own dates in the village's zone, and a
+  session belongs to the season it was opened in.
+- **Who writes in the room.** Moving the stick and setting or marking priorities is the
+  facilitator, the secretary or a joined admin, while the room is open. Capturing a share and
+  bringing one to a later session is anybody in the room.
+
 ## How it rhymes with the rest of the game
 
 - **Roles.** An action can be held by a role from the org chart, so the work stays with the role
@@ -764,9 +870,9 @@ and the admins.
 
 | Declared | Value |
 |---|---|
-| API prefixes | `/api/sessions` |
+| API prefixes | `/api/sessions`, `/api/session-templates` |
 | Data class | `member-pii`: every row names a person |
-| Capabilities | none: each door is a member's own, and facilitation belongs to the session |
+| Capabilities | `session.template`, for keeping the meeting templates; every room door is a member's own, and facilitation belongs to the session |
 | Variables | `sessions.place_line`, `sessions.default_minutes`, `calendar.seasons` |
 | Recommends | `gratitude` |
 | Open state | none: a session holds no value anybody is owed |
@@ -780,7 +886,7 @@ and the admins.
 - **No guests.** Members only, with no link a non-member can open and no public minutes.
 - **No village-wide decisions.** A consent round in the room decides for the circle in the room.
   Anything for the whole village goes to governance.
-- **No events on the public spine,** and no capability of its own.
+- **No events on the public spine.** Its one capability keeps the meeting templates.
 
 ## Leaving
 
@@ -797,6 +903,10 @@ answer, the answer keeps its kind and loses their number and their words, and ev
 gave reads as a member's with its note removed. A send they pressed reads as sent by nobody.
 `sessionIdsNaming` reads the three task tables too, so every record that named them is rebuilt.
 
+Meeting templates go in the same transaction (`forgetTemplatesFor`): what they said or kept around a
+talking stick is deleted, since its words are theirs, and a priority they wrote stays the circle's
+plan with its author set to 0.
+
 The agenda library goes in the same transaction too, after every session row is held: the items they
 brought go (their takes stay, holding no words), a take they made reads as taken by nobody, where they
 last changed somebody else's words the item says nobody, and a note they wrote on somebody else's item
@@ -807,7 +917,8 @@ nothing from then on. A circle's own calendar they attached says it was attached
 and so does a decision's review date they set. A decision they wrote went with the rest of their words,
 so its review date goes too, with every "Review:" item made from it, since those carried the words.
 The requests for advice they made go, with every ask and every word of advice on them, since those
-answered their words; and their own advice on anybody else's request goes.
+answered their words; and their own advice on anybody else's request goes. Their votes on agenda items
+go (0290).
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
@@ -822,4 +933,5 @@ the circles they follow (`*` for every circle) and since when, `calendarAddress`
 address was made and last read, never its key, and `ownCalendarsAttached`, the circles whose own
 calendar they attached, never its address. From decisions it carries `reviewsSet`, the review dates they
 set last. From the advice process it carries `adviceAsked`, the requests they made in their own words,
-and `adviceGiven`, the advice they gave, each with the request's id and nothing else of it.
+and `adviceGiven`, the advice they gave, each with the request's id and nothing else of it. From the
+agenda vote it carries `agendaVotes`, each vote they gave with its session, item and date.

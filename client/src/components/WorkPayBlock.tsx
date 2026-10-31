@@ -8,12 +8,27 @@
  * by the function the consent and the settlement pay from, so this renders and
  * decides nothing.
  *
+ * Voice and badges (Rye, 2026-10-30: each quest and role shows its full pay,
+ * cash, tokens, Voice and badge, before you take it on): a Voice line is a
+ * token line, named for what it is on the full block, and a badge that
+ * multiplies one of the lines is named beside it, never folded into the figure.
+ *
  * `pay` ABSENT draws nothing: an older server, or a role payload below the
  * terms tier, where a reader may not know what a role pays.
  */
-import { Coins, HandCoins } from "lucide-react";
+import { Award, Coins, HandCoins } from "lucide-react";
 import type { WorkPay } from "@shared/workValue";
-import { agreementCashWords, cashPayWords, lineWords, linesWords, payHeadline, useDisplayRates, valueWords } from "@/lib/workPay";
+import {
+  agreementCashWords,
+  badgeWords,
+  cashPayWords,
+  lineWords,
+  linesWords,
+  payHeadline,
+  useDisplayRates,
+  valueWords,
+  voiceNames,
+} from "@/lib/workPay";
 
 export default function WorkPayBlock({
   pay,
@@ -31,6 +46,8 @@ export default function WorkPayBlock({
   // 0285: the cash the work itself pays, which the village owes and records.
   const ownCash = cashPayWords(pay, rates);
   const every = pay.cadence === "cycle" ? " each cycle" : "";
+  const badges = pay.badges ?? [];
+  const voices = voiceNames(pay);
 
   if (variant === "card") {
     if (headline === "inquire") {
@@ -55,6 +72,12 @@ export default function WorkPayBlock({
             {value ? "paid as " : ""}
             {[ownCash?.own, pay.lines.length > 0 ? linesWords(pay.lines) : null].filter(Boolean).join(", ")}
             {every}
+          </span>
+        )}
+        {badges.length > 0 && (
+          <span data-work-pay-badges="" className="inline-flex items-center gap-1 font-normal">
+            <Award className="w-3.5 h-3.5" aria-hidden="true" />
+            {badges.map(badgeWords).join(", ")}
           </span>
         )}
       </span>
@@ -105,6 +128,21 @@ export default function WorkPayBlock({
             <p className="text-xs text-muted-foreground">These are the village&apos;s standard amounts.</p>
           )}
           {cash && <p className="text-foreground">Plus {cash} in cash, per the role agreement.</p>}
+          {voices.length > 0 && (
+            <p data-work-pay-voice="" className="text-xs text-muted-foreground">
+              {voices.join(" and ")} is your say in the village&apos;s decisions.
+            </p>
+          )}
+          {badges.length > 0 && (
+            <ul data-work-pay-badges="" className="space-y-0.5">
+              {badges.map((b) => (
+                <li key={`${b.badge}:${b.token}`} className="text-foreground">
+                  <Award className="inline w-4 h-4 mr-1 align-text-bottom text-primary" aria-hidden="true" />
+                  {badgeWords(b)}.
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
     </div>

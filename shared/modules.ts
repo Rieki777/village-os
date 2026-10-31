@@ -1238,6 +1238,28 @@ export const MODULES: ModuleDef[] = [
     // surface; saved results stay in their table and return when it is on.
   },
   {
+    id: "session-card",
+    guild: [],
+    tier: "included",
+    // A card names the people present and holds a line of words for each one
+    // read, drawn from their saved Gene Keys result. Cards are deleted when
+    // their session closes (drizzle/0296).
+    dataClass: "member-pii",
+    group: "connect",
+    setup: "none",
+    name: "Session Card",
+    description:
+      "An optional card anyone in a live session can pull at the start, as often as they like. It reads today's sky in both Human Design and Western astrology, weaves in the Gene Keys of the people present who said yes, names each person, and offers the room a few ways to hold the session. Each person's own line stays private until they share it, and the cards are deleted when the session closes.",
+    // The card lives in a session's room and reads the lines Gene Keys saved.
+    requires: ["sessions", "gene-keys"],
+    recommends: [],
+    capabilities: [],
+    variableKeys: [],
+    apiPrefixes: ["/api/session-card"],
+    // No openStateCheck: it holds nothing anybody is owed, and nothing past
+    // the session it was pulled in.
+  },
+  {
     id: "sessions",
     guild: [],
     tier: "included",
@@ -1259,11 +1281,11 @@ export const MODULES: ModuleDef[] = [
     // The close opens a gratitude round. Gratitude is core today, so this is
     // always met; it is named so the dependency reads true if that changes.
     recommends: ["gratitude"],
-    // None in v1. Each door is a member's own, the room's facilitator is a
+    // One. Each room door is a member's own, the room's facilitator is a
     // fact of the session itself, and an admin reads closed records through
-    // `isAdmin`. A facilitation capability can come later without a
-    // migration, because nothing stores one.
-    capabilities: [],
+    // `isAdmin`. Keeping the village's meeting templates (0291) asks the gate
+    // for `session.template`, which opens at the member rung.
+    capabilities: ["session.template"],
     /*
      * `calendar.seasons` is listed here as well as owned by the calendar's
      * namespace, because the room is the only surface that reads it: the
@@ -1278,7 +1300,7 @@ export const MODULES: ModuleDef[] = [
      * moon and falls back to the north on an older stamp.
      */
     variableKeys: ["sessions.place_line", "sessions.default_minutes", "calendar.seasons"],
-    apiPrefixes: ["/api/sessions"],
+    apiPrefixes: ["/api/sessions", "/api/session-templates"],
     // No openStateCheck: a session holds no value anybody is owed. Off hides
     // the surface, and closed records stay in their tables for when it is
     // turned back on.

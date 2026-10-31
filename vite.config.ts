@@ -159,6 +159,38 @@ function routeChunkPreload(): Plugin {
   };
 }
 
+/**
+ * SMALL PURE MODULES SHARE ONE CHUNK.
+ *
+ * Rollup gives every shared module its own chunk, and CI charges every file a
+ * whole 4 KB block (scripts/check-dist-budget.mjs), so a 300-byte API helper
+ * imported by two pages costs 4 KB. A LEAF module (it imports nothing of
+ * ours) under this many bytes of source, living in shared/ or client/src/lib/
+ * and loaded only after the first page, goes into one lazy "smalls" chunk.
+ *
+ * Measured on the profile dashboard's composed tree (2026-10-31): 6620 KB
+ * block-charged before, 6572 KB after, main JS unchanged at 613 KB, no circular
+ * chunk, and nothing new preloaded by index.html. 3000 bytes left 4 KB of
+ * headroom and 12000 bought nothing more. Measure both budgets with
+ * check-dist-budget.mjs after any change.
+ *
+ * Three rules keep it safe, each one found by a build that broke without it:
+ * - Never a module the entry imports statically, or the first page load
+ *   fetches the whole chunk (it pulled 200 KB to boot when tried).
+ * - Leaves only, and nothing the natural kit imports, or "smalls" and
+ *   "natural" import each other and rollup warns of a circular chunk.
+ * - Only shared/ and client/src/lib/: plain modules, never components.
+ */
+const SMALL_MODULE_BYTES = 6000;
+/**
+ * The modules the entry imports statically, worked out on the first call and
+ * kept for the rest of the build. `vite build` is one build per process here;
+ * a `--watch` rebuild would read a stale set and only lose some grouping.
+ */
+let eagerModules: Set<string> | null = null;
+/** The natural interface kit, grouped into its own chunk below. */
+const NATURAL_KIT = /components[\\/]natural[\\/]|lib[\\/]celebrated|shared[\\/]capabilities/;
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), routeChunkPreload()],
   resolve: {
@@ -220,7 +252,17 @@ export default defineConfig({
          * Verify any chunking change with `node scripts/check-dist-budget.mjs`,
          * which prints both measures.
          */
-        manualChunks: (id: string) => {
+        /*
+         * ON AT 4096, 2026-10-30, BESIDE THE SMALL-MODULE RULE BELOW. With that
+         * rule alone the dashboard measured 6584 KB of 6600, and the
+         * companions section (0295) took it to 6608. Measured on that tree:
+         * off, 6608 KB block-charged and main JS 620 KB; 4096, 6480 and 624;
+         * 8192, 6408 and 657. 4096 buys 128 KB of the ceiling for 4 KB of
+         * first load. The note above says why it is the weaker knob; take it
+         * off the day the total has room without it.
+         */
+        experimentalMinChunkSize: 4096,
+        manualChunks: (id: string, { getModuleInfo, getModuleIds }) => {
           if (id.includes("lucide-react")) return "icons";
           /*
            * The natural interface kit, one chunk instead of four.
@@ -232,8 +274,32 @@ export default defineConfig({
            * block. This is the merging fix the block-charge note above
            * describes, at the smallest scale it is worth doing.
            */
-          if (/components[\\/]natural[\\/]|lib[\\/]celebrated|shared[\\/]capabilities/.test(id)) {
+          if (NATURAL_KIT.test(id)) {
             return "natural";
+          }
+          // SMALL PURE MODULES, one lazy chunk: see SMALL_MODULE_BYTES above.
+          // Only modules the entry does NOT import statically, so the first
+          // page load fetches nothing it did not fetch before.
+          if (!eagerModules) {
+            eagerModules = new Set();
+            const stack = Array.from(getModuleIds()).filter((m) => getModuleInfo(m)?.isEntry);
+            while (stack.length) {
+              const m = stack.pop() as string;
+              if (eagerModules.has(m)) continue;
+              eagerModules.add(m);
+              for (const dep of getModuleInfo(m)?.importedIds ?? []) stack.push(dep);
+            }
+          }
+          const code = getModuleInfo(id)?.code;
+          if (
+            code &&
+            code.length < SMALL_MODULE_BYTES &&
+            !eagerModules.has(id) &&
+            !(getModuleInfo(id)?.importers ?? []).some((by) => NATURAL_KIT.test(by)) &&
+            (getModuleInfo(id)?.importedIds ?? []).every((dep) => dep.includes("node_modules")) &&
+            /[\\/]shared[\\/][^\\/]+\.ts$|client[\\/]src[\\/]lib[\\/][^\\/]+\.ts$/.test(id)
+          ) {
+            return "smalls";
           }
           return undefined;
         },

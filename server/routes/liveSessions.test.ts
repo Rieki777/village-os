@@ -29,6 +29,9 @@ const DOORS = [
   "POST /api/sessions/:id/arrival",
   "POST /api/sessions/:id/items",
   "PATCH /api/sessions/:id/items/:itemId",
+  // The room votes its agenda (0290): one vote per person per item, and whoever runs the room sets the order.
+  "POST /api/sessions/:id/items/:itemId/vote",
+  "POST /api/sessions/:id/agenda/order",
   "POST /api/sessions/:id/entries",
   "PATCH /api/sessions/:id/entries/:entryId",
   "DELETE /api/sessions/:id/entries/:entryId",
@@ -41,6 +44,8 @@ const DOORS = [
   "POST /api/sessions/:id/entries/:entryId/decide",
   "POST /api/sessions/:id/tool-feedback",
   "GET /api/sessions/:id/minutes.md",
+  // A facilitator fills in for a member (0288): the person, or the facilitator, takes it back.
+  "POST /api/sessions/:id/on-behalf/:fillId/undo",
 ];
 
 function collect(): { app: any; handlers: Map<string, Handler>; mounts: string[]; gates: ((req: any, res: any, next: () => void) => unknown)[] } {
@@ -303,7 +308,7 @@ describe("who may reach a live session", () => {
     const { app, handlers } = collect();
     const { pool, queries } = stubPool();
     register(app, deps(pool, () => null));
-    const out = await call(handlers, key, { params: { id: "12", itemId: "3", entryId: "4" }, body: { title: "x", text: "y" } });
+    const out = await call(handlers, key, { params: { id: "12", itemId: "3", entryId: "4", fillId: "5" }, body: { title: "x", text: "y" } });
     expect(out.status).toBe(401);
     expect(out.body).toEqual({ error: "auth_required" });
     expect(queries, "a refused request must not reach the pool").toEqual([]);

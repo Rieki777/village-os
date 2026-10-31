@@ -10,9 +10,29 @@
  *
  * "Open" means two things in this product and both are named here so neither
  * is mistaken for the other: an OPENING is one place a person could take
- * (places minus held), and an open ROLE is a role with at least one opening.
+ * today, and an open ROLE is a role with at least one opening. A forming
+ * role's places are neither: it is not calling anyone yet, and the map draws
+ * them dotted, never as an opening. Live on 2026-10-30 the side panel said 16
+ * "open calls" (roles with a vacancy, forming included) beside a legend saying
+ * 15 (roles in the open state), in the same words; both now read the seat's
+ * state through `seatWord`.
  */
 import type { PowerCircle, PowerSeat } from "./types";
+
+/** A seat's state as the legend tallies it, with the server's word winning. */
+export function seatWord(s: Pick<PowerSeat, "state" | "holderCount">): string {
+  return String(s.state ?? (s.holderCount > 0 ? "filled" : "open"));
+}
+
+/** A role asking for someone today: open, or partly held. Forming is not. */
+export function isCalling(s: Pick<PowerSeat, "state" | "holderCount" | "seats">): boolean {
+  return seatWord(s) !== "forming" && (s.holderCount ?? 0) < (s.seats ?? 0);
+}
+
+/** Places nobody holds yet, in roles that are calling. */
+export function openingsOf(roles: PowerSeat[]): number {
+  return roles.filter(isCalling).reduce((n, r) => n + Math.max(0, (r.seats ?? 0) - (r.holderCount ?? 0)), 0);
+}
 
 /** The village's own, or every example while it has nothing of its own yet. */
 export function countable<T extends { isExample?: boolean }>(items: T[]): T[] {
@@ -29,9 +49,9 @@ export interface VillageCounts {
   /** Every place a person could hold, across every role. */
   places: number;
   held: number;
-  /** Places nobody holds yet. */
+  /** Places nobody holds yet, in roles that are calling (forming roles left out). */
   openings: number;
-  /** Roles with at least one opening. */
+  /** Roles calling for someone: at least one opening, and not forming. */
   openRoles: number;
 }
 
@@ -49,8 +69,8 @@ export function villageCounts(data: { circles: PowerCircle[]; roles: PowerSeat[]
     roles: roles.length,
     places,
     held,
-    openings: Math.max(0, places - held),
-    openRoles: roles.filter((r) => r.vacant).length,
+    openings: openingsOf(roles),
+    openRoles: roles.filter(isCalling).length,
   };
 }
 
@@ -75,7 +95,7 @@ export function circleCounts(
     roles: roles.length,
     places,
     held,
-    openings: Math.max(0, places - held),
+    openings: openingsOf(roles),
     inside: data.circles.filter((c) => c.parentCircleId === circleId).length,
   };
 }

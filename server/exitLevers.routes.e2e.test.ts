@@ -4,9 +4,9 @@
  *
  * There were seven refusals until the founder ruled that members keep their
  * tokens. A share of equity and keeping Voice were lifted that day, and the
- * cases for them below now assert that each SAVES. The last describe drives
- * the departure itself: a leaver still holding tokens is kept as a former
- * member, and an empty account is erased as before.
+ * cases for them below now assert that each SAVES. The describe after the
+ * refusals drives the departure itself: a leaver still holding tokens is kept
+ * as a former member, and an empty account is erased as before.
  *
  * `server/lib/exitPolicy.test.ts` proves `exitLeverProblem` in isolation, with
  * every fact injected. That is a claim about a function. This file is the claim
@@ -27,6 +27,11 @@
  * belongs to the test run. A guard that refused it would be the platform
  * deciding a village's exit terms for it.
  *
+ * ONE MORE DOOR RIDES ON THIS SERVER: the exit cancel (round 2, finding 1).
+ * `server/routes/erasureQueue.test.ts` proves `cancelExit` against a real
+ * database; the last block here proves the route in the built server calls it,
+ * which no unit test can. The e2e port map is full, so it shares this boot.
+ *
  * Boots the BUILT `dist/index.js` against a throwaway schema, so run
  * `pnpm build` first or you are testing stale code. Skips loudly without
  * TEST_DATABASE_URL.
@@ -41,6 +46,8 @@ import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFr
 import { waitForHealth } from "./db/e2eBoot";
 import { balanceOf, loadTokenRegistry, memberAccount, MINT_FAUCET, postTransfer, tokenDef } from "./lib/ledger";
 import { fromLedgerUnits, VILLAGE_VOICE } from "./lib/economy";
+import { LEFT_THE_VILLAGE_VOTE } from "./lib/ballots";
+import { DELEGATE_LEFT_NOTICE } from "./lib/delegation";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -478,13 +485,46 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
  * schema the server is writing to. The server reads balances off
  * `token_balances` on every request, so it sees them, and the ledger primitive
  * is the only door a posting may use.
+ *
+ * AND WHAT A FORMER MEMBER MAY STILL DO IN THE VILLAGE'S DECISIONS (Rye,
+ * 2026-10-30: "yes build all the exit suggestions!"). A vote cast before
+ * leaving stands and a new one is refused; the frozen roll does not move; a
+ * member who handed them a voice gets it back and is told; no badge puts them
+ * on a new roll; admitted again, they are on the next one. Cash still owed
+ * keeps an account holding no tokens, and they can sign in to see it paid.
  */
 describe.skipIf(!DB_CONFIGURED)("resolving a departure: a former member, or a tombstone", () => {
   const CREDIT_UNITS = 5_000;
   const VOICE_UNITS = 300;
   let holder = { id: "", token: "", email: "" };
   let empty = { id: "", token: "", email: "" };
+  let cal = { id: "", token: "", email: "" };
   let holderExit = "";
+  /** The advisory ballot open across the departure, its roll and its head count as they froze. */
+  let ballotA = "";
+  let rollA: string[] = [];
+  let countA = 0;
+  /** The ballot opened after they left, and the one after they came back. */
+  let ballotB = "";
+
+  const rollOf = async (ballotId: string): Promise<string[]> => {
+    const [rows] = await pool.query<any[]>("SELECT user_id FROM ballot_electorate WHERE ballot_id = ? ORDER BY user_id", [ballotId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    return rows.map((r) => String(r.user_id));
+  };
+  const votesOn = async (ballotId: string): Promise<any[]> => {
+    const [rows] = await pool.query<any[]>("SELECT user_id, choice, followed_user_id FROM ballot_votes WHERE ballot_id = ? ORDER BY user_id", [ballotId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    return rows;
+  };
+  /** The founder asks the village an advisory question, which freezes a roll through `buildElectorate`. */
+  const ask = async (question: string) => {
+    const r = await call("POST", "/api/governance/advisory", { body: { question } });
+    expect(r.status, `advisory: ${JSON.stringify(r.json)}`).toBe(200);
+    return { id: String(r.json?.ballot?.id ?? ""), count: Number(r.json?.ballot?.electorateCount) };
+  };
+  const callOff = async (ballotId: string) => {
+    const r = await call("POST", `/api/governance/ballots/${ballotId}/withdraw`, { body: { reason: "Asked again below." } });
+    expect(r.status, `withdraw: ${JSON.stringify(r.json)}`).toBe(200);
+  };
 
   const register = async (name: string, slug: string) => {
     const email = `${slug}-${PORT}@example.test`;
@@ -569,6 +609,36 @@ describe.skipIf(!DB_CONFIGURED)("resolving a departure: a former member, or a to
     expect(settled.json?.swept?.[VILLAGE_VOICE]).toBeUndefined();
   });
 
+  it("before the resolve, they are on a ballot's roll, vote on it, and carry another member's voice", async () => {
+    for (const id of ["governance", "badges"]) {
+      const on = await call("PUT", `/api/admin/modules/${id}/lifecycle`, { body: { lifecycle: "members", examples: false } });
+      expect(on.status, `${id} on: ${JSON.stringify(on.json)}`).toBe(200);
+    }
+    cal = await register("Cal Delegator", "cal-delegator");
+    expect((await call("PUT", `/api/admin/players/${cal.id}/stage`, { body: { stageId: "member" } })).status).toBe(200);
+    const offered = await call("PUT", "/api/governance/delegation", { token: cal.token, body: { delegateId: holder.id } });
+    expect(offered.status, `offer: ${JSON.stringify(offered.json)}`).toBe(200);
+    const accepted = await call("POST", "/api/governance/delegation/accept", { token: holder.token, body: {} });
+    expect(accepted.json?.accepted, `accept: ${JSON.stringify(accepted.json)}`).toBe(1);
+
+    const a = await ask("Should the orchard get a second water tank?");
+    ballotA = a.id;
+    countA = a.count;
+    rollA = await rollOf(ballotA);
+    expect(rollA).toEqual(expect.arrayContaining([holder.id, cal.id]));
+    expect(rollA.length).toBe(countA);
+
+    const voted = await call("POST", `/api/governance/ballots/${ballotA}/vote`, { token: holder.token, body: { choice: "yes" } });
+    expect(voted.status, `vote: ${JSON.stringify(voted.json)}`).toBe(200);
+    // The control for the delegation case below: Cal's seat carries the holder's yes.
+    expect(await votesOn(ballotA)).toEqual(
+      expect.arrayContaining([
+        { user_id: holder.id, choice: "yes", followed_user_id: null },
+        { user_id: cal.id, choice: "yes", followed_user_id: holder.id },
+      ]),
+    );
+  });
+
   it("resolve keeps them as a former member, says so, and names what they still hold", async () => {
     const resolved = await call("POST", `/api/admin/exits/${holderExit}/resolve`, { body: { agreementRef: "kept-2026-10" } });
     expect(resolved.status, `resolve: ${JSON.stringify(resolved.json)}`).toBe(200);
@@ -631,11 +701,76 @@ describe.skipIf(!DB_CONFIGURED)("resolving a departure: a former member, or a to
     expect(await balanceOf(pool, memberAccount(holder.id), VILLAGE_VOICE)).toBe(VOICE_UNITS);
   });
 
+  it("the vote they cast before leaving stands, a new one is refused in a sentence, and the roll it froze does not move", async () => {
+    const changed = await call("POST", `/api/governance/ballots/${ballotA}/vote`, { token: holder.token, body: { choice: "no" } });
+    expect(changed.status).toBe(409);
+    expect(changed.json?.error).toBe(LEFT_THE_VILLAGE_VOTE);
+    expect((await votesOn(ballotA)).find((v) => v.user_id === holder.id)).toEqual({ user_id: holder.id, choice: "yes", followed_user_id: null });
+    expect(await rollOf(ballotA), "the frozen roll still counts them, so the quorum does not shift").toEqual(rollA);
+    const seen = await call("GET", `/api/governance/ballots/${ballotA}`);
+    expect(Number(seen.json?.electorateCount)).toBe(countA);
+  });
+
+  it("the member who handed them a voice gets it back, uncast, and is told", async () => {
+    const [live] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT delegator_id FROM delegations WHERE (delegate_id = ? OR delegator_id = ?) AND revoked_at IS NULL",
+      [holder.id, holder.id],
+    );
+    expect(live).toEqual([]);
+    expect((await votesOn(ballotA)).some((v) => v.user_id === cal.id), "the copy of the holder's yes is no longer cast").toBe(false);
+    const titles = ((await call("GET", "/api/notifications", { token: cal.token })).json?.notifications ?? []).map((n: any) => String(n.title));
+    expect(titles).toContain(DELEGATE_LEFT_NOTICE.title);
+  });
+
+  it("whatever a badge grants, a former member is on no new roll, casts nothing, and starts no delegation", async () => {
+    const made = await call("POST", "/api/admin/badges", { body: { name: "Elder Voice", kind: "granted", capabilities: ["ballot.vote"] } });
+    expect(made.status, `badge: ${JSON.stringify(made.json)}`).toBe(200);
+    const awarded = await call("POST", `/api/admin/badges/${String(made.json?.badge?.id ?? "")}/award`, { body: { userId: holder.id } });
+    expect(awarded.status, `award: ${JSON.stringify(awarded.json)}`).toBe(200);
+    // The control: the badge really does grant the vote, so only the departure can keep them off.
+    const caps = await call("GET", `/api/admin/members/${holder.id}/capabilities`);
+    expect((caps.json?.capabilities ?? []).find((c: any) => c.capability === "ballot.vote")?.held, JSON.stringify(caps.json)).toBe(true);
+
+    await callOff(ballotA);
+    const b = await ask("Should the orchard get a third water tank?");
+    ballotB = b.id;
+    const rollB = await rollOf(ballotB);
+    expect(rollB, "a former member is off the new roll").not.toContain(holder.id);
+    expect(rollB, "and the member still here is on it").toContain(cal.id);
+    expect(rollB.length).toBe(b.count);
+
+    const refused = await call("POST", `/api/governance/ballots/${ballotB}/vote`, { token: holder.token, body: { choice: "yes" } });
+    expect(refused.json?.error).toBe(LEFT_THE_VILLAGE_VOTE);
+    const give = await call("PUT", "/api/governance/delegation", { token: holder.token, body: { delegateId: cal.id } });
+    expect(give.status).toBe(403);
+    expect(give.json?.error).toBe("You have left the village, so there is no voice here to hand on now");
+  });
+
+  it("the delete screen's read lists what they hold, for themselves alone", async () => {
+    const mine = await call("GET", "/api/me/holdings", { token: holder.token });
+    expect(mine.status).toBe(200);
+    expect(Object.fromEntries((mine.json?.held ?? []).map((h: any) => [h.token, h.amount]))).toEqual({
+      credits: fromLedgerUnits("credits", CREDIT_UNITS),
+      [VILLAGE_VOICE]: fromLedgerUnits(VILLAGE_VOICE, VOICE_UNITS),
+    });
+    expect(mine.json?.cash).toEqual([]);
+    expect((await call("GET", "/api/me/holdings", { token: null })).status).toBe(401);
+  });
+
   it("an admin can admit a former member again, through the door that admits anybody", async () => {
     const back = await call("PUT", `/api/admin/players/${holder.id}/stage`, { body: { stageId: "member" } });
     expect(back.status).toBe(200);
     expect(back.json?.stageComputed).toBe("member");
     expect((await player(holder.id))?.stageGranted).toBe("member");
+  });
+
+  it("admitted again, their Voice counts again: they are on the next roll and vote on it", async () => {
+    await callOff(ballotB);
+    const c = await ask("Should the orchard get a fourth water tank?");
+    expect(await rollOf(c.id)).toContain(holder.id);
+    const voted = await call("POST", `/api/governance/ballots/${c.id}/vote`, { token: holder.token, body: { choice: "yes" } });
+    expect(voted.status, `vote: ${JSON.stringify(voted.json)}`).toBe(200);
+    await callOff(c.id);
   });
 
   it("a member holding nothing of value is erased on resolve, exactly as before", async () => {
@@ -656,5 +791,80 @@ describe.skipIf(!DB_CONFIGURED)("resolving a departure: a former member, or a to
     expect(row?.status).toBe("resolved");
     expect(row?.userName).toBe("A departed member");
     expect(String(row?.resolution ?? "")).not.toContain("kept as a former member");
+  });
+
+  it("cash still owed keeps an account holding no tokens, and they can still sign in to see it marked paid", async () => {
+    const dee = await register("Dee Owed", "dee-owed");
+    // The record the quest consent writes (0285), written here because the door to it is another lane's.
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO cash_owed (id, occurrence_key, user_id, work_kind, work_ref, work_title, amount_minor, currency) VALUES (?,?,?,?,?,?,?,?)",
+      ["e2e-cash-1", `exit-levers:cash:${dee.id}`, dee.id, "quest", "q-fence", "Mend the fence", 2500, "USD"],
+    );
+    const opened = await call("POST", "/api/profile/request-exit", { token: dee.token, body: { password: PASSWORD } });
+    expect(opened.status, `request-exit: ${JSON.stringify(opened.json)}`).toBe(200);
+    const exitId = String(opened.json?.exit?.id ?? "");
+
+    // The exit desk shows it, and it blocks nothing.
+    const state = await call("GET", `/api/admin/players/${dee.id}/exit-state`);
+    const cash = (state.json?.states ?? []).find((s: any) => s.domain === "cash");
+    expect(cash, JSON.stringify(state.json)).toMatchObject({ count: 1, blocking: false });
+    expect(String(cash?.description)).toContain("is owed 25.00 USD in cash");
+
+    const resolved = await call("POST", `/api/admin/exits/${exitId}/resolve`, {});
+    expect(resolved.status, `resolve: ${JSON.stringify(resolved.json)}`).toBe(200);
+    expect(resolved.json?.outcome).toBe("former");
+    expect(resolved.json?.held).toEqual([]);
+    expect(resolved.json?.owed).toEqual([{ currency: "USD", amountMinor: 2500, rows: 1 }]);
+    expect(String((await exitRecord(exitId))?.resolution ?? "")).toContain("kept as a former member: is owed 25.00 USD in cash");
+
+    // Still an account: a fresh sign-in, the delete screen's read, and the payment seen.
+    const login = await call("POST", "/api/auth/login", { token: null, body: { email: dee.email, password: PASSWORD } });
+    expect(login.status, `login: ${JSON.stringify(login.json)}`).toBe(200);
+    const fresh = String(login.json?.token ?? "");
+    expect((await call("GET", "/api/me/holdings", { token: fresh })).json?.cash).toEqual([{ currency: "USD", amountMinor: 2500, rows: 1 }]);
+    const paid = await call("POST", "/api/cash-owed/e2e-cash-1/paid", { body: { note: "Paid in cash at the Saturday market" } });
+    expect(paid.status, `paid: ${JSON.stringify(paid.json)}`).toBe(200);
+    const mine = await call("GET", "/api/me/cash-owed", { token: fresh });
+    expect((mine.json?.entries ?? []).map((e: any) => [e.id, e.state])).toEqual([["e2e-cash-1", "paid"]]);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("the exit cancel route, wired to cancelExit (round 2, finding 1)", () => {
+  /** A living member with an open exit, opened through the admin's own door. */
+  async function openFor(id: string): Promise<string> {
+    await pool.query("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [id, "Ned Okafor", `${id}@example.test`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const opened = await call("POST", "/api/admin/exits", { body: { userId: id, kind: "voluntary" } });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    return String(opened.json.exit.id);
+  }
+
+  it("ends the deletion a stopped resolve began, and names what it had already removed", async () => {
+    const id = `exitlevers-stayed-${PORT}`;
+    const exitId = await openFor(id);
+    // What a resolve that stopped at portraits leaves behind: open, failed, short of the close.
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO `member_erasures` (`user_id`, `attempts`, `last_attempt_at`, `steps_done`, `failed_step`, `last_error`) " +
+        "VALUES (?, 1, CURRENT_TIMESTAMP, JSON_ARRAY('role-holdings', 'skill-tags'), 'portraits', 'could not take it off the volume')",
+      [id],
+    );
+
+    const out = await call("POST", `/api/admin/exits/${exitId}/cancel`);
+    expect(out.status, JSON.stringify(out.json)).toBe(200);
+    expect(out.json.alreadyRemoved).toEqual(["role-holdings", "skill-tags"]);
+    const [left] = await pool.query<any[]>("SELECT `user_id` FROM `member_erasures` WHERE `user_id` = ?", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(left, "the cancel left the deletion armed for the next Finish them").toEqual([]);
+    expect((await call("POST", `/api/admin/exits/${exitId}/cancel`)).status).toBe(404);
+  });
+
+  it("refuses once the account is closed, and the exit stays open", async () => {
+    const id = `exitlevers-closed-${PORT}`;
+    const exitId = await openFor(id);
+    // The sweep got past the close, and the status write after it never ran.
+    await pool.query("UPDATE `users` SET `email` = ?, `name` = 'A departed member' WHERE `id` = ?", [`deleted-${id}@anonymized.invalid`, id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+
+    const out = await call("POST", `/api/admin/exits/${exitId}/cancel`);
+    expect(out.status, JSON.stringify(out.json)).toBe(409);
+    const [exit] = await pool.query<any[]>("SELECT `status` FROM `exits` WHERE `id` = ?", [exitId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(exit).toEqual([{ status: "open" }]);
   });
 });

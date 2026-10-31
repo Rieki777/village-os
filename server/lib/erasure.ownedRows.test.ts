@@ -481,6 +481,49 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     );
   });
 
+  /*
+   * ROUND 2, FINDING 4. A guest who never joined has a contact with no
+   * account, so no account, no request and no member-linked contact holds
+   * their address, and an address the leaver typed into a request of their
+   * own read as the leaver's alone. The step gave up the guest's seat to the
+   * queue and then forgot their contact, their answers and their unsubscribe.
+   * A contact the village met through another door, or one somebody has used
+   * since, is held by whoever owns that inbox, and only a contact the leaver's
+   * own request made and nobody used since goes.
+   */
+  it("keeps a living guest whose address the leaver typed: their seat, the queue behind them, their contact and their unsubscribe stay", async () => {
+    const leaver = await member("own-leaver-gx", "Wren Halloway");
+    await member("own-gx-bo", "Bo Lind");
+    const rowan = "rowan.guest@x-own.test";
+    // Rowan, a guest with no account, holds the one seat at an evening ahead, and Bo waits for it.
+    const rowanContact = await contactFor(rowan, null, "guest");
+    const rowanKey = guestPersonKey(rowanContact);
+    await gathering("own-gx-full", { capacity: 1 });
+    expect((await rsvp(pool, "own-gx-full", rowanKey, "going")).ok).toBe(true);
+    expect((await joinWaitlist(pool, "own-gx-full", "own-gx-bo")).ok).toBe(true);
+    // And Rowan asked the village for no more newsletters.
+    await q("INSERT INTO comms_suppressions (village_id, email_key, reason) VALUES ('local', ?, 'unsubscribed_all')", [rowan]);
+    // The leaver, signed in, typed Rowan's address into a request of their own, with the paths box ticked.
+    const filed = await createReservation(pool, { structureKey: null, homeType: "casita", name: "Wren Halloway", email: rowan, phone: null, notes: null, userId: leaver.id });
+    await handlePathTrigger({ getPool: () => pool, members: usersRepo(pool) }, { type: "housing_status", reservationId: filed.id, status: "new", email: rowan, name: "Wren Halloway", consentPaths: true } as any);
+    // And a second address of the leaver's own, with no box ticked: the route's acknowledgement made its contact, and nobody used it since.
+    const own = "wren.porch@x-own.test";
+    await createReservation(pool, { structureKey: null, homeType: "casita", name: "Wren Halloway", email: own, phone: null, notes: null, userId: leaver.id });
+    await contactFor(own, null, "housing.ack");
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT id FROM comms_contacts WHERE email_key = ?", [own]), "a contact only the leaver's own request made still goes").toEqual([]);
+
+    expect(await q("SELECT id FROM comms_contacts WHERE email_key = ?", [rowan]), "Rowan's contact stays").toEqual([{ id: rowanContact }]);
+    expect(await answer("own-gx-full", rowanKey), "and so does Rowan's seat").toBe("going");
+    expect(await q("SELECT user_id FROM event_waitlist WHERE event_id = 'own-gx-full'"), "Bo still waits, nobody was promoted").toEqual([{ user_id: "own-gx-bo" }]);
+    expect(await answer("own-gx-full", "own-gx-bo")).toBeNull();
+    expect(await q("SELECT reason FROM comms_suppressions WHERE email_key = ?", [rowan]), "and Rowan's unsubscribe stands").toEqual([{ reason: "unsubscribed_all" }]);
+    // The leaver's own request is still scrubbed, so it no longer shows the address.
+    expect(await q("SELECT email FROM housing_reservations WHERE id = ?", [filed.id])).toEqual([{ email: `deleted-${leaver.id}@anonymized.invalid` }]);
+  });
+
   it("drops the vouches written about them and the ones they gave somebody still waiting, and keeps the vouch that admitted somebody without its words", async () => {
     const leaver = await member("own-leaver-vc", "Wren Halloway");
     await member("own-vc-new", "Pip Arden");
@@ -774,8 +817,9 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     const steps = (await erasureRecord(pool, leaver.id))!.stepsDone;
     const at = steps.indexOf("role-tensions-after-tombstone");
     expect(at).toBeGreaterThan(steps.indexOf("tombstone"));
-    expect(steps.slice(steps.indexOf("tombstone"), steps.indexOf("tombstone") + 4), "the guest-era places go before comms takes the contacts").toEqual([
+    expect(steps.slice(steps.indexOf("tombstone"), steps.indexOf("tombstone") + 5), "the guest-era places go before comms takes the contacts").toEqual([
       "tombstone",
+      "handle-after-tombstone",
       "member-agent-after-tombstone",
       "guest-places-after-tombstone",
       "comms",

@@ -43,7 +43,7 @@ vi.mock("@/lib/geneKeysApi", () => ({
 }));
 
 import { parsePlaces, searchPlaces } from "./places";
-import GeneKeysSeal from "./GeneKeysSeal";
+import GeneKeysSeal, { ABOVE_A_MODAL } from "./GeneKeysSeal";
 import CircleLines from "./CircleLines";
 import GeneKeysReveal from "./GeneKeysReveal";
 import { PARTS } from "@/pages/GeneKeys";
@@ -158,6 +158,29 @@ describe("the seal", () => {
     expect(screen.getByText("Manifestor")).toBeTruthy();
     expect(screen.getByText("12.2")).toBeTruthy();
   });
+
+  /*
+   * Live 2026-10-30 (9ba19a2): the seal sits inside the role sheet, which is a
+   * z-[70] modal, and its card opened at the shadcn default z-50, so on a phone
+   * the lines sheet opened UNDER the role sheet. Card and overlay both sit one
+   * tier above a modal, on the phone sheet and the wide dialog alike.
+   */
+  it.each([
+    ["a phone", false],
+    ["a wide screen", true],
+  ])("opens its card above a modal sheet on %s, overlay included", async (_label, wide) => {
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: wide && q.includes("min-width"), addEventListener() {}, removeEventListener() {} }));
+    inRouter(<GeneKeysSeal view={WREN} whose="Wren" />);
+    fireEvent.click(screen.getByRole("button", { name: /Gene Keys lines 2 and 5/ }));
+    await screen.findByText("Explore more in depth on genekeys.com");
+    const content = document.querySelector(wide ? "[data-slot=dialog-content]" : "[data-slot=sheet-content]")!;
+    const overlay = document.querySelector(wide ? "[data-slot=dialog-overlay]" : "[data-slot=sheet-overlay]")!;
+    for (const el of [content, overlay]) {
+      expect(el.className).toContain(ABOVE_A_MODAL);
+      expect(el.className).not.toMatch(/(^|\s)z-50(\s|$)/);
+    }
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("a circle's six lines", () => {
@@ -194,7 +217,7 @@ describe("a circle's six lines", () => {
 });
 
 const own = (v: GeneKeysView, over: Partial<OwnGeneKeysView> = {}): OwnGeneKeysView => ({
-  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, source: "exact", stale: false, ...over,
+  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, cardOut: false, source: "exact", stale: false, ...over,
 });
 
 describe("Love and Prosperity on the lines card", () => {

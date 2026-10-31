@@ -34,7 +34,7 @@ import { clearMemberDrivers } from "./memberDrivers";
 import { makeInviteDoor } from "./inviteDoor";
 import { INVITE_REFUSALS, hashInviteToken, inviteStanding, mintInviteToken } from "./invites";
 import { usersRepo } from "../repos/users";
-import { claimInvite, createInvite, inviteByHash, revokeOpenInvitesOf } from "../repos/memberInvites";
+import { claimInvite, createInviteOn, inviteByHash, revokeOpenInvitesOf } from "../repos/memberInvites";
 import { erasureRecord } from "../repos/memberErasure";
 import { vouchesFor } from "../repos/vouches";
 
@@ -82,7 +82,13 @@ async function member(id: string, name: string): Promise<any> {
 async function link(inviter: string): Promise<{ id: string; token: string }> {
   const token = mintInviteToken();
   const id = `inv-er-${String(++seq).padStart(3, "0")}`;
-  await createInvite(pool, { id, tokenHash: hashInviteToken(token), inviterUserId: inviter, days: 14 });
+  // Straight into the table on a connection of its own: some of these makers have no account to hold a session.
+  const conn = await pool.getConnection();
+  try {
+    await createInviteOn(conn, { id, tokenHash: hashInviteToken(token), inviterUserId: inviter, days: 14 });
+  } finally {
+    conn.release();
+  }
   return { id, token };
 }
 

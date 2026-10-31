@@ -155,7 +155,20 @@ export type Capability =
   // handover keys set: a member can finish "the village's ____ look after
   // that". The sender, the domain and the provider key are NOT behind it;
   // they stay with the admin in the secrets plane (the comms build spec 8).
-  | "comms.manage"; // run the village's email: automations, their words, and letters
+  | "comms.manage" // run the village's email: automations, their words, and letters
+  // ── Meeting templates (Live Sessions, 0291) ──────────────────────────────
+  //
+  // Make, change, duplicate, order and archive the meetings the village holds
+  // again and again (shared/sessionTemplates.ts). Opens at the member rung,
+  // the same people who may open a room; a village that wants a narrower door
+  // moves the rung or grants it by role.
+  | "session.template" // keep the village's meeting templates
+  //
+  // Keep AI companions on your profile: answer what they ask and say yes or no
+  // to what they draft (0295, shared/companionItems.ts). A yes always opens the
+  // draft's own door, which asks for its own power, so this key opens the
+  // conversation and nothing it could move.
+  | "companion.use"; // keep companions, answer them and decide their drafts
 
 /**
  * The canonical list, as a VALUE: badge validation and unlock diffs iterate
@@ -202,6 +215,8 @@ export const ALL_CAPABILITIES: Capability[] = [
   "module.switch",
   "steward.veto",
   "comms.manage",
+  "session.template",
+  "companion.use",
 ];
 
 /**
@@ -264,6 +279,8 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",
   "comms.manage": "Run the village's email: its automations, their words, and letters",
+  "session.template": "Keep the village's meeting templates",
+  "companion.use": "Keep AI companions, answer their questions and decide their drafts",
 };
 
 /**
@@ -340,6 +357,11 @@ export const STAGE_UNLOCKS: Partial<Record<Capability, string>> = {
   // narrower door moves the rung, sets it to "none" and grants by role or
   // badge, or leaves it here.
   "map.photograph": "member",
+  // Whoever may open a room may shape the meetings it opens from.
+  "session.template": "member",
+  // Companions open with membership, the same rung as messages. Every draft's
+  // yes still asks its own door for its own power.
+  "companion.use": "member",
   // `map.curatePhotos` is deliberately absent, and it is the R54 key on this
   // surface. Taking somebody's photograph off the village's map is a power
   // that WOULD have been an admin check, and an admin check is scaffolding a
@@ -547,6 +569,11 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "terms.read": false,
   "map.contact": false,
   "map.edit": false,
+  // A member-rung act, the same as opening a room: whoever runs sessions
+  // shapes the meetings they run. Nothing the village entrusts to a seat.
+  "session.template": false,
+  // Talking to your own companion is a personal act, like a message.
+  "companion.use": false,
 
   // ── FALSE: a power with no act to reach past ────────────────────────────
   //
@@ -601,7 +628,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
  * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 23 keys
- * today. The other 16 are not withheld from anybody: they are personal acts
+ * today. The other 18 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
@@ -629,7 +656,11 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * and leaves the second; a key RECLASSIFIED from withheld to transferable would
  * move both, in opposite directions. `cash.pay` (0285) was born held back,
  * which moved only the second, to 22 and 17. Rye then ruled it in on
- * 2026-10-30, a reclassification, which moved both: the pair today is 23 and 16.
+ * 2026-10-30, a reclassification, which moved both, to 23 and 16.
+ * `session.template` (0291) was born held back, a member-rung act, which moved
+ * only the second: 23 and 17. `companion.use` (0295) was born a personal act,
+ * talking to your own companion, which moved only the second again: the pair
+ * today is 23 and 18.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -837,6 +868,11 @@ export const DENIABLE: Record<Capability, boolean> = {
   // village's letters and changing its automations, and takes away nothing
   // they hold as a say in a decision.
   "comms.manage": true,
+  // A job a warning can pause, like keeping the library.
+  "session.template": true,
+  // A warning can pause it, the same as messages: the companions go quiet and
+  // nothing the member holds is taken.
+  "companion.use": true,
 };
 
 /**
@@ -957,6 +993,8 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   // An ordinary appointment, the same as `feed.announce`: a badge is an
   // honest way to hand the village's email to somebody.
   "comms.manage": true,
+  "session.template": true,
+  "companion.use": true,
   "module.switch": true,
 };
 
