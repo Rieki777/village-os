@@ -93,7 +93,7 @@ export default function PartiesCard({ data }: { data: Pick<DashData, "messages">
   return (
     <section aria-labelledby="party-h" className={`${PANEL} flex flex-col gap-3 p-5 sm:p-6`}>
       <div className="flex items-baseline gap-3">
-        <h2 id="party-h" className={`${H2} flex-1`}>
+        <h2 id="party-h" className={`${H2} flex-1 sm:text-[28px]`}>
           Your parties
         </h2>
         <Link href="/messages" className={`${LINK} text-sm`}>
@@ -124,8 +124,8 @@ export default function PartiesCard({ data }: { data: Pick<DashData, "messages">
                   ))}
                 </span>
                 <span className="min-w-0 flex-1 pl-2.5">
-                  <span className="block truncate text-[15px] font-medium">{p.title}</span>
-                  <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
+                  <span className="block break-words text-[15px] font-medium">{p.title}</span>
+                  <span className="mt-0.5 block break-words text-[13px] text-muted-foreground">
                     {p.last || "Nobody has written yet"}
                   </span>
                 </span>
