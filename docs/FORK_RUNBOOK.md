@@ -176,6 +176,20 @@ above the size of a gathering, not to the size of one person's usage.
   ("Make This Yours"): identity, images (uploaded, sharp-compressed), dues,
   personas.
 - Game variables: only CHANGED values are stored; platform defaults inherit.
+- Finished erasures, given the steps they predate (no migration, no env var):
+  late in boot, once per list of steps (the runOnce id is
+  `erasure-steps-backfill-<digest>`), every finished `member_erasures` record
+  and every tombstone with no record at all is given the steps after the
+  tombstone that it lacks and that find their rows by user id
+  (`backfillFinishedErasures`, `server/lib/erasure.ts`). On a village that
+  erased somebody on an older release, this ends the agent token, open
+  invitation link, place at a gathering, vouch for somebody still waiting,
+  group ownership and delegation that outlived them, and takes off the
+  `departed-<id>` handle an old tombstone kept, so no profile page answers to
+  it (`handle-after-tombstone`). A fee for a place ahead
+  comes back once, and a freed seat goes to whoever was waiting, who is told.
+  Look for `[erasure] finished-erasure backfill:` in the boot log. A member it
+  stopped part way is counted there and tried again on the next boot.
 - Earned equity (0266, no env var): the migration seeds the `earned-equity`
   token with `sys:equity-mint`, `sys:equity-bridge` and `sys:equity-settled`,
   and `seedEconomy` adds its two mint rules (`quest.completed`, `role.cycle`)

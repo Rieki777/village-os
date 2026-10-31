@@ -229,8 +229,8 @@ export function register(app: Express, deps: Deps): void {
     const target = await members.byId(delegateId);
     if (!target) return res.status(404).json({ error: "No member here by that name" });
     const pool = getPool();
-    const result = await setDelegation(pool, String(user.id), delegateId);
-    if (!result.ok) return res.status(400).json({ error: result.error });
+    const result = await setDelegation(pool, String(user.id), delegateId, Number(user.tokenVersion ?? 0));
+    if (!result.ok) return res.status(result.status ?? 400).json({ error: result.error });
     const moved = await applyDelegatedVotesEverywhere(pool);
     const names = await namesFor([result.delegation.delegateId, result.chain.finalId]);
     const delegateName = names.get(result.delegation.delegateId) ?? "them";

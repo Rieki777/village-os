@@ -3128,6 +3128,31 @@ forever. Re-running it moves nothing.
   still hold anything of value? Either way their roles are vacated and the
   stewards are told which. Value rows are never deleted, so conservation holds
   through every departure.
+- **An admin can cancel** ("They're staying", `POST /api/admin/exits/:id/cancel`,
+  which calls `cancelExit` in `server/lib/exit.ts`): the exit closes without a
+  tombstone and moves no value. A balance an earlier settle already swept stays
+  where that sweep posted it; nothing in the cancel gives it back. If a resolve
+  on the tombstone path (below) had begun the erasure and stopped before the
+  account closed, the cancel ends
+  that erasure record first, so no later resume closes the account of a member
+  who stayed, and it names the steps the stopped sweep had already run (role
+  holdings, skill tags and the like), which it does not undo. Once the account
+  is closed the cancel is refused (round 2 of the erasure review, finding 1).
+- **A recurring payment informs and never blocks** (round 3, finding 5). The
+  enumeration's `subscriptions` domain (`subscriptionsState`) names each Stripe
+  subscription the member's purchases hold, and says the deletion cancels it in
+  Stripe and refunds nothing already paid. It cannot block, because no door lets
+  a member cancel one first. The erasure's `product-subscriptions-after-tombstone`
+  step does the cancelling and moves no token; with no Stripe key it asks the
+  admins to cancel each one by hand and finishes. A charge that lands after the
+  account is gone posts no `product_grant` from the treasury: `settleProductPurchase`
+  refuses a buyer who has left on every period, banks the money in `fiat_charges`
+  as it does for any refused renewal, and asks the admins to refund it. That
+  refusal also cancels the subscription (round 4), so a checkout paid after the
+  delete stops charging; with no key, or a failing Stripe, the cancel is owed
+  on `/review` until Finish, the hourly job or a person settles it. On the exit
+  path a member who holds tokens, or is owed cash, reads that resolving keeps them a former
+  member and the payments keep renewing until an admin cancels them.
 - **The exit desk shows the cash the village still owes them** as a
   NON-blocking `cash` domain: the `cash_owed` rows (0285) in state `owed` or
   `claimed`, totalled per currency, with the sentence `is owed <amount> in cash
@@ -3236,6 +3261,32 @@ them through the built server.
 then. Nothing ends those retroactively: they stand until either side revokes them,
 and a delegate who left casts nothing new, so the delegator's vote goes uncast on
 any ballot until they act.
+
+**Nothing new reaches a tombstone.** Its row keeps an address,
+`deleted-<id>@anonymized.invalid`, and the doors that pay a recipient a member
+names used to refuse only the standing examples, so that address, the tombstone's
+id or a heart on a departed member's old post issued Gratitude from the faucet,
+or moved credits, into an account nobody holds. `departedRecipient` in
+`server/lib/gratitude.ts` now refuses it on all three: `sendGratitude` (the wall
+and forum hearts), the Hearts give (`POST /api/gratitude`) and member sends
+(`POST /api/wallet/send`), with 404 and "That member has left the village, so
+nothing can be sent to them." before anything is written, so no allowance is
+spent and no ledger leg posts. A former member keeps their address and is not a
+tombstone, so they can still be paid.
+
+**The admin hand-mint refuses a tombstone too.** `POST /api/admin/tokens/:slug/mint`
+used to refuse only a missing recipient, so a steward could issue any platform
+token from `sys:mint` into a tombstone's account, or a standing example's. It now
+asks `mintRecipientRefusal` in `server/lib/gratitude.ts` before anything is
+recorded or moved: a tombstone gets 404 and the same sentence as the send doors,
+and a standing example gets 409 and the example refusal every admin door gives,
+under the co-sign line and over it, so no grant waits for a second steward in a
+departed member's name. The co-signed approval
+(`POST /api/admin/mint-requests/:id/approve`) asks it again when the second
+steward signs, so a grant asked for while a member was here mints nothing once
+they have left; it stays pending, and a steward can decline it. A former member
+can still be minted to. Pinned by `server/lib/gratitude.tombstone.test.ts` and
+`server/needsTombstone.routes.e2e.test.ts`.
 
 ### What the village owes
 

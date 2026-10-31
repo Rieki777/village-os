@@ -39,7 +39,7 @@
  * (reserved rows count toward a hamlet's homes taken) and loses the name,
  * address, phone and notes on it.
  *
- * Three more things stay on purpose, each for its own reason:
+ * Six more things stay on purpose, each for its own reason:
  *
  *   MESSAGES. What they wrote in a conversation stays in it, read as "A
  *   departed member" through the join to the tombstone, the way a forum post
@@ -60,6 +60,39 @@
  *   it must is a legal question for each village. The fact and its dates stay,
  *   de-attributed; the free text beside it goes. Rye decides whether a village
  *   should be able to delete them outright (raised 2026-10-22).
+ *   VOTES ALREADY CAST (round 4, R4-8). A yes, no or abstain the member cast
+ *   in person on a ballot still open stays in `ballot_votes` and counts when
+ *   the ballot closes, because that ballot froze them into its roll: the
+ *   snapshot law (server/lib/ballots.ts, the header) and docs/ECONOMICS.md,
+ *   which already says a former member can vote on a ballot that froze them
+ *   in. It was their own act while present, as a forum post is. The row holds
+ *   a choice, the tombstone's id and any reason they typed on it
+ *   (`ballot_votes.reason`, which no step clears today, so it stays the way a
+ *   forum post's words do). Every COPIED vote goes: the delegations step ends each
+ *   delegation they gave or carried and derives every open ballot again
+ *   ("delegations-after-tombstone"). The member hears this before either door
+ *   (`VOTE_CAST_STAYS`, client/src/components/LeavingKeeps.tsx). Whether a
+ *   cast vote on an open ballot should go with its author is Rye's to decide
+ *   (raised 2026-10-30); that would be a new id-only step after the tombstone
+ *   that deletes their rows with no `followed_user_id` on open ballots, before
+ *   the delegations step re-derives.
+ *   SUBMISSIONS, AS ROWS. A raised hand, a seat claim, a signing, a quest idea
+ *   or a form they sent, on their account or signed out under their address,
+ *   keeps its row, type, status and time: the inbox is the village's record of
+ *   what was asked and what it decided. Inside it every value goes, their
+ *   words and their name, except what another person relies on: which of the
+ *   village's seats, powers, emails or documents it was about (the stewards'
+ *   queues find a claim or a hand by them), the letter version a signing was
+ *   made against and its acknowledgements (an admission stands on them), a
+ *   quest idea's words (the idea in review is the village's, by the rule the
+ *   quest-proposals step follows), and an investor's declared accreditation,
+ *   for the reason given just above. `KEPT_BY_TYPE` in
+ *   server/lib/submissionWords.ts is the list, with the reason beside each.
+ *   PULSE LINES SOMEBODY ELSE WROTE ABOUT THEM. "Ann appreciated Wren" stays
+ *   Ann's line and reads "Ann appreciated a departed member". The village
+ *   counts its active members and each holder's activity by the actors of
+ *   these lines, so deleting the row would take a living member's activity
+ *   out of every count it sits in. Only the name goes.
  *
  * ORDER IS LOAD-BEARING. The local sweep runs to completion FIRST, then the
  * outside stores are asked, so a slow or refusing vendor never delays the one
@@ -127,6 +160,7 @@
  * silent any more.
  */
 import type { Pool } from "mysql2/promise";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { forgetStewardActs } from "./stewardship";
@@ -153,8 +187,10 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetProposer } from "../repos/questProposals";
-import { contactsForPerson, forgetCommsPerson, forgetMailRepliedTo, housingAddressesOf } from "../repos/commsPeople";
-import { forgetNoticesOf } from "../repos/noticesNaming";
+import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
+import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
+import { pathHandoffKey } from "./comms/notices";
+import { forgetBallotWordsOf, forgetProposalBallotWordsOf } from "./ballotErasure";
 import { forgetMeetMeWindowsOf } from "./gatherings";
 import { forgetOwnExitNotes } from "./exit";
 import { forgetCheckinNotesOf } from "./economy";
@@ -168,19 +204,31 @@ import { insertNotification, type NotifyDeps, type NotifyInput } from "./notify"
 import { forgetVenturesOf } from "../repos/ventures";
 import { forgetFactWordsOf } from "../repos/investorPath";
 import { forgetStayNotesOf } from "../repos/stays";
-import { forgetPayerEmailOf } from "../repos/productPurchases";
-import { heldByAnotherAccount } from "../repos/users";
+import { forgetPayerEmailOf, liveSubscriptionsOf } from "../repos/productPurchases";
+import { recordSubscriptionCancels } from "../repos/subscriptionCancels";
+import { cancelSubscription, stripeConfigured } from "./payments";
+import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
+import { leaveEveryCrewOf } from "../repos/questCrewErasure";
+import { forgetReportReasonsOf } from "../repos/placePhotos";
+import { heldByAnotherAccount, usersRepo } from "../repos/users";
+import { forgetPulseLinesNaming } from "../repos/pulseLines";
+import { forgetSubmissionWords } from "./submissionWords";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
 import { isTombstone } from "./oauthAccounts";
 import {
+  abandonErasure,
   beginErasure,
   erasedIdentity,
   erasureRecord,
+  finishedErasureSubjects,
+  noteBackfilledStep,
   noteErasureFailed,
   noteErasureFinished,
   noteResumeAttempt,
   noteStepDone,
+  stayedSinceLastAttempt,
+  openBackfillRecord,
   type ErasedIdentity,
 } from "../repos/memberErasure";
 
@@ -190,18 +238,21 @@ export type ErasureDeps = {
    * is how the tombstone step says so: once a row is a tombstone, the
    * repository keeps its identity fixed against every other writer
    * (`server/repos/users.ts`), and this sweep is the one writer that may
-   * still change it.
+   * still change it. Two steps pass it: "tombstone", and
+   * "handle-after-tombstone", which takes the handle off a tombstone that
+   * still has one.
    */
   members: {
     byId(id: string): Promise<any>;
     update(id: string, fn: (u: any) => void, opts?: { erasure?: boolean }): Promise<unknown>;
   };
-  /** Submissions, scrubbed of PII keys while the proposal content stays. */
+  /** Submissions, which keep their rows and lose the member's words and name (server/lib/submissionWords.ts). */
   submissionsRepo: { all(): unknown[]; replaceAll(rows: unknown[]): Promise<unknown> };
   /** Permission holdings, which end here. The org chart is a different plane. */
   roleHoldersRepo: { remove(ids: string[]): Promise<unknown> };
   withRoleHolderLock: <T>(fn: () => Promise<T>) => Promise<T>;
-  loadRoleHolders: () => Array<{ id: string; userId: string }>;
+  /** `roleId` is read by a former member's resolve, to name the roles it ends (round 4). */
+  loadRoleHolders: () => Array<{ id: string; userId: string; roleId?: string }>;
   /**
    * The uploads volume. A portrait's bytes outlive its row, and its address
    * needs no sign-in, so revoking a face means unlinking a file.
@@ -228,9 +279,20 @@ export interface SweepResult {
    * to ask because an earlier one already had.
    */
   external: ErasureOutcome | null;
+  /**
+   * True when the resume ran nothing because the member's departure was
+   * cancelled after this sweep stopped: they stayed (`resumeErasure`).
+   */
+  stayed?: boolean;
 }
 
 const ANON = "A departed member";
+
+/** What a scrubbed key of a submission reads as. */
+const REMOVED = "[removed at member's request]";
+
+/** The inbox's word for an ask to be confirmed in a documented seating (server/routes/org.ts). */
+const SEAT_CLAIM_TYPE = "seat-claim";
 
 /** The address the tombstone carries, and the one a scrubbed row is given in place of theirs. */
 const tombstoneAddress = (id: string): string => `deleted-${id}@anonymized.invalid`;
@@ -248,6 +310,24 @@ const tombstoneAddress = (id: string): string => `deleted-${id}@anonymized.inval
 const realEmailKey = (target: any): string => {
   const email = String(target?.email ?? "");
   return email && !isTombstone({ email }) ? emailKeyOf(email) : "";
+};
+
+/**
+ * The member's real name, or null for a target that is still a tombstone and
+ * names nobody. A resume whose old address somebody else holds now comes back
+ * with no address and its real name (`asTheyWere`), and the name still counts.
+ * For the steps that can only find a line or an alert by the name it printed.
+ */
+const realName = (target: any): string | null => {
+  if (isTombstone({ email: String(target?.email ?? "") })) return null;
+  const name = String(target?.name ?? "").trim();
+  return name && name !== ANON ? name : null;
+};
+
+/** The real name and the real address, whichever of the two the sweep still knows. */
+const knownAs = (target: any): string[] => {
+  const email = String(target?.email ?? "");
+  return [realName(target) ?? "", email && !isTombstone({ email }) ? email : ""].filter(Boolean);
 };
 
 /**
@@ -334,6 +414,67 @@ export async function endPermissionHoldings(
   });
 }
 
+/** A duplicate key on the users table's address, the one collision the tombstone answers. */
+const isAddressTaken = (err: any): boolean => err?.code === "ER_DUP_ENTRY" && /users_email_unique/.test(String(err?.message ?? ""));
+
+/**
+ * Close the account: the update the "tombstone" step makes, and the reason
+ * that step's header gives for its handle and its address.
+ *
+ * The address is tried in its plain form first, so every tombstone nobody
+ * squatted reads exactly as it always has. Only a duplicate key on the address
+ * is answered, by the suffixed form; the database's own key decides, so an
+ * address that differs by case or by an accent the collation folds is caught
+ * the same way. Anything else still throws, and the sweep records where.
+ *
+ * `erasure`: a second erasure of a tombstone writes these fields again. Two
+ * steps may pass it, this one and "handle-after-tombstone", which takes the
+ * handle off a tombstone that still has one (see ErasureDeps).
+ */
+async function writeTombstone(members: ErasureDeps["members"], id: string): Promise<void> {
+  const close = (address: string) =>
+    members.update(id, (u: any) => {
+      u.name = ANON;
+      u.email = address;
+      u.handle = null;
+      u.passwordHash = "";
+      u.tokenVersion = (u.tokenVersion ?? 0) + 1; // every session dies now
+      u.bio = "";
+      u.avatar = null;
+      u.paths = [];
+      u.journeys = {};
+      u.prefs = {};
+      u.contributions = [];
+      u.role = "member";
+      u.stageGranted = null;
+      u.membershipGranted = false;
+      u.walletAddress = null;
+      u.walletVerifiedAt = null;
+    }, { erasure: true });
+  try {
+    await close(tombstoneAddress(id));
+  } catch (err) {
+    if (!isAddressTaken(err)) throw err;
+    await close(`deleted-${id}-${randomBytes(6).toString("hex")}@anonymized.invalid`);
+  }
+}
+
+/**
+ * A person's comms rows, with the day-21 hand-offs that named them first.
+ *
+ * The hand-off asks a path's contact person to write to somebody by first
+ * name, on that person's bell with no actor, keyed on the walker's journey
+ * enrollment, and emailed. The comms rows below delete the enrollment, the one
+ * record that ties those rows to the walker, so they are rewritten here while
+ * it stands (round 2, finding 12). Both callers need it: the comms step for the
+ * member, and the housing-contacts step for a second address they typed, which
+ * a ticked box walks onto the resident path too.
+ */
+async function forgetCommsAndHandOffs(pool: Pool, who: { userId?: string | null; emailKeys?: string[]; name?: string | null }): Promise<void> {
+  await forgetNoticesByKey(pool, (await enrollmentIdsOf(pool, who)).map(pathHandoffKey));
+  await forgetCommsPerson(pool, who);
+}
+
 /** One named, idempotent piece of the sweep. */
 interface Step {
   name: string;
@@ -351,11 +492,32 @@ interface Step {
  * The NAMES are stored in `member_erasures.steps_done` and matched back by
  * string. Renaming one makes a resume re-run it, which is the safe direction;
  * reusing a name for different work is the unsafe one.
+ *
+ * A step added after the tombstone is also named in `BACKFILL_BY_ID` or
+ * `BACKFILL_LEAVES_OUT` (below `resumeErasure`), which decides whether an
+ * erasure that finished before the step existed is given it at boot.
  */
 function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: ErasureDeps): Step[] {
   const { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders } = deps;
   const submissionIdsOf = (userId: string): string[] =>
     (submissionsRepo.all() as any[]).filter((s) => s?.userId === userId).map((s) => String(s.id));
+  /*
+   * The names a seat's journal may quote for this member, and the rewrite
+   * (server/repos/orgSeatErasure.ts says how each is found). Their own name
+   * comes from `target`, which holds it on a resume too (`asTheyWere`), and
+   * from nothing when the row is still a tombstone, whose name is nobody's.
+   */
+  const forgetSeatJournal = async (): Promise<void> => {
+    const name = isTombstone({ email: String(target.email ?? "") }) ? "" : String(target.name ?? "").trim();
+    await forgetSeatJournalNames(pool, {
+      userId: target.id,
+      ownNames: name ? [name, name.split(/\s+/)[0]] : [],
+      claims: (submissionsRepo.all() as any[])
+        .filter((s) => s?.type === SEAT_CLAIM_TYPE && s?.userId === target.id)
+        .map((s) => ({ roleId: String(s.data?.roleId ?? ""), name: String(s.data?.recordedName ?? ""), held: s.status === "accepted" }))
+        .filter((c) => c.name !== REMOVED),
+    });
+  };
   return [
     {
       // Ledger descriptions first, while gratitude_log still links names to refs.
@@ -425,23 +587,20 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
-      // Scrub PII keys inside submissions they authored; the proposal content
-      // itself stays part of the village record.
+      // Their submissions keep their rows and lose their words and name: every
+      // row on their account and every row sent signed out under their
+      // address, with the team alerts those set off blanked first, while the
+      // rows still say what the alerts said. A quest idea's words and the
+      // other values `KEPT_BY_TYPE` lists stay (server/lib/submissionWords.ts).
+      // Before any of that, a Work With Us file only their rows name comes off
+      // the volume through `unlink`, so a file that will not come off stops
+      // this step with the rows still naming it.
+      // This pass ran first with seven contact keys and the account match
+      // alone; a record that already holds this name gets the rest from
+      // "submission-words-after-tombstone", which every record runs.
       name: "submissions",
       run: async () => {
-        const submissions = submissionsRepo.all();
-        let scrubbed = false;
-        for (const s of submissions as any[]) {
-          if (s.userId !== target.id) continue;
-          s.userName = ANON;
-          if (s.data && typeof s.data === "object") {
-            for (const k of ["name", "firstName", "lastName", "email", "phone", "whatsapp", "telegram"]) {
-              if (k in s.data) s.data[k] = "[removed at member's request]";
-            }
-          }
-          scrubbed = true;
-        }
-        if (scrubbed) await submissionsRepo.replaceAll(submissions);
+        await forgetSubmissionWords(pool, submissionsRepo, { userId: target.id, emailKey: realEmailKey(target), knownAs: knownAs(target) }, (file) => unlink(deps.uploadsDir, file));
       },
     },
     {
@@ -478,8 +637,14 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       // plane called "role" (ARCHITECTURE 3.15) and shares nothing with it, so
       // it went on holding a departed member's seat under their real user id
       // while /api/org republished it to everyone with map.viewPeople.
+      //
+      // The seat's journal first: its lines quote the names the release takes
+      // off the seatings, and once they are off, a seating a steward confirmed
+      // under some other spelling has nothing left to find its lines by. It
+      // runs again after the tombstone, for the reason that step gives.
       name: "org-seatings",
       run: async () => {
+        await forgetSeatJournal();
         await releaseSeatingsForUser(pool, target.id, "member left the village");
       },
     },
@@ -667,27 +832,62 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * NOTHING HERE IS A NAME ANOTHER MEMBER CAN TAKE FIRST (round 2, finding
+       * 5). This update ends the member's sessions, so it has to land whatever
+       * anybody else did. It used to write the handle `departed-<last eight of
+       * the id>` and the address `deleted-<id>@anonymized.invalid`, both under a
+       * unique key, and any member who could read an id could take either first:
+       * the handle through their own profile, the address at sign-up. Every run
+       * then failed on the duplicate key, and the leaver kept their name,
+       * address, role and live sessions for good.
+       *
+       * So the handle is NULL, which the unique key admits any number of times
+       * and which a handle already means when nobody has chosen one. The address
+       * keeps its form, because `isTombstone` and every `@anonymized.invalid`
+       * filter read it, and sign-up now refuses that domain
+       * (server/routes/register.ts). A database may already hold an account at
+       * one, though, so when the address is taken the step writes the same form
+       * with a random suffix nobody can guess (`writeTombstone`). A later run
+       * writes a tombstone address again the same way, so the step stays
+       * idempotent in what it leaves: an account closed at an address that is
+       * its own.
+       */
       name: "tombstone",
       run: async () => {
-        // `erasure`: a second erasure of a tombstone writes these fields again,
-        // and only this step may (see ErasureDeps).
+        await writeTombstone(members, target.id);
+      },
+    },
+    {
+      /*
+       * THE HANDLE A TOMBSTONE STILL CARRIES (adversarial round 3, finding 13).
+       *
+       * Before round 2 the tombstone wrote the handle `departed-<last eight of
+       * the id>`, and forum bylines print a handle through a live join, so
+       * anybody could find it. `GET /api/profiles/<handle>` needs no sign-in
+       * and read the tombstone like any member: the date they joined, their
+       * moons on the land and, because the tombstone never reset `privacy`,
+       * their token chips and gratitude counts. A typed @handle in the
+       * gratitude form found them too. Both look the handle up through
+       * `userIdForHandle`, so a tombstone with no handle has no page.
+       *
+       * The backfill never runs "tombstone" again, so this step is how an old
+       * tombstone loses the handle (it is in `BACKFILL_BY_ID`). It comes first
+       * after the tombstone so a member whose backfill keeps stopping at a
+       * later step still loses the page.
+       *
+       * `erasure`: the users repository puts a tombstone's handle back after
+       * any other writer (TOMBSTONE_FIXED, server/repos/users.ts), so without
+       * it this step would be noted as done and change nothing. A tombstone
+       * with no handle is not written at all, so a second run, and every
+       * tombstone written since round 2, changes nothing.
+       */
+      name: "handle-after-tombstone",
+      run: async () => {
+        const row = await members.byId(target.id);
+        if (row?.handle == null) return;
         await members.update(target.id, (u: any) => {
-          u.name = ANON;
-          u.email = tombstoneAddress(u.id);
-          u.handle = `departed-${String(u.id).slice(-8)}`;
-          u.passwordHash = "";
-          u.tokenVersion = (u.tokenVersion ?? 0) + 1; // every session dies now
-          u.bio = "";
-          u.avatar = null;
-          u.paths = [];
-          u.journeys = {};
-          u.prefs = {};
-          u.contributions = [];
-          u.role = "member";
-          u.stageGranted = null;
-          u.membershipGranted = false;
-          u.walletAddress = null;
-          u.walletVerifiedAt = null;
+          u.handle = null;
         }, { erasure: true });
       },
     },
@@ -776,7 +976,11 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "comms",
       run: async () => {
         const email = String(target.email ?? "");
-        await forgetCommsPerson(pool, { userId: target.id, emailKeys: email && !isTombstone({ email }) ? [emailKeyOf(email)] : [] });
+        await forgetCommsAndHandOffs(pool, {
+          userId: target.id,
+          emailKeys: email && !isTombstone({ email }) ? [emailKeyOf(email)] : [],
+          name: String(target.name ?? ""),
+        });
       },
     },
     {
@@ -905,6 +1109,39 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * The ballots that name them (round 2, finding 6). A vote to seat them
+       * or take a role back from them keeps its subject, its votes and its
+       * outcome, and its title, document and closer's note stop naming them;
+       * its public pulse lines go. A ballot they opened loses the name on its
+       * "Asked by" line. The notices those ballots rang went in the two steps
+       * above, found by the ballot's id. After the tombstone, because opening
+       * a ballot is something a signed-in member does, and directly after the
+       * notices step, so the words and the notices go together.
+       * server/lib/ballotErasure.ts says which spellings and why.
+       */
+      name: "ballot-words-after-tombstone",
+      run: async () => {
+        await forgetBallotWordsOf(pool, { id: target.id, name: target.name, handle: target.handle, email: target.email });
+      },
+    },
+    {
+      /*
+       * Three ballot templates the step above never knew (round 4, finding 9):
+       * a game-mechanics vote's "Proposed by <first name>" line, found through
+       * the proposal the member made whoever opened the vote, a launch vote's
+       * three opener sentences, and their "- <first name>" line on a launch
+       * vote's steward slate. A new name, because old records already hold
+       * the step above as done, and found by the member's id alone, so a
+       * tombstone with no name left is cleaned the same way.
+       * server/lib/ballotErasure.ts, forgetProposalBallotWordsOf, says how.
+       */
+      name: "proposal-ballot-words-after-tombstone",
+      run: async () => {
+        await forgetProposalBallotWordsOf(pool, { id: target.id, name: target.name, handle: target.handle, email: target.email });
+      },
+    },
+    {
+      /*
        * The note a member wrote when they opened their own departure. The
        * exit record stays, with the lines the settle step wrote under it,
        * the split of record among them; a note a steward wrote on a departure
@@ -922,10 +1159,24 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        * account's address (a relay, a housing alert); these are the housing
        * alerts sent under a different address they typed into a request of
        * their own, read off that request here, before anything scrubs it.
+       *
+       * ONLY THEIR OWN ALERTS (round 2, findings 3 and 16). An address they
+       * typed can be a partner's account address or a porch inbox a
+       * stranger's own public request also uses, and each of those people's
+       * requests sent its own alert under the same reply-to. So the requests
+       * at each address say whose each alert is, by the name its subject was
+       * written with (`forgetHousingAlertsOf`, server/repos/commsPeople.ts),
+       * and a living person's own alert keeps its subject and its reply-to.
        */
       name: "relayed-mail-after-tombstone",
       run: async () => {
-        await forgetMailRepliedTo(pool, { emailKeys: await housingAddressesOf(pool, target.id), origins: ["housing.team_alert"] });
+        const key = realEmailKey(target);
+        await forgetHousingAlertsOf(pool, {
+          userId: target.id,
+          name: String(target.name ?? ""),
+          keys: await housingAddressesOf(pool, target.id),
+          ownKeys: key ? [key] : [],
+        });
       },
     },
     {
@@ -936,6 +1187,37 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "checkin-notes-after-tombstone",
       run: async () => {
         await forgetCheckinNotesOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The public pulse lines that name them. "public-health-events" took
+       * the lines they wrote, and only while their sessions lived; this takes
+       * those again, and the lines that name them with somebody else as the
+       * actor: "Ann appreciated Wren", "Wren joined the Stewards", "Wren sits
+       * in Steward, by a vote of the whole village." A signed-out visitor
+       * reads every one at `GET /api/game/pulse`. Those rows stay with the
+       * living actor and lose the name, so nobody's activity count moves.
+       * Lines recording them as their subject are found by id; older role
+       * lines by the audit row beside a vote, or by their words when no
+       * living member shares the first name (server/repos/pulseLines.ts).
+       */
+      name: "pulse-lines-naming-after-tombstone",
+      run: async () => {
+        await forgetPulseLinesNaming(pool, { userId: target.id, name: realName(target) });
+      },
+    },
+    {
+      /*
+       * Their submissions again, once nothing can file one: a hand raised,
+       * a seat claimed or a form sent between the first pass and the
+       * tombstone keeps its words otherwise, and a record that holds
+       * "submissions" from before that pass took words never ran it. The
+       * files only their rows name come off the volume first, as above.
+       */
+      name: "submission-words-after-tombstone",
+      run: async () => {
+        await forgetSubmissionWords(pool, submissionsRepo, { userId: target.id, emailKey: realEmailKey(target), knownAs: knownAs(target) }, (file) => unlink(deps.uploadsDir, file));
       },
     },
     {
@@ -1029,7 +1311,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         for (const contact of await contactsForPerson(pool, { emailKeys: keys })) {
           await releasePlacesOf(pool, guestPersonKey(contact.id));
         }
-        await forgetCommsPerson(pool, { emailKeys: keys });
+        await forgetCommsAndHandOffs(pool, { emailKeys: keys });
       },
     },
     {
@@ -1130,6 +1412,88 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         await forgetMemberProposals(pool, target.id);
       },
     },
+    /*
+     * WHAT A SEAT STILL HELD FOR THEM (adversarial round 2, findings 8 to 10).
+     * Four steps, each after the tombstone for the reason the needs step gives:
+     * a claim, a confirm, a seating and a carried seat vote can each land while
+     * the member's sessions live, behind the steps that ran before it. Each has
+     * a new name, so a resume of an older record runs it. The org chart's doors
+     * refuse a tombstone on their own as well (`claimSeating`, the confirm and
+     * admin seat routes, the role_seat closer and the seat vote opener).
+     */
+    {
+      /*
+       * A seat's journal: the lines that quote the name a seating was recorded
+       * under, which `GET /api/org/:kind/:id/journal` serves to every account
+       * holding `map.viewPeople`, keep their act and date and lose the name.
+       * BEFORE the seat claims are scrubbed, because a claim's recorded name
+       * is one of the ways the lines are found.
+       */
+      name: "seat-journal-after-tombstone",
+      run: forgetSeatJournal,
+    },
+    {
+      /*
+       * Their seat claims. An open one goes on asking a steward to confirm a
+       * member who has gone, with their recorded name beside "A departed
+       * member", so it closes the way a decline closes it, with nobody told.
+       * Every one of theirs, open or answered, loses the recorded name and the
+       * words the submissions step takes, which a claim filed while the sweep
+       * ran still carries.
+       */
+      name: "seat-claims-after-tombstone",
+      run: async () => {
+        const rows = submissionsRepo.all() as any[];
+        let changed = false;
+        for (const s of rows) {
+          if (s?.type !== SEAT_CLAIM_TYPE || s.userId !== target.id) continue;
+          if (s.status !== "accepted" && s.status !== "declined") {
+            s.status = "declined";
+            changed = true;
+          }
+          if (s.userName !== ANON) {
+            s.userName = ANON;
+            changed = true;
+          }
+          if (s.data && typeof s.data === "object") {
+            for (const k of ["recordedName", "name", "firstName", "lastName", "email", "phone", "whatsapp", "telegram"]) {
+              if (k in s.data && s.data[k] !== REMOVED) {
+                s.data[k] = REMOVED;
+                changed = true;
+              }
+            }
+          }
+        }
+        if (changed) await submissionsRepo.replaceAll(rows);
+      },
+    },
+    {
+      /*
+       * A seating confirmed for them after "org-seatings" ran: a steward
+       * pressing Confirm, or an admin seating them, while the account still
+       * worked. Released the way that step releases one, and its journal
+       * lines first, while the seating still carries the recorded name that
+       * finds them.
+       */
+      name: "org-seatings-after-tombstone",
+      run: async () => {
+        await forgetSeatJournal();
+        await releaseSeatingsForUser(pool, target.id, "member left the village");
+      },
+    },
+    {
+      /*
+       * A permission holding that landed after "role-holdings" ran: a carried
+       * role_seat vote coming due, or an appointment, while they were not yet
+       * a tombstone. The closer and the appoint route refuse a tombstone, so
+       * after this nothing seats them again. The same call as "role-holdings"
+       * and the former-member resolve, so the three end a holding one way.
+       */
+      name: "role-holdings-after-tombstone",
+      run: async () => {
+        await endPermissionHoldings(target.id, { roleHoldersRepo, withRoleHolderLock, loadRoleHolders });
+      },
+    },
     {
       /*
        * Live Sessions (0238): the member leaves every room. Their people rows,
@@ -1165,6 +1529,38 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * Quest crews (0067): they leave every crew they are in, the way
+       * `crewsRepo.leave` lets a member walk out, and a crew left with nobody
+       * in it disbands. Kept, a full crew refused the next person in their
+       * name and every roster listed them as "A". The founder id stays as a
+       * historical id: crews have no handover (server/repos/questCrewErasure.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the join
+       * door writes for anybody signed in until the sessions die.
+       */
+      name: "quest-crews-after-tombstone",
+      run: async () => {
+        await leaveEveryCrewOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Place-photo reports (0093): the words they typed go, the reports stay.
+       * The curators' queue serves them to every holder of `map.curatePhotos`,
+       * a role or badge power, and a subject request often names the person.
+       * The photograph is not touched, so a picture they asked to come down
+       * stays dark.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the report
+       * doors write for anybody signed in until the sessions die.
+       */
+      name: "photo-report-reasons-after-tombstone",
+      run: async () => {
+        await forgetReportReasonsOf(pool, target.id);
+      },
+    },
+    {
       name: "audit",
       run: async () => {
         await recordEvent(pool, {
@@ -1177,7 +1573,118 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         });
       },
     },
+    {
+      /*
+       * Recurring purchases (0032, S69): every Stripe subscription their
+       * purchases hold is cancelled, so their card stops being charged. The
+       * village gives a member no door to cancel one, so before this a member
+       * who left kept paying every period, and each renewal paid the
+       * product's tokens into the tombstone (round 3, finding 5). The orders
+       * stay as the record of what was paid; nothing is refunded and no token
+       * moves. A charge that lands anyway is refused delivery and an admin is
+       * told (`settleProductPurchase`, server/index.ts).
+       *
+       * LAST BEFORE THE OUTSIDE STORES, after the audit line, because it asks
+       * Stripe: the local sweep finishes first, for the reason this file's
+       * header gives. After the tombstone, and a new name, so a resume or a
+       * second erasure runs it. Idempotent: `cancelSubscription` reads first,
+       * and one already over or unknown to Stripe is done. A Stripe that
+       * fails with the key present throws: the sweep stops here, loudly, and
+       * the hourly job and the queue resume it.
+       *
+       * NO KEY IS A PERSON'S JOB, AND THE STEP IS DONE. A village that once
+       * sold subscriptions and has since removed its Stripe key can never
+       * cancel one from here, so throwing held every such erasure open at
+       * this step for good, ten retries and then "needs a person", with
+       * `external-stores` behind it never asked. Connecting Stripe later is
+       * no help to a record the queue has given up on. So with no key the
+       * step asks every admin to cancel each one by hand in the Stripe
+       * dashboard, writes the count and the ids to the audit trail, and
+       * counts itself done (`askAdminsToCancelByHand`).
+       */
+      name: "product-subscriptions-after-tombstone",
+      run: async () => {
+        const subs = await liveSubscriptionsOf(pool, target.id);
+        if (!subs.length) return;
+        if (!stripeConfigured()) {
+          await askAdminsToCancelByHand(pool, target.id, actorId, subs.map((s) => s.subscriptionId), deps);
+          return;
+        }
+        for (const sub of subs) {
+          await cancelSubscription(sub.subscriptionId);
+        }
+        // Settles anything an earlier run, or the renewal gate, handed to a
+        // person (server/lib/owedCancels.ts): the newest row naming an id wins.
+        await recordSubscriptionCancels(pool, { userId: target.id, kind: "cancelled", subscriptionIds: subs.map((s) => s.subscriptionId), actorUserId: actorId });
+      },
+    },
   ];
+}
+
+/**
+ * The subscriptions a leaver's erasure could not cancel, handed to the people
+ * who can: every admin and founder hears it on the bell, through the host's
+ * notice spine when it hands one over, and the audit trail records the count
+ * and every id as the step's result.
+ *
+ * THE ALARM THE ADMINS ALREADY GET for money that needs a person: the
+ * `payments_alert` kind, one row per admin under `<key>:<admin id>`, the
+ * shape `notifyAdmins` writes in server/index.ts. It names the subscription
+ * ids, because those are what the Stripe dashboard finds, and never the
+ * leaver, who is a tombstone by now: no actor, no name, no address.
+ *
+ * ONCE PER LEAVER. The key is the leaver's id, so an erasure asked for again
+ * with the key still missing rings nobody twice. The audit line is written on
+ * every run, as every attempt is.
+ */
+async function askAdminsToCancelByHand(
+  pool: Pool,
+  userId: string,
+  actorId: string | null,
+  subscriptionIds: readonly string[],
+  deps: ErasureDeps,
+): Promise<void> {
+  const notify = deps.notify ?? ((input: NotifyInput) => insertNotification(bellOnly(pool, deps.members), input));
+  const title =
+    `Cancel ${subscriptionIds.length} recurring payment(s) by hand in the Stripe dashboard. A departed member's erasure could not cancel them, ` +
+    "because Stripe is not connected, and Stripe may keep charging them.";
+  const body =
+    `Subscription ids to find in the Stripe dashboard: ${subscriptionIds.join(", ")}. ` +
+    "Cancel each one still active, and refund any period charged after the account was deleted.";
+  const admins = (await usersRepo(pool).all()).filter(
+    (u: any) => (u.role === "admin" || u.role === "founder") && String(u.id) !== userId && !isTombstone({ email: String(u.email ?? "") }),
+  );
+  for (const admin of admins) {
+    await notify({
+      userId: String(admin.id),
+      type: "payments_alert",
+      title,
+      body,
+      link: "/admin",
+      dedupeKey: `erasure-subscriptions-by-hand:${userId}:${admin.id}`,
+    });
+  }
+  /*
+   * THIS ROW IS THE OBLIGATION. Nothing else records that these cancels are
+   * owed: the step counts itself done, `steps_done` keeps it, and /review,
+   * Finish and the hourly job derive what is owed from this row and the
+   * cancelled row that later settles it (server/lib/owedCancels.ts).
+   *
+   * It survives only because it is audience 'admin'. The erasure's own
+   * `public-health-events` step deletes rows with audience = 'public' whose
+   * actor is the leaver, and on a self-delete the leaver IS this row's actor,
+   * so a re-erasure runs that DELETE over it. Widening that DELETE to admin
+   * rows would silently drop every owed cancel. Pinned by
+   * server/lib/erasure.subscriptions.test.ts.
+   *
+   * The shape works only because this step is id-only: its re-run needs
+   * `liveSubscriptionsOf(pool, userId)` and a Stripe id, never the identity
+   * the erasure cleared.
+   */
+  await recordSubscriptionCancels(pool, { userId, kind: "by-hand", subscriptionIds, actorUserId: actorId });
+  console.error(
+    `[erasure] Stripe is not connected, so ${subscriptionIds.length} subscription(s) of ${userId} were handed to the admins to cancel by hand`,
+  );
 }
 
 /**
@@ -1251,11 +1758,13 @@ async function runSweep(
     if (done.has(step.name)) continue;
     try {
       await step.run();
+      // Inside the try (round 5): a note that does not land is this step failing, recorded at once. Outside
+      // it, the record showed no failed step and read as possibly running for ten minutes. The step re-runs.
+      await noteStepDone(pool, target.id, step.name);
     } catch (err: any) {
       await noteErasureFailed(pool, target.id, step.name, String(err?.message ?? err));
       throw err;
     }
-    await noteStepDone(pool, target.id, step.name);
     ran.push(step.name);
   }
 
@@ -1278,7 +1787,7 @@ function identityOf(row: any): ErasedIdentity | null {
  *
  * THE DEFECT THIS CLOSES. A resume re-reads the user row, and after the
  * tombstone that row says "A departed member" at `deleted-<id>@anonymized.invalid`
- * with the handle `departed-<id>`. Every step that finds the member by name or
+ * with no handle. Every step that finds the member by name or
  * address (the comms address book, the alignment words, and any step added
  * later) then matched nothing, and the record still read finished.
  *
@@ -1323,6 +1832,7 @@ export async function anonymizeMember(
   target: any,
   actorId: string | null,
   deps: ErasureDeps,
+  opts: { begun?: boolean } = {},
 ): Promise<ErasureOutcome> {
   // Defensive: every route into here refuses example identities, and if one
   // ever slips through, the scrub would rename the author of every seeded
@@ -1330,9 +1840,66 @@ export async function anonymizeMember(
   // rename is a write and the seed is only re-applied on a refresh.
   if (isExampleUser(target)) return ASKED_NOBODY;
 
-  await beginErasure(pool, target.id, identityOf(target));
+  if (!opts.begun) await beginMemberErasure(pool, target);
   const result = await runSweep(pool, await asTheyWere(pool, target), actorId, deps, new Set());
   return result.external ?? ASKED_NOBODY;
+}
+
+/**
+ * Open the erasure record that `anonymizeMember` sweeps under, on its own.
+ *
+ * For a caller that must open it at one exact moment and sweep after: a
+ * resolve opens it while it holds the exit's row (`resolveExit`,
+ * server/lib/exitResolve.ts, round 4), so a "They're staying" from then on
+ * finds the deletion running and refuses, and one that landed first stops the
+ * resolve before any record exists. That caller then passes `begun`. An
+ * example identity opens nothing, as `anonymizeMember` erases nothing for one.
+ */
+export async function beginMemberErasure(pool: Pool, target: any): Promise<void> {
+  if (isExampleUser(target)) return;
+  await beginErasure(pool, target.id, identityOf(target));
+}
+
+/**
+ * A sweep that stopped before the close, whose member's departure was then
+ * cancelled: they stayed, so it is ended and never run (round 2, finding 1).
+ *
+ * The exit cancel ends such a record itself now (`cancelExit`,
+ * server/lib/exit.ts). A cancel made before it did left the record armed, and
+ * without this the next Finish them, pressed for somebody else, restarted it
+ * from the top and closed the account of a member who stayed. Only the restart
+ * asks, and only for an account that still works: past the tombstone the
+ * account is closed and the sweep finishes as before. An erasure asked for
+ * again after the cancel moves the record's last attempt past it, so it runs
+ * (`stayedSinceLastAttempt`).
+ *
+ * "PAST THE TOMBSTONE" IS READ OFF THE ACCOUNT, NOT THE RECORD (round 3,
+ * finding 17). A record can lack "tombstone" over an account that is one: the
+ * write committed and its note was lost (a deploy's SIGTERM can land between
+ * them; a note that fails with the process alive is recorded as the step
+ * failing since round 5, see `runSweep`), or a second
+ * resolve over the closed account emptied the steps and stopped early. The old
+ * cancel route flipped such an exit with no look at the account, and this
+ * then ended the record of somebody who could no longer sign in, with every
+ * step after the tombstone unrun. `cancelExit` refuses a closed account for
+ * the same reason (server/lib/exit.ts).
+ *
+ * The record goes the way the cancel would have taken it (`abandonErasure`);
+ * one that may still be running is left alone and still not run.
+ */
+async function endForAMemberWhoStayed(pool: Pool, userId: string): Promise<SweepResult> {
+  const ended = await abandonErasure(pool, userId);
+  if (ended.outcome === "abandoned") {
+    await recordEvent(pool, {
+      kind: "audit",
+      text: "member:erasure-abandoned:stayed",
+      actorUserId: null,
+      entityType: "user",
+      entityRef: userId,
+      audience: "admin",
+    });
+  }
+  return { ran: [], finished: false, external: null, stayed: true };
 }
 
 /**
@@ -1360,6 +1927,11 @@ export async function anonymizeMember(
  * idempotent by the rule this list's header states, so running them all again
  * costs only the writes that match something. Past the tombstone nothing can
  * write any more, and the record's steps are skipped as they always were.
+ *
+ * A RESTART NEVER RUNS FOR A MEMBER WHO STAYED: a departure cancelled after
+ * the sweep stopped ends the record instead (`endForAMemberWhoStayed`). A
+ * closed account cannot have stayed, whatever its record's steps say, so its
+ * restart runs to the end.
  */
 export async function resumeErasure(
   pool: Pool,
@@ -1381,9 +1953,242 @@ export async function resumeErasure(
 
   const done = new Set(record?.stepsDone ?? []);
   const restart = !done.has("tombstone");
+  const closed = isTombstone({ email: String(target.email ?? "") });
+  if (restart && !closed && (await stayedSinceLastAttempt(pool, userId))) return endForAMemberWhoStayed(pool, userId);
   await noteResumeAttempt(pool, userId, { restart, identity: identityOf(target) });
   // The actor is the village rather than a person: a resume is the queue
   // finishing an obligation, and attributing it to whoever pressed the button
   // would put their name on an act somebody else began.
   return runSweep(pool, await asTheyWere(pool, target), null, deps, restart ? new Set() : done);
+}
+
+/*
+ * ══ A FINISHED ERASURE, GIVEN THE STEPS IT PREDATES ════════════════════════
+ *
+ * THE GAP. `resumeErasure` returns at `finishedAt`, and neither the queue nor
+ * the hourly job reads a finished record, so a step added to this list after
+ * a member's sweep finished never ran for them. A sweep that finished before
+ * "member-agent-after-tombstone" kept the agent tokens minted in the window
+ * before the tombstone; one that finished before "invites-after-tombstone"
+ * kept their open links letting people in; and so on down the list.
+ * `steps_done` survives the finish, so what a record lacks can be read off it.
+ *
+ * WHAT RUNS. Steps after the tombstone, the ones written for an account that
+ * can no longer act, and of those only the ones that find what they reach by
+ * the member's user id. A finished record holds no name or address any more
+ * (`noteErasureFinished` clears them, and the user row is the tombstone), so
+ * the target here is the tombstone and nothing else. A step that also matches
+ * by address (comms, the guest places, the housing scrub, the order address)
+ * finds what is keyed on the account and nothing by address, which is the
+ * limit a resume of a record from before 0282 already has. Those are named in
+ * `BACKFILL_BY_ID`; a step that finds nothing without the name is named in
+ * `BACKFILL_LEAVES_OUT` with why. The backfill test holds every step after the
+ * tombstone to exactly one of the two, so a step added later fails it until
+ * whoever adds the step decides which. Neither is a default.
+ *
+ * IN THE SWEEP'S ORDER, FROM THE SWEEP'S OWN LIST. The same closures run, so a
+ * backfilled step cannot drift from the step it stands for, and a step that
+ * reads a row before another scrubs it (housing contacts before the housing
+ * scrub) still reads it first.
+ *
+ * NO VALUE MOVES TWICE. Four of these give a fee back or seat somebody from a
+ * queue: the places at gatherings, the guest-era places, the guest places of
+ * a second housing address, and the meet-me windows. Each claims a held
+ * charge before it posts a refund leg under the charge's own key, and deletes
+ * the answers it frees (`releasePlacesOf`, `removeGatheringRows`), so a run
+ * after a lost note finds no answer to free and no held charge to claim, the
+ * ledger refuses the key a second time, and escrow cannot pay out what it no
+ * longer holds. The backfill test runs them twice over a neighbour's fee.
+ *
+ * WHAT IT RECORDS. Each step that lands is appended to `steps_done` on a record
+ * that is still finished, and `finished_at` stays where the sweep put it
+ * (`noteBackfilledStep`). A member given any step gets one audit line,
+ * `member:erasure-backfilled`. A tombstone with no record at all is an erasure
+ * from before 0195, and is given a finished record first, with no attempts on
+ * it, so what ran is written down the same way and a second run reads it done.
+ *
+ * WHAT IT NEVER RUNS. Anything before the tombstone or the tombstone itself,
+ * which were written for an account that still worked. Four of those came
+ * after some records had finished ("quest-proposals", "org-drafts",
+ * "proposal-drafts", "alignment-party-left"), and whether a finished record is
+ * given them is Rye's to decide (raised 2026-10-24). The audit line, which
+ * would say a second time that an erasure happened. And the outside stores,
+ * which were asked when the sweep finished and are the /review button's to
+ * ask again. An open record is the queue's.
+ */
+
+/**
+ * Steps after the tombstone a finished erasure is given when its record lacks
+ * them: each finds what it reaches by the member's user id. The sweep's list
+ * decides the order they run in; this decides only which.
+ */
+export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
+  "handle-after-tombstone",
+  "member-agent-after-tombstone",
+  "guest-places-after-tombstone",
+  "comms",
+  "needs-after-tombstone",
+  "journal-after-tombstone",
+  "invites-after-tombstone",
+  "saberra-bridge-after-tombstone",
+  "seat-application-words-after-tombstone",
+  "meet-me-windows-after-tombstone",
+  "notices-naming-after-tombstone",
+  "ballot-words-after-tombstone",
+  "proposal-ballot-words-after-tombstone",
+  "exit-notes-after-tombstone",
+  "relayed-mail-after-tombstone",
+  "checkin-notes-after-tombstone",
+  "pulse-lines-naming-after-tombstone",
+  "submission-words-after-tombstone",
+  "season-plan-words-after-tombstone",
+  "role-tensions-after-tombstone",
+  "event-places-after-tombstone",
+  "housing-contacts-after-tombstone",
+  "housing-reservations-after-tombstone",
+  "vouches-after-tombstone",
+  "conversations-after-tombstone",
+  "delegations-after-tombstone",
+  "ventures-after-tombstone",
+  "investor-fact-words-after-tombstone",
+  "stay-notes-after-tombstone",
+  "purchase-emails-after-tombstone",
+  "role-proposals-after-tombstone",
+  "seat-journal-after-tombstone",
+  "seat-claims-after-tombstone",
+  "org-seatings-after-tombstone",
+  "role-holdings-after-tombstone",
+  "sessions-after-tombstone",
+  "gene-keys-after-tombstone",
+  "quest-crews-after-tombstone",
+  "photo-report-reasons-after-tombstone",
+  "product-subscriptions-after-tombstone",
+]);
+
+/** Steps after the tombstone a finished erasure is never given, and why. */
+export const BACKFILL_LEAVES_OUT: Readonly<Record<string, string>> = {
+  "alignment-names-after-tombstone":
+    "it finds the member in other people's words by the name and handle the tombstone took, and a finished record holds neither",
+  audit: "the sweep wrote its line when it finished, and a second would say the erasure happened twice",
+  [EXTERNAL_STEP]: "the outside stores were asked when the sweep finished, and asking them again is the /review button's job",
+};
+
+/** Every step name in the order the sweep runs them, the outside stores last. */
+export function sweepStepNames(): string[] {
+  return [...sweepSteps(null as unknown as Pool, { id: "" }, null, {} as ErasureDeps).map((s) => s.name), EXTERNAL_STEP];
+}
+
+/** The steps a finished erasure is given when its record lacks them, in sweep order. */
+export function backfillStepNames(): string[] {
+  const names = sweepSteps(null as unknown as Pool, { id: "" }, null, {} as ErasureDeps).map((s) => s.name);
+  return names.slice(names.indexOf("tombstone") + 1).filter((name) => BACKFILL_BY_ID.has(name));
+}
+
+/**
+ * The runOnce id the boot job is recorded under, one per list of steps it
+ * gives. A step added to that list later changes the id, so the next boot runs
+ * the job again and every finished record is given the new step too; one that
+ * already holds a step skips it, so a rerun costs a read per member.
+ */
+export function erasureBackfillJob(): string {
+  const digest = createHash("sha256").update([...backfillStepNames()].sort().join("\n")).digest("hex").slice(0, 12);
+  return `erasure-steps-backfill-${digest}`;
+}
+
+/**
+ * Give one finished erasure every step after the tombstone that its record
+ * lacks and that finds its rows by user id. Returns the steps it ran.
+ *
+ * Runs nothing for a member whose row is gone, is an example, or is not a
+ * tombstone, or whose record is open. A step that throws stops this member
+ * here, with every step before it already noted, and the error names it.
+ */
+export async function backfillFinishedErasure(pool: Pool, userId: string, deps: ErasureDeps): Promise<string[]> {
+  const target = await deps.members.byId(userId);
+  if (!target || isExampleUser(target) || !isTombstone({ email: String(target.email ?? "") })) return [];
+  let record = await erasureRecord(pool, userId);
+  if (!record) {
+    await openBackfillRecord(pool, userId);
+    record = await erasureRecord(pool, userId);
+  }
+  if (!record?.finishedAt) return [];
+
+  const done = new Set(record.stepsDone);
+  const wanted = new Set(backfillStepNames());
+  const ran: string[] = [];
+  try {
+    for (const step of sweepSteps(pool, target, null, deps)) {
+      if (!wanted.has(step.name) || done.has(step.name)) continue;
+      try {
+        await step.run();
+      } catch (err: any) {
+        throw new Error(`step "${step.name}": ${String(err?.message ?? err)}`);
+      }
+      await noteBackfilledStep(pool, userId, step.name);
+      ran.push(step.name);
+    }
+  } finally {
+    if (ran.length) {
+      await recordEvent(pool, {
+        kind: "audit",
+        text: "member:erasure-backfilled",
+        actorUserId: null,
+        entityType: "user",
+        entityRef: userId,
+        audience: "admin",
+      });
+    }
+  }
+  return ran;
+}
+
+/** What one run of the boot job did, counted. */
+export interface ErasureBackfillCounts {
+  /** Finished erasures read, tombstones with no record among them. */
+  read: number;
+  /** Members given at least one step. */
+  given: number;
+  /** Steps run, across every member. */
+  steps: number;
+  /** Members a step stopped part way, left for the next boot. */
+  stopped: number;
+}
+
+/**
+ * THE BOOT JOB: every finished erasure, given the steps it predates.
+ *
+ * Registered through `runOnce` in server/index.ts, LATE in boot, after the
+ * waitlist's promotion sink and the comms dispatcher are wired, because a seat
+ * this frees tells whoever it goes to the way any promotion does.
+ *
+ * One member's failure stops only that member. The rest still run, and then
+ * this throws, so `runOnce` leaves the job unrecorded and the next boot runs
+ * it again; what already landed is noted, so that run starts where this one
+ * stopped.
+ */
+export async function backfillFinishedErasures(
+  pool: Pool,
+  deps: ErasureDeps,
+  log: (line: string) => void = console.log,
+): Promise<ErasureBackfillCounts> {
+  const subjects = await finishedErasureSubjects(pool);
+  const counts: ErasureBackfillCounts = { read: subjects.length, given: 0, steps: 0, stopped: 0 };
+  for (const userId of subjects) {
+    try {
+      const ran = await backfillFinishedErasure(pool, userId, deps);
+      if (ran.length) {
+        counts.given += 1;
+        counts.steps += ran.length;
+      }
+    } catch (err: any) {
+      counts.stopped += 1;
+      console.error(`[erasure] the backfill stopped for ${userId} at ${String(err?.message ?? err)}. The next boot tries again.`);
+    }
+  }
+  log(
+    `[erasure] finished-erasure backfill: ${counts.read} finished erasure(s) read, ${counts.given} given ` +
+      `${counts.steps} step(s) they predate, ${counts.stopped} stopped part way.`,
+  );
+  if (counts.stopped) throw new Error(`${counts.stopped} finished erasure(s) stopped part way, so the job stays unrecorded for the next boot`);
+  return counts;
 }

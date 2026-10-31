@@ -31,9 +31,9 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { guardOutboundUrl } from "./toolcheck";
 import { NO_MEMBER_SECRETS_KEY_SENTENCE, memberSecretsKey } from "./memberSecrets";
 import { recordEvent } from "./events";
-import { holderStands } from "./agentTokens";
+import { holderStands, whileSessionHolds } from "./sessionHold";
 import { usersRepo } from "../repos/users";
-import { enabledInboxUserIds, forgetInboxOf } from "../repos/memberAgent";
+import { enabledInboxUserIds, forgetInboxOf, replaceInboxOn } from "../repos/memberAgent";
 
 export const DELIVERY_KINDS = ["test", "week_ahead", "weekly_digest", "opportunity"] as const;
 export type DeliveryKind = (typeof DELIVERY_KINDS)[number];
@@ -175,11 +175,12 @@ export function verifyDelivery(secret: string, body: any, header?: string | null
  * WHY THE INBOX ASKS, when the erasure sweep deletes inboxes again after the
  * tombstone ("member-agent-after-tombstone"). A request checks its session
  * once, at the start, and `setInbox` then waits on a DNS lookup whose length
- * the member's own nameserver sets. Started before an erasure, it can write
- * after that step has deleted, and no step runs again. So the write asks after
- * it lands, and every place a delivery is queued or sent asks before anything
- * leaves. An inbox that fails is removed where it is found, with everything
- * queued for it.
+ * the member's own nameserver sets. Started before an erasure, it could write
+ * after that step had deleted, and no step runs again. So the write asks
+ * under the member's row lock (`whileSessionHolds`, which also refuses a
+ * session a new password or a revoke ended), and every place a delivery is
+ * queued or sent asks here before anything leaves. An inbox that fails is
+ * removed where it is found, with everything queued for it.
  */
 async function holderListens(pool: Pool, userId: string): Promise<boolean> {
   return holderStands(await usersRepo(pool).byId(userId));
@@ -194,14 +195,25 @@ export async function getInbox(pool: Pool, userId: string): Promise<InboxRow | n
 
 export type SetInboxResult =
   | { ok: true; inbox: InboxRow; secret: string }
-  | { ok: false; status: 400 | 403 | 503; error: string };
+  | { ok: false; status: 400 | 401 | 403 | 503; error: string };
 
 /**
  * Set or replace the member's inbox URL. Setting a new URL mints a new inbox
  * id, so the secret rotates with the URL and the old one stops verifying.
  * The secret is in the result and nowhere else.
+ *
+ * `sessionVersion` is the tokenVersion the request's session was checked at.
+ * The write lands only while the member's row still carries it, and a
+ * session that a new password, a revoke or signing out ended since its check
+ * answers 401 with nothing written (`whileSessionHolds`).
  */
-export async function setInbox(pool: Pool, userId: string, rawUrl: unknown, env: NodeJS.ProcessEnv = process.env): Promise<SetInboxResult> {
+export async function setInbox(
+  pool: Pool,
+  userId: string,
+  rawUrl: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+  sessionVersion: number,
+): Promise<SetInboxResult> {
   if (!memberSecretsKey(env)) return { ok: false, status: 503, error: NO_MEMBER_SECRETS_KEY_SENTENCE };
   const url = String(rawUrl ?? "").trim();
   if (!url || url.length > 2048) return { ok: false, status: 400, error: "Give the URL your agent listens on" };
@@ -210,24 +222,23 @@ export async function setInbox(pool: Pool, userId: string, rawUrl: unknown, env:
   // resolved to, and a member-reachable route must not be an oracle for what
   // an internal name points at.
   if (!guard.ok) return { ok: false, status: 400, error: "That URL is not reachable from here. It must be a public https host" };
-  // Replacing the URL retires the old inbox whole: its id, its derived
-  // secret and anything still queued for it. A fresh id means a fresh secret.
   const prior = await getInbox(pool, userId);
-  if (prior) {
-    await pool.query("DELETE FROM agent_deliveries WHERE inbox_id = ?", [prior.id]);
-    await pool.query("DELETE FROM agent_inboxes WHERE user_id = ?", [userId]);
-  }
   const id = `inb-${randomBytes(8).toString("hex")}`;
-  await pool.query(
-    "INSERT INTO agent_inboxes (id, user_id, url, enabled, consecutive_failures) VALUES (?,?,?,1,0)",
-    [id, userId, url],
+  // The holder and the session are asked UNDER THE MEMBER'S ROW LOCK, and the
+  // write happens inside the same transaction, which is what closes both
+  // races. The guard above can wait seconds on DNS. An erasure's tombstone or
+  // a tokenVersion bump that lands in that wait has committed before the lock
+  // is taken, and this refuses; one that comes later waits for the commit,
+  // and the sweep after the tombstone or the end after the bump removes what
+  // this wrote. No secret leaves for a write that is refused.
+  // Replacing the URL retires the old inbox whole: its id, its derived secret
+  // and anything still queued for it. A fresh id means a fresh secret.
+  const held = await whileSessionHolds(pool, userId, sessionVersion, (conn) =>
+    replaceInboxOn(conn, userId, prior?.id ?? null, { id, url }),
   );
-  // The holder is read AFTER the write, which is what closes the race. The
-  // tombstone commits before the sweep's last delete, so an INSERT that lands
-  // before that delete is removed by it, and one that lands after finds the
-  // tombstone here. A read before the INSERT would leave a gap one round trip
-  // wide. No secret leaves for a holder that fails.
-  if (!(await holderListens(pool, userId))) {
+  if (!held.ok && held.refusal === "session_ended") return { ok: false, status: 401, error: "auth_required" };
+  if (!held.ok) {
+    // An inbox that fails its holder is removed where it is found.
     await forgetInboxOf(pool, userId);
     return { ok: false, status: 403, error: INBOX_HOLDER_GONE };
   }

@@ -24,6 +24,17 @@
  *      the sweep runs. `KEY_FAMILIES` below is the list, one entry per
  *      producer, and the test beside the erasure seeds one row per entry.
  *
+ *   3. A NOTICE WHOSE SUBJECT IS THE MEMBER, never their act, has no actor to
+ *      find either, and is found by the record its key was built from just
+ *      the same. A ballot to seat a member or take a role back from them
+ *      ("The village is asked whether Wren keeps the role in Steward") keys
+ *      every notice it rings `bal:<ballotId>:...`, and the ballot's
+ *      `subject_ref` names the member (server/repos/ballotWords.ts). The
+ *      day-21 hand-off ("Wren has been on the resident path for three weeks")
+ *      keys its notice on the walker's journey enrollment, which the comms
+ *      step deletes, so the erasure rewrites it by key just before that
+ *      (`forgetNoticesByKey`, below; round 2, findings 6 and 12).
+ *
  * WHAT HAPPENS TO A ROW FOUND. It stays, on the bell it was rung on, with the
  * sweep's constant title and no body, which is the treatment the actor match
  * always gave. Its EMAILED COPIES go blank first, while the row can still find
@@ -33,10 +44,10 @@
  * Sent mail still counts it; its subject and words go, the same shape
  * `forgetCommsPerson` gives a person's own emails.
  *
- * WHAT IT CANNOT FIND, and says so. A notice whose SUBJECT is a member who is
- * not its actor (a ballot asking whether somebody keeps a role) carries neither
- * the member's id nor a key built from their records, and there is no column
- * to record a subject in without a migration.
+ * WHAT IT CANNOT FIND, and says so. A notice that names a member in its words
+ * with no actor and a key built from no record of theirs. Every producer that
+ * writes one is listed above; a new one has to be added here, or has to pass
+ * the member as its actor.
  *
  * Every statement is a DELETE keyed on the member, or an UPDATE writing a
  * constant to rows found through the member, so a second run writes the same
@@ -46,6 +57,7 @@ import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { COMMS_CHANGE } from "../../shared/comms/memberView";
 import { POWER_APPLICATION } from "../../shared/powerHands";
 import { ERASED_SUBJECT } from "./commsPeople";
+import { ballotIdsAbout } from "./ballotWords";
 
 const VILLAGE = "local";
 
@@ -88,6 +100,8 @@ async function patternsFor(pool: Pool, userId: string, submissionIds: readonly s
     for (const r of rows) prefixes.push(...family.prefixes(String(r.id)));
   }
   for (const id of submissionIds) prefixes.push(...submissionPrefixes(String(id)));
+  // server/lib/ballotNotices.ts and every closer: `bal:<ballot>:<what>`, on a ballot about this member.
+  for (const id of await ballotIdsAbout(pool, userId)) prefixes.push(`bal:${id}:`);
   return [
     // server/routes/org.ts, a claim on a seat: `seat-claim:<seat>:<member>:<admin>`.
     `seat-claim:%:${likeEscape(userId)}:%`,
@@ -185,6 +199,17 @@ export async function forgetNoticesOf(pool: Pool, who: { userId: string; submiss
 
   const notices = await noticesNaming(pool, who.userId, who.submissionIds ?? []);
   if (!notices.length) return counts;
+  await rewriteNotices(pool, notices, counts);
+  return counts;
+}
+
+/** The emailed copies of these notices go blank, then the notices lose their words. */
+async function rewriteNotices(
+  pool: Pool,
+  notices: Array<{ id: string; userId: string; emailedAt: number | null }>,
+  counts: { rewritten: number; emails: number },
+  opts: { link?: boolean } = {},
+): Promise<void> {
   const copies = await copiesOf(pool, notices);
   for (let i = 0; i < copies.length; i += CHUNK) {
     const [res] = await pool.query<ResultSetHeader>(
@@ -196,10 +221,33 @@ export async function forgetNoticesOf(pool: Pool, who: { userId: string; submiss
   }
   for (let i = 0; i < notices.length; i += CHUNK) {
     const [res] = await pool.query<ResultSetHeader>(
-      "UPDATE notifications SET actor_user_id = NULL, title = ?, body = NULL WHERE id IN (?)",
+      `UPDATE notifications SET actor_user_id = NULL, title = ?, body = NULL${opts.link ? ", link = NULL" : ""} WHERE id IN (?)`,
       [DEPARTED_NOTICE_TITLE, notices.slice(i, i + CHUNK).map((n) => n.id)],
     );
     counts.rewritten += Number(res.affectedRows ?? 0);
   }
+}
+
+/**
+ * Rewrite the notices under these exact dedupe keys the way a notice naming a
+ * departed member is rewritten, their emailed copies first, and their link
+ * too: for the producers whose key is built from a record the erasure is
+ * about to delete, so the key must be read while the record still stands.
+ * The day-21 hand-off is the one today, keyed on the walker's enrollment and
+ * linking to their People page, a page about a contact that is about to go.
+ * Constant writes keyed by the rows found, so a resume repeats it harmlessly.
+ */
+export async function forgetNoticesByKey(pool: Pool, dedupeKeys: readonly string[]): Promise<{ rewritten: number; emails: number }> {
+  const counts = { rewritten: 0, emails: 0 };
+  const keys = Array.from(new Set(dedupeKeys.filter(Boolean)));
+  const notices: Array<{ id: string; userId: string; emailedAt: number | null }> = [];
+  for (let i = 0; i < keys.length; i += CHUNK) {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      "SELECT id, user_id, UNIX_TIMESTAMP(emailed_at) AS emailed_at FROM notifications WHERE dedupe_key IN (?)",
+      [keys.slice(i, i + CHUNK)],
+    );
+    for (const r of rows) notices.push({ id: String(r.id), userId: String(r.user_id), emailedAt: r.emailed_at == null ? null : Number(r.emailed_at) });
+  }
+  if (notices.length) await rewriteNotices(pool, notices, counts, { link: true });
   return counts;
 }

@@ -42,12 +42,16 @@ import {
   markCashOwedPaidRow,
   recentlyPaidCashRows,
   seatsOnCashRoles,
+  unpaidCashCountFor,
   unpaidCashRows,
 } from "../repos/cashOwed";
 import {
+  CASH_GIVE_UP_FIELD,
+  CASH_ON_DELETION,
   CASH_PAID_NOTE_MAX,
   CASH_REFERENCE_MAX,
   CASH_TRANSFER_MAX_LINES,
+  cashStillOwedWords,
   cashTotalsByCurrency,
   cashTransferNote,
   type CashOwedEntry,
@@ -56,6 +60,7 @@ import {
 } from "../../shared/cashOwed";
 import { readWorkValue, readWorkValueInput, type WorkValue } from "../../shared/workValue";
 import { exponentOf } from "../../shared/money";
+import { departedById } from "./departed";
 
 const newId = () => `cash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -88,6 +93,10 @@ interface OweInput {
 async function owe(db: Pool | PoolConnection, p: OweInput): Promise<boolean> {
   const cash = p.cash ? readWorkValue(p.cash.minor, p.cash.currency) : null;
   if (!cash || cash.minor <= 0) return false;
+  // No cash is owed to a member who has left (round 4, finding 3): the
+  // treasurer's queue would carry a line nobody can claim. This is the one
+  // writer of `cash_owed`, so a quest, a proposal and a role all stop here.
+  if (await departedById(db, p.userId)) return false;
   const id = newId();
   await insertCashOwedRow(db, {
     id,
@@ -240,6 +249,30 @@ export async function markCashPaid(
   if (res.affectedRows !== 1) return { ok: false, status: 409, error: "This has already been paid." };
   const paid = await cashOwedRowById(pool, id);
   return { ok: true, entry: { ...rowToCashEntry(paid!), userId: String(paid!.user_id) } };
+}
+
+/** How many cash payments the village still owes this member (R4-4). */
+export async function unpaidCashOf(pool: Pool, userId: string): Promise<number> {
+  return unpaidCashCountFor(pool, userId);
+}
+
+/**
+ * Why delete-account may not erase yet, or null when it may (R4-4, part c).
+ *
+ * The self-serve delete erases without going through resolve, so a member the
+ * village still owes cash would lose it with no word. Deleting is the member's
+ * own request, so this never blocks it: it asks once, and an explicit true in
+ * `CASH_GIVE_UP_FIELD` is the answer. A truthy string is not, for the reason
+ * the exit policy's placeholder flag gives.
+ *
+ * The rows stay where they are, unpaid, for the treasurer to settle or close
+ * by hand. Rye decides whether an erasure should close them.
+ */
+export async function cashNotGivenUp(pool: Pool, userId: string, body: unknown): Promise<{ error: string; cashOwed: number } | null> {
+  const cashOwed = await unpaidCashOf(pool, userId);
+  if (!cashOwed) return null;
+  if ((body as Record<string, unknown> | null | undefined)?.[CASH_GIVE_UP_FIELD] === true) return null;
+  return { error: `${cashStillOwedWords(cashOwed)}. ${CASH_ON_DELETION}. Tick the box to delete anyway.`, cashOwed };
 }
 
 export type CashTransferResult =
