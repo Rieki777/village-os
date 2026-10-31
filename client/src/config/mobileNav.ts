@@ -26,6 +26,8 @@ import {
   NotebookPen,
   Orbit,
   ListChecks,
+  MessagesSquare,
+  SquarePen,
 } from "lucide-react";
 import { TASK_BOARD_PATH, TASK_COPY } from "@shared/sessionTasks";
 
@@ -123,6 +125,19 @@ export const FAB_ACTIONS: FabAction[] = [
     Icon: ListChecks,
     requiresAuth: true,
     module: "sessions",
+  },
+  {
+    // A member's conversations, and from inside them a new one: on /messages
+    // the row would link to the page being read, so it starts a conversation
+    // instead (Messages reads `?new=1` and opens the composer).
+    key: "messages",
+    label: "Messages",
+    href: "/messages",
+    Icon: MessagesSquare,
+    requiresAuth: true,
+    module: "messaging",
+    anchorPath: "/messages",
+    insteadOf: { label: "New conversation", href: "/messages?new=1", Icon: SquarePen },
   },
   { key: "signin", label: "Sign in", href: "/login", Icon: UserPlus, requiresAuth: false },
   { key: "work-with-us", label: "Work with us", href: "/work-with-us", Icon: MessageCircle },
