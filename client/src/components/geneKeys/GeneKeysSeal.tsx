@@ -22,6 +22,15 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { GeneKeysLines, GeneKeysOwnerControls } from "./GeneKeysLines";
 import { EYEBROW } from "./ui";
 
+/**
+ * ONE TIER ABOVE A MODAL SHEET, overlay included (live 2026-10-30, 9ba19a2).
+ * The seal sits inside the role sheet, which is z-[70] (MobileFab's ladder), and
+ * the shadcn default is z-50, tab-bar level: on a phone the lines sheet opened
+ * UNDER the role sheet and a tap showed nothing. 75 is a tier of its own, under
+ * the setup walk's 80.
+ */
+export const ABOVE_A_MODAL = "z-[75]";
+
 function wideScreen(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia?.("(min-width: 768px)").matches;
 }
@@ -74,7 +83,7 @@ export default function GeneKeysSeal({ view, whose, mine = null, className = "ab
       </span>
       {open && wide ? (
         <Dialog open onOpenChange={setOpen}>
-          <DialogContent className="sheet-night max-h-[90vh] overflow-y-auto rounded-2xl border-border bg-card p-6 text-card-foreground sm:max-w-2xl">
+          <DialogContent overlayClassName={ABOVE_A_MODAL} className={`${ABOVE_A_MODAL} sheet-night max-h-[90vh] overflow-y-auto rounded-2xl border-border bg-card p-6 text-card-foreground sm:max-w-2xl`}>
             <p className={EYEBROW}>Gene Keys {view.profile}</p>
             <DialogTitle className="font-display text-3xl font-normal text-foreground">{view.names}</DialogTitle>
             <DialogDescription className="sr-only">Gene Keys lines and how this person works best.</DialogDescription>
@@ -86,7 +95,8 @@ export default function GeneKeysSeal({ view, whose, mine = null, className = "ab
         <Sheet open onOpenChange={setOpen}>
           <SheetContent
             side="bottom"
-            className="sheet-night max-h-[90vh] overflow-y-auto rounded-t-2xl border-border bg-card px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-card-foreground"
+            overlayClassName={ABOVE_A_MODAL}
+            className={`${ABOVE_A_MODAL} sheet-night max-h-[90vh] overflow-y-auto rounded-t-2xl border-border bg-card px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-card-foreground`}
           >
             <p className={EYEBROW}>Gene Keys {view.profile}</p>
             <SheetTitle className="font-display text-3xl font-normal text-foreground">{view.names}</SheetTitle>
