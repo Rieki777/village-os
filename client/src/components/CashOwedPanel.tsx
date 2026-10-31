@@ -75,7 +75,14 @@ export default function CashOwedPanel() {
       const res = await fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(out?.error || "That did not go through.");
+        // A 401 or 403 is the session or the key, and its `error` is a code
+        // (E7, 2026-10-31): only its sentence is shown. Other refusals here
+        // carry their sentence in `error` and keep it.
+        const said = typeof out?.message === "string" ? out.message.trim() : "";
+        setError(
+          res.status === 401 ? "Your sign-in has run out, so that did not go through. Sign in again and try once more."
+            : said || (res.status === 403 ? "That did not go through: this account does not hold the key for it." : out?.error) || "That did not go through.",
+        );
         return;
       }
       setNotice(done);
