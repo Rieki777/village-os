@@ -49,6 +49,7 @@ import { register as registerProfileRoutes } from "../routes/profile";
 import { loadSecrets } from "./secrets";
 import { BUYER_HAS_LEFT, refusedChargeAdvice } from "./payments";
 import { subscriptionsState } from "./exit";
+import { FORMER_MEMBER_HOLD } from "./exitResolve";
 import { loadTokenRegistry, memberAccount, MINT_FAUCET, postTransfer } from "./ledger";
 import {
   confirmOwedCancelsByHand,
@@ -451,7 +452,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       await purchase("pp-k2", kit.id, "prod-year", { status: "reversed", sub: "sub_kit_year", at: "2026-06-02 10:00:00" });
       await purchase("pp-k3", kit.id, "prod-once", { status: "paid", at: "2026-06-03 10:00:00" });
 
-      const states = await exitOpenState(pool, kit.id, []);
+      const states = await exitOpenState(pool, kit.id, [], { formerMember: FORMER_MEMBER_HOLD });
       const subs = states.find((st) => st.domain === "subscriptions");
       expect(subs).toEqual({
         domain: "subscriptions",
@@ -466,7 +467,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
 
       // With no Stripe key the deletion cannot cancel them, and the notice says who will.
       delete process.env.STRIPE_SECRET_KEY;
-      expect((await exitOpenState(pool, kit.id, [])).find((st) => st.domain === "subscriptions")).toEqual({
+      expect((await exitOpenState(pool, kit.id, [], { formerMember: FORMER_MEMBER_HOLD })).find((st) => st.domain === "subscriptions")).toEqual({
         domain: "subscriptions",
         count: 2,
         description:
@@ -478,7 +479,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       process.env.STRIPE_SECRET_KEY = KEY;
 
       const none = await member("subs-desk-none", "Lee Plain");
-      expect((await exitOpenState(pool, none.id, [])).find((st) => st.domain === "subscriptions")).toEqual({
+      expect((await exitOpenState(pool, none.id, [], { formerMember: FORMER_MEMBER_HOLD })).find((st) => st.domain === "subscriptions")).toEqual({
         domain: "subscriptions", count: 0, description: "no recurring payments", blocking: false,
       });
     });
@@ -504,7 +505,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
 
       const mine = await call();
       expect(mine.status).toBe(200);
-      const desk = (await exitOpenState(pool, kit.id, [])).find((st) => st.domain === "subscriptions");
+      const desk = (await exitOpenState(pool, kit.id, [], { formerMember: FORMER_MEMBER_HOLD })).find((st) => st.domain === "subscriptions");
       expect(mine.body).toEqual({ notices: [desk] });
 
       signedIn = await member("subs-self-other", "Other Plain");
@@ -735,7 +736,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       const renewing = "1 recurring payment(s) still renewing through Stripe: Monthly membership (every month). ";
       const deleting = `${renewing}Deleting the account cancels each one in Stripe, and nothing already paid is refunded`;
 
-      const exit = await subscriptionsState(pool, kit.id, "exit");
+      const exit = await subscriptionsState(pool, kit.id, "exit", FORMER_MEMBER_HOLD);
       expect(exit.description).toBe(
         renewing +
           "Holding tokens when the departure is resolved keeps the account as a former member, and these keep renewing " +
@@ -743,7 +744,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       );
       expect(exit.blocking).toBe(false);
       // The exit desk reads the exit path.
-      expect((await exitOpenState(pool, kit.id, [])).find((st) => st.domain === "subscriptions")).toEqual(exit);
+      expect((await exitOpenState(pool, kit.id, [], { formerMember: FORMER_MEMBER_HOLD })).find((st) => st.domain === "subscriptions")).toEqual(exit);
       // A delete always erases, and the erasure cancels: that sentence stays.
       expect((await subscriptionsState(pool, kit.id, "delete")).description).toBe(deleting);
 
@@ -759,6 +760,41 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       };
       expect(await read({ for: "exit" })).toEqual([exit.description]);
       expect(await read({})).toEqual([deleting]);
+    });
+
+    it("takes the former-member rule and its reason from the caller, and promises nothing without one (round 5)", async () => {
+      const ash = await member("subs-hold-injected", "Ash Injected");
+      await purchase("pp-hi1", ash.id, "prod-month", { status: "paid", sub: "sub_injected", at: "2026-10-02 10:00:00" });
+      const renewing = "1 recurring payment(s) still renewing through Stripe: Monthly membership (every month). ";
+      const asked: string[] = [];
+      // A wider rule, the shape the composition passes: Ash holds no tokens, and is kept anyway.
+      const owedCash = {
+        keptAsFormerMember: async (_pool: unknown, userId: string) => (asked.push(userId), true),
+        reason: "Holding tokens, or being owed cash by the village",
+      };
+      expect((await subscriptionsState(pool, ash.id, "exit", owedCash)).description).toBe(
+        renewing +
+          "Holding tokens, or being owed cash by the village when the departure is resolved keeps the account as a former member, " +
+          "and these keep renewing until an admin cancels them in Stripe",
+      );
+      expect(asked).toEqual([ash.id]);
+      // The delete panel never asks the rule: a delete always erases.
+      expect((await subscriptionsState(pool, ash.id, "delete", owedCash)).description).toBe(
+        `${renewing}Deleting the account cancels each one in Stripe, and nothing already paid is refunded`,
+      );
+      expect(asked).toEqual([ash.id]);
+      // The shipped rule: no tokens held, so the departure erases and cancels.
+      expect((await subscriptionsState(pool, ash.id, "exit", FORMER_MEMBER_HOLD)).description).toBe(
+        `${renewing}Deleting the account cancels each one in Stripe, and nothing already paid is refunded`,
+      );
+      // A caller that only reads the blocking list passes no rule, and the line promises no cancel.
+      const blind = (await exitOpenState(pool, ash.id, [])).find((st) => st.domain === "subscriptions");
+      expect(blind).toEqual({
+        domain: "subscriptions",
+        count: 1,
+        description: `${renewing}Whether they are cancelled depends on how the departure is resolved`,
+        blocking: false,
+      });
     });
   });
 });

@@ -46,6 +46,7 @@ import { claimPaths } from "../../shared/gameConfig";
 import type { AppDeps } from "../lib/appDeps";
 import { isTombstone } from "../lib/oauthAccounts";
 import { subscriptionsState } from "../lib/exit";
+import { FORMER_MEMBER_HOLD } from "../lib/exitResolve";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
 
@@ -158,7 +159,7 @@ export function register(app: Express, deps: Deps): void {
     const authed = await authedUser(req);
     if (!authed) return res.status(401).json({ error: "auth_required" });
     const path = req.query?.for === "exit" ? "exit" : "delete";
-    const subscriptions = await subscriptionsState(getPool(), String(authed.id), path);
+    const subscriptions = await subscriptionsState(getPool(), String(authed.id), path, FORMER_MEMBER_HOLD);
     res.json({ notices: subscriptions.count > 0 ? [subscriptions] : [] });
   });
 }
