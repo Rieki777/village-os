@@ -44,6 +44,7 @@ import { ArrowRight } from "lucide-react";
 import { ROOM_COPY, SESSION_STAGES, STAGE_DEFS, type SessionStage, type SessionView } from "@shared/sessions";
 import { BTN_FORWARD, BTN_QUIET, BTN_SECONDARY, INPUT, LABEL } from "./roomUi";
 import type { RoomActions } from "./useSessionRoom";
+import { ON_BEHALF_COPY } from "@shared/sessionOnBehalf";
 
 export default function FacilitatorBar({
   view,
@@ -73,6 +74,7 @@ export default function FacilitatorBar({
   const started = view.state.startedAt != null;
   const next = SESSION_STAGES[SESSION_STAGES.indexOf(room) + 1] ?? null;
   const others = view.people.filter((p) => p.userId !== view.me.userId);
+  const fillName = others.find((p) => p.userId === actions.fillingFor)?.name ?? null;
 
   // The start's answer and the view that shows the clock running can land in
   // either order, so focus waits for the Next stage button to exist. `said`
@@ -148,6 +150,25 @@ export default function FacilitatorBar({
       </div>
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-2">
         <p className="mr-auto text-sm font-semibold text-foreground">{ROOM_COPY.youFacilitate}</p>
+        {actions.fillFor && others.length > 0 && (
+          // Filling in for somebody (0288): what the facilitator adds next goes in as theirs, and they are told.
+          <label htmlFor="fill-in-for" className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>{ON_BEHALF_COPY.fillingForLabel}</span>
+            <select
+              id="fill-in-for"
+              className={`${INPUT} w-auto py-1`}
+              value={actions.fillingFor ?? ""}
+              onChange={(e) => actions.fillFor?.(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">{ON_BEHALF_COPY.fillingForNobody}</option>
+              {others.map((p) => (
+                <option key={p.userId} value={p.userId}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
           {said}
         </p>
@@ -159,6 +180,12 @@ export default function FacilitatorBar({
           {ROOM_COPY.hostsTitle}
         </button>
       </div>
+
+      {fillName && (
+        <p role="status" className="rounded-xl border border-notice/60 bg-muted px-4 py-2 text-sm font-medium text-foreground">
+          {ON_BEHALF_COPY.fillingForLine(fillName)}
+        </p>
+      )}
 
       {panel === "cues" && (
         <ul className="space-y-1.5 rounded-2xl border border-border bg-card px-4 py-3">

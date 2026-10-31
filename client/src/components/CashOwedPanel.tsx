@@ -29,6 +29,7 @@ import {
   CASH_PAID_NOTE_MAX,
   CASH_STATE_WORDS,
   CASH_WORK_WORDS,
+  cashYearsPaid,
   type CashOwedEntry,
   type CashQueueEntry,
 } from "@shared/cashOwed";
@@ -86,7 +87,28 @@ export default function CashOwedPanel() {
     }
   };
 
+  /* A member's own year, for their taxes or books (Rye, 2026-10-30). Fetched with the token, then saved. */
+  const downloadYear = async (year: number) => {
+    setError("");
+    try {
+      const res = await fetch(`/api/me/cash-owed/export.csv?year=${year}`, { headers: headers() });
+      if (!res.ok) {
+        setError("The file did not download. Try again in a moment.");
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cash-received-${year}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("The file did not download. Try again in a moment.");
+    }
+  };
+
   const mine = entries ?? [];
+  const paidYears = cashYearsPaid(mine);
   const keepsBooks = !!queue;
   if (mine.length === 0 && !keepsBooks) return null;
 
@@ -137,12 +159,32 @@ export default function CashOwedPanel() {
               </li>
             ))}
           </ul>
+          {paidYears.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <p className="text-sm text-muted-foreground">For your taxes or books:</p>
+              {paidYears.map((y) => (
+                <button
+                  key={y}
+                  type="button"
+                  onClick={() => void downloadYear(y)}
+                  className="min-h-[44px] rounded-full border border-border px-4 text-sm font-medium text-foreground hover:bg-muted"
+                >
+                  Download cash received in {y}
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
       {keepsBooks && (
         <section aria-labelledby="cash-books" className="space-y-3">
-          <h4 id="cash-books" className="font-semibold text-card-foreground">What the village owes</h4>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 id="cash-books" className="font-semibold text-card-foreground">What the village owes</h4>
+            <a href="/cash-payouts" className="inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2">
+              Record a bank transfer
+            </a>
+          </div>
           {queue!.unpaid.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing is waiting to be paid.</p>
           ) : (

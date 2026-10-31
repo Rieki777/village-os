@@ -73,6 +73,7 @@ import { register as registerBrochurePagesRoutes } from "./routes/brochurePages"
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
+import { register as registerGratitudeNudgeRoutes } from "./routes/gratitudeNudge";
 import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
 import { register as registerTrainingRoutes } from "./routes/training";
@@ -164,12 +165,14 @@ import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerSessionLibraryRoutes } from "./routes/sessionLibrary";
 import { register as registerSessionRhythmRoutes } from "./routes/sessionRhythm";
+import { register as registerSessionTemplateRoutes } from "./routes/sessionTemplates";
 import { register as registerSessionCalendarRoutes } from "./routes/sessionCalendar";
 import { register as registerSessionDecisionRoutes } from "./routes/sessionDecisions";
 import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
@@ -9568,7 +9571,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     notifyDeps,
     notifyReportReviewed,
     overLimit,
-    getPool,
+    getPool, lapseContext,
   });
 
   // â”€â”€ S19-S23: the village map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€─
@@ -18338,6 +18341,7 @@ ${inner}
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
   registerSessionRhythmRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify, lapseContext });
+  registerSessionTemplateRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, guardCapability, mayAct, lapseContext });
   registerSessionCalendarRoutes(app, { authedUser, getPool, overLimit, members, circlesRepo, clientIp, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionDecisionRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, lapseContext, members, notify });
   registerRoleTensionRoutes(app, { authedUser, isAdmin, getPool, overLimit, notify, seasonState });
@@ -18354,6 +18358,7 @@ ${inner}
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay") });
+  registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -19571,6 +19576,7 @@ ${inner}
 
   // The hero and the wall, both in server/routes/gratitudeVoices.ts.
   registerGratitudeVoiceRoutes(app, { getPool, gratitudeLog: () => gratitudeRepo.all() });
+  registerGratitudeNudgeRoutes(app, { getPool, authedUser, members, notify, notifyDeps, remainingFor: async (u) => (await gratitudeBudget(u)).remaining });
 
   // Gratitude: my journal (received + sent, with amounts)
   app.get("/api/game/gratitude/me", async (req, res) => {

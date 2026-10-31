@@ -5,6 +5,7 @@
  * name twice), and an old chart beside it with people in some of its seats.
  */
 import { describe, expect, it } from "vitest";
+import { readProposedSeats } from "./proposedSeats";
 import {
   decideStructure,
   planStructure,
@@ -389,5 +390,61 @@ describe("a moved role takes the words the review shows (0268, 0274)", () => {
     expect(ops.payload).toMatchObject(words);
     // A key the source never sent is not invented on the way across.
     expect(ops.payload).not.toHaveProperty("responsibilities");
+  });
+});
+
+describe("what the source holds a role to pay", () => {
+  // The source's Operations role described the fields on 2026-10-30: Active is
+  // settled, Proposed and Under Review are pending, Deferred is decided and not
+  // paying yet, and the target is one monthly dollar figure for the whole
+  // arrangement.
+  function payBatch(): PlanProposal[] {
+    return [
+      {
+        id: "xprop-pay",
+        kind: "org.proposed",
+        payload: {
+          title: "t",
+          rationale: "r",
+          seats: [
+            { name: "Finance Steward", circleName: "Land Circle", sourcePay: { model: "Stipend", status: "Active", monthlyUsd: 1200 }, id: "r-fin" },
+            { name: "Grant Writer", circleName: "Land Circle", sourcePay: { model: "Stipend", status: "Under Review", monthlyUsd: "$1,500.50" }, id: "r-grant" },
+            { name: "Builder", circleName: "Land Circle", sourcePay: { model: "Hybrid", status: "Deferred", terms: "Starts when the build fund lands." }, id: "r-build" },
+            { name: "Greeter", circleName: "Land Circle", sourcePay: { model: "Volunteer" }, id: "r-greet" },
+            { name: "Scribe", circleName: "Land Circle", sourcePay: { monthlyUsd: -5, status: "  " }, id: "r-scribe" },
+          ],
+        },
+      },
+      circle("xc-land", "Land Circle"),
+    ];
+  }
+  const by = (name: string) => planStructure(payBatch(), LIVE_CIRCLES, LIVE_SEATS).seats.find((s) => s.name === name)!;
+
+  it("reads each standing, and never treats Deferred as Proposed", () => {
+    expect(by("Finance Steward").sourcePay).toEqual({ model: "Stipend", standing: "settled", statusLabel: "Active", terms: null, monthlyUsd: 1200 });
+    expect(by("Grant Writer").sourcePay).toMatchObject({ standing: "pending", monthlyUsd: 1500.5 });
+    expect(by("Builder").sourcePay).toMatchObject({ standing: "agreed-not-paying", terms: "Starts when the build fund lands.", monthlyUsd: null });
+    expect(by("Greeter").sourcePay).toMatchObject({ model: "Volunteer", standing: null, monthlyUsd: null });
+  });
+
+  it("drops a figure it cannot read, and says nothing when nothing is left", () => {
+    expect(by("Scribe").sourcePay).toBeNull();
+  });
+
+  it("is read by the plan, so never reported as a key nothing read", () => {
+    const read = readProposedSeats(payBatch()[0].payload, [{ id: "land", name: "Land Circle" }]);
+    expect(read.ignored).not.toContain("sourcePay");
+  });
+
+  it("NEVER WRITES IT TO A SEAT: it is not in the payload and not in the change", () => {
+    const plan = planStructure(payBatch(), LIVE_CIRCLES, LIVE_SEATS);
+    for (const s of plan.seats) expect(s.payload).not.toHaveProperty("sourcePay");
+    const d = decideStructure(plan, {});
+    expect(d.changes.some((c) => c.op === "create_seat")).toBe(true);
+    for (const c of d.changes) {
+      const payload = c.payload ?? {};
+      expect(payload).not.toHaveProperty("sourcePay");
+      for (const k of ["valueMinor", "valueTokens", "cashMinor", "termsOffer"]) expect(payload).not.toHaveProperty(k);
+    }
   });
 });

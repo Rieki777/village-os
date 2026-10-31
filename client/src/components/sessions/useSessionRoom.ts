@@ -65,6 +65,8 @@ import {
   type SessionView,
 } from "@shared/sessions";
 import { LIBRARY_TENSION_API, type LibraryCard } from "@shared/sessionLibrary";
+import { onBehalfUndoPath } from "@shared/sessionOnBehalf";
+import { agendaOrderPath, itemVotePath, type AgendaVote } from "@shared/sessionVotes";
 
 export type RoomStatus = "loading" | "ready" | "signed-out" | "refused" | "missing" | "gone" | "failed";
 
@@ -100,6 +102,8 @@ export interface EntryPatch {
   claim?: boolean;
   release?: boolean;
   ownerSeatId?: string | null;
+  /** The facilitator hands an action to somebody in the room (0288). */
+  ownerUserId?: number;
   text?: string;
   dueOn?: string | null;
   status?: EntryStatus;
@@ -147,6 +151,25 @@ export interface RoomActions {
    * after it, as after every write, so it shows where the tension went.
    */
   sendTension(input: { sessionId: number; entryId: number; circleId: string | null }, opts?: WriteOptions): Promise<WriteResult<{ item?: LibraryCard }>>;
+  /**
+   * FILLING IN FOR SOMEBODY (0288, shared/sessionOnBehalf.ts). While the
+   * facilitator has chosen a person, the arrival, a new agenda item and a new
+   * entry go in as that person's (`forUserId`). Null: the writer's own. It
+   * goes back to null by itself when the viewer stops facilitating or the
+   * person leaves the room. Optional so a fixture that predates it still types.
+   */
+  fillingFor?: number | null;
+  fillFor?(userId: number | null): void;
+  /** Take back something filled in: the person it was for, or the facilitator who filled it in. */
+  undoFill?(fillId: number, opts?: WriteOptions): Promise<WriteResult>;
+  /**
+   * THE ROOM VOTES ITS AGENDA (0290, shared/sessionVotes.ts). The viewer's own
+   * vote on a waiting item, 0 to take it back; never for somebody else, even
+   * while filling in. Optional so a fixture that predates it still types.
+   */
+  vote?(itemId: number, vote: AgendaVote, opts?: WriteOptions): Promise<WriteResult>;
+  /** Whoever runs the room sets the voted order (true), or opens the vote again (false). */
+  setOrder?(set: boolean, opts?: WriteOptions): Promise<WriteResult<{ state?: SessionState }>>;
 }
 
 export interface SessionRoom {
@@ -363,6 +386,21 @@ export function useSessionRoom(
 
   const refresh = useCallback(() => ask(true), [ask]);
 
+  // Who the facilitator is filling in for, if anybody. Kept only while it still
+  // makes sense: they facilitate, and the person is in the room.
+  const [fillingFor, setFillingFor] = useState<number | null>(null);
+  const fillRef = useRef<number | null>(null);
+  fillRef.current = fillingFor;
+  const fillStillFits = !!view && view.me.facilitates && view.status === "open" && view.people.some((p) => p.userId === fillingFor);
+  useEffect(() => {
+    if (fillingFor != null && view && !fillStillFits) setFillingFor(null);
+  }, [fillingFor, view, fillStillFits]);
+  const withFor = useCallback(<P extends object>(payload: P): P | (P & { forUserId: number }) => {
+    const v = current.current;
+    const n = fillRef.current;
+    return n != null && v?.me.facilitates && n !== v.me.userId ? { ...payload, forUserId: n } : payload;
+  }, []);
+
   const write = useCallback(
     async <T,>(method: string, path: string, payload: unknown, opts?: WriteOptions, url?: string): Promise<WriteResult<T>> => {
       if (!base) return { ok: false, status: 0, error: ROOM_COPY.writeFailed, body: {}, room: null };
@@ -390,10 +428,10 @@ export function useSessionRoom(
   const actions = useMemo<RoomActions>(() => ({
     join: () => write("POST", "/join", {}),
     patchSession: (patch, opts) => write("PATCH", "", patch, opts),
-    arrival: (score, wish) => write("POST", "/arrival", wish ? { score, wish } : { score }),
-    addItem: (input, opts) => write("POST", "/items", input, opts),
+    arrival: (score, wish) => write("POST", "/arrival", withFor(wish ? { score, wish } : { score })),
+    addItem: (input, opts) => write("POST", "/items", withFor(input), opts),
     patchItem: (itemId, patch, opts) => write("PATCH", `/items/${itemId}`, patch, opts),
-    addEntry: (input, opts) => write("POST", "/entries", input, opts),
+    addEntry: (input, opts) => write("POST", "/entries", withFor(input), opts),
     patchEntry: (entryId, patch, opts) => write("PATCH", `/entries/${entryId}`, patch, opts),
     deleteEntry: (entryId, opts) => write("DELETE", `/entries/${entryId}`, undefined, opts),
     respond: (target, value, text, opts, answerBy) =>
@@ -423,7 +461,12 @@ export function useSessionRoom(
     },
     bringFromLibrary: (ids, opts) => write<{ ids?: number[] }>("POST", "/library", { ids }, opts),
     sendTension: (input, opts) => write<{ item?: LibraryCard }>("POST", "", input, opts, LIBRARY_TENSION_API),
-  }), [write, base]);
+    fillingFor,
+    fillFor: (userId) => setFillingFor(userId),
+    undoFill: (fillId, opts) => write("POST", "", {}, opts, id == null ? undefined : onBehalfUndoPath(id, fillId)),
+    vote: (itemId, vote, opts) => write("POST", "", { vote }, opts, id == null ? undefined : itemVotePath(id, itemId)),
+    setOrder: (set, opts) => write<{ state?: SessionState }>("POST", "", { set }, opts, id == null ? undefined : agendaOrderPath(id)),
+  }), [write, base, withFor, fillingFor, id]);
 
   return { view, status, lagging, offset, refresh, actions };
 }
