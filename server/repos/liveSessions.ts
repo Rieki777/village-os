@@ -34,6 +34,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { lostConcurrencyRace } from "../db/concurrency";
+import { deleteChecksForEntries, deleteChecksForSession } from "./sessionChecks";
 
 /** A pool, or the one connection a transaction runs on. */
 export type Queryable = Pool | PoolConnection;
@@ -565,7 +566,9 @@ export async function parkEntries(q: Queryable, sessionId: number, ids: readonly
   await q.query("UPDATE `live_session_entries` SET `status` = 'parked' WHERE `session_id` = ? AND `id` IN (?)", [sessionId, ids]);
 }
 
+/** An entry, and its check with it (0297). */
 export async function deleteEntryRow(q: Queryable, id: number): Promise<void> {
+  await deleteChecksForEntries(q, [id]);
   await q.query("DELETE FROM `live_session_entries` WHERE `id` = ?", [id]);
 }
 
@@ -640,6 +643,7 @@ export async function sessionEntryIds(q: Queryable, sessionId: number): Promise<
  */
 export async function deleteSessionRows(q: Queryable, sessionId: number): Promise<number> {
   await q.query("DELETE FROM `live_session_responses` WHERE `session_id` = ?", [sessionId]);
+  await deleteChecksForSession(q, sessionId);
   await q.query("DELETE FROM `live_session_entries` WHERE `session_id` = ?", [sessionId]);
   await q.query("DELETE FROM `live_session_items` WHERE `session_id` = ?", [sessionId]);
   await q.query("DELETE FROM `live_session_people` WHERE `session_id` = ?", [sessionId]);
@@ -722,7 +726,10 @@ export async function authoredEntryIds(q: Queryable, no: number): Promise<RowDat
 export async function forgetMemberRows(q: Queryable, no: number, entryIds: readonly number[]): Promise<void> {
   await q.query("DELETE FROM `live_session_people` WHERE `member_no` = ?", [no]);
   await q.query("DELETE FROM `live_session_responses` WHERE `member_no` = ?", [no]);
-  if (!none(entryIds)) await q.query("DELETE FROM `live_session_entries` WHERE `id` IN (?)", [entryIds]);
+  if (!none(entryIds)) {
+    await deleteChecksForEntries(q, entryIds);
+    await q.query("DELETE FROM `live_session_entries` WHERE `id` IN (?)", [entryIds]);
+  }
   await q.query("UPDATE `live_session_entries` SET `owner_no` = NULL, `claimed_at` = NULL WHERE `owner_no` = ?", [no]);
   await q.query("UPDATE `live_session_items` SET `added_by_no` = 0 WHERE `added_by_no` = ?", [no]);
   await q.query("UPDATE `live_session_items` SET `presenter_no` = NULL WHERE `presenter_no` = ?", [no]);
