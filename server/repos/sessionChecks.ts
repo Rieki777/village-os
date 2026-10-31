@@ -13,18 +13,18 @@ import type { Queryable } from "./liveSessions";
 /** Every check in one session. */
 export async function checkRows(q: Queryable, sessionId: number): Promise<RowDataPacket[]> {
   const [rows] = await q.query<RowDataPacket[]>(
-    "SELECT `entry_id`, `checked_at`, `checked_text`, `read_json` FROM `live_session_checks` WHERE `session_id` = ?",
+    "SELECT `entry_id`, `checked_at`, `checked_hash`, `read_json` FROM `live_session_checks` WHERE `session_id` = ?",
     [sessionId],
   );
   return rows;
 }
 
 /** One proposal's check, replacing the one before it. */
-export async function writeCheck(q: Queryable, row: { entryId: number; sessionId: number; text: string; read: string; now: Date }): Promise<void> {
+export async function writeCheck(q: Queryable, row: { entryId: number; sessionId: number; hash: string; read: string; now: Date }): Promise<void> {
   await q.query(
-    "INSERT INTO `live_session_checks` (`entry_id`, `session_id`, `checked_at`, `checked_text`, `read_json`) VALUES (?, ?, ?, ?, ?) " +
-      "ON DUPLICATE KEY UPDATE `checked_at` = VALUES(`checked_at`), `checked_text` = VALUES(`checked_text`), `read_json` = VALUES(`read_json`)",
-    [row.entryId, row.sessionId, row.now, row.text, row.read],
+    "INSERT INTO `live_session_checks` (`entry_id`, `session_id`, `checked_at`, `checked_hash`, `read_json`) VALUES (?, ?, ?, ?, ?) " +
+      "ON DUPLICATE KEY UPDATE `checked_at` = VALUES(`checked_at`), `checked_hash` = VALUES(`checked_hash`), `read_json` = VALUES(`read_json`)",
+    [row.entryId, row.sessionId, row.now, row.hash, row.read],
   );
 }
 

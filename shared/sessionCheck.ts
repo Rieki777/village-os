@@ -94,12 +94,27 @@ export function entryCheckPath(sessionId: number, entryId: number): string {
 
 // ── The matching ─────────────────────────────────────────────────────────────
 
+/**
+ * A letter or a digit, in any script: ASCII letters and digits, and every
+ * character past ASCII except the punctuation blocks (Latin-1 signs, general
+ * punctuation, CJK punctuation). Written out because this target has no `\p{L}`.
+ */
+function isWordChar(code: number): boolean {
+  if (code >= 48 && code <= 57) return true;
+  if (code >= 97 && code <= 122) return true;
+  if (code < 128) return false;
+  if ((code >= 0xa0 && code <= 0xbf) || code === 0xd7 || code === 0xf7) return false;
+  if (code >= 0x2000 && code <= 0x206f) return false;
+  if (code >= 0x3000 && code <= 0x303f) return false;
+  return true;
+}
+
 /** Lower case, letters and digits only, one space between words. */
 function words(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
+  const lower = s.toLowerCase();
+  let out = "";
+  for (let i = 0; i < lower.length; i++) out += isWordChar(lower.charCodeAt(i)) ? lower.charAt(i) : " ";
+  return out.replace(/ +/g, " ").trim();
 }
 
 /** A phrase inside a text, on word boundaries. */
