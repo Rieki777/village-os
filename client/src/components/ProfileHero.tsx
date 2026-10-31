@@ -19,6 +19,8 @@ import { Link } from "wouter";
 import { announceProfileChange, onProfileRefresh } from "@/lib/profileRefresh";
 import { moonsOnLandPhrase } from "@shared/villageMoon";
 import { MyGeneKeysSeal } from "@/components/geneKeys/ProfileGeneKeys";
+import BadgeFlower, { type FlowerBadge } from "@/components/badges/BadgeFlower";
+import BadgeRoster from "@/components/badges/BadgeRoster";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -66,6 +68,8 @@ export default function ProfileHero({
   actions,
   about,
   footer,
+  badges,
+  maxFeatured,
 }: {
   name: string;
   handle?: string | null;
@@ -83,6 +87,10 @@ export default function ProfileHero({
   about?: ReactNode;
   /** The next-rung bar, under the party. */
   footer?: ReactNode;
+  /** Every badge held, featured first, drawn as the flower round the portrait. Off /api/badges/of, which the page already reads. */
+  badges?: FlowerBadge[] | null;
+  /** The featured cap that came with them, for the roster's picker. */
+  maxFeatured?: number | null;
 }) {
   const [party, setParty] = useState<Character[]>([]);
   const [archetypes, setArchetypes] = useState<Archetype[]>([]);
@@ -149,6 +157,8 @@ export default function ProfileHero({
    * failed. Same three-state shape as WalletCard.
    */
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [roster, setRoster] = useState(false);
+  const flower = badges ?? [];
   /** One polite region for this page's mutations. See `front` below. */
   const [said, setSaid] = useState("");
 
@@ -244,10 +254,21 @@ export default function ProfileHero({
           starts at twelve o'clock. The track behind it is always whole, so the
           shape reads as "this much of that" and never as a broken ring.
         */}
-        <div className="relative h-[150px] w-[150px] shrink-0 sm:h-[236px] sm:w-[236px]">
+        {/*
+          THE BADGE FLOWER (Rye, 2026-10-30) sits behind the ring and the face,
+          its petals overhanging the square, so the square gains a margin while
+          there are petals to hold. The ring and the portrait let a click fall
+          through to it, and the seal and the stage chip stay on top.
+        */}
+        <div className={`relative h-[150px] w-[150px] shrink-0 sm:h-[236px] sm:w-[236px] ${flower.length ? "my-7 sm:m-11" : ""}`}>
           <div className="absolute inset-0 rounded-full shadow-[0_0_40px_color-mix(in_srgb,var(--color-dash-gold)_25%,transparent)]" aria-hidden="true" />
+          <BadgeFlower
+            badges={flower}
+            label={`Your badges, ${flower.length} held. Open the roster and pick which show on your card.`}
+            onOpen={() => setRoster(true)}
+          />
           {arc !== null && (
-            <svg viewBox="0 0 260 260" className="absolute inset-0 h-full w-full" aria-hidden="true">
+            <svg viewBox="0 0 260 260" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
               <circle cx="130" cy="130" r={RING_R} fill="none" stroke="var(--color-dash-track)" strokeWidth="12" />
               <circle
                 cx="130" cy="130" r={RING_R} fill="none"
@@ -258,7 +279,7 @@ export default function ProfileHero({
               />
             </svg>
           )}
-          <div className="absolute inset-[6px] overflow-hidden rounded-full border-4 border-background bg-muted">
+          <div className="pointer-events-none absolute inset-[6px] overflow-hidden rounded-full border-4 border-background bg-muted">
             {portrait("hero", primary)}
           </div>
           {/* Their Gene Keys seal, top right, opposite the stage chip. Nothing while the module is off or nothing is saved. */}
@@ -370,6 +391,15 @@ export default function ProfileHero({
       <p aria-live="polite" className="sr-only">
         {said}
       </p>
+      <BadgeRoster
+        open={roster}
+        onOpenChange={setRoster}
+        badges={flower}
+        maxFeatured={maxFeatured ?? null}
+        whose={null}
+        editable
+        onChanged={announceProfileChange}
+      />
     </motion.section>
   );
 }

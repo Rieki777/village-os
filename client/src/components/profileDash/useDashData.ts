@@ -10,7 +10,7 @@
  *   /api/game/cycle/distributions  the closed moons' bounds, for "earned by moon"
  *   /api/game/gratitude/me         thanks received, and the giving allowance
  *   /api/me/cash-owed              cash owed, claimed and paid (0285)
- *   /api/badges/of/:id             badges held
+ *   /api/badges/of/:id             badges held, and the featured cap (the flower)
  *   /api/season                    the season's name and its days
  *   /api/governance/waiting-on-me  consents asked of this member
  *   /api/sessions/tasks/count      tasks waiting and the nearest date
@@ -30,6 +30,7 @@ import type { CashOwedEntry } from "@shared/cashOwed";
 import type { WaitingConsent } from "@shared/waitingOnYou";
 import { WAITING_URL } from "@shared/waitingOnYou";
 import type { WorkPay } from "@shared/workValue";
+import type { FlowerBadge } from "@/components/badges/BadgeFlower";
 
 export interface WalletRowLite {
   token: string;
@@ -66,6 +67,10 @@ export interface DashData {
   gratitude: { receivedThisCycle: number; remaining: number; total: number } | null;
   cash: CashOwedEntry[] | null;
   badges: number | null;
+  /** The badges themselves, featured first, for the flower on the portrait. */
+  badgeList: FlowerBadge[] | null;
+  /** How many may show on the card (`badges.max_featured`). */
+  maxFeatured: number | null;
   season: { name: string; day: number | null; of: number | null } | null;
   consents: WaitingConsent[] | null;
   tasks: { waiting: number; nextDue: string | null } | null;
@@ -82,6 +87,8 @@ const EMPTY: DashData = {
   gratitude: null,
   cash: null,
   badges: null,
+  badgeList: null,
+  maxFeatured: null,
   season: null,
   consents: null,
   tasks: null,
@@ -141,9 +148,14 @@ export function useDashData(userId: string | number | null | undefined): DashDat
         }),
       );
       read<{ entries: CashOwedEntry[] }>("/api/me/cash-owed").then((c) => put({ cash: c?.entries ?? null }));
-      read<{ badges: unknown[] }>(`/api/badges/of/${encodeURIComponent(String(userId))}`).then((b) =>
-        put({ badges: Array.isArray(b?.badges) ? b.badges.length : null }),
-      );
+      read<{ badges: FlowerBadge[]; maxFeatured?: number }>(`/api/badges/of/${encodeURIComponent(String(userId))}`).then((b) => {
+        const list = Array.isArray(b?.badges) ? b.badges : null;
+        put({
+          badges: list ? list.length : null,
+          badgeList: list,
+          maxFeatured: typeof b?.maxFeatured === "number" ? b.maxFeatured : null,
+        });
+      });
       read<{ current: { name: string; startsOn: string; endsOn?: string | null } | null; today: string }>("/api/season").then((s) => {
         const cur = s?.current;
         if (!cur?.name) return put({ season: null });

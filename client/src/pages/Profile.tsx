@@ -392,6 +392,8 @@ export default function Profile() {
                 stageLabel={stagePill(stages, stageIndex)}
                 season={seasonWords}
                 rolesLine={rolesLine || null}
+                badges={dash.badgeList}
+                maxFeatured={dash.maxFeatured}
                 actions={
                   <div className="hidden items-center gap-3 sm:flex">
                     <a href="#invite" className={BTN_GOLD}>
