@@ -17,6 +17,7 @@
  */
 import { authToken } from "@/lib/gameApi";
 import type { PickSource } from "./wizardConfig";
+import type { WorkPay } from "@shared/workValue";
 
 export interface PickOption {
   value: string;
@@ -27,6 +28,8 @@ export interface PickOption {
   full?: boolean;
   /** Seats only: who holds it, when the reader may see names. */
   holderIds?: string[];
+  /** Seats only: what it pays, at the `terms.read` tier (server/lib/workPay.ts). Absent below it. */
+  pay?: WorkPay | null;
 }
 
 const headers = (): Record<string, string> => {
@@ -120,6 +123,7 @@ export async function loadPickOptions(source: PickSource): Promise<PickOption[]>
           hint: r.recruiting ? "recruiting" : r.circleName ? String(r.circleName) : undefined,
           full: r.state === "filled",
           holderIds: Array.isArray(r.holders) ? r.holders.map((h: any) => String(h?.userId ?? "")).filter(Boolean) : [],
+          ...(r.pay ? { pay: r.pay as WorkPay } : {}),
         }));
     }
     case "circles": {

@@ -138,7 +138,7 @@ describe("todayCards", () => {
       {
         consents: [{ proposalId: 1, applicationId: 2, href: "/role-applications/2", roles: ["Cook"], circle: "Kitchen circle", applicant: "Ada", closesOn: "2026-11-01T12:00:00Z" } as any],
         tasks: { waiting: 2, nextDue: "2026-10-30" },
-        messages: { unreadTotal: 2, top: { id: "9", title: "Seed bank shelves", preview: "Trays arrive Monday", unread: 2 } },
+        messages: { unreadTotal: 2, top: { id: "9", title: "Seed bank shelves", preview: "Trays arrive Monday", unread: 2 }, parties: [] },
         session: { circle: "General circle", title: null, words: "Thu at 17:00", href: "/sessions" },
       },
       now,
@@ -150,7 +150,7 @@ describe("todayCards", () => {
     expect(cards[3]).toMatchObject({ kicker: "Live session · Thu at 17:00", title: "General circle" });
   });
   it("leaves out a card with nothing in it", () => {
-    const cards = todayCards({ consents: [], tasks: { waiting: 0, nextDue: null }, messages: { unreadTotal: 0, top: null }, session: null }, now);
+    const cards = todayCards({ consents: [], tasks: { waiting: 0, nextDue: null }, messages: { unreadTotal: 0, top: null, parties: [] }, session: null }, now);
     expect(cards).toEqual([]);
   });
 });

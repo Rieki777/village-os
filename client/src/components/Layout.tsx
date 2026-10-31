@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import NotificationBell from "@/components/NotificationBell";
 import NotificationToasts from "@/components/NotificationToasts";
+import RewardMoment from "@/components/RewardMoment";
 import SeasonSummaryOffer from "@/components/seasonSummary/SeasonSummaryOffer";
 import TaskCountBadge from "@/components/tasks/TaskCountBadge";
 import MessageCountBadge from "@/components/messages/MessageCountBadge";
@@ -840,6 +841,7 @@ export default function Layout({ children }: LayoutProps) {
           surface and the page's single polite live region live here so a
           member never sees the same moment twice. */}
       {user && <NotificationToasts />}
+      {user && <RewardMoment />}
       {user && <SeasonSummaryOffer /> /* idea 4: once, after a season turns */}
     </div>
   );

@@ -89,6 +89,14 @@ describe("which seats fit", () => {
     expect(out[1].openPlaces).toBe(1);
   });
 
+  it("carries the role's pay when the chart sends it, and nothing when it does not (2026-10-30)", () => {
+    const pay = { value: null, lines: [{ token: "village-credit", name: "Village Credits", amount: 40 }], source: "own", cadence: "cycle" };
+    const org = { roles: [{ id: "p", name: "Paid seat", state: "open", seats: 1, pay }, { id: "q", name: "Plain seat", state: "open", seats: 1 }], circles: [] };
+    const [paid, plain] = fittingSeats(org, ["p", "q"]);
+    expect(paid!.pay).toEqual(pay);
+    expect("pay" in plain!).toBe(false);
+  });
+
   it("counts the places still to fill", () => {
     expect(openPlacesOf({ state: "open", seats: 3 })).toBe(3);
     expect(openPlacesOf({ state: "expired", seats: 2, holderCount: 2 })).toBe(2);

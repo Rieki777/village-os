@@ -58,6 +58,7 @@ import TreasuryPanel from "@/components/profileDash/TreasuryPanel";
 import LevelUpMoment from "@/components/profileDash/LevelUpMoment";
 import ProfileTabs, { phoneTab, type ProfileTab } from "@/components/profileDash/ProfileTabs";
 import { useDashData } from "@/components/profileDash/useDashData";
+import PartiesCard from "@/components/profileDash/PartiesCard";
 import { abilitiesAtStage, nextRungProgress, pickTokens, stagePill } from "@/components/profileDash/dashModel";
 import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/dashUi";
 
@@ -393,6 +394,8 @@ export default function Profile() {
                 stageLabel={stagePill(stages, stageIndex)}
                 season={seasonWords}
                 rolesLine={rolesLine || null}
+                badges={dash.badgeList}
+                maxFeatured={dash.maxFeatured}
                 actions={
                   <div className="hidden items-center gap-3 sm:flex">
                     <a href="#invite" className={BTN_GOLD}>
@@ -572,6 +575,9 @@ export default function Profile() {
               </div>
 
               <aside aria-label="Your character" className="flex min-w-0 flex-[1_1_360px] flex-col gap-6 sm:gap-8">
+                <div className={`empty:hidden ${tabOf("quests")}`}>
+                  <PartiesCard data={dash} />
+                </div>
                 <div id="roles" className={`scroll-mt-28 flex flex-col gap-6 ${tabOf("roles")}`}>
                   <YourRolesSection />
                   <ProposeBanner />

@@ -10,11 +10,11 @@
  *   /api/game/cycle/distributions  the closed moons' bounds, for "earned by moon"
  *   /api/game/gratitude/me         thanks received, and the giving allowance
  *   /api/me/cash-owed              cash owed, claimed and paid (0285)
- *   /api/badges/of/:id             badges held
+ *   /api/badges/of/:id             badges held, and the featured cap (the flower)
  *   /api/season                    the season's name and its days
  *   /api/governance/waiting-on-me  consents asked of this member
  *   /api/sessions/tasks/count      tasks waiting and the nearest date
- *   /api/messages                  unread conversations
+ *   /api/messages                  unread conversations, and the parties (work chats)
  *   /api/sessions                  the next meeting of a circle this member sits in
  *   /api/quests                    what a claimed quest pays when it is consented
  *
@@ -30,6 +30,9 @@ import type { CashOwedEntry } from "@shared/cashOwed";
 import type { WaitingConsent } from "@shared/waitingOnYou";
 import { WAITING_URL } from "@shared/waitingOnYou";
 import type { WorkPay } from "@shared/workValue";
+import type { FlowerBadge } from "@/components/badges/BadgeFlower";
+import type { InboxConversation } from "@/lib/messaging";
+import { partiesOf, type Party } from "./PartiesCard";
 
 export interface WalletRowLite {
   token: string;
@@ -66,10 +69,19 @@ export interface DashData {
   gratitude: { receivedThisCycle: number; remaining: number; total: number } | null;
   cash: CashOwedEntry[] | null;
   badges: number | null;
+  /** The badges themselves, featured first, for the flower on the portrait. */
+  badgeList: FlowerBadge[] | null;
+  /** How many may show on the card (`badges.max_featured`). */
+  maxFeatured: number | null;
   season: { name: string; day: number | null; of: number | null } | null;
   consents: WaitingConsent[] | null;
   tasks: { waiting: number; nextDue: string | null } | null;
-  messages: { unreadTotal: number; top: { id: string; title: string; preview: string; unread: number } | null } | null;
+  messages: {
+    unreadTotal: number;
+    top: { id: string; title: string; preview: string; unread: number } | null;
+    /** The shared chat of each quest or task this member is on (PR #642), newest first. */
+    parties: Party[];
+  } | null;
   session: { circle: string; title: string | null; words: string; href: string } | null;
   questPay: Record<string, WorkPay> | null;
 }
@@ -82,6 +94,8 @@ const EMPTY: DashData = {
   gratitude: null,
   cash: null,
   badges: null,
+  badgeList: null,
+  maxFeatured: null,
   season: null,
   consents: null,
   tasks: null,
@@ -141,9 +155,14 @@ export function useDashData(userId: string | number | null | undefined): DashDat
         }),
       );
       read<{ entries: CashOwedEntry[] }>("/api/me/cash-owed").then((c) => put({ cash: c?.entries ?? null }));
-      read<{ badges: unknown[] }>(`/api/badges/of/${encodeURIComponent(String(userId))}`).then((b) =>
-        put({ badges: Array.isArray(b?.badges) ? b.badges.length : null }),
-      );
+      read<{ badges: FlowerBadge[]; maxFeatured?: number }>(`/api/badges/of/${encodeURIComponent(String(userId))}`).then((b) => {
+        const list = Array.isArray(b?.badges) ? b.badges : null;
+        put({
+          badges: list ? list.length : null,
+          badgeList: list,
+          maxFeatured: typeof b?.maxFeatured === "number" ? b.maxFeatured : null,
+        });
+      });
       read<{ current: { name: string; startsOn: string; endsOn?: string | null } | null; today: string }>("/api/season").then((s) => {
         const cur = s?.current;
         if (!cur?.name) return put({ season: null });
@@ -155,10 +174,7 @@ export function useDashData(userId: string | number | null | undefined): DashDat
       read<{ waiting: number; nextDue: string | null }>("/api/sessions/tasks/count").then((t) =>
         put({ tasks: t && typeof t.waiting === "number" ? { waiting: t.waiting, nextDue: t.nextDue ?? null } : null }),
       );
-      read<{
-        unreadTotal: number;
-        conversations: Array<{ id: string | number; title?: string | null; name?: string | null; unreadCount: number; preview?: string | null; muted?: boolean }>;
-      }>("/api/messages").then((m) => {
+      read<{ unreadTotal: number; conversations: InboxConversation[] }>("/api/messages").then((m) => {
         if (!m || typeof m.unreadTotal !== "number") return put({ messages: null });
         const top = (m.conversations ?? []).find((c) => c.unreadCount > 0 && !c.muted) ?? null;
         put({
@@ -167,6 +183,7 @@ export function useDashData(userId: string | number | null | undefined): DashDat
             top: top
               ? { id: String(top.id), title: String(top.title || top.name || ""), preview: String(top.preview ?? ""), unread: top.unreadCount }
               : null,
+            parties: partiesOf(m.conversations ?? [], String(userId)),
           },
         });
       });
