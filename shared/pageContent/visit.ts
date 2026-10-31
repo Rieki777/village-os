@@ -7,8 +7,10 @@
  * still typed into the page: the headline, and the promise made after the form
  * is sent.
  *
- * The defaults are the words the page carried in code until 2026-10-22, so
- * switching the page onto this spec changes nothing a visitor sees.
+ * The defaults are neutral starter text (2026-10-23): the first village's
+ * response promise ("within 48 hours") came out, because only a village can
+ * make one. That village keeps its own copy in its database; the record is
+ * server/seeds/amora/pages/page-visit.json.
  */
 import type { PageSpec } from "./types";
 
@@ -34,7 +36,7 @@ export const VISIT_PAGE: PageSpec = {
           help: "Promise only what your team will do. Leave blank for none.",
           kind: "long",
           max: 160,
-          default: "We'll be in touch within 48 hours to coordinate.",
+          default: "We'll be in touch to plan your visit.",
           optional: true,
         },
       ],

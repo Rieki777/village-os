@@ -35,7 +35,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 import { MASTER_PLAN_PAGE } from "@shared/pageContent/masterPlan";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
+
+/** A field's default as the spec holds it. The words are the spec's to choose; what the page does with them is this file's. */
+const word = (sectionId: string, key: string) =>
+  MASTER_PLAN_PAGE.sections.find((s) => s.id === sectionId)!.fields.find((f) => f.key === key)!.default;
+const listDefault = (sectionId: string, key: string) =>
+  MASTER_PLAN_PAGE.sections.find((s) => s.id === sectionId)!.lists!.find((l) => l.key === key)!.default;
 
 const useBrandImagesMock = vi.fn();
 /*
@@ -244,9 +250,9 @@ describe("the size of the land", () => {
     renderPlan();
     const band = await bandDrawn();
 
-    // Today's words, now the defaults of Admin, Pages, Master Plan.
-    expect(band).toHaveTextContent("Planned Homes");
-    expect(band).toHaveTextContent("Retreat Keys");
+    // The defaults of Admin, Pages, Master Plan.
+    expect(band).toHaveTextContent(word("stats", "plannedHomesLabel"));
+    expect(band).toHaveTextContent(word("stats", "guestRoomsLabel"));
   });
 
   it("shows no band at all when the village has stated nothing", async () => {
@@ -254,7 +260,7 @@ describe("the size of the land", () => {
 
     renderPlan();
     // The words have arrived (the vision heading is drawn), and still no band.
-    await screen.findByText("Our Vision");
+    await screen.findByText(word("vision", "heading"));
 
     expect(statsBand()).toBeNull();
   });
@@ -309,23 +315,32 @@ describe("every field in the Master Plan spec reaches the page", () => {
   });
 
   it("draws nothing of a section the village hid", async () => {
-    storedPlan = { vision: { hidden: true }, phases: { hidden: true }, valuation: { hidden: true }, cta: { hidden: true } };
+    storedPlan = {
+      vision: { hidden: true, zones: [{ title: "Orchard", description: "Fruit.", tags: "" }] },
+      phases: { hidden: true, phases: [{ phase: "Wells", items: "Two wells", status: "Planning" }] },
+      valuation: { hidden: true },
+      cta: { hidden: true },
+    };
     renderPlan();
     await bandDrawnHere();
 
-    for (const gone of ["Our Vision", "Village Center", "Development Phases", "Land Valuation", "Be Part of the Vision"]) {
+    for (const gone of [word("vision", "heading"), "Orchard", "Wells", word("phases", "heading"), word("valuation", "heading"), word("cta", "heading")]) {
       expect(screen.queryByText(gone)).toBeNull();
     }
   });
 
-  it("draws today's words by default, and no document button until the village links one", async () => {
+  it("draws the starter words by default, no zones or phases nobody wrote, and no document button until the village links one", async () => {
     renderPlan();
-    await screen.findByText("Our Vision");
+    await screen.findByText(word("vision", "heading"));
 
-    expect(screen.getByText("Retreat & Wellness")).toBeInTheDocument();
-    expect(screen.getByText("120-150 key retreat")).toBeInTheDocument();
-    expect(screen.getByText("Residential Phase 1")).toBeInTheDocument();
-    expect(document.body.textContent ?? "").toContain("Our vision for a regenerative village that harmonizes human habitation with the natural beauty");
+    expect(document.body.textContent ?? "").toContain(fillVars(word("hero", "subline"), { village: "Willowbrook" }));
+    expect(document.body.textContent ?? "").toContain(fillVars(word("vision", "body"), { village: "Willowbrook" }));
+    // Zones and phases are one piece of land's facts, so they ship empty, and
+    // a phases heading over no phases is not drawn.
+    expect(listDefault("vision", "zones")).toEqual([]);
+    expect(listDefault("phases", "phases")).toEqual([]);
+    expect(screen.queryByText(word("phases", "heading"))).toBeNull();
+    expect(screen.getByText(word("cta", "heading"))).toBeInTheDocument();
     // The disabled "Coming Soon" button every village used to show is gone until there is a document.
     expect(screen.queryByText(/Coming Soon/)).toBeNull();
     expect(screen.queryByRole("link", { name: /Master Plan PDF/ })).toBeNull();

@@ -1,16 +1,18 @@
 /**
  * The Team page (brochure villages), as fields.
  *
- * The defaults are the words the page carried in code until 2026-10-22, moved
- * here unchanged, so switching the page onto this spec changes nothing a
- * visitor sees. Two exceptions, both because the old page said something that
- * was not true for every village:
+ * The defaults are NEUTRAL STARTER TEXT (2026-10-23), true of any village.
+ * They were the first village's words until then; that village keeps its own
+ * copy in its database, and the record of it is
+ * server/seeds/amora/pages/page-team.json. What the page does with them:
  *
- *   - the "roles are open" line now shows ONLY while some role has a place
- *     nobody holds (counted from /api/org on the page). It used to print the
- *     same sentence over a village with every role filled;
- *   - the advisory council and the board can be hidden, because a village
- *     that has neither should not have to describe one.
+ *   - the "roles are open" line shows ONLY while some role has a place nobody
+ *     holds (counted from /api/org on the page);
+ *   - the advisory council and the board start with NO lines, and the page
+ *     draws neither box until the village lists someone or something in it.
+ *     A council or a board is a fact about one village, so the platform
+ *     claims none; a village that has one writes it in, and one that does not
+ *     never sees an empty box.
  *
  * The people themselves are not here: the grid is the village's live roles
  * (/api/org) merged with the Team cards (portrait and bio), as before.
@@ -41,14 +43,14 @@ export const TEAM_PAGE: PageSpec = {
       label: "The people",
       shows: "The cards for everyone holding a role. The cards themselves come from your roles and the Team cards.",
       fields: [
-        { key: "heading", label: "Heading", kind: "text", max: 32, default: "Leadership Circle" },
+        { key: "heading", label: "Heading", kind: "text", max: 32, default: "Who Holds the Roles" },
         {
           key: "openNote",
           label: "Line under the cards while a role is open",
           help: "Shown only while at least one role has a place nobody holds. Blank shows nothing even then.",
           kind: "long",
           max: 140,
-          default: "The team is growing, and several leadership roles and steward roles are open right now.",
+          default: "Some roles here are open right now.",
           optional: true,
         },
         {
@@ -64,16 +66,16 @@ export const TEAM_PAGE: PageSpec = {
     {
       id: "advisory",
       label: "Advisory council",
-      shows: "A shaded box under the people.",
+      shows: "A shaded box under the people, drawn once it lists at least one line.",
       hideable: true,
       fields: [
-        { key: "heading", label: "Heading", kind: "text", max: 40, default: "Community Advisory Council" },
+        { key: "heading", label: "Heading", kind: "text", max: 40, default: "Advisory Council" },
         {
           key: "intro",
           label: "Sentence under the heading",
           kind: "long",
           max: 200,
-          default: "Practitioners and thought leaders shaping this village's culture, partnerships, and community integration.",
+          default: "The people who advise {village} on its culture, its partnerships, and its place in the wider community.",
         },
         {
           key: "terms",
@@ -81,7 +83,7 @@ export const TEAM_PAGE: PageSpec = {
           help: "The small line at the bottom of the box. Leave blank for none.",
           kind: "long",
           max: 200,
-          default: "Advisors receive First Right of Refusal on lot purchases, retreat discounts, and recognition as Founding Advisors.",
+          default: "",
           optional: true,
         },
       ],
@@ -89,43 +91,35 @@ export const TEAM_PAGE: PageSpec = {
         {
           key: "items",
           label: "Who sits on it",
-          help: "Up to eight, in two columns.",
+          help: "Up to eight, in two columns. With none, the box is not shown.",
           itemLabel: "Line",
           titleKey: "text",
           maxItems: 8,
           fields: [{ key: "text", label: "Line", kind: "text", max: 60, default: "" }],
-          default: [
-            { text: "Regenerative Agriculture & Permaculture Leaders" },
-            { text: "Wellness & Healing Arts Practitioners" },
-            { text: "Education & Child Development Experts" },
-            { text: "Arts & Culture Leaders" },
-            { text: "Local Community Representatives" },
-            { text: "Cultural Liaisons from where the village sits" },
-          ],
+          default: [],
         },
       ],
     },
     {
       id: "board",
       label: "Board",
-      shows: "A second shaded box, with up to three columns of short lists.",
+      shows: "A second shaded box, with up to three columns of short lists, drawn once it has a column.",
       hideable: true,
       fields: [
-        { key: "heading", label: "Heading", kind: "text", max: 40, default: "Development Board of Directors" },
+        { key: "heading", label: "Heading", kind: "text", max: 40, default: "Board" },
         {
           key: "intro",
           label: "Sentence under the heading",
           kind: "long",
           max: 200,
-          default:
-            "5-7 expert members providing strategic oversight, fiduciary responsibility, and guidance on business, legal, and financial aspects.",
+          default: "The people who oversee {village}'s legal and financial decisions.",
         },
       ],
       lists: [
         {
           key: "columns",
           label: "Columns",
-          help: "Up to three, side by side. Each has a heading and up to four lines; a blank line is left out.",
+          help: "Up to three, side by side. Each has a heading and up to four lines; a blank line is left out. With none, the box is not shown.",
           itemLabel: "Column",
           titleKey: "heading",
           maxItems: 3,
@@ -136,11 +130,7 @@ export const TEAM_PAGE: PageSpec = {
             { key: "third", label: "Third line", kind: "text", max: 32, default: "" },
             { key: "fourth", label: "Fourth line", kind: "text", max: 32, default: "" },
           ],
-          default: [
-            { heading: "Expertise Areas", first: "Legal & Regulatory", second: "Real Estate Development", third: "Financial & Investment", fourth: "" },
-            { heading: "Responsibilities", first: "Financial Oversight", second: "Development Milestones", third: "Investor Relations", fourth: "" },
-            { heading: "Meeting Schedule", first: "Monthly Meetings", second: "Quarterly Sessions", third: "Annual Retreat", fourth: "" },
-          ],
+          default: [],
         },
       ],
     },

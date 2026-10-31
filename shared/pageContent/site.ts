@@ -13,7 +13,7 @@ import type { PageSpec } from "./types";
 import { BROCHURE_PATHS } from "../brochure";
 
 /** The footer sign-off a village gets until it writes its own. */
-export const SITE_FOOTER_SIGNOFF = "Built with Pura Vida by";
+export const SITE_FOOTER_SIGNOFF = "Built with care by";
 
 export const SITE_PAGE: PageSpec = {
   id: "site",

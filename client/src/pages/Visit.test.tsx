@@ -13,6 +13,10 @@
  *
  * And the line after the form is sent ("within 48 hours") is a promise only
  * the village can make, so it is the village's field now, and blank hides it.
+ *
+ * A programme with nothing in a section draws no heading for it (2026-10-23):
+ * the starter programme ships with no logistics, and "Logistics" over an
+ * empty grid read as a page that failed to load.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -98,11 +102,15 @@ describe("every field in the Visit spec reaches the page", () => {
     expect(screen.getByText(doc.form.thanks)).toBeTruthy();
   });
 
-  it("says today's words until the village writes its own", async () => {
+  it("says the spec's starter words until the village writes its own", async () => {
+    const word = (sectionId: string, key: string) =>
+      VISIT_PAGE.sections.find((s) => s.id === sectionId)!.fields.find((f) => f.key === key)!.default;
     render(<Visit />);
-    expect(await headline()).toHaveTextContent("Come and see for yourself");
+    expect(await headline()).toHaveTextContent(word("hero", "headline"));
     await sendForm();
-    expect(screen.getByText("We'll be in touch within 48 hours to coordinate.")).toBeTruthy();
+    expect(screen.getByText(word("form", "thanks"))).toBeTruthy();
+    // A reply time is a promise only a village can make, so the starter makes none.
+    expect(word("form", "thanks")).not.toMatch(/\d/);
   });
 
   it("promises nothing after sending when the village cleared that line", async () => {
@@ -159,6 +167,24 @@ describe("a sentence the village cleared in Visit Program", () => {
     await programLoaded();
     const formHead = screen.getByRole("heading", { name: "Tell us you're coming" }).parentElement as HTMLElement;
     expect(formHead.querySelector("p")).toBeNull();
+  });
+
+  it("draws no Logistics heading when every logistics line is blank", async () => {
+    program.logistics = { getting_there: "", accommodation: " ", what_to_bring: "", contact_note: "Write to us below." };
+    render(<Visit />);
+    await programLoaded();
+    expect(screen.queryByRole("heading", { name: "Logistics" })).toBeNull();
+    expect(screen.getByText("Write to us below.")).toBeTruthy();
+  });
+
+  it("draws no ways-to-visit section and no visit-type choice when the programme lists none, and still takes a request", async () => {
+    program.visit_types = [];
+    render(<Visit />);
+    await screen.findByRole("heading", { name: "Logistics" });
+    expect(screen.queryByRole("heading", { name: "Pick a way to visit" })).toBeNull();
+    expect(screen.queryByLabelText("Visit type")).toBeNull();
+    await sendForm();
+    expect(submitted).toHaveLength(1);
   });
 
   it("draws no logistics card for a cleared logistics line", async () => {

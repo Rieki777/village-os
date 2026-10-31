@@ -1,9 +1,15 @@
 /**
  * The housing page (/housing), as fields.
  *
- * The defaults are the words the page carried in code until 2026-10-22, moved
- * here unchanged, so switching the page onto this spec changes nothing a
- * visitor sees. A village replaces them in Admin, Pages, Housing.
+ * The defaults are NEUTRAL STARTER TEXT (2026-10-23), true of any village.
+ * They were the first village's words until then; that village keeps its own
+ * copy in its database, and the record of it is
+ * server/seeds/amora/pages/page-housing.json. A village replaces them in
+ * Admin, Pages, Housing.
+ *
+ * THE LAND FEATURES START EMPTY. Views, springs, forest and sun are facts
+ * about one piece of land, and the page draws no features band until the
+ * village lists its own.
  *
  * NOT HERE: the homes themselves. Those are the village's own table (0131,
  * `housing_home_types`, written in Admin, Housing) and the page keeps reading
@@ -75,7 +81,7 @@ export const HOUSING_PAGE: PageSpec = {
         {
           key: "items",
           label: "Features",
-          help: `Up to eight, four to a row on a wide screen. Icon is one word from: ${HOUSING_FEATURE_ICONS.join(", ")}.`,
+          help: `Up to eight, four to a row on a wide screen. Icon is one word from: ${HOUSING_FEATURE_ICONS.join(", ")}. With none, the row is not shown.`,
           itemLabel: "Feature",
           titleKey: "title",
           maxItems: 8,
@@ -84,28 +90,7 @@ export const HOUSING_PAGE: PageSpec = {
             { key: "body", label: "Description", kind: "long", max: 120, default: "" },
             { key: "icon", label: "Icon", kind: "text", max: 16, default: "" },
           ],
-          default: [
-            {
-              title: "Mountain Views",
-              body: "Many lots offer stunning views of the surrounding mountains and valleys.",
-              icon: "mountain",
-            },
-            {
-              title: "Water Access",
-              body: "Natural springs and streams throughout the property provide clean water.",
-              icon: "water",
-            },
-            {
-              title: "Mature Forest",
-              body: "Existing forest provides shade, privacy, and connection to nature.",
-              icon: "forest",
-            },
-            {
-              title: "Solar Exposure",
-              body: "Lots are positioned for optimal solar energy and natural lighting.",
-              icon: "sun",
-            },
-          ],
+          default: [],
         },
       ],
     },
@@ -122,7 +107,7 @@ export const HOUSING_PAGE: PageSpec = {
           kind: "long",
           max: 280,
           default:
-            "At {village}, you don't purchase land outright: you acquire a Land Share Agreement that gives you long-term access to your lot. This unique structure:",
+            "A Land Share Agreement gives you long-term access to your home at {village}. Here is how it works:",
         },
       ],
       lists: [
@@ -162,7 +147,7 @@ export const HOUSING_PAGE: PageSpec = {
           label: "Sentence under \"Interested in Housing?\"",
           kind: "long",
           max: 200,
-          default: "Join a community call to learn about available lots, pricing, and the process for becoming a resident.",
+          default: "Join a community call to learn about the homes, what they cost, and how to become a resident.",
         },
       ],
     },

@@ -256,8 +256,11 @@ export default function Team() {
             )}
           </div>
 
-          {/* Advisory Council: a village with none hides it in Admin, Pages, Team. */}
-          {page && !page.advisory.hidden && (
+          {/* Advisory Council: drawn once the village lists someone on it, and
+              a village can hide it in Admin, Pages, Team. It ships with no
+              lines, so a village that has no council never shows an empty
+              box claiming one. */}
+          {page && !page.advisory.hidden && page.advisory.lists.items.length > 0 && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
@@ -272,7 +275,6 @@ export default function Team() {
                 <Emphasized text={page.advisory.fields.intro} />
               </p>
             </div>
-            {page.advisory.lists.items.length > 0 && (
             <div className="grid md:grid-cols-2 gap-4 max-w-4xl mx-auto mb-8">
               {page.advisory.lists.items.map((item, index) => (
                 <motion.div
@@ -288,7 +290,6 @@ export default function Team() {
                 </motion.div>
               ))}
             </div>
-            )}
             {page.advisory.fields.terms && (
             <p className="text-center text-sm text-muted-foreground break-words">
               <Emphasized text={page.advisory.fields.terms} />
@@ -297,8 +298,8 @@ export default function Team() {
           </motion.div>
           )}
 
-          {/* Board: a village with none hides it in Admin, Pages, Team. */}
-          {page && !page.board.hidden && (
+          {/* Board: drawn once it has a column, the same rule as the council. */}
+          {page && !page.board.hidden && page.board.lists.columns.length > 0 && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
@@ -312,7 +313,6 @@ export default function Team() {
               <p className="text-muted-foreground max-w-2xl mx-auto mb-8 break-words">
                 <Emphasized text={page.board.fields.intro} />
               </p>
-              {page.board.lists.columns.length > 0 && (
               <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
                 {page.board.lists.columns.map((column, index) => (
                 <div key={`${index}-${column.heading}`} className="text-left min-w-0">
@@ -325,7 +325,6 @@ export default function Team() {
                 </div>
                 ))}
               </div>
-              )}
             </div>
           </motion.div>
           )}

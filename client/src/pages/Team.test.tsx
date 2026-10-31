@@ -7,7 +7,10 @@
  *
  *   - every field and list row reaches the page (a marker typed into each one
  *     comes out), which is how a field the page ignores gets caught;
- *   - the advisory council, the board and the closing box can be hidden;
+ *   - the advisory council, the board and the closing box can be hidden, and
+ *     the council and the board are drawn only once the village lists a line
+ *     or a column in them (2026-10-23: they ship empty, because a council or
+ *     a board is one village's fact);
  *   - the "roles are open" line is said ONLY while a role has a place nobody
  *     holds. It used to print under a village with every role filled;
  *   - the people grid is still /api/org merged with the Team cards.
@@ -32,7 +35,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 import { TEAM_PAGE } from "@shared/pageContent/team";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
+
+/** A field's default as the spec holds it. The words are the spec's to choose; what the page does with them is this file's. */
+const word = (sectionId: string, key: string) =>
+  TEAM_PAGE.sections.find((s) => s.id === sectionId)!.fields.find((f) => f.key === key)!.default;
+const listDefault = (sectionId: string, key: string) =>
+  TEAM_PAGE.sections.find((s) => s.id === sectionId)!.lists!.find((l) => l.key === key)!.default;
+const fill = (text: string) => fillVars(text, { village: "Willowbrook" });
 
 /** /api/org as a public reader gets it: one circle, its roles, first names. */
 let org: Record<string, unknown>;
@@ -114,29 +124,48 @@ describe("every field in the Team spec reaches the page", () => {
     expect(missing).toEqual([]);
   });
 
-  it("draws today's words by default", async () => {
+  it("draws the starter words by default, and no council or board the village has not described", async () => {
     renderTeam();
     await wordsArrived();
 
-    expect(screen.getByText("The people holding roles here, and the circles they hold them in.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Leadership Circle" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Community Advisory Council" })).toBeInTheDocument();
-    expect(screen.getByText("Cultural Liaisons from where the village sits")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Development Board of Directors" })).toBeInTheDocument();
-    expect(screen.getByText("Quarterly Sessions")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Join Our Community" })).toBeInTheDocument();
+    expect(screen.getByText(word("header", "intro"))).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: word("leadership", "heading") })).toBeInTheDocument();
+    // Both ship with no lines, so neither box is drawn on a village that has none.
+    expect(listDefault("advisory", "items")).toEqual([]);
+    expect(listDefault("board", "columns")).toEqual([]);
+    expect(screen.queryByRole("heading", { name: word("advisory", "heading") })).toBeNull();
+    expect(screen.queryByRole("heading", { name: word("board", "heading") })).toBeNull();
+    expect(screen.getByRole("heading", { name: word("cta", "heading") })).toBeInTheDocument();
     expect(screen.getByText(/there's a place for you at Willowbrook\./)).toBeInTheDocument();
   });
 
+  it("draws the council and the board once the village lists someone in them", async () => {
+    storedTeam = {
+      advisory: { items: [{ text: "Two neighbouring farmers" }] },
+      board: { columns: [{ heading: "Rhythm", first: "Monthly" }] },
+    };
+    renderTeam();
+    await screen.findByText("Two neighbouring farmers");
+
+    expect(screen.getByRole("heading", { name: word("advisory", "heading") })).toBeInTheDocument();
+    expect(screen.getByText(fill(word("advisory", "intro")))).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: word("board", "heading") })).toBeInTheDocument();
+    expect(screen.getByText("Monthly")).toBeInTheDocument();
+  });
+
   it("draws nothing of a section the village hid", async () => {
-    storedTeam = { advisory: { hidden: true }, board: { hidden: true }, cta: { hidden: true } };
+    storedTeam = {
+      advisory: { hidden: true, items: [{ text: "Two neighbouring farmers" }] },
+      board: { hidden: true, columns: [{ heading: "Rhythm", first: "Monthly" }] },
+      cta: { hidden: true },
+    };
     renderTeam();
     await wordsArrived();
 
-    expect(screen.queryByText("Community Advisory Council")).toBeNull();
-    expect(screen.queryByText("Development Board of Directors")).toBeNull();
-    expect(screen.queryByText("Join Our Community")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Leadership Circle" })).toBeInTheDocument();
+    expect(screen.queryByText("Two neighbouring farmers")).toBeNull();
+    expect(screen.queryByText("Rhythm")).toBeNull();
+    expect(screen.queryByText(word("cta", "heading"))).toBeNull();
+    expect(screen.getByRole("heading", { name: word("leadership", "heading") })).toBeInTheDocument();
   });
 
   it("leaves a blank board line out", async () => {
@@ -152,7 +181,7 @@ describe("every field in the Team spec reaches the page", () => {
 describe("the open-roles line says only what is true", () => {
   it("is said while a role has a place nobody holds", async () => {
     renderTeam();
-    expect(await screen.findByText("The team is growing, and several leadership roles and steward roles are open right now.")).toBeInTheDocument();
+    expect(await screen.findByText(word("leadership", "openNote"))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /See the open roles/ })).toHaveAttribute("href", "/roles");
   });
 
