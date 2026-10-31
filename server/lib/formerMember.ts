@@ -37,7 +37,7 @@
  */
 import type { Pool } from "mysql2/promise";
 import { GAME_CONFIG } from "../../shared/gameConfig";
-import { exponentOf } from "../../shared/money";
+import { formatMoney } from "../../shared/money";
 import { isAdmitted, type AdmissionRecord, type LadderStage } from "./admission";
 import { isTombstone } from "./oauthAccounts";
 import { hasResolvedExit, resolvedExitUserIds, unpaidCashTotalsOf } from "../repos/formerMembers";
@@ -100,16 +100,13 @@ export async function unpaidCashOf(pool: Pool, userId: string): Promise<UnpaidCa
 }
 
 /**
- * "25.00 USD, 3000 CRC": the cash in words that read the same on every
- * runtime, because this text is written onto the permanent exit row. The
- * exponent comes from the currency (`exponentOf`), so a currency with no minor
- * unit prints none.
+ * "$25.00, CHF 50.00": the cash in the platform's one money format
+ * (`formatMoney`, shared/money.ts), so the exit desk and the departure record
+ * read the amount the way every other page does (the e2e sweep, E11: they
+ * said "50.00 CHF" while the rest said "CHF 50.00"). The exponent comes from
+ * the currency, so a currency with no minor unit prints none. Never converted:
+ * this text is written onto the permanent exit row.
  */
 export function cashWords(owed: readonly UnpaidCash[]): string {
-  return owed
-    .map((c) => {
-      const digits = exponentOf(c.currency);
-      return `${(c.amountMinor / Math.pow(10, digits)).toFixed(digits)} ${c.currency}`;
-    })
-    .join(", ");
+  return owed.map((c) => formatMoney(c.amountMinor, c.currency)).join(", ");
 }

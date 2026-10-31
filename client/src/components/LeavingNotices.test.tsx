@@ -40,8 +40,8 @@ describe("the notice before the delete", () => {
   });
 
   it("asks for the departure's sentence on the departure page (round 4, finding 1)", async () => {
-    // A departure keeps a member who holds tokens as a former member, and the
-    // payments keep renewing; only the server knows which, so the page says where it is.
+    // A departure keeps a member who holds tokens as a former member, and resolving it
+    // cancels the payments (ruling 8); only the server knows which act, so the page says where it is.
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ notices: [] }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     render(<Probe path="exit" />);

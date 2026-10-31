@@ -235,7 +235,7 @@ describe.skipIf(!configured)("resolving a departure: what the leaver was part of
 
     const exit = await exitById(pool, exitId);
     expect(exit?.status).toBe("resolved");
-    expect(String(exit?.resolution ?? "")).toContain(`${FORMER_MEMBER_MARK}is owed 25.00 USD in cash`);
+    expect(String(exit?.resolution ?? "")).toContain(`${FORMER_MEMBER_MARK}is owed $25.00 in cash`);
     const after = (await usersRepo(pool).byId(owed.id))!;
     expect(after.email, "not a tombstone: they can still sign in and see it marked paid").toBe(`${owed.id}@example.test`);
     expect(after.membershipGranted).toBe(false);
@@ -249,7 +249,7 @@ describe.skipIf(!configured)("resolving a departure: what the leaver was part of
     const { out, exitId } = await leave(both);
     expect(out.outcome).toBe("former");
     expect(String((await exitById(pool, exitId))?.resolution ?? "")).toContain(
-      `${FORMER_MEMBER_MARK}still holds 30 ${TOKEN}; is owed 12.34 USD in cash`,
+      `${FORMER_MEMBER_MARK}still holds 30 ${TOKEN}; is owed $12.34 in cash`,
     );
   });
 

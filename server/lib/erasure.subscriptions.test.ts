@@ -44,12 +44,12 @@ import { anonymizeMember, resumeErasure, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
 import { erasureRecord } from "../repos/memberErasure";
-import { blockingStates, exitOpenState } from "./exit";
+import { blockingStates, cancelExit, createExit, exitById, exitOpenState } from "./exit";
 import { register as registerProfileRoutes } from "../routes/profile";
 import { loadSecrets } from "./secrets";
 import { BUYER_HAS_LEFT, refusedChargeAdvice } from "./payments";
 import { subscriptionsState } from "./exit";
-import { FORMER_MEMBER_HOLD, keepsAsFormerMember } from "./exitResolve";
+import { FORMER_MEMBER_HOLD, keepsAsFormerMember, resolveExit } from "./exitResolve";
 import { insertCashOwedRow } from "../repos/cashOwed";
 import { loadTokenRegistry, memberAccount, MINT_FAUCET, postTransfer } from "./ledger";
 import {
@@ -722,10 +722,108 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       expect(await owedOf(ash.id), "arrived after the card was read, so still owed").toEqual(["sub_owed_after"]);
       expect(confirmed.body.subscriptions.count).toBe(1);
     });
+
+    /*
+     * A FORMER MEMBER'S EXIT CANCELS THEIR SUBSCRIPTIONS (Rye, 2026-10-31,
+     * ruling 8). A leaver who still holds tokens, or is owed cash, is kept on
+     * as a former member and never erased, so the erasure's step never ran
+     * for them and their card was charged every period. The resolve now runs
+     * the same cancel as a step of its own, with the same no-key hand-off.
+     */
+    describe("a former member's exit (Rye, 2026-10-31, ruling 8)", () => {
+      /** A member who holds credits, so resolving their departure keeps them as a former member. */
+      async function holder(id: string, name: string, sub: string): Promise<{ who: any; exitId: string }> {
+        await loadTokenRegistry(pool);
+        const who = await member(id, name);
+        await purchase(`pp-${id}`, who.id, "prod-month", { status: "paid", sub, at: "2026-10-05 10:00:00" });
+        const seeded = await postTransfer(pool, {
+          from: MINT_FAUCET, to: memberAccount(who.id), tokenType: "credits", amount: 5_000,
+          source: "test_seed", idempotencyKey: `subs-former:seed:${who.id}`,
+        });
+        expect(seeded.ok, String(seeded.error)).toBe(true);
+        const opened = await createExit(pool, { userId: who.id, kind: "voluntary", openedBy: "admin-1", noticeDays: 0 });
+        if (!opened.ok) throw new Error(opened.error);
+        return { who, exitId: opened.exit.id };
+      }
+      const resolveFor = async (exitId: string, id: string) =>
+        resolveExit(pool, { exitId, target: await usersRepo(pool).byId(id), actorId: "admin-1", deps: deps() });
+
+      it("with Stripe connected, resolving a former member cancels their subscriptions and leaves a neighbour's", async () => {
+        await settleOthers("subs-former-key");
+        const { who, exitId } = await holder("subs-former-key", "Kit Former", "sub_former_key");
+        const ash = await member("subs-former-neighbour", "Ash Neighbour");
+        await purchase("pp-subs-former-neighbour", ash.id, "prod-month", { status: "paid", sub: "sub_former_neighbour", at: "2026-10-05 11:00:00" });
+        const s = useStripe({ sub_former_key: "active", sub_former_neighbour: "active" });
+
+        const out = await resolveFor(exitId, who.id);
+
+        expect(out.outcome, "the control: they hold credits, so they are kept as a former member").toBe("former");
+        expect(s.deletes(), "a former member's exit left their subscription charging").toEqual(["sub_former_key"]);
+        expect(s.subs.sub_former_neighbour).toBe("active");
+        expect((await cancelRows(who.id)).at(-1)).toEqual({
+          text: "member:subscriptions-cancelled:1:sub_former_key", audience: "admin", actor_user_id: "admin-1",
+        });
+        expect(await owedOf(who.id)).toEqual([]);
+        expect(String((await exitById(pool, exitId))!.resolution)).toMatch(/resolve began ending: subscriptions/);
+      });
+
+      it("with no key, hands each one to the admins by hand, and /review owes it", async () => {
+        await settleOthers("subs-former-nokey");
+        delete process.env.STRIPE_SECRET_KEY;
+        await member("subs-admin-exit", "Oak Steward", "admin");
+        const { who, exitId } = await holder("subs-former-nokey", "Kit Unconnected", "sub_former_nokey");
+        const s = useStripe({ sub_former_nokey: "active" });
+
+        expect((await resolveFor(exitId, who.id)).outcome).toBe("former");
+
+        expect(s.calls, "no key, so nothing was sent anywhere").toEqual([]);
+        expect(await cancelRows(who.id)).toEqual([
+          { text: "member:subscriptions-cancel-by-hand:1:sub_former_nokey", audience: "admin", actor_user_id: "admin-1" },
+        ]);
+        expect(await owedOf(who.id)).toEqual(["sub_former_nokey"]);
+        const bell = await q("SELECT title, body FROM notifications WHERE user_id = 'subs-admin-exit' AND dedupe_key = ?", [
+          `exit-subscriptions-by-hand:${who.id}:subs-admin-exit`,
+        ]);
+        expect(bell).toEqual([{
+          title: "Cancel 1 recurring payment(s) by hand in the Stripe dashboard. A departed member's exit could not cancel them, " +
+            "because Stripe is not connected, and Stripe may keep charging them.",
+          body: "Subscription ids to find in the Stripe dashboard: sub_former_nokey. Cancel each one still active.",
+        }]);
+        const read = await queue({ id: "subs-admin-ada" })("GET /api/review/erasure");
+        expect(read.body.subscriptions).toMatchObject({ count: 1 });
+        expect(JSON.stringify(read.body)).not.toContain(who.id);
+      });
+
+      it("a Stripe failure never holds the departure: the cancel is handed over and the hourly job finishes it", async () => {
+        await settleOthers("subs-former-fail");
+        const { who, exitId } = await holder("subs-former-fail", "Kit Failing", "sub_former_fail");
+        const s = useStripe({ sub_former_fail: "active" });
+        s.failNext(500);
+
+        expect((await resolveFor(exitId, who.id)).outcome).toBe("former");
+        expect(await owedOf(who.id), "a failed cancel is a person's job, and owed").toEqual(["sub_former_fail"]);
+        expect(await finishOwedCancelsJob(pool, Date.now() + 60_000)).toBe("cancelled the owed subscriptions of 1 of 1 departed members");
+        expect(s.subs.sub_former_fail).toBe("canceled");
+        expect(await owedOf(who.id)).toEqual([]);
+      });
+
+      it("the control: a member the admins keep with They're staying keeps their subscription", async () => {
+        await settleOthers("subs-former-stays");
+        const { who, exitId } = await holder("subs-former-stays", "Kit Stays", "sub_former_stays");
+        const s = useStripe({ sub_former_stays: "active" });
+        expect((await cancelExit(pool, exitId, { memberById: (id) => usersRepo(pool).byId(id), actorId: "admin-1" })).status).toBe(200);
+
+        expect((await resolveFor(exitId, who.id)).outcome).toBe("stopped");
+
+        expect(s.calls, "a member who stays was asked nothing of Stripe").toEqual([]);
+        expect(s.subs.sub_former_stays).toBe("active");
+        expect(await cancelRows(who.id)).toEqual([]);
+      });
+    });
   });
 
   describe("the departure's notice for a member who holds tokens (round 4, finding 1)", () => {
-    it("says on the exit path that the payments keep renewing, and the delete panel keeps its cancel sentence", async () => {
+    it("says on the exit path that resolving the departure cancels the payments, and the delete panel keeps its sentence", async () => {
       await loadTokenRegistry(pool);
       const kit = await member("subs-holder", "Kit Holder");
       await purchase("pp-hd1", kit.id, "prod-month", { status: "paid", sub: "sub_holder", at: "2026-10-01 10:00:00" });
@@ -740,8 +838,8 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       const exit = await subscriptionsState(pool, kit.id, "exit", FORMER_MEMBER_HOLD);
       expect(exit.description).toBe(
         renewing +
-          "Holding tokens, or being owed cash by the village, when the departure is resolved keeps the account as a former member, " +
-          "and these keep renewing until an admin cancels them in Stripe",
+          "Holding tokens, or being owed cash by the village, when the departure is resolved keeps the account as a former member. " +
+          "Resolving the departure cancels each one in Stripe, and nothing already paid is refunded",
       );
       expect(exit.blocking).toBe(false);
       // The exit desk reads the exit path.
@@ -763,7 +861,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       expect(await read({})).toEqual([deleting]);
     });
 
-    it("tells a leaver kept only for cash owed that the payments keep renewing, the rule resolve uses (round 6, R5-0/R5-1)", async () => {
+    it("tells a leaver kept only for cash owed that resolving cancels the payments, the rule resolve uses (round 6, R5-0/R5-1)", async () => {
       const rue = await member("subs-cash-only", "Rue Cash");
       await purchase("pp-co1", rue.id, "prod-month", { status: "paid", sub: "sub_cash_only", at: "2026-10-03 10:00:00" });
       await insertCashOwedRow(pool, {
@@ -777,8 +875,8 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       const exit = await subscriptionsState(pool, rue.id, "exit", FORMER_MEMBER_HOLD);
       expect(exit.description).toBe(
         renewing +
-          "Holding tokens, or being owed cash by the village, when the departure is resolved keeps the account as a former member, " +
-          "and these keep renewing until an admin cancels them in Stripe",
+          "Holding tokens, or being owed cash by the village, when the departure is resolved keeps the account as a former member. " +
+          "Resolving the departure cancels each one in Stripe, and nothing already paid is refunded",
       );
       expect(exit.description).not.toContain("Deleting the account cancels");
       expect((await exitOpenState(pool, rue.id, [], { formerMember: FORMER_MEMBER_HOLD })).find((st) => st.domain === "subscriptions")).toEqual(exit);
@@ -790,7 +888,7 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       expect((await subscriptionsState(pool, rue.id, "exit", FORMER_MEMBER_HOLD)).description).toBe(deleting);
     });
 
-    it("takes the former-member rule and its reason from the caller, and promises nothing without one (round 5)", async () => {
+    it("takes the former-member rule and its reason from the caller, and names the resolve without one (round 5)", async () => {
       const ash = await member("subs-hold-injected", "Ash Injected");
       await purchase("pp-hi1", ash.id, "prod-month", { status: "paid", sub: "sub_injected", at: "2026-10-02 10:00:00" });
       const renewing = "1 recurring payment(s) still renewing through Stripe: Monthly membership (every month). ";
@@ -802,8 +900,8 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       };
       expect((await subscriptionsState(pool, ash.id, "exit", owedCash)).description).toBe(
         renewing +
-          "Holding tokens, or being owed cash by the village when the departure is resolved keeps the account as a former member, " +
-          "and these keep renewing until an admin cancels them in Stripe",
+          "Holding tokens, or being owed cash by the village when the departure is resolved keeps the account as a former member. " +
+          "Resolving the departure cancels each one in Stripe, and nothing already paid is refunded",
       );
       expect(asked).toEqual([ash.id]);
       // The delete panel never asks the rule: a delete always erases.
@@ -815,12 +913,12 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       expect((await subscriptionsState(pool, ash.id, "exit", FORMER_MEMBER_HOLD)).description).toBe(
         `${renewing}Deleting the account cancels each one in Stripe, and nothing already paid is refunded`,
       );
-      // A caller that only reads the blocking list passes no rule, and the line promises no cancel.
+      // A caller that only reads the blocking list passes no rule: both outcomes cancel (Rye, 2026-10-31, ruling 8).
       const blind = (await exitOpenState(pool, ash.id, [])).find((st) => st.domain === "subscriptions");
       expect(blind).toEqual({
         domain: "subscriptions",
         count: 1,
-        description: `${renewing}Whether they are cancelled depends on how the departure is resolved`,
+        description: `${renewing}Resolving the departure cancels each one in Stripe, and nothing already paid is refunded`,
         blocking: false,
       });
     });

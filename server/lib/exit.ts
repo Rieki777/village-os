@@ -47,7 +47,8 @@ import { isTombstone } from "./oauthAccounts";
 import { openRedemptionCount } from "./redemptionStore";
 import { liveSubscriptionsOf } from "../repos/productPurchases";
 import { stripeConfigured } from "./payments";
-import { cashWords, unpaidCashOf } from "./formerMember";
+import { cashWords, leftTheVillage, unpaidCashOf } from "./formerMember";
+import { usersRepo } from "../repos/users";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -147,6 +148,10 @@ export async function createExit(
 ): Promise<{ ok: true; exit: ExitRow } | { ok: false; error: string }> {
   const existing = await openExitFor(pool, input.userId);
   if (existing) return { ok: false, error: `An exit is already ${existing.status} for this member` };
+  // A FORMER MEMBER ALREADY LEFT (the e2e sweep, E4). Their exit is resolved, and a second one opened a second
+  // departure for somebody who has none to make. Admitting them again is the only way back, and a member who is
+  // admitted again may leave again: `leftTheVillage` answers false from that moment.
+  if (await leftTheVillage(pool, await usersRepo(pool).byId(input.userId))) return { ok: false, error: FORMER_MEMBER_EXIT };
   const id = `exit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const noticeEnds = input.noticeDays > 0 ? new Date(Date.now() + input.noticeDays * 24 * 3600 * 1000) : null;
   await pool.query(
@@ -155,6 +160,10 @@ export async function createExit(
   );
   return { ok: true, exit: (await exitById(pool, id))! };
 }
+
+/** Why no exit opens for a former member. */
+export const FORMER_MEMBER_EXIT =
+  "They already left the village and are a former member, so there is no departure to open. Admitting them again is the only way back.";
 
 /** What the cancel route answers, status and body together. */
 export interface CancelExitOutcome {
@@ -266,7 +275,14 @@ function stayingAnswer(erasure: AbandonedErasure, endings: ResolveEndings): Reco
  * server/lib/exitResolve.ts). "role-applications" is the erasure's
  * `withdrawUnseatedOf`, which there runs inside a later step.
  */
-export const FORMER_MEMBER_STEPS = ["alignment-party-left", "role-holdings", "org-seatings", "role-applications", "invitations"] as const;
+export const FORMER_MEMBER_STEPS = [
+  "alignment-party-left",
+  "role-holdings",
+  "org-seatings",
+  "role-applications",
+  "invitations",
+  "subscriptions",
+] as const;
 export type FormerMemberStep = (typeof FORMER_MEMBER_STEPS)[number];
 
 /** What each of those steps ends, as the admin reads it. */
@@ -276,6 +292,8 @@ const ENDED_IN_WORDS: Record<FormerMemberStep, (roles: readonly string[]) => str
   "org-seatings": () => "their places on the org chart",
   "role-applications": () => "their open role applications",
   invitations: () => "their open invitation links",
+  // Rye, 2026-10-31, ruling 8: a former member's exit cancels their recurring payments.
+  subscriptions: () => "their recurring payments through Stripe",
 };
 
 /** What a resolve's record says it already began ending: each step once, and the permission roles by id. */
@@ -545,10 +563,13 @@ const EVERY: Record<"month" | "year", string> = { month: "every month", year: "e
  * `resolveExit` (server/lib/exitResolve.ts), which keeps a member who still
  * holds tokens, or whom the village still owes cash, as a former member
  * (Rye's ruling, #617; `keepsAsFormerMember`). That path ends their
- * membership and roles and leaves their purchases alone, so the payments keep
- * renewing. A member kept that way today reads that, plainly, and so does
- * the admin resolving them. Whether the former-member path should cancel
- * them itself is a decision for Rye.
+ * membership and roles, and since Rye's ruling 8 of 2026-10-31 ("a former
+ * member's exit cancels their subscriptions") it cancels their recurring
+ * payments too, through the erasure's cancel and the same no-key hand-off
+ * (the `subscriptions` step of `keepAsFormerMember`). So both outcomes
+ * cancel, and the sentence differs only in what the admin presses: a member
+ * kept that way reads that resolving the departure cancels them, and so does
+ * the admin resolving them. A caller with no hold can promise the cancel too.
  */
 export async function subscriptionsState(
   pool: Pool,
@@ -560,35 +581,22 @@ export async function subscriptionsState(
   if (!subs.length) return { domain: "subscriptions", count: 0, description: "no recurring payments", blocking: false };
   const named = subs.map((s) => `${s.productName || "A product no longer listed"}${s.interval ? ` (${EVERY[s.interval]})` : ""}`);
   const renewing = `${subs.length} recurring payment(s) still renewing through Stripe: ${named.join(", ")}. `;
-  // An exit-path caller that passed no hold only reads the blocking list, and
-  // this file cannot tell which way the departure goes: it promises nothing.
-  if (path === "exit" && !formerMember) {
-    return {
-      domain: "subscriptions",
-      count: subs.length,
-      description: `${renewing}Whether they are cancelled depends on how the departure is resolved`,
-      blocking: false,
-    };
-  }
-  if (path === "exit" && formerMember && (await formerMember.keptAsFormerMember(pool, userId))) {
-    return {
-      domain: "subscriptions",
-      count: subs.length,
-      description:
-        `${renewing}${formerMember.reason} when the departure is resolved keeps the account as a former member, ` +
-        "and these keep renewing until an admin cancels them in Stripe",
-      blocking: false,
-    };
-  }
+  // Which act cancels them. An exit-path caller with no hold cannot tell which
+  // way the departure goes, and both ways cancel, so it names the resolve.
+  const kept = path === "exit" && (!formerMember || (await formerMember.keptAsFormerMember(pool, userId)));
+  const act = kept ? "resolving the departure" : "deleting the account";
+  const formerLine = path === "exit" && formerMember && kept
+    ? `${formerMember.reason} when the departure is resolved keeps the account as a former member. `
+    : "";
   // Read only when there is something to cancel: the secrets store throws
   // until boot has loaded it, and every departure reads this domain.
   const cancel = stripeConfigured()
-    ? "Deleting the account cancels each one in Stripe"
-    : "Stripe is not connected to this village, so deleting the account asks the admins to cancel each one by hand in Stripe";
+    ? `${act[0].toUpperCase()}${act.slice(1)} cancels each one in Stripe`
+    : `Stripe is not connected to this village, so ${act} asks the admins to cancel each one by hand in Stripe`;
   return {
     domain: "subscriptions",
     count: subs.length,
-    description: `${renewing}${cancel}, and nothing already paid is refunded`,
+    description: `${renewing}${formerLine}${cancel}, and nothing already paid is refunded`,
     blocking: false,
   };
 }

@@ -30,8 +30,9 @@ export interface LeavingNotice {
  * `path` says which door the member is at. "delete" is the delete panel, and a
  * delete always cancels. "exit" is the departure page: a departure keeps a
  * member who still holds tokens, or whom the village still owes cash, as a
- * former member, and the server says then that the payments keep renewing
- * (round 4, finding 1; round 6, R5-0/R5-1).
+ * former member (round 4, finding 1; round 6, R5-0/R5-1), and since Rye's
+ * ruling 8 of 2026-10-31 that departure cancels the payments too. The server
+ * says which act cancels them, deleting the account or resolving the departure.
  */
 export function useLeavingNotices(enabled: boolean, path: "delete" | "exit" = "delete"): LeavingNotice[] | null {
   const [notices, setNotices] = useState<LeavingNotice[] | null>(null);

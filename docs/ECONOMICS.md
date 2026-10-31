@@ -3152,7 +3152,8 @@ forever. Re-running it moves nothing.
   delete stops charging; with no key, or a failing Stripe, the cancel is owed
   on `/review` until Finish, the hourly job or a person settles it. On the exit
   path a member who holds tokens, or is owed cash, reads that resolving keeps them a former
-  member and the payments keep renewing until an admin cancels them.
+  member, and that resolving cancels the payments all the same (Rye, 2026-10-31, ruling 8:
+  the resolve's `subscriptions` step runs the erasure's cancel and its no-key hand-off).
 - **The exit desk shows the cash the village still owes them** as a
   NON-blocking `cash` domain: the `cash_owed` rows (0285) in state `owed` or
   `claimed`, totalled per currency, with the sentence `is owed <amount> in cash

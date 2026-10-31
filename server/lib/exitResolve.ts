@@ -48,6 +48,11 @@
  *   - Their open invitation links (`revokeOpenInvitesOf`, round 6, R5-2). A
  *     link is its maker's vouch, and a former member can no longer vouch, so
  *     a link made before they left must not admit anybody in their name.
+ *   - Their recurring payments (`cancelFormerMembersSubscriptions`, Rye,
+ *     2026-10-31, ruling 8: "a former member's exit cancels their
+ *     subscriptions"). The erasure's cancel and its no-key hand-off, so
+ *     /review owes whatever Stripe could not be asked to stop. Last of the
+ *     steps, so a cancel that lands earlier leaves their card untouched.
  *   - Every DELEGATION they gave or carried (`endDelegationsOf`), the call the
  *     erasure makes, notices included (Rye, 2026-10-30). Each member who
  *     handed them a voice is told and decides their own votes again, and a
@@ -97,7 +102,14 @@
 import type { Pool } from "mysql2/promise";
 import { fromLedgerUnits } from "./economy";
 import { balancesFor, memberAccount, tokenDef, type TokenDef } from "./ledger";
-import { anonymizeMember, beginMemberErasure, endPermissionHoldings, noticeSpine, type ErasureDeps } from "./erasure";
+import {
+  anonymizeMember,
+  beginMemberErasure,
+  cancelFormerMembersSubscriptions,
+  endPermissionHoldings,
+  noticeSpine,
+  type ErasureDeps,
+} from "./erasure";
 import type { ErasureOutcome } from "./memberDrivers";
 import { recordPartyLeft } from "./alignmentEndings";
 import { releaseSeatingsForUser } from "./orgChart";
@@ -174,8 +186,10 @@ export async function heldValueOf(pool: Pool, userId: string): Promise<HeldValue
  * rule, because exit.ts is imported by the economy and may not import this
  * file (shared/seatSettings.boundary.test.ts). It asks `keepsAsFormerMember`,
  * the rule resolve itself reads, so a leaver kept only for cash owed is told
- * their payments keep renewing (round 6, R5-0/R5-1). The reason phrase opens
- * the sentence the member and the admin read, and names both reasons.
+ * they stay on as a former member (round 6, R5-0/R5-1), and that resolving
+ * the departure cancels their recurring payments (Rye, 2026-10-31, ruling 8).
+ * The reason phrase opens the sentence the member and the admin read, and
+ * names both reasons.
  */
 export const FORMER_MEMBER_HOLD: FormerMemberHold = {
   keptAsFormerMember: (pool, userId) => keepsAsFormerMember(pool, userId),
@@ -231,7 +245,7 @@ interface FormerMemberStepRun {
  */
 export async function keepAsFormerMember(
   pool: Pool,
-  input: { exitId: string; target: any; deps: ErasureDeps; now: Date; agreementRef: string | null; note: string },
+  input: { exitId: string; target: any; actorId?: string | null; deps: ErasureDeps; now: Date; agreementRef: string | null; note: string },
 ): Promise<HeldExit | null> {
   const { deps, now } = input;
   const userId = String(input.target.id);
@@ -246,6 +260,8 @@ export async function keepAsFormerMember(
     { name: "role-applications", run: () => withdrawUnseatedOf(pool, userId) },
     // A link is its maker's vouch, and a former member can no longer vouch: their open links stop admitting (R5-2).
     { name: "invitations", run: () => revokeOpenInvitesOf(pool, userId) },
+    // Rye, 2026-10-31, ruling 8: their recurring payments stop with them, through the erasure's cancel and hand-off.
+    { name: "subscriptions", run: () => cancelFormerMembersSubscriptions(pool, userId, input.actorId ?? null, deps) },
   ];
   for (const step of steps) {
     // The line goes on first and the step runs after the hold: see `resolveEndingLine` for why that order.
@@ -330,6 +346,7 @@ export async function resolveExit(
   const closed = await keepAsFormerMember(pool, {
     exitId: input.exitId,
     target: input.target,
+    actorId: input.actorId,
     deps: input.deps,
     now,
     agreementRef: agreement,
