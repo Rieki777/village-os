@@ -275,9 +275,9 @@ A circle holds a working call together in real time: drop in with a shared breat
 | Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
 | Requires | nothing |
 | Recommends | `gratitude` |
-| Capabilities it adds | none |
+| Capabilities it adds | `session.template` |
 | Variable keys it owns | `sessions.place_line`, `sessions.default_minutes`, `calendar.seasons` |
-| API prefixes | `/api/sessions` |
+| API prefixes | `/api/sessions`, `/api/session-templates` |
 | What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [live-sessions.md](modules/live-sessions.md) |
 | Switching it off is blocked by | `session-card`, which requires it while non-off |
@@ -811,7 +811,7 @@ Ten keys are claimed by more than one module, so switching one module off leaves
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 39 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Thirteen modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 40 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Fourteen modules add keys:
 
 | Module | Capabilities |
 | --- | --- |
@@ -826,6 +826,7 @@ A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which
 | `exchange` | `exchange.buy`, `exchange.swap`, `exchange.manage` |
 | `redemption` | `redemption.confirm` |
 | `events` | `event.rsvp`, `event.manage` |
+| `sessions` | `session.template` |
 | `governance` | `ballot.vote`, `member.vouch` |
 | `comms` | `comms.manage` |
 
@@ -1479,14 +1480,17 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "recommends": [
         "gratitude"
       ],
-      "capabilities": [],
+      "capabilities": [
+        "session.template"
+      ],
       "variableKeys": [
         "sessions.place_line",
         "sessions.default_minutes",
         "calendar.seasons"
       ],
       "apiPrefixes": [
-        "/api/sessions"
+        "/api/sessions",
+        "/api/session-templates"
       ],
       "contractDoc": "docs/modules/live-sessions.md"
     },

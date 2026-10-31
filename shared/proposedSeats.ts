@@ -126,11 +126,13 @@ export const SEAT_KEY_ALIASES: Readonly<Record<string, readonly string[]>> = {
  * What the SOURCE said about a seat, carried beside it for the structure
  * review to read (`shared/structurePlan.ts`) and never written to a seat:
  * the source's status for the seat and for its circle, the further circles a
- * relation named, and that a relation named a circle the read did not hold.
- * Read by the caller, so never reported as a key nothing read, and never part
- * of the canonical payload.
+ * relation named, that a relation named a circle the read did not hold, and
+ * what the source holds the seat to pay (`sourcePay`). Read by the caller, so
+ * never reported as a key nothing read, and never part of the canonical
+ * payload. Pay in particular never reaches a seat this way: money is set here,
+ * by a person, on the role's own terms.
  */
-export const SOURCE_SEAT_KEYS = ["sourceStatus", "sourceCircleStatus", "sourceOtherCircles", "sourceCircleUnresolved"] as const;
+export const SOURCE_SEAT_KEYS = ["sourceStatus", "sourceCircleStatus", "sourceOtherCircles", "sourceCircleUnresolved", "sourcePay"] as const;
 
 /** Keys that give a circle by NAME, tried in this order. An id beats all of them. */
 export const CIRCLE_NAME_KEYS = ["circleName", "circle_name", "circle"] as const;

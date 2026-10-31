@@ -58,10 +58,45 @@ import {
   decideStructure,
   type ConflictChoice,
   type PlanSeat,
+  type SourcePay,
+  type SourcePayStanding,
   type StructureDecisions,
   type StructurePlan,
 } from "@shared/structurePlan";
 import { MODULES_BY_ID } from "@shared/modules";
+
+/** How each pay standing opens its line. The figure is information, never this village's pay. */
+const PAY_LEAD: Record<SourcePayStanding, (source: string, label: string | null) => string> = {
+  settled: (source) => `Pay in ${source}`,
+  pending: (source) => `Pay in ${source}, still pending`,
+  "agreed-not-paying": (source) => `Pay in ${source}, agreed and not paying yet`,
+  other: (source, label) => (label ? `Pay in ${source}, marked ${label}` : `Pay in ${source}`),
+};
+
+const usd = (n: number): string =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
+  }).format(n);
+
+/**
+ * What the source holds a role to pay, in words for the steward reading the
+ * structure. The source's target is one figure for the whole arrangement, so
+ * the line says so. Pay itself is set on the role's own terms, here.
+ */
+export function sourcePayWords(p: SourcePay, source: string): string[] {
+  const lead = p.standing ? PAY_LEAD[p.standing](source, p.statusLabel) : `Pay in ${source}`;
+  const what = [p.model, p.monthlyUsd !== null ? `${usd(p.monthlyUsd)} a month for the whole arrangement` : null]
+    .filter((x): x is string => !!x)
+    .join(", ");
+  const out: string[] = [];
+  if (what) out.push(`${lead}: ${what}`);
+  else if (p.standing) out.push(lead);
+  if (p.terms) out.push(`Pay terms in ${source}: ${p.terms.length > 200 ? `${p.terms.slice(0, 199)}…` : p.terms}`);
+  return out;
+}
 
 interface PlanAnswer {
   batchId: string;
@@ -697,6 +732,10 @@ export default function StructureReview() {
                               {sourceNotes(s).map((n) => (
                                 <p key={n} className="text-xs text-notice">{n}</p>
                               ))}
+                              {s.sourcePay &&
+                                sourcePayWords(s.sourcePay, source).map((n) => (
+                                  <p key={n} className="text-xs text-muted-foreground">{n}</p>
+                                ))}
                               {s.circleProblem && <p className="text-[13px] text-destructive">{s.circleProblem}</p>}
                               {s.problem && <p className="text-[13px] text-destructive">{s.problem}</p>}
                               {s.match && !settledOrOut(s) && (

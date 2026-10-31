@@ -559,3 +559,147 @@ describe.skipIf(!DB_CONFIGURED)("messaging routes: the gate and the 404 posture"
     expect(report.reason, "the reporter's words are all that is left").toBe("cruel");
   });
 });
+
+/*
+ * SHARED WORK CHATS (server/lib/sharedWork.ts). A quest or a task with two or
+ * more people on it has one chat, and its members are exactly those people.
+ *
+ * The claims and seatings below are written straight into the tables, not
+ * through the quest routes, on purpose: the chat reconciles against the RECORD
+ * on every read, whichever of the many writers changed it (claim, the map's
+ * promise, a steward's decline, the erasure, a seat's term). Writing the rows
+ * directly is the proof that no writer has to remember to call it.
+ */
+describe.skipIf(!DB_CONFIGURED)("messaging routes: shared work chats", () => {
+  const QUEST = `q-shared-${PORT}`;
+  const inboxOf = async (token: string) => (await call("GET", "/api/messages", undefined, token)).json?.conversations ?? [];
+  const workChat = (list: any[], kind: string, id: string) =>
+    list.find((c: any) => c.contextType === kind && c.contextId === id && c.kind === "group");
+  const claim = (userId: string, status = "claimed") =>
+    pool.query("INSERT INTO quest_claims (id, quest_id, quest_title, user_id, status) VALUES (?,?,?,?,?)", [ // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+      `claim-${userId}-${Math.random().toString(36).slice(2, 8)}`,
+      QUEST,
+      "Mend the long fence",
+      userId,
+      status,
+    ]);
+  let chatId = "";
+
+  it("opens no chat while only one person is on a quest", async () => {
+    await pool.query("INSERT INTO quests (id, title, status) VALUES (?,?,'Open')", [QUEST, "Mend the long fence"]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+    await claim(anaId);
+    const asked = await call("GET", `/api/messages/work/quest/${QUEST}`, undefined, anaToken);
+    expect(asked.status).toBe(200);
+    expect(asked.json).toEqual({ available: false, conversationId: null, people: 1 });
+    expectHidden(await call("POST", `/api/messages/work/quest/${QUEST}`, undefined, anaToken), "a chat for one person");
+    expect(workChat(await inboxOf(anaToken), "quest", QUEST)).toBeUndefined();
+  });
+
+  it("gives both people the chat once a second person claims, titled by the quest", async () => {
+    await claim(benId);
+    // Ben has not pressed anything: his inbox load finds the chat for him.
+    const benChat = workChat(await inboxOf(benToken), "quest", QUEST);
+    expect(benChat, "the second claimant sees the chat in their inbox").toBeTruthy();
+    expect(benChat.title).toBe("Mend the long fence");
+    expect(benChat.memberCount).toBe(2);
+    chatId = String(benChat.id);
+
+    const opened = await call("POST", `/api/messages/work/quest/${QUEST}`, undefined, anaToken);
+    expect(opened.status).toBe(200);
+    expect(opened.json?.id, "one chat per quest, whoever opens it").toBe(chatId);
+    const asked = await call("GET", `/api/messages/work/quest/${QUEST}`, undefined, anaToken);
+    expect(asked.json).toEqual({ available: true, conversationId: chatId, people: 2 });
+
+    const before = Number((await call("GET", "/api/messages/unread", undefined, benToken)).json?.unreadTotal);
+    expect((await call("POST", `/api/messages/${chatId}/messages`, { body: "Posts are in the barn" }, anaToken)).status).toBe(200);
+    const after = await call("GET", "/api/messages/unread", undefined, benToken);
+    expect(after.json?.unreadTotal, "the menu's count is one COUNT and moves with the chat").toBe(before + 1);
+    expect((await call("GET", "/api/messages/unread", undefined, "")).status, "and answers nobody signed out").toBe(401);
+    const read = await call("GET", `/api/messages/${chatId}`, undefined, benToken);
+    expect(read.status).toBe(200);
+    expect(read.json?.contextType).toBe("quest");
+    expect(read.json?.messages?.map((m: any) => m.body)).toEqual(["Posts are in the barn"]);
+  });
+
+  it("hides the chat from everyone not on the quest, the founder included", async () => {
+    expectHidden(await call("GET", `/api/messages/${chatId}`, undefined, caraToken), "a quest chat to a non-claimant");
+    expectHidden(await call("GET", `/api/messages/${chatId}`), "a quest chat to the founder");
+    expectHidden(await call("POST", `/api/messages/work/quest/${QUEST}`, undefined, caraToken), "opening it as a non-claimant");
+    const asked = await call("GET", `/api/messages/work/quest/${QUEST}`, undefined, caraToken);
+    expect(asked.json, "the button's question tells an outsider nothing").toEqual({ available: false, conversationId: null, people: 0 });
+    expectHidden(await call("GET", "/api/messages/work/circle/anything", undefined, anaToken), "a kind that is not shared work");
+  });
+
+  it("keeps membership the record's: no adding, removing, renaming or leaving", async () => {
+    const refused = [
+      await call("POST", `/api/messages/${chatId}/members`, { userIds: [benId] }, anaToken),
+      await call("DELETE", `/api/messages/${chatId}/members/${benId}`, undefined, anaToken),
+      await call("POST", `/api/messages/${chatId}/owner`, { userId: benId }, anaToken),
+      await call("POST", `/api/messages/${chatId}/leave`, undefined, benToken),
+      await call("PATCH", `/api/messages/${chatId}`, { name: "Something else" }, anaToken),
+    ];
+    for (const r of refused) expect(r.status).toBe(400);
+    // Muting is how a member quiets it, and it stays open.
+    expect((await call("PATCH", `/api/messages/${chatId}`, { muted: true }, benToken)).status).toBe(200);
+    expect((await call("PATCH", `/api/messages/${chatId}`, { muted: false }, benToken)).status).toBe(200);
+  });
+
+  it("takes a declined claimant out on their next request, and back in when they claim again", async () => {
+    await pool.query("UPDATE quest_claims SET status = 'declined' WHERE quest_id = ? AND user_id = ?", [QUEST, benId]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+    expectHidden(await call("GET", `/api/messages/${chatId}`, undefined, benToken), "the chat to a declined claimant");
+    expectHidden(
+      await call("POST", `/api/messages/${chatId}/messages`, { body: "still here?" }, benToken),
+      "sending as a declined claimant",
+    );
+    expect(workChat(await inboxOf(benToken), "quest", QUEST), "and it leaves their inbox").toBeUndefined();
+    const forAna = await call("GET", `/api/messages/${chatId}`, undefined, anaToken);
+    expect(forAna.json?.members?.find((m: any) => m.userId === benId)?.left).toBe(true);
+
+    await claim(benId);
+    const back = await call("GET", `/api/messages/${chatId}`, undefined, benToken);
+    expect(back.status, "a new claim puts them back, history included").toBe(200);
+    expect(back.json?.messages?.map((m: any) => m.body)).toEqual(["Posts are in the barn"]);
+  });
+
+  it("follows the quest's name", async () => {
+    await pool.query("UPDATE quests SET title = ? WHERE id = ?", ["Mend the north fence", QUEST]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+    const read = await call("GET", `/api/messages/${chatId}`, undefined, anaToken);
+    expect(read.json?.title).toBe("Mend the north fence");
+  });
+
+  it("gives a task its chat: the person holding it and everyone in its seat", async () => {
+    const seat = `seat-shared-${PORT}`;
+    await pool.query("INSERT IGNORE INTO live_session_members (user_id) VALUES (?), (?)", [anaId, benId]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+    const [nos]: any = await pool.query("SELECT no, user_id FROM live_session_members WHERE user_id IN (?,?)", [anaId, benId]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+    const anaNo = Number(nos.find((r: any) => r.user_id === anaId).no);
+    const [entry]: any = await pool.query( // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+      "INSERT INTO live_session_entries (session_id, kind, text, author_no, owner_no, owner_seat_id) VALUES (1,'action',?,?,?,?)",
+      ["Order the seed for the south beds", anaNo, anaNo, seat],
+    );
+    const entryId = String(entry.insertId);
+    await pool.query( // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+      "INSERT INTO live_session_task_state (entry_id, session_id, status, owner_no, owner_seat_id) VALUES (?,1,'open',?,?)",
+      [entryId, anaNo, seat],
+    );
+
+    // Ana alone holds it: no chat yet.
+    expect((await call("GET", `/api/messages/work/task/${entryId}`, undefined, anaToken)).json?.available).toBe(false);
+
+    // Ben takes the seat that holds it.
+    await pool.query( // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+      "INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES (?,?,'member',?,?)",
+      [`asg-${PORT}`, seat, benId, benId],
+    );
+    const benChat = workChat(await inboxOf(benToken), "task", entryId);
+    expect(benChat, "a seat holder finds the task's chat in their inbox").toBeTruthy();
+    expect(benChat.title).toBe("Order the seed for the south beds");
+    const taskChat = String(benChat.id);
+    expect((await call("POST", `/api/messages/work/task/${entryId}`, undefined, anaToken)).json?.id).toBe(taskChat);
+    expectHidden(await call("GET", `/api/messages/${taskChat}`, undefined, caraToken), "a task chat to someone not holding it");
+
+    // Ben leaves the seat: he is out of the chat on his next request.
+    await pool.query("UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP WHERE id = ?", [`asg-${PORT}`]); // module-review-ok: a fixture writing the claim, seating or session record directly, to prove no writer has to call the chat sync
+    expectHidden(await call("GET", `/api/messages/${taskChat}`, undefined, benToken), "the task chat once out of the seat");
+    expect((await call("GET", `/api/messages/${taskChat}`, undefined, anaToken)).status).toBe(200);
+  });
+});
