@@ -158,7 +158,8 @@ describe("the catalogue", () => {
 
   it("has a sample for every field a preview could need, all on the village's own site", () => {
     const sample = sampleValues({ villageUrl: "https://village.example", firstName: "Ada", fullName: "Ada Lovelace" });
-    const needed = MERGE_FIELDS.filter((f) => !["village.name", "village.url", "footer.address", "path.name"].includes(f.key));
+    // The village's own facts come from the village, never from a sample.
+    const needed = MERGE_FIELDS.filter((f) => !["village.name", "village.url", "village.tokenName", "footer.address", "path.name"].includes(f.key));
     for (const f of needed) expect(sample[f.key], f.key).toBeTruthy();
     expect(sample["person.firstName"]).toBe("Ada");
     for (const [key, value] of Object.entries(sample)) {

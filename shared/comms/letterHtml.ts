@@ -63,6 +63,12 @@ export interface EmailVillage {
   character: string | null;
   /** The postal address for the footer, from Comms Settings. Empty leaves the line out. */
   postalAddress: string;
+  /**
+   * The recognition token's name, as Admin, Tokens sets it (`village.tokenName`).
+   * Optional so a caller that never names a token still composes; the field's
+   * fallback then reads the platform default.
+   */
+  tokenName?: string;
 }
 
 /** The words of one email, before any person's values. */
@@ -271,7 +277,7 @@ function imageFrom(village: EmailVillage) {
 /**
  * Words plus a person's values, made into one email.
  *
- * The village's own facts (`village.name`, `village.url`, `footer.address`)
+ * The village's own facts (`village.name`, `village.url`, `village.tokenName`, `footer.address`)
  * always come from `village`, whatever the values say, so an email can never
  * claim to be from somewhere else.
  */
@@ -281,6 +287,7 @@ export function composeEmail(input: ComposeInput): ComposedEmail {
     ...input.values,
     "village.name": village.name,
     "village.url": village.url,
+    "village.tokenName": village.tokenName ?? null,
     "footer.address": village.postalAddress,
   };
   const tracker: FillTracker = newTracker();
