@@ -422,3 +422,45 @@ describe.skipIf(!DB_CONFIGURED)("PR 9: tensions on the card, as each reader may 
     expect((await orgTile(readerToken)).health.openTensions).toBe(1);
   });
 });
+
+/*
+ * THE PORTRAIT IN THE GOLD RING (the approved design): the owner's own
+ * character, never an initial once they have one, by the portrait's own
+ * visibility rule. Before any character the card draws the initial; once the
+ * owner walks a path it draws that character's stock art; an uploaded
+ * portrait reaches the owner at once and everybody else only once published.
+ */
+describe.skipIf(!DB_CONFIGURED)("the approved design's portrait and hero", () => {
+  const portraitOf = async (token: string | null) => (await card(token)).json.card.header.portrait;
+
+  it("draws the initial until the owner has a character, then the character's own art", async () => {
+    expect(await portraitOf(null)).toEqual({ kind: "sigil", letter: "W" });
+    const made = await call("POST", "/api/me/characters", { body: { archetypeKey: "facilitating", presentation: "f", tone: "olive", primary: true }, token: ownerToken });
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const stock = String(made.json.character.avatar);
+    expect(stock).toMatch(/^\/images\/avatars\//);
+    for (const t of [null, readerToken, ownerToken]) expect(await portraitOf(t)).toEqual({ kind: "photo", src: stock });
+  });
+
+  it("shows an uploaded portrait to its owner at once, and to anybody else only once it is published", async () => {
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 60, height: 80, channels: 3, background: "#7a6a4a" } }).png().toBuffer();
+    const form = new FormData();
+    form.append("portrait", new Blob([new Uint8Array(png)], { type: "image/png" }), "me.png");
+    const up = await fetch(`${BASE}/api/me/portraits/facilitating/upload`, { method: "POST", headers: { Authorization: `Bearer ${ownerToken}` }, body: form }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+    expect(up.status).toBe(200);
+    const own = await portraitOf(ownerToken);
+    expect(own.src).toMatch(/^\/api\/uploads\/portrait-/);
+    // Private until published: a member and a stranger still see the stock art.
+    for (const t of [null, readerToken]) expect((await portraitOf(t)).src).toMatch(/^\/images\/avatars\//);
+    expect((await call("POST", "/api/me/portraits/facilitating/publish", { body: { published: true }, token: ownerToken })).status).toBe(200);
+    for (const t of [null, readerToken]) expect(await portraitOf(t)).toEqual(own);
+  });
+
+  it("names the moon on the pill and gives each tile its icon", async () => {
+    const r = (await card(readerToken)).json.card;
+    expect(r.header.moon.words).toMatch(/^(January|February|March|April|May|June|July|August|September|October|November|December) Moon/);
+    expect(r.header.tagline).toBe("One role");
+    expect(r.tiles.items.value[0].icon).toBe("sprout");
+  });
+});

@@ -780,6 +780,18 @@ export const VARIABLES: VariableDef[] = [
     type: "boolean",
     default: "true",
   },
+  {
+    key: "gratitude.nudge_days_before_close",
+    category: "Gratitude",
+    label: "Days before close to nudge unsent gratitude",
+    description:
+      "How many days before a cycle closes each member who still has gratitude to send gets one warm note saying how much is left and when the cycle closes, with the people they worked with this cycle one tap away on the send panel. Once per member per cycle, never more. The note sends nothing itself: every gift still goes through the send panel. A member can turn it off in their notification settings. Set it to 0 to switch the nudge off for the whole village.",
+    type: "integer",
+    default: "3",
+    min: 0,
+    max: 14,
+    unit: "days",
+  },
   /*
    * THE RHYTHM DIAL, AND WHY IT IS BACK.
    *
@@ -2799,19 +2811,12 @@ export const VARIABLES: VariableDef[] = [
     default: "true",
   },
 
-  // ── Recognition issuance that used to hide in a content document ──────────
-  {
-    key: "gratitude.proposal_accept_award",
-    category: "Gratitude",
-    label: "Recognition for an accepted Work With Us proposal",
-    description:
-      "How much recognition is minted for a member whose Work With Us proposal is accepted. This used to live inside the Work With Us content settings with no bounds; it is issuance, so it belongs here with the other Gratitude dials.",
-    type: "integer",
-    default: "100",
-    min: 0,
-    max: 100000,
-    unit: "Gratitude",
-  },
+  // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude
+  // an accepted Work With Us proposal minted, 100 by default. Rye: "GRATITUDE is
+  // only sent from player to player using the send gratitude function, gratitude
+  // is not distributed in any other way!" An accepted proposal pays the Mint
+  // panel's `proposal.accepted` rules now (server/lib/proposalAward.ts). A stored
+  // override row for the key is never read.
 
   // ── Per-member daily activity caps that were hardcoded ────────────────────
   {
@@ -2985,17 +2990,22 @@ export const VARIABLES: VariableDef[] = [
   // and it is the community's question to hold: what a leaver keeps is the
   // most community-shaped number in this file.
   //
-  // EVERY DEFAULT HERE REPRODUCES TODAY, EXACTLY. `sweepBalances`
-  // (server/lib/exit.ts) reads these five dials now, and on the defaults below
-  // it does what it always did: every positive balance moves in full to
-  // sys:exit-settlement, nothing is held back, and no date gates the settle.
-  // So a village that never opens this panel keeps the departure it already
-  // has. `shared/gameVariables.test.ts` asserts each of the ten defaults by
-  // name, and `server/lib/exitDefaults.test.ts` runs a whole departure on them
-  // and compares every ledger row to the ones origin/main writes.
+  // THE DEFAULTS FOLLOW THE FOUNDER'S RULING OF 2026-10-23. "As a general rule
+  // members keep their tokens", and asked whether a leaver stays on as a
+  // former member or is erased after carrying their voice and equity to
+  // Hypha, Rye answered "a if b hasn't already happened". So on the defaults
+  // below a leaver keeps every credit, Voice and equity balance, and resolve
+  // (`resolveExit`, server/lib/exitResolve.ts) keeps their account as a
+  // former member while any of it is held. Recognition is the one kind still
+  // settled at 0, because it is a record of thanks and it is what shares the
+  // cycle pool. Until that ruling every share defaulted to 0 and every positive
+  // balance moved in full to sys:exit-settlement; a village that stored its
+  // own values keeps them, and one that never touched a dial inherits these.
+  // `shared/gameVariables.test.ts` asserts each of the ten defaults by name,
+  // and `server/lib/exitDefaults.test.ts` runs a whole departure on them.
   //
   // TWO THINGS ACT ON THESE. The save-time guard, `exitLeverProblem`
-  // (server/lib/exitPolicy.ts), refuses six incoherent combinations with one
+  // (server/lib/exitPolicy.ts), refuses five incoherent combinations with one
   // sentence each, and it now runs inside `setVariable` so a passed proposal
   // meets it as well as an admin. The SETTLEMENT reads the five dials that
   // decide what moves: the four keep shares, the remainder account, the
@@ -3011,9 +3021,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Exit",
     label: "Share of credits a leaver keeps",
     description:
-      "The share of each credit token a departing member keeps when their balance is settled. At 0, where this starts, the whole balance moves to the account named in 'Where the rest of a settled balance goes'. At 40 they keep forty percent of every credit token they hold and the village receives the other sixty. This counts by KIND and never by token name, so a village that mints its own credits gets the same answer as one running the platform's. The share is worked out in the token's smallest unit and rounded DOWN, so what a leaver keeps plus what the village receives is exactly what they held, to the last unit. Works with: 'Where the rest of a settled balance goes' and 'Days of cooling before a balance settles'. The settle act records the shares it actually applied onto the exit, so a dial moved afterwards never rewrites what happened.",
+      "The share of each credit token a departing member keeps when their balance is settled. At 100, where this starts, they keep all of it, by the founder's ruling that members keep their tokens, and a member still holding any stays on as a former member when their exit resolves. At 0 the whole balance moves to the account named in 'Where the rest of a settled balance goes'. At 40 they keep forty percent of every credit token they hold and the village receives the other sixty. This counts by KIND and never by token name, so a village that mints its own credits gets the same answer as one running the platform's. The share is worked out in the token's smallest unit and rounded DOWN, so what a leaver keeps plus what the village receives is exactly what they held, to the last unit. Works with: 'Where the rest of a settled balance goes' and 'Days of cooling before a balance settles'. The settle act records the shares it actually applied onto the exit, so a dial moved afterwards never rewrites what happened.",
     type: "percentage",
-    default: "0",
+    default: "100",
     min: 0,
     max: 100,
     unit: "% kept",
@@ -3023,9 +3033,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Exit",
     label: "Share of Voice a leaver keeps",
     description:
-      "The share of a departing member's Voice that 'What happens to Voice at a departure' is applied to. At 0 the whole holding settles the way it does today. Above 0, the shape of what happens to that share is the other dial's answer: forfeit sends it with everything else, keep leaves it where it is, convert turns it into credits at the rate below. Voice that was earned and Voice that was bought are treated alike, because the ledger holds one balance for both. At forfeit, which is where this starts, the whole holding moves whatever share you set here, so this dial only changes a departure once the other one does.",
+      "The share of a departing member's Voice that 'What happens to Voice at a departure' is applied to. At 100, where this starts, that is the whole holding, and with keep chosen there, which is where that dial starts, the member keeps all of it. At 0 the whole holding settles to the account named in 'Where the rest of a settled balance goes'. Above 0, the shape of what happens to that share is the other dial's answer: forfeit sends it with everything else, keep leaves it where it is, convert turns it into credits at the rate below. Voice that was earned and Voice that was bought are treated alike, because the ledger holds one balance for both. At forfeit the whole holding moves whatever share you set here.",
     type: "percentage",
-    default: "0",
+    default: "100",
     min: 0,
     max: 100,
     unit: "% kept",
@@ -3047,9 +3057,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Exit",
     label: "Share of equity a leaver keeps",
     description:
-      "Here so all four kinds of token are visible in one place. Any value above 0 is refused when you save it: equity is governed on Base under Hypha, this platform never moves it, and a boot invariant requires zero equity rows in this ledger. What happens to equity when somebody leaves is decided where it lives. Leave it at 0.",
+      "The share of each equity token this ledger holds, Earned Equity among them, that a departing member keeps when their balance is settled. At 100, where this starts, they keep all of it, by the founder's ruling that members keep their tokens, and a member still holding any stays on as a former member when their exit resolves. At 0 the whole balance moves to the account named in 'Where the rest of a settled balance goes'. The village's equity on Base under Hypha is outside this dial: this ledger holds no rows of it, so there is nothing of it here to settle.",
     type: "percentage",
-    default: "0",
+    default: "100",
     min: 0,
     max: 100,
     unit: "% kept",
@@ -3102,19 +3112,19 @@ export const VARIABLES: VariableDef[] = [
     category: "Exit",
     label: "What happens to Voice at a departure",
     description:
-      "Voice is the one holding that is also standing in the village, so it gets its own answer. Forfeit is what happens today. Keep is refused while a resolved exit turns the account into a tombstone, and the refusal says when it becomes available. Convert needs a rate under it and a share of Voice the leaver keeps, because only that share converts, so convert with a rate of 0 or a share of 0 is refused as well. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.",
+      "Voice is the one holding that is also standing in the village, so it gets its own answer. Keep is where this starts, by the founder's ruling of 2026-10-23: the member keeps the share set under 'Share of Voice a leaver keeps', and while they hold any of it their exit resolves with the account kept, as a former member. Forfeit sends the share with everything else, which is what a departure did before that ruling. Convert needs a rate under it and a share of Voice the leaver keeps, because only that share converts, so convert with a rate of 0 or a share of 0 is refused. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.",
     type: "choice",
-    default: "forfeit",
+    default: "keep",
     choices: [
       {
         value: "forfeit",
         label: "It goes with everything else",
-        hint: "The share settles to the account above, which is what a departure does today.",
+        hint: "The share settles to the account above, which is what a departure did before the ruling of 2026-10-23.",
       },
       {
         value: "keep",
         label: "The member keeps it",
-        hint: "Refused for now. A resolved exit anonymizes the account, and a tombstone cannot hold voting weight, so this opens once a village can record a departure without one.",
+        hint: "Where this starts. The Voice stays in their account, and the account stays on as a former member while it holds anything of value.",
       },
       {
         value: "convert",

@@ -500,6 +500,26 @@ export async function insertReport(
   );
 }
 
+/**
+ * The erasure sweep's "photo-report-reasons-after-tombstone": the words a
+ * member who has left typed on their reports go, and the reports stay.
+ *
+ * The curators' queue (`listReports`) serves `reason` to every holder of
+ * `map.curatePhotos`, which a role or a badge can grant, and a subject request
+ * is often the person's own name. The row keeps its kind, status, photo and
+ * resolver, because the unique key, the concern count and the queue's
+ * decision all rest on it, and the photograph is left exactly as it is: a
+ * subject request keeps the picture dark after the person who made it has
+ * gone. Reads only by the reporter's id, so a resume may run it again.
+ */
+export async function forgetReportReasonsOf(pool: Pool, reporterId: string): Promise<number> {
+  const [r] = await pool.query<ResultSetHeader>(
+    "UPDATE place_photo_reports SET reason = NULL WHERE reporter_id = ? AND reason IS NOT NULL",
+    [reporterId],
+  );
+  return r.affectedRows;
+}
+
 /** Distinct members who have an open concern on one photograph. */
 export async function openConcernReporters(pool: Pool, photoId: string): Promise<number> {
   const [rows] = await pool.query<RowDataPacket[]>(

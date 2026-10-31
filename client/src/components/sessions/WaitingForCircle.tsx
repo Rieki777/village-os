@@ -42,6 +42,7 @@ import { AIM_DEFS } from "@shared/sessions";
 import {
   LIBRARY_API,
   LIBRARY_COPY,
+  LIBRARY_SOURCE_LINE,
   LIBRARY_STATUS_LINE,
   broughtAnchor,
   broughtIdFromHash,
@@ -209,6 +210,7 @@ function BroughtCard({
             {card.aim && <span className={CHIP}>{AIM_DEFS[card.aim].label}</span>}
             <span>{card.mine ? LIBRARY_COPY.broughtByYou(when) : LIBRARY_COPY.broughtBy(card.broughtBy, when)}</span>
           </p>
+          {card.source && <p className="mt-1 text-sm text-muted-foreground">{LIBRARY_SOURCE_LINE[card.source.kind](card.source.label)}</p>}
           <StatusLine card={card} />
           {card.changedBy && <p className="mt-1 text-xs text-muted-foreground">{LIBRARY_COPY.changedBy(card.changedBy)}</p>}
           {card.note && <ClampedNote text={card.note} />}

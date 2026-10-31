@@ -131,7 +131,7 @@ import { readTexts } from "../repos/alignments";
 import { asksFor, proposalsForApplications, setDecidedWords, type StoredAsk, type StoredProposal } from "../repos/roleProposals";
 import { changesRoles } from "../../shared/roleProposals";
 import { CONSENT_WORDS, consentState } from "../../shared/roleProposalConsent";
-import { applyProposalChanges, consentAsksWaitingOn, consentView, decisionFor } from "../lib/roleProposals";
+import { applyProposalChanges, askRolesFor, consentAsksWaitingOn, consentView, decisionFor, type AskRoles } from "../lib/roleProposals";
 import { revertDraft } from "../lib/orgDrafts";
 import { groupApplications, groupingContext, PAST_SEATING_WORDS } from "../../shared/applicationGroups";
 import { registerJob } from "../lib/scheduler";
@@ -356,12 +356,16 @@ export function register(app: Express, deps: Deps): void {
     return STATUS_WORDS[a.status];
   }
 
+  /** A withdrawn or decided application takes no answer from the circle, so nobody reads that they may give one (PR D). */
+  const answersCloseWith = (view: ReturnType<typeof consentView>, awaiting: boolean) =>
+    awaiting ? view : { ...view, you: { ...view.you, mayAnswer: false } };
+
   /** An application as a member reads it, with what this reader may do with it. */
   async function served(
     a: StoredApplication,
     viewerId: string | null,
     rule: Awaited<ReturnType<typeof adoptionRule>> | null,
-    known?: { ballot: ApplicationBallot | null; seats: SeatForCapacity[]; view: TextView | null; proposal: StoredProposal | null; asks: StoredAsk[] },
+    known?: { ballot: ApplicationBallot | null; seats: SeatForCapacity[]; view: TextView | null; proposal: StoredProposal | null; asks: StoredAsk[]; askRoles: AskRoles },
   ) {
     const pool = getPool();
     const seats = known ? known.seats : await seatsForUpdate(pool, a.seatIds);
@@ -375,6 +379,8 @@ export function register(app: Express, deps: Deps): void {
     // A proposal that changes roles is decided by its circle or the power, never by a village vote (PR B).
     const changes = !!proposal && changesRoles(proposal.body);
     const asks = proposal ? (known ? known.asks : ((await asksFor(pool, [proposal.id])).get(proposal.id) ?? [])) : [];
+    // The roles the asked hold, by title, for the tally (role proposals PR D). The list reads them once for every row.
+    const askRoles = known ? known.askRoles : await askRolesFor(pool, asks);
     const awaiting = a.status === "awaiting-holder";
     const seatNames = a.seatIds.map((id) => seats.find((x) => x.id === id)?.name ?? proposed.get(id) ?? id);
     return {
@@ -390,7 +396,7 @@ export function register(app: Express, deps: Deps): void {
       }),
       // The role proposal it came from: whether it changes roles, where the circle's consent stands, and the decision in words.
       proposal: proposal
-        ? { id: proposal.id, changesRoles: changes, consent: consentView(asks, new Date(), tz, viewerId), decided: proposal.decidedWords }
+        ? { id: proposal.id, changesRoles: changes, consent: answersCloseWith(consentView(asks, new Date(), tz, viewerId, askRoles), awaiting), decided: proposal.decidedWords }
         : null,
       note: a.note,
       deliverables: a.deliverables,
@@ -763,6 +769,7 @@ export function register(app: Express, deps: Deps): void {
     const views = await viewTexts(pool, texts, today(), tz);
     const proposals = await proposalsForApplications(pool, all.map((a) => a.id));
     const asks = await asksFor(pool, Array.from(proposals.values()).map((p) => p.id));
+    const askRoles = await askRolesFor(pool, Array.from(asks.values()).flat());
     const applications = await Promise.all(
       all.map((a) =>
         served(a, String(viewer.id), rule, {
@@ -771,6 +778,7 @@ export function register(app: Express, deps: Deps): void {
           view: (a.textId && views.find((v) => v.text.id === a.textId)) || null,
           proposal: proposals.get(a.id) ?? null,
           asks: asks.get(proposals.get(a.id)?.id ?? "") ?? [],
+          askRoles,
         }),
       ),
     );

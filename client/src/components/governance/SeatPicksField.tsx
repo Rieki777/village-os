@@ -13,6 +13,7 @@
  * longer offers stays listed under its id, so a saved draft never loses a seat
  * without the member seeing it.
  */
+import WorkPayBlock from "@/components/WorkPayBlock";
 import { useEffect, useRef, useState } from "react";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import InfoTip from "@/components/InfoTip";
@@ -118,7 +119,7 @@ export default function SeatPicksField({
               <li key={o.value}>
                 <label
                   htmlFor={id}
-                  className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded-lg border px-3 text-sm ${
+                  className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm ${
                     on ? "border-teal-deep bg-teal-deep/5 font-semibold text-stone-900" : "border-stone-200 text-stone-700 hover:bg-stone-50"
                   }`}
                 >
@@ -130,7 +131,15 @@ export default function SeatPicksField({
                     onChange={() => toggle(o.value)}
                     className="size-4 accent-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
                   />
-                  <span className="min-w-0 flex-1">{o.label}</span>
+                  <span className="min-w-0 flex-1">
+                    {o.label}
+                    {/* What it pays, before it is picked (Rye, 2026-10-30). */}
+                    {o.pay && (
+                      <span className="mt-1 block text-xs font-normal">
+                        <WorkPayBlock pay={o.pay} />
+                      </span>
+                    )}
+                  </span>
                   {full ? (
                     <span className="text-xs text-stone-500">Full: every place is held</span>
                   ) : (

@@ -19,7 +19,7 @@ import { exchangeSettings } from "./exchange";
 import { allTokens, tokenDef } from "./ledger";
 import { effectiveLifecycle } from "./modules";
 import { redeemableTokens } from "./redemption";
-import { numberVar, stringVar } from "./variables";
+import { stringVar } from "./variables";
 import { CLAIM_LANES } from "./voiceClaim";
 import { payableTokens } from "./workPay";
 import { MODULES_BY_ID } from "../../shared/modules";
@@ -53,16 +53,15 @@ function job(
 
 /** Every job, in the order the admin screen lists them. */
 export async function tokenJobs(pool: Pool): Promise<TokenJob[]> {
-  const [questRules, roleRules, exchange] = await Promise.all([
+  const [questRules, roleRules, proposalRules, exchange] = await Promise.all([
     rulesFor(pool, "quest.completed"),
     rulesFor(pool, "role.cycle"),
+    rulesFor(pool, "proposal.accepted"),
     exchangeSettings(pool),
   ]);
 
   // Vote weight: one person, one vote is no token at all.
   const weighted = String(stringVar("governance.weight_mode")) === "token";
-  // The proposal award mints the recognition token; an award of 0 is no token.
-  const award = Math.max(0, numberVar("gratitude.proposal_accept_award"));
   const staysToken = MODULES_BY_ID.stays?.sellsToken ?? null;
 
   return [
@@ -88,7 +87,9 @@ export async function tokenJobs(pool: Pool): Promise<TokenJob[]> {
       "exchange",
     ),
     job("hypha.claim", tokensOf(CLAIM_LANES.map((l) => l.token)), { kind: "code", where: "server/lib/voiceClaim.ts CLAIM_LANES" }, false, "hypha"),
-    job("proposal.award", award > 0 ? tokensOf([HEARTS]) : [], { kind: "dial", key: "gratitude.proposal_accept_award" }, false),
+    // An accepted proposal is work (Rye, 2026-10-23): it pays its own mint rules,
+    // never Gratitude (server/lib/proposalAward.ts). It minted Gratitude off a dial until then.
+    job("proposal.award", tokensOf(payableTokens(proposalRules).map((t) => t.token)), { kind: "mint_rules", trigger: "proposal.accepted" }, true),
     job("stays", staysToken ? tokensOf([staysToken]) : [], { kind: "module", module: "stays" }, false, "stays"),
     job("dues", [], { kind: "nothing" }, false),
     job("revenue.share", [], { kind: "nothing" }, false),

@@ -34,6 +34,7 @@ vi.mock("sonner", () => ({
 }));
 
 import Review from "./Review";
+import { forgetPayOptions } from "@/components/WorkValueEditor";
 
 const ANSWERS = [
   "What they bring: Two afternoons and my own seeds",
@@ -90,6 +91,8 @@ const renderReview = () =>
 describe("a quest idea on /review says where it came from, and what the person answered", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    // The editor keeps the pay options for the page; each case reads its own.
+    forgetPayOptions();
   });
 
   it("names the form, and puts each answer on its own line beneath the idea", async () => {
@@ -131,7 +134,8 @@ describe("a quest idea on /review says where it came from, and what the person a
     const accepted = () => fetchMock.mock.calls.find(([url]) => String(url) === "/api/review/quests/qp-1/accept");
     await waitFor(() => expect(accepted()).toBeTruthy());
     expect(JSON.parse(String(accepted()![1]?.body))).toEqual({
-      reward: { valueMinor: 2500000, valueTokens: [{ token: "credits", amount: 25 }], stayCreditReward: null },
+      // 0285: an empty cash box sends null, which stores no cash.
+      reward: { cashMinor: null, valueMinor: 2500000, valueTokens: [{ token: "credits", amount: 25 }], stayCreditReward: null },
       edits: { title: "Build a seed library shelf", description: "Turn the old bookcase into a seed library." },
     });
   });

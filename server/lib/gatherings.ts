@@ -49,6 +49,7 @@ import { chargeForPlace, heldSeatValue, refundAllPlaces, refundPlace } from "./e
 // Village Comms: the one door to the email system. Every call fires after the
 // change it reports is written, and never throws (server/lib/commsSink.ts).
 import { commsSink } from "./commsSink";
+import { forgetWindowMail, meetMeWindowIdsOf } from "../repos/meetMeWindows";
 import { gatheringTriggers } from "../../shared/comms/contracts";
 
 const newId = () => `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -349,6 +350,22 @@ export async function updateGathering(
 }
 
 export async function deleteGathering(pool: Pool, id: string): Promise<boolean> {
+  const deleted = await removeGatheringRows(pool, id, "The gathering was deleted");
+  // Its answers are gone by now, so its journey enrollments are what is left
+  // of its audience (the CommsTrigger union says so beside this trigger).
+  if (deleted) commsSink.fire({ type: "gathering_cancelled", eventId: id });
+  return deleted;
+}
+
+/**
+ * Every row a gathering holds, refunded and then deleted, and nobody told.
+ *
+ * The half of `deleteGathering` that is about ROWS, split out so the erasure's
+ * meet-me step (below) frees a window the way the event rules free any
+ * gathering, without the "gathering cancelled" email that would write to every
+ * person who answered it about somebody's erasure.
+ */
+async function removeGatheringRows(pool: Pool, id: string, reason: string): Promise<boolean> {
   /*
    * 0092: REFUND BEFORE ANYTHING IS DELETED.
    *
@@ -360,7 +377,7 @@ export async function deleteGathering(pool: Pool, id: string): Promise<boolean> 
    * The refund runs first and the charge rows go last, so a crash anywhere in
    * between leaves rows that a retry can still refund from.
    */
-  await refundAllPlaces(pool, id, "The gathering was deleted");
+  await refundAllPlaces(pool, id, reason);
   // RSVPs go with it. They are answers to a question that no longer exists.
   // The queue and the slots (0088) are answers of the same kind and go the
   // same way, and the seat charges follow now that they are settled: the
@@ -371,11 +388,37 @@ export async function deleteGathering(pool: Pool, id: string): Promise<boolean> 
   await pool.query("DELETE ss FROM event_slot_signups ss JOIN event_slots s ON s.id = ss.slot_id WHERE s.event_id = ?", [id]);
   await pool.query("DELETE FROM event_slots WHERE event_id = ?", [id]);
   const [res] = await pool.query<any>("DELETE FROM events WHERE id = ?", [id]);
-  const deleted = Number(res?.affectedRows ?? 0) > 0;
-  // Its answers are gone by now, so its journey enrollments are what is left
-  // of its audience (the CommsTrigger union says so beside this trigger).
-  if (deleted) commsSink.fire({ type: "gathering_cancelled", eventId: id });
-  return deleted;
+  return Number(res?.affectedRows ?? 0) > 0;
+}
+
+/**
+ * An erased member's meet-me windows go with them (server/lib/erasure.ts,
+ * "meet-me-windows-after-tombstone"). A window is the member's own offer,
+ * titled "Meet <first name>" with their place and their note, on a layer a
+ * signed-out visitor reads, and nobody can close it once the tombstone has
+ * ended the sessions `cancelMeetMe` needs.
+ *
+ * Past windows go too: a month view reads them as readily as next Saturday's.
+ * Each one is freed the way any gathering is, so a fee somebody paid for a
+ * place is refunded before its row goes and the answers other members gave
+ * it are deleted with it. Keyed on the member and every statement a DELETE,
+ * so a second run finds nothing, and a run that stopped half way leaves the
+ * window's own row for the next one to find.
+ *
+ * FIRST, WHAT THE WINDOW LEFT IN ITS GUESTS' MAIL (round 2, finding 13): each
+ * guest's journey kept the title and the place it told them, and their
+ * confirmation kept the title, the place, the note and the calendar file.
+ * `forgetWindowMail` takes those words out and sends nothing, before the
+ * window's row goes, because that row is how a resume finds the window again.
+ */
+export async function forgetMeetMeWindowsOf(pool: Pool, userId: string): Promise<number> {
+  if (!userId) return 0;
+  let removed = 0;
+  for (const id of await meetMeWindowIdsOf(pool, userId)) {
+    await forgetWindowMail(pool, id);
+    if (await removeGatheringRows(pool, id, "The meet-me window closed when its host left the village")) removed += 1;
+  }
+  return removed;
 }
 
 export type RsvpOutcome =

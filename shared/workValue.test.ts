@@ -80,6 +80,20 @@ describe("checking what a steward typed", () => {
     expect(readWorkValueInput({ valueTokens: tokens }, anyPayable)).toEqual({ ok: true, valueMinor: undefined, tokens });
   });
 
+  it("reads the cash a piece of work pays on its own, and stores none for zero (0285)", () => {
+    expect(readWorkValueInput({ cashMinor: 2000000 }, anyPayable)).toEqual({ ok: true, valueMinor: undefined, tokens: undefined, cashMinor: 2000000 });
+    // Zero and null both pay no cash, so both store nothing.
+    expect(readWorkValueInput({ cashMinor: 0 }, anyPayable)).toMatchObject({ ok: true, cashMinor: null });
+    expect(readWorkValueInput({ cashMinor: null }, anyPayable)).toMatchObject({ ok: true, cashMinor: null });
+    // A body that does not carry it leaves the stored cash alone.
+    expect(readWorkValueInput({ valueMinor: 5 }, anyPayable)).toMatchObject({ ok: true, cashMinor: undefined });
+    for (const [cashMinor, error] of [[2.5, /whole number/], [-1, /zero or more/], ["lots", /whole number/], [1e15, /larger than/]] as const) {
+      const out = readWorkValueInput({ cashMinor }, anyPayable);
+      expect(out.ok, String(cashMinor)).toBe(false);
+      if (!out.ok) expect(out.error).toMatch(error);
+    }
+  });
+
   it("refuses Gratitude by name before asking anything else", () => {
     let asked = 0;
     const out = readWorkValueInput({ valueTokens: [{ token: "gratitude", amount: 40 }] }, () => {

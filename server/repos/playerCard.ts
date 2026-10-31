@@ -119,6 +119,40 @@ export async function readCardRows(
   };
 }
 
+/**
+ * Each person's characters, and which one fronts their sheet, for the card's
+ * portrait. Two statements for any number of people, and no join across
+ * `users` and `player_characters` (server/db/collation.ts records what that
+ * join has cost): the primary is matched by id in TypeScript.
+ */
+export async function readCharacters(
+  pool: Pool,
+  villageId: string,
+  userIds: readonly string[],
+): Promise<{ primary: Map<string, string | null>; characters: Array<{ id: string; userId: string; archetypeKey: string; presentation: string; tone: string }> }> {
+  const ids = [...userIds];
+  if (!ids.length) return { primary: new Map(), characters: [] };
+  const q = async (sql: string, args: unknown[]) => (await pool.query<RowDataPacket[]>(sql, args))[0];
+  const [users, chars] = await Promise.all([
+    q(`SELECT id, primary_character_id FROM users WHERE id IN (${marks(ids.length)})`, ids),
+    q(
+      "SELECT id, user_id, archetype_key, presentation, tone FROM player_characters " +
+        `WHERE village_id = ? AND user_id IN (${marks(ids.length)}) ORDER BY chosen_at, id`,
+      [villageId, ...ids],
+    ),
+  ]);
+  return {
+    primary: new Map(users.map((u) => [String(u.id), u.primary_character_id == null ? null : String(u.primary_character_id)])),
+    characters: chars.map((c) => ({
+      id: String(c.id),
+      userId: String(c.user_id),
+      archetypeKey: String(c.archetype_key),
+      presentation: String(c.presentation),
+      tone: String(c.tone),
+    })),
+  };
+}
+
 /** What a role application's card reads about the roles it names. */
 export interface ProposalRows {
   roles: RowDataPacket[];

@@ -9,7 +9,8 @@
  * what arrived, so a public read has no terms to draw.
  *
  * A member may leave feedback while it is a draft, and reads back only their
- * own. The owner reading their own link sees every comment and a way back to
+ * own. Once it is submitted, a member reads where the circle's consent stands
+ * (role proposals PR D), in counts and role titles, never names. The owner reading their own link sees every comment and a way back to
  * the steps.
  */
 import { useEffect, useState } from "react";
@@ -21,6 +22,7 @@ import { fetchSharedComments, postSharedComment, type CommentOut, type SharedOut
 import { RP_WORDS } from "./proposalWords";
 import { changedSections } from "./roleWords";
 import { FeedbackList } from "./StepShare";
+import { ConsentSummary } from "./CircleConsent";
 import { INPUT, LEDE, PANEL, PRIMARY, QUIET } from "./parts";
 
 export default function SharedProposal({ token, shared }: { token: string; shared: SharedOut }) {
@@ -71,6 +73,9 @@ export default function SharedProposal({ token, shared }: { token: string; share
       </header>
 
       {card && <PlayerRoleCardView data={card} mode="proposal" changed={changedSections(proposal)} />}
+
+      {/* Where a submitted proposal stands, for a member reading it by its link (PR D). The public tier gets no consent. */}
+      {readsFeedback && proposal.status === "submitted" && proposal.consent && <ConsentSummary consent={proposal.consent} decided={proposal.decided} />}
 
       {you.tier === "public" && <p className={LEDE}>{RP_WORDS.readOnly}</p>}
 

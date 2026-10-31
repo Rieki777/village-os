@@ -9,6 +9,7 @@
 import { authToken } from "@/lib/gameApi";
 import type { ApplicationStatus } from "@shared/seatApplications";
 import type { ServedAlignment } from "@/components/alignment/alignmentsApi";
+import type { ConsentOut } from "@/components/roleProposal/proposalApi";
 
 export interface ServedApplication {
   id: string;
@@ -35,6 +36,12 @@ export interface ServedApplication {
   createdAt: string | null;
   /** The words the parties align with, and where each party stands (PR5). */
   alignment?: ServedAlignment;
+  /**
+   * The role proposal it came from (role proposals PR B): where the circle's
+   * consent stands for this reader, and the decision record in words once
+   * adopted. Null for an ordinary application; absent from an older server.
+   */
+  proposal?: { id: string; changesRoles: boolean; consent: ConsentOut | null; decided: string | null } | null;
   you?: {
     isCandidate: boolean;
     mayAdopt: boolean;

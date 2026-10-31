@@ -100,7 +100,10 @@ import { endedSeasons } from "../../shared/applicationGroups";
 import { isLapsed, rowToAssignment, rowToRole, type LapseContext, type OrgAssignment, type OrgRole } from "./orgChart";
 import { coveredSeatIds, type Relation, type RelationType } from "./orgRelations";
 import { projectSeat, type SeatTier } from "./seatProjection";
-import { readCardRows, readProposalRows, readSignTables, type SignTable } from "../repos/playerCard";
+import { readCardRows, readCharacters, readProposalRows, readSignTables, type SignTable } from "../repos/playerCard";
+import { portraitsVisibleTo } from "../repos/characterPortraits";
+import { avatarFor } from "./characters";
+import { portraitUrl } from "./characterPortraits";
 import { applicationsOfCandidates, pastSeatingsWithoutApplication } from "../repos/seatApplications";
 import { latestCardWordsFor, moonLoadsFor } from "../repos/seasonPlans";
 import { accomplishmentsOfMany } from "./sessionTasks";
@@ -153,6 +156,37 @@ export interface CardContext {
    * the variable the circle card reads). Absent is off: plain headings.
    */
   frameworkTerms?: boolean;
+  /**
+   * The village the characters are read in, for the portrait in the card's
+   * gold ring. Absent reads no portrait, and the card draws the initial.
+   */
+  villageId?: string;
+}
+
+/**
+ * THE PORTRAIT IN THE GOLD RING: each owner's character that fronts their
+ * sheet (the primary, else the first they walked), as this reader may see it.
+ * Their own portrait where they have one this reader may see, by the
+ * portrait's own visibility rule (`portraitsVisibleTo`), and the stock art
+ * for that class and look otherwise: the same picture `partyFor` puts on
+ * their profile, for the whole batch in three statements. Null when the owner
+ * has walked no path, and the card draws their initial.
+ */
+async function ownerAvatars(pool: Pool, villageId: string | undefined, ownerIds: string[], viewerId: string | null): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  if (!villageId || !ownerIds.length) return out;
+  const [{ primary, characters }, portraits] = await Promise.all([
+    readCharacters(pool, villageId, ownerIds),
+    portraitsVisibleTo(pool, villageId, ownerIds, viewerId),
+  ]);
+  for (const id of ownerIds) {
+    const mine = characters.filter((c) => c.userId === id);
+    const front = mine.find((c) => c.id === primary.get(id)) ?? mine[0];
+    if (!front) continue;
+    const own = portraits.find((p) => p.userId === id && p.archetypeKey === front.archetypeKey);
+    out.set(id, portraitUrl(own?.fileName) ?? avatarFor(front.archetypeKey, front.presentation, front.tone));
+  }
+  return out;
 }
 
 /** The four card words drawn under "How I hold my roles". The other two have their own boxes. */
@@ -344,7 +378,7 @@ export async function buildPlayerCards(
   const selfIds = owners.filter((o) => o.tier.level === "self").map((o) => o.userId);
   // Accomplishments are a live card's: a proposal card reads none.
   const liveMemberIds = owners.filter((o) => o.tier.level !== "stranger" && !o.proposal).map((o) => o.userId);
-  const [rows, prop, ownApps, pastHeld, accomplished, cardWords, loads] = await Promise.all([
+  const [rows, prop, ownApps, pastHeld, accomplished, cardWords, loads, avatars] = await Promise.all([
     readCardRows(pool, owners.map((o) => o.userId), { moonFrom, threeMoonsFrom: moonStart(ctx.now, 2) }),
     readProposalRows(pool, owners.flatMap((o) => o.proposal?.seatIds ?? [])),
     applicationsOfCandidates(pool, memberIds),
@@ -355,6 +389,7 @@ export async function buildPlayerCards(
     }),
     latestCardWordsFor(pool, memberIds),
     ctx.moonId ? moonLoadsFor(pool, memberIds, ctx.moonId) : Promise.resolve(new Map<string, { level: number }>()),
+    ownerAvatars(pool, ctx.villageId, owners.map((o) => o.userId), ctx.viewerUserId),
   ]);
 
   const roles = new Map<string, OrgRole & { archetypesSuggested: boolean }>(
@@ -544,7 +579,7 @@ export async function buildPlayerCards(
     const input: PlayerCardInput = {
       now: ctx.now,
       timeZone: ctx.timeZone,
-      owner: { userId: owner.userId, displayName: String(user.name ?? ""), avatar: null },
+      owner: { userId: owner.userId, displayName: String(user.name ?? ""), avatar: avatars.get(owner.userId) ?? null },
       viewerUserId: ctx.viewerUserId,
       viewerMember: ctx.viewerMember === true,
       villageName: ctx.villageName,

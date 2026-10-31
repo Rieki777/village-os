@@ -1259,11 +1259,11 @@ export const MODULES: ModuleDef[] = [
     // The close opens a gratitude round. Gratitude is core today, so this is
     // always met; it is named so the dependency reads true if that changes.
     recommends: ["gratitude"],
-    // None in v1. Each door is a member's own, the room's facilitator is a
+    // One. Each room door is a member's own, the room's facilitator is a
     // fact of the session itself, and an admin reads closed records through
-    // `isAdmin`. A facilitation capability can come later without a
-    // migration, because nothing stores one.
-    capabilities: [],
+    // `isAdmin`. Keeping the village's meeting templates (0291) asks the gate
+    // for `session.template`, which opens at the member rung.
+    capabilities: ["session.template"],
     /*
      * `calendar.seasons` is listed here as well as owned by the calendar's
      * namespace, because the room is the only surface that reads it: the
@@ -1278,7 +1278,7 @@ export const MODULES: ModuleDef[] = [
      * moon and falls back to the north on an older stamp.
      */
     variableKeys: ["sessions.place_line", "sessions.default_minutes", "calendar.seasons"],
-    apiPrefixes: ["/api/sessions"],
+    apiPrefixes: ["/api/sessions", "/api/session-templates"],
     // No openStateCheck: a session holds no value anybody is owed. Off hides
     // the surface, and closed records stay in their tables for when it is
     // turned back on.

@@ -75,3 +75,17 @@ export function useValueTokenName(fallback = "village tokens"): string {
   const cfg = useGameConfig();
   return String(cfg?.currency?.value?.name ?? "").trim() || fallback;
 }
+
+/**
+ * What this village calls ALL its tokens together: the umbrella word.
+ *
+ * Rye, 2026-10-23: "Village Tokens is the umbrella word, which should be able
+ * to be set in admin to name each type of token". The platform default is his
+ * own word, "Village Tokens", and a village renames it in Admin then Tokens.
+ * Served as `currency.collectiveName`; pages say it as `{tokens}`. The loading
+ * fallback is a generic noun, the rule `useTokenName` explains above.
+ */
+export function useTokensWord(fallback = "tokens"): string {
+  const cfg = useGameConfig();
+  return String(cfg?.currency?.collectiveName ?? "").trim() || fallback;
+}

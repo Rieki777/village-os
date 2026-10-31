@@ -43,6 +43,8 @@ import GratitudeRound from "./GratitudeRound";
 import ItemPage from "./ItemPage";
 import { forgetDrafts } from "./roomUi";
 import { breathEndsAt, breathScale } from "./SharedBreath";
+import { bellFor } from "./SharedSit";
+import { chakraLight, WAVE_SECS } from "./ChakraFigure";
 import StageActions from "./StageActions";
 import StageArrival from "./StageArrival";
 import StageClose from "./StageClose";
@@ -86,6 +88,8 @@ function doors(): RoomActions {
     patchEntry: (...a) => ok("patchEntry", ...a),
     deleteEntry: (...a) => ok("deleteEntry", ...a),
     respond: (...a) => ok("respond", ...a),
+    answerNight: (...a) => ok("answerNight", ...a),
+    decideAfterNight: (...a) => ok("decideAfterNight", ...a),
     act: (...a) => ok("act", ...a),
     hosts: (...a) => ok("hosts", ...a),
     close: (...a) => ok("close", ...a),
@@ -93,6 +97,7 @@ function doors(): RoomActions {
     discard: (...a) => ok("discard", ...a),
     library: async () => [],
     bringFromLibrary: (...a) => ok("bringFromLibrary", ...a),
+    sendTension: (...a) => ok("sendTension", ...a),
   };
 }
 
@@ -167,8 +172,8 @@ describe("a consent round", () => {
     expect(log[0]!.args.slice(0, 3)).toEqual(["agenda", "consent", null]);
   });
 
-  it("sleeping on it carries no words, and the round says it stays open while anybody sleeps on it", async () => {
-    // Ada (1) sleeps on it; Bo (2), whose screen this is, has not answered yet.
+  it("sleeping on it carries no words but a time to answer by, and the round says it stays open while anybody sleeps on it", async () => {
+    // Ada (1) slept on it before answer-by times; Bo (2), whose screen this is, has not answered yet.
     const view = makeView({ responses: [{ target: "agenda", userId: 1, value: "sleep", text: null }] });
     render(<ConsentRound view={view} actions={doors()} target="agenda" ask={SESSION_COPY.agendaConsentAsk} />);
     expect(screen.getByText(ROOM_COPY.tallyLine({ consent: 0, concern: 0, object: 0, sleeping: 1, waiting: 1 }))).toBeInTheDocument();
@@ -176,9 +181,12 @@ describe("a consent round", () => {
     expect(screen.queryByText(ROOM_COPY.consented)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: CONSENT_LABELS.sleep }));
     expect(screen.queryByPlaceholderText(ROOM_COPY.consentSentence)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: ROOM_COPY.consentSend })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.nightTomorrow }));
     fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.consentSend }));
     await waitFor(() => expect(log).toHaveLength(1));
     expect(log[0]!.args.slice(0, 3)).toEqual(["agenda", "sleep", null]);
+    expect(typeof log[0]!.args[4]).toBe("string");
   });
 
   it("says when everyone here consents", () => {
@@ -196,11 +204,13 @@ describe("a consent round", () => {
 });
 
 describe("the agenda", () => {
+  // The arrows show once the order is set (0290): while the room votes, the vote orders the agenda.
+  const SET = { ...defaultSessionState(), orderSet: true };
   const two = () => [item({ id: 5, title: "Roof", position: 1 }), item({ id: 6, title: "Paths", position: 2, aim: "explore" })];
 
   it("moving an item down sends the neighbour's position, and fixes the neighbour when the server only set the number", async () => {
     nextRoom = makeView({ items: [item({ id: 5, position: 2 }), item({ id: 6, title: "Paths", position: 2 })] });
-    render(<AgendaList view={makeView({ items: two(), me: FACILITATOR })} actions={doors()} />);
+    render(<AgendaList view={makeView({ items: two(), me: FACILITATOR, state: SET })} actions={doors()} />);
     fireEvent.click(screen.getAllByRole("button", { name: ROOM_COPY.moveDown })[0]!);
     await waitFor(() => expect(log).toHaveLength(2));
     expect(log[0]).toEqual({ door: "patchItem", args: [5, { position: 2 }] });
@@ -209,7 +219,7 @@ describe("the agenda", () => {
 
   it("a server that swapped the two needs one write", async () => {
     nextRoom = makeView({ items: [item({ id: 5, position: 2 }), item({ id: 6, title: "Paths", position: 1 })] });
-    render(<AgendaList view={makeView({ items: two(), me: FACILITATOR })} actions={doors()} />);
+    render(<AgendaList view={makeView({ items: two(), me: FACILITATOR, state: SET })} actions={doors()} />);
     fireEvent.click(screen.getAllByRole("button", { name: ROOM_COPY.moveDown })[0]!);
     await waitFor(() => expect(log).toHaveLength(1));
     await new Promise((r) => setTimeout(r, 0));
@@ -397,6 +407,41 @@ describe("the shared breath", () => {
     expect(breathScale(breathAt(b, T0 + 10_000))).toBeCloseTo(0.775);
     expect(breathScale(breathAt(b, T0 + 13_000))).toBe(0.55);
     expect(breathScale({ state: "idle" })).toBe(0.7);
+  });
+});
+
+describe("the shared sit", () => {
+  const sitting = (elapsed: number) => ({ state: "sitting" as const, elapsed, progress: 0, secondsLeft: 60 });
+
+  it("rings softly as a sit starts and fully as it ends, and never for a moment already past", () => {
+    expect(bellFor("idle", sitting(1))).toBe("start");
+    expect(bellFor("done", sitting(2))).toBe("start");
+    expect(bellFor("idle", sitting(40))).toBeNull();
+    expect(bellFor("sitting", { state: "done", sinceEnd: 0.3 })).toBe("end");
+    expect(bellFor("idle", { state: "done", sinceEnd: 0.3 })).toBeNull();
+    expect(bellFor("sitting", { state: "done", sinceEnd: 30 })).toBeNull();
+    expect(bellFor("sitting", sitting(10))).toBeNull();
+  });
+
+  it("the light climbs from the root to the crown and falls back", () => {
+    const brightest = (l: number[]) => l.indexOf(Math.max(...l));
+    expect(brightest(chakraLight(sitting(0), false))).toBe(0);
+    expect(brightest(chakraLight(sitting(WAVE_SECS / 2), false))).toBe(6);
+    expect(brightest(chakraLight(sitting(WAVE_SECS), false))).toBe(0);
+  });
+
+  it("when the bowl rings the body fills from the root up, a pulse falls from the crown, and all seven rest lit", () => {
+    const filling = chakraLight({ state: "done", sinceEnd: 2 }, false);
+    expect(filling[0]).toBe(1);
+    expect(filling[6]).toBeLessThan(0.5);
+    const falling = chakraLight({ state: "done", sinceEnd: 4.2 }, false);
+    expect(falling.indexOf(Math.max(...falling))).toBe(6);
+    expect(new Set(chakraLight({ state: "done", sinceEnd: 60 }, false)).size).toBe(1);
+  });
+
+  it("holds still under reduced motion", () => {
+    expect(new Set(chakraLight(sitting(3), true)).size).toBe(1);
+    expect(new Set(chakraLight(sitting(9), true))).toEqual(new Set(chakraLight(sitting(3), true)));
   });
 });
 

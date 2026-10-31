@@ -182,6 +182,76 @@ describe.skipIf(!configured)("a draft that moves circles", () => {
     expect(!r.ok && r.error).toContain("no longer in the village");
   });
 
+  // ── 0286: a move may also set the circle's order and governance layer ──────
+
+  /** Where a circle sits, in full: parent, place among its siblings, layer. */
+  async function placeOf(id: string): Promise<{ parent: string | null; order: number; layer: string | null }> {
+    const [[row]] = await pool.query<any[]>("SELECT parent_circle_id, sort_order, layer FROM circles WHERE id = ?", [id]); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+    return { parent: row.parent_circle_id ?? null, order: Number(row.sort_order), layer: row.layer ?? null };
+  }
+
+  /** One draft holding one move with this payload. */
+  async function draftWith(circle: string, payload: Record<string, unknown>): Promise<string> {
+    const made = await createDraft(pool, { title: "Arrange the circles", createdBy: "u-steward", sourceKind: "human", openCap: 99 });
+    if (!made.ok) throw new Error(made.error);
+    const r = await addChange(pool, made.id, { op: "move_circle", orgRoleId: `circle:${circle}`, payload });
+    expect(r.ok, !r.ok ? r.error : "").toBe(true);
+    return made.id;
+  }
+
+  it("sets a circle's place and layer with its move, and says so in the preview", async () => {
+    const id = await draftWith("dev", { parentCircleId: null, order: 0, layer: "lead" });
+    const preview = await previewDraft(pool, id);
+    expect(preview.blocked).toBe(0);
+    expect(preview.lines[0].reads).toBe('Give "Development Circle" place 1 among the circles beside it, and make it a lead circle');
+    expect((await publishDraft(pool, id, "u-steward")).ok).toBe(true);
+    expect(await placeOf("dev")).toEqual({ parent: null, order: 0, layer: "lead" });
+  });
+
+  it("leaves the place and layer alone when a move carries only its parent", async () => {
+    await pool.query("UPDATE circles SET layer = 'operating', sort_order = 7 WHERE id = 'web'"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+    const id = await draftOf([["web", "gcc"]]);
+    expect((await publishDraft(pool, id, "u-steward")).ok).toBe(true);
+    expect(await placeOf("web")).toEqual({ parent: "gcc", order: 7, layer: "operating" });
+  });
+
+  it("clears a layer with null", async () => {
+    await pool.query("UPDATE circles SET layer = 'advisory' WHERE id = 'web'"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+    const id = await draftWith("web", { parentCircleId: "dev", layer: null });
+    expect((await previewDraft(pool, id)).lines[0].reads).toBe('Clear the governance layer of "Web Guild"');
+    expect((await publishDraft(pool, id, "u-steward")).ok).toBe(true);
+    expect((await placeOf("web")).layer).toBeNull();
+  });
+
+  it("refuses a layer this build does not know, and publishes nothing", async () => {
+    const id = await draftWith("dev", { parentCircleId: null, layer: "chief" });
+    expect(String((await previewDraft(pool, id)).lines[0].blocked)).toContain("governance layer is one of");
+    expect((await publishDraft(pool, id, "u-steward")).ok).toBe(false);
+    expect((await placeOf("dev")).layer).toBeNull();
+  });
+
+  it("puts the place and layer back on revert, along with the parent", async () => {
+    await pool.query("UPDATE circles SET layer = 'operating' WHERE id = 'web'"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+    const id = await draftWith("web", { parentCircleId: "gcc", order: 0, layer: "lead" });
+    expect((await publishDraft(pool, id, "u-steward")).ok).toBe(true);
+    expect(await placeOf("web")).toEqual({ parent: "gcc", order: 0, layer: "lead" });
+
+    const r = await revertDraft(pool, id);
+    expect(r.ok, !r.ok ? r.error : "").toBe(true);
+    expect(await placeOf("web")).toEqual({ parent: "dev", order: 3, layer: "operating" });
+  });
+
+  it("refuses to undo a layer that has been changed again since, and writes nothing", async () => {
+    const id = await draftWith("web", { parentCircleId: "dev", layer: "lead" });
+    expect((await publishDraft(pool, id, "u-steward")).ok).toBe(true);
+    await pool.query("UPDATE circles SET layer = 'advisory' WHERE id = 'web'"); // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
+
+    const r = await revertDraft(pool, id);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("rearranged again");
+    expect((await placeOf("web")).layer, "a refused revert writes nothing").toBe("advisory");
+  });
+
   it("moves a circle whose id is as long as an id can be", async () => {
     // A circle id is cut at 64 characters, and a change names it as
     // circle:<id>, which is 71. The seat column was 64 wide and refused it.

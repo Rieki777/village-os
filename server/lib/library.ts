@@ -59,6 +59,7 @@ import { CURRENCY_DECIMALS } from "../../shared/tokenScale";
 import { numberVar } from "./variables";
 import { cycleIdFor, currentCycle } from "./gratitude-cycles";
 import { recordEvent } from "./events";
+import { DEPARTED_RECIPIENT, departedById } from "./departed";
 
 export const LIBRARY_CREDIT = "library-credit";
 export const LIBRARY_MINT = "sys:library-mint";
@@ -228,6 +229,8 @@ async function intakeMintedThisCycle(pool: Pool, userId: string): Promise<number
 export async function recordIntake(pool: Pool, input: IntakeInput): Promise<IntakeResult> {
   const appraisal = Math.floor(Number(input.appraisal));
   if (!(appraisal > 0)) return { ok: false, error: "An appraisal in credits is required" };
+  // No intake is recorded in the name of a member who has left, so no credit is awarded to them (round 4, finding 3).
+  if (await departedById(pool, input.donorUserId)) return { ok: false, error: DEPARTED_RECIPIENT };
   const pct = Math.max(0, Math.min(100, numberVar("library.intake_award_pct")));
   const award = Math.floor((appraisal * pct) / 100);
   const cap = numberVar("library.intake_member_cycle_cap");
@@ -280,7 +283,10 @@ export async function approveIntake(pool: Pool, itemId: string, approverId: stri
     return { ok: false, error: "Dual sign-off means a SECOND steward. You recorded this intake" };
   }
   const pct = Math.max(0, Math.min(100, numberVar("library.intake_award_pct")));
-  const award = Math.floor((item.creditValue * pct) / 100);
+  // A donor who left while the item waited is awarded nothing, and the item
+  // still joins the library: the object is on the shelf, and refusing the
+  // signature would strand it with no way to clear it (round 4, finding 3).
+  const award = item.donorUserId && (await departedById(pool, item.donorUserId)) ? 0 : Math.floor((item.creditValue * pct) / 100);
   const cap = numberVar("library.intake_member_cycle_cap");
   if (item.donorUserId && cap > 0 && award > 0) {
     const already = await intakeMintedThisCycle(pool, item.donorUserId);

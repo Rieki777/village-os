@@ -78,7 +78,7 @@ describe("absent key refuses, with the sentence (harm metric 6)", () => {
   it("storeMemberKey answers the sentence before it touches the pool", async () => {
     let touched = 0;
     const pool = { query: async () => { touched += 1; return [[]]; } } as any;
-    const r = await storeMemberKey(pool, "u-1", { provider: "anthropic", key: "sk-ant-example-0000" }, without);
+    const r = await storeMemberKey(pool, "u-1", { provider: "anthropic", key: "sk-ant-example-0000" }, without, 0);
     expect(r).toEqual({ ok: false, error: NO_MEMBER_SECRETS_KEY_SENTENCE });
     expect(touched).toBe(0);
     expect(NO_MEMBER_SECRETS_KEY_SENTENCE).toBe("this deployment has no member-secrets key; ask your operator");
@@ -98,9 +98,9 @@ describe("base URL", () => {
   });
   it("an openai_compatible key needs a base URL and a model", async () => {
     const pool = { query: async () => [[]] } as any;
-    const r = await storeMemberKey(pool, "u-1", { provider: "openai_compatible", key: "sk-or-example-0000" }, withKey);
+    const r = await storeMemberKey(pool, "u-1", { provider: "openai_compatible", key: "sk-or-example-0000" }, withKey, 0);
     expect(r.ok).toBe(false);
-    const noModel = await storeMemberKey(pool, "u-1", { provider: "openai_compatible", key: "sk-or-example-0000", baseUrl: "https://93.184.216.34" }, withKey);
+    const noModel = await storeMemberKey(pool, "u-1", { provider: "openai_compatible", key: "sk-or-example-0000", baseUrl: "https://93.184.216.34" }, withKey, 0);
     expect(noModel).toMatchObject({ ok: false, error: expect.stringContaining("model") });
   });
 
@@ -108,7 +108,7 @@ describe("base URL", () => {
     let touched = 0;
     const pool = { query: async () => { touched += 1; return [[]]; } } as any;
     for (const baseUrl of ["https://127.0.0.1:11434", "https://10.0.0.5", "https://169.254.169.254", "https://192.168.1.2:8443"]) {
-      const r = await storeMemberKey(pool, "u-1", { provider: "openai_compatible", key: "sk-or-example-0000", baseUrl, model: "m" }, withKey);
+      const r = await storeMemberKey(pool, "u-1", { provider: "openai_compatible", key: "sk-or-example-0000", baseUrl, model: "m" }, withKey, 0);
       expect(r.ok).toBe(false);
       if (!r.ok) {
         expect(r.error).toBe("That base URL is not reachable from here. It must be a public https host");

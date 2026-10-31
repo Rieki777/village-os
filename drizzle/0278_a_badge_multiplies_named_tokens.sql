@@ -1,0 +1,13 @@
+-- A BADGE'S REWARD MULTIPLIER NAMES THE TOKEN IT MULTIPLIES.
+--
+-- Rye, 2026-10-23: "badges that have multipliers should multiply token pay
+-- (the multiplier is attached to a token, so voice, credits, etc)".
+--
+-- A map of token slug to factor, such as {"village-voice": 1.5}. NULL is no
+-- multiplier. It multiplies what a holder is paid in that token for a quest, a
+-- role each cycle, and an accepted proposal (server/lib/seasonPatterns.ts).
+--
+-- Expand only. The old single `multiplier` column (0050) stays, named no token,
+-- and multiplies nothing since quests stopped paying Gratitude. The admin
+-- screen shows it beside the new one so a village can move it onto a token.
+ALTER TABLE `badges` ADD COLUMN `multipliers` json NULL AFTER `multiplier`;

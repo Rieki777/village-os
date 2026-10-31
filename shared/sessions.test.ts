@@ -13,6 +13,7 @@ import {
   SESSION_COPY,
   SESSION_LIMITS,
   SESSION_STAGES,
+  SLEEP_LIMITS,
   STAGE_DEFS,
   AIM_DEFS,
   FACILITATION_LABELS,
@@ -22,6 +23,7 @@ import {
   arrivalSummary,
   breathAt,
   buildMinutes,
+  cleanAnswerBy,
   cleanDueOn,
   cleanLine,
   cleanText,
@@ -30,10 +32,15 @@ import {
   consentWaiting,
   consentWaitingIds,
   defaultSessionState,
+  nightAtWords,
+  nightIsOver,
+  nightLasts,
+  nightRoundState,
   normalizeSessionState,
   parseResponseTarget,
   parseSessionAction,
   roundSpeakers,
+  sitAt,
   timebox,
   unownedActions,
   type MinutesInput,
@@ -145,6 +152,29 @@ describe("the shared breath", () => {
   });
 });
 
+describe("the shared sit", () => {
+  it("is idle until started, counts down on every screen alike, and knows how long ago it ended", () => {
+    expect(sitAt({ minutes: 3, startedAt: null }, T0)).toEqual({ state: "idle" });
+    expect(sitAt({ minutes: 3, startedAt: T0 }, T0 + 60_500)).toMatchObject({ state: "sitting", secondsLeft: 120 });
+    expect(sitAt({ minutes: 1, startedAt: T0 }, T0 + 63_000)).toEqual({ state: "done", sinceEnd: 3 });
+  });
+
+  it("the facilitator starts and ends it, and only the offered minutes are taken", () => {
+    let s = applySessionAction(defaultSessionState(), { type: "sit", minutes: 5, run: true }, T0);
+    expect(s.sit).toEqual({ minutes: 5, startedAt: T0 });
+    s = applySessionAction(s, { type: "sit", run: false }, T0 + 1000);
+    expect(s.sit).toEqual({ minutes: 5, startedAt: null });
+    expect(parseSessionAction({ type: "sit", minutes: 7, run: true })).toBeNull();
+    expect(parseSessionAction({ type: "sit", run: 1 })).toBeNull();
+    expect(parseSessionAction({ type: "sit", minutes: 10, run: true })).toEqual({ type: "sit", minutes: 10, run: true });
+  });
+
+  it("a room stored before the sit existed reads as a sit not started", () => {
+    expect(normalizeSessionState(JSON.stringify({ stage: "dropin" })).sit).toEqual({ minutes: 3, startedAt: null });
+    expect(normalizeSessionState(JSON.stringify({ sit: { minutes: 4, startedAt: T0 } })).sit).toEqual({ minutes: 3, startedAt: T0 });
+  });
+});
+
 describe("time", () => {
   it("an item's clock is calm, then near at four fifths, then over, and grace adds to it", () => {
     expect(timebox(null, 10, 0, T0).phase).toBe("idle");
@@ -199,6 +229,51 @@ describe("consent and arrival", () => {
     // Nobody sleeping on it, and a record kept before anybody could: the line reads as it always did.
     expect(ROOM_COPY.tallyLine({ consent: 1, concern: 0, object: 0, sleeping: 0, waiting: 2 })).toBe("1 consent, 0 with a concern, 0 objecting, 2 still to answer");
     expect(ROOM_COPY.talliedLine({ consent: 3, concern: 1, object: 0 })).toBe("3 consent, 1 with a concern, 0 objecting");
+  });
+
+  it("asks a night for its answer-by time, from a quarter of an hour to a week ahead", () => {
+    const now = Date.parse("2026-10-23T18:00:00Z");
+    expect(cleanAnswerBy(undefined, now)).toEqual({ ok: false, error: SESSION_REFUSALS.answerByNeeded });
+    expect(cleanAnswerBy("next week", now)).toEqual({ ok: false, error: SESSION_REFUSALS.answerByNeeded });
+    expect(cleanAnswerBy("2026-10-23T18:10:00Z", now)).toEqual({ ok: false, error: SESSION_REFUSALS.answerBySoon });
+    expect(cleanAnswerBy("2026-10-30T18:01:00Z", now)).toEqual({ ok: false, error: SESSION_REFUSALS.answerByFar });
+    expect(cleanAnswerBy("2026-10-24T09:00:00Z", now)).toEqual({ ok: true, value: Date.parse("2026-10-24T09:00:00Z") });
+    expect(cleanAnswerBy(now + SLEEP_LIMITS.maxAheadMs, now)).toEqual({ ok: true, value: now + SLEEP_LIMITS.maxAheadMs });
+  });
+
+  it("counts a night that has ended as no objection, by default, and never as waiting", () => {
+    const by = 1_000_000;
+    const answers = [
+      { who: 1, value: "consent" as const },
+      { who: 2, value: "sleep" as const, answerBy: by },
+      { who: 3, value: "consent" as const },
+    ];
+    expect(consentTally(answers, [1, 2, 3], by - 1)).toMatchObject({ consent: 2, sleeping: 1, byDefault: 0, consented: false });
+    const after = consentTally(answers, [1, 2, 3], by);
+    expect(after).toMatchObject({ consent: 2, sleeping: 0, byDefault: 1, waiting: 0, consented: true });
+    expect(ROOM_COPY.tallyLine(after)).toBe("2 consent, 0 with a concern, 0 objecting, 1 no objection by default, 0 still to answer");
+    expect(ROOM_COPY.talliedLine(after)).toBe("2 consent, 0 with a concern, 0 objecting, 1 no objection by default");
+    // A night asked for before answer-by times never ends by itself.
+    expect(consentTally([{ who: 2, value: "sleep", answerBy: null }], [2], Number.MAX_SAFE_INTEGER)).toMatchObject({ sleeping: 1, byDefault: 0 });
+    expect(nightLasts({ value: "sleep", answerBy: by }, by - 1)).toBe(true);
+    expect(nightLasts({ value: "sleep", answerBy: by }, by)).toBe(false);
+    expect(nightIsOver({ value: "consent", answerBy: by }, by + 1)).toBe(false);
+  });
+
+  it("keeps a round open after the call while a night lasts, and consents once none does and nobody objects", () => {
+    const by = 1_000_000;
+    const sleepy = [{ who: 1, value: "consent" as const }, { who: 2, value: "sleep" as const, answerBy: by }];
+    expect(nightRoundState(undefined, sleepy, by + 1)).toMatchObject({ outlives: false, consented: false });
+    expect(nightRoundState({ waiting: 0 }, sleepy, by - 1)).toMatchObject({ outlives: true, open: true, consented: false });
+    expect(nightRoundState({ waiting: 0 }, sleepy, by)).toMatchObject({ open: false, consented: true, tally: { byDefault: 1, waiting: 0, consented: true } });
+    // Somebody at the close who went unheard, or an objection after the night, and it does not consent.
+    expect(nightRoundState({ waiting: 1 }, sleepy, by).consented).toBe(false);
+    expect(nightRoundState({ waiting: 0 }, [sleepy[0], { who: 2, value: "object" }], 0).consented).toBe(false);
+  });
+
+  it("says when a night ends in the village's own clock", () => {
+    expect(nightAtWords(Date.parse("2026-10-24T09:00:00Z"), "UTC")).toBe("9:00 on Saturday 24 October");
+    expect(nightAtWords(Date.parse("2026-10-24T09:05:00Z"), "Australia/Melbourne")).toBe("20:05 on Saturday 24 October");
   });
 
   it("names who a round is still waiting on: people here, once each, in order, and nobody who left", () => {
