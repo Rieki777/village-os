@@ -169,14 +169,16 @@ function routeChunkPreload(): Plugin {
  * into "smalls" (plain modules in shared/, client/src/lib/, client/src/hooks/)
  * or "smallui" (components). See `smallGroupOf` for the exact rule.
  *
- * Measured on main e1c5eb6 (2026-10-31): 6588 KB block-charged before, 6484 KB
- * after. The first page fetches the same code, 241 KB gzipped before and
- * after, in more files: main JS reads 362 KB where it read 620 KB, because
- * rollup moves the boot modules the two groups import out of the entry chunk
- * into shared boot chunks. The groups are 31 KB ("smalls") and 58 KB
- * ("smallui") gzipped. 8000 bytes saved 100 KB with a 53 KB "smallui"; 12000
- * saved 140 KB with a 77 KB one, too much for a route's first paint to wait on.
- * Measure both budgets with check-dist-budget.mjs after any change.
+ * Measured on batch 62 (2026-10-31, with experimentalMinChunkSize 4096 below):
+ * 6500 KB block-charged with the old leaf-only rule, 6460 KB with this one
+ * (this rule without minChunkSize, 6528). The first page fetches the same
+ * code, about 242 KB gzipped either way, in more files: main JS reads 361 KB
+ * where it read 623 KB, because rollup moves the boot modules the groups
+ * import out of the entry chunk into shared boot chunks, which is why the
+ * MAX_BOOT_JS_KB budget exists. The groups are 31 KB ("smalls") and 58 KB
+ * ("smallui") gzipped. 6000 bytes measured 6492 KB; 12000 measured 6448 KB
+ * with a 77 KB "smallui", too much for a route's first paint to wait on.
+ * Measure all three budgets with check-dist-budget.mjs after any change.
  *
  * Four rules keep it safe, each one found by a build that broke without it:
  * - `onlyExplicitManualChunks` (output, below). Without it rollup moves every
@@ -306,6 +308,16 @@ export default defineConfig({
          * Verify any chunking change with `node scripts/check-dist-budget.mjs`,
          * which prints both measures.
          */
+        /*
+         * ON AT 4096, 2026-10-30, BESIDE THE SMALL-MODULE RULE BELOW. With that
+         * rule alone the dashboard measured 6584 KB of 6600, and the
+         * companions section (0295) took it to 6608. Measured on that tree:
+         * off, 6608 KB block-charged and main JS 620 KB; 4096, 6480 and 624;
+         * 8192, 6408 and 657. 4096 buys 128 KB of the ceiling for 4 KB of
+         * first load. The note above says why it is the weaker knob; take it
+         * off the day the total has room without it.
+         */
+        experimentalMinChunkSize: 4096,
         // Groups hold only what manualChunks names: see SMALL_MODULE_BYTES.
         onlyExplicitManualChunks: true,
         manualChunks: (id: string, { getModuleInfo, getModuleIds }) => {
