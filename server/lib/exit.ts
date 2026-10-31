@@ -267,7 +267,7 @@ function stayingAnswer(erasure: AbandonedErasure, endings: ResolveEndings): Reco
  * server/lib/exitResolve.ts). "role-applications" is the erasure's
  * `withdrawUnseatedOf`, which there runs inside a later step.
  */
-export const FORMER_MEMBER_STEPS = ["alignment-party-left", "role-holdings", "org-seatings", "role-applications"] as const;
+export const FORMER_MEMBER_STEPS = ["alignment-party-left", "role-holdings", "org-seatings", "role-applications", "invitations"] as const;
 export type FormerMemberStep = (typeof FORMER_MEMBER_STEPS)[number];
 
 /** What each of those steps ends, as the admin reads it. */
@@ -276,6 +276,7 @@ const ENDED_IN_WORDS: Record<FormerMemberStep, (roles: readonly string[]) => str
   "role-holdings": (roles) => (roles.length ? `their roles (${roles.join(", ")})` : "their roles"),
   "org-seatings": () => "their places on the org chart",
   "role-applications": () => "their open role applications",
+  invitations: () => "their open invitation links",
 };
 
 /** What a resolve's record says it already began ending: each step once, and the permission roles by id. */
@@ -520,7 +521,7 @@ export async function cashState(pool: Pool, userId: string): Promise<ExitDomainS
 export interface FormerMemberHold {
   /** True when resolving this member's departure keeps them as a former member. */
   keptAsFormerMember: (pool: Pool, userId: string) => Promise<boolean>;
-  /** What keeps them, opening the sentence: "Holding tokens". */
+  /** What keeps them, opening the sentence: "Holding tokens, or being owed cash by the village,". */
   reason: string;
 }
 
@@ -547,9 +548,10 @@ const EVERY: Record<"month" | "year", string> = { month: "every month", year: "e
  * panel: a delete always erases, so the cancel sentence is true there. "exit"
  * is the exit desk and the departure page, and a departure is resolved by
  * `resolveExit` (server/lib/exitResolve.ts), which keeps a member who still
- * holds tokens as a former member (Rye's ruling, #617). That path ends their
+ * holds tokens, or whom the village still owes cash, as a former member
+ * (Rye's ruling, #617; `keepsAsFormerMember`). That path ends their
  * membership and roles and leaves their purchases alone, so the payments keep
- * renewing. A member who holds value today reads that, plainly, and so does
+ * renewing. A member kept that way today reads that, plainly, and so does
  * the admin resolving them. Whether the former-member path should cancel
  * them itself is a decision for Rye.
  */

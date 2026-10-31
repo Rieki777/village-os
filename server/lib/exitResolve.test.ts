@@ -40,6 +40,9 @@ import { cancelExit, createExit, exitById, forgetOwnExitNotes } from "./exit";
 import { resolveExit } from "./exitResolve";
 import { usersRepo } from "../repos/users";
 import { erasureRecord } from "../repos/memberErasure";
+import { createInviteOn } from "../repos/memberInvites";
+import { hashInviteToken, INVITE_REFUSALS, mintInviteToken } from "./invites";
+import { makeInviteDoor } from "./inviteDoor";
 
 const configured = testDbConfigured();
 
@@ -273,6 +276,36 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
     expect(await statusOf(exitId)).toBe("resolved");
   });
 
+  // ── 1b. A former member's open links (round 6, R5-2) ────────────────────
+
+  it("a former member's open invitation links stop admitting, and nobody arrives on their vouch", async () => {
+    const { id, exitId } = await member({ holdsValue: true });
+    const token = mintInviteToken();
+    const inviteId = `inv-former-${id}`;
+    const conn = await pool.getConnection();
+    try {
+      await createInviteOn(conn, { id: inviteId, tokenHash: hashInviteToken(token), inviterUserId: id, days: 14 });
+    } finally {
+      conn.release();
+    }
+    const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+    expect((await door.resolve(token)).ok, "the control: the link opened the door before the resolve").toBe(true);
+
+    const out = await resolve(exitId, id);
+    expect(out.outcome).toBe("former");
+
+    expect(await door.resolve(token)).toEqual({ ok: false, error: INVITE_REFUSALS.revoked });
+    const newcomer = `newcomer-${id}`;
+    await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [newcomer, "Pip Arden", `${newcomer}@example.test`]);
+    // As both sign-up doors run it: the take, then the welcome only for a link that was taken.
+    const inviter = await door.claim(inviteId, newcomer);
+    if (inviter) await door.welcome(inviter, newcomer);
+    expect(inviter, "the link of a member who left was taken").toBeNull();
+    expect(await q("SELECT `id` FROM `member_vouches` WHERE `voucher_user_id` = ?", [id]), "an arrival vouch from someone who left").toEqual([]);
+    expect(await q("SELECT `id` FROM `member_invites` WHERE `inviter_user_id` = ? AND `used_at` IS NULL AND `revoked_at` IS NULL", [id])).toEqual([]);
+    expect(String((await exitById(pool, exitId))!.resolution ?? "")).toMatch(/resolve began ending: invitations/);
+  });
+
   // ── 2. What a stopped former-member resolve already ended ───────────────
 
   it("a cancel after a former-member resolve that stopped part way names every role it had already ended", async () => {
@@ -293,6 +326,7 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
       "role-holdings",
       "org-seatings",
       "role-applications",
+      "invitations",
     ]);
     expect(out.body.vacatedRoles).toEqual(["treasury"]);
     expect(String(out.body.message)).toMatch(/treasury/);

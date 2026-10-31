@@ -33,7 +33,7 @@ export default function ExitPolicy() {
   // Cash the village still owes keeps a leaver on as a former member (round 4, R4-4). Signed in only.
   const cashOwed = useUnpaidCash(!!user);
   // And their recurring payments: cancelled when the departure erases the account, still
-  // renewing when holding tokens keeps them a former member. The server says which. Signed in only.
+  // renewing when holding tokens or being owed cash keeps them a former member. The server says which. Signed in only.
   const leavingNotices = useLeavingNotices(!!user, "exit");
 
   useEffect(() => {

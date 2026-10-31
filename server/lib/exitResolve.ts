@@ -44,6 +44,9 @@
  *     marked `party_left` (`recordPartyLeft`), in the erasure's order and for
  *     the erasure's reason: a released seating ends seat terms by the
  *     derivation, and the record would then never say why.
+ *   - Their open invitation links (`revokeOpenInvitesOf`, round 6, R5-2). A
+ *     link is its maker's vouch, and a former member can no longer vouch, so
+ *     a link made before they left must not admit anybody in their name.
  *
  * WHAT THEY KEEP: everything else. Their name, sign-in, sessions, wallet,
  * history and balances. An admin can admit them again through any door that
@@ -87,6 +90,7 @@ import { recordEvent } from "./events";
 import { endedInWords, resolveEndingLine, resolveEndingsIn, type FormerMemberStep } from "./exit";
 import { unpaidCashOf } from "./cashOwed";
 import { withdrawUnseatedOf } from "../repos/seatApplications";
+import { revokeOpenInvitesOf } from "../repos/memberInvites";
 import { markExitResolved, whileExitHeld, type HeldExit } from "../repos/exitNotes";
 import type { FormerMemberHold } from "./exit";
 
@@ -152,12 +156,14 @@ export async function heldValueOf(pool: Pool, userId: string): Promise<HeldValue
  * handed to `exitOpenState` and `subscriptionsState` (server/lib/exit.ts) by
  * the routes that show the sentence. It lives here, beside `resolveExit`'s
  * rule, because exit.ts is imported by the economy and may not import this
- * file (shared/seatSettings.boundary.test.ts). The reason phrase opens the
- * sentence the member and the admin read.
+ * file (shared/seatSettings.boundary.test.ts). It asks `keepsAsFormerMember`,
+ * the rule resolve itself reads, so a leaver kept only for cash owed is told
+ * their payments keep renewing (round 6, R5-0/R5-1). The reason phrase opens
+ * the sentence the member and the admin read, and names both reasons.
  */
 export const FORMER_MEMBER_HOLD: FormerMemberHold = {
-  keptAsFormerMember: async (pool, userId) => (await heldValueOf(pool, userId)).length > 0,
-  reason: "Holding tokens",
+  keptAsFormerMember: (pool, userId) => keepsAsFormerMember(pool, userId),
+  reason: "Holding tokens, or being owed cash by the village,",
 };
 
 /**
@@ -221,6 +227,8 @@ export async function keepAsFormerMember(
     },
     { name: "org-seatings", run: () => releaseSeatingsForUser(pool, userId, "member left the village") },
     { name: "role-applications", run: () => withdrawUnseatedOf(pool, userId) },
+    // A link is its maker's vouch, and a former member can no longer vouch: their open links stop admitting (R5-2).
+    { name: "invitations", run: () => revokeOpenInvitesOf(pool, userId) },
   ];
   for (const step of steps) {
     // The line goes on first and the step runs after the hold: see `resolveEndingLine` for why that order.

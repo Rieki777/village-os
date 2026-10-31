@@ -49,7 +49,8 @@ import { register as registerProfileRoutes } from "../routes/profile";
 import { loadSecrets } from "./secrets";
 import { BUYER_HAS_LEFT, refusedChargeAdvice } from "./payments";
 import { subscriptionsState } from "./exit";
-import { FORMER_MEMBER_HOLD } from "./exitResolve";
+import { FORMER_MEMBER_HOLD, keepsAsFormerMember } from "./exitResolve";
+import { insertCashOwedRow } from "../repos/cashOwed";
 import { loadTokenRegistry, memberAccount, MINT_FAUCET, postTransfer } from "./ledger";
 import {
   confirmOwedCancelsByHand,
@@ -739,8 +740,8 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       const exit = await subscriptionsState(pool, kit.id, "exit", FORMER_MEMBER_HOLD);
       expect(exit.description).toBe(
         renewing +
-          "Holding tokens when the departure is resolved keeps the account as a former member, and these keep renewing " +
-          "until an admin cancels them in Stripe",
+          "Holding tokens, or being owed cash by the village, when the departure is resolved keeps the account as a former member, " +
+          "and these keep renewing until an admin cancels them in Stripe",
       );
       expect(exit.blocking).toBe(false);
       // The exit desk reads the exit path.
@@ -760,6 +761,33 @@ describe.skipIf(!configured)("a departing member's recurring payments", () => {
       };
       expect(await read({ for: "exit" })).toEqual([exit.description]);
       expect(await read({})).toEqual([deleting]);
+    });
+
+    it("tells a leaver kept only for cash owed that the payments keep renewing, the rule resolve uses (round 6, R5-0/R5-1)", async () => {
+      const rue = await member("subs-cash-only", "Rue Cash");
+      await purchase("pp-co1", rue.id, "prod-month", { status: "paid", sub: "sub_cash_only", at: "2026-10-03 10:00:00" });
+      await insertCashOwedRow(pool, {
+        id: "cash-subs-cash-only", occurrenceKey: "test:cash-subs-cash-only", userId: rue.id,
+        workKind: "quest", workRef: "quest-1", workTitle: "Mend the east fence", amountMinor: 20000, currency: "USD",
+      });
+      const renewing = "1 recurring payment(s) still renewing through Stripe: Monthly membership (every month). ";
+      const deleting = `${renewing}Deleting the account cancels each one in Stripe, and nothing already paid is refunded`;
+      // No tokens at all: only the cash keeps Rue, and resolve's own rule says so.
+      expect(await keepsAsFormerMember(pool, rue.id)).toBe(true);
+      const exit = await subscriptionsState(pool, rue.id, "exit", FORMER_MEMBER_HOLD);
+      expect(exit.description).toBe(
+        renewing +
+          "Holding tokens, or being owed cash by the village, when the departure is resolved keeps the account as a former member, " +
+          "and these keep renewing until an admin cancels them in Stripe",
+      );
+      expect(exit.description).not.toContain("Deleting the account cancels");
+      expect((await exitOpenState(pool, rue.id, [], { formerMember: FORMER_MEMBER_HOLD })).find((st) => st.domain === "subscriptions")).toEqual(exit);
+      // The delete panel: a delete always erases, owed cash or not.
+      expect((await subscriptionsState(pool, rue.id, "delete", FORMER_MEMBER_HOLD)).description).toBe(deleting);
+      // Paid out, nothing keeps Rue, and the departure erases and cancels.
+      await q("UPDATE `cash_owed` SET `state` = 'paid' WHERE `id` = 'cash-subs-cash-only'");
+      expect(await keepsAsFormerMember(pool, rue.id)).toBe(false);
+      expect((await subscriptionsState(pool, rue.id, "exit", FORMER_MEMBER_HOLD)).description).toBe(deleting);
     });
 
     it("takes the former-member rule and its reason from the caller, and promises nothing without one (round 5)", async () => {
