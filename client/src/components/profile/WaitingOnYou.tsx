@@ -20,6 +20,13 @@
  *                 and never names who raised it. Taking it keeps the row,
  *                 answering it or bringing it to the circle removes it. A
  *                 server from before this group sends none (`readWaiting`).
+ *   toConsent     a role proposal the reader's circle is asked about, under
+ *                 its own heading, "Asked to consent" (role proposals PR D).
+ *                 The row names the roles, the circle, the day the circle's
+ *                 2 business days close, and the proposer the way an
+ *                 application row does (first name only), and opens the
+ *                 application, where Consent and Object live. Answered, the
+ *                 row is gone on the next read.
  *
  * NO COUNTS on the heading, as the rest of the board. The group draws nothing
  * at all when nothing waits, and nothing when the read is closed to the
@@ -150,7 +157,7 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
     try {
       const res = await gameFetch(WAITING_URL, { cache: "no-store" });
       if (!live.current) return;
-      if (CLOSED.has(res.status)) return setData({ applications: [], drafts: [], toAccept: [], raisedWithYou: [] });
+      if (CLOSED.has(res.status)) return setData({ applications: [], drafts: [], toAccept: [], raisedWithYou: [], toConsent: [] });
       const next = res.ok ? readWaiting(await res.json().catch(() => null)) : null;
       if (!live.current) return;
       if (next) setData(next);
@@ -166,7 +173,8 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
 
   const toAccept = data?.toAccept ?? [];
   const raised = data?.raisedWithYou ?? [];
-  const has = !!data && (data.applications.length > 0 || data.drafts.length > 0 || toAccept.length > 0 || raised.length > 0);
+  const toConsent = data?.toConsent ?? [];
+  const has = !!data && (data.applications.length > 0 || data.drafts.length > 0 || toAccept.length > 0 || raised.length > 0 || toConsent.length > 0);
   const accepted = (entryId: number) =>
     setData((d) => (d ? { ...d, toAccept: (d.toAccept ?? []).filter((t) => t.entryId !== entryId) } : d));
   const responded = (id: string, action: TensionAction) =>
@@ -234,6 +242,30 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
           </li>
         ))}
       </ul>
+      {toConsent.length > 0 && (
+        <div className="space-y-3 pt-2" data-to-consent-group="">
+          <h4 id="task-board-consent" className={LABEL_CAPS}>
+            {WAITING_COPY.consentHeading}
+          </h4>
+          <ul className="space-y-3" aria-labelledby="task-board-consent">
+            {toConsent.map((c) => {
+              const where = [WAITING_COPY.consentIn(c.circle), WAITING_COPY.consentCloses(c.closesOn)].filter(Boolean).join(" · ");
+              return (
+                <li key={`c-${c.proposalId}`} data-to-consent={c.applicationId}>
+                  <Link href={c.href} className={ROW}>
+                    <p className="font-semibold leading-snug">{WAITING_COPY.consentLine(c.applicant, c.roles)}</p>
+                    <p className={`${HINT} mt-0.5`}>{where}</p>
+                    <span className={ROW_ACTION}>
+                      {WAITING_COPY.consentAction}
+                      <ArrowRight className={ROW_ARROW} aria-hidden="true" />
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {raised.length > 0 && (
         <div className="space-y-3 pt-2" data-raised>
           <h4 id="task-board-raised" className={LABEL_CAPS}>

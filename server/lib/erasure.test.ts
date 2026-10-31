@@ -75,14 +75,20 @@ let submissions: any[] = [];
  */
 function deps(broken?: "role-holdings" | "tombstone", beforeTombstone?: () => Promise<void>): ErasureDeps {
   const real = usersRepo(pool);
+  let lived = true;
   return {
     members: {
       byId: (id: string) => real.byId(id),
       update: async (id: string, fn: (u: any) => void) => {
         if (broken === "tombstone") throw new Error("the member row would not take the tombstone");
-        // The last instant the member's sessions still live. A write here is
-        // one a signed-in request could make.
-        await beforeTombstone?.();
+        // The last instant the member's sessions still live, before the
+        // sweep's first write to the row (the tombstone). A write here is one
+        // a signed-in request could make; "handle-after-tombstone" writes the
+        // row again after they died, so this does not fire again.
+        if (lived) {
+          lived = false;
+          await beforeTombstone?.();
+        }
         return real.update(id, fn);
       },
     },
@@ -230,11 +236,19 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     const out = await resumeErasure(pool, id, deps());
 
     expect(out.finished).toBe(true);
-    // Only what was left. A resume that re-ran the whole sweep would still be
-    // correct, and would prove nothing about the record having been read.
+    // FROM THE TOP, because the break came before the tombstone. Until then
+    // the account worked, so a step recorded as done proves nothing about
+    // what the member wrote since, and every step runs again (they are
+    // idempotent, as the next cases prove). That the record IS read shows on
+    // a resume past the tombstone, which skips what it holds: the pinned list
+    // below for "tombstone" itself, and erasure.identity.test.ts for the rest.
+    expect(out.ran[0]).toBe("ledger-descriptions");
+    expect(out.ran).toContain("notifications");
     expect(out.ran).toContain("role-holdings");
     expect(out.ran).toContain("portraits");
-    expect(out.ran).not.toContain("notifications");
+    // And the record says what this attempt did, once each.
+    const ranOnce = (await erasureRecord(pool, id))!.stepsDone;
+    expect(ranOnce).toEqual(out.ran);
 
     const after = await erasureRecord(pool, id);
     expect(after!.finishedAt).toBeTruthy();
@@ -375,6 +389,46 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(submissions.find((s) => s.id === idea.id).data.email).toBe("[removed at member's request]");
   });
 
+  /*
+   * THE LOST NOTE (round 3's open problem, closed in round 5). The step's write
+   * commits, then the UPDATE that notes it done fails: a dropped connection, a
+   * deploy's SIGTERM. `noteStepDone` sat outside the step's try, so nothing
+   * recorded the failure, and the record read as possibly running for ten
+   * minutes with no failed step until somebody pressed Finish them.
+   *
+   * The pool here is the real one with one statement refused: the note for
+   * "skill-tags". Everything else, the step's own write included, lands.
+   */
+  it("a step whose note is lost is recorded as the failed step, at once", async () => {
+    const id = "er-lost-note-1";
+    const target = await seedMember(id);
+    const losing = new Proxy(pool, {
+      get(t, p) {
+        const v = Reflect.get(t, p, t);
+        if (p !== "query") return typeof v === "function" ? v.bind(t) : v;
+        return (sql: unknown, params?: unknown) =>
+          typeof sql === "string" && sql.includes("JSON_ARRAY_APPEND") && Array.isArray(params) && params[0] === "skill-tags"
+            ? Promise.reject(new Error("the connection dropped before the note landed"))
+            : (t.query as any)(sql, params);
+      },
+    }) as mysql.Pool;
+
+    await expect(anonymizeMember(losing, target, null, deps())).rejects.toThrow(/before the note landed/);
+
+    const record = await erasureRecord(pool, id);
+    // The step ran, and its write is there.
+    expect(await q("SELECT `id` FROM `skill_tags` WHERE `user_id` = ?", [id])).toHaveLength(0);
+    // And the record says where it stopped, which is what makes it truthful now and not in ten minutes.
+    expect(record!.finishedAt).toBeNull();
+    expect(record!.failedStep).toBe("skill-tags");
+    expect(record!.lastError).toContain("before the note landed");
+    expect(record!.stepsDone).not.toContain("skill-tags");
+
+    const out = await resumeErasure(pool, id, deps());
+    expect(out.finished).toBe(true);
+    expect((await erasureRecord(pool, id))!.failedStep).toBeNull();
+  });
+
   it("records a break AFTER the tombstone, where the account is already gone", async () => {
     const id = "er-late-1";
     const target = await seedMember(id);
@@ -396,10 +450,40 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(out.finished).toBe(true);
     // The comms rows, the needs deletion and the journal deletion sit after the
     // tombstone, so a break AT the tombstone leaves them undone and the resume
-    // runs them. The ORDER here is the order erasure.ts declares its steps in;
-    // the merge of wt/comms with main checks it against the source below.
+    // runs them. The tombstone never landed, so the account still worked and
+    // the resume starts again from the top: every step before it runs a second
+    // time, for anything the member wrote in between. The ORDER here is the
+    // order erasure.ts declares its steps in, ALL of them, so every new step
+    // has to be named here; the merge of wt/comms with main checks it against
+    // the source below.
     expect(out.ran).toEqual([
+      "ledger-descriptions",
+      "gratitude-names",
+      "quest-claim-names",
+      "notifications",
+      "tool-clicks",
+      "public-health-events",
+      "steward-acts",
+      "submissions",
+      "quest-proposals",
+      "alignment-party-left",
+      "role-holdings",
+      "org-seatings",
+      "org-drafts",
+      "proposal-drafts",
+      "skill-tags",
+      "push-subscriptions",
+      "forum-subscriptions",
+      "wallet-challenges",
+      "concierge-queries",
+      "contact-requests",
+      "intents",
+      "module-records",
+      "member-agent",
+      "character-sheet",
+      "portraits",
       "tombstone",
+      "handle-after-tombstone",
       "member-agent-after-tombstone",
       "guest-places-after-tombstone",
       "comms",
@@ -410,9 +494,13 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "seat-application-words-after-tombstone",
       "meet-me-windows-after-tombstone",
       "notices-naming-after-tombstone",
+      "ballot-words-after-tombstone",
+      "proposal-ballot-words-after-tombstone",
       "exit-notes-after-tombstone",
       "relayed-mail-after-tombstone",
       "checkin-notes-after-tombstone",
+      "pulse-lines-naming-after-tombstone",
+      "submission-words-after-tombstone",
       "alignment-names-after-tombstone",
       "season-plan-words-after-tombstone",
       "role-tensions-after-tombstone",
@@ -427,9 +515,16 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "stay-notes-after-tombstone",
       "purchase-emails-after-tombstone",
       "role-proposals-after-tombstone",
+      "seat-journal-after-tombstone",
+      "seat-claims-after-tombstone",
+      "org-seatings-after-tombstone",
+      "role-holdings-after-tombstone",
       "sessions-after-tombstone",
       "gene-keys-after-tombstone",
+      "quest-crews-after-tombstone",
+      "photo-report-reasons-after-tombstone",
       "audit",
+      "product-subscriptions-after-tombstone",
       "external-stores",
     ]);
     expect((await usersRepo(pool).byId(id))!.name).toBe("A departed member");

@@ -29,6 +29,7 @@ vi.mock("@/lib/gameApi", () => ({
 vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: (f: string) => f }));
 vi.mock("@/components/NotificationBell", () => ({ default: () => null }));
 vi.mock("@/components/NotificationToasts", () => ({ default: () => null }));
+vi.mock("@/components/RewardMoment", () => ({ default: () => null }));
 vi.mock("./mobile/MobileTabBar", () => ({ default: () => null, isBareRoute: () => false }));
 vi.mock("./mobile/MobileFab", () => ({ default: () => null }));
 vi.mock("./NextStepTrail", () => ({ default: () => null }));

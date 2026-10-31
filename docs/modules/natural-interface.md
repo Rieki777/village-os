@@ -85,6 +85,7 @@ is a special case of the other.
 | A cycle settled | `fireflies` | `client/src/pages/Admin.tsx` (Cycle Close) | Once per settlement that released something |
 | A pledge landed | `ripples` | `client/src/components/crowdpool/PoolPieces.tsx` | Once per arrival seen while watching |
 | A power crossed to the village | `dawn` | `client/src/components/governance/TransferCeremony.tsx` | Once ever per crossing, in the session that closed the vote |
+| What landed for your work | `seeds` | `client/src/components/RewardMoment.tsx` | Once ever per arrival, on any device, gathered into one moment per open |
 
 ### What was deliberately NOT wired, to keep celebration rare
 
@@ -110,9 +111,10 @@ reachable and was left alone on purpose.
   with no member on the other end. The admin GATE, which is a real full-screen
   spinner, and the settlement desk, which is one of the wired moments, are the
   two that changed.
-- **The dead `client/src/components/ui/spinner.tsx` primitive.** It has no
-  call sites at all. Deleting it belongs to whoever prunes unused shadcn
-  primitives, not to this lane.
+- **The dead `ui/spinner` primitive** (path not spelled in full: the file is gone
+  and the doc link guard resolves every repo path a document names). It had no
+  call sites at all. **Deleted on 2026-10-30** with 38 other unused shadcn
+  primitives, which is the pruning this bullet was waiting for.
 
 ## This is a unification, not an invention
 
@@ -225,6 +227,7 @@ Two intensities, and the split is a budget rather than a volume knob.
 - a ballot carrying
 - a need delivered on a crowdpool
 - a power crossing over to the village
+- pay for work landing: tokens, Voice or a cash payment (0294)
 
 Everything else gets a `whisper`: a gratitude sent, a claim made, a form
 accepted, a row saved.
@@ -254,6 +257,8 @@ not a moment attached to how many powers a village holds. A village holding
 two of twelve is young and not behind, so nothing here counts, compares or
 totals: one power crossing is one daybreak, and the village with one and the
 village with ten see the same drawing when their next one lands.
+
+**Pay landing is the sixth, and it spends the same drawing as the consent.** Rye asked for it on 2026-10-30 (earnings idea 1), and it clears the bar on the ration's own rule: it is the END of a piece of work, the moment the village paid for it. It cannot become wallpaper, for three reasons the server enforces (`server/lib/rewardMoment.ts`). It fires once per arrival, ever, remembered per member in `reward_moment_seen`, so a second device never replays it. Everything that landed since the last look is ONE moment, a line per piece of work, never a queue. And the first look is a baseline, so a member's history is not thrown at them the day it ships. It takes `seeds` because it is the consent's own event read later: the work left, and here is where it landed. Gratitude received is not in it: it is not pay, and its acknowledgment already has the bloom.
 
 The reason is not taste. A celebration on every action becomes wallpaper
 within a session, and once it is wallpaper the rare event has nothing left to

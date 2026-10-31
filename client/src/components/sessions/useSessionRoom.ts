@@ -44,6 +44,9 @@
  * server now holds and never what this device hoped it would.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+/** How often a closed record with a round still outliving its call is asked for again. */
+const CLOSED_NIGHT_ASK_MS = 60_000;
 import { toast } from "sonner";
 import { gameFetch } from "@/lib/gameApi";
 import {
@@ -61,7 +64,9 @@ import {
   type SessionState,
   type SessionView,
 } from "@shared/sessions";
-import type { LibraryCard } from "@shared/sessionLibrary";
+import { LIBRARY_TENSION_API, type LibraryCard } from "@shared/sessionLibrary";
+import { onBehalfUndoPath } from "@shared/sessionOnBehalf";
+import { agendaOrderPath, itemVotePath, type AgendaVote } from "@shared/sessionVotes";
 
 export type RoomStatus = "loading" | "ready" | "signed-out" | "refused" | "missing" | "gone" | "failed";
 
@@ -97,6 +102,8 @@ export interface EntryPatch {
   claim?: boolean;
   release?: boolean;
   ownerSeatId?: string | null;
+  /** The facilitator hands an action to somebody in the room (0288). */
+  ownerUserId?: number;
   text?: string;
   dueOn?: string | null;
   status?: EntryStatus;
@@ -117,7 +124,12 @@ export interface RoomActions {
   addEntry(input: EntryInput, opts?: WriteOptions): Promise<WriteResult<{ id?: number }>>;
   patchEntry(entryId: number, patch: EntryPatch, opts?: WriteOptions): Promise<WriteResult>;
   deleteEntry(entryId: number, opts?: WriteOptions): Promise<WriteResult>;
-  respond(target: ResponseTarget, value: string, text?: string | null, opts?: WriteOptions): Promise<WriteResult>;
+  /** `answerBy` (an ISO instant) goes with a night, `sleep`, and with nothing else. */
+  respond(target: ResponseTarget, value: string, text?: string | null, opts?: WriteOptions, answerBy?: string): Promise<WriteResult>;
+  /** On a closed record (0281): answer a round you slept on, by your time. */
+  answerNight(entryId: number, value: string, text: string | null, opts?: WriteOptions): Promise<WriteResult>;
+  /** On a closed record (0281): the facilitator marks a round that consented after the call decided. */
+  decideAfterNight(entryId: number, opts?: WriteOptions): Promise<WriteResult>;
   act(action: SessionAction, opts?: WriteOptions): Promise<WriteResult<{ state?: SessionState }>>;
   hosts(input: { facilitatorUserId?: number; secretaryUserId?: number | null }, opts?: WriteOptions): Promise<WriteResult>;
   close(opts?: WriteOptions): Promise<WriteResult & { unowned?: number[] }>;
@@ -132,6 +144,32 @@ export interface RoomActions {
   library(): Promise<LibraryCard[] | null>;
   /** Bring items from the agenda library onto this room's agenda, all or none. */
   bringFromLibrary(ids: number[], opts?: WriteOptions): Promise<WriteResult<{ ids?: number[] }>>;
+  /**
+   * Send one of this room's tensions, or one from "From last time" (`sessionId`
+   * is the session it was named in), to a circle's agenda items, or to none in
+   * particular. The door is the agenda library's own; the room is read again
+   * after it, as after every write, so it shows where the tension went.
+   */
+  sendTension(input: { sessionId: number; entryId: number; circleId: string | null }, opts?: WriteOptions): Promise<WriteResult<{ item?: LibraryCard }>>;
+  /**
+   * FILLING IN FOR SOMEBODY (0288, shared/sessionOnBehalf.ts). While the
+   * facilitator has chosen a person, the arrival, a new agenda item and a new
+   * entry go in as that person's (`forUserId`). Null: the writer's own. It
+   * goes back to null by itself when the viewer stops facilitating or the
+   * person leaves the room. Optional so a fixture that predates it still types.
+   */
+  fillingFor?: number | null;
+  fillFor?(userId: number | null): void;
+  /** Take back something filled in: the person it was for, or the facilitator who filled it in. */
+  undoFill?(fillId: number, opts?: WriteOptions): Promise<WriteResult>;
+  /**
+   * THE ROOM VOTES ITS AGENDA (0290, shared/sessionVotes.ts). The viewer's own
+   * vote on a waiting item, 0 to take it back; never for somebody else, even
+   * while filling in. Optional so a fixture that predates it still types.
+   */
+  vote?(itemId: number, vote: AgendaVote, opts?: WriteOptions): Promise<WriteResult>;
+  /** Whoever runs the room sets the voted order (true), or opens the vote again (false). */
+  setOrder?(set: boolean, opts?: WriteOptions): Promise<WriteResult<{ state?: SessionState }>>;
 }
 
 export interface SessionRoom {
@@ -180,6 +218,8 @@ export function useSessionRoom(
   const stopped = useRef(false);
   /** The room a poll is out asking for, so polls never stack; null when none is out. */
   const asking = useRef<number | null>(null);
+  /** When a closed record was last asked for, so one with a night still on it is asked again slowly. */
+  const closedAskedAt = useRef(0);
   const current = useRef<SessionView | null>(null);
   /** The shortest round trip the offset was measured on: the steadiest reading wins. */
   const bestTrip = useRef(Number.POSITIVE_INFINITY);
@@ -279,9 +319,17 @@ export function useSessionRoom(
   );
 
   const poll = useCallback(async () => {
-    // A closed session's record stays as it was, so there is nothing to ask for.
+    // A closed session's record stays as it was, so there is nothing to ask for,
+    // unless a round on it outlived the call (0281): then it is asked for once a
+    // minute, so a night that ends or an answer that lands shows without a reload.
     // A poll still out for an earlier room does not hold up this one.
-    if (stopped.current || asking.current === generation.current || !tabVisible() || current.current?.status === "closed") return;
+    if (stopped.current || asking.current === generation.current || !tabVisible()) return;
+    const record = current.current;
+    if (record?.status === "closed") {
+      const live = record.nights?.some((n) => n.open || n.canDecide);
+      if (!live || Date.now() - closedAskedAt.current < CLOSED_NIGHT_ASK_MS) return;
+      closedAskedAt.current = Date.now();
+    }
     const mine = generation.current;
     asking.current = mine;
     try {
@@ -338,12 +386,27 @@ export function useSessionRoom(
 
   const refresh = useCallback(() => ask(true), [ask]);
 
+  // Who the facilitator is filling in for, if anybody. Kept only while it still
+  // makes sense: they facilitate, and the person is in the room.
+  const [fillingFor, setFillingFor] = useState<number | null>(null);
+  const fillRef = useRef<number | null>(null);
+  fillRef.current = fillingFor;
+  const fillStillFits = !!view && view.me.facilitates && view.status === "open" && view.people.some((p) => p.userId === fillingFor);
+  useEffect(() => {
+    if (fillingFor != null && view && !fillStillFits) setFillingFor(null);
+  }, [fillingFor, view, fillStillFits]);
+  const withFor = useCallback(<P extends object>(payload: P): P | (P & { forUserId: number }) => {
+    const v = current.current;
+    const n = fillRef.current;
+    return n != null && v?.me.facilitates && n !== v.me.userId ? { ...payload, forUserId: n } : payload;
+  }, []);
+
   const write = useCallback(
-    async <T,>(method: string, path: string, payload: unknown, opts?: WriteOptions): Promise<WriteResult<T>> => {
+    async <T,>(method: string, path: string, payload: unknown, opts?: WriteOptions, url?: string): Promise<WriteResult<T>> => {
       if (!base) return { ok: false, status: 0, error: ROOM_COPY.writeFailed, body: {}, room: null };
       let result: WriteResult<T>;
       try {
-        const res = await gameFetch(`${base}${path}`, {
+        const res = await gameFetch(url ?? `${base}${path}`, {
           method,
           ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
         });
@@ -365,13 +428,16 @@ export function useSessionRoom(
   const actions = useMemo<RoomActions>(() => ({
     join: () => write("POST", "/join", {}),
     patchSession: (patch, opts) => write("PATCH", "", patch, opts),
-    arrival: (score, wish) => write("POST", "/arrival", wish ? { score, wish } : { score }),
-    addItem: (input, opts) => write("POST", "/items", input, opts),
+    arrival: (score, wish) => write("POST", "/arrival", withFor(wish ? { score, wish } : { score })),
+    addItem: (input, opts) => write("POST", "/items", withFor(input), opts),
     patchItem: (itemId, patch, opts) => write("PATCH", `/items/${itemId}`, patch, opts),
-    addEntry: (input, opts) => write("POST", "/entries", input, opts),
+    addEntry: (input, opts) => write("POST", "/entries", withFor(input), opts),
     patchEntry: (entryId, patch, opts) => write("PATCH", `/entries/${entryId}`, patch, opts),
     deleteEntry: (entryId, opts) => write("DELETE", `/entries/${entryId}`, undefined, opts),
-    respond: (target, value, text, opts) => write("POST", "/respond", text ? { target, value, text } : { target, value }, opts),
+    respond: (target, value, text, opts, answerBy) =>
+      write("POST", "/respond", { target, value, ...(text ? { text } : {}), ...(answerBy ? { answerBy } : {}) }, opts),
+    answerNight: (entryId, value, text, opts) => write("POST", "/night", { entryId, value, ...(text ? { text } : {}) }, opts),
+    decideAfterNight: (entryId, opts) => write("POST", `/entries/${entryId}/decide`, {}, opts),
     act: (action, opts) => write<{ state?: SessionState }>("POST", "/act", { action }, opts),
     hosts: (input, opts) => write("POST", "/hosts", input, opts),
     close: async (opts) => {
@@ -394,7 +460,13 @@ export function useSessionRoom(
       }
     },
     bringFromLibrary: (ids, opts) => write<{ ids?: number[] }>("POST", "/library", { ids }, opts),
-  }), [write, base]);
+    sendTension: (input, opts) => write<{ item?: LibraryCard }>("POST", "", input, opts, LIBRARY_TENSION_API),
+    fillingFor,
+    fillFor: (userId) => setFillingFor(userId),
+    undoFill: (fillId, opts) => write("POST", "", {}, opts, id == null ? undefined : onBehalfUndoPath(id, fillId)),
+    vote: (itemId, vote, opts) => write("POST", "", { vote }, opts, id == null ? undefined : itemVotePath(id, itemId)),
+    setOrder: (set, opts) => write<{ state?: SessionState }>("POST", "", { set }, opts, id == null ? undefined : agendaOrderPath(id)),
+  }), [write, base, withFor, fillingFor, id]);
 
   return { view, status, lagging, offset, refresh, actions };
 }

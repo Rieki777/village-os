@@ -212,6 +212,39 @@ export async function loadGratitude(
   };
 }
 
+/**
+ * `departed-` IS THE DEPARTED'S PREFIX, AND NO LIVING MEMBER TAKES IT.
+ *
+ * Releases before round 2 gave every tombstone the handle `departed-` and the
+ * last eight characters of its id, and forum bylines and old links print it.
+ * The erasure step `handle-after-tombstone` (server/lib/erasure.ts) takes it
+ * off, which frees it, and a living member who then took `departed-xxxxxxxx`
+ * would be the person every old link to the departed member's page reached.
+ *
+ * So two rules, one per door. A handle a member CHOOSES (`PUT /api/profile`)
+ * may not start with it, and is refused in `DEPARTED_HANDLE_REFUSAL`'s words.
+ * A handle a NAME GIVES (sign-up, Google sign-up, the founder's bootstrap and
+ * the boot backfill, all through `slugifyHandle` in server/index.ts) drops the
+ * prefix through `livingHandle`, because nobody should be turned away for a
+ * name.
+ */
+export const DEPARTED_HANDLE_PREFIX = "departed-";
+
+export const DEPARTED_HANDLE_REFUSAL =
+  'Handles starting with "departed-" are kept for members who have left. Pick another one.';
+
+/** Whether a handle wears the departed's prefix, in any case and with any spaces around it. */
+export function isDepartedHandle(handle: unknown): boolean {
+  return String(handle ?? "").trim().toLowerCase().startsWith(DEPARTED_HANDLE_PREFIX);
+}
+
+/** A handle a name gave, with every leading `departed-` taken off. */
+export function livingHandle(slug: string): string {
+  let out = String(slug ?? "");
+  while (isDepartedHandle(out)) out = out.trim().slice(DEPARTED_HANDLE_PREFIX.length);
+  return out || "member";
+}
+
 /** Find a member by the name a stranger reaches them with. */
 export async function userIdForHandle(pool: Pool, handle: string): Promise<string | null> {
   const [rows] = await pool.query<RowDataPacket[]>(

@@ -141,7 +141,8 @@ describe.skipIf(!configured)("claiming a seat recorded under a name", () => {
         return false;
       },
       getPool: () => pool,
-      members: { all: async () => [] },
+      // Nobody here has left, so the departed-member check finds no row.
+      members: { all: async () => [], byId: async () => null },
       firstName: (n: string) => String(n).split(/\s+/)[0],
       capabilityCtx: async () => ({}),
       lapseContext: () => ({}),

@@ -50,6 +50,7 @@ import {
 } from "@/components/sessions/roomUi";
 import { dueWords, fromWords } from "./dateWords";
 import TaskAnswerSheet from "./TaskAnswerSheet";
+import WorkChatButton from "@/components/messages/WorkChatButton";
 
 export interface TaskCardProps {
   task: TaskCardData;
@@ -184,6 +185,9 @@ export default function TaskCard({ task, today, onAnswered, compact = false, hid
           )
         )}
 
+        {/* The chat the people holding it share: the person and the seat's holders. */}
+        {sharedByTwo(shown) && <WorkChatButton kind="task" id={shown.entryId} likely className="mt-2" />}
+
         {shown.recordLink && !hideRecordLink && (
           <Link href={`/sessions/${shown.sessionId}`} className={`${BTN_QUIET} mt-2`} aria-describedby={textId}>
             {TASK_COPY.buttons.record}
@@ -194,4 +198,16 @@ export default function TaskCard({ task, today, onAnswered, compact = false, hid
       {op && <TaskAnswerSheet task={shown} op={op} today={today} onDone={done} onClose={() => setOp(null)} />}
     </article>
   );
+}
+
+/**
+ * Whether two or more people hold this task, from what the card already
+ * carries: a person, and the seat's live holders. Names only, so a person who
+ * also sits in the seat may count twice; the Chat button's press asks the
+ * server, which counts by member, and says so when there is no chat.
+ */
+export function sharedByTwo(task: Pick<TaskCardData, "heldAs" | "seat" | "inSessionNow">): boolean {
+  if (task.inSessionNow) return false;
+  const person = task.heldAs === "you" || task.heldAs === "person" ? 1 : 0;
+  return person + (task.seat?.holders.length ?? 0) >= 2;
 }

@@ -24,6 +24,7 @@
  * or a date under an action never opens the editor by accident.
  */
 import { useState, type ReactNode } from "react";
+import FilledInNote from "./FilledInNote";
 import { X } from "lucide-react";
 import { ENTRY_LABELS, ROOM_COPY, SESSION_LIMITS, SESSION_REFUSALS, cleanLine, cleanText, type SessionEntry } from "@shared/sessions";
 import EditableText from "./EditableText";
@@ -124,6 +125,7 @@ export default function EntryCard({ view, actions, entry, label, singleLine = fa
             </div>
           )}
         />
+        {!readOnly && <FilledInNote filled={entry.filledIn} actions={actions} />}
         {extra}
       </div>
     </div>

@@ -23,6 +23,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -35,15 +36,20 @@ import {
 import { motion } from "framer-motion";
 import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
 import { cssColourForCircle } from "@shared/circleView";
+import { arcCounts } from "@shared/capacityArc";
+import { iconFor } from "@/lib/circleIcons";
 import { viewBoxFor, type CameraTarget, type CameraView } from "./camera";
 import { NO_NUDGE, useCameraFlight, useMeasuredBox, useNudge } from "./mapStage";
 import SeatGlyph, { HitArea, seatStateWords } from "./SeatGlyph";
 import CircleLabel from "./CircleLabel";
-import { buildLabelPlan } from "./labelPlacement";
+import { bandObstacles, buildLabelPlan } from "./labelPlacement";
 import { seatHitRadii, type SeatPoint } from "./seatTargets";
 import { fitLabelToScreen } from "./labelFit";
 import { TermArc, SeasonRing } from "./TermMarkers";
 import RelationLines, { RelationArrowDef } from "./RelationLines";
+import SeatRing from "./SeatRing";
+import FormingBand from "./FormingBand";
+import CircleGlyph from "@/components/geneKeys/CircleGlyph";
 import type { Filters, PowerData, PowerSeat, Selection } from "./types";
 import { anyFilterOn, seatPassesFilters } from "./types";
 
@@ -162,7 +168,10 @@ export default function PowerMap({
 
   // The camera. Target derives from the layout, so a shape morph re-aims it.
   const target: CameraTarget = useMemo(() => {
-    const pos = focusId ? posById.get(focusId) : null;
+    const at = focusId ? posById.get(focusId) : null;
+    // An arc of a forming band is part of its container's picture, so the
+    // camera frames the container and the arc lights up inside it.
+    const pos = at?.band ? (at.band.containerId ? posById.get(at.band.containerId) : null) : at;
     if (focusId && pos) return { id: focusId, cx: pos.x, cy: pos.y, r: pos.r };
     /*
      * THE VILLAGE VIEW HAS TO CLEAR THE SEASON RING, WHICH DRAWS OUTSIDE IT.
@@ -325,6 +334,9 @@ export default function PowerMap({
      back out again, which loses your place each time. Pointer only: a touch
      device gets the tap, and hover would fire on the way to it. */
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // Ids this map's own defs answer to. The phone map and the desktop map are
+  // both mounted in one document, so a fixed id would resolve to whichever came first.
+  const uid = `pm${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const box = useMeasuredBox(svgEl);
   const aspect = box.w > 0 && box.h > 0 ? box.h / box.w : layout.height / layout.width;
   /*
@@ -384,7 +396,7 @@ export default function PowerMap({
     () =>
       buildLabelPlan(
         layout.circles
-          .filter((pos) => maxDepth === undefined || pos.depth <= maxDepth)
+          .filter((pos) => (maxDepth === undefined || pos.depth <= maxDepth) && !pos.band)
           .map((pos) => ({
             id: pos.id,
             x: pos.x,
@@ -397,6 +409,7 @@ export default function PowerMap({
             forming: byId.get(pos.id)?.status === "forming",
           })),
         pxPerWorld,
+        layout.bands ? bandObstacles(layout.bands, layout.circles.filter((pos) => maxDepth === undefined || pos.depth <= maxDepth)) : [],
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- showLabel reads focusId and readFocus, both listed.
     [layout, maxDepth, byId, data.circles, posById, pxPerWorld, focusId, readFocus],
@@ -500,6 +513,11 @@ export default function PowerMap({
       >
         <defs>
           <RelationArrowDef />
+          {/* The forming material: a hatch over the tint, so "not yet" never
+              rests on a fade alone (opacity is a dimmer, not a status). */}
+          <pattern id={`${uid}-hatch`} width={8} height={8} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1={0} y1={0} x2={0} y2={8} stroke="var(--foreground)" strokeOpacity={0.14} strokeWidth={2} />
+          </pattern>
         </defs>
 
         {/* The enclosing line. Tapping it, or any backdrop, goes out one
@@ -550,7 +568,7 @@ export default function PowerMap({
 
         {/* The circles, every shape, one loop. */}
         {layout.circles
-          .filter((pos) => maxDepth === undefined || pos.depth <= maxDepth)
+          .filter((pos) => (maxDepth === undefined || pos.depth <= maxDepth) && !pos.band)
           .map((pos) => {
           const c = byId.get(pos.id);
           const forming = c?.status === "forming";
@@ -566,12 +584,31 @@ export default function PowerMap({
           const label = { lines: placed.lines, fontSize: placed.fontSize, lineHeight: placed.lineHeight };
           const hasChildren = data.circles.some((o) => o.parentCircleId === pos.id && posById.has(o.id));
           const labelTop = placed.top;
+          /*
+           * ARC FAR, GLYPHS CLOSE (Rye, 2026-10-23). Looking at the whole
+           * village, every circle's border is a meter of its roles; stepping
+           * into a circle brings back the glyphs for it and the circles
+           * directly inside it. A circle holding the role a reader picked or a
+           * search pulsed shows its glyphs wherever the camera is.
+           */
+          const glyphs =
+            (focusId !== null && (isFocus || parentOf(pos.id) === focusId)) ||
+            pos.roles.some((rp) => (selected?.kind === "role" && rp.id === selected.id) || rp.id === pulseSeatId);
+          const counts = arcCounts(data.roles.filter((r) => r.circleId === pos.id));
+          const countWords = counts.places ? `, ${counts.held} of ${counts.places} held${counts.open ? `, ${counts.open} open` : ""}` : "";
+          const unit = pxPerWorld > 0 ? 1 / pxPerWorld : 1;
+          const Icon = iconFor(c?.icon);
+          const iconSize = 18 * unit;
+          const iconY = labelTop - label.fontSize * 0.9 - 4 * unit - iconSize;
+          const showIcon =
+            !compact && pxPerWorld > 0 && showLabel(pos.id) && !placed.outside && !hasChildren && !!c?.icon &&
+            iconY >= pos.y - pos.r + (glyphs ? 34 : 8 * unit);
 
           return (
             <motion.g key={pos.id} animate={{ opacity }} transition={morph}>
-              {/* The circle, its links and its seats: this is what goes quiet
-                  while a circle is still forming. */}
-              <g opacity={forming ? 0.6 : 1}>
+              {/* The circle, its links and its roles. A forming circle reads by
+                  its material, a dashed edge and a hatch, never by a fade. */}
+              <g>
               <motion.circle
                 id={`power-node-${pos.id}`}
                 animate={{ cx: pos.x, cy: pos.y, r: pos.r }}
@@ -603,10 +640,11 @@ export default function PowerMap({
                  * about legibility moves. The mini render on /circles is on
                  * the dark ground and keeps its own lower value.
                  */
-                fillOpacity={isFocus ? 0.42 : hovered ? 0.46 : 0.32}
+                fillOpacity={isFocus ? 0.42 : hovered ? 0.46 : forming ? 0.16 : 0.32}
                 stroke={tone}
-                strokeOpacity={isFocus ? 0.9 : hovered ? 0.85 : 0.45}
+                strokeOpacity={isFocus ? 0.9 : hovered ? 0.85 : forming ? 0.7 : 0.45}
                 strokeWidth={isFocus ? 3 : hovered ? 3 : 2}
+                strokeDasharray={forming ? `${7 * unit} ${5 * unit}` : undefined}
                 className={interactive ? "cursor-pointer focus:outline-none focus-visible:stroke-[4]" : ""}
                 pointerEvents={interactive ? undefined : "none"}
                 onMouseEnter={() => interactive && setHoverId(pos.id)}
@@ -618,7 +656,7 @@ export default function PowerMap({
                 data-circle-id={pos.id}
                 role="button"
                 tabIndex={interactive ? 0 : -1}
-                aria-label={`${keys?.get(pos.id) ? `${keys.get(pos.id)}, ` : ""}${c?.name ?? pos.id}${forming ? ", still forming" : ""}${
+                aria-label={`${keys?.get(pos.id) ? `${keys.get(pos.id)}, ` : ""}${c?.name ?? pos.id}${forming ? ", still forming" : ""}${countWords}${
                   isFocus ? ". You are inside it; press Enter or Escape to go out one level" : ". Press Enter to go inside"
                 }${arrangeHint && interactive ? `, or ${arrangeHint}` : ""}`}
                 onClick={(e: ReactMouseEvent) => {
@@ -666,128 +704,32 @@ export default function PowerMap({
 
 
 
-              {/* ── THE DOUBLE LINK, DRAWN ────────────────────────────────
-                  Sociocracy's one structural idea that a normal org chart
-                  cannot show: a circle is joined to its parent by a PERSON
-                  who sits in both. `representsCircle` marks that seat, and
-                  it has been on the wire since 0083 and said out loud only
-                  in the holder card, as a sentence, one seat at a time. A
-                  reader looking at the whole village could not see which
-                  seats hold it together.
-
-                  So the seat is joined to the circle it speaks into. Drawn
-                  before the glyphs, so the line passes UNDER them, and
-                  dashed so it never reads as the containment the solid
-                  rings mean. */}
-              {pos.roles.map((rp) => {
-                const seat = seatById.get(rp.id);
-                if (!seat?.representsCircle) return null;
-                const parentId = parentOf(pos.id);
-                const anchor = parentId ? posById.get(parentId) : layout.village;
-                if (!anchor) return null;
-                return (
-                  <line
-                    key={`dbl-${rp.id}`}
-                    x1={rp.x}
-                    y1={rp.y}
-                    x2={anchor.x}
-                    y2={anchor.y}
-                    stroke={tone}
-                    strokeOpacity={seatPasses(seat) ? 0.5 : 0.12}
-                    strokeWidth={1.6}
-                    strokeDasharray="5 4"
-                    pointerEvents="none"
-                  />
-                );
-              })}
-
-              {/* The seats on this circle's ring. */}
-              {pos.roles.map((rp) => {
-                const seat = seatById.get(rp.id);
-                const dotR = pos.depth === 0 ? 11 : 9;
-                const pass = seatPasses(seat);
-                const showFaces =
-                  data.viewer.viewPeople && (totalSeats <= AVATAR_SEAT_CAP || isChildOfFocus(pos.id) || pos.id === focusId);
-                const words = seat ? seatStateWords(seat.state, seat.holderCount, seat.seats) : "";
-                return (
-                  <motion.g
-                    key={rp.id}
-                    animate={{ x: rp.x, y: rp.y, opacity: pass ? 1 : 0.2 }}
-                    initial={false}
-                    transition={morph}
-                    className="cursor-pointer focus:outline-none"
-                    role="button"
-                    tabIndex={interactive ? 0 : -1}
-                    pointerEvents={interactive ? undefined : "none"}
-                    aria-label={`${seat?.name ?? rp.id}, a role in ${c?.name ?? "this circle"}, ${words}${
-                      seat?.representsCircle ? ", and it speaks for this circle where it links out" : ""
-                    }. Press Enter to open it`}
-                    onClick={(e: ReactMouseEvent) => {
-                      // A tap on a seat NEVER moves the camera (spec 1).
-                      e.stopPropagation();
-                      onSelect({ kind: "role", id: rp.id });
-                    }}
-                    onKeyDown={(e: ReactKeyboardEvent) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onSelect({ kind: "role", id: rp.id });
-                      }
-                    }}
-                  >
-                    {/* The tap area, which is bigger than the dot and carries
-                        no ink. Drawn first, so it sits UNDER the glyph and
-                        cannot cover the face on a held seat. */}
-                    <HitArea r={seatHits.get(rp.id) ?? dotR} drawn={dotR} />
-                    <SeatGlyph
-                      x={0}
-                      y={0}
-                      r={dotR}
-                      state={seat?.state}
-                      held={seat?.holderCount ?? 0}
-                      seats={seat?.seats ?? 1}
-                      holders={seat?.holders ?? []}
-                      showAvatars={!!showFaces}
-                      pulse={pulseSeatId === rp.id}
-                    />
-                    <TermArc x={0} y={0} r={dotR} termEnds={seat?.termEnds} />
-                    {/* The representative's badge, at the far end of the link
-                        drawn above. A second ring, so the mark survives
-                        greyscale and never depends on colour alone (spec 4's
-                        rule, applied to representation as well as to state). */}
-                    {seat?.representsCircle && (
-                      <circle
-                        cx={0}
-                        cy={0}
-                        r={dotR + 4}
-                        fill="none"
-                        stroke={tone}
-                        strokeOpacity={0.85}
-                        strokeWidth={1.4}
-                        pointerEvents="none"
-                      />
-                    )}
-                    {selected?.kind === "role" && selected.id === rp.id && (
-                      <circle cx={0} cy={0} r={dotR + 3} fill="none" stroke="var(--color-teal-deep)" strokeWidth={1.6} />
-                    )}
-                  </motion.g>
-                );
-              })}
-
-              {pos.questDots.map((q, i) => (
-                <circle key={i} cx={q.x} cy={q.y} r={4} className="fill-amber/70 pointer-events-none" />
-              ))}
-              {pos.questOverflow > 0 && showLabel(pos.id) && (
-                <text
-                  x={pos.x}
-                  y={pos.y + pos.r - 10}
-                  textAnchor="middle"
-                  className="fill-muted-foreground pointer-events-none"
-                  style={{ fontSize: 10 }}
-                >
-                  +{pos.questOverflow} more quests
-                </text>
+              {/* A forming disc carries the hatch over its tint. */}
+              {forming && (
+                <motion.circle animate={{ cx: pos.x, cy: pos.y, r: pos.r }} initial={false} transition={morph} fill={`url(#${uid}-hatch)`} pointerEvents="none" />
               )}
+
+              <SeatRing
+                pos={pos}
+                circleName={c?.name ?? "this circle"}
+                tone={tone}
+                glyphs={glyphs}
+                interactive={interactive}
+                anchor={(() => {
+                  const parentId = parentOf(pos.id);
+                  return parentId ? (posById.get(parentId) ?? null) : layout.village;
+                })()}
+                seatById={seatById}
+                seatPasses={seatPasses}
+                showFaces={data.viewer.viewPeople && (totalSeats <= AVATAR_SEAT_CAP || isChildOfFocus(pos.id) || pos.id === focusId)}
+                seatHits={seatHits}
+                selected={selected}
+                onSelect={onSelect}
+                pulseSeatId={pulseSeatId}
+                showQuestOverflow={showLabel(pos.id)}
+                pxPerWorld={pxPerWorld}
+                morph={morph}
+              />
               </g>
 
               {/* The number and the name are drawn AFTER the seats and OUTSIDE
@@ -818,9 +760,29 @@ export default function PowerMap({
                 </text>
               )}
 
+              {/* THE CIRCLE'S SIX LINES (Gene Keys lane, 2026-10-30): which lines its
+                  holders show and where the gaps are, once you step in. It draws nothing
+                  while the module is off or no holder shows lines. */}
+              {glyphs && pxPerWorld > 0 && (
+                <CircleGlyph
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={pos.r}
+                  px={1 / pxPerWorld}
+                  holderIds={data.roles
+                    .filter((r) => r.circleId === pos.id)
+                    .flatMap((r) => r.holders)
+                    .filter((h) => !!h.userId && !(h as { lapsed?: boolean }).lapsed)
+                    .map((h) => String(h.userId))}
+                />
+              )}
+              {showIcon && (
+                <Icon x={pos.x - iconSize / 2} y={iconY} width={iconSize} height={iconSize} color={tone} strokeWidth={2} aria-hidden="true" pointerEvents="none" />
+              )}
+
               <CircleLabel
                 circleId={pos.id}
-                x={pos.x}
+                x={pos.x + placed.dx}
                 labelTop={labelTop}
                 label={label}
                 show={showLabel(pos.id)}
@@ -835,6 +797,37 @@ export default function PowerMap({
             </motion.g>
           );
         })}
+
+        {layout.bands && (
+          <FormingBand
+            bands={layout.bands}
+            riders={layout.circles.filter((pos) => !!pos.band && (maxDepth === undefined || pos.depth <= maxDepth))}
+            byId={byId}
+            pxPerWorld={pxPerWorld}
+            compact={compact}
+            keys={keys}
+            uid={uid}
+            isInteractive={isInteractive}
+            showLabel={showLabel}
+            captionY={(containerId) => {
+              const unit = pxPerWorld > 0 ? 1 / pxPerWorld : 1;
+              if (!containerId) return layout.village.y - layout.village.r + 30 + 14 * unit;
+              const named = labelPlan.get(containerId);
+              if (!named || !showLabel(containerId)) return null;
+              // Below the hover line, when the container is hovered, so the two never sit on each other.
+              return named.top + (named.lines.length - 1) * named.lineHeight + named.fontSize * 0.25 + (hoverId === containerId ? 34 : 14) * unit;
+            }}
+            opacityFor={(id) => {
+              const dimForFocus = focusId !== null && !isInteractive(id) && !chain.has(id) ? 0.3 : 1;
+              const dimForFilter = filtersOn && !circleAnyPass(id) ? 0.2 : 1;
+              return Math.min(dimForFocus, dimForFilter);
+            }}
+            focusId={focusId}
+            hoverId={hoverId}
+            onHover={setHoverId}
+            onOpen={(id) => onFocus(id === focusId ? parentOf(id) : id)}
+          />
+        )}
 
         {/* The village's own seats: the apex, the council ring, the steward's
             centre, or the boundary, wherever the shape put them. */}

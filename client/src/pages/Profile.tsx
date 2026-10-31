@@ -10,10 +10,11 @@ import OnchainCard from "@/components/OnchainCard";
 import WalletCard from "@/components/WalletCard";
 import SendTokensCard from "@/components/SendTokensCard";
 import RedemptionPanel from "@/components/RedemptionPanel";
+import CashOwedPanel from "@/components/CashOwedPanel";
+import SeasonSummarySection from "@/components/seasonSummary/SeasonSummarySection";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
-import StandingRow from "@/components/profile/StandingRow";
 import InvitePanel from "@/components/profile/InvitePanel";
 import StartHereCard from "@/components/profile/StartHereCard";
 import type { MembershipSigning } from "@shared/membershipSigning";
@@ -40,13 +41,25 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useModule, useModuleOn } from "@/modules/ModuleProvider";
 import { authToken, fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { onProfileRefresh } from "@/lib/profileRefresh";
 import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
+import { roleWithHolders } from "@shared/roleHolderLabel";
+import type { StageAdvance } from "@/components/StageAdvanced";
+import StatRow from "@/components/profileDash/StatRow";
+import StagePanel from "@/components/profileDash/StagePanel";
+import TodayStrip from "@/components/profileDash/TodayStrip";
+import TreasuryPanel from "@/components/profileDash/TreasuryPanel";
+import LevelUpMoment from "@/components/profileDash/LevelUpMoment";
+import ProfileTabs, { phoneTab, type ProfileTab } from "@/components/profileDash/ProfileTabs";
+import { useDashData } from "@/components/profileDash/useDashData";
+import PartiesCard from "@/components/profileDash/PartiesCard";
+import { abilitiesAtStage, nextRungProgress, pickTokens, stagePill } from "@/components/profileDash/dashModel";
+import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/dashUi";
 
 /**
  * THE CHARACTER SHEET.
@@ -62,6 +75,15 @@ import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
  *   Paths       which parts of village life you are here for
  *   Maturity    how far you have come, and what opens the next rung
  *   Powers      what you can do right now, and where climbing leads
+ *
+ * ── THE GAME DASHBOARD (Rye approved the design on 2026-10-30) ──────────────
+ *
+ * The page now reads top to bottom as the approved character sheet: the hero,
+ * the stat row, Stage reached, Today, the treasury, then two columns (the
+ * quest log on the left, roles and powers on the right) and the settings
+ * band. The sections under components/profileDash/ are new; everything below
+ * them is the section it always was, moved and not rewritten. On a phone the
+ * same sections split across five tabs (profileDash/ProfileTabs.tsx).
  *
  * ── EVERY FIGURE COMES OFF A PAYLOAD ────────────────────────────────────────
  *
@@ -104,6 +126,12 @@ export default function Profile() {
   const [savingPath, setSavingPath] = useState<string | null>(null);
   const [pathError, setPathError] = useState("");
   const config = useGameConfig();
+  /** The phone's tab (profileDash/ProfileTabs.tsx). A desktop shows every section whatever this holds. */
+  const [tab, setTab] = useState<ProfileTab>("today");
+  /** A crossing GameDashboard claimed, played as the full-screen moment. */
+  const [advance, setAdvance] = useState<StageAdvance | null>(null);
+  /** Every read the dashboard takes, once for the page. */
+  const dash = useDashData(user?.id ?? null);
 
   /**
    * The progression read, once for the page.
@@ -120,6 +148,8 @@ export default function Profile() {
     capabilityCatalogue: ProgressionCapability[];
     /** This member's signed letter and the village's answer (shared/membershipSigning.ts). */
     signing?: MembershipSigning | null;
+    /** The roles this member holds (`rolesFor`), named "Role (FirstName)" in the hero. */
+    roles?: Array<{ id: string; name: string }>;
   } | null>(null);
   /*
    * ONE READ OF /api/game/me, AND IT IS WHAT MAKES THE BALANCE CORRECT.
@@ -320,6 +350,18 @@ export default function Profile() {
       .map((id) => ({ id, label: id, role: "", route: "", offered: false })),
   ];
 
+  const stages = config?.stages ?? null;
+  const stageIndex = prog?.stageIndex ?? null;
+  const nextRung = stages && stageIndex !== null ? (stages[stageIndex + 1] ?? null) : null;
+  const progress = nextRungProgress(nextRung, { consentedQuests: prog?.consentedQuests ?? null, training: prog?.training ?? null });
+  const rolesLine = (prog?.roles ?? []).map((r) => roleWithHolders(r.name, [user.name])).join(", ");
+  const { village: villageToken } = pickTokens(dash.wallet ?? []);
+  const seasonWords = dash.season
+    ? [dash.season.name, dash.season.day !== null && dash.season.of !== null ? `day ${Math.min(dash.season.day, dash.season.of)} of ${dash.season.of}` : ""].filter(Boolean).join(" · ")
+    : null;
+  const claimedQuests = (me?.quests ?? []).filter((q) => q.status === "claimed" || q.status === "submitted");
+  const tabOf = (mine: ProfileTab | readonly ProfileTab[]) => phoneTab(tab, mine);
+
   return (
     <Layout>
       {/*
@@ -327,185 +369,254 @@ export default function Profile() {
         colour tokens and the display face on THIS element, so every descendant
         that already reads `bg-card`, `text-muted-foreground`, `border-border`
         and the rest resolves them against the night world instead of the app's
-        light or dark one. No component under here needed an edit; the block
-        and the reasoning live in client/src/index.css.
+        light or dark one. The dashboard's own `dash-*` tokens live beside them
+        in client/src/index.css.
 
-        It is the same class on the loading branch above, so the page does not
-        flash a daylight ground before the member lands.
+        NightMotes is `absolute inset-0` and needs this element to be what it
+        measures. MoonDock is `fixed` and placed last for source order: a
+        keyboard reaches the member's own page before it reaches an ornament.
       */}
-      {/*
-        THE AIR AND THE MOON.
-
-        `relative` is new and it is load-bearing: NightMotes is
-        `absolute inset-0` and needs this element to be what it measures, or it
-        fills the viewport and scrolls away from the page it belongs to.
-
-        The motes sit BEFORE the container and behind it, so nothing on the
-        sheet has to know they exist. MoonDock is `fixed` and renders its own
-        layer, so it is placed last for source order: a keyboard reaches the
-        member's own page before it reaches an ornament.
-      */}
-      <div className="relative sheet-night min-h-screen bg-background py-12">
+      <div className="relative sheet-night min-h-screen bg-background pb-20 pt-4 sm:py-10">
         <NightMotes />
-        <div className="relative container">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            {/*
-              WHO YOU ARE PLAYING, FIRST.
+        <div className="relative mx-auto max-w-[1300px] px-4 sm:px-10">
+          <ProfileTabs tab={tab} onTab={setTab} />
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
+            {/* WHO YOU ARE PLAYING, FIRST. The ladder position comes from the
+                page's own reads (`prog.stageIndex`, `config.stages`), never a
+                second fetch inside the hero. */}
+            <div className={tabOf("today")}>
+              <ProfileHero
+                name={user.name}
+                handle={user.handle}
+                stageIndex={stageIndex}
+                stageCount={stages?.length ?? null}
+                stageLabel={stagePill(stages, stageIndex)}
+                season={seasonWords}
+                rolesLine={rolesLine || null}
+                badges={dash.badgeList}
+                maxFeatured={dash.maxFeatured}
+                actions={
+                  <div className="hidden items-center gap-3 sm:flex">
+                    <a href="#invite" className={BTN_GOLD}>
+                      <UserPlus className="h-[18px] w-[18px]" aria-hidden="true" />
+                      Invite a friend
+                    </a>
+                    <button type="button" onClick={() => logout()} className={BTN_LINE}>
+                      Sign out
+                    </button>
+                  </div>
+                }
+                about={
+                  <div className="hidden flex-col gap-2.5 sm:flex">
+                    <p className="m-0 max-w-[620px] text-[15px] text-foreground/85">
+                      {user.bio ? `"${user.bio}" ` : "No about line yet. "}
+                      <a href="#about" className={`${LINK} text-sm`}>
+                        {user.bio ? "Edit about me and links" : "Write one"}
+                      </a>
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Paths</span>
+                      {user.paths.map((id, i) => (
+                        <span
+                          key={id}
+                          className={`rounded-full border px-3 py-1 text-[13px] ${i === 0 ? "border-dash-gold bg-dash-gold text-dash-gold-ink" : "border-border text-foreground"}`}
+                        >
+                          {offeredPaths.find((p) => p.id === id)?.label ?? id}
+                        </span>
+                      ))}
+                      <a href="#sheet-paths" className={`${LINK} text-[13px]`}>
+                        {user.paths.length ? "Walk another path" : "Choose a path"}
+                      </a>
+                    </div>
+                  </div>
+                }
+                footer={
+                  nextRung ? (
+                    <div className="mt-1 flex w-full max-w-[640px] flex-col gap-2 sm:mt-3.5">
+                      <div className="flex justify-between text-xs sm:text-sm">
+                        <span className="font-semibold text-dash-gold-lit">Next: {nextRung.name}</span>
+                        {progress ? (
+                          <span className="text-muted-foreground">
+                            {progress.done} of {progress.total} steps
+                            <span className="hidden sm:inline"> · {progress.total - progress.done} left</span>
+                          </span>
+                        ) : null}
+                      </div>
+                      {progress ? (
+                        <div
+                          role="progressbar"
+                          aria-label={`Toward ${nextRung.name}`}
+                          aria-valuemin={0}
+                          aria-valuemax={progress?.total ?? 1}
+                          aria-valuenow={progress?.done ?? 0}
+                          className="h-2.5 overflow-hidden rounded-md border border-dash-edge bg-dash-track sm:h-3.5"
+                        >
+                          <div
+                            className="h-full bg-[linear-gradient(90deg,var(--color-dash-gold),var(--color-dash-gold-lit))] shadow-[0_0_14px_color-mix(in_srgb,var(--color-dash-gold-lit)_60%,transparent)]"
+                            style={{ width: `${progress ? Math.round((progress.done / Math.max(1, progress.total)) * 100) : 0}%` }}
+                          />
+                        </div>
+                      ) : (
+                        /* A rung that is one act (a grant, being paid, signing)
+                           has no fraction to draw, so it says what opens it. */
+                        <p className="m-0 text-[13px] text-muted-foreground">{nextRung.description}</p>
+                      )}
+                      <a href="#invite" className={`${BTN_GOLD} mt-1.5 w-full sm:hidden`}>
+                        Invite a friend
+                      </a>
+                    </div>
+                  ) : null
+                }
+              />
+            </div>
 
-              `flex justify-between` with no column breakpoint put a 5xl
-              heading and a Sign Out button on one row at 375px, which is how
-              a long name produced scrolling in two dimensions. Stacked below
-              `sm`, and the button sits after the identity in source order so
-              a keyboard reaches the name first.
-            */}
-            <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0 flex-1">
-                {/* The ladder position comes from HERE and not from a second
-                    fetch inside the hero: `prog.stageIndex` is /api/game/me and
-                    `config.stages` is /api/game/config, both already read above.
-                    Two reads of one fact disagree for one render every time a
-                    rung turns. Null while either is loading, and the arc draws
-                    nothing rather than drawing zero. */}
-                <ProfileHero
-                  name={user.name}
-                  handle={user.handle}
-                  stageIndex={prog?.stageIndex ?? null}
-                  stageCount={config?.stages?.length ?? null}
-                />
-                {/*
-                  WHERE YOU STAND, under the identity and above everything else.
+            <div className={tabOf("today")}>
+              <StatRow
+                stats={[
+                  { key: "paths", glyph: "◎", value: user.paths.length, label: "Paths walked", short: "Paths", phone: true },
+                  { key: "quests", glyph: "✦", value: prog?.consentedQuests ?? null, label: "Quests done", short: "Quests", phone: true },
+                  { key: "badges", glyph: "❖", value: dash.badges, label: "Badges", short: "Badges", phone: true },
+                  {
+                    key: "tokens",
+                    glyph: "◐",
+                    value: villageToken ? villageToken.heldUnits / Math.pow(10, Math.max(0, villageToken.decimals)) : null,
+                    label: "Tokens",
+                    short: "Tokens",
+                    phone: true,
+                  },
+                  { key: "powers", glyph: "☾", value: prog ? prog.capabilityCatalogue.filter((c) => c.held).length : null, label: "Powers open", short: "Powers", phone: false },
+                ]}
+              />
+            </div>
 
-                  `held` is the balance AND its scale, from /api/game/me, which
-                  is the only pair that can be formatted honestly. It is null
-                  while that read is in flight, and the figure is simply absent
-                  until it lands rather than flashing a wrong number.
-
-                  Powers open is counted from the catalogue's held flags, which
-                  is the same set PowersMap draws from, so the figure and the
-                  section below it can never disagree.
-                */}
-                <StandingRow
-                  standing={{
-                    held: me ? { units: Number(me.gratitude.balance ?? 0), decimals: Number(me.gratitude.decimals ?? 0) } : null,
-                    powersOpen: prog ? prog.capabilityCatalogue.filter((c) => c.held).length : null,
-                    pathsWalked: user.paths.length,
-                    questsDone: prog?.consentedQuests ?? null,
-                  }}
+            {stages && prog ? (
+              <div className={tabOf("today")}>
+                <StagePanel
+                  stages={stages}
+                  stageIndex={prog.stageIndex}
+                  abilities={abilitiesAtStage(prog.capabilityCatalogue ?? [], stages[prog.stageIndex]?.id ?? "")}
+                  nextAction={me?.nextAction ?? null}
+                  progress={progress}
+                  progressUnit={nextRung?.rule.type === "training-complete" ? "lessons" : "quests consented"}
+                  nextRuleWords={nextRung?.description ?? null}
                 />
               </div>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => logout()}
-                className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
-              >
-                <LogOut className="h-4 w-4" aria-hidden="true" />
-                Sign out
-              </motion.button>
+            ) : null}
+
+            <div className={tabOf("today")}>
+              <TodayStrip data={dash} />
             </div>
 
-            {/* START HERE: the one next step from joining to proposing, owner only.
-                `undefined` signing means the progression read has not landed. */}
-            <StartHereCard ownerId={user.id} me={me} signing={prog ? (prog.signing ?? null) : undefined} config={config} catalogue={prog?.capabilityCatalogue} />
-
-            {/* YOUR TASKS. How many tasks wait on this member and the
-                nearest date, with one button down to the board. Nothing when
-                nothing waits. It reads the small count door, not the board. */}
-            <TasksWaitingCard enabled={sessionsOn} />
-
-            {/* INVITE SOMEBODY, at the top of the page on Rye's ruling of
-                2026-09-09. It draws nothing until the village has answered. */}
-            <InvitePanel />
-
-            {/* WHAT IS NEXT. Server-resolved, and the only element on this page
-                that answers a question without making the member assemble it.
-                Untouched: the banner, its label, its href and its wrapping all
-                stay exactly as they were. */}
-            <div className="mb-8">
-              {/* The page's own /api/game/me read, handed down. Rendered bare,
-                  GameDashboard fetches the same thing again, so one failure had
-                  two different remedies on one screen and the member met
-                  whichever retry they scrolled to first. */}
-              <GameDashboard me={me} meFailed={meFailed} />
+            <div className={tabOf("treasury")}>
+              <TreasuryPanel
+                data={dash}
+                claimedQuests={claimedQuests}
+                particulars={particulars ?? null}
+                redeemOn={!!redemptionModule}
+                seasonName={dash.season?.name ?? null}
+              />
             </div>
 
-            <div className="space-y-8">
-              {/* WHO YOU ARE HERE. */}
-              {/*
-                THE ONE PLACE THE FIXED ORDER BENDS, and it bends by a signpost
-                rather than by moving anything.
+            {/* THE TWO COLUMNS: what is on your plate, and your character. */}
+            <div className="flex flex-wrap items-start gap-6 sm:gap-8">
+              <div className="flex min-w-0 flex-[999_1_660px] flex-col gap-6 sm:gap-8">
+                <p aria-live="polite" className="sr-only">
+                  {surfacedSection && surfacedLabel ? `${surfacedLabel} is newly open to you.` : ""}
+                </p>
+                {surfacedSection && surfacedLabel ? (
+                  <div className={tabOf("today")}>
+                    <SurfacedBanner
+                      title={surfacedLabel}
+                      because={surfacedSection.quiet.replace(/, once you walk.*$/, ".")}
+                      onGo={() => {
+                        surfaced.acknowledge(surfacedSection.id);
+                        setTab("sheet");
+                        (document.getElementById(`sheet-${surfacedSection.id}`) ??
+                          document.getElementById("sheet-paths"))?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                    />
+                  </div>
+                ) : null}
 
-                A section that has just opened is named here for a visit or two
-                and then settles. The section itself never leaves its home: this
-                points DOWN at it. Rendering the section up here instead would
-                put the same thing on the page twice and leave a member unsure
-                whether they were looking at two things or one.
-              */}
-              {/*
-                THE ANNOUNCEMENT, in a region that is always mounted.
-
-                The banner below is inserted complete, text and all, so a live
-                region ON it announces nothing: assistive technology watches an
-                existing region for a CHANGE, and a node that arrives already
-                carrying its message is not a change. This paragraph is here on
-                every render and empty until there is something to say.
-              */}
-              <p aria-live="polite" className="sr-only">
-                {surfacedSection && surfacedLabel ? `${surfacedLabel} is newly open to you.` : ""}
-              </p>
-
-              {surfacedSection && surfacedLabel ? (
-                <SurfacedBanner
-                  title={surfacedLabel}
-                  because={surfacedSection.quiet.replace(/, once you walk.*$/, ".")}
-                  onGo={() => {
-                    surfaced.acknowledge(surfacedSection.id);
-                    /* Every surfaceable section today is a path section, and a
-                       path's content lives in PathsPanel, so that is the anchor.
-                       Falling back to the section's own id keeps this correct
-                       for whatever surfaces next without another edit here. */
-                    (document.getElementById(`sheet-${surfacedSection.id}`) ??
-                      document.getElementById("sheet-paths"))?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                />
-              ) : null}
-
-              {/* Every task taken on in a live session, what this member's
-                  seats hold, and what waits on a power they hold, which is
-                  governance and so stands with sessions off. Emails and
-                  notices land on #my-tasks, and `scroll-mt-28` keeps the
-                  board's heading clear of the fixed site header (about 96px). */}
-              {(sessionsOn || governanceOn) && (
-                <div id={TASK_BOARD_ANCHOR} className="scroll-mt-28">
-                  <TaskBoard sessions={sessionsOn} />
+                {/* START HERE: the one next step from joining to proposing, owner only.
+                    It heads the quest log: the stage panel above carries the
+                    server's next step, and the design has nothing between it and Today.
+                    `undefined` signing means the progression read has not landed. */}
+                <div className={tabOf("quests")}>
+                  <StartHereCard ownerId={user.id} me={me} signing={prog ? (prog.signing ?? null) : undefined} config={config} catalogue={prog?.capabilityCatalogue} />
                 </div>
-              )}
-
-              {/* The journal's door on the profile; renders nothing while it is off. */}
-              <div className="scroll-mt-28"><ProfileJournalCard /></div>
-              <div className="scroll-mt-28"><ProfileGeneKeysCard /></div>
-
-              {/* R20: what this member needs, and how they are doing on it.
-                  Private to them; the village only ever reads counts. */}
-              <div id="my-needs">
-                <NeedCard />
+                {/* The quest log: every task taken on in a live session, what
+                    this member's roles hold, and what waits on a power they
+                    hold. Emails and notices land on #my-tasks. */}
+                <div className={tabOf(["today", "quests"])}>
+                  <TasksWaitingCard enabled={sessionsOn} />
+                </div>
+                {(sessionsOn || governanceOn) && (
+                  <div id={TASK_BOARD_ANCHOR} className={`scroll-mt-28 ${tabOf("quests")}`}>
+                    <TaskBoard sessions={sessionsOn} />
+                  </div>
+                )}
+                <div className={tabOf("quests")}>
+                  <GameDashboard me={me} meFailed={meFailed} showNextStep={false} onAdvance={setAdvance} />
+                </div>
+                {/* Deeds: stage turns, firsts, recognition flows, the ledger. */}
+                <div id="ledger" className={`scroll-mt-28 ${tabOf("treasury")}`}>
+                  <ProfileJourney />
+                </div>
+                <div className={tabOf("sheet")}>
+                  <AlignedSection />
+                </div>
               </div>
 
-              {/*
-                ABOUT YOU IS A DAY-ONE ACT, so it reads in the day-one band.
+              <aside aria-label="Your character" className="flex min-w-0 flex-[1_1_360px] flex-col gap-6 sm:gap-8">
+                <div className={`empty:hidden ${tabOf("quests")}`}>
+                  <PartiesCard data={dash} />
+                </div>
+                <div id="roles" className={`scroll-mt-28 flex flex-col gap-6 ${tabOf("roles")}`}>
+                  <YourRolesSection />
+                  <ProposeBanner />
+                  <ProposeRolesEntry />
+                  <PlayerRoleCard />
+                  <SeasonPlanSection />
+                </div>
+                {config && prog ? (
+                  <div className={tabOf("roles")}>
+                    <PowersMap
+                      catalogue={prog.capabilityCatalogue ?? []}
+                      stages={config.stages}
+                      stageIndex={prog.stageIndex}
+                      consentedQuests={prog.consentedQuests}
+                      training={prog.training ?? null}
+                    />
+                  </div>
+                ) : null}
+                <div id="my-needs" className={tabOf("sheet")}>
+                  <NeedCard />
+                </div>
+                <div className={`scroll-mt-28 ${tabOf("sheet")}`}>
+                  <ProfileJournalCard />
+                </div>
+                <div className={`scroll-mt-28 ${tabOf("sheet")}`}>
+                  <ProfileGeneKeysCard owner={user?.id ? String(user.id) : null} />
+                </div>
+              </aside>
+            </div>
 
-                It was eleven sections down, below Powers and the whole record,
-                which put one of the two things a brand-new member can actually
-                DO on arrival past everything they cannot. Writing a bio and
-                choosing a character are the acts available before anything has
-                been earned; the character picker already sits in the hero, and
-                this belongs beside it.
-              */}
+            {/* THE SHEET: about you, your paths and the settings, as the design's
+                last band. Each one is the section it always was. */}
+            <div className={`flex flex-col gap-6 sm:gap-8 ${tabOf("sheet")}`}>
+              <div>
+                <p className={KICKER}>Settings</p>
+                <h2 className={H2}>How your sheet works for you</h2>
+              </div>
+              {/* ABOUT YOU IS A DAY-ONE ACT. The bio Save is the whole point:
+                  the editor used to discard every word on close, silently. */}
               <motion.section
+                id="about"
                 aria-labelledby="bio-h"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
+                className="scroll-mt-28 rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
               >
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <h2 id="bio-h" className="font-display text-2xl font-bold text-card-foreground">
@@ -542,21 +653,9 @@ export default function Profile() {
                       </p>
                     )}
                     <div className="mt-3 flex items-center gap-3">
-                      {/* This Save is the whole point: the editor used to
-                          discard every word on close, silently.
-
-                          `border border-border` is the one thing `sheet-night`
-                          could not fix from the token layer. The fill is
-                          `--tone-brand`, which is the VILLAGE's colour and is
-                          derived to clear AA against WHITE, so it is dark by
-                          construction: measured on the night panel it is
-                          1.58:1 as a shape, against a 3:1 floor, for the
-                          platform default and for any seed a village picks.
-                          Retinting it would overwrite the brand, so the button
-                          takes an edge instead. `--border` on `--card`
-                          measures 3.94:1, the label stays white on the
-                          village's own colour at 10.37:1, and the boundary is
-                          now seed-independent. */}
+                      {/* `border border-border`: the fill is the village's own
+                          colour, dark by construction, so the button takes an
+                          edge to clear 3:1 on the night panel. */}
                       <button
                         onClick={saveBio}
                         disabled={savingBio}
@@ -575,8 +674,6 @@ export default function Profile() {
                         Cancel
                       </button>
                     </div>
-                    {/* The page carried no aria-live at all, so a save landed
-                        in silence for anyone not watching the button. */}
                     <p aria-live="polite" role="status" className="sr-only">
                       {savingBio ? "Saving your bio." : ""}
                     </p>
@@ -588,109 +685,46 @@ export default function Profile() {
                 )}
               </motion.section>
 
-              {/*
-                THE VESSEL SITS IN THE "NOW" BAND, and a subject stays whole.
-
-                Giving is a day-one act: a member has a sending allowance from
-                the moment they arrive, before they have walked a path or
-                claimed a quest. The gratitude LEDGER inside this panel is empty
-                for months, and the gradient would put that low, but splitting a
-                subject to satisfy an ordering is how the six sections happened
-                in the first place. A subject sits at the height of its most
-                actionable part and its history rides inside it.
-              */}
-              {/*
-                THE VESSEL, WHERE SIX SECTIONS USED TO BE.
-
-                This span was the raw-balance card: a MINOR-unit column printed
-                at 5xl with no scale, which is a hundred times too large for any
-                token with two decimals. It is gone rather than patched, because
-                the same number was also on ProfileSheet and in the dashboard
-                card, and patching one of three is how a defect survives.
-              */}
-              <TheVessel
-                gratitude={me?.gratitude ?? null}
-                here={me?.stage ?? null}
-                next={me && me.stages ? (me.stages[me.stageIndex + 1] ?? null) : null}
-                failed={meFailed}
-                onGiven={reloadMe}
-              />
-              {/* YOUR SEASON (season plans RC1): where your plan stands, and the door to it. */}
-              <SeasonPlanSection />
-              {/* YOUR ROLES: the seats you hold, the doors to apply and plan, your open applications. */}
-              <YourRolesSection />
-              <ProposeBanner />
-              <ProposeRolesEntry />
-              <PlayerRoleCard />
-              {/*
-                THE ANCHOR THE SURFACED BANNER POINTS AT.
-
-                A walked path's ladder renders inside PathsPanel, so this is
-                where "take a look" lands. The banner names the path and this is
-                the thing it means; a second surface for a walked path would be
-                the duplicate the whole consolidation exists to avoid.
-              */}
-              <div id="sheet-paths" className="scroll-mt-6">
-              <PathsPanel
-                tiles={pathTiles}
-                claimedIds={user.paths}
-                offerKnown={offerKnown}
-                saving={savingPath}
-                error={pathError}
-                onToggle={togglePath}
-                ladders={ladders}
-              />
+              {/* The anchor the surfaced banner and "Walk another path" point at. */}
+              <div id="sheet-paths" className="scroll-mt-28">
+                <PathsPanel
+                  tiles={pathTiles}
+                  claimedIds={user.paths}
+                  offerKnown={offerKnown}
+                  saving={savingPath}
+                  error={pathError}
+                  onToggle={togglePath}
+                  ladders={ladders}
+                />
               </div>
 
-              {/* HOW FAR YOU HAVE COME. Both halves wait for their payload:
-                  `config` carries the ladder with every rule already overlaid,
-                  and `prog` carries where this member stands on it. */}
               {config && prog ? (
-                <MaturityLadder
-                  /*
-                    THE VESSEL SAYS THE ALLOWANCE SENTENCE NOW, SO THE LADDER
-                    MUST NOT. `showNext` was added with a default of true and
-                    then never passed, which meant the whole next-rung block,
-                    the allowance-multiplier line included, printed in both
-                    places. A member reading the same sentence twice on one
-                    page assumes they are two different facts. The prop existed
-                    for exactly this and was not used, which is worse than not
-                    having added it.
-                  */
-                  showNext={false}
-                  stages={config.stages}
-                  stageIndex={prog.stageIndex}
-                  consentedQuests={prog.consentedQuests}
-                />
+                <MaturityLadder showNext={false} stages={config.stages} stageIndex={prog.stageIndex} consentedQuests={prog.consentedQuests} />
               ) : null}
 
-              {/* WHAT YOU CAN DO RIGHT NOW. */}
-              {config && prog ? (
-                <PowersMap
-                  catalogue={prog.capabilityCatalogue ?? []}
-                  stages={config.stages}
-                  stageIndex={prog.stageIndex}
-                  consentedQuests={prog.consentedQuests}
-                  training={prog.training ?? null}
+              {/* THE PATH BAND: a walked path's particulars, an unwalked one's quiet line. */}
+              {SHEET_SECTIONS.filter((sec) => sec.band === "path" && sec.path && user.paths.includes(sec.path)).map((sec) => (
+                <PathFacts
+                  key={sec.id}
+                  pathId={sec.path ?? ""}
+                  title={offeredPaths.find((p) => p.id === sec.path)?.label ?? sec.path ?? ""}
+                  particulars={particulars}
+                  unavailable={laddersFailed}
                 />
-              ) : null}
-
-              {/* About you */}
-
-              {/*
-                GRATITUDE HELD.
-
-                This card was `text-white` on a `--tone-sun` gradient. That
-                token is DERIVED to carry dark ink, so the pairing measured
-                between 1.48:1 and 2.25:1, and `index.css` documents two
-                earlier shipments of the same bug. It also had no heading
-                element at all, and its 48px number had no accessible name, so
-                a screen reader read a bare integer.
-
-                Rebuilt on the semantic pair, with a real heading and a
-                labelled figure. The amber survives as the icon only, which
-                carries no information and is hidden from the reader.
-              */}
+              ))}
+              {SHEET_SECTIONS.filter((sec) => sec.band === "path" && sec.path && !user.paths.includes(sec.path)).map((sec) => {
+                const label = offeredPaths.find((p) => p.id === sec.path)?.label ?? sec.path ?? "";
+                return (
+                  <QuietSection
+                    key={sec.id}
+                    title={label}
+                    quiet={sec.quiet}
+                    action={`Walk the ${label} path`}
+                    busy={savingPath === sec.path}
+                    onAction={() => sec.path && void togglePath(sec.path)}
+                  />
+                );
+              })}
 
               {/* Contributions */}
               <motion.section
@@ -699,19 +733,11 @@ export default function Profile() {
                 animate={{ opacity: 1, y: 0 }}
                 className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
               >
-                <h2
-                  id="contrib-h"
-                  className="mb-6 font-display text-2xl font-bold text-card-foreground"
-                >
+                <h2 id="contrib-h" className="mb-6 font-display text-2xl font-bold text-card-foreground">
                   Your contributions
                 </h2>
                 {recentContributions.length === 0 ? (
-                  /*
-                    R47: say what is missing, then point at the one door. A row
-                    lands here from `POST /api/profile/contribution`, which no
-                    client calls, or from an admin accepting a Work With Us
-                    proposal. So the card links the second one.
-                  */
+                  /* R47: say what is missing, then point at the one door. */
                   brochureOn ? (
                     <p className="text-muted-foreground">
                       No contributions yet. Propose one through{" "}
@@ -734,30 +760,20 @@ export default function Profile() {
                           transition={{ delay: idx * 0.1 }}
                           className="flex flex-wrap items-start gap-4 rounded-lg border border-border bg-muted p-4"
                         >
-                          <CheckCircle2
-                            className="mt-1 h-5 w-5 shrink-0 text-foreground"
-                            aria-hidden="true"
-                          />
+                          <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-foreground" aria-hidden="true" />
                           <div className="min-w-0 flex-1">
-                            <p className="font-semibold break-words text-foreground">
-                              {contrib.description}
-                            </p>
+                            <p className="font-semibold break-words text-foreground">{contrib.description}</p>
                             <p className="text-sm text-muted-foreground">{contrib.type}</p>
                           </div>
                           <div className="shrink-0 text-right">
-                            {/* The amount was `text-amber` as a foreground,
-                                which measures about 1.42:1. `text-amber-ink`
-                                exists for exactly this and clears 5.60:1, and
-                                it is the right answer on a hardcoded white
-                                card. This card is themed, and amber-ink is
-                                frozen, so the amount takes the theme's own
-                                foreground and the amber stays on the icon. */}
                             <p className="text-lg font-semibold text-foreground">
-                              +{contrib.recognitionEarned}
+                              {contrib.paid?.length
+                                ? contrib.paid.map((p) => `+${p.amount} ${p.name}`).join(", ")
+                                : contrib.recognitionEarned > 0
+                                  ? `+${contrib.recognitionEarned}`
+                                  : null}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(contrib.date).toLocaleDateString()}
-                            </p>
+                            <p className="text-xs text-muted-foreground">{new Date(contrib.date).toLocaleDateString()}</p>
                           </div>
                         </motion.li>
                       ))}
@@ -766,129 +782,13 @@ export default function Profile() {
                 )}
               </motion.section>
 
-              {/* Deeds: stage turns, firsts, recognition flows, the ledger */}
-              <ProfileJourney />
-              <AlignedSection />
-
-              {/* Standing, gratitude and this moon, from /api/me/profile */}
+              {/* Standing, gratitude and this moon, from /api/me/profile. */}
               <ProfileSheet />
 
-              {/*
-                THE PATH BAND: present, and not yet yours.
-
-                Each path opens its own section, and an UNWALKED path's section
-                is quiet rather than absent. Filtering was the first idea and it
-                breaks on the case this redesign exists for: a new member has no
-                paths, so a filtered sheet shows them nothing on the page they
-                land on straight after signing up.
-
-                Marked instead, a day-one member sees the whole map, quiet, and
-                every quiet line is an argument for claiming a path. That makes
-                the day-one act obvious without a tutorial, and it finally gives
-                `user.paths` an observable consequence: claiming one visibly
-                grows your sheet.
-
-                It expands IMMEDIATELY and costs no round trip, because
-                `updateProfile` writes the new user back into AuthContext, so
-                `user.paths` has already changed by the time the await returns.
-                The quiet line vanishes on that same render.
-
-                EACH PATH APPEARS ONCE, IN ONE OF TWO STATES. Unwalked, it is
-                a single quiet line naming what walking it would open. Walked,
-                it is that path's own PARTICULARS: the investor's dated facts,
-                a member's ventures, their reservations, their seatings.
-
-                The ladder is a different thing and stays where it is, inside
-                PathsPanel up in the "now" band. A ladder says WHERE somebody
-                stands on a path; this says WHAT the path holds. Reading the
-                second off the first is what was impossible before: `laddersFor`
-                narrows every row to the dated fields a rung needs and drops
-                the venture's name, so the profile could show that a venture had
-                been opened and never which one. Both projections now come off
-                the same fetch and the same four queries.
-              */}
-              {SHEET_SECTIONS.filter(
-                (sec) => sec.band === "path" && sec.path && user.paths.includes(sec.path),
-              ).map((sec) => (
-                <PathFacts
-                  key={sec.id}
-                  pathId={sec.path ?? ""}
-                  title={offeredPaths.find((p) => p.id === sec.path)?.label ?? sec.path ?? ""}
-                  particulars={particulars}
-                  unavailable={laddersFailed}
-                />
-              ))}
-
-              {SHEET_SECTIONS.filter(
-                (sec) => sec.band === "path" && sec.path && !user.paths.includes(sec.path),
-              ).map((sec) => {
-                const label = offeredPaths.find((p) => p.id === sec.path)?.label ?? sec.path ?? "";
-                return (
-                  <QuietSection
-                    key={sec.id}
-                    title={label}
-                    quiet={sec.quiet}
-                    action={`Walk the ${label} path`}
-                    busy={savingPath === sec.path}
-                    onAction={() => sec.path && void togglePath(sec.path)}
-                  />
-                );
-              })}
-
-              {/* The member's wallet: every token, what can be claimed toward
-                  Hypha, and what Base says. Target of /profile#wallet from the
-                  account menu, and shown whatever modules are on (0266). The
-                  village exchange itself stays on /tokens. */}
-              <WalletCard />
-
-              {/* 0092: sending credits to another member. Not module-gated: a
-                  village running only the core four still has credits arriving
-                  from the cycle pool, and this is where they can go. */}
-              <SendTokensCard />
-
-              {/*
-                * ASKING TO REDEEM, AND WHY IT IS HERE RATHER THAN BESIDE THE
-                * BALANCES CARD ABOVE.
-                *
-                * `/wallet` was redemption's only member-facing door, and that
-                * whole page short-circuits on `ModuleGate moduleId="exchange"`.
-                * So a village that switched redemption fully on, answered all
-                * fourteen of its settings and left the exchange off had no way
-                * for a member to reach it, while the routes and the ledger
-                * worked. A funds-bearing feature whose door sits inside an
-                * unrelated module is reachable by accident, not by design.
-                *
-                * IT IS NOT BESIDE `WalletCard` ON PURPOSE, and this is the
-                * load-bearing part. That card was gated on `useModule("exchange")`
-                * too when this was written (it no longer is, since 0266), so
-                * putting the panel inside it would have closed the same door in a
-                * second place and looked like a fix. What makes this
-                * spot work is `SendTokensCard` directly above: it is deliberately
-                * ungated, which is what proves this section still renders with
-                * the exchange off. A fork that later gates this section takes the
-                * door away again, silently.
-                *
-                * `user &&` IS DEFENSIVE RATHER THAN LOAD-BEARING, and the
-                * difference is worth stating because I got it wrong first. The
-                * panel asks `/api/redemptions` on mount and that route answers
-                * 401 to a stranger, so an unguarded mount here would be the
-                * defect #353 closed. What keeps it quiet TODAY is not this
-                * check: `/profile` renders a sign-in form for a signed-out
-                * visitor, so this JSX never runs for them at all. Removing
-                * `user &&` changes nothing measurable right now, which I proved
-                * by removing it and watching the suite stay green.
-                *
-                * It stays because that is a guarantee about a render path
-                * rather than about this line, and a render path is somebody
-                * else's to change. The component's own effects DO run for a
-                * signed-out visitor, which is exactly how #353's two reads got
-                * out; only the JSX is spared.
-                */}
-              {user && redemptionModule && <RedemptionPanel />}
-
-              {/* S47: on-chain holdings, renders nothing until the village
-                  turns the economics section on */}
-              <OnchainCard />
+              {/* INVITE SOMEBODY. The hero's "Invite a friend" lands here. */}
+              <div id="invite" className="scroll-mt-28">
+                <InvitePanel />
+              </div>
 
               {/* S16/S18: notification cadence + data rights */}
               <NotifyPrefsPanel onDeleted={logout} />
@@ -898,41 +798,85 @@ export default function Profile() {
                 <YourAgentPanel />
               </div>
 
-              {/* Quick links. These were raw `<a href>` inside a wouter SPA, so
-                  each one threw away the running application and reloaded the
-                  whole document to reach a page the router already holds. */}
-              <motion.nav
-                aria-labelledby="links-h"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
-              >
-                <h2 id="links-h" className="mb-4 font-display text-lg font-bold text-card-foreground">
-                  Quick links
-                </h2>
-                <ul className="space-y-2">
-                  {[
-                    { href: "/quests", label: "Quests" },
-                    { href: "/circles", label: "Circles" },
-                    { href: "/housing", label: "Housing" },
-                  ].filter((l) => brochureOn || !isBrochurePath(l.href)).map((l) => (
+              <button type="button" onClick={() => logout()} className={`${BTN_LINE} self-start sm:hidden`}>
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                Sign out
+              </button>
+            </div>
+
+            {/*
+              THE PURSES' OWN DOORS, on the Treasury tab. Each card is the one it
+              always was; the treasury above summarises them and links down.
+
+              The vessel is giving, beside the allowance it spends. WalletCard is
+              /profile#wallet from the account menu. SendTokensCard is deliberately
+              ungated, which is what proves the redemption panel below it still
+              renders with the exchange off: `/wallet` sits behind the exchange
+              module, so this is redemption's only member-facing door.
+            */}
+            <div className={`flex flex-col gap-6 sm:gap-8 ${tabOf("treasury")}`}>
+              <TheVessel
+                gratitude={me?.gratitude ?? null}
+                here={me?.stage ?? null}
+                next={me && me.stages ? (me.stages[me.stageIndex + 1] ?? null) : null}
+                failed={meFailed}
+                onGiven={reloadMe}
+              />
+              <WalletCard />
+              <div id="send-tokens" className="scroll-mt-28">
+                <SendTokensCard />
+              </div>
+              {user && redemptionModule && (
+                <div id="redeem" className="scroll-mt-28">
+                  <RedemptionPanel />
+                </div>
+              )}
+              {user && <CashOwedPanel /> /* 0285: cash owed, and the books for whoever holds cash.pay */}
+              {user && <SeasonSummarySection /> /* idea 4: your season summed up, shareable as a picture */}
+              {/* S47: on-chain holdings, renders nothing until the village turns the economics section on */}
+              <OnchainCard />
+            </div>
+
+            {/* Quick links, inside the SPA router. */}
+            <motion.nav
+              aria-labelledby="links-h"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8 ${tabOf("sheet")}`}
+            >
+              <h2 id="links-h" className="mb-4 font-display text-lg font-bold text-card-foreground">
+                Quick links
+              </h2>
+              <ul className="space-y-2">
+                {[
+                  { href: "/quests", label: "Quests" },
+                  { href: "/circles", label: "Circles" },
+                  { href: "/housing", label: "Housing" },
+                ]
+                  .filter((l) => brochureOn || !isBrochurePath(l.href))
+                  .map((l) => (
                     <li key={l.href}>
-                      <Link
-                        href={l.href}
-                        className="flex min-h-11 items-center justify-between rounded-lg p-3 hover:bg-muted"
-                      >
+                      <Link href={l.href} className="flex min-h-11 items-center justify-between rounded-lg p-3 hover:bg-muted">
                         <span className="text-sm font-medium text-foreground">{l.label}</span>
                         <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                       </Link>
                     </li>
                   ))}
-                </ul>
-              </motion.nav>
-            </div>
+              </ul>
+            </motion.nav>
           </motion.div>
         </div>
         <MoonDock />
       </div>
+      {advance && stages ? (
+        <LevelUpMoment
+          advance={advance}
+          stages={stages}
+          name={user.name}
+          portrait={null}
+          onClose={() => setAdvance(null)}
+        />
+      ) : null}
     </Layout>
   );
 }

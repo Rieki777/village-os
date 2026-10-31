@@ -55,9 +55,24 @@ import {
   postTransfer,
   registerToken,
 } from "./ledger";
-import { blockingStates, createExit, EXIT_SETTLEMENT, exitOpenState, sweepBalances } from "./exit";
+import { blockingStates, createExit, EXIT_SETTLEMENT, exitOpenState, sweepBalances, type ExitSplitPolicy } from "./exit";
 
 const configured = testDbConfigured();
+
+/**
+ * The sweeps below MOVE every balance, because what they measure is the units
+ * of a posting, and a posting needs something to move. Since the founder's
+ * ruling of 2026-10-23 the shipped dials keep credits, Voice and equity, so a
+ * sweep on them posts nothing; this policy is passed explicitly so the file
+ * keeps measuring what it always did. `exitDefaults.test.ts` owns the defaults.
+ */
+const KEEP_NOTHING: ExitSplitPolicy = {
+  keepPct: { credit: 0, voice: 0, recognition: 0, equity: 0 },
+  remainderAccount: "settlement",
+  coolingDays: 0,
+  voiceOnExit: "forfeit",
+  voiceConvertRate: "0",
+};
 
 /**
  * Registered by 0007, and PINNED to 0 in the setup below.
@@ -232,7 +247,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     for (const token of TOKENS) before.set(token, await balanceOf(pool, EXIT_SETTLEMENT, token));
 
     const exitId = await openExit(u);
-    const result = await sweepBalances(pool, { exitId, userId: u });
+    const result = await sweepBalances(pool, { exitId, userId: u, policy: KEEP_NOTHING });
     expect(result.errors).toEqual([]);
 
     for (const token of TOKENS) {
@@ -262,7 +277,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     const exitId = await openExit(u);
     const before = await balanceOf(pool, EXIT_SETTLEMENT, VOICE);
 
-    const first = await sweepBalances(pool, { exitId, userId: u });
+    const first = await sweepBalances(pool, { exitId, userId: u, policy: KEEP_NOTHING });
     expect(first.swept[VOICE]).toBe(fromLedgerUnits(VOICE, MINOR));
     expect((await balanceOf(pool, EXIT_SETTLEMENT, VOICE)) - before).toBe(MINOR);
 
@@ -270,7 +285,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     // key is ABSENT, which is a different fact from a swept amount of zero: an
     // admin reading "village-voice: 0" would think a sweep that should have
     // moved something moved nothing, and this says nothing was there to move.
-    const again = await sweepBalances(pool, { exitId, userId: u });
+    const again = await sweepBalances(pool, { exitId, userId: u, policy: KEEP_NOTHING });
     expect(again.errors).toEqual([]);
     expect(VOICE in again.swept).toBe(false);
     expect((await balanceOf(pool, EXIT_SETTLEMENT, VOICE)) - before).toBe(MINOR);
@@ -286,7 +301,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     expect(await balanceOf(pool, memberAccount(u), WHOLE)).toBe(-40);
 
     const exitId = await openExit(u);
-    const result = await sweepBalances(pool, { exitId, userId: u });
+    const result = await sweepBalances(pool, { exitId, userId: u, policy: KEEP_NOTHING });
 
     // The positive balance goes; the debt is untouched and unmentioned. Again
     // an absence, not a zero: a debt reported as "swept 0" reads as settled.
@@ -346,5 +361,26 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     expect((await stateFor(u, "balances")).count).toBe(0);
     expect((await stateFor(u, "debts")).description).toBe("no negative balances");
     expect(blockingStates(await exitOpenState(pool, u, [])).map((s) => s.domain)).not.toContain("debts");
+    expect((await stateFor(u, "cash")).description).toBe("no cash owed");
+    expect((await stateFor(u, "cash")).count).toBe(0);
+  });
+
+  it("shows the cash the village still owes, which never blocks and which keeps the account (Rye, 2026-10-30)", async () => {
+    const u = await member("exit-state-cash");
+    const owed = (id: string, amountMinor: number, state: string) =>
+      pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO cash_owed (id, occurrence_key, user_id, work_kind, work_ref, work_title, amount_minor, currency, state) VALUES (?,?,?,?,?,?,?,?,?)",
+        [id, `exit-test:${id}`, u, "role", "r-1", "Water keeper", amountMinor, "USD", state],
+      );
+    await owed("exit-cash-1", 1200, "owed");
+    await owed("exit-cash-2", 300, "claimed");
+    await owed("exit-cash-3", 5000, "paid");
+
+    const cash = await stateFor(u, "cash");
+    expect(cash.count, "two unpaid rows; the paid one is history").toBe(2);
+    expect(cash.blocking).toBe(false);
+    expect(cash.description).toContain("is owed 15.00 USD in cash the village has not paid yet");
+    expect(cash.description).toContain("they stay on as a former member");
+    expect(blockingStates(await exitOpenState(pool, u, [])).map((s) => s.domain)).not.toContain("cash");
   });
 });

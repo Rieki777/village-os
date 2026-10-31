@@ -4,6 +4,7 @@
  * bought with real money or EARNED through work-exchange quests — the same
  * consent gate as every other reward.
  */
+import WorkPayBlock from "@/components/WorkPayBlock";
 import Layout from "@/components/Layout";
 import ModuleGate from "@/components/modules/ModuleGate";
 import { useEffect, useState } from "react";
@@ -316,9 +317,16 @@ export default function Stay() {
               </div>
               <div className="space-y-2">
                 {data.earnQuests.map((q: any) => (
-                  <Link key={q.id} href="/quests" className="block text-sm text-muted-foreground hover:text-foreground">
+                  <Link key={q.id} href={`/quests/${encodeURIComponent(q.id)}`} className="block text-sm text-muted-foreground hover:text-foreground">
                     <span className="font-medium text-foreground">{q.title}</span>
-                    {q.stayCreditReward > 0 && <>: {formatHumanAmount(q.stayCreditReward, stayScale)} stay credit(s) on consent</>}
+                    {/* The whole of what it pays (Rye, 2026-10-30); an older server sends the nights alone. */}
+                    {q.pay ? (
+                      <span className="mt-1 block text-xs">
+                        <WorkPayBlock pay={q.pay} />
+                      </span>
+                    ) : (
+                      q.stayCreditReward > 0 && <>: {formatHumanAmount(q.stayCreditReward, stayScale)} stay credit(s) on consent</>
+                    )}
                   </Link>
                 ))}
               </div>

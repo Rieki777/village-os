@@ -18,13 +18,21 @@
  * saving sends only the fields this person changed, so a change somebody else
  * made while the form was open survives unless both touched the same field.
  *
+ * THE ROOM VOTES THE ORDER (0290, shared/sessionVotes.ts). Everyone in the
+ * room votes each waiting item up or down, and the agenda sorts itself by the
+ * score as the votes come in; pressing the same vote again takes it back. The
+ * tallies are the room's to see. Whoever runs the room sets the order once
+ * the room has voted, which closes the vote, and only then do the arrows
+ * show, to move an item by hand. Opening the vote again sorts by the score
+ * once more.
+ *
  * Moving an item sends the neighbour's position, then checks the answer: if
  * the server swapped the two, that was the whole move; if it only set the one
  * number, the neighbour gets the old one. Either reading of `position` ends in
  * the same order.
  */
 import { useState } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ThumbsDown, ThumbsUp } from "lucide-react";
 import {
   AIM_DEFS,
   ITEM_AIMS,
@@ -36,7 +44,9 @@ import {
   type SessionItem,
 } from "@shared/sessions";
 import { LIBRARY_COPY } from "@shared/sessionLibrary";
+import { VOTE_COPY, nextVote, voteScore } from "@shared/sessionVotes";
 import GrowingText from "./GrowingText";
+import FilledInNote from "./FilledInNote";
 import {
   BTN_ICON,
   BTN_PRIMARY,
@@ -185,6 +195,61 @@ export function AddItem({ view, actions }: Omit<StageProps, "now">) {
   );
 }
 
+/** One item's vote: up, the score, down. Pressing the vote you gave takes it back. */
+function VoteControl({ view, actions, item }: Omit<StageProps, "now"> & { item: SessionItem }) {
+  const [busy, setBusy] = useState(false);
+  const votes = item.votes ?? { up: 0, down: 0, mine: 0 as const };
+  const score = voteScore(votes);
+  const may = view.me.joined && view.status === "open" && !view.state.orderSet && item.status === "waiting" && !!actions.vote;
+  const press = async (pressed: 1 | -1) => {
+    if (!actions.vote || busy) return;
+    setBusy(true);
+    try {
+      await actions.vote(item.id, nextVote(votes.mine, pressed));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const tally = VOTE_COPY.tally(votes.up, votes.down);
+  // Your own vote reads gold and filled, in the seat card's ring, so it is plain which way you voted.
+  const voteButton = (on: boolean) => (on ? `${BTN_ICON.replace("text-muted-foreground", "text-notice")} bg-muted ring-1 ring-inset ring-notice/70` : BTN_ICON);
+  if (!may) {
+    return votes.up || votes.down ? (
+      <span className="shrink-0 text-sm tabular-nums text-muted-foreground" title={tally}>
+        <span className="sr-only">{tally}</span>
+        <span aria-hidden="true">{score > 0 ? `+${score}` : score}</span>
+      </span>
+    ) : null;
+  }
+  return (
+    <div className="flex shrink-0 items-center gap-1" role="group" aria-label={tally}>
+      <button
+        type="button"
+        className={voteButton(votes.mine === 1)}
+        aria-label={VOTE_COPY.voteUp(item.title)}
+        aria-pressed={votes.mine === 1}
+        disabled={busy}
+        onClick={() => void press(1)}
+      >
+        <ThumbsUp className="h-4 w-4" fill={votes.mine === 1 ? "currentColor" : "none"} aria-hidden="true" />
+      </button>
+      <span className="min-w-8 text-center text-sm font-bold tabular-nums text-foreground" title={tally} aria-hidden="true">
+        {score > 0 ? `+${score}` : score}
+      </span>
+      <button
+        type="button"
+        className={voteButton(votes.mine === -1)}
+        aria-label={VOTE_COPY.voteDown(item.title)}
+        aria-pressed={votes.mine === -1}
+        disabled={busy}
+        onClick={() => void press(-1)}
+      >
+        <ThumbsDown className="h-4 w-4" fill={votes.mine === -1 ? "currentColor" : "none"} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 function ItemRow({
   view,
   actions,
@@ -299,9 +364,11 @@ function ItemRow({
             nameOf(view, item.addedBy) && <span>· {nameOf(view, item.addedBy)}</span>
           )}
         </p>
+        <FilledInNote filled={item.filledIn} actions={actions} />
       </div>
+      {!parked && <VoteControl view={view} actions={actions} item={item} />}
       <div className="flex flex-wrap items-center gap-1">
-        {mayRun && !parked && (
+        {mayRun && !parked && view.state.orderSet && (
           <>
             <button type="button" className={BTN_ICON} aria-label={ROOM_COPY.moveUp} disabled={busy || index === 0} onClick={() => onMove(item, -1)}>
               <ArrowUp className="h-4 w-4" aria-hidden="true" />
@@ -339,7 +406,19 @@ function ItemRow({
 
 export default function AgendaList({ view, actions }: Omit<StageProps, "now">) {
   const [moving, setMoving] = useState(false);
+  const [setting, setSetting] = useState(false);
   const ordered = agendaOrder(view.items);
+  const orderSet = view.state.orderSet;
+  const mayRun = leads(view) && view.status === "open" && !!actions.setOrder;
+  const setOrder = async (set: boolean) => {
+    if (!actions.setOrder || setting) return;
+    setSetting(true);
+    try {
+      await actions.setOrder(set);
+    } finally {
+      setSetting(false);
+    }
+  };
   const onAgenda = ordered.filter((i) => i.status !== "parked");
   const off = ordered.filter((i) => i.status === "parked");
 
@@ -366,6 +445,23 @@ export default function AgendaList({ view, actions }: Omit<StageProps, "now">) {
 
   return (
     <div className="space-y-3">
+      {onAgenda.length > 0 && view.status === "open" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted px-4 py-2">
+          <p role="status" className="text-sm text-foreground">
+            {orderSet ? VOTE_COPY.set : VOTE_COPY.open}
+          </p>
+          {mayRun &&
+            (orderSet ? (
+              <button type="button" className={BTN_QUIET} disabled={setting} onClick={() => void setOrder(false)}>
+                {VOTE_COPY.reopen}
+              </button>
+            ) : (
+              <button type="button" className={BTN_SECONDARY} disabled={setting} onClick={() => void setOrder(true)}>
+                {VOTE_COPY.setOrder}
+              </button>
+            ))}
+        </div>
+      )}
       {onAgenda.length ? (
         <ol className="space-y-2">
           {onAgenda.map((item, i) => (

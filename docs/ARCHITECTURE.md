@@ -702,9 +702,14 @@ The retention sweep never deletes an unstamped row, at any age.
   becomes a tombstone (name/email/handle scrubbed, password removed,
   `tokenVersion` bumped so every session dies) and every denormalised trace
   is scrubbed: gratitude names, claim names, ledger descriptions (keyed by
-  structured refs, never string matching), submission PII keys, tool
-  clicks, role seats. PUBLIC pulse lines naming them are deleted; ADMIN
-  audit rows are kept as the legal record.
+  structured refs, never string matching), the words and name in every
+  submission they sent, signed in or signed out under their address
+  (`KEPT_BY_TYPE` in `server/lib/submissionWords.ts` lists what stays and
+  why), with the team alerts those set off, tool clicks, role seats. PUBLIC
+  pulse lines they wrote are deleted; a line somebody else wrote that names
+  them ("Ann appreciated Wren", "Wren joined the Stewards") stays with its
+  living actor and loses the name (`server/repos/pulseLines.ts`), so no
+  activity count moves. ADMIN audit rows are kept as the legal record.
   **ORG SEATINGS TOO** (`releaseSeatingsForUser`), which they did not for
   as long as 0049 has existed: "role seats" above means `role_holders`, the
   permission plane, and the org chart is the other thing called role
@@ -763,10 +768,45 @@ The retention sweep never deletes an unstamped row, at any age.
   ends, each living delegator is told through the notification spine, and
   open ballots are derived again, so no vote copied from them stays cast.
   Ventures go. Investor path facts, stays and orders stay as records and lose
-  their words and the payer's address. The header of `server/lib/erasure.ts`
+  their words and the payer's address. A ballot about them (a vote to seat
+  them, or to take a role back) keeps its subject, votes and outcome and stops
+  naming them in its title, document and notices, and its public pulse lines
+  go (`ballot-words-after-tombstone`); the day-21 path hand-off that names
+  them to a path's contact person loses its words; and a living person's own
+  housing alert, or guest contact, at an address they also typed stays that
+  person's. The header of `server/lib/erasure.ts`
   says why each kept thing is kept, and
   `server/lib/erasure.ownedRows.resume.test.ts` stops each of these steps
   part way and resumes it.
+  **AND THEIR RECURRING PAYMENTS STOP** (round 3, finding 5). A recurring
+  product is a Stripe subscription, nothing in the app lets a member cancel
+  one, and a member who left kept being charged every period while each
+  renewal paid the product's tokens into the tombstone.
+  `product-subscriptions-after-tombstone`, after the audit line and before
+  the outside stores, cancels each subscription their purchases hold
+  (`cancelSubscription`, `server/lib/payments.ts`: it reads first, so a
+  second run cancels nothing, and it never refunds). Stripe failing with the
+  key present stops the sweep there, loudly, for the retry. With no Stripe
+  key the step cannot cancel, so it asks every admin to cancel each one by
+  hand in the Stripe dashboard (a `payments_alert` naming the count and the
+  ids), writes `member:subscriptions-cancel-by-hand:<n>:<ids>` to the audit
+  trail, and counts itself done; it used to hold such a sweep open at this
+  step for good, with the outside stores never asked. A charge that lands
+  after the account is gone, a first period included, is banked and
+  delivers nothing: `settleProductPurchase` refuses a buyer who has left,
+  sends no receipt, and tells the admins. It also cancels the subscription
+  itself, on every such charge (`settleLeaversSubscription`,
+  `server/lib/owedCancels.ts`, round 4): a recurring checkout opened before
+  the delete and paid after it makes a subscription the erasure never saw.
+  **WHAT IS STILL OWED IS DERIVED, NOT STORED.** The by-hand audit row IS
+  the obligation; a later `member:subscriptions-cancelled:<n>:<ids>` row
+  settles it, and an id is owed while the newest row naming it is by-hand.
+  `steps_done` is untouched. `/review` counts the owed members, naming
+  nobody; Finish and the hourly failed-actions job cancel them once Stripe
+  is connected, and "I cancelled these by hand" records a person's
+  confirmation with their id. The row survives a re-erasure only because it
+  is audience `admin`: the erasure's public-row DELETE needs audience
+  `public`. The shape holds only for an id-only step.
   **AND IT RESUMES** (`member_erasures`, 0195). The sweep is a sequence of
   about twenty writes that cannot be one transaction: three participants
   are repositories on their own connections with their own caches, one
@@ -778,11 +818,22 @@ The retention sweep never deletes an unstamped row, at any age.
   while looking closed.
 - **Member exit** (`server/lib/exit.ts`, S52/F12): `openStateCheck`
   semantics applied to a person. ENUMERATE every domain's open state
-  (loans, stays, orders, debts block; balances, roles, warnings inform);
+  (loans, stays, orders, debts block; balances, roles, warnings and
+  recurring payments inform, the last because the erasure cancels them and
+  no door lets a member do it first; on the exit desk and the departure page
+  a member who holds tokens is told instead that a former member's payments
+  keep renewing until an admin cancels them in Stripe);
   SETTLE through each domain's own terminals — exit adds exactly ONE move
-  of its own, sweeping positive balances to `sys:exit-settlement`,
-  idempotent per `(exit, token)`; RESOLVE refuses until clean, then the
-  anonymise tombstone runs. Restorative content flows only to its
+  of its own, splitting each positive balance by the village's
+  `exit.keep_pct.*` shares and sending the rest to
+  `exit.remainder_account`, idempotent per `(exit, token)`; RESOLVE refuses
+  until clean. Then (Rye, 2026-10-23: members keep their tokens, "a if b
+  hasn't already happened") a leaver whose account still holds a positive
+  platform-governed, non-recognition balance stays on as a FORMER MEMBER,
+  account and balances intact, with membership ended and roles vacated
+  (`resolveExit`, `server/lib/exitResolve.ts`); anybody else meets the
+  anonymise tombstone. On the shipped dials a leaver keeps every credit,
+  Voice and equity balance. Restorative content flows only to its
   recipients; the `exits` row carries a pointer and a status, never the
   content.
 

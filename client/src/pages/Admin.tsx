@@ -23,6 +23,8 @@ import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
+import { BulkStageGrant } from "@/components/admin/StageFloorPicker";
+import { PlayerCard, PlayersKey, type LadderStage, type PathOption, type Player } from "@/components/admin/PlayerCard";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
@@ -41,11 +43,13 @@ import { AdminGoLive } from "@/components/modules/GoLiveCard";
 import type { ModuleLifecycle } from "@shared/modules";
 import type { UploadsSweepReport } from "@shared/uploadsSweep";
 import { CIRCLE_STATUSES } from "@shared/draftKinds";
-
+import CashPayoutsTab from "@/components/admin/CashPayoutsTab";
 import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
+import { putSubmissionStatus } from "@/components/admin/submissionStatus";
+import ProposalAcceptCash from "@/components/admin/ProposalAcceptCash";
 import LandTab from "@/components/admin/LandTab";
 import GameRolesTab from "@/components/admin/GameRolesTab";
 import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
@@ -54,6 +58,7 @@ import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import VillageAnswers from "@/components/admin/VillageAnswers";
 import VillageCurrencyField from "@/components/admin/VillageCurrencyField";
+import { BadgeDefinitionRow } from "@/components/admin/BadgeMultipliersEditor";
 import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -751,27 +756,8 @@ export function SubmissionsTab({ password }: { password: string }) {
     load();
   };
 
-  const setStatus = async (id: string, status: string, type = "") => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/submissions/${id}/status`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ status }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error();
-      if (data.rewarded) toast.success("Accepted. The member was welcomed into the game.");
-      else if (data.admitted) toast.success("Accepted. They hold membership now.");
-      // A stranger signed with no account, so the accept stands and admits nobody.
-      else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
-      // A yes to joining admits nobody, even from an account (a signing or vouches do), and names the next step:
-      // for an account, the doors that do admit; for a stranger's form, with no account to reach, an invitation.
-      else if (type === "membership-request" && status === "accepted") toast.success(data.notified ? "Accepted, and they have been told. A yes to a request admits nobody. Their signed letter, once accepted, or enough vouches will make them a member." : "Accepted. They have no account yet, so nobody was told. Make them a link under Invite somebody on your profile, and send it to the address on their request.", { duration: 12000 });
-      else if (data.notified) toast.success("Status updated. The person who sent it has been told.");
-      else toast.success("Status updated");
-      load();
-    } catch { toast.error("Could not update status"); }
-  };
+  // Moved to submissionStatus.ts, so the proposal cash control shares its sentences (0285).
+  const setStatus = async (id: string, status: string, type = "") => { if (await putSubmissionStatus(password, id, status, type)) load(); };
 
   return (
     <div>
@@ -870,6 +856,7 @@ export function SubmissionsTab({ password }: { password: string }) {
                       </span>
                     )}
                   </div>
+                  <ProposalAcceptCash password={password} submission={s} onDone={load} />
                   {s.type === "role-application" && <RaisedHandTerm data={s.data} />}
                   {s.type === "power-application" && <PowerHandNote data={s.data} />}
                   <table className="w-full text-sm">
@@ -2748,17 +2735,12 @@ function QuestClaimsTab() {
  */
 // ── Game Admin: Players + stage grants ───────────────────────────────────────
 
-const ROLE_STYLE: Record<string, string> = {
-  founder: "bg-amber-100 text-amber-800 border-amber-200",
-  admin: "bg-violet-100 text-violet-700 border-violet-200",
-  member: "bg-gray-100 text-gray-500 border-gray-200",
-};
-
 function PlayersTab({ password }: { password: string }) {
   const { user: me } = useAuth();
   const iAmFounder = me?.role === "founder";
-  const [players, setPlayers] = useState<any[]>([]);
-  const [stages, setStages] = useState<{ id: string; name: string }[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [stages, setStages] = useState<LadderStage[]>([]);
+  const [paths, setPaths] = useState<PathOption[]>([]);
   /*
    * R90: THE FOUNDER ROLE ENDS WHEN THE VILLAGE STARTS ITS GAME, so who may
    * work the control below changes at that moment and this tab has to know it.
@@ -2772,6 +2754,7 @@ function PlayersTab({ password }: { password: string }) {
    */
   const [gameStarted, setGameStarted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [picked, setPicked] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2786,6 +2769,7 @@ function PlayersTab({ password }: { password: string }) {
       const m = await mRes.json();
       setPlayers(Array.isArray(p) ? p : []);
       setStages(c?.stages ?? []);
+      setPaths(c?.paths ?? []);
       setGameStarted(m?.gameStart?.started === true);
     } catch { setPlayers([]); }
     setLoading(false);
@@ -2829,7 +2813,7 @@ function PlayersTab({ password }: { password: string }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(refusal(data, "failed"));
-      toast.success(`${name} is now ${role}`);
+      toast.success(`${name} now has ${role} access`);
       load();
     } catch (e: any) { toast.error(e?.message || "Role change failed"); }
   };
@@ -2848,81 +2832,37 @@ function PlayersTab({ password }: { password: string }) {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-4">
         <h2 className="text-xl font-bold text-gray-900">Players</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Stages compute automatically from real acts; grant the ceremony-based stages here.
+          Everyone with an account: what they may do on this site, and where they stand in village life.
         </p>
       </div>
       {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : players.length === 0 ? (
         <p className="text-sm text-gray-400">No players yet.</p>
       ) : (
-        <div className="space-y-2">
-          {players.map((p) => (
-            <div key={p.id} className="border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-[180px]">
-                <div className="font-medium text-gray-900">
-                  {p.name}
-                  {p.handle && <span className="text-gray-400 font-normal"> @{p.handle}</span>}
-                </div>
-                <div className="text-xs text-gray-400">{p.email} · joined {new Date(p.joinedAt).toLocaleDateString()}</div>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium border ${ROLE_STYLE[p.role] ?? ROLE_STYLE.member}`}>
-                {p.role}
-              </span>
-              <span className="text-xs bg-teal-deep/10 text-teal-deep px-2 py-1 rounded-full font-medium">
-                {stages.find((s) => s.id === p.stageComputed)?.name ?? p.stageComputed}
-              </span>
-              <span className="text-xs text-gray-500">{p.balance} earned</span>
-              {(gameStarted || iAmFounder) && (
-                <select
-                  value={p.role}
-                  onChange={(e) => setRole(p.id, e.target.value, p.name)}
-                  title={
-                    gameStarted
-                      ? "Change this member's role. The founder role ended when the village started its Game, so an administrator is the most this can set"
-                      : "Founders run the admins: change this member's role"
-                  }
-                  className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-                >
-                  <option value="member">member</option>
-                  <option value="admin">admin</option>
-                  {/* Only while the role still exists, or on the row of
-                      somebody who already holds it. After launch the server
-                      refuses a new one, and an option that can only ever
-                      produce a refusal is worse than no option. Dropping it
-                      from a founder's OWN row would be worse again: the select
-                      would have no option matching the value and would show
-                      that person as a member beside a badge saying founder. */}
-                  {(!gameStarted || p.role === "founder") && <option value="founder">founder</option>}
-                </select>
-              )}
-              <button
-                onClick={() => revokeSessions(p.id, p.name)}
-                title="Sign this member out everywhere (their password keeps working)"
-                className="text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 font-medium"
-              >
-                Sign out all
-              </button>
-              <select
-                value={p.stageGranted ?? ""}
-                onChange={(e) => grant(p.id, e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-              >
-                <option value="">No grant</option>
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>Grant: {s.name}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => remove(p.id, p.email)}
-                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5 font-medium"
-              >
-                Delete
-              </button>
-            </div>
-          ))}
-        </div>
+        <>
+          <PlayersKey players={players} stages={stages} gameStarted={gameStarted} />
+          <div className="space-y-3">
+            {picked.length > 0 && <BulkStageGrant stages={stages} ids={picked} password={password} onDone={() => { setPicked([]); load(); }} />}
+            {players.map((p) => (
+              <PlayerCard
+                key={p.id}
+                player={p}
+                stages={stages}
+                paths={paths}
+                canSetAccess={gameStarted || iAmFounder}
+                gameStarted={gameStarted}
+                picked={picked.includes(p.id)}
+                onPick={(on) => setPicked((s) => (on ? [...s, p.id] : s.filter((x) => x !== p.id)))}
+                onAccess={(role) => setRole(p.id, role, p.name)}
+                onStage={(id) => grant(p.id, id ?? "")}
+                onSignOut={() => revokeSessions(p.id, p.name)}
+                onDelete={() => remove(p.id, p.email)}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -4940,7 +4880,7 @@ function BadgesAdminTab({ password }: { password: string }) {
   // or denied from here at all. Reading the registry means a new capability
   // shows up the moment it is added.
   const CAPS = ALL_CAPABILITIES;
-  const METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth"];
+  const METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth", "gene_keys_shown"];
   const [data, setData] = useState<any>(null);
   const [off, setOff] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -5035,28 +4975,7 @@ function BadgesAdminTab({ password }: { password: string }) {
         <h3 className="font-semibold text-gray-900 mb-3">Badge definitions</h3>
         <div className="space-y-2 mb-5">
           {(data?.badges ?? []).map((b: any) => (
-            <div key={b.id} className={`border rounded-lg px-4 py-3 ${b.active ? "border-gray-200" : "border-gray-100 opacity-60"}`}>
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {b.name} <span className="text-xs text-gray-400">({b.kind})</span>
-                    {b.isExample && <ExampleChip className="ml-2 align-middle" />}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {b.kind === "earned" && b.rule ? `at ${b.rule.threshold} ${String(b.rule.metric).replace(/_/g, " ")}${b.rule.stackable ? ` · stacks ×${b.rule.maxStack}` : ""} · ` : ""}
-                    {(b.capabilities ?? []).length ? `grants ${b.capabilities.join(", ")} · ` : ""}
-                    {(b.denies ?? []).length ? `denies ${b.denies.join(", ")} · ` : ""}
-                    {b.description || "no description"}
-                  </p>
-                </div>
-                <button
-                  onClick={async () => { const d = await call(`/admin/badges/${b.id}`, { active: !b.active }, "PUT"); if (d) load(); }}
-                  className="text-xs text-gray-500 hover:text-gray-900"
-                >
-                  {b.active ? "Deactivate" : "Reactivate"}
-                </button>
-              </div>
-            </div>
+            <BadgeDefinitionRow key={b.id} badge={b} call={call} onSaved={load} />
           ))}
           {(data?.badges ?? []).length === 0 && <p className="text-sm text-gray-400">No badges yet.</p>}
         </div>
@@ -5748,11 +5667,11 @@ function ExitsAdminTab({ password }: { password: string }) {
                   <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/settle-balances`); if (d) { toast.success(`Swept: ${JSON.stringify(d.swept)}`); loadState(selectedUser); } }}
                     className="text-sm border border-teal-deep text-teal-deep rounded-lg px-3 py-2 font-medium">Sweep balances</button>
                   <button onClick={async () => {
-                    if (!window.confirm("Resolve this exit? The account becomes a tombstone: identity removed, contributions kept.")) return;
+                    if (!window.confirm("Resolve this exit? A member still holding tokens, or owed cash by the village, stays on as a former member, with their account and balances, and their membership and roles end. An account with nothing of value left becomes a tombstone: identity removed, contributions kept.")) return;
                     const d = await call(`/admin/exits/${openExit.id}/resolve`);
-                    if (d) { toast.success(`Resolved${d.vacatedRoles.length ? `. Roles opened: ${d.vacatedRoles.join(", ")}` : ""}`); setSelectedUser(""); load(); }
-                  }} className="text-sm bg-red-600 text-white rounded-lg px-3 py-2 font-medium">Resolve (tombstone)</button>
-                  <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/cancel`); if (d) { toast.success("They're staying"); loadState(selectedUser); load(); } }}
+                    if (d) { toast.success(`${d.outcome === "former" ? "Resolved. Kept as a former member" : "Resolved. The account is a tombstone"}${d.vacatedRoles.length ? `. Roles opened: ${d.vacatedRoles.join(", ")}` : ""}`); setSelectedUser(""); load(); }
+                  }} className="text-sm bg-red-600 text-white rounded-lg px-3 py-2 font-medium">Resolve</button>
+                  <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/cancel`); if (d) { toast.success(d.message ?? "They're staying", d.message ? { duration: 15000 } : undefined); loadState(selectedUser); load(); } }}
                     className="text-sm text-gray-500 hover:text-gray-900 px-2">They're staying</button>
                 </>
               )}
@@ -8246,10 +8165,10 @@ export default function Admin() {
           {activeTab === "exits-admin" && <ExitsAdminTab password={password} />}
           {activeTab === "calls-admin" && <CallsAdminTab password={password} />}
           {activeTab === "intents-admin" && <IntentsAdminTab password={password} />}
-          {/* The same lifecycle map the nav filters on, so the registry and the
-              rail can never disagree about which modules this village runs. */}
+          {/* The nav's own lifecycle map, so the registry and the rail never disagree on which modules run. */}
           {activeTab === "tokens" && <TokensTab password={password} lifecycles={moduleLifecycles} />}
           {activeTab === "ledger" && <LedgerTab password={password} />}
+          {activeTab === "cash-payouts" && <CashPayoutsTab password={password} />}
           {activeTab === "cycles" && <CyclesTab password={password} />}
           {activeTab === "variables" && <VariablesTab password={password} />}
           {activeTab === "season" && <SeasonTab password={password} />}

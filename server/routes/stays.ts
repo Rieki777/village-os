@@ -67,6 +67,8 @@ import {
 } from "../lib/payments";
 import { priceRefusal } from "../lib/spending";
 import { requireModule } from "../lib/modules";
+import { payBadgeBoosts, questPay, questPayRules, withPayBadges } from "../lib/workPay";
+import { seasonallyDormantBadgeIds } from "../lib/seasonPatterns";
 import {
   STAY_CREDIT,
   allStays,
@@ -96,6 +98,7 @@ type Deps = Pick<
   | "questsRepo"
   | "stayPostingHooks"
   | "getPool"
+  | "currentPatternId"
 >;
 
 export function register(app: Express, deps: Deps): void {
@@ -178,7 +181,23 @@ export function register(app: Express, deps: Deps): void {
       // Example quests are never offered as a way to earn: this list is
       // shown to a guest running low on stay credits as real, claimable work.
       (q) => !q.isExample && String(q.status).toLowerCase() === "open" && ((q.stayCreditReward ?? 0) > 0 || (tag && q.tags.includes(tag))),
-    ).map((q) => ({ id: q.id, title: q.title, stayCreditReward: q.stayCreditReward ?? 0, gratitude: q.gratitude }));
+    );
+    // The whole of what each one pays, as its board card says it (Rye, 2026-10-30):
+    // the nights are one line of it, and cash, tokens, Voice and badges are the rest.
+    const [payRules, payBadges] = earnQuests.length
+      ? await Promise.all([
+          questPayRules(getPool()),
+          seasonallyDormantBadgeIds(getPool(), deps.currentPatternId())
+            .then((dormant) => payBadgeBoosts(getPool(), dormant))
+            .catch(() => []),
+        ])
+      : [[], []];
+    const earnRows = earnQuests.map((q) => ({
+      id: q.id,
+      title: q.title,
+      stayCreditReward: q.stayCreditReward ?? 0,
+      pay: withPayBadges(questPay(q, payRules), payBadges),
+    }));
     /*
      * THE NAME AND THE SCALE OF EVERY TOKEN ANY ROOM POSTS A RATE IN.
      *
@@ -209,7 +228,7 @@ export function register(app: Express, deps: Deps): void {
       audience,
       priceTokens,
       mine,
-      earnQuests,
+      earnQuests: earnRows,
       guestBookingEnabled: boolVar("stay.guest_booking_enabled"),
       stripeConfigured: stripeConfigured(),
       maxPurchaseNights: numberVar("stay.max_purchase_nights"),

@@ -77,9 +77,10 @@ export async function reservationsForMember(
  * their address with NO account on it (the public form needs no sign-in, so a
  * request made before joining carries no `user_id`). The address is matched
  * the way the path facts match it (server/repos/commsPathFacts.ts), trimmed and
- * lower-cased. `emailKey` is empty on a resume that reads the tombstone and
- * no longer knows the old address, and then only the account's rows are found,
- * the same limit the comms step states.
+ * lower-cased. A resume past the tombstone still has the old address, held in
+ * `member_erasures` (0282). `emailKey` is empty only for a record from before
+ * that, and then only the account's rows are found, the same limit the comms
+ * step states.
  *
  * A ROW ANOTHER ACCOUNT OWNS IS THAT MEMBER'S, even when the contact address
  * typed on it is the leaver's: a household where one partner filed for both
@@ -161,10 +162,24 @@ export async function scrubReservationsOf(
  *   - not any other member's account address;
  *   - on no request another account made, and on no request with no account
  *     at all, which may be somebody else's own public request;
- *   - on no contact linked to another member.
- * What is left was typed by them and is held by them alone. A shared inbox a
- * stranger also uses as a guest elsewhere cannot be told apart from theirs,
- * and that is the case this reading leaves behind on purpose.
+ *   - on no contact linked to another member;
+ *   - on no contact the village met through any door but a housing request,
+ *     or met before the first of their requests carrying the address, and on
+ *     none that has been used since: a guest's answer, queue place, slot,
+ *     attendance, feedback, vote or seat request, a yes given at another
+ *     door, or a suppression (round 2, finding 4).
+ * What is left was typed by them, made by their own request, and used by
+ * nobody since.
+ *
+ * WHAT THE LAST RULE TRADES. A guest who never joined has a contact with no
+ * account, so the first four rules read their inbox as the leaver's, and the
+ * step then gave their seat to the queue and forgot their answers and their
+ * unsubscribe. Their contact was made at the guest door and holds their own
+ * rows, which is what the last rule reads. The cost runs the safe way: when
+ * the address really was the leaver's own and they had used it as a guest
+ * too, that guest contact now stays. A contact kept here can still carry the
+ * yes the leaver's ticked box gave it and its place on the resident path;
+ * whether those should go is Rye's to decide (raised 2026-10-24).
  *
  * Read-only. On a resume after the scrub the rows no longer carry the address
  * and this finds nothing, which is why the step runs before the scrub. Each
@@ -192,5 +207,114 @@ export async function secondAddressesOf(pool: Pool, userId: string): Promise<str
     [VILLAGE, userId, keys],
   );
   for (const r of [...accounts, ...requests, ...contacts]) held.add(String(r.k ?? ""));
+  for (const k of await addressesInUse(pool, userId, keys.filter((key) => !held.has(key)))) held.add(k);
   return keys.filter((k) => !held.has(k));
+}
+
+/**
+ * Of these addresses on a member's own requests, the ones whose contact shows
+ * that whoever owns the inbox has used it: see the last rule above. Read-only,
+ * every table asked by bound values.
+ *
+ * A contact the request made carries a first source the request route
+ * writes: `housing` from the ticked box, or the origin of the first email
+ * the route posted to the address (`housing.ack`, `housing.status`), which can
+ * land before the box's trigger does. It is written a moment AFTER the
+ * request, and its stamp holds whole seconds where the request's holds
+ * milliseconds, so a contact counts as older only when it is more than two
+ * seconds older.
+ */
+async function addressesInUse(pool: Pool, userId: string, keys: string[]): Promise<string[]> {
+  if (!keys.length) return [];
+  const used = new Set<string>();
+  const [contacts] = await pool.query<RowDataPacket[]>( // module-review-ok: the address book rows behind these addresses
+    "SELECT id, email_key AS k, first_source, UNIX_TIMESTAMP(created_at) AS at FROM comms_contacts WHERE village_id = ? AND email_key IN (?)",
+    [VILLAGE, keys],
+  );
+  const [firsts] = await pool.query<RowDataPacket[]>(
+    "SELECT LOWER(TRIM(email)) AS k, MIN(UNIX_TIMESTAMP(created_at)) AS at FROM housing_reservations " +
+      "WHERE village_id = ? AND user_id = ? GROUP BY LOWER(TRIM(email))",
+    [VILLAGE, userId],
+  );
+  const firstAt = new Map(firsts.map((r) => [String(r.k ?? ""), Number(r.at)]));
+  const byRequest = (source: unknown): boolean => String(source ?? "") === "housing" || String(source ?? "").startsWith("housing.");
+  const keyOf = new Map<string, string>();
+  for (const c of contacts) {
+    const k = String(c.k ?? "");
+    keyOf.set(String(c.id), k);
+    const first = firstAt.get(k);
+    if (!byRequest(c.first_source) || (first !== undefined && Number(c.at) < first - 2)) used.add(k);
+  }
+  const [suppressed] = await pool.query<RowDataPacket[]>( // module-review-ok: an unsubscribe or a complaint kept for these addresses
+    "SELECT email_key AS k FROM comms_suppressions WHERE village_id = ? AND email_key IN (?)",
+    [VILLAGE, keys],
+  );
+  for (const r of suppressed) used.add(String(r.k ?? ""));
+  const ids = Array.from(keyOf.keys());
+  if (!ids.length) return Array.from(used);
+  const guestKeys = ids.map((id) => `guest:${id}`);
+  const [permissions] = await pool.query<RowDataPacket[]>( // module-review-ok: the yeses recorded on these contacts, and where each was given
+    "SELECT contact_id AS c, source FROM comms_permissions WHERE contact_id IN (?)",
+    [ids],
+  );
+  // A yes the inbox gave at another door than the housing form.
+  for (const r of permissions) if (!byRequest(r.source)) used.add(keyOf.get(String(r.c)) ?? "");
+  const byContact: Array<[string, unknown[]]> = [["SELECT contact_id AS c FROM event_guest_requests WHERE contact_id IN (?)", [ids]]];
+  const byGuestKey: Array<[string, unknown[]]> = [
+    ["SELECT user_id AS g FROM event_rsvps WHERE user_id IN (?)", [guestKeys]],
+    ["SELECT user_id AS g FROM event_waitlist WHERE user_id IN (?)", [guestKeys]],
+    ["SELECT user_id AS g FROM event_slot_signups WHERE user_id IN (?)", [guestKeys]],
+    ["SELECT person_key AS g FROM event_attendance WHERE person_key IN (?)", [guestKeys]],
+    ["SELECT person_key AS g FROM event_feedback WHERE person_key IN (?)", [guestKeys]],
+    ["SELECT person_key AS g FROM event_time_poll_votes WHERE person_key IN (?)", [guestKeys]],
+  ];
+  for (const [sql, params] of byContact) {
+    const [rows] = await pool.query<RowDataPacket[]>(sql, params); // module-review-ok: whether the inbox behind a contact has used it, one read per table
+    for (const r of rows) used.add(keyOf.get(String(r.c)) ?? "");
+  }
+  for (const [sql, params] of byGuestKey) {
+    const [rows] = await pool.query<RowDataPacket[]>(sql, params); // module-review-ok: whether a guest key behind a contact holds a row, one read per table
+    for (const r of rows) used.add(keyOf.get(String(r.g).slice("guest:".length)) ?? "");
+  }
+  used.delete("");
+  return Array.from(used);
+}
+
+/** The names typed on housing requests, by address and by whose request each is. */
+export interface RequestNames {
+  /** On the member's own requests: their account's, and those with no account at one of their own addresses. */
+  mine: Map<string, Set<string>>;
+  /** On everybody else's. */
+  others: Map<string, Set<string>>;
+}
+
+/**
+ * The names typed on every housing request at these addresses, split by
+ * whose request each is, for the erasure's reading of whose team alert a
+ * reply-to belongs to (`forgetHousingAlertsOf`, server/repos/commsPeople.ts).
+ * Read-only.
+ *
+ * A request is the member's when it is on their account, or when it has no
+ * account and sits at one of `ownKeys`, the member's own addresses: the same
+ * rule `scrubReservationsOf` scrubs by. Every other request is somebody
+ * else's own, a partner's on their account or a stranger's from the public
+ * form, and its alert is theirs.
+ */
+export async function requestNamesAt(pool: Pool, input: { userId: string; keys: string[]; ownKeys: string[] }): Promise<RequestNames> {
+  const out: RequestNames = { mine: new Map(), others: new Map() };
+  const keys = Array.from(new Set(input.keys.map((k) => String(k ?? "").trim().toLowerCase()).filter(Boolean)));
+  if (!keys.length) return out;
+  const own = new Set(input.ownKeys.map((k) => String(k ?? "").trim().toLowerCase()).filter(Boolean));
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT LOWER(TRIM(email)) AS k, name, user_id FROM housing_reservations WHERE village_id = ? AND LOWER(TRIM(email)) IN (?)",
+    [VILLAGE, keys],
+  );
+  for (const r of rows) {
+    const k = String(r.k ?? "");
+    const theirs = (r.user_id != null && String(r.user_id) === input.userId) || (r.user_id == null && own.has(k));
+    const side = theirs ? out.mine : out.others;
+    if (!side.has(k)) side.set(k, new Set());
+    side.get(k)!.add(String(r.name ?? ""));
+  }
+  return out;
 }
