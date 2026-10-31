@@ -45,10 +45,9 @@ import { abandonErasure, type AbandonedErasure } from "../repos/memberErasure";
 import { recordEvent } from "./events";
 import { isTombstone } from "./oauthAccounts";
 import { openRedemptionCount } from "./redemptionStore";
-import { unpaidCashOf } from "./cashOwed";
-import { CASH_ON_DELETION, CASH_ON_DEPARTURE, cashStillOwedWords } from "../../shared/cashOwed";
 import { liveSubscriptionsOf } from "../repos/productPurchases";
 import { stripeConfigured } from "./payments";
+import { cashWords, unpaidCashOf } from "./formerMember";
 
 /*
  * UNITS IN THIS FILE, stated once so no future sweep has to guess.
@@ -267,7 +266,7 @@ function stayingAnswer(erasure: AbandonedErasure, endings: ResolveEndings): Reco
  * server/lib/exitResolve.ts). "role-applications" is the erasure's
  * `withdrawUnseatedOf`, which there runs inside a later step.
  */
-export const FORMER_MEMBER_STEPS = ["alignment-party-left", "role-holdings", "org-seatings", "role-applications", "invitations"] as const;
+export const FORMER_MEMBER_STEPS = ["alignment-party-left", "role-holdings", "org-seatings", "role-applications", "invitations", "delegations"] as const;
 export type FormerMemberStep = (typeof FORMER_MEMBER_STEPS)[number];
 
 /** What each of those steps ends, as the admin reads it. */
@@ -277,6 +276,7 @@ const ENDED_IN_WORDS: Record<FormerMemberStep, (roles: readonly string[]) => str
   "org-seatings": () => "their places on the org chart",
   "role-applications": () => "their open role applications",
   invitations: () => "their open invitation links",
+  delegations: () => "the delegations they gave or carried",
 };
 
 /** What a resolve's record says it already began ending: each step once, and the permission roles by id. */
@@ -463,6 +463,20 @@ export async function exitOpenState(
     blocking: false,
   });
 
+  // Cash the village still owes them (0285), `owed` or `claimed`. Never a
+  // block: the platform moves no money, and a debt the village owes a leaver
+  // is no reason to hold the leaver. It is the line that explains a resolve
+  // keeping an account that holds no tokens (Rye, 2026-10-30; `resolveExit`).
+  const owed = await unpaidCashOf(pool, userId);
+  states.push({
+    domain: "cash",
+    count: owed.reduce((n, c) => n + c.rows, 0),
+    description: owed.length
+      ? `is owed ${cashWords(owed)} in cash the village has not paid yet. Unpaid cash keeps the account at resolve, so they stay on as a former member and can still sign in to see it marked paid`
+      : "no cash owed",
+    blocking: false,
+  });
+
   states.push({
     domain: "roles",
     count: roleIds.length,
@@ -486,25 +500,8 @@ export async function exitOpenState(
 
   states.push(await subscriptionsState(pool, userId, "exit", opts.formerMember));
   // Last, so the domains other lanes add land above it.
-  states.push(await cashState(pool, userId));
 
   return states;
-}
-
-/**
- * The cash the village still owes the member, as a NOTICE (round 4, R4-4).
- *
- * NEVER BLOCKING. It is the village's debt to the member, which the member
- * cannot settle, and Rye's ruling of 2026-10-23 answers what happens to it:
- * resolve keeps a leaver owed cash on as a former member, so they can still
- * claim it (`unpaidCashOf`, server/lib/exitResolve.ts). Deleting the account
- * gives it up, and delete-account asks first (`cashNotGivenUp`,
- * server/lib/cashOwed.ts). A count only, never the amount or the work.
- */
-export async function cashState(pool: Pool, userId: string): Promise<ExitDomainState> {
-  const n = await unpaidCashOf(pool, userId);
-  if (!n) return { domain: "cash", count: 0, description: "no cash owed", blocking: false };
-  return { domain: "cash", count: n, description: `${cashStillOwedWords(n)}. ${CASH_ON_DEPARTURE}. ${CASH_ON_DELETION}`, blocking: false };
 }
 
 /**

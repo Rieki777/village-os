@@ -40,20 +40,6 @@ export async function cancelOpenExit(db: Db, exitId: string): Promise<boolean> {
 }
 
 /**
- * Whether this member's departure was ever resolved, for the invite door
- * (server/lib/inviteDoor.ts). A resolve that kept them as a former member ends
- * membership and the resolve that erases them leaves a tombstone, so a resolved
- * exit on a member who has not been admitted again means they left.
- */
-export async function hasResolvedExit(pool: Pool, userId: string): Promise<boolean> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT 1 FROM exits WHERE user_id = ? AND status = 'resolved' LIMIT 1",
-    [userId],
-  );
-  return rows.length > 0;
-}
-
-/**
  * The terminal write of a resolve, for `resolveExit` (server/lib/exitResolve.ts).
  *
  * ONLY WHILE THE EXIT IS STILL OPEN OR SETTLING (round 4). It used to write

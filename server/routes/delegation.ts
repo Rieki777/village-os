@@ -47,6 +47,14 @@
  * same call server/routes/governanceWizard.ts makes and for the same reason,
  * because this asks a member about themselves and carries no break-glass.
  *
+ * AND NEVER FROM SOMEBODY WHO LEFT (Rye, 2026-10-30). A departure ends every
+ * delegation a leaver gave or carried (`keepAsFormerMember`), and a former
+ * member casts no new vote. A badge granting `ballot.vote` would otherwise
+ * let them start a delegation again the day after, and a seat on a roll that
+ * froze before they left would then carry a choice they made after leaving.
+ * So giving and accepting both ask `leftTheVillage` after the gate, and the
+ * two ways out (decline, revoke) ask nothing.
+ *
  * WHAT THIS FILE DOES NOT DECIDE. Whether a delegation may be given at all
  * (cycles, self-delegation), how a chain resolves, and what a change does to
  * an open ballot all live in server/lib/delegation.ts. This file reads the
@@ -56,6 +64,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { hasCapability } from "../../shared/capabilities";
 import { uncastDelegatedVote } from "../lib/ballots";
+import { leftTheVillage } from "../lib/formerMember";
 import {
   acceptDelegations,
   applyDelegatedVotesEverywhere,
@@ -212,6 +221,9 @@ export function register(app: Express, deps: Deps): void {
         error: "Voting is not open to your account at the moment, so there is no voice here to hand on yet",
       });
     }
+    if (await leftTheVillage(getPool(), user)) {
+      return res.status(403).json({ error: "You have left the village, so there is no voice here to hand on now" });
+    }
     const delegateId = String(req.body?.delegateId ?? "").trim();
     if (!delegateId) return res.status(400).json({ error: "A delegation names the member you are handing your voice to" });
     const target = await members.byId(delegateId);
@@ -264,6 +276,9 @@ export function register(app: Express, deps: Deps): void {
       return res.status(403).json({
         error: "Voting is not open to your account at the moment, so you cannot carry anybody's voice yet",
       });
+    }
+    if (await leftTheVillage(getPool(), user)) {
+      return res.status(403).json({ error: "You have left the village, so you cannot carry anybody's voice here now" });
     }
     const pool = getPool();
     const only = String(req.body?.delegatorId ?? "").trim();

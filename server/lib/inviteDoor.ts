@@ -30,14 +30,12 @@
  * leaver as a former member withdraws their open links (the 'invitations' step,
  * server/lib/exitResolve.ts), but it cannot see a link a sign-up had already
  * taken, and that sign-up can give it back open, or welcome its newcomer, after
- * membership ended. So the door also refuses a maker whose departure was
- * resolved and who has not been admitted again, at the same three steps.
+ * membership ended. So the door also refuses a former member (`leftTheVillage`:
+ * a resolved departure and not admitted again), at the same three steps.
  */
 import type { Pool } from "mysql2/promise";
 
-import { GAME_CONFIG } from "../../shared/gameConfig";
-import { hasResolvedExit } from "../repos/exitNotes";
-import { ADMISSION_RUNG } from "./admission";
+import { leftTheVillage } from "./formerMember";
 import { claimInvite, inviteByHash, releaseInvite, revokeInvite } from "../repos/memberInvites";
 import { livingVouchesFor, recordVouch } from "../repos/vouches";
 import { INVITATION_NEEDED, INVITE_REFUSALS, hashInviteToken, inviteStanding } from "./invites";
@@ -69,21 +67,10 @@ function makerStands(maker: InviterFacts | null | undefined): maker is InviterFa
   return !!maker && !isTombstone({ email: String(maker.email ?? "") });
 }
 
-/**
- * `makerStands`, and not a member who left and was kept as a former member.
- * That resolve clears both admission records, so either one set again means the
- * village let them back in: vouches, a steward or a Love Letter write
- * membershipGranted, and an admin's stage grant at the admission rung or above
- * writes stageGranted. On a ladder with no admission rung any stage grant counts.
- */
+/** `makerStands`, and not a former member (`leftTheVillage`, server/lib/formerMember.ts). */
 async function makerStill(pool: Pool, makerId: string, maker: InviterFacts | null | undefined): Promise<boolean> {
   if (!makerStands(maker)) return false;
-  if (maker.membershipGranted === true) return true;
-  const stages = GAME_CONFIG.stages;
-  const door = stages.findIndex((st) => st.id === ADMISSION_RUNG);
-  const granted = String(maker.stageGranted ?? "");
-  if (granted && (door < 0 || stages.findIndex((st) => st.id === granted) >= door)) return true;
-  return !(await hasResolvedExit(pool, makerId));
+  return !(await leftTheVillage(pool, { ...maker, id: makerId }));
 }
 
 export interface InviteDoor {

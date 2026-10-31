@@ -31,6 +31,7 @@ import { useModules } from "@/modules/ModuleProvider";
 import { saveMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
 import { GeneKeysLines } from "@/components/geneKeys/GeneKeysLines";
 import GeneKeysReveal from "@/components/geneKeys/GeneKeysReveal";
+import RolesForYourLines from "@/components/geneKeys/RolesForYourLines";
 import { setMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
 import { countryName, loadPlaces, searchPlaces, zoneName, type Place } from "@/components/geneKeys/places";
 import { BTN_GOLD, BTN_LINK, BTN_PLAIN, EYEBROW, HINT, INPUT } from "@/components/geneKeys/ui";
@@ -438,11 +439,9 @@ export default function GeneKeysPage() {
                   Badge earned: {badge}
                 </p>
               ) : null}
+              <RolesForYourLines me={user.id} lines={picked.view.lines} />
               <div className="flex flex-wrap gap-2">
-                <Link href="/profile/characters" className={BTN_GOLD}>
-                  Next: see roles that fit you
-                </Link>
-                <Link href="/profile#gene-keys" className={BTN_PLAIN}>
+                <Link href="/profile#gene-keys" className={BTN_GOLD}>
                   See them on your profile
                 </Link>
               </div>

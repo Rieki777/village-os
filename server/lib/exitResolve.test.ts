@@ -399,6 +399,7 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
       "org-seatings",
       "role-applications",
       "invitations",
+      "delegations",
     ]);
     expect(out.body.vacatedRoles).toEqual(["treasury"]);
     expect(String(out.body.message)).toMatch(/treasury/);

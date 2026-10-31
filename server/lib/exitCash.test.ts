@@ -98,17 +98,16 @@ describe.skipIf(!configured)("cash the village owes a leaver keeps them on, and 
     if (uploadsDir) fs.rmSync(uploadsDir, { recursive: true, force: true });
   });
 
-  it("(a) the open state names the unpaid cash as a count, last, and never blocks", async () => {
+  it("(a) the open state names the unpaid cash once, per currency, and never blocks", async () => {
     const id = await member(["owed", "claimed", "paid"]);
     const states = await exitOpenState(pool, id, []);
-    const cash = states[states.length - 1];
-    expect(cash.domain).toBe("cash");
-    expect(cash.count, "owed and claimed count, paid does not").toBe(2);
-    expect(cash.blocking).toBe(false);
-    expect(cash.description).toContain("2 cash payment(s) the village still owes you");
-    // A count, never the amount or the work: the exit desk is read by admins who do not hold cash.pay.
-    expect(cash.description).not.toContain("200");
-    expect(cash.description).not.toContain("east fence");
+    const cash = states.filter((s) => s.domain === "cash");
+    expect(cash, "one cash line on the exit desk, not two").toHaveLength(1);
+    expect(cash[0].count, "owed and claimed count, paid does not").toBe(2);
+    expect(cash[0].blocking).toBe(false);
+    expect(cash[0].description).toContain("is owed 400.00 USD in cash the village has not paid yet");
+    // The amount, never the work.
+    expect(cash[0].description).not.toContain("east fence");
     expect(blockingStates(states).map((s) => s.domain)).not.toContain("cash");
   });
 
@@ -127,13 +126,13 @@ describe.skipIf(!configured)("cash the village owes a leaver keeps them on, and 
 
     expect(out.outcome, "the account was tombstoned with cash still owed to it").toBe("former");
     expect(out.held).toEqual([]);
-    expect(out.cashOwed).toBe(1);
+    expect(out.owed).toEqual([{ currency: "USD", amountMinor: 20000, rows: 1 }]);
     const u = (await usersRepo(pool).byId(id))!;
     expect(u.email, "the account must keep its address so it can still be paid").toBe(`${id}@example.test`);
     expect(u.membershipGranted).toBe(false);
     const exit = (await exitById(pool, exitId))!;
     expect(exit.status).toBe("resolved");
-    expect(String(exit.resolution)).toContain("kept as a former member: is owed 1 cash payment(s)");
+    expect(String(exit.resolution)).toContain("kept as a former member: is owed 200.00 USD in cash");
     expect(String(exit.resolution)).not.toContain("east fence");
     // The row is still there for the treasurer to pay.
     expect(await unpaidCashOf(pool, id)).toBe(1);

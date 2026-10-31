@@ -322,6 +322,31 @@ describe.skipIf(!configured)("delegation routes (MySQL)", () => {
     expect(String(out.body.message)).toContain("Nobody has offered you their voice");
   });
 
+  it("refuses a FORMER MEMBER both halves of a delegation, whatever grants them a vote, and lets them back in when they are admitted again", async () => {
+    await clearDelegations();
+    // Left: a resolved exit and no admission. `mayVote` true is a badge granting `ballot.vote`.
+    // A row of their own, as every member has: a delegation is written under it (`whileSessionHolds`).
+    await usersRepo(pool).add({ id: "u-dee", name: "Dee Marsh", email: "dee@example.test", passwordHash: "x", paths: [] });
+    await pool.query("INSERT INTO exits (id, user_id, status, opened_by) VALUES ('dl-exit-dee', 'u-dee', 'resolved', 'u-dee')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const dee = { id: "u-dee", email: "dee@example.test" };
+    const give = await call(handlersFor(dee).get("PUT /api/governance/delegation")!, { body: { delegateId: "u-ben" } });
+    expect(give.status).toBe(403);
+    expect(give.body.error).toBe("You have left the village, so there is no voice here to hand on now");
+    await setDelegation(pool, "u-ann", "u-dee");
+    const carry = await call(handlersFor(dee).get("POST /api/governance/delegation/accept")!);
+    expect(carry.status).toBe(403);
+    expect(carry.body.error).toBe("You have left the village, so you cannot carry anybody's voice here now");
+    expect(await liveDelegationOf(pool, "u-dee"), "nothing was given").toBeNull();
+    expect((await liveDelegationOf(pool, "u-ann"))?.acceptedAt, "nothing was accepted").toBeNull();
+
+    // Admitted again: the same account gives and carries like anybody.
+    const back = { ...dee, membershipGranted: true };
+    expect((await call(handlersFor(back).get("POST /api/governance/delegation/accept")!)).body).toMatchObject({ accepted: 1 });
+    await clearDelegations();
+    expect((await call(handlersFor(back).get("PUT /api/governance/delegation")!, { body: { delegateId: "u-ben" } })).status).toBe(200);
+    await pool.query("DELETE FROM delegations WHERE delegator_id = 'u-dee'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  });
+
   it("refuses an account with no voice the right to carry somebody else's", async () => {
     await clearDelegations();
     await setDelegation(pool, "u-ann", "u-ben");
