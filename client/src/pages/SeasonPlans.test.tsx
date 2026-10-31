@@ -267,4 +267,16 @@ describe("the banner", () => {
     render(<SeasonBanner />);
     expect(screen.queryByRole("link", { name: "Plan your season" })).toBeNull();
   });
+
+  it("gives the end-of-season governance reminder to a member, and never to a visitor", () => {
+    signedIn = { id: "u-ana" };
+    season = { ...base, planWindow: null };
+    render(<SeasonBanner />);
+    expect(document.body.textContent).toContain("run the end-of-season governance");
+    cleanup();
+    signedIn = null;
+    render(<SeasonBanner />);
+    expect(document.body.textContent).toContain("Season Now");
+    expect(document.body.textContent).not.toContain("end-of-season governance");
+  });
 });

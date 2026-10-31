@@ -162,6 +162,30 @@ export function fetchConfigCached(): Promise<PublicGameConfig | null> {
   return _configCache;
 }
 
+/** Every mounted reader of the config, so a fresh one reaches them all at once. */
+const _configReaders = new Set<(c: PublicGameConfig) => void>();
+
+/**
+ * READ THE CONFIG AGAIN AND HAND IT TO EVERY READER ON THE PAGE.
+ *
+ * The cache above is filled once per page load, so a founder who saved a new
+ * name or new pictures in Admin went on seeing the old ones in their own tab,
+ * header and all, until a full reload, under a note saying the change shows
+ * instantly (audit item 24). A save that changes identity calls this after
+ * the server answers: the shell, every page hook and the brand images then
+ * repaint with what the server now serves. A failed read changes nothing.
+ */
+export async function refreshGameConfig(): Promise<PublicGameConfig | null> {
+  const fresh = await fetch("/api/game/config")
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  if (!fresh) return null;
+  _configNow = fresh;
+  _configCache = Promise.resolve(fresh);
+  _configReaders.forEach((read) => read(fresh));
+  return fresh;
+}
+
 /**
  * The whole live config, null until loaded. The shell (Layout) reads its
  * identity — logo, name, outside links, footer copy — from here rather than
@@ -174,7 +198,11 @@ export function useGameConfig(): PublicGameConfig | null {
   useEffect(() => {
     let alive = true;
     fetchConfigCached().then((c) => { if (alive && c) setConfig(c); });
-    return () => { alive = false; };
+    _configReaders.add(setConfig);
+    return () => {
+      alive = false;
+      _configReaders.delete(setConfig);
+    };
   }, []);
   return config;
 }
@@ -283,6 +311,9 @@ export function useBrandImages(): BrandImages {
   const [images, setImages] = useState<BrandImages>(() => _configNow?.images ?? {});
   useEffect(() => {
     fetchConfigCached().then((c) => { if (c?.images) setImages(c.images); });
+    const read = (c: PublicGameConfig) => { if (c.images) setImages(c.images); };
+    _configReaders.add(read);
+    return () => { _configReaders.delete(read); };
   }, []);
   return images;
 }
