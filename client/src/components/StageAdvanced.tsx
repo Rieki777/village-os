@@ -31,6 +31,7 @@ import MoonProgress from "@/components/natural/MoonProgress";
 import { useMomentWindow } from "@/components/natural/moments";
 import { capabilityLabel } from "@shared/capabilities";
 import { playMoment } from "@/lib/sound";
+import { DEFAULT_LADDER_TITLE } from "@shared/villagePaths";
 
 export interface StageAdvance {
   fromStage: string;
@@ -45,9 +46,12 @@ export interface StageAdvancedProps {
   stages: Array<{ id: string; name: string }>;
   /** Dismiss. The member closing this is the only way it leaves for good. */
   onClose: () => void;
+  /** The ladder's name in this village's words. Absent reads as the platform's. */
+  ladderTitle?: string;
 }
 
-export default function StageAdvanced({ advance, stages, onClose }: StageAdvancedProps) {
+export default function StageAdvanced({ advance, stages, onClose, ladderTitle }: StageAdvancedProps) {
+  const ladder = ladderTitle?.trim() || DEFAULT_LADDER_TITLE;
   const last = Math.max(1, stages.length - 1);
   const fromIndex = stages.findIndex((s) => s.id === advance.fromStage);
   const toIndex = stages.findIndex((s) => s.id === advance.toStage);
@@ -84,7 +88,7 @@ export default function StageAdvanced({ advance, stages, onClose }: StageAdvance
         <MoonProgress
           value={value}
           size={56}
-          label="Path of Growth"
+          label={ladder}
           showNumber={false}
         />
         <div className="min-w-0">
@@ -93,7 +97,7 @@ export default function StageAdvanced({ advance, stages, onClose }: StageAdvance
             New stage: {reached}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {next ? `Next on your Path of Growth: ${next}.` : "You stand on the last stage this village has named."}
+            {next ? `Next on your ${ladder}: ${next}.` : "You stand on the last stage this village has named."}
           </p>
         </div>
         {showing && (

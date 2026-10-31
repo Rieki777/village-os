@@ -15,7 +15,8 @@
  * it, so the promise and the decision cannot drift.
  *
  * Everything here is a pure function of (config, registry, module lifecycle,
- * capability ctx). No database, no clock, no request.
+ * the village's words for its stages, capability ctx). No database, no clock,
+ * no request: the words are read from the boot cache in ./villagePaths.
  */
 import {
   ALL_CAPABILITIES,
@@ -25,10 +26,11 @@ import {
   type Capability,
   type CapabilityCtx,
 } from "../../shared/capabilities";
-import { GAME_CONFIG, withCommitmentName, getStage, type GameStage, type StageRule } from "../../shared/gameConfig";
+import { GAME_CONFIG, getStage, type GameStage, type StageRule } from "../../shared/gameConfig";
 import { MODULES } from "../../shared/modules";
 import { effectiveLifecycle } from "./modules";
 import { numberVar } from "./variables";
+import { villageStageReader } from "./villagePaths";
 
 /**
  * LANE Q: which module a capability belongs to, if any.
@@ -181,6 +183,10 @@ export function servedStage(stageId: string) {
   const s = getStage(stageId);
   return {
     ...s,
+    // The village's own name and line for the rung (Admin, Paths & Stages,
+    // server/lib/villagePaths.ts), `{words}` filled. Spreading the config
+    // alone served the platform's words and the raw `{commitment}` brace.
+    ...villageStageReader()(s.id),
     rule: servedRule(s),
     gratitudeMultiplier: servedMultiplier(s.id),
   };
@@ -204,10 +210,13 @@ export function servedStage(stageId: string) {
  *   let the brace assertion below be written at all.
  */
 export function servedLadder(commitmentName: string) {
+  // The village's own names and lines for the rungs (Admin, Paths & Stages),
+  // every `{word}` filled. The ids, the order and the rules stay the
+  // platform's: see shared/villagePaths.ts for what keys on them.
+  const words = villageStageReader(commitmentName);
   return GAME_CONFIG.stages.map((s) => ({
     id: s.id,
-    name: s.name,
-    description: withCommitmentName(s.description, commitmentName),
+    ...words(s.id),
     rule: servedRule(s),
     // The multiplier ships on the LADDER too, through the same expression
     // `servedStage` uses, so the sheet can say what the next rung is worth.

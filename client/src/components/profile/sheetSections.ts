@@ -68,6 +68,9 @@ export interface SheetSection {
    * "show the whole map" is a scroll rather than a map. A quiet section has to
    * collapse to ONE LINE for the map to be legible as one, which is what makes
    * showing everything viable at all.
+   *
+   * `{path}` is the path's name as this village gives it (Admin, Paths &
+   * Stages); Profile fills it from `/api/game/config`.
    */
   quiet: string;
 }
@@ -119,25 +122,25 @@ export const SHEET_SECTIONS: SheetSection[] = [
     id: "investorFacts",
     band: "path",
     path: "investor",
-    quiet: "What you have put in, and what came back, once you walk the Investor path.",
+    quiet: "What you have put in, and what came back, once you walk the {path} path.",
   },
   {
     id: "ventures",
     band: "path",
     path: "prosperity-creator",
-    quiet: "The ventures you open here, once you walk the Prosperity Creator path.",
+    quiet: "The ventures you open here, once you walk the {path} path.",
   },
   {
     id: "reservations",
     band: "path",
     path: "resident",
-    quiet: "Where you are staying and what you have reserved, once you walk the Resident path.",
+    quiet: "Where you are staying and what you have reserved, once you walk the {path} path.",
   },
   {
     id: "seats",
     band: "path",
     path: "steward",
-    quiet: "The positions you hold and when each began, once you walk the Village Steward path.",
+    quiet: "The positions you hold and when each began, once you walk the {path} path.",
   },
 
   // ── SETTINGS: always available, rarely wanted ──────────────────────────

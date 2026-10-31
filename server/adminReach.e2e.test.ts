@@ -437,6 +437,37 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     expect(cfg.json.images.logoAlt).toBe("");
   });
 
+  it("a path's and a stage's own words reach /api/game/config, which the join form and every ladder read", async () => {
+    const before = await asStranger("/api/game/config");
+    expect(before.json.paths.find((p: any) => p.id === "steward").label, "a village that never saved reads today's name").toBe("Village Steward");
+    expect(before.json.ladder).toEqual({ title: "Path of Growth" });
+
+    const saved = await call("PUT", "/api/admin/village-paths", {
+      paths: { steward: { label: "Keeper", description: "Tend {village} with us." } },
+      stages: { member: { name: "Kin" } },
+      ladder: { title: "The Spiral" },
+    });
+    expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+
+    const cfg = await asStranger("/api/game/config");
+    const steward = cfg.json.paths.find((p: any) => p.id === "steward");
+    expect(steward).toMatchObject({ id: "steward", label: "Keeper", route: "/steward", role: "Co-Creator" });
+    expect(steward.description).not.toContain("{village}");
+    // Every word the founder did not touch still reads as it did.
+    expect(cfg.json.paths.find((p: any) => p.id === "investor").label).toBe("Investor");
+    expect(cfg.json.ladder).toEqual({ title: "The Spiral" });
+    expect(cfg.json.stages.find((s: any) => s.id === "member").name).toBe("Kin");
+    expect(cfg.json.stages.map((s: any) => s.id), "the rungs keep their ids and their order").toEqual(before.json.stages.map((s: any) => s.id));
+
+    const me = await call("GET", "/api/game/me");
+    expect(me.status).toBe(200);
+    expect(me.json.stages.find((s: any) => s.id === "member").name).toBe("Kin");
+
+    const refused = await call("PUT", "/api/admin/village-paths", { paths: { pirate: { label: "Pirate" } } });
+    expect(refused.status).toBe(400);
+    expect((await asStranger("/api/game/config")).json.paths.find((p: any) => p.id === "steward").label, "a refused save changes nothing").toBe("Keeper");
+  });
+
   it("a linked crowdpool campaign reaches /api/crowdpool/campaigns", async () => {
     const saved = await call("PUT", "/api/admin/modules/crowdpool/config", {
       config: { villageCampaigns: [{ slug: "second-raising" }] },

@@ -658,6 +658,7 @@ export default function Profile() {
                     having added it.
                   */
                   showNext={false}
+                  title={config.ladder?.title}
                   stages={config.stages}
                   stageIndex={prog.stageIndex}
                   consentedQuests={prog.consentedQuests}
@@ -827,7 +828,7 @@ export default function Profile() {
                   <QuietSection
                     key={sec.id}
                     title={label}
-                    quiet={sec.quiet}
+                    quiet={sec.quiet.replace("{path}", label)}
                     action={`Walk the ${label} path`}
                     busy={savingPath === sec.path}
                     onAction={() => sec.path && void togglePath(sec.path)}
