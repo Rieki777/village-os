@@ -525,7 +525,29 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       await setRules("quest.completed", []);
       const board = await call("GET /api/quests");
       const old = board.body.find((q: any) => q.id === "wp-route-old");
-      expect(old.pay).toEqual({ value: null, lines: [], source: "standard", cadence: "once", cashPay: null });
+      expect(old.pay).toEqual({ value: null, lines: [], source: "standard", cadence: "once", cashPay: null, badges: [] });
+    });
+
+    it("names Voice and the badge that multiplies it on the board, and leaves the figure alone (2026-10-30)", async () => {
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `badges` (`id`, `name`, `kind`, `capabilities`, `denies`, `multipliers`, `active`) VALUES " +
+          "('wp-b-builder','Builder','granted','[]','[]',?,1), ('wp-b-self','Self said','self','[]','[]',?,1)",
+        [JSON.stringify({ [VILLAGE_VOICE]: 2 }), JSON.stringify({ [VILLAGE_VOICE]: 3 })],
+      );
+      try {
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "INSERT INTO `quests` (`id`, `title`, `gratitude`, `status`) VALUES ('wp-route-voice', 'Mend the fence', '0', 'Open')",
+        );
+        const board = await call("GET /api/quests");
+        const q = board.body.find((x: any) => x.id === "wp-route-voice");
+        const voice = q.pay.lines.find((l: any) => l.token === VILLAGE_VOICE);
+        expect(voice).toMatchObject({ amount: 10, voice: true });
+        expect(q.pay.lines.find((l: any) => l.token === CREDITS).voice).toBeUndefined();
+        // A self badge gates nothing and pays nothing, so it is never named.
+        expect(q.pay.badges).toEqual([{ badge: "Builder", token: VILLAGE_VOICE, name: voice.name, factor: 2 }]);
+      } finally {
+        await pool.query("DELETE FROM `badges` WHERE `id` IN ('wp-b-builder','wp-b-self')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      }
     });
   });
 });

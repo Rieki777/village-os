@@ -808,6 +808,20 @@ keep changing what it looks like and how its meeting flows.
   keeps a line of what was shared (grateful for, what's working, what's not working, a tension),
   and a line can be brought to a later session: it becomes an item in the agenda library for the
   session's circle, a tension as an Explore and anything else as a Report, once only.
+- **The season's priorities stay at the centre** (0292, Rye 2026-10-30). A season's priorities are
+  its own `goals` (the season document, kept in the season settings). A `season_priorities` section
+  reads them out in the room; the weekly templates open with one. Every weekly priority and every
+  win may name the season priority it serves, chosen from that list and copied as written, the way
+  a member's season plan names its goal; a carried priority taken up again keeps the one it served.
+  Wins are shared under a `wins` section in the room's panel (the item page's own wins name none).
+- **The season so far**, at `/sessions/season` (`GET /api/session-templates/season?season=<id>`):
+  for each season priority, the weekly priorities that named it set against how each went, and the
+  wins that named it; wins over time, a row per week; and the tensions that keep coming up in
+  Heart share (what was named a tension or as not working), grouped when the same one comes back,
+  latest first. Counts and words only, no score, no ranking and no person's name. A tension's words
+  reach the people who were in a Heart share it came up in, and admins; everybody else reads that
+  it came up, and how often. The window is the season's own dates in the village's zone, and a
+  session belongs to the season it was opened in.
 - **Who writes in the room.** Moving the stick and setting or marking priorities is the
   facilitator, the secretary or a joined admin, while the room is open. Capturing a share and
   bringing one to a later session is anybody in the room.

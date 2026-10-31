@@ -38,6 +38,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { loadOrg } from "@/components/governance/pickSources";
+import WorkPayBlock from "@/components/WorkPayBlock";
+import type { WorkPay } from "@shared/workValue";
 import { MAX_SEATS } from "@shared/seatApplications";
 import { applySeatsHref } from "@shared/seatApplyLinks";
 import { lineWord, type GeneKeysView } from "@shared/geneKeys";
@@ -74,6 +76,8 @@ export interface FitSeat {
   circleId: string | null;
   aim: string | null;
   openPlaces: number;
+  /** What the role pays, at the `terms.read` tier. Absent below it. */
+  pay?: WorkPay | null;
 }
 
 /** Places still to fill: every place on an open or lapsed seat, the gap on a partly held one. */
@@ -104,6 +108,7 @@ export function fittingSeats(org: { roles?: any[]; circles?: any[] } | null, fit
       circleId: r.circleId ? String(r.circleId) : null,
       aim: r.aim ? String(r.aim) : r.description ? String(r.description) : null,
       openPlaces: openPlacesOf(r),
+      ...(r.pay ? { pay: r.pay as WorkPay } : {}),
     });
   }
   return out;
@@ -216,6 +221,12 @@ export default function RolesThatFit({ archetypeName, fits }: { archetypeName: s
                   {s.circle && <p className="text-xs font-medium uppercase tracking-wide text-sage">{s.circle}</p>}
                   {s.aim && <p className="mt-2 line-clamp-3 text-sm text-stone-700">{s.aim}</p>}
                   <p className="mt-2 text-sm font-medium text-teal-deep">{ROLES_FIT_WORDS.places(s.openPlaces)}</p>
+                  {/* What it pays, before it is picked (Rye, 2026-10-30). */}
+                  {s.pay && (
+                    <div className="mt-2 text-xs">
+                      <WorkPayBlock pay={s.pay} />
+                    </div>
+                  )}
                   <p className="mt-1 text-sm text-stone-700">
                     {ROLES_FIT_WORDS.why(
                       archetypeName,
