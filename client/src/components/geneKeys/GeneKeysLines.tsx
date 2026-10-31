@@ -17,6 +17,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { GENE_KEYS_SITE, MOON_SPHERES, withArticle, type GeneKeysView, type OwnGeneKeysView, type SphereView } from "@shared/geneKeys";
 import { changeMyGeneKeys, removeMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
+import { useModuleOn } from "@/modules/ModuleProvider";
 import { setMyGeneKeys } from "./useMyGeneKeys";
 import ShareLines from "./ShareLines";
 import { BTN_LINK, BTN_PLAIN, EYEBROW, HINT, TILE } from "./ui";
@@ -100,6 +101,7 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
   };
 
   const shown = mine.visibility === "show";
+  const cards = useModuleOn("session-card");
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-4">
       <p className={HINT}>
@@ -109,6 +111,7 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
             ? "Maia uses your lines to choose what she suggests, and talks to you plainly."
             : "Maia uses your lines to shape what she suggests, and says when she does."
           : "Maia does not use your lines."}
+        {cards ? (mine.cardOut ? " Session cards welcome you by name and leave your lines out." : mine.maia && shown ? " Session cards can read your lines." : "") : ""}
       </p>
       {mine.stale ? (
         <p className="text-sm text-notice">Your lines were found with an older calculator. Find them again to be sure they are right.</p>
@@ -123,6 +126,11 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
         {mine.maia ? (
           <button type="button" className={BTN_PLAIN} disabled={busy} onClick={() => act(() => changeMyGeneKeys({ maiaPlain: !mine.maiaPlain }))}>
             {mine.maiaPlain ? "Let Maia speak to my type" : "Talk to me plainly"}
+          </button>
+        ) : null}
+        {cards ? (
+          <button type="button" className={BTN_PLAIN} disabled={busy} onClick={() => act(() => changeMyGeneKeys({ cardOut: !mine.cardOut }))}>
+            {mine.cardOut ? "Include me in session cards" : "Leave me out of session cards"}
           </button>
         ) : null}
         <ShareLines view={mine} />
