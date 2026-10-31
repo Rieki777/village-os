@@ -53,6 +53,7 @@ import type { StageAdvance } from "@/components/StageAdvanced";
 import StatRow from "@/components/profileDash/StatRow";
 import StagePanel from "@/components/profileDash/StagePanel";
 import TodayStrip from "@/components/profileDash/TodayStrip";
+import AsksPanel from "@/components/asks/AsksPanel";
 import YourCompanions from "@/components/profileDash/YourCompanions";
 import TreasuryPanel from "@/components/profileDash/TreasuryPanel";
 import LevelUpMoment from "@/components/profileDash/LevelUpMoment";
@@ -506,6 +507,11 @@ export default function Profile() {
 
             <div className={tabOf("today")}>
               <TodayStrip data={dash} />
+            </div>
+
+            {/* ASKED OF YOU: what other members asked this member, and what they asked (shared/memberAsks.ts). */}
+            <div id="waiting" className={`scroll-mt-28 ${tabOf("today")}`}>
+              <AsksPanel />
             </div>
 
             {/* YOUR COMPANIONS, beside the tasks on a desktop and on the Quests tab on a phone. */}

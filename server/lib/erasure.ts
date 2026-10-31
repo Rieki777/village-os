@@ -188,6 +188,7 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
+import { forgetAsksForMember } from "../repos/memberAsks";
 import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
 import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
@@ -800,6 +801,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "companions",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S ASKS (0299): every ask they sent and every ask sent to
+       * them. A row is the two members on it and nobody else, so it goes
+       * whole. It runs again after the tombstone, as
+       * "member-asks-after-tombstone", because an ask can still be sent to
+       * them until then.
+       */
+      name: "member-asks",
+      run: async () => {
+        await forgetAsksForMember(pool, target.id);
       },
     },
     {
@@ -1589,6 +1603,13 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      // An ask can still reach them between the first pass and the tombstone.
+      name: "member-asks-after-tombstone",
+      run: async () => {
+        await forgetAsksForMember(pool, target.id);
+      },
+    },
+    {
       // A chat or a draft can still land between the first pass and the
       // tombstone, so it runs again last, after every other
       // after-tombstone step. DELETEs keyed on the member, so this matches nothing when
@@ -2102,6 +2123,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
   "companions-after-tombstone",
+  "member-asks-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 

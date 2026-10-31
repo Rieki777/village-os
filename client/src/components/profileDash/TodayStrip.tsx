@@ -49,8 +49,19 @@ const dayWords = (iso: string, now = new Date()): string => {
 };
 
 /** The cards, in the design's order. Pure, so the order and the wording are testable. */
-export function todayCards(d: Pick<DashData, "consents" | "tasks" | "messages" | "session">, now = new Date()): TodayCard[] {
+export function todayCards(d: Pick<DashData, "consents" | "tasks" | "messages" | "session"> & Partial<Pick<DashData, "asks">>, now = new Date()): TodayCard[] {
   const out: TodayCard[] = [];
+  // Someone is stuck on this member first: an ask marked blocking leads the strip.
+  if (d.asks && d.asks.waiting > 0) {
+    out.push({
+      key: "asks",
+      kicker: d.asks.blocking > 0 ? "Someone is stuck on you" : "Asked of you",
+      title: d.asks.waiting === 1 ? "One ask waiting on you" : `${d.asks.waiting} asks waiting on you`,
+      meta: d.asks.blocking > 0 ? `${d.asks.blocking} blocking · Open your asks` : "Open your asks",
+      href: "/profile#waiting",
+      tone: "gold",
+    });
+  }
   const consent = d.consents?.[0];
   if (consent) {
     const left = daysUntil(consent.closesOn, now);
@@ -100,9 +111,10 @@ export function todayCards(d: Pick<DashData, "consents" | "tasks" | "messages" |
 
 export default function TodayStrip({ data }: { data: DashData }) {
   const cards = todayCards(data);
-  const anyRead = data.consents !== null || data.tasks !== null || data.messages !== null || data.session !== null;
+  const anyRead = data.consents !== null || data.tasks !== null || data.messages !== null || data.session !== null || data.asks !== null;
   if (!anyRead) return null;
-  const waiting = (data.consents?.length ?? 0) + (data.tasks?.waiting ?? 0) + (data.messages && data.messages.unreadTotal > 0 ? 1 : 0);
+  const waiting =
+    (data.asks?.waiting ?? 0) + (data.consents?.length ?? 0) + (data.tasks?.waiting ?? 0) + (data.messages && data.messages.unreadTotal > 0 ? 1 : 0);
 
   return (
     <section aria-labelledby="today-h" className="flex flex-col gap-2.5 sm:gap-3.5">
