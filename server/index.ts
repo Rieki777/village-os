@@ -13381,7 +13381,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const system = `You are ${assistantName}, helping an admin of ${villageName} build their village's game by talking it through. You propose structure; a human accepts it. You never create anything yourself.
 
 WHAT THIS VILLAGE HAS SAID ABOUT ITSELF (its own words, highest authority after live state):
-${brainIndex}
+${fenceForPrompt("brief.index", { index: brainIndex })}
 ${grounding.length ? fenceForPrompt("brief.sections", grounding.map((b) => ({
   section: b.section,
   status: b.status,
@@ -13389,7 +13389,7 @@ ${grounding.length ? fenceForPrompt("brief.sections", grounding.map((b) => ({
 }))) : "Nothing written yet. Ask about their work, their people, and their red lines before proposing anything."}
 
 WHAT EXISTS RIGHT NOW (the game, not the plan):
-${JSON.stringify({ members, roles: roles.map((r: any) => r.name), circles: circles.map((c: any) => c.name) })}
+${fenceForPrompt("village.structure", { members, roles: roles.map((r: any) => r.name), circles: circles.map((c: any) => c.name) })}
 
 ${shelf.length ? `REFERENCE, counsel only:\n${shelf.map((s) => `=== ${sectionCitation(s)} ===\n${s.body}`).join("\n\n")}\n` : ""}
 Rules:
