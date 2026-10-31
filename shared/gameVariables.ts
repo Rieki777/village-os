@@ -2319,6 +2319,27 @@ export const VARIABLES: VariableDef[] = [
 
   // ── Messaging (visible in Admin only while the module is non-off) ─────────
   {
+    key: "companions.max_questions_per_day",
+    category: "Companions",
+    label: "Questions one companion may ask a day",
+    description:
+      "The most questions each companion brings a member in one village day. Drafts are never held back by this, because a draft that wants to move money should always be seen. A member may lower it for any of their companions. More than 3 is not offered: that ceiling waits on a founder's ruling. A question over the limit waits for the next morning.",
+    type: "integer",
+    default: "3",
+    min: 0,
+    max: 3,
+    unit: "questions",
+  },
+  {
+    key: "companions.role_ids",
+    category: "Companions",
+    label: "Roles that have a companion",
+    description:
+      "Which roles give their holders a companion that speaks for the role. Write all for every role, leave it empty for none, or paste role ids from the org chart separated by commas. The personal companion is always there for every member, whatever this says.",
+    type: "text",
+    default: "all",
+  },
+  {
     key: "messaging.sends_per_minute",
     category: "Messages",
     label: "Messages one member may send per minute",
