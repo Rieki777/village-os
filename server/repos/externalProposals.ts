@@ -341,3 +341,66 @@ export async function rebatchWaiting(pool: Pool, id: string, batchId: string): P
   );
   return Number(res?.affectedRows ?? 0) > 0;
 }
+
+/**
+ * Bring back a record a newer read had retired, when the service sends the
+ * very same claim again, into that newer delivery.
+ *
+ * Without this a claim retired as GONE (`withdrawGone`) or replaced by a
+ * changed claim could never return: its dedupe key is unique whatever its
+ * status, so a redelivery is a no-op and the steward never sees it again.
+ * `superseded` is only ever written by a landing (here and in
+ * `landProposal`), never by a steward, so reopening one undoes no decision.
+ * Any other claim still waiting about the same thing is retired in the same
+ * transaction, because the claim that came back is now the newest word.
+ *
+ * Answers how many waiting claims it retired, or null when nothing reopened.
+ */
+export async function reopenSuperseded(pool: Pool, row: { id: string; batchId: string; identityKey: string }): Promise<number | null> {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [res] = await conn.query<any>(
+      "UPDATE external_proposals SET status = 'proposed', batch_id = ? WHERE id = ? AND status = 'superseded'",
+      [row.batchId, row.id],
+    );
+    if (!Number(res?.affectedRows ?? 0)) {
+      await conn.rollback();
+      return null;
+    }
+    const [others] = await conn.query<any>(
+      "UPDATE external_proposals SET status = 'superseded' WHERE identity_key = ? AND status = 'proposed' AND id <> ?",
+      [row.identityKey, row.id],
+    );
+    await conn.commit();
+    return Number(others?.affectedRows ?? 0);
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Retire every waiting record of these kinds from one module whose identity
+ * the newest read did not carry: the service stopped sending it.
+ *
+ * The caller decides which kinds were read WHOLE; this only compares. Only
+ * `status = 'proposed'` is touched, so anything a steward decided stays as it
+ * is. Answers the ids it retired.
+ */
+export async function withdrawGone(
+  pool: Pool,
+  input: { villageId: string; moduleId: string; kinds: readonly string[]; present: ReadonlySet<string> },
+): Promise<string[]> {
+  if (!input.kinds.length) return [];
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, identity_key FROM external_proposals WHERE village_id = ? AND module_id = ? AND status = 'proposed' AND kind IN (?)",
+    [input.villageId, input.moduleId, input.kinds],
+  );
+  const gone = rows.filter((r) => !input.present.has(String(r.identity_key))).map((r) => String(r.id));
+  if (!gone.length) return [];
+  await pool.query("UPDATE external_proposals SET status = 'superseded' WHERE id IN (?) AND status = 'proposed'", [gone]);
+  return gone;
+}

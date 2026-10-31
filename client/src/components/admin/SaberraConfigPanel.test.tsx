@@ -77,6 +77,7 @@ const run = (over: Record<string, unknown>) => ({
   refused: 0,
   superseded: 1,
   rebatched: 18,
+  gone: 0,
   held: 0,
   addresses: 0,
   skipped: ["tension", "risk"],
@@ -469,7 +470,7 @@ describe("the report of each run", () => {
         schedule: "every-6-hours",
         nextAt,
         runs: [
-          run({ trigger: "by-hand" }),
+          run({ trigger: "by-hand", gone: 13 }),
           run({ at: "2026-10-15T12:00:00.000Z", outcome: "no-change", landed: 0, rebatched: 0, superseded: 0, facts: 0, circles: null }),
           run({
             at: "2026-10-15T06:00:00.000Z",
@@ -492,6 +493,9 @@ describe("the report of each run", () => {
     const text = log.textContent ?? "";
     expect(text).toContain("Sent to the review queue · By hand · ");
     expect(text).toContain("58 records read. 19 suggestions reached the review queue: 18 carried forward unchanged, 1 replaced by a changed claim, 0 refused. 58 facts stored.");
+    // A record the service stopped sending is said apart from a changed claim, and only when there is one.
+    expect(text).toContain("13 waiting suggestions withdrawn: the service stopped sending their records.");
+    expect(text.match(/withdrawn: the service stopped sending/g)).toHaveLength(1);
     expect(text).toContain("Not offered by the service, so not asked for: tension, risk.");
     expect(text).toContain(
       "Circles: 56 placed, 0 unresolved, 0 with none, 0 naming several, 3 in an archived circle. The circle field arrived as: list of 1 id.",
