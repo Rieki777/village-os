@@ -17,6 +17,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { authToken } from "@/lib/gameApi";
+import { useTokenName } from "@/hooks/useTokenNames";
 import { announceProfileChange } from "@/lib/profileRefresh";
 import { cashPayWords, linesWords, useDisplayRates } from "@/lib/workPay";
 import type { PathParticulars } from "@shared/pathLadders";
@@ -112,6 +113,8 @@ export default function TreasuryPanel({
   seasonName: string | null;
 }) {
   const rates = useDisplayRates();
+  /** The village's own word for its recognition token, never a literal (scripts/check-village-facts.mjs). */
+  const thanksName = useTokenName("Recognition");
   const [claiming, setClaiming] = useState(false);
   const [said, setSaid] = useState("");
   const { village, voice } = pickTokens(data.wallet ?? []);
@@ -275,14 +278,14 @@ export default function TreasuryPanel({
         {data.gratitude ? (
           <Purse
             coin="thanks"
-            glyph="G"
-            name="Gratitude"
+            glyph={thanksName.trim().slice(0, 1).toUpperCase()}
+            name={thanksName}
             value={whole(data.gratitude.receivedThisCycle)}
             delta="received this cycle"
             what="Thanks you give from the pool. It only counts when you send it."
             actions={
               <Link href="/gratitude" className={`${BTN} ${BTN_FILL.thanks}`}>
-                Send gratitude
+                Send {thanksName.toLowerCase()}
               </Link>
             }
           >
