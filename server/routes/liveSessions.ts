@@ -514,9 +514,10 @@ export function register(app: Express, deps: Deps): void {
 
   /** Check a proposal (0297, shared/sessionCheck.ts): its facilitator or its proposer, while it is open. */
   app.post("/api/sessions/:id/entries/:entryId/check", async (req, res) => {
-    if (!checkOffer()) return res.status(404).json({ error: CHECK_REFUSALS.off });
+    // Who is asking comes first, as on every door: a stranger hears 401 and never what the village offers.
     const w = await writer(req, res, { key: "sessions-check", max: CHECKS_PER_HOUR });
     if (!w) return;
+    if (!checkOffer()) return res.status(404).json({ error: CHECK_REFUSALS.off });
     const entryId = parseId(req.params?.entryId);
     if (entryId == null) return res.status(404).json({ error: R.entryUnknown });
     const season = seasonRefOf(deps.seasonState?.().current ?? null);
