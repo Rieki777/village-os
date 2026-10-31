@@ -41,6 +41,7 @@ import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { encodeToken } from "./lib/memberTokens";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -378,6 +379,20 @@ describe.skipIf(!DB_CONFIGURED)("a member who joined through Google can leave an
     expect(r.json?.anonymized).toBe(true);
     const [rows] = await pool.query<any[]>("SELECT email FROM users WHERE id = ?", [halId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(String(rows[0].email)).toContain("anonymized.invalid");
+  });
+
+  it("a session signed at the tombstone's own version opens nothing", async () => {
+    // The shape a sign-in racing the erasure could mint: the tombstone's
+    // address and its bumped version, signed with the server's own key. The
+    // version check alone passes it, so the door has to ask what the row is.
+    const [rows] = await pool.query<any[]>("SELECT email, token_version FROM users WHERE id = ?", [halId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const forged = encodeToken(SECRET, halId, String(rows[0].email), Number(rows[0].token_version ?? 0));
+    const read = await call("GET", "/api/profile", { token: forged });
+    expect(read.status, "a tombstone still had a working session").toBe(401);
+    // And the control: the same key and the same shape for a member who stays.
+    const [anna] = await pool.query<any[]>("SELECT email, token_version FROM users WHERE id = ?", [annaId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const live = encodeToken(SECRET, annaId, String(anna[0].email), Number(anna[0].token_version ?? 0));
+    expect((await call("GET", "/api/profile", { token: live })).status).toBe(200);
   });
 
   it("THE PASSWORD PATH IS UNCHANGED: same bodies on a wrong password, and the right one deletes", async () => {

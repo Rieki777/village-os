@@ -201,6 +201,28 @@ because members never read them.
 Never XP, gold, loot or "level up": Gratitude is thanks, never pay. Growth
 words do the job instead: you grow into a stage, and a room opens.
 
+### Naming who holds a role
+
+The role comes first, always. When a signed-in member reads a line that hands
+an item to a role (a task, a live session's action, "Held by"), the first
+names of the people sitting in that role now follow in parentheses:
+"Treasurer (Rick)", "Steward (Rye, Jessica)", "Steward (Ana, Ben, Cy +2)".
+A vacant role is the role alone. The founder's ruling of 2026-10-30: "name the
+role AND the person (if there is one) so it's always naming the role as
+primacy, just the first name of the person in parenthesis".
+
+This amends the ruling of 2026-10-22 ("we never name people instead we name
+the role") for live display only, and the rest of that ruling stands:
+
+- The names are read from the roster when the page is drawn
+  (`roleWithHolders` in `shared/roleHolderLabel.ts`), so a handover renames
+  every line by itself. Written copy, stored notices, emails, role card text
+  and machine drafts still name the role and never a person.
+- Public pages, shared links and anything sent to a vendor never carry the
+  parenthesis. The Saberra bridge sends role ids and code names.
+- A role proposal still counts who holds or applies, since its shared link
+  can be read by anyone holding it.
+
 ## Who reads it, and who speaks
 
 - Write every page for ONE reader: a visitor, a member or a founder. Lines

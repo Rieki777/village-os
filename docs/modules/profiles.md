@@ -29,8 +29,8 @@ through the same `users` row this module owns. That is why the interesting quest
 "should I run it" but "what is already public", "what happens when somebody leaves", and "what did
 the builders decide that reading the code cold will not tell me".
 
-The one sentence to carry out of this document: **the module's declared API prefix covers eight of
-its handlers and none of its public ones.** `/api/profile` really does cover all eight: the three in
+The one sentence to carry out of this document: **the module's declared API prefix covers nine of
+its handlers and none of its public ones.** `/api/profile` really does cover all nine: the four in
 `server/routes/profile.ts` and the five in `server/index.ts`, export, exit and delete among them, so
 a gate mounted on the prefix reaches every one of them. What it does not reach is
 `/api/profiles/:handle`, the only endpoint on the platform that serves one NAMED member's record to
@@ -110,6 +110,7 @@ handlers used to occupy, because Express matches in registration order.
 | `GET /api/profile` | the signed-in member | `publicUser(user)`: the whole account record minus `passwordHash`, `tokenVersion` and `prefs.googleLink` |
 | `PUT /api/profile` | the signed-in member | `name`, `bio`, `avatar`, `handle`, `paths`, each optional |
 | `POST /api/profile/contribution` | the signed-in member | a journal entry, `type` and `description`, clipped to 120 and 2000 characters |
+| `GET /api/profile/leaving-notices` | the signed-in member | `{ notices }`: what deleting their account cancels, today their live recurring payments, in the exit desk's own sentence; empty when there is nothing |
 | `GET /api/profile/prefs` | the signed-in member | `{ notify }`, `sheetSeen` and `displayCurrency` |
 | `PUT /api/profile/prefs` | the signed-in member | accepts and echoes `notify` PLUS `displayCurrency` |
 | `GET /api/profile/export` | the signed-in member | roughly thirty domains of their own data, as a download |
@@ -144,7 +145,7 @@ not, which is how a data-rights review came to report the gap against code that 
 it. [Sharp edges](#sharp-edges) describes the fix.
 
 Every one of these refuses a stranger with `401 {"error": "auth_required"}`. The `prefs`, export,
-exit and delete handlers live in `server/index.ts` rather than in the routes file. One of the three
+exit and delete handlers live in `server/index.ts` rather than in the routes file. One of the four
 routes in `server/routes/profile.ts` reads beyond its own member: `PUT /api/profile` runs
 `(await members.all()).some(...)` for the handle-clash scan, which is a read of every member row on
 the deployment, and that is exactly why the slice is `members` and not a single-row getter. The
@@ -333,6 +334,17 @@ existed since `drizzle/0003_variables_and_stage_events.sql`, and `drizzle/0070_p
 released any empty-string handles to NULL, because an empty string occupies a unique index once and
 then refuses every later member who saves a blank one.
 
+**No living member takes a `departed-` handle.** That prefix is what tombstones wore before round 2,
+and `handle-after-tombstone` frees each one, so a living member holding `departed-xxxxxxxx` would be
+who every old link to the departed member's page reached. `PUT /api/profile` refuses a new handle
+starting with `departed-` in `DEPARTED_HANDLE_REFUSAL`'s words (`server/lib/profile.ts`); a member
+already wearing one from before the rule keeps saving their profile with it. A handle a NAME gives
+(sign-up, Google sign-up, the founder's bootstrap and the boot backfill below, all through
+`slugifyHandle`) drops the prefix through `livingHandle`, so "Departed Fern" joins as `fern`. No admin
+route edits a handle. Pinned by `server/routes/profile.handle.test.ts`, the sign-up case in
+`server/needsTombstone.routes.e2e.test.ts` and the Google case in
+`server/authGoogle.routes.e2e.test.ts`.
+
 **There is a third handle-assignment path and it runs at boot.** `startServer` calls
 `runOnce("backfill-member-handles", backfillMemberHandles)`, which loads the whole roster and mints a
 handle from `u.name` for every member without one. For a fork that imports an existing membership
@@ -378,7 +390,7 @@ surfaces each carried their own spelling of it and the wallet carried none.
 
 **Leaving.** `POST /api/profile/delete-account` is an anonymisation, not a deletion.
 `anonymizeMember` in `server/lib/erasure.ts` renames the row to "A departed member", rewrites the
-email and handle to tombstones, bumps `tokenVersion` so every session dies, clears bio, avatar,
+email to a tombstone address, clears the handle, bumps `tokenVersion` so every session dies, clears bio, avatar,
 paths, journeys, prefs and contributions, then sweeps the tables that restate the person
 independently of the join (`gratitude_log` names, `quest_claims.user_name`, notification titles and
 bodies, skill tags, push subscriptions, forum subscriptions, wallet challenges, concierge queries,
@@ -387,6 +399,23 @@ the files on the volume), releases org seatings and role holdings, and
 asks the external stores last so a slow vendor never delays the local sweep. Value rows stay: the
 ledger, gratitude, claims, loans, orders and badge awards are the village's record of what happened
 and what is owed, and deleting them would break the conservation proof.
+
+**A recurring payment stops with them** (round 3, finding 5). Nothing in the app lets a member cancel
+a Stripe subscription, so the sweep does: `product-subscriptions-after-tombstone`, just before the
+outside stores, cancels every subscription their purchases hold (`cancelSubscription` in
+`server/lib/payments.ts`, which reads first, so a second run cancels nothing). It never refunds and
+never moves a token. Stripe failing with the key present stops the sweep at that step for the retry.
+A village with no Stripe key cannot cancel from here, so the step asks every admin to cancel each one
+by hand in the Stripe dashboard, naming the count and the ids, records that on the audit trail, and
+counts itself done, and the notice tells the member the admins will cancel it.
+The delete panel and the departure page say so before the member confirms
+(`GET /api/profile/leaving-notices`), in the sentence the exit desk shows, and a charge that lands
+after the account is gone is banked, delivers nothing, sends no receipt and tells the admins, and
+cancels that subscription in Stripe on every such charge (round 4). A cancel nobody could make is
+owed on `/review`, derived from the audit trail (`server/lib/owedCancels.ts`), until Finish, the
+hourly job or a person's "I cancelled these by hand" settles it. The departure page reads
+`?for=exit`: a member who holds tokens is told that resolving keeps them a former member and the
+payments keep renewing until an admin cancels them.
 
 **The sweep is a sequence and not a transaction, on purpose, and it resumes.** `server/lib/erasure.ts`
 opens no connection and calls no `beginTransaction`, and its header argues at length why it must
@@ -529,11 +558,16 @@ is the platform's one public identity URL.
 
 **A departed member's title and home still survive the tombstone. Their characters and portraits do
 not, any more.** `anonymizeMember` writes through `members.update`, so it can only clear columns the
-users repository owns, and `title` and `home_structure_key` are not among them. The tombstone handle
-is deterministic (`departed-` plus the last eight characters of the user id) and appears on their
-forum bylines, so `GET /api/profiles/<that handle>` still answers with their remaining standing
-chips, whatever `title` they carried and wherever `home_structure_key` says they sleep. Both columns
-are READ (`server/lib/profile.ts` names them in its SELECT and publishes them) and NEITHER is
+users repository owns, and `title` and `home_structure_key` are not among them. A member erased
+before round 2 of the erasure review kept a deterministic tombstone handle (`departed-` plus the
+last eight characters of the user id), which their forum bylines print, and `GET /api/profiles/<that
+handle>` needs no sign-in, so it answered with their join date, moons, standing chips and gratitude
+counts, whatever `title` they carried and wherever `home_structure_key` says they sleep. A tombstone
+written since holds no handle at all: a living member could take that handle first and block the
+erasure for good (finding 5). The sweep's `handle-after-tombstone` step takes the old handle off, and
+the boot backfill gives the step to every erasure that finished before it existed (adversarial round
+3, finding 13). A tombstone then has no page, and the gratitude form finds no tombstone by handle.
+Both columns are READ (`server/lib/profile.ts` names them in its SELECT and publishes them) and NEITHER is
 written by anything in the tree: no route, no repository and no migration sets either one. So the
 exposure is latent rather than live, and it is latent in the way that ends in one commit. A fork
 that adds a title editor, or a "where I sleep" control, without also adding a line to the erasure

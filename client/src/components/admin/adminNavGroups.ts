@@ -149,6 +149,10 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
       items: [
         { key: "tokens", label: "Tokens", icon: Coins },
         { key: "ledger", label: "Ledger", icon: BarChart3 },
+        // The cash the village owes, and the record of each bank transfer
+        // that paid it (0285, 2026-10-30). Beside the Ledger because it is the
+        // other book a treasurer keeps, and it never touches the ledger.
+        { key: "cash-payouts", label: "Cash To Pay Out", icon: Coins },
         { key: "cycles", label: "Cycle Close", icon: Moon },
         { key: "products", label: "Payments", icon: Handshake },
         { key: "resources-admin", label: "How Resources Flow", icon: Coins },

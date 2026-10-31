@@ -3,27 +3,8 @@ import { Link } from "wouter";
 /** The link from a circle's group to its own card (`/circles/:id`). */
 const OPEN_CIRCLE_CARD = "Open this circle's card";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Users,
-  ArrowRight,
-  Briefcase,
-  Shield,
-  Lightbulb,
-  ChevronDown,
-  Users2,
-  Zap,
-  Leaf,
-  Star,
-  Home,
-  Building2,
-  CircleDot,
-  Globe,
-  Handshake,
-  MessageCircle,
-  ClipboardList,
-  Scale,
-  Link2,
-} from "lucide-react";
+import { ArrowRight, Briefcase, ChevronDown, Link2 } from "lucide-react";
+import { iconFor } from "@/lib/circleIcons";
 import { useEffect, useId, useRef, useState } from "react";
 import { prefersReducedMotion } from "@/components/natural/useReducedMotion";
 import InfoTip from "@/components/InfoTip";
@@ -74,11 +55,6 @@ interface SheetSource {
   historyShown: boolean;
 }
 
-/** Icon names a card may reference; anything unknown falls back to CircleDot. */
-const ICONS: Record<string, React.ElementType> = {
-  Users, Briefcase, Shield, Lightbulb, Users2, Zap, Leaf, Star, Home,
-  Building2, CircleDot, Globe, Handshake, MessageCircle, ClipboardList, Scale,
-};
 
 // The subtitles under each circle heading used to be a hardcoded map of one
 // village's circle names, living in platform code: a fork got no subtitle for
@@ -227,7 +203,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
   // and a literal would be this platform naming one of them.
   const vendorName = useModule("saberra")?.name ?? "the connected service";
   const headerId = `${useId().replace(/[^a-zA-Z0-9]/g, "")}-seat`;
-  const Icon = ICONS[role.icon ?? ""] ?? CircleDot;
+  const Icon = iconFor(role.icon);
   // Admin-editable colour, resolved together with the ink that stays legible
   // on it. See client/src/lib/swatch.ts.
   const swatch = swatchFor(role.color);

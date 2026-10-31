@@ -9,6 +9,8 @@ import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import ICAL from "ical.js";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { usersRepo } from "../repos/users";
+import { recentEvents } from "./events";
 import type { CalendarRow } from "./calendar";
 import {
   buildIcs,
@@ -218,13 +220,28 @@ describe.skipIf(!configured)("feed keys", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 2 });
+    // The member stands in the users table: a key is written under their own
+    // row, at the tokenVersion a session signed now carries (`whileSessionHolds`).
+    await usersRepo(pool).add({ id: "u1", name: "Una Feed", email: "u1@village.example.test", passwordHash: "x", paths: [] });
   });
   afterAll(async () => { await pool?.end(); await db?.drop(); });
 
+  /** A key for u1's current session, which is signed at tokenVersion 0. */
+  async function mint(): Promise<string> {
+    const minted = await mintFeedToken(pool, "u1", 0);
+    if (!minted.ok) throw new Error(`the feed address was refused: ${minted.error}`);
+    return minted.raw;
+  }
+
   it("mints one live key per member, stores only its hash, resolves it, and kills it on revoke", async () => {
     expect(await feedTokenStatus(pool, "u1")).toEqual({ hasToken: false, createdAt: null });
-    const first = await mintFeedToken(pool, "u1");
+    const first = await mint();
     expect(looksLikeFeedToken(first)).toBe(true);
+    // One audit line for the admin per address made, and it never carries the key.
+    const audit = (await recentEvents(pool, "admin")).filter((e) => e.kind === "calendar_feed_minted");
+    expect(audit.map(({ actorUserId, audience, text }) => ({ actorUserId, audience, text }))).toEqual([
+      { actorUserId: "u1", audience: "admin", text: "made a private calendar feed address" },
+    ]);
     const [rows] = await pool.query<any[]>("SELECT token_hash, revoked_at FROM calendar_feed_tokens WHERE user_id = 'u1'");
     expect(rows).toHaveLength(1);
     expect(rows[0].token_hash).not.toBe(first);
@@ -235,7 +252,7 @@ describe.skipIf(!configured)("feed keys", () => {
     expect((await feedTokenStatus(pool, "u1")).hasToken).toBe(true);
 
     // A second mint retires the first.
-    const second = await mintFeedToken(pool, "u1");
+    const second = await mint();
     expect(await resolveFeedToken(pool, first)).toBeNull();
     expect(await resolveFeedToken(pool, second)).toBe("u1");
     const [live] = await pool.query<any[]>("SELECT COUNT(*) n FROM calendar_feed_tokens WHERE user_id = 'u1' AND revoked_at IS NULL");

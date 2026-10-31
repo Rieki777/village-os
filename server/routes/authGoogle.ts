@@ -35,6 +35,7 @@ import {
 } from "../lib/oauthGoogle";
 import {
   decideGoogleSignIn,
+  isUnclaimable,
   makeGoogleLink,
   readGoogleLink,
   type AccountFacts,
@@ -402,10 +403,18 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       // The link is written under the row lock `update` holds, and it does NOT
       // touch passwordHash. A member who links Google keeps the password they
       // had, and a member who had none can still set one later.
+      //
+      // ASKED AGAIN UNDER THE LOCK. The decision was made from a plain read,
+      // and an erasure can land between that read and this lock: the row the
+      // mutator is handed is then the tombstone, and writing the link there
+      // would hand the tombstone back, with its new tokenVersion, to sign a
+      // handoff at. It would also refuse this Google account forever after.
+      let gone = false;
       member = await deps.members.update(decision.userId, (u: any) => {
+        if ((gone = isUnclaimable(u))) return;
         u.prefs = { ...(u.prefs ?? {}), googleLink: makeGoogleLink(deps.authSecret, decision.userId, identity.sub) };
       });
-      if (!member) return failTo(res, "account_unavailable");
+      if (!member || gone) return failTo(res, "account_unavailable");
       deps.recordAudit("auth:google-linked", member.id);
     } else {
       // From crypto, like the email door's (server/routes/register.ts): the id is signed into a session.
@@ -471,14 +480,22 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       isExample: Boolean(member?.isExample),
     });
     if (grant.grant) {
+      // The same recheck as the link: this write hands back the row as it is
+      // now, and a tombstone is never made a founder, nor handed on below.
+      let gone = false;
       const elevated = await deps.members.update(member.id, (u: any) => {
+        if ((gone = isUnclaimable(u))) return;
         u.role = "founder";
       });
+      if (gone) return failTo(res, "account_unavailable");
       if (elevated) member = elevated;
       console.warn(`[oauth] founder role granted to ${member.id}: ${grant.reason}`);
       deps.recordAudit("auth:founder-granted", member.id);
     }
 
+    // The last word before a session is signed for: whatever the paths above
+    // read or wrote, a tombstone or an example identity is never handed one.
+    if (!member || isUnclaimable(member)) return failTo(res, "account_unavailable");
     const handoff = makeHandoffToken(deps.authSecret, member.id, member.tokenVersion ?? 0);
     // HttpOnly so no script can read it. SameSite=Lax so it survives the
     // top-level navigation back from Google and is still refused on a
@@ -523,7 +540,9 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       return res.status(401).json({ error: "This sign-in has already been used. Start again." });
     }
     const user = await deps.members.byId(claim.userId);
-    if (!user) {
+    // A handoff for an account that has since been erased buys nothing: the
+    // callback refuses to sign one, and this refuses to honour one it signed.
+    if (!user || isUnclaimable(user)) {
       clear();
       return res.status(401).json({ error: "This sign-in has expired. Start again." });
     }

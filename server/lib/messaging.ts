@@ -28,6 +28,7 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { insertNotification, type NotifyDeps } from "./notify";
+import { ensureLivingOwner, groupsEverJoinedBy, leaveAndHandOn, liveConversationsOf } from "../repos/conversationMembers";
 
 /** Bodies longer than this are refused, never silently truncated. */
 export const MAX_BODY_CHARS = 4000;
@@ -682,34 +683,22 @@ export async function totalUnreadFor(pool: Pool, userId: string): Promise<number
  * Leave a conversation. Anyone may, always.
  *
  * When the owner of a group walks out and other people are still in it,
- * ownership passes to the longest-standing remaining member. A thread with
- * members and no owner has nobody who can add anyone, and the only way back
- * would be an admin editing a table by hand.
+ * ownership passes to the longest-standing remaining member who is still
+ * here. A thread with members and no owner has nobody who can add anyone, and
+ * the only way back would be an admin editing a table by hand.
+ *
+ * The leaver is demoted on the way out, always. Owner is a property of ACTIVE
+ * membership, never a residue on a row nobody is using: a departed owner's
+ * role that survives on their row comes back with them the moment somebody
+ * re-adds them, which hands ownership to whoever asked nicely to be let back
+ * in.
+ *
+ * The three writes (out, demoted, heir made owner) are one transaction in
+ * server/repos/conversationMembers.ts, which says what a death between them
+ * used to leave, and why the heir is never a tombstone.
  */
 export async function leaveConversation(pool: Pool, conversationId: string, userId: string): Promise<boolean> {
-  const membership = await membershipOf(pool, conversationId, userId);
-  if (!membership) return false;
-  // Demoted on the way out, always. Owner is a property of ACTIVE membership,
-  // never a residue on a row nobody is using: a departed owner's role that
-  // survives on their row comes back with them the moment somebody re-adds
-  // them, which hands ownership to whoever asked nicely to be let back in.
-  await pool.query(
-    "UPDATE conversation_members SET left_at = CURRENT_TIMESTAMP, role = 'member' WHERE conversation_id = ? AND user_id = ?",
-    [conversationId, userId],
-  );
-  if (membership.role === "owner") {
-    const [heirs] = await pool.query<RowDataPacket[]>(
-      "SELECT user_id FROM conversation_members WHERE conversation_id = ? AND left_at IS NULL ORDER BY joined_at, user_id LIMIT 1",
-      [conversationId],
-    );
-    if (heirs[0]) {
-      await pool.query(
-        "UPDATE conversation_members SET role = 'owner' WHERE conversation_id = ? AND user_id = ?",
-        [conversationId, String(heirs[0].user_id)],
-      );
-    }
-  }
-  return true;
+  return leaveAndHandOn(pool, conversationId, userId);
 }
 
 /**
@@ -717,26 +706,33 @@ export async function leaveConversation(pool: Pool, conversationId: string, user
  * erasure's `conversations-after-tombstone` step (server/lib/erasure.ts).
  *
  * Each one goes through `leaveConversation`, so a group they owned passes to
- * its longest-standing remaining member exactly as it would if they had left
- * it themselves. Without this the tombstone stayed the owner, every
- * owner-only door (add, remove, rename, hand on) answered to nobody, and the
- * thread could not be run again without an admin editing a table by hand.
+ * its longest-standing living member exactly as it would if they had left it
+ * themselves. Without this the tombstone stayed the owner, every owner-only
+ * door (add, remove, rename, hand on) answered to nobody, and the thread could
+ * not be run again without an admin editing a table by hand.
+ *
+ * THEN EVERY GROUP THEY WERE EVER IN IS CHECKED FOR A LIVING OWNER, left or
+ * not. A leave that died half way under the code before the leave was one
+ * transaction left a group ownerless with the leaver's row already out, so the
+ * walk above never visits it again; a group whose owner was erased before
+ * this step existed is owned by a tombstone. Both get their longest-standing
+ * living member as owner. A group with a living owner is untouched.
  *
  * THEIR MESSAGES STAY, and that is a decision written into the erasure's
  * header: the other people in a thread keep the conversation they had, and
  * the words read as "A departed member" through the join to the tombstone,
  * the way forum posts do.
  *
- * Idempotent: a second run finds no conversation they are still in.
+ * Idempotent: a second run finds no conversation they are still in, and every
+ * group it checks already has its owner.
  */
 export async function leaveEveryConversation(pool: Pool, userId: string): Promise<number> {
-  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the erasure's read of one member's live memberships, beside the membership writes this file already owns
-    "SELECT conversation_id FROM conversation_members WHERE user_id = ? AND left_at IS NULL ORDER BY conversation_id",
-    [userId],
-  );
   let left = 0;
-  for (const r of rows) {
-    if (await leaveConversation(pool, String(r.conversation_id), userId)) left += 1;
+  for (const conversationId of await liveConversationsOf(pool, userId)) {
+    if (await leaveConversation(pool, conversationId, userId)) left += 1;
+  }
+  for (const conversationId of await groupsEverJoinedBy(pool, userId)) {
+    await ensureLivingOwner(pool, conversationId);
   }
   return left;
 }

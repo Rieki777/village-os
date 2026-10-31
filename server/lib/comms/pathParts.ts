@@ -81,7 +81,7 @@ import { guestDoorFacts, type GuestDeps } from "./guests";
 import { journeyStatus, villagePathIds } from "./journeyDefinitions";
 import { registerStepPosted, registerVarsBuilder, type StepPostedContext, type VarsContext } from "./journeyRegistry";
 import { escapeHtml } from "./mailer";
-import { noticePathHandoff } from "./notices";
+import { noticePathHandoff, pathHandoffKey } from "./notices";
 import { pathIdOfJourney, PATHWAY_OF_PATH } from "./paths";
 import type { MembersPort } from "./permissions";
 import { post, type PostOfficeDeps } from "./postOffice";
@@ -365,7 +365,7 @@ export async function handOff(deps: PathPartsDeps, ctx: StepPostedContext): Prom
   const sentence = `${firstName} has been on the ${pathName} path for three weeks. Write to them.`;
   const href = `${site}${link}`;
   await post(deps.postOffice, {
-    idempotencyKey: `comms_path_handoff:${ctx.enrollment.id}`,
+    idempotencyKey: pathHandoffKey(ctx.enrollment.id),
     kind: "essential",
     origin: "comms.path_handoff",
     to: { email: contact.email },

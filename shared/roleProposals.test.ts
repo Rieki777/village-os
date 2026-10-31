@@ -91,7 +91,7 @@ const ctx = (over: Partial<BodyContext> = {}): BodyContext => ({
 describe("the word fields of a role", () => {
   it("are every field the template carries, less the ones that are not words", () => {
     expect(WORDS.fields).toEqual(["name", "aim", "domain", "accountabilities", "whyItMatters", "bringMe", "notMine", "runbook", "existsWhile", "authorities"]);
-    for (const f of ["id", "circleId", "seats", "criticality", "termsOffer", "archetypes"]) expect(NOT_ROLE_WORDS.has(f)).toBe(true);
+    for (const f of ["id", "circleId", "seats", "criticality", "termsOffer", "archetypes", "valueMinor", "cashMinor", "cashCurrency"]) expect(NOT_ROLE_WORDS.has(f)).toBe(true);
   });
 
   it("knows a list from the template, and the handover and CCOS lists whatever the template says", () => {

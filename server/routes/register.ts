@@ -37,6 +37,7 @@ import type { Express, Request } from "express";
 import { claimPaths } from "../../shared/gameConfig";
 import type { InviteDoor } from "../lib/inviteDoor";
 import { INVITE_REFUSALS, readInviteToken } from "../lib/invites";
+import { isTombstone } from "../lib/oauthAccounts";
 import { numberVar } from "../lib/variables";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
@@ -71,6 +72,13 @@ export function register(app: Express, deps: RegisterDeps): void {
     const { name, email, password, paths } = req.body ?? {};
     if (!name || !email || !password || !paths || !Array.isArray(paths)) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+    // The domain closed accounts are written at. An account here would read as
+    // closed everywhere, and one at a departing member's tombstone address
+    // used to block that member's erasure for good (round 2, finding 5). No
+    // answer about anybody: the refusal is about the address alone.
+    if (isTombstone({ email: String(email).trim() })) {
+      return res.status(400).json({ error: "That address cannot hold an account. Sign up with the address you read your mail at." });
     }
     // The other door onto a member's paths, and the one a stranger can open.
     const chosen = claimPaths(paths);

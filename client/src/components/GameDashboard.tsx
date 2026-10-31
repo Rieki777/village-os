@@ -37,7 +37,23 @@ const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
  * is passed, so it keeps working standalone and its own tests keep driving it
  * the way they always did.
  */
-export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | null; meFailed?: boolean } = {}) {
+export default function GameDashboard({
+  me: given,
+  meFailed,
+  onAdvance,
+  showNextStep = true,
+}: {
+  me?: GameMe | null;
+  meFailed?: boolean;
+  /**
+   * The profile dashboard plays the crossing as its full-screen moment
+   * (profileDash/LevelUpMoment.tsx). Given, the claimed advance is handed up
+   * instead of drawn inline, so it still plays exactly once.
+   */
+  onAdvance?: (advance: NonNullable<GameMe["lastAdvance"]>) => void;
+  /** False where the stage panel already carries the next step, so it is never on the page twice. */
+  showNextStep?: boolean;
+} = {}) {
   const [me, setMe] = useState<GameMe | null>(null);
   const currency = useTokenName("Recognition");
   /**
@@ -87,7 +103,10 @@ export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | n
         setMe(next);
         setStatus("ready");
         const fresh = next?.lastAdvance;
-        if (fresh && claimMoment(`stage:${fresh.toStage}:${fresh.at}`)) setAdvance(fresh);
+        if (fresh && claimMoment(`stage:${fresh.toStage}:${fresh.at}`)) {
+          if (onAdvance) onAdvance(fresh);
+          else setAdvance(fresh);
+        }
       })
       .catch(() => setStatus("failed"));
   };
@@ -113,7 +132,10 @@ export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | n
     setMe(given ?? null);
     setStatus(meFailed ? "failed" : "ready");
     const fresh = given?.lastAdvance;
-    if (fresh && claimMoment(`stage:${fresh.toStage}:${fresh.at}`)) setAdvance(fresh);
+    if (fresh && claimMoment(`stage:${fresh.toStage}:${fresh.at}`)) {
+          if (onAdvance) onAdvance(fresh);
+          else setAdvance(fresh);
+        }
   }, [handedDown, given, meFailed]);
   // A write anywhere on the sheet moves the balance and the quest chips. When
   // the page owns the read it also owns this listener, so a handed-down card
@@ -194,6 +216,7 @@ export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | n
         The whole card is still ONE link. A button nested inside a link is two
         controls a keyboard has to distinguish for one action.
       */}
+      {showNextStep && (
       <Link
         href={me.nextAction.href}
         className="group flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-notice/50 bg-notice/10 px-6 py-5 shadow-md transition-colors hover:bg-notice/15"
@@ -217,6 +240,7 @@ export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | n
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </span>
       </Link>
+      )}
 
       {/* The stage ladder used to stand here as "Path of Growth". It moved to
           `components/profile/MaturityLadder.tsx`, which the character sheet

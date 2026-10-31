@@ -66,6 +66,8 @@ export default function RhythmForm({ idBase, circles, fixedCircleId, initial, la
     }
   }, [askStop]);
 
+  // A circle whose meetings come only from its own calendar has no rhythm to stop.
+  const hasRhythm = !!initial && initial.kind !== "none";
   const today = villageKey(new Date(), zone);
   const lastDay = addDays(today, RHYTHM_LIMITS.lookAheadDays);
   const weekly = howOften.startsWith("every");
@@ -201,7 +203,7 @@ export default function RhythmForm({ idBase, circles, fixedCircleId, initial, la
           <button type="button" className={BTN_QUIET} onClick={onCancel}>
             {RHYTHM_COPY.cancel}
           </button>
-          {fixedCircleId && (
+          {fixedCircleId && hasRhythm && (
             <button ref={stopButton} type="button" className={`${BTN_DANGER_QUIET} sm:ml-auto`} disabled={busy} onClick={() => setAskStop(true)}>
               {RHYTHM_COPY.clear}
             </button>

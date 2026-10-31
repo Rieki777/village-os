@@ -21,11 +21,13 @@
  * (components/natural/moments.ts, `useArrival`).
  */
 import { useState } from "react";
+import FilledInNote from "./FilledInNote";
 import { Lock, X } from "lucide-react";
 import { ROOM_COPY, SESSION_LIMITS, SESSION_REFUSALS, cleanText, type SessionEntry } from "@shared/sessions";
 import Celebration from "@/components/natural/Celebration";
 import { useArrival, useMomentWindow } from "@/components/natural/moments";
 import ConsentRound, { WaitingLine } from "./ConsentRound";
+import RegenLens from "./RegenLens";
 import EditableText from "./EditableText";
 import {
   BTN_ICON,
@@ -77,7 +79,7 @@ const Handshake = ENTRY_GLYPH.decision;
 /** The decided mark: the room's living green, never the gold the next step wears. */
 const DECIDED_CHIP = "inline-flex shrink-0 items-center gap-1 rounded-full border border-open/50 bg-muted px-2.5 py-0.5 text-xs font-semibold text-open";
 
-export default function Proposal({ view, actions, entry }: Omit<StageProps, "now"> & { entry: SessionEntry }) {
+export default function Proposal({ view, actions, entry, now }: Omit<StageProps, "now"> & { entry: SessionEntry; now?: number }) {
   const [removing, setRemoving] = useState(false);
   const decided = entry.status === "done";
   const rights = entryRightsFor(view, entry);
@@ -138,6 +140,7 @@ export default function Proposal({ view, actions, entry }: Omit<StageProps, "now
               </div>
             )}
           />
+          <FilledInNote filled={entry.filledIn} actions={actions} />
         </div>
         {decided && (
           <span className={DECIDED_CHIP}>
@@ -153,9 +156,11 @@ export default function Proposal({ view, actions, entry }: Omit<StageProps, "now
         </p>
       ) : (
         <div className="mt-4">
+          <RegenLens entryId={entry.id} />
           <ConsentRound
             view={view}
             actions={actions}
+            now={now}
             target={`decision:${entry.id}`}
             ask={ROOM_COPY.proposalConsentAsk}
             readOnly={!view.me.joined || view.status !== "open"}

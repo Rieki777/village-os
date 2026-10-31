@@ -38,6 +38,12 @@
  * Shapes, limits and words all come from shared/sessions.ts, the contract the
  * server reads too.
  *
+ * MEETING TYPE. The start card offers the village's meeting templates
+ * (components/sessions/MeetingTypePicker, shared/sessionTemplates.ts), grouped
+ * by category. Picking one fills the title, circle and length and shows the
+ * flow; the room opens linked to that template, so its meetings form a series.
+ * The templates themselves are kept in components/sessions/MeetingTemplates.
+ *
  * The page stays on the light linen, a document beside the room's night: the
  * title in the village's display face set large and light, each session its
  * own panel (SessionList), and the title box the room's own growing box, so a
@@ -56,6 +62,7 @@ import {
 } from "@shared/sessions";
 import { LIBRARY_COPY, LIBRARY_REFUSALS, offeredFor, type LibraryCard, type LibraryPayload } from "@shared/sessionLibrary";
 import { RHYTHM_COPY, type ComingUpPayload, type ComingUpRow } from "@shared/sessionRhythm";
+import { TEMPLATES_API, type SessionTemplate, type TemplatesPayload } from "@shared/sessionTemplates";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
@@ -63,7 +70,12 @@ import GrowingText from "@/components/sessions/GrowingText";
 import { LIST_UI, OpenSessions, RecentSessions, type JoinState } from "@/components/sessions/SessionList";
 import ComingUp from "@/components/sessions/ComingUp";
 import StartChecklist from "@/components/sessions/StartChecklist";
+import MeetingTypePicker from "@/components/sessions/MeetingTypePicker";
+import MeetingTemplates from "@/components/sessions/MeetingTemplates";
 import WaitingForCircle from "@/components/sessions/WaitingForCircle";
+import CircleDecisions from "@/components/sessions/CircleDecisions";
+import AdviceProcess from "@/components/sessions/AdviceProcess";
+import CirclePulse from "@/components/sessions/CirclePulse";
 import { clearRoomGone, peekRoomGone } from "@/components/sessions/roomGone";
 import { STAGE_LEDE, STAGE_TITLE } from "@/components/sessions/roomUi";
 import { useAuth } from "@/contexts/AuthContext";
@@ -127,6 +139,8 @@ function readPayload(body: unknown): ListPayload {
     rows: Array.isArray(cu.rows) ? (cu.rows as ComingUpRow[]).filter((r) => r && typeof r.circleId === "string" && r.next && typeof r.next.at === "string") : [],
     zone: typeof cu.zone === "string" ? cu.zone : "UTC",
     keepCircleIds: Array.isArray(cu.keepCircleIds) ? (cu.keepCircleIds as unknown[]).filter((id): id is string => typeof id === "string") : [],
+    ownCalendars: cu.ownCalendars && typeof cu.ownCalendars === "object" ? (cu.ownCalendars as ComingUpPayload["ownCalendars"]) : {},
+    ownCalendarsAvailable: cu.ownCalendarsAvailable === true,
   };
   return { open: rows(b.open), recent: rows(b.recent), circles, defaultMinutes: dm, library, comingUp };
 }
@@ -166,6 +180,9 @@ export default function Sessions() {
   const [startError, setStartError] = useState<string | null>(null);
   // The brought items this session will take up, in the order the checklist shows them.
   const [picked, setPicked] = useState<number[]>([]);
+  // The village's meeting templates, and the one this session opens from.
+  const [templates, setTemplates] = useState<TemplatesPayload>({ templates: [], mayKeep: false });
+  const [templateId, setTemplateId] = useState<number | null>(null);
 
   // A poll that answers after the page has gone must not set state on it.
   const alive = useRef(true);
@@ -204,6 +221,38 @@ export default function Sessions() {
     }
     if (alive.current) setLoad({ kind: "ready", data: readPayload(body) });
   }, []);
+
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const res = await gameFetch(TEMPLATES_API);
+      if (!res.ok) return;
+      const body = (await res.json()) as Partial<TemplatesPayload>;
+      if (!alive.current) return;
+      setTemplates({
+        templates: Array.isArray(body?.templates) ? body.templates.filter((t) => t && typeof t.id === "number" && typeof t.name === "string" && Array.isArray(t.flow)) : [],
+        mayKeep: body?.mayKeep === true,
+      });
+    } catch {
+      // Offline, or a server before templates: the start card works without them.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (on && signedIn) void fetchTemplates();
+  }, [on, signedIn, fetchTemplates]);
+
+  /** A meeting type fills the card: its name as the title, its circle, its length. Nothing is sent yet. */
+  const pickTemplate = (t: SessionTemplate | null) => {
+    setTemplateId(t?.id ?? null);
+    setStartError(null);
+    if (!t) return;
+    setTitle(t.name);
+    setCircleId(t.circleId && (load.kind !== "ready" || load.data.circles.some((c) => c.id === t.circleId)) ? t.circleId : "");
+    if (t.durationMin != null) {
+      setDuration(String(t.durationMin));
+      setDurationTouched(true);
+    }
+  };
 
   // Ask on open, every half minute while visible, and once on coming back.
   useEffect(() => {
@@ -301,6 +350,7 @@ export default function Sessions() {
           circleId: circleId || undefined,
           durationMin: minutes ?? undefined,
           libraryIds: picked.length ? picked : undefined,
+          templateId: templateId ?? undefined,
         }),
       });
     } catch {
@@ -406,6 +456,10 @@ export default function Sessions() {
                   onChanged={fetchList}
                 />
                 <WaitingForCircle library={load.data.library} circles={load.data.circles} onChanged={fetchList} />
+                <CircleDecisions circles={load.data.circles} keepCircleIds={load.data.comingUp.keepCircleIds} myCircleIds={load.data.library.myCircleIds} />
+                <AdviceProcess />
+                <CirclePulse circles={load.data.circles} keepCircleIds={load.data.comingUp.keepCircleIds} myCircleIds={load.data.library.myCircleIds} />
+                <MeetingTemplates payload={templates} circles={load.data.circles} onChanged={fetchTemplates} />
                 <RecentSessions rows={load.data.recent} />
               </>
             )}
@@ -420,6 +474,7 @@ export default function Sessions() {
               {SESSION_COPY.startTitle}
             </h2>
             <form ref={startForm} className="mt-4 space-y-4" onSubmit={(e) => void onStart(e)} noValidate>
+              <MeetingTypePicker templates={templates.templates} value={templateId} onPick={pickTemplate} />
               <div>
                 <label htmlFor="sessions-start-title" className={LIST_UI.label}>
                   {SESSION_LIST_COPY.titleLabel}

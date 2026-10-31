@@ -23,6 +23,13 @@
  * that anchor is lit, scrolled to and focused once the list holds it, on the
  * first visit and when the link is followed from the page itself.
  *
+ * A row's next meeting can come from the circle's own calendar
+ * (OwnCalendarPanel.tsx, for the circle's keepers): it then carries that
+ * meeting's own title. A skip always names the rhythm's own next meeting, so
+ * while a calendar's meeting comes sooner it says which ("Skip the rhythm's
+ * meeting on Thursday"); a meeting on the calendar is skipped there. A circle
+ * with a calendar and no rhythm is offered "Set a meeting rhythm".
+ *
  * "Follow the calendar" sits at the foot of the section (FollowCalendar.tsx):
  * any member puts the circles they choose on their own calendar. It shows
  * whenever the village has a circle, a rhythm or not, so "every circle, new
@@ -36,6 +43,7 @@ import {
   RHYTHM_COPY,
   comingAnchor,
   phraseOf,
+  type Meeting,
   rhythmSkipUrl,
   rhythmUrl,
   type ComingUpPayload,
@@ -44,6 +52,7 @@ import {
 } from "@shared/sessionRhythm";
 import { gameFetch } from "@/lib/gameApi";
 import FollowCalendar from "./FollowCalendar";
+import OwnCalendarPanel from "./OwnCalendarPanel";
 import RhythmForm from "./RhythmForm";
 import { useHash } from "./useHash";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, EYEBROW, HINT, LABEL_CAPS, PANEL } from "./roomUi";
@@ -97,10 +106,10 @@ function Row({
   const anchor = comingAnchor(row.circleId);
   const describedBy = `${anchor}-circle ${anchor}-when`;
 
-  // Back from the form or a skip, the focus returns to the control that was used.
+  // Back from the form or a skip, the focus returns to the control that was used, or to Change when a skip left none.
   useEffect(() => {
     if (editing || busy || !refocus.current) return;
-    (refocus.current === "skip" ? skipButton : changeButton).current?.focus();
+    (refocus.current === "skip" && skipButton.current ? skipButton : changeButton).current?.focus();
     refocus.current = null;
   }, [editing, busy]);
 
@@ -123,9 +132,9 @@ function Row({
     void write(rhythmUrl(circleId), "PUT", input, (next) => (input.kind === "none" || !next ? RHYTHM_COPY.stopped(row.circleName) : RHYTHM_COPY.saved(row.circleName)));
   };
 
-  const skip = () => {
+  const skip = (meeting: Meeting) => {
     refocus.current = "skip";
-    void write(rhythmSkipUrl(row.circleId), "POST", { key: row.next.key }, (next) =>
+    void write(rhythmSkipUrl(row.circleId), "POST", { key: meeting.key }, (next) =>
       next ? RHYTHM_COPY.skipped(row.circleName, phraseOf(next.words)) : RHYTHM_COPY.skippedLast(row.circleName),
     );
   };
@@ -166,6 +175,7 @@ function Row({
               <p id={`${anchor}-when`} className="mt-1 font-display text-xl leading-tight text-foreground">
                 {row.words}
               </p>
+              {row.nextTitle && <p className="mt-0.5 line-clamp-2 break-words text-sm text-foreground [overflow-wrap:anywhere]">{row.nextTitle}</p>}
               <p className="mt-1 text-sm text-muted-foreground">
                 {row.rhythmWords} · {RHYTHM_COPY.waiting(row.waiting)}
               </p>
@@ -185,11 +195,13 @@ function Row({
           {row.canKeep && (
             <div className="mt-2 flex flex-wrap items-center gap-1">
               <button ref={changeButton} type="button" className={BTN_QUIET} disabled={busy} aria-describedby={describedBy} onClick={() => setEditing(true)}>
-                {RHYTHM_COPY.change}
+                {row.rhythm.kind === "none" ? RHYTHM_COPY.setRhythm : RHYTHM_COPY.change}
               </button>
-              <button ref={skipButton} type="button" className={BTN_QUIET} disabled={busy} aria-describedby={describedBy} onClick={skip}>
-                {RHYTHM_COPY.skip}
-              </button>
+              {row.rhythmNext && (
+                <button ref={skipButton} type="button" className={BTN_QUIET} disabled={busy} aria-describedby={describedBy} onClick={() => skip(row.rhythmNext!)}>
+                  {row.nextFrom === "rhythm" ? RHYTHM_COPY.skip : RHYTHM_COPY.skipRhythm(phraseOf(row.rhythmNext.words))}
+                </button>
+              )}
             </div>
           )}
           {error && (
@@ -340,6 +352,13 @@ export default function ComingUp({
           )}
         </div>
       )}
+      <OwnCalendarPanel
+        circles={circles.filter((c) => comingUp.keepCircleIds.includes(c.id))}
+        ownCalendars={comingUp.ownCalendars}
+        available={comingUp.ownCalendarsAvailable}
+        onChanged={onChanged}
+        onSaid={setSaid}
+      />
       <FollowCalendar />
     </section>
   );

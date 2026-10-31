@@ -45,6 +45,13 @@ export interface WorkValueDraft {
   tokens: Record<string, string>;
   /** A stored value in a currency that is no longer the village's, kept unless retyped. */
   held?: { minor: number; currency: string };
+  /**
+   * The cash it pays (0285), as typed. Absent when the record this opened on
+   * never carried the field, so a save leaves the stored cash alone.
+   */
+  cash?: string;
+  /** Stored cash in a currency that is no longer the village's, kept unless retyped. */
+  cashHeld?: { minor: number; currency: string };
 }
 
 let optionsOnce: Promise<PayOptions | null> | null = null;
@@ -53,7 +60,14 @@ export function loadPayOptions(): Promise<PayOptions | null> {
   if (!optionsOnce) {
     optionsOnce = fetch("/api/quests/pay-options")
       .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
+      .catch(() => null)
+      .then((o) => {
+        // A failed read is not kept: the next editor to open asks again. Kept,
+        // one dropped request left every editor on the page with no tokens
+        // until a reload (it also made Review.questIdeas.test flaky).
+        if (!o) optionsOnce = null;
+        return o;
+      });
   }
   return optionsOnce;
 }
@@ -85,7 +99,10 @@ const plain = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.roun
  * paid today.
  */
 export function draftFrom(
-  record: { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null } | null | undefined,
+  record:
+    | { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null; cashMinor?: number | null; cashCurrency?: string | null }
+    | null
+    | undefined,
   offered: readonly PayOption[],
   currency: string,
 ): WorkValueDraft {
@@ -99,7 +116,17 @@ export function draftFrom(
     if (record?.valueTokens) tokens[o.token] = own ? plain(own.amount) : "0";
     else tokens[o.token] = o.standard !== null && o.standard > 0 ? plain(o.standard) : "0";
   }
-  return held ? { value, tokens, held } : { value, tokens };
+  const draft: WorkValueDraft = held ? { value, tokens, held } : { value, tokens };
+  // The cash, read the same way as the value. A record that never carried the
+  // field opens with no cash box value at all, and a save then sends nothing.
+  if (!record || record.cashMinor !== undefined) {
+    const cashMinor = record?.cashMinor ?? null;
+    const cashStored = record?.cashCurrency || currency;
+    const cashHeld = cashMinor !== null && !!currency && cashStored !== currency ? { minor: cashMinor, currency: cashStored } : undefined;
+    draft.cash = cashMinor === null || cashHeld ? "" : plain(cashMinor / 10 ** currencyExponent(currency));
+    if (cashHeld) draft.cashHeld = cashHeld;
+  }
+  return draft;
 }
 
 /** A held value as a person reads it: "50 USD". */
@@ -116,7 +143,7 @@ export function draftToBody(
   offered: readonly PayOption[],
   currency: string,
   opts: { required: boolean },
-): { ok: true; valueMinor: number | null | undefined; valueTokens: TokenAmount[] } | { ok: false; error: string } {
+): { ok: true; valueMinor: number | null | undefined; valueTokens: TokenAmount[]; cashMinor: number | null | undefined } | { ok: false; error: string } {
   const raw = draft.value.replace(/,/g, "").trim();
   // undefined leaves the stored value alone: an empty box over a held value.
   let valueMinor: number | null | undefined = null;
@@ -137,7 +164,19 @@ export function draftToBody(
     if (!Number.isFinite(amount) || amount < 0) return { ok: false, error: `The amount of ${o.name} is a number, zero or more.` };
     if (amount > 0) valueTokens.push({ token: o.token, amount });
   }
-  return { ok: true, valueMinor, valueTokens };
+  // The cash (0285). Undefined leaves it alone: a draft that never carried the
+  // field, or an empty box over cash held in an older currency.
+  let cashMinor: number | null | undefined = undefined;
+  if (draft.cash !== undefined) {
+    const rawCash = draft.cash.replace(/,/g, "").trim();
+    if (rawCash === "") cashMinor = draft.cashHeld ? undefined : null;
+    else {
+      const major = Number(rawCash);
+      if (!Number.isFinite(major) || major < 0) return { ok: false, error: "Cash is a number, zero or more." };
+      cashMinor = Math.round(major * 10 ** currencyExponent(currency));
+    }
+  }
+  return { ok: true, valueMinor, valueTokens, cashMinor };
 }
 
 export default function WorkValueEditor({
@@ -173,6 +212,26 @@ export default function WorkValueEditor({
         <p className="text-xs opacity-70">
           Valued at {heldWords(draft.held)} before this village changed its currency. Left empty, that value stays as it is.
           {currency ? ` Type a figure to value it in ${currency} instead.` : ""}
+        </p>
+      )}
+      <label className="block text-xs font-medium">
+        {cadence === "cycle" ? "Cash it pays each holder, every cycle" : "Cash it pays when the work is confirmed"}
+        {currency ? `, in ${currency}` : ""}
+        <input
+          inputMode="decimal"
+          value={draft.cash ?? ""}
+          onChange={(e) => onChange({ ...draft, cash: e.target.value })}
+          placeholder="0"
+          className={`w-full mt-1 ${inputClassName}`}
+        />
+      </label>
+      <p className="text-xs opacity-70">
+        The village pays the cash itself. The platform writes down what is owed when the work is paid, the member claims it, and
+        whoever keeps the books marks it paid.
+      </p>
+      {draft.cashHeld && (
+        <p className="text-xs opacity-70">
+          Pays {heldWords(draft.cashHeld)} in cash, set before this village changed its currency. Left empty, that stays as it is.
         </p>
       )}
       {offered === null ? (

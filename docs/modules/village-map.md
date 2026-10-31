@@ -467,6 +467,26 @@ markdown adds "Decides by: consent."
 shape, ending at "publish structure to the network?". Assignment posts to the
 existing seating endpoint, so it stays a dated row.
 
+**The governance layer, and who arranges the circles (0286, 2026-10-23).**
+Each circle may carry a `layer`: link, lead, operating, advisory or council
+(`CIRCLE_LAYERS` in `shared/circleView.ts`, a varchar checked in code, NULL for
+not set). In the circle picture a link or lead circle holds the middle of the
+circle it sits inside and the rest ring it by layer, then by `sort_order`
+(`layoutNestedMap`); with no layer set anywhere in a pack the biggest circle
+keeps the middle, so a village that sets none keeps its picture. An admin sets
+a layer in Org Chart. Arranging on the map is open to whoever may publish an
+org draft (`arrangeViewer`, `server/routes/orgDraftDecide.ts`): a live holder of
+`org.decide`, stewards by default and any role the village hands it to, or an
+admin until a launch vote carries. `/api/map`'s `viewer` says `mayArrange` and
+`arrangeDoor` ("power" or "admin"). An admin publishes through the admin draft
+routes and keeps Undo; a holder posts the whole arrangement to
+`POST /api/org/arrangements`, which makes one human-sourced draft of
+`move_circle` changes, previews it, and publishes it by power, or withdraws it
+and answers the refusals in words. A `move_circle` payload may carry `order`
+and `layer` beside `parentCircleId` (`server/lib/circlePlacement.ts`); an absent
+key changes nothing, `layer: null` clears it, and revert puts back only what
+the draft set and only while it is still what the draft left.
+
 ## Photographs of a place (round 5, 0093)
 
 The ask: sprite cards accept photos, and past that a place works like a

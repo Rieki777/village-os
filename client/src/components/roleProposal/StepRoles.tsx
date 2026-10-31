@@ -7,11 +7,15 @@
  * as counts: nobody is named (Rye, 2026-10-22). Or propose a new role, which
  * sits in a circle the member picks.
  *
+ * Each role says what it pays, the same block its card on the map shows, so
+ * a member reads cash, tokens, Voice and badges before picking it.
+ *
  * At most five, across existing and new (`limits.maxRoles`). Once five are
  * picked the rest are disabled and the count says why.
  */
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
+import WorkPayBlock from "@/components/WorkPayBlock";
 import type { ProposalOut, OrgCircleIn, OrgRoleIn } from "./proposalApi";
 import { RP_WORDS } from "./proposalWords";
 import { FOCUS, INPUT, LEDE, PANEL, PRIMARY, QUIET } from "./parts";
@@ -118,6 +122,12 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
             <span className="text-xs text-stone-600" data-role-facts="">
               {roleFacts(r, me, applying.get(r.id) ?? 0).join(". ")}.
             </span>
+            {/* What it pays, before it is picked (Rye, 2026-10-30). */}
+            {r.pay && (
+              <span className="mt-1 text-xs">
+                <WorkPayBlock pay={r.pay} />
+              </span>
+            )}
           </span>
         </label>
       </li>

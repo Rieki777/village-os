@@ -606,7 +606,6 @@ const FIXED: Record<string, number> = {
   "client/src/components/QuestActions.tsx": 2,
   "client/src/components/admin/ContentEditorTab.tsx": 1,
   "client/src/components/profile/InvitePanel.tsx": 1,
-  "client/src/components/ui/badge.tsx": 1,
   "client/src/components/ui/button.tsx": 1,
   "client/src/pages/Admin.tsx": 12,
   // The Comms setup editors took one of Admin.tsx's fixed hovers with them; the total stays 63.
@@ -642,11 +641,13 @@ const FIXED: Record<string, number> = {
 
 describe("under the pointer, a brand button stays readable and visibly moves, light only", () => {
   it(`reads every white-on-brand hover in client/src (${POINTER_LISTS.length}), and every one this change fixed`, () => {
-    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(60);
+    // 60 until 2026-10-30, when the unused shadcn ui/badge.tsx was deleted with 38
+    // other primitives nothing imported. Its one fixed hover left with the file.
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(59);
     for (const [file, n] of Object.entries(FIXED)) {
       expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
     }
-    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(60 + 25);
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(59 + 25);
   });
 
   for (const list of POINTER_LISTS) {

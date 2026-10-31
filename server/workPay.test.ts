@@ -257,6 +257,37 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       ]);
     });
 
+    /*
+     * THE CASH A ROLE PAYS (0285): owed to each seat once per cycle, and owed
+     * even when the village has no `role.cycle` rule at all, because the step
+     * runs before the rules are read. The platform pays none of it.
+     */
+    it("owes a role's cash to each seat once per cycle, with no token rule at all", async () => {
+      await pool.query("DELETE FROM `cash_owed`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await setRules("role.cycle", []);
+      const holder = await makeMember("wp-seat-cash");
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `cash_minor`, `cash_currency`) VALUES ('wp-role-cash', 'Treasurer', 2000000, 'CRC')",
+      );
+      await role("wp-role-none", null);
+      await seat("wp-a-cash", "wp-role-cash", holder);
+      await seat("wp-a-none", "wp-role-none", await makeMember("wp-seat-nocash"));
+
+      const first = await runSettlement(pool);
+      const again = await runSettlement(pool);
+      expect(first.cashOwed, "the first run owes the one cash seat").toBe(1);
+      expect(again.cashOwed, "and a rerun in the same cycle writes nothing").toBe(0);
+
+      const [rows] = await pool.query<any[]>("SELECT * FROM `cash_owed`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      expect(rows.length, "a role that states no cash owes none").toBe(1);
+      expect(rows[0]).toMatchObject({ user_id: holder, work_kind: "role", work_ref: "wp-role-cash", currency: "CRC", state: "owed" });
+      expect(Number(rows[0].amount_minor)).toBe(2000000);
+      expect(String(rows[0].work_title)).toBe(`Treasurer, ${first.cycleKey}`);
+      // No token moved for it: cash never touches the ledger.
+      const [legs] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM `token_ledger` WHERE `source` = 'role_cycle'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      expect(Number(legs[0].n)).toBe(0);
+    });
+
     it("pays a role with its own list that list, and a role without one the flat amounts", async () => {
       const own = await makeMember("wp-seat-own");
       const flat = await makeMember("wp-seat-flat");
@@ -445,6 +476,21 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       expect(stored).toMatchObject({ valueMinor: 2500000, valueCurrency: "CRC", valueTokens: [{ token: CREDITS, amount: 40 }] });
     });
 
+    it("stores the cash a quest pays in the village's currency, and shows it on the card (0285)", async () => {
+      const out = await call("POST /api/admin/quests", {
+        body: { id: "wp-route-cash", title: "Fix the pump", valueMinor: 3000000, cashMinor: 2500000, cashCurrency: "USD", valueTokens: [{ token: CREDITS, amount: 5 }] },
+      });
+      expect(out.status).toBe(200);
+      expect(await makeQuestsRepo(pool).byId("wp-route-cash")).toMatchObject({ cashMinor: 2500000, cashCurrency: "CRC" });
+      const board = await call("GET /api/quests");
+      expect(board.body.find((q: any) => q.id === "wp-route-cash").pay.cashPay).toEqual({ minor: 2500000, currency: "CRC" });
+      // Zero clears it, and a save that does not carry it leaves it alone.
+      await call("PUT /api/admin/quests/:id", { params: { id: "wp-route-cash" }, body: { title: "Fix the pump today" } });
+      expect((await makeQuestsRepo(pool).byId("wp-route-cash"))?.cashMinor).toBe(2500000);
+      await call("PUT /api/admin/quests/:id", { params: { id: "wp-route-cash" }, body: { cashMinor: 0 } });
+      expect(await makeQuestsRepo(pool).byId("wp-route-cash")).toMatchObject({ cashMinor: null, cashCurrency: null });
+    });
+
     it("refuses Gratitude before anything is written, and stores an amount far above the ceiling", async () => {
       const hearts = await call("POST /api/admin/quests", { body: { id: "wp-route-2", title: "A", valueMinor: 1, valueTokens: [{ token: HEARTS, amount: 40 }] } });
       expect(hearts.status).toBe(400);
@@ -479,7 +525,29 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       await setRules("quest.completed", []);
       const board = await call("GET /api/quests");
       const old = board.body.find((q: any) => q.id === "wp-route-old");
-      expect(old.pay).toEqual({ value: null, lines: [], source: "standard", cadence: "once" });
+      expect(old.pay).toEqual({ value: null, lines: [], source: "standard", cadence: "once", cashPay: null, badges: [] });
+    });
+
+    it("names Voice and the badge that multiplies it on the board, and leaves the figure alone (2026-10-30)", async () => {
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `badges` (`id`, `name`, `kind`, `capabilities`, `denies`, `multipliers`, `active`) VALUES " +
+          "('wp-b-builder','Builder','granted','[]','[]',?,1), ('wp-b-self','Self said','self','[]','[]',?,1)",
+        [JSON.stringify({ [VILLAGE_VOICE]: 2 }), JSON.stringify({ [VILLAGE_VOICE]: 3 })],
+      );
+      try {
+        await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+          "INSERT INTO `quests` (`id`, `title`, `gratitude`, `status`) VALUES ('wp-route-voice', 'Mend the fence', '0', 'Open')",
+        );
+        const board = await call("GET /api/quests");
+        const q = board.body.find((x: any) => x.id === "wp-route-voice");
+        const voice = q.pay.lines.find((l: any) => l.token === VILLAGE_VOICE);
+        expect(voice).toMatchObject({ amount: 10, voice: true });
+        expect(q.pay.lines.find((l: any) => l.token === CREDITS).voice).toBeUndefined();
+        // A self badge gates nothing and pays nothing, so it is never named.
+        expect(q.pay.badges).toEqual([{ badge: "Builder", token: VILLAGE_VOICE, name: voice.name, factor: 2 }]);
+      } finally {
+        await pool.query("DELETE FROM `badges` WHERE `id` IN ('wp-b-builder','wp-b-self')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      }
     });
   });
 });

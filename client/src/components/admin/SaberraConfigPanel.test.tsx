@@ -27,7 +27,7 @@
  * `fetch` is stubbed. The routes behind it have their own server tests.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -301,7 +301,7 @@ describe("Sync now", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Sync now" }));
     expect(await screen.findByText(/2 suggestions reached the review queue/)).toBeInTheDocument();
     expect(screen.getByText("This sync stored 5 facts from the service.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open the review queue" })).toHaveAttribute("href", "/review");
+    expect(screen.getByRole("link", { name: "Open the review queue (2 suggestions)" })).toHaveAttribute("href", "/review");
     expect(screen.getByText("tension: not offered by the service yet")).toBeInTheDocument();
     expect(callsTo("/api/saberra/sync", "POST")[0]![1].headers.Authorization).toBe("Bearer secret");
   });
@@ -502,6 +502,11 @@ describe("the report of each run", () => {
     expect(text).toContain("Not run: no key is set for the service.");
     expect(text).toContain("Not offered by the service, so not asked for: tension, risk. Kinds chosen from the service's own schema.");
     expect(text).toContain(villageTime("2026-10-15T18:00:00.000Z", "America/Costa_Rica"));
+    // Only the run that put suggestions in the queue offers the way to them.
+    const toQueue = within(log).getAllByRole("link", { name: /^Open the review queue/ });
+    expect(toQueue).toHaveLength(1);
+    expect(toQueue[0]).toHaveAccessibleName("Open the review queue (19 suggestions)");
+    expect(toQueue[0]).toHaveAttribute("href", "/review");
   });
 
   it("SAYS SO WHEN THE SCHEDULE IS BACKING OFF, and how far", async () => {

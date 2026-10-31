@@ -27,6 +27,7 @@ import type { CircleValue } from "@shared/circleCharter";
 import type { CircleWordKey } from "@shared/circleCharterParse";
 import { CircleEditContext, PendingWords, ProposeWords } from "./ProposeWords";
 import ProposalsPanel from "./ProposalsPanel";
+import WorkPayBlock from "@/components/WorkPayBlock";
 
 const H2 = "font-display text-xl font-bold text-card-foreground sm:text-2xl";
 const H3 = "text-sm font-semibold text-card-foreground";
@@ -142,6 +143,12 @@ function RoleRow({ role }: { role: RoleRowOut }) {
           {role.stateWords}
         </span>
       </div>
+      {/* What it pays, before the Apply link (Rye, 2026-10-30). */}
+      {role.pay ? (
+        <div className="text-xs">
+          <WorkPayBlock pay={role.pay} />
+        </div>
+      ) : null}
       {role.holderCards.length || role.applyHref ? (
         <div className="flex flex-wrap gap-x-4">
           {role.holderCards.map((h) => (
