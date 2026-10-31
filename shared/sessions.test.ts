@@ -40,6 +40,7 @@ import {
   parseResponseTarget,
   parseSessionAction,
   roundSpeakers,
+  sitAt,
   timebox,
   unownedActions,
   type MinutesInput,
@@ -148,6 +149,29 @@ describe("the shared breath", () => {
     const m = breathAt(b, T0 + 5_000);
     expect(m).toMatchObject({ state: "breathing", round: 1, kind: "out" });
     expect(breathAt(b, T0 + 12_000)).toMatchObject({ round: 2, kind: "in" });
+  });
+});
+
+describe("the shared sit", () => {
+  it("is idle until started, counts down on every screen alike, and knows how long ago it ended", () => {
+    expect(sitAt({ minutes: 3, startedAt: null }, T0)).toEqual({ state: "idle" });
+    expect(sitAt({ minutes: 3, startedAt: T0 }, T0 + 60_500)).toMatchObject({ state: "sitting", secondsLeft: 120 });
+    expect(sitAt({ minutes: 1, startedAt: T0 }, T0 + 63_000)).toEqual({ state: "done", sinceEnd: 3 });
+  });
+
+  it("the facilitator starts and ends it, and only the offered minutes are taken", () => {
+    let s = applySessionAction(defaultSessionState(), { type: "sit", minutes: 5, run: true }, T0);
+    expect(s.sit).toEqual({ minutes: 5, startedAt: T0 });
+    s = applySessionAction(s, { type: "sit", run: false }, T0 + 1000);
+    expect(s.sit).toEqual({ minutes: 5, startedAt: null });
+    expect(parseSessionAction({ type: "sit", minutes: 7, run: true })).toBeNull();
+    expect(parseSessionAction({ type: "sit", run: 1 })).toBeNull();
+    expect(parseSessionAction({ type: "sit", minutes: 10, run: true })).toEqual({ type: "sit", minutes: 10, run: true });
+  });
+
+  it("a room stored before the sit existed reads as a sit not started", () => {
+    expect(normalizeSessionState(JSON.stringify({ stage: "dropin" })).sit).toEqual({ minutes: 3, startedAt: null });
+    expect(normalizeSessionState(JSON.stringify({ sit: { minutes: 4, startedAt: T0 } })).sit).toEqual({ minutes: 3, startedAt: T0 });
   });
 });
 
