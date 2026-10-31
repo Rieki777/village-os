@@ -17439,7 +17439,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 - whatYouWantToDo (required): the quest itself, in plain terms, and the value it brings
 - resourcesBringing (required): what they bring: skills, time, tools, materials, funding, relationships
 - resourcesNeeded (required): what they need from the village: land access, materials, budget, people, space
-- compensation (required): what they'd want in return. It is completely fine for this to be "nothing, it's a gift" or "Gratitude only". Never push them toward asking for money
+- compensation (required): what they'd want in return. It is completely fine for this to be "nothing, it's a gift". Never push them toward asking for money
 - timelineMilestones (required): rough phases or dates, and any milestone-based payments they'd propose`,
     },
   };
