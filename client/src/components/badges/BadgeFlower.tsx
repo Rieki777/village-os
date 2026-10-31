@@ -16,7 +16,8 @@
  *
  * A PHONE SHOWS FEWER PETALS AND SAYS HOW MANY MORE. The 150px portrait cannot
  * carry a hundred legible petals, so it draws one even ring of the first
- * PHONE_CAP and a "+87" chip; the wide one draws up to DESKTOP_CAP. Both are in
+ * PHONE_CAP and a "+87" chip at the top left, opposite the Gene Keys seal and
+ * lifted above the portrait; the wide one draws up to DESKTOP_CAP. Both are in
  * the DOM and CSS picks one, so there is no width read and no flash.
  *
  * Colours are the dashboard's tokens, one per badge kind. A petal knows its
@@ -88,7 +89,7 @@ function Petals({ badges, cap, className }: { badges: FlowerBadge[]; cap: number
       {more > 0 ? (
         <span
           aria-hidden="true"
-          className="absolute left-[4%] top-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-dash-chip px-2 py-0.5 text-xs font-bold text-dash-gold-lit"
+          className="absolute left-[3%] top-[3%] z-10 rounded-full border-2 border-background bg-dash-chip px-2 py-0.5 text-xs font-bold text-dash-gold-lit"
         >
           +{more}
         </span>

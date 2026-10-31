@@ -14,8 +14,9 @@
  *
  * ── TWO REGIMES, AND WHY THE SWITCH IS AT THIRTEEN ──────────────────────────
  *
- * Up to RING_MAX petals, ONE EVEN RING: petal k at -90° + k * 360°/n, so the
- * first petal stands at twelve o'clock and the gaps are all equal. That is
+ * Up to RING_MAX petals, ONE EVEN RING: petal k at start + k * 360°/n, so the
+ * gaps are all equal and six o'clock, where the stage chip sits, is always a
+ * gap (an odd ring starts at twelve, an even one half a step round). That is
  * exactly the symmetry a small count should have, and a phyllotaxis spiral of
  * five points is lopsided, because the golden angle only balances in the long
  * run.
@@ -48,11 +49,11 @@ export const VIEW_R = 180;
 /** The portrait's edge, the XP ring's outer edge included. */
 export const PORTRAIT_R = 130;
 /** Where a ring petal's base sits, tucked under the portrait's edge. */
-export const RING_BASE_R = 120;
+export const RING_BASE_R = 112;
 /** One even ring up to this many petals, the spiral beyond it. */
 export const RING_MAX = 13;
 /** The largest petal, for one to three badges. */
-export const PETAL_MAX_LEN = 50;
+export const PETAL_MAX_LEN = 64;
 /** The smallest a petal gets, however many there are. */
 export const PETAL_MIN_SIZE = 7;
 /** The golden angle, 360° * (2 - phi), in degrees. */
@@ -89,11 +90,15 @@ const round = (v: number) => Math.round(v * 100) / 100;
 /** Where k of n sits, and its size, before it is attached to an item. */
 function place(k: number, n: number, ringMax: number): Omit<Petal<never>, "item" | "index"> {
   if (n <= ringMax) {
-    const angle = -90 + (k * 360) / n;
-    // 50 at one to three petals, easing to about 35 at the ring's limit.
-    const length = PETAL_MAX_LEN - Math.max(0, n - 3) * 1.5;
+    // An odd ring stands a petal at twelve o'clock and leaves a gap at six; an
+    // even ring turns half a step, so six o'clock is a gap there too. The stage
+    // chip sits at six, and a petal hidden behind it reads as a missing one.
+    const start = n % 2 ? -90 : -90 + 180 / n;
+    const angle = start + (k * 360) / n;
+    // 64 at one to three petals, easing to 50 at the ring's limit.
+    const length = PETAL_MAX_LEN - Math.max(0, n - 3) * 1.4;
     const share = (2 * Math.PI * RING_BASE_R) / n;
-    const width = Math.min(length * 0.72, share * 0.78);
+    const width = Math.min(length * 0.95, share);
     const rad = (angle * Math.PI) / 180;
     return { x: RING_BASE_R * Math.cos(rad), y: RING_BASE_R * Math.sin(rad), angle, length, width };
   }

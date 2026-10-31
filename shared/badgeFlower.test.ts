@@ -20,13 +20,16 @@ describe("flowerLayout", () => {
     expect(flowerLayout([])).toEqual({ mode: "none", petals: [] });
   });
 
-  it.each([1, 3, 5, 8, 13])("lays %i petals on one even ring, the first at twelve o'clock", (n) => {
+  it.each([1, 2, 3, 4, 5, 8, 13])("lays %i petals on one even ring with a gap at six o'clock", (n) => {
     const { mode, petals } = flowerLayout(badges(n));
     expect(mode).toBe("ring");
     expect(petals).toHaveLength(n);
-    expect(petals[0].angle).toBeCloseTo(-90, 5);
+    const start = n % 2 ? -90 : -90 + 180 / n;
+    if (n % 2) expect(petals[0].angle, "an odd ring stands a petal at twelve").toBeCloseTo(-90, 5);
+    // No petal within half a step of six o'clock, where the stage chip sits.
+    for (const p of petals) expect(Math.abs(norm(p.angle) - 90)).toBeGreaterThanOrEqual(180 / n - 0.01);
     for (let k = 0; k < n; k++) {
-      expect(petals[k].angle).toBeCloseTo(-90 + (k * 360) / n, 1);
+      expect(petals[k].angle).toBeCloseTo(start + (k * 360) / n, 1);
       expect(Math.hypot(petals[k].x, petals[k].y)).toBeCloseTo(RING_BASE_R, 1);
       expect(petals[k].length).toBe(petals[0].length);
       expect(petals[k].width).toBe(petals[0].width);
