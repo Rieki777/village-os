@@ -146,6 +146,22 @@ export async function heldValueOf(pool: Pool, userId: string): Promise<HeldValue
   return held.sort((a, b) => a.token.localeCompare(b.token));
 }
 
+/**
+ * The one rule for whether resolve keeps a leaver on as a former member: they
+ * hold value (`heldValueOf`) or the village still owes them cash
+ * (`unpaidCashOf`). Resolve and every departure notice that predicts its
+ * outcome ask this, so a new reason to keep someone cannot split them (R5-0).
+ */
+export async function keepsAsFormerMember(pool: Pool, userId: string): Promise<boolean> {
+  return (await keepReasons(pool, userId)).keeps;
+}
+
+async function keepReasons(pool: Pool, userId: string): Promise<{ held: HeldValue[]; cashOwed: number; keeps: boolean }> {
+  const held = await heldValueOf(pool, userId);
+  const cashOwed = await unpaidCashOf(pool, userId);
+  return { held, cashOwed, keeps: held.length > 0 || cashOwed > 0 };
+}
+
 /** The marker the resolution line is written under, matched by `SETTLE_LINE` in exit.ts. */
 export const FORMER_MEMBER_MARK = "kept as a former member: ";
 
@@ -242,10 +258,9 @@ export async function resolveExit(
 ): Promise<ExitResolution> {
   const now = input.now ?? new Date();
   const agreement = input.agreementRef ? String(input.agreementRef).slice(0, 255) : null;
-  const held = await heldValueOf(pool, String(input.target.id));
-  const cashOwed = await unpaidCashOf(pool, String(input.target.id));
+  const { held, cashOwed, keeps } = await keepReasons(pool, String(input.target.id));
 
-  if (!held.length && !cashOwed) {
+  if (!keeps) {
     // Opened in the hold, so a cancel from here on finds the deletion running and refuses.
     const closed = await whileExitHeld(pool, input.exitId, async (hold) => {
       if (!hold.exit.open) return hold.exit;
