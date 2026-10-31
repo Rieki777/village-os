@@ -252,6 +252,16 @@ export default defineConfig({
          * Verify any chunking change with `node scripts/check-dist-budget.mjs`,
          * which prints both measures.
          */
+        /*
+         * ON AT 4096, 2026-10-30, BESIDE THE SMALL-MODULE RULE BELOW. With that
+         * rule alone the dashboard measured 6584 KB of 6600, and the
+         * companions section (0295) took it to 6608. Measured on that tree:
+         * off, 6608 KB block-charged and main JS 620 KB; 4096, 6480 and 624;
+         * 8192, 6408 and 657. 4096 buys 128 KB of the ceiling for 4 KB of
+         * first load. The note above says why it is the weaker knob; take it
+         * off the day the total has room without it.
+         */
+        experimentalMinChunkSize: 4096,
         manualChunks: (id: string, { getModuleInfo, getModuleIds }) => {
           if (id.includes("lucide-react")) return "icons";
           /*
