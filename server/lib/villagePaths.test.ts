@@ -134,6 +134,23 @@ describe("a village's ladder", () => {
   });
 });
 
+describe("a sparse save: one stage renamed and nothing else", () => {
+  beforeEach(async () => {
+    await loadVillagePaths(poolHolding({ stages: { initiate: { name: "Apprentice" } } }).pool);
+  });
+
+  it("renames that rung alone, keeps its line, and leaves every other word as it was", () => {
+    const ladder = servedLadder("Pact");
+    expect(ladder.find((s) => s.id === "initiate")).toMatchObject({ name: "Apprentice", description: "Walking the Co-Creator Right of Passage." });
+    for (const s of GAME_CONFIG.stages.filter((x) => x.id !== "initiate")) {
+      expect(ladder.find((x) => x.id === s.id)?.name, s.id).toBe(s.name);
+    }
+    expect(servedPathWords().paths.map((p) => p.label)).toEqual(GAME_CONFIG.paths.map((p) => p.label));
+    expect(ladderTitle()).toBe("Path of Growth");
+    expect(stageName("initiate")).toBe("Apprentice");
+  });
+});
+
 describe("saving", () => {
   it("writes the document under its own key and serves the new words on the next read", async () => {
     const { pool, writes } = poolHolding(null);

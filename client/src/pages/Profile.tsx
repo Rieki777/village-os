@@ -499,6 +499,7 @@ export default function Profile() {
                   progress={progress}
                   progressUnit={nextRung?.rule.type === "training-complete" ? "lessons" : "quests consented"}
                   nextRuleWords={nextRung?.description ?? null}
+                  ladderTitle={config?.ladder?.title}
                 />
               </div>
             ) : null}
@@ -874,6 +875,7 @@ export default function Profile() {
           stages={stages}
           name={user.name}
           portrait={null}
+          ladderTitle={config?.ladder?.title}
           onClose={() => setAdvance(null)}
         />
       ) : null}

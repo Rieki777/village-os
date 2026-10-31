@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { capabilityLabel } from "@shared/capabilities";
 import { playMoment } from "@/lib/sound";
 import type { StageAdvance } from "@/components/StageAdvanced";
+import { DEFAULT_LADDER_TITLE } from "@shared/villagePaths";
 
 const SPARKS = Array.from({ length: 46 }, (_, i) => ({
   left: `${(i * 41) % 98}%`,
@@ -33,6 +34,7 @@ export default function LevelUpMoment({
   name,
   portrait,
   onClose,
+  ladderTitle,
 }: {
   advance: StageAdvance;
   stages: ReadonlyArray<{ id: string; name: string }>;
@@ -41,6 +43,8 @@ export default function LevelUpMoment({
   /** The fronted character's art, or null for the initial. */
   portrait: { src: string | null; label: string } | null;
   onClose: () => void;
+  /** The ladder's name in this village's words (Admin, Paths & Stages). Absent reads as the platform's. */
+  ladderTitle?: string;
 }) {
   const reached = stages.find((s) => s.id === advance.toStage)?.name ?? advance.toStage;
   const gifts = advance.unlocked.map((key) => capabilityLabel(key));
@@ -65,7 +69,7 @@ export default function LevelUpMoment({
       : `${first}, the village saw what you carried.`;
 
   const share = async () => {
-    const text = `I reached ${reached} on our Path of Growth.`;
+    const text = `I reached ${reached} on our ${ladderTitle?.trim() || DEFAULT_LADDER_TITLE}.`;
     try {
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
         await navigator.share({ text });
