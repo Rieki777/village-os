@@ -64,10 +64,6 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
 const MORNING_AT_NINE = () => new Date(2026, 9, 2, 9, 0, 0);
 
 function renderToday(now = MORNING_AT_NINE) {
@@ -306,6 +302,8 @@ function writeMorningToReview(first = "Slept deep.") {
  * Every POST still held open. A test that fails before releasing them would
  * leave the outbox's per-member flush waiting forever and fail every later
  * save in this file for a reason of its own, so afterEach lets them all go.
+ * The fetch stub comes off only after the flush, in this same hook, so the
+ * order holds whichever way vitest runs a file's after-hooks.
  */
 const held: Array<() => void> = [];
 afterEach(async () => {
@@ -314,6 +312,7 @@ afterEach(async () => {
   await act(async () => {
     await flushOutbox(OWNER);
   });
+  vi.unstubAllGlobals();
 });
 
 /** Hold every entry POST open until `release` is called. */
