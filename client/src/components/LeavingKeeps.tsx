@@ -4,8 +4,8 @@
  * CASH THE VILLAGE STILL OWES (R4-4). Rye's ruling of 2026-10-23, "a if b
  * hasn't already happened": a leaver who still holds value stays on as a
  * former member who can claim later. Cash in `cash_owed` (0285) is value, so
- * a departure keeps an account owed cash on (`unpaidCashOf`,
- * server/lib/exitResolve.ts). Deleting the account gives it up, and the delete
+ * a departure keeps an account owed cash on (`keepReasons`,
+ * server/lib/exitResolve.ts, reading `unpaidCashOf` in server/lib/formerMember.ts). Deleting the account gives it up, and the delete
  * panel asks the member to say so with a tick the server checks
  * (`cashNotGivenUp`, server/lib/cashOwed.ts). The count is read from the
  * member's own list (`GET /api/me/cash-owed`); the amounts and the work stay

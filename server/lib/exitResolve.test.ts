@@ -43,6 +43,7 @@ import { erasureRecord } from "../repos/memberErasure";
 import { createInviteOn } from "../repos/memberInvites";
 import { hashInviteToken, INVITE_REFUSALS, mintInviteToken } from "./invites";
 import { makeInviteDoor } from "./inviteDoor";
+import { acceptDelegations, setDelegation } from "./delegation";
 
 const configured = testDbConfigured();
 
@@ -358,6 +359,27 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
     expect(await q("SELECT `id` FROM `member_vouches` WHERE `voucher_user_id` = ?", [id])).toHaveLength(1);
   });
 
+  it("a former member's delegations end with their membership, never in a step a cancel could still undo (round 6)", async () => {
+    const { id, exitId } = await member({ holdsValue: true });
+    const giver = `delegator-${id}`;
+    await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `membership_granted`) VALUES (?,?,?,'x',1)", [giver, "Ann Rivers", `${giver}@example.test`]);
+    expect((await setDelegation(pool, giver, id)).ok).toBe(true);
+    await acceptDelegations(pool, id, giver);
+    const live = () => q("SELECT `delegator_id` FROM `delegations` WHERE `delegator_id` = ? AND `revoked_at` IS NULL", [giver]);
+    const told = () => q("SELECT `id` FROM `notifications` WHERE `user_id` = ? AND `dedupe_key` LIKE 'delegation-ended:%'", [giver]);
+    // Every step before membership ends has run when the account is written: nobody may have been told yet.
+    let atAccountWrite: { live: number; told: number } | null = null;
+    whenAccountWritten = async () => {
+      atAccountWrite = { live: (await live()).length, told: (await told()).length };
+    };
+
+    expect((await resolve(exitId, id)).outcome).toBe("former");
+
+    expect(atAccountWrite, "a step a cancel could still stop had already ended the delegation and told its giver").toEqual({ live: 1, told: 0 });
+    expect(await live(), "the delegation they carried outlived their membership").toEqual([]);
+    expect(await told(), "the giver is told once").toHaveLength(1);
+  });
+
   it("the control: a living member who was never admitted, with no departure, still invites and vouches", async () => {
     const id = `exit-turns-living-${(seq += 1)}`;
     await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`) VALUES (?,?,?,'x','admin')", [id, "Rowan Keep", `${id}@example.test`]);
@@ -399,7 +421,6 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
       "org-seatings",
       "role-applications",
       "invitations",
-      "delegations",
     ]);
     expect(out.body.vacatedRoles).toEqual(["treasury"]);
     expect(String(out.body.message)).toMatch(/treasury/);

@@ -246,9 +246,6 @@ export async function keepAsFormerMember(
     { name: "role-applications", run: () => withdrawUnseatedOf(pool, userId) },
     // A link is its maker's vouch, and a former member can no longer vouch: their open links stop admitting (R5-2).
     { name: "invitations", run: () => revokeOpenInvitesOf(pool, userId) },
-    // The erasure's own call, notices included (Rye, 2026-10-30): each member who handed them a voice is
-    // told, and a vote copied from them is no longer cast. Idempotent: a retry finds no live row and tells nobody twice.
-    { name: "delegations", run: () => endDelegationsOf(pool, userId, noticeSpine(pool, deps)) },
   ];
   for (const step of steps) {
     // The line goes on first and the step runs after the hold: see `resolveEndingLine` for why that order.
@@ -260,17 +257,30 @@ export async function keepAsFormerMember(
     if (closed) return closed;
     await step.run();
   }
-  // The irreversible end and the move to resolved, in one hold: a cancel waits for both or lands before either.
-  return whileExitHeld(pool, input.exitId, async (hold) => {
+  /*
+   * The irreversible end and the move to resolved, in one hold: a cancel waits for both or lands before either.
+   *
+   * THEIR DELEGATIONS END HERE, with membership, never as a step before it (Rye, 2026-10-30; the erasure's own
+   * call, notices included). Each member who handed them a voice is told they left, and a vote copied from them is
+   * no longer cast. A step could run and then be cancelled, telling those members something false, and the notice's
+   * one stable key would then swallow the true one on a later departure. Inside the hold, a cancel lands before it
+   * or after the exit is resolved. It runs once more after the hold commits: between the end of membership and the
+   * commit the leaver is not yet a former member to the delegation routes, so an offer accepted in that moment is
+   * ended too. Idempotent: a second run finds no live row and tells nobody twice.
+   */
+  const closed = await whileExitHeld(pool, input.exitId, async (hold) => {
     if (!hold.exit.open) return hold.exit;
     await deps.members.update(userId, (u: any) => {
       u.membershipGranted = false;
       u.stageGranted = null;
       u.role = "member";
     });
+    await endDelegationsOf(pool, userId, noticeSpine(pool, deps));
     await hold.markResolved(input.agreementRef, input.note);
     return null;
   });
+  if (!closed) await endDelegationsOf(pool, userId, noticeSpine(pool, deps));
+  return closed;
 }
 
 /** What a resolve that found the exit closed tells the admin, with what the exit's record says had already ended. */

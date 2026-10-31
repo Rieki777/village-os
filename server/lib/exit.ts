@@ -266,7 +266,7 @@ function stayingAnswer(erasure: AbandonedErasure, endings: ResolveEndings): Reco
  * server/lib/exitResolve.ts). "role-applications" is the erasure's
  * `withdrawUnseatedOf`, which there runs inside a later step.
  */
-export const FORMER_MEMBER_STEPS = ["alignment-party-left", "role-holdings", "org-seatings", "role-applications", "invitations", "delegations"] as const;
+export const FORMER_MEMBER_STEPS = ["alignment-party-left", "role-holdings", "org-seatings", "role-applications", "invitations"] as const;
 export type FormerMemberStep = (typeof FORMER_MEMBER_STEPS)[number];
 
 /** What each of those steps ends, as the admin reads it. */
@@ -276,7 +276,6 @@ const ENDED_IN_WORDS: Record<FormerMemberStep, (roles: readonly string[]) => str
   "org-seatings": () => "their places on the org chart",
   "role-applications": () => "their open role applications",
   invitations: () => "their open invitation links",
-  delegations: () => "the delegations they gave or carried",
 };
 
 /** What a resolve's record says it already began ending: each step once, and the permission roles by id. */
@@ -499,7 +498,6 @@ export async function exitOpenState(
   });
 
   states.push(await subscriptionsState(pool, userId, "exit", opts.formerMember));
-  // Last, so the domains other lanes add land above it.
 
   return states;
 }
