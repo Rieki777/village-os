@@ -185,9 +185,11 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "quest.approve": "put a proposed quest on the board, and set what finishing it pays",
   "redemption.confirm":
     "agree that a member has been paid off the platform, and destroy the tokens they redeemed",
+  "cash.pay": "read the cash the village owes its members, and mark a payment as made once the money has gone out",
   "module.switch": "turn a module on for the whole village, without a vote",
   "steward.veto":
     "stop a decision the village has already carried, inside the window before it lands, and say why",
+  "session.template": "make, change, duplicate, order and archive the meeting templates every session can open from",
   "comms.manage":
     "run the village's email: turn automations on and off, change their words, send letters to people who agreed to get them, and see the village's address book and every email the village still keeps: who it went to, its subject, whether it arrived, and its words",
 };

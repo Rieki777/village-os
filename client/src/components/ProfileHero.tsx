@@ -12,14 +12,15 @@
  * the img carries onError as well, because a file can go missing after the
  * server answered.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { authToken, useGameConfig } from "@/lib/gameApi";
 import { Link } from "wouter";
-import { Star } from "lucide-react";
 import { announceProfileChange, onProfileRefresh } from "@/lib/profileRefresh";
 import { moonsOnLandPhrase } from "@shared/villageMoon";
 import { MyGeneKeysSeal } from "@/components/geneKeys/ProfileGeneKeys";
+import BadgeFlower, { type FlowerBadge } from "@/components/badges/BadgeFlower";
+import BadgeRoster from "@/components/badges/BadgeRoster";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -52,19 +53,44 @@ interface Archetype {
  * renders a zero-length arc while it waits says "you have got nowhere", which
  * is a lie told confidently; drawing nothing says nothing.
  */
-/** The arc's own circumference, at the r=122 the viewBox is drawn for. */
-const CIRCUMFERENCE = 2 * Math.PI * 122;
+/** The ring's own circumference, at the radius the viewBox is drawn for. */
+const RING_R = 124;
+const CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
 export default function ProfileHero({
   name,
   handle,
   stageIndex,
   stageCount,
+  stageLabel,
+  season,
+  rolesLine,
+  actions,
+  about,
+  footer,
+  badges,
+  maxFeatured,
 }: {
   name: string;
   handle?: string | null;
   stageIndex?: number | null;
   stageCount?: number | null;
+  /** "Stage 5 · Member", off the ladder the page already holds. Absent, the pill counts the rung instead. */
+  stageLabel?: string | null;
+  /** "Season of Roots · day 41 of 92", added after the village's name when the season is known. */
+  season?: string | null;
+  /** The roles held, each as "Role (FirstName)". */
+  rolesLine?: string | null;
+  /** Invite and sign out, beside the eyebrow (approved design, 2026-10-30). */
+  actions?: ReactNode;
+  /** The about line and the path chips, under the identity. */
+  about?: ReactNode;
+  /** The next-rung bar, under the party. */
+  footer?: ReactNode;
+  /** Every badge held, featured first, drawn as the flower round the portrait. Off /api/badges/of, which the page already reads. */
+  badges?: FlowerBadge[] | null;
+  /** The featured cap that came with them, for the roster's picker. */
+  maxFeatured?: number | null;
 }) {
   const [party, setParty] = useState<Character[]>([]);
   const [archetypes, setArchetypes] = useState<Archetype[]>([]);
@@ -87,7 +113,7 @@ export default function ProfileHero({
   const arc = known ? Math.max(0, Math.min(1, (stageIndex + 1) / stageCount)) : null;
   // R47: progress is a number, and the ladder's name is the Path of Growth,
   // so the chip names the stage and never "Maturity".
-  const rung = known ? `Stage ${stageIndex + 1}/${stageCount}` : "";
+  const rung = stageLabel || (known ? `Stage ${stageIndex + 1}/${stageCount}` : "");
 
   /*
    * THE VILLAGE'S NAME, AND NOT ITS TAGLINE.
@@ -103,7 +129,7 @@ export default function ProfileHero({
    * The name is always the village's own. A tagline is marketing copy and this
    * is an identity line, so dropping it costs nothing and leaks nothing.
    */
-  const eyebrow = String(village?.name ?? "").trim();
+  const eyebrow = [String(village?.name ?? "").trim(), season ?? ""].filter(Boolean).join(" · ");
 
   /*
    * "Joined March 2026". Month and year, never a day: the exact date is not
@@ -131,6 +157,8 @@ export default function ProfileHero({
    * failed. Same three-state shape as WalletCard.
    */
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [roster, setRoster] = useState(false);
+  const flower = badges ?? [];
   /** One polite region for this page's mutations. See `front` below. */
   const [said, setSaid] = useState("");
 
@@ -195,87 +223,101 @@ export default function ProfileHero({
     }
   };
 
+  /* A character's art, or its initial when there is none or the file went missing. */
+  const portrait = (size: "hero" | "card", c: Character | null) =>
+    c?.avatar && !broken[c.id] ? (
+      <img
+        src={c.avatar}
+        alt={nameOf(c.archetypeKey)}
+        onError={() => setBroken((b) => ({ ...b, [c.id]: true }))}
+        className="h-full w-full object-cover object-top"
+      />
+    ) : (
+      <span className={`flex h-full w-full items-center justify-center font-display text-foreground ${size === "hero" ? "text-5xl" : "text-lg"}`}>
+        {c ? initial(c.archetypeKey) : name.slice(0, 1)}
+      </span>
+    );
+
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
+    <motion.section aria-labelledby="hero-name" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:gap-9 sm:text-left">
         {/*
-          THE PORTRAIT, ROUND, INSIDE THE LADDER.
+          THE PORTRAIT, ROUND, INSIDE THE LADDER (approved design, 2026-10-30).
 
           `object-top` is load-bearing. Every portrait in this system is 3:4
           body art, and a circle centred on a 3:4 figure is a crop of their
           torso. Anchoring to the top puts the head in the circle, which is the
           same crop server/lib/characterPortraits.ts applies to the bytes.
 
-          The arc is one circle with `stroke-dasharray` set to its whole
+          The ring is one circle with `stroke-dasharray` set to its whole
           circumference and the offset carrying the fraction, rotated so it
           starts at twelve o'clock. The track behind it is always whole, so the
           shape reads as "this much of that" and never as a broken ring.
         */}
-        <div className="relative h-44 w-44 shrink-0 sm:h-52 sm:w-52">
+        {/*
+          THE BADGE FLOWER (Rye, 2026-10-30) sits behind the ring and the face,
+          its petals overhanging the square, so the square gains a margin while
+          there are petals to hold. The ring and the portrait let a click fall
+          through to it, and the seal and the stage chip stay on top.
+        */}
+        <div className={`relative h-[150px] w-[150px] shrink-0 sm:h-[236px] sm:w-[236px] ${flower.length ? "my-7 sm:m-11" : ""}`}>
+          <div className="absolute inset-0 rounded-full shadow-[0_0_40px_color-mix(in_srgb,var(--color-dash-gold)_25%,transparent)]" aria-hidden="true" />
+          <BadgeFlower
+            badges={flower}
+            label={`Your badges, ${flower.length} held. Open the roster and pick which show on your card.`}
+            onOpen={() => setRoster(true)}
+          />
           {arc !== null && (
-            <svg viewBox="0 0 260 260" className="absolute inset-0 h-full w-full" aria-hidden="true">
-              <defs>
-                <linearGradient id="maturityArc" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="var(--sheet-earned-deep, #6b4a15)" />
-                  <stop offset="55%" stopColor="var(--sheet-notice, #dfab4d)" />
-                  <stop offset="100%" stopColor="var(--sheet-earned-lit, #f2ce85)" />
-                </linearGradient>
-              </defs>
-              <circle cx="130" cy="130" r="122" fill="none" stroke="var(--border)" strokeWidth="3" />
+            <svg viewBox="0 0 260 260" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+              <circle cx="130" cy="130" r={RING_R} fill="none" stroke="var(--color-dash-track)" strokeWidth="12" />
               <circle
-                cx="130" cy="130" r="122" fill="none"
-                stroke="url(#maturityArc)" strokeWidth="6" strokeLinecap="round"
+                cx="130" cy="130" r={RING_R} fill="none"
+                stroke="var(--color-dash-gold)" strokeWidth="12"
                 transform="rotate(-90 130 130)"
                 strokeDasharray={CIRCUMFERENCE.toFixed(1)}
                 strokeDashoffset={(CIRCUMFERENCE * (1 - arc)).toFixed(1)}
               />
             </svg>
           )}
-          <div className="absolute inset-[7px] overflow-hidden rounded-full border border-border bg-muted">
-            {primary?.avatar && !broken[primary.id] ? (
-              <img
-                src={primary.avatar}
-                alt={nameOf(primary.archetypeKey)}
-                onError={() => setBroken((b) => ({ ...b, [primary.id]: true }))}
-                className="h-full w-full object-cover object-top"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <span className="font-display text-4xl font-bold text-foreground">
-                  {primary ? initial(primary.archetypeKey) : name.slice(0, 1)}
-                </span>
-              </div>
-            )}
+          <div className="pointer-events-none absolute inset-[6px] overflow-hidden rounded-full border-4 border-background bg-muted">
+            {portrait("hero", primary)}
           </div>
           {/* Their Gene Keys seal, top right, opposite the stage chip. Nothing while the module is off or nothing is saved. */}
           <MyGeneKeysSeal />
           {rung && (
-            <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-notice/60 bg-card px-3 py-1 text-[11px] font-medium uppercase tracking-widest text-notice">
+            <span className="absolute bottom-0 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-[3px] border-background bg-dash-gold px-3 py-0.5 text-xs font-bold text-dash-gold-ink sm:bottom-1.5 sm:px-3.5 sm:py-1 sm:text-sm">
               {rung}
             </span>
           )}
         </div>
 
-        <div className="min-w-0 flex-1">
-          {/* The village's own two words. A fork reads its own, or nothing. */}
-          {eyebrow && (
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground">{eyebrow}</p>
-          )}
-          <h1 className="mb-2 font-display text-3xl font-bold break-words text-foreground sm:text-4xl lg:text-5xl">{name}</h1>
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-2.5">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:justify-start">
+            {/* The village's own name, and the season when it is known. A fork reads its own, or nothing. */}
+            {eyebrow ? (
+              <p className="m-0 hidden text-[13px] uppercase tracking-[0.23em] text-muted-foreground sm:block sm:flex-1">{eyebrow}</p>
+            ) : (
+              <span className="hidden sm:block sm:flex-1" />
+            )}
+            {actions}
+          </div>
+          <h1 id="hero-name" className="m-0 break-words font-display text-[44px] leading-none text-foreground sm:text-[72px] sm:leading-[0.95]">
+            {name}
+          </h1>
           {primary ? (
-            <p className="text-lg font-medium break-words text-foreground">
+            <p className="m-0 break-words text-[15px] font-medium text-dash-gold-lit sm:text-[21px]">
               {nameOf(primary.archetypeKey)}
               {subtitleOf(primary.archetypeKey) ? ` · ${subtitleOf(primary.archetypeKey)}` : ""}
             </p>
           ) : status === "loading" ? (
-            <p role="status" className="text-lg text-muted-foreground">
+            <p role="status" className="m-0 text-lg text-muted-foreground">
               Reading your characters…
             </p>
           ) : status === "failed" ? (
             /* The failure branch that used to be the empty branch. Retry, and
                never the sentence that tells a member with six characters that
                they have none. */
-            <p role="status" className="text-lg text-muted-foreground">
+            <p role="status" className="m-0 text-lg text-muted-foreground">
               Your characters didn't load.{" "}
               <button
                 type="button"
@@ -286,76 +328,60 @@ export default function ProfileHero({
               </button>
             </p>
           ) : (
-            <p className="text-lg text-muted-foreground">
+            <p className="m-0 text-lg text-muted-foreground">
               No character chosen yet.{" "}
               <Link href="/profile/characters" className="font-medium text-foreground underline underline-offset-2">
                 Choose who you will be
               </Link>
             </p>
           )}
-          {title ? <p className="mt-1 font-medium break-words text-foreground">{title}</p> : null}
-          <p className="mt-2 break-words text-muted-foreground">
-            {/* Every part is optional and the separators are joined rather than
-                typed, so a missing join date never leaves a stray middle dot. */}
-            {[handle ? `@${handle}` : "", joinedLine, moonsOnLandPhrase(moons)].filter(Boolean).join(" · ")}
+          {title ? <p className="m-0 font-medium break-words text-foreground">{title}</p> : null}
+          <p className="m-0 hidden break-words text-base text-muted-foreground sm:block">
+            {/* Every part is optional and the separators are joined, so a
+                missing join date never leaves a stray middle dot. */}
+            {[handle ? `@${handle}` : "", joinedLine, moonsOnLandPhrase(moons), rolesLine ?? ""].filter(Boolean).join(" · ")}
           </p>
+          {about}
+
+          {/* The party, under the identity. Multi-class is the point, so every
+              character a member plays is visible without scrolling. On a phone
+              the party lives on the Sheet tab instead. */}
+          {party.length > 0 ? (
+            <div className="mt-2 hidden flex-wrap items-center gap-3 sm:flex">
+              {party.map((c) => (
+                /* The name is on the BUTTON, not inherited from the image's
+                   `alt`. `onError` replaces that image with a single letter,
+                   and `title` is only consulted when there is no content at
+                   all, so a portrait that failed to load used to rename this
+                   control to "S". */
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => front(c.id)}
+                  aria-label={`Front ${nameOf(c.archetypeKey)}`}
+                  aria-pressed={c.isPrimary}
+                  title={`Front ${nameOf(c.archetypeKey)}`}
+                  className={`relative h-24 w-[76px] shrink-0 overflow-hidden rounded-[14px] border-[3px] bg-muted p-0 transition ${
+                    c.isPrimary
+                      ? "border-dash-gold shadow-[0_0_18px_color-mix(in_srgb,var(--color-dash-gold)_60%,transparent)]"
+                      : "border-foreground hover:border-dash-gold"
+                  }`}
+                >
+                  {portrait("card", c)}
+                </button>
+              ))}
+              <Link
+                href="/profile/characters"
+                className="flex h-24 flex-col items-center justify-center rounded-[14px] border-[1.5px] border-dashed border-border px-[18px] text-sm font-medium text-foreground hover:bg-muted"
+              >
+                Forge a character
+                <span className="text-xs text-muted-foreground">Play as many as you like</span>
+              </Link>
+            </div>
+          ) : null}
+          {footer}
         </div>
       </div>
-
-      {/* The rest of the party, directly under the hero. Multi-class is the
-          point, so every character a member plays is visible without scrolling. */}
-      {party.length > 0 ? (
-        <div className="mt-5">
-          <div className="flex flex-wrap items-center gap-3">
-            {party.map((c) => (
-              /* The name is on the BUTTON, not inherited from the image's
-                 `alt`. `onError` two lines down replaces that image with a
-                 single letter, and `title` is only consulted when there is no
-                 content at all, so a portrait that failed to load used to
-                 rename this control to "S". Same defect the class rail on
-                 /profile/characters carried across thirty buttons. */
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => front(c.id)}
-                aria-label={`Front ${nameOf(c.archetypeKey)}`}
-                aria-pressed={c.isPrimary}
-                title={`Front ${nameOf(c.archetypeKey)}`}
-                className={`relative w-20 shrink-0 overflow-hidden rounded-xl border bg-card transition ${
-                  c.isPrimary ? "border-foreground ring-2 ring-ring" : "border-border hover:border-foreground"
-                }`}
-              >
-                <span className="block aspect-[3/4] w-full bg-muted">
-                  {c.avatar && !broken[c.id] ? (
-                    <img
-                      src={c.avatar}
-                      alt={nameOf(c.archetypeKey)}
-                      onError={() => setBroken((b) => ({ ...b, [c.id]: true }))}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-lg text-foreground">
-                      {initial(c.archetypeKey)}
-                    </span>
-                  )}
-                </span>
-                {c.isPrimary ? (
-                  <Star className="absolute left-1 top-1 h-4 w-4 fill-foreground text-foreground" aria-hidden="true" />
-                ) : null}
-              </button>
-            ))}
-            <Link
-              href="/profile/characters"
-              className="flex min-h-11 items-center rounded-xl border border-dashed border-border px-4 py-3 text-sm font-semibold text-foreground hover:bg-muted"
-            >
-              Add a character
-            </Link>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Tap a character to front your sheet. Play as many as you like.
-          </p>
-        </div>
-      ) : null}
 
       {/* ONE POLITE REGION FOR THIS PAGE. Fronting a character swaps the hero
           art, the name and the subtitle, and none of that was announced. The
@@ -365,6 +391,15 @@ export default function ProfileHero({
       <p aria-live="polite" className="sr-only">
         {said}
       </p>
-    </motion.div>
+      <BadgeRoster
+        open={roster}
+        onOpenChange={setRoster}
+        badges={flower}
+        maxFeatured={maxFeatured ?? null}
+        whose={null}
+        editable
+        onChanged={announceProfileChange}
+      />
+    </motion.section>
   );
 }

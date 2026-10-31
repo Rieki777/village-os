@@ -44,7 +44,7 @@ import type { SubjectCloser } from "./applyDue";
 import type { PostOfficeDeps } from "./comms/postOffice";
 import type { CrewsRepo } from "./crews";
 import type { WeightModeSnapshot } from "./governanceWeights";
-import type { NotifyDeps, NotifyInput, NotifyResult } from "./notify";
+import type { NoticeAbout, NotifyDeps, NotifyInput, NotifyResult } from "./notify";
 import type { LapseContext } from "./orgChart";
 import type { StayRow } from "./stays";
 import type { ClaimsRepo, QuestsRepo } from "../repos/quests";
@@ -400,9 +400,11 @@ export interface AppDeps {
    * One alert to EVERY admin and founder, deduped per recipient.
    *
    * The suffix on the dedupe key is what keeps "each admin hears it once" and
-   * "the event fires once" separate concerns.
+   * "the event fires once" separate concerns. A title that names a member
+   * passes them in `about.actorUserId`, so the erasure sweep finds the row
+   * once they have gone (server/repos/noticesNaming.ts).
    */
-  notifyAdmins(type: string, title: string, dedupeKey: string, link?: string, except?: readonly string[]): Promise<void>;
+  notifyAdmins(type: string, title: string, dedupeKey: string, link?: string, except?: readonly string[], about?: NoticeAbout): Promise<void>;
 
   /**
    * Tell whoever raised a report that a steward has read it and closed it.

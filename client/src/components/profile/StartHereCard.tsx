@@ -44,6 +44,7 @@ import { gameFetch, type GameMe, type ProgressionCapability, type PublicGameConf
 import { pageVarsFrom } from "@shared/pageContent/vars";
 import { articleFor } from "@shared/villageWord";
 import { useModule } from "@/modules/ModuleProvider";
+import { useMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
 
 /**
  * The rung whose rule is being admitted. The server names it `ADMISSION_RUNG`
@@ -111,6 +112,7 @@ interface OwnVouches {
 const QUEST_AFTER = "A steward reads it, and if it goes on the board, they set what it pays.";
 const LETTER_AFTER = "The people who look after joining read it and answer. You get a notice when they do.";
 const HAND_AFTER = "The people who seat roles read your offer and answer. You get a notice when they do.";
+const LINES_AFTER = "Your Gene Keys show how you work best, so the roles and teams we suggest fit you.";
 
 /** A date the member reads, in their own locale, or nothing if the instant is unreadable. */
 function dayOf(at: string): string {
@@ -188,6 +190,8 @@ export default function StartHereCard({ ownerId, me, signing, config, catalogue 
   const admitted = me ? isAdmittedHere(me) : null;
   // Every hook above the returns below: the page's hook order is gated.
   const vouches = useOwnVouches(isOwner && admitted === false);
+  // Gene Keys, when the village has them on and this member has not found theirs yet.
+  const { on: linesOn, mine: myLines } = useMyGeneKeys();
 
   if (!isOwner || !me || admitted === null) return null;
 
@@ -253,6 +257,8 @@ export default function StartHereCard({ ownerId, me, signing, config, catalogue 
     }
     others = [...(vouchDoor && primary !== vouchDoor ? [vouchDoor] : []), questDoor];
   }
+  // Last among the other doors: a member may skip Gene Keys, so this door never stands above a step of the game.
+  if (linesOn && myLines === null) others = [...others, { href: "/profile/gene-keys", label: "Find your lines", after: LINES_AFTER }];
 
   return (
     <section

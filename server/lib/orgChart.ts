@@ -23,6 +23,7 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
 import { circleStatusRows } from "../repos/circles";
+import { documentedSeatNames, forgetNamesInSeatJournals } from "../repos/orgSeatErasure";
 import {
   decidesByProblem,
   domainsProblem,
@@ -147,6 +148,15 @@ export interface OrgRole {
   valueCurrency?: string | null;
   valueTokens?: TokenAmount[] | null;
   /**
+   * The cash the role pays each seat every cycle (0285), in minor units of
+   * `cashCurrency`. Owed when the cycle settles (`oweRoleCycleCash`,
+   * server/lib/cashOwed.ts) and never paid by the platform. NULL pays none.
+   * Separate from the cash its terms on offer state, which the pay path may
+   * never read (shared/seatSettings.boundary.test.ts).
+   */
+  cashMinor?: number | null;
+  cashCurrency?: string | null;
+  /**
    * THE HANDOVER WORDS (0268, Rye 2026-10-22). "Bring me" and "Not mine to
    * hold" are short lists; the runbook is words or one https link. They live
    * on the role and change only through an `update_seat` or `create_seat`
@@ -239,6 +249,8 @@ export const ROLE_COLS =
   "terms_offer, terms_offer_at, terms_offer_by, " +
   // 0265: the value and the list. Projected at the `terms.read` tier.
   "value_minor, value_currency, value_tokens, " +
+  // 0285: the cash it pays. Projected with the value, at the `terms.read` tier.
+  "cash_minor, cash_currency, " +
   // 0268: the handover words. Structure like aim and domain, in every tier's core.
   "bring_me, not_mine, runbook, " +
   // 0274: the CCOS words. Structure like the handover words, in every tier's core.
@@ -308,6 +320,8 @@ export function rowToRole(r: any): OrgRole {
     valueMinor: readWorkValue(r.value_minor, r.value_currency)?.minor ?? null,
     valueCurrency: readWorkValue(r.value_minor, r.value_currency)?.currency ?? null,
     valueTokens: readValueTokens(r.value_tokens),
+    cashMinor: readWorkValue(r.cash_minor, r.cash_currency)?.minor ?? null,
+    cashCurrency: readWorkValue(r.cash_minor, r.cash_currency)?.currency ?? null,
     bringMe: readStoredRoleList(r.bring_me),
     notMine: readStoredRoleList(r.not_mine),
     runbook: readStoredRunbook(r.runbook),
@@ -999,7 +1013,14 @@ export async function updateOrgRole(pool: Pool, id: string, body: any, value?: O
  * UPDATE as the rest of the row. A field that is `undefined` is left alone;
  * `null` clears it.
  */
-export type OrgRoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null };
+export type OrgRoleValueEdit = {
+  valueMinor?: number | null;
+  valueCurrency?: string | null;
+  valueTokens?: TokenAmount[] | null;
+  /** 0285: the cash it pays, stamped with the village's currency like the value. */
+  cashMinor?: number | null;
+  cashCurrency?: string | null;
+};
 
 function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknown[]): void {
   if (!v) return;
@@ -1011,6 +1032,11 @@ function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknow
   if (v.valueTokens !== undefined) {
     sets.push("`value_tokens` = ?");
     args.push(valueTokensToStore(v.valueTokens));
+  }
+  if (v.cashMinor !== undefined) {
+    const set = !!v.cashMinor && !!v.cashCurrency;
+    sets.push("`cash_minor` = ?", "`cash_currency` = ?");
+    args.push(set ? Math.trunc(Number(v.cashMinor)) : null, set ? String(v.cashCurrency).toUpperCase() : null);
   }
 }
 
@@ -1190,6 +1216,12 @@ export async function releaseSeatingsForUser(
  * because `documentedKey` derives it from the name and a slug is a name with
  * hyphens. Ending comes first: the key is part of a generated column under a
  * unique index while the seating is live, and NULL once it ends.
+ *
+ * The seat's journal goes before either (adversarial round 3, finding 12):
+ * "seated <name>" and the quoted claim lines are served to every account at
+ * the guest rung, and the names on the seatings are the only way to find
+ * those lines, so they are rewritten while the names are still there to read.
+ * See `forgetNamesInSeatJournals`.
  */
 export async function forgetDocumentedHolder(
   pool: Pool,
@@ -1202,6 +1234,7 @@ export async function forgetDocumentedHolder(
   );
   const key = (rows as any[])[0]?.holder_key;
   if (!key) return { found: false, seatings: 0 };
+  await forgetNamesInSeatJournals(pool, await documentedSeatNames(pool, String(key)));
   const [ended]: any = await pool.query(
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? " +
       "WHERE holder_key = ? AND holder_kind = 'documented' AND ended_at IS NULL",
@@ -1218,14 +1251,21 @@ export async function forgetDocumentedHolder(
 /**
  * Convert a documented holder into a real member holding, keeping the same
  * row so the seat's history does not restart when somebody finally signs up.
+ *
+ * NEVER FOR A MEMBER WHO HAS LEFT. An erasure keeps the user row as a
+ * tombstone, and a seating flipped to it is a holding the moon settlement pays
+ * and nothing releases, because the erasure's seating steps have already run.
+ * Refused here, in the same statement that writes, so every door that seats
+ * through this one is covered whatever it checked first.
  */
 export async function claimSeating(pool: Pool, assignmentId: string, userId: string): Promise<boolean> {
   const [r]: any = await pool.query(
     `UPDATE org_role_assignments
         SET holder_kind = 'member', user_id = ?, holder_key = ?
       WHERE id = ? AND ended_at IS NULL AND holder_kind = 'documented' AND is_example = 0
-        AND is_agent = 0`,
-    [userId, userId, assignmentId],
+        AND is_agent = 0
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND LOWER(u.email) LIKE '%@anonymized.invalid')`,
+    [userId, userId, assignmentId, userId],
   );
   return !!r?.affectedRows;
 }

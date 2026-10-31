@@ -26,6 +26,8 @@ import { numberVar } from "./variables";
 import { recordEvent } from "./events";
 import { secretConfigured, secretValue } from "./secrets";
 import { reportError } from "./errors";
+import { isTombstone } from "./oauthAccounts";
+import type { RefusedSubscription } from "./owedCancels";
 
 // ── Configuration ────────────────────────────────────────────────────────────
 // S63: keys resolve through the secrets store — admin-typed first, env
@@ -107,6 +109,75 @@ export async function createCheckout(input: CheckoutInput): Promise<{ url: strin
   const data: any = await res.json();
   if (!res.ok) throw new Error(`Stripe checkout failed: ${data?.error?.message ?? res.status}`);
   return { url: String(data.url), sessionId: String(data.id) };
+}
+
+// ── Stopping a subscription ─────────────────────────────────────────────────
+
+/** The Stripe statuses a subscription never charges from again. */
+const ENDED_SUBSCRIPTION = new Set(["canceled", "incomplete_expired"]);
+
+/** What became of one subscription the village asked Stripe to stop. */
+export type SubscriptionCancel = "cancelled" | "already-ended" | "missing";
+
+/**
+ * Stop one Stripe subscription charging again, now. The erasure's
+ * `product-subscriptions-after-tombstone` step calls this for every
+ * subscription a departed member's purchases hold (server/lib/erasure.ts),
+ * because the village offers a member no door to cancel one themselves and
+ * nothing else would ever stop it.
+ *
+ * IT READS FIRST, then cancels, so a second run is a read and nothing more.
+ * A subscription Stripe says is already over (cancelled in the dashboard, or
+ * by an earlier run of the step) is done, and so is one Stripe has no record
+ * of: neither can charge anybody. Reading the state is the check, because
+ * Stripe's answer to cancelling twice is an error whose wording is not a
+ * contract.
+ *
+ * IT NEVER REFUNDS AND NEVER MOVES A TOKEN. A cancel ends future charges and
+ * leaves every period already paid as it stands. Whether a period is refunded
+ * stays a person's call in Stripe, which the renewal alarm in
+ * `settleProductPurchase` asks for when a charge lands after the account is
+ * gone.
+ *
+ * IT THROWS on anything else: Stripe not connected, an error, a timeout.
+ * The erasure records the step as stopped and the sweep is resumed, so the
+ * failure is loud and retried and never recorded as done. The step checks
+ * for a key before it calls this, and with none it hands the cancel to the
+ * admins and finishes, so the no-key throw here is for any other caller.
+ */
+export async function cancelSubscription(subscriptionId: string): Promise<SubscriptionCancel> {
+  const id = String(subscriptionId ?? "").trim();
+  if (!id) throw new Error("No subscription id to cancel");
+  const key = secretValue("stripe_secret_key");
+  if (!key) {
+    throw new Error(
+      `Stripe is not connected, so subscription ${id} cannot be cancelled and may keep charging. ` +
+        "Connect Stripe in Admin, Integrations, and the next retry of this erasure cancels it",
+    );
+  }
+  const url = `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(id)}`;
+  const ask = async (method: "GET" | "DELETE"): Promise<{ missing: boolean; status: string | null }> => {
+    const verb = method === "GET" ? "read" : "cancel";
+    let res: Response;
+    try {
+      res = await fetch(url, { // module-review-ok: the fixed Stripe API host, never an address anybody typed in, called the way createCheckout calls it; guardedFetchJson pins typed-in hosts and has no DELETE
+        method,
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (err: any) {
+      throw new Error(`Stripe could not ${verb} subscription ${id}: ${err?.message ?? err}`);
+    }
+    const data: any = await res.json().catch(() => null);
+    if (res.status === 404 || data?.error?.code === "resource_missing") return { missing: true, status: null };
+    if (!res.ok) throw new Error(`Stripe could not ${verb} subscription ${id}: ${data?.error?.message ?? res.status}`);
+    return { missing: false, status: data?.status == null ? null : String(data.status) };
+  };
+  const now = await ask("GET");
+  if (now.missing) return "missing";
+  if (now.status && ENDED_SUBSCRIPTION.has(now.status)) return "already-ended";
+  const after = await ask("DELETE");
+  return after.missing ? "missing" : "cancelled";
 }
 
 // ── Signature verification (Stripe v1 scheme, on the RAW body) ──────────────
@@ -465,6 +536,50 @@ export async function suspendPurchasing(pool: Pool, userId: string, reason: stri
     "INSERT INTO payment_suspensions (id, user_id, reason, order_ref) VALUES (?,?,?,?)",
     [`sus-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, userId, reason.slice(0, 500), orderRef ?? null],
   );
+}
+
+/** The refusal a charge for somebody no longer in the village is given (round 3, finding 5). */
+export const BUYER_HAS_LEFT = "the buyer has left the village";
+
+/**
+ * Whether a purchase's buyer can be delivered anything: false for a tombstone,
+ * and for a user row that is gone. `settleProductPurchase` (server/index.ts)
+ * asks it of EVERY period it settles, a first one included, because a checkout
+ * opened before the member left can complete after, and the two events for a
+ * subscription's first period can land either side of the delete. A refusal
+ * banks the money, posts no grant and no receipt, and tells the admins.
+ */
+export function buyerHasLeft(member: { email?: unknown } | null | undefined): boolean {
+  return !member || isTombstone({ email: String(member.email ?? "") });
+}
+
+/**
+ * The last sentence of the admins' "charged but NOT delivered" alarm in
+ * `settleProductPurchase` (server/index.ts): what to do about a charge the
+ * village banked and refused to deliver.
+ *
+ * FOR A BUYER WHO HAS LEFT, IT SAYS WHAT REALLY HAPPENED to the subscription
+ * (round 4, finding 2). The renewal gate tries the cancel itself on every
+ * such charge (`settleLeaversSubscription`, server/lib/owedCancels.ts) and
+ * hands this sentence the outcome. It used to say "their erasure cancels the
+ * subscription", which was false for a recurring checkout that completed
+ * after the erasure ran: the erasure had already finished, nothing would ever
+ * cancel it, and the card was charged every period.
+ *
+ * SHORT ON PURPOSE. The whole alarm is the notice's title, and
+ * `insertNotification` cuts a title at 255 characters. With Stripe's real ids
+ * the words before this sentence run to about 128 characters plus the product
+ * name, so each sentence here stays under 100 to survive a product name of 30.
+ *
+ * Every other refusal reads as it always did, key or no key.
+ */
+export function refusedChargeAdvice(subscription: RefusedSubscription, refusal: string): string {
+  if (subscription === "none") return "Refund this payment.";
+  if (refusal !== BUYER_HAS_LEFT || subscription === "kept") return "Cancel the subscription in Stripe and refund this period.";
+  if (subscription === "cancelled") return "The subscription is now cancelled in Stripe; refund this period there.";
+  if (subscription === "ended") return "The subscription had already ended in Stripe; refund this period there.";
+  if (subscription === "by-hand-failed") return "Stripe did not cancel it: cancel the subscription in the Stripe dashboard and refund this period.";
+  return "Stripe is not connected: cancel the subscription in the Stripe dashboard and refund this period.";
 }
 
 export async function isSuspended(pool: Pool, userId: string): Promise<boolean> {

@@ -42,7 +42,7 @@ V1 ships as JSON stores (data/badges.json, data/badge-awards.json, data/badge-ev
 | kind | enum('self','earned','granted','warning','hypha') NOT NULL | drives every rule below |
 | capabilities | json | capability keys GRANTED. MUST be [] for kind self/hypha — boot assertion + server rejection. Keys validated against the Capability union; unknown key → refuse to boot (F4) |
 | denies | json | capability keys REMOVED. Only kind='warning' may populate |
-| rule | json | only kind='earned': `{metric, threshold, scope?, stackable}` — metric ∈ quests_consented \| ledger_earned_total \| gratitude_breadth \| cycle_streak(v2); scope: `{circle?: string}` |
+| rule | json | only kind='earned': `{metric, threshold, scope?, stackable}` — metric ∈ quests_consented | ledger_earned_total | gratitude_breadth | gene_keys_shown | cycle_streak(v2)\| ledger_earned_total \| gratitude_breadth \| cycle_streak(v2); scope: `{circle?: string}` |
 | stackable | boolean default false | |
 | maxStack | int default 1 | cap on count |
 | defaultExpiryDays | int NULL | warnings default from game variable |
@@ -186,7 +186,7 @@ Public-visibility awards emit addActivity("badge", "{firstName} earned {badge} �
 - badges.max_featured: 3 (0–10) — badges shown in bylines/map chips
 - badges.warning_default_days: 14 (1–365) — default warning/timeout expiry when the issuer sets none
 - badges.evaluate_on_cycle_close: true (boolean) — run the earned-rule engine as part of cycle close
-- badges.earned_points_per_stack: 1000 (1–1000000) — the original 'every 1,000 points' threshold for the default ledger_earned_total badge (unit: Gratitude, quest-consent credits only)
+- badges.earned_points_per_stack: 1000 (1–1000000) — the original 'every 1,000 points' threshold for the defaultmetric ∈ quests_consented | ledger_earned_total | gratitude_breadth | gene_keys_shown | cycle_streak(v2)badge (unit: Gratitude, quest-consent credits only)
 - badges.gratitude_breadth_threshold: 5 (1–1000) — distinct senders in one settled cycle for the breadth badge
 - badges.streak_cycles: 3 (2–24) — consecutive active cycles for the streak badge (v2)
 - badges.show_on_byline: true (boolean) — featured chips on wall/pulse bylines
@@ -212,7 +212,7 @@ Admin.tsx "Badges" tab (AdminBadges.tsx), following the existing tab pattern, co
 
 ## v1 (ship first, useful alone)
 
-Ships alone and useful (4 sessions): Session 1 — shared/badges.ts (types, rule schema, validation), four JSON stores + seeds + ensureDataFiles entries, Drizzle tables in schema.ts, capabilities.ts extension (badge grants + warning denies, evaluation order), F4 boot assertions, server/badges.invariants.test.ts + gate unit tests. Session 2 — AdminBadges tab: registry CRUD with kind-driven validation, granted-badge award/revoke/restore with provenance, warnings desk with expiry (lazy expiry at read + sweep), manual Hypha mirror, audit journal, pulse entries; gate enforcement live on forum.post etc. Session 3 — member surfaces: self-claim/unclaim, skill tags, BadgeShelf + provenance popover + featured picker on Profile, /api/badges/of/:userId with visibility rules, byline chips on the Gratitude Wall. Session 4 — earned engine: evaluateEarnedBadges hooked into cycle close (quests_consented, ledger_earned_total stacking, gratitude_breadth), idempotent tier events, recompute-based stacks, /api/badges/match + MemberMatchPanel in role creation. Default seed set (platform-generic): First Quest, Steady Hands (5 consented quests), Widely Thanked (breadth), Village Craftsperson per-circle (stacking), Timeout (warning, denies forum.post), Hypha Treasury Mirror (display-only example).
+Ships alone and useful (4 sessions): Session 1 — shared/badges.ts (types, rule schema, validation), four JSON stores + seeds + ensureDataFiles entries, Drizzle tables in schema.ts, capabilities.ts extension (badge grants + warning denies, evaluation order), F4 boot assertions, server/badges.invariants.test.ts + gate unit tests. Session 2 — AdminBadges tab: registry CRUD with kind-driven validation, granted-badge award/revoke/restore with provenance, warnings desk with expiry (lazy expiry at read + sweep), manual Hypha mirror, audit journal, pulse entries; gate enforcement live on forum.post etc. Session 3 — member surfaces: self-claim/unclaim, skill tags, BadgeShelf + provenance popover + featured picker on Profile, /api/badges/of/:userId with visibility rules, byline chips on the Gratitude Wall. Session 4 — earned engine: evaluateEarnedBadges hooked into cycle close (quests_consented,metric ∈ quests_consented | ledger_earned_total | gratitude_breadth | gene_keys_shown | cycle_streak(v2)stacking, gratitude_breadth), idempotent tier events, recompute-based stacks, /api/badges/match + MemberMatchPanel in role creation. Default seed set (platform-generic): First Quest, Steady Hands (5 consented quests), Widely Thanked (breadth), Village Craftsperson per-circle (stacking), Timeout (warning, denies forum.post), Hypha Treasury Mirror (display-only example).
 
 ## v2 (the rest of the design)
 

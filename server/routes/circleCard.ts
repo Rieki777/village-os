@@ -59,6 +59,8 @@ type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" | "getPool"
   boolVar(key: string): boolean;
   /** Tests hand in a fixed instant. */
   now?: () => Date;
+  /** Badges asleep this season (server/index.ts), so the role rows name no multiplier the payment skips. */
+  dormantBadgeIds?: () => Promise<string[]>;
 };
 
 /** `/api/org`'s tier for this reader, by the same three functions. */
@@ -116,6 +118,7 @@ export function register(app: Express, deps: Deps): void {
       reviewOn: state.current?.endsOn ?? null,
       viewer: viewer ? { userId: String(viewer.id), admin } : null,
       sessionsDeps: { circles: () => deps.circles().map((c) => ({ id: c.id, name: c.name })), lapseContext: deps.lapse },
+      dormantBadges: deps.dormantBadgeIds ? await deps.dormantBadgeIds().catch(() => []) : [],
     });
     res.json({
       circleId: circle.id,

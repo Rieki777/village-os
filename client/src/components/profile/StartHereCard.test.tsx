@@ -16,6 +16,8 @@ const session = vi.hoisted(() => ({
   modulesOn: new Set<string>(),
 }));
 const gameFetch = vi.hoisted(() => vi.fn());
+/** The member's own Gene Keys: off, and nothing saved, unless a test says otherwise. */
+const geneKeys = vi.hoisted(() => ({ on: false, mine: null as unknown }));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: session.user, token: session.user ? "t" : null, loading: false }),
@@ -25,6 +27,7 @@ vi.mock("@/lib/gameApi", () => ({ gameFetch: (...args: unknown[]) => gameFetch(.
 vi.mock("@/modules/ModuleProvider", () => ({
   useModule: (id: string) => (session.modulesOn.has(id) ? { id, lifecycle: "members" } : undefined),
 }));
+vi.mock("@/components/geneKeys/useMyGeneKeys", () => ({ useMyGeneKeys: () => ({ on: geneKeys.on, mine: geneKeys.on ? geneKeys.mine : null }) }));
 
 import StartHereCard, { isAdmittedHere, opensAtMembership, viewerOwns } from "./StartHereCard";
 import type { GameMe, ProgressionCapability, PublicGameConfig } from "@/lib/gameApi";
@@ -61,6 +64,8 @@ beforeEach(() => {
   gameFetch.mockReturnValue(answer(VOUCHES));
   session.user = { id: "u1", name: "Wren Alder", handle: "wren" };
   session.modulesOn = new Set(["map"]);
+  geneKeys.on = false;
+  geneKeys.mine = null;
 });
 
 describe("StartHereCard: a signed-in guest who has not asked yet", () => {
@@ -165,6 +170,45 @@ describe("StartHereCard: a member", () => {
     render(<StartHereCard ownerId="u1" me={me({ membership: true, stageIndex: 4 })} signing={null} config={config()} />);
     expect(within(card()).queryByRole("link", { name: /Raise your hand/ })).toBeNull();
     expect(link(/Propose a quest/)).toBeInTheDocument();
+  });
+});
+
+describe("StartHereCard: finding your lines", () => {
+  const member = () => me({ membership: true, stageIndex: 4 });
+  const doors = () => within(within(card()).getByRole("list", { name: "Other ways forward" })).getAllByRole("link").map((a) => a.getAttribute("href"));
+
+  // CONTROL: drop the `myLines === null` test and the saved and reading cases go red.
+  it("offers it last among the other doors while Gene Keys are on and nothing is saved, the quest still the step", () => {
+    geneKeys.on = true;
+    render(<StartHereCard ownerId="u1" me={member()} signing={null} config={config()} />);
+    expect(link(/Propose a quest/)).toHaveAttribute("href", "/propose-quest");
+    expect(link("Find your lines")).toHaveAttribute("href", "/profile/gene-keys");
+    expect(doors()).toEqual(["/roles", "/profile/gene-keys"]);
+    expect(within(card()).getByText(/so the roles and teams we suggest fit you/)).toBeInTheDocument();
+  });
+
+  it("offers it to a guest as well, beside the joining door", () => {
+    geneKeys.on = true;
+    render(<StartHereCard ownerId="u1" me={me()} signing={null} config={config()} />);
+    expect(link(/Sign the Love Letter/)).toHaveAttribute("href", "/love-letter");
+    expect(link("Find your lines")).toHaveAttribute("href", "/profile/gene-keys");
+    expect(doors().at(-1)).toBe("/profile/gene-keys");
+  });
+
+  it("leaves it out once lines are saved, while they are still being read, and while the module is off", () => {
+    geneKeys.on = true;
+    geneKeys.mine = { lines: [2, 5] };
+    const { unmount } = render(<StartHereCard ownerId="u1" me={member()} signing={null} config={config()} />);
+    expect(within(card()).queryByRole("link", { name: "Find your lines" })).toBeNull();
+    unmount();
+    geneKeys.mine = undefined;
+    const second = render(<StartHereCard ownerId="u1" me={member()} signing={null} config={config()} />);
+    expect(within(card()).queryByRole("link", { name: "Find your lines" })).toBeNull();
+    second.unmount();
+    geneKeys.on = false;
+    geneKeys.mine = null;
+    render(<StartHereCard ownerId="u1" me={member()} signing={null} config={config()} />);
+    expect(within(card()).queryByRole("link", { name: "Find your lines" })).toBeNull();
   });
 });
 

@@ -55,6 +55,8 @@
 import Layout from "@/components/Layout";
 import ConsentQueue, { useConsentClaims } from "@/components/review/ConsentQueue";
 import OwedPostings from "@/components/review/OwedPostings";
+import OwedCancels, { type OwedCancelsSummary } from "@/components/review/OwedCancels";
+import { announceErasureRetry, type ErasureRetryAnswer } from "@/components/review/erasureRetry";
 import ProposedSeatPreview from "@/components/power/ProposedSeatPreview";
 import { blockedReasons, NOTHING_LEFT_OUT, notReadLines, type NotRead } from "@/components/review/draftNotes";
 import { useCallback, useEffect, useState } from "react";
@@ -251,6 +253,8 @@ export default function Review() {
      * crash on the queue screen.
      */
     local?: { count: number; oldestSince: string | null; stoppedAt: Record<string, number> };
+    /** The third kind: a departed member's recurring payment a person still has to cancel. Optional for the same reason. */
+    subscriptions?: OwedCancelsSummary;
   } | null>(null);
   const [asking, setAsking] = useState(false);
 
@@ -268,39 +272,12 @@ export default function Review() {
     setAsking(true);
     try {
       const r = await fetch("/api/review/erasure/retry", { method: "POST", headers: headers() });
-      const d = (await r.json().catch(() => ({}))) as {
-        asked?: number;
-        finished?: number;
-        resumed?: number;
-        swept?: number;
-        error?: string;
-      };
+      const d = (await r.json().catch(() => ({}))) as ErasureRetryAnswer;
       if (!r.ok) {
         toast.error(d?.error ?? "That did not go through");
         return;
       }
-      const finished = d.finished ?? 0;
-      // The two halves are reported separately because they are separate work.
-      // Folding a finished local sweep into the vendor count would say a store
-      // confirmed something no store was ever asked about.
-      const swept = d.swept ?? 0;
-      if (d.resumed) {
-        toast.success(
-          swept > 0
-            ? `${swept} of ${d.resumed} unfinished sweeps completed here.`
-            : `${d.resumed} unfinished sweeps are still stuck. The queue says which step.`,
-        );
-      }
-      if (d.asked) {
-        toast.success(
-          finished > 0
-            ? `${finished} of ${d.asked} finished. The rest have still not confirmed.`
-            : `Asked about ${d.asked}. None of them confirmed yet.`,
-        );
-      }
-      // A press that found nothing to do still says so. A silent button is one
-      // a steward presses again, and again.
-      if (!d.resumed && !d.asked) toast.success("Nothing was outstanding.");
+      announceErasureRetry(d);
       await load();
     } catch {
       toast.error("Could not reach the server");
@@ -587,6 +564,7 @@ export default function Review() {
         reward: {
           valueMinor: body.valueMinor,
           valueTokens: body.valueTokens,
+          cashMinor: body.cashMinor,
           stayCreditReward: typed.stayCreditReward.trim() === "" ? null : Number(typed.stayCreditReward),
         },
         // The words as the steward left them: the one way a name typed into an idea comes out before the board.
@@ -722,6 +700,10 @@ export default function Review() {
             </button>
           </div>
         )}
+
+        {/* A recurring payment a departed member's erasure could not cancel. */}
+        <OwedCancels summary={owed?.subscriptions} aged={agedFor(owed?.subscriptions?.oldestSince ?? null)} busy={asking}
+          onFinish={() => void askAgain()} headers={headers} onChanged={() => void load()} />
 
         {/* What the village still owes somebody who left. The only item on
             this screen about a person already gone, and it is here because

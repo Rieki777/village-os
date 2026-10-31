@@ -85,6 +85,7 @@
 import { clockFor } from "../cycleClock";
 import { VARIABLES_BY_KEY, parseVariable } from "../gameVariables";
 import { shareOfTotal, topShares } from "../governanceShare";
+import { GRATITUDE_NEVER_PAYS } from "../workValue";
 import type {
   DomainModel,
   Flag,
@@ -932,9 +933,10 @@ function stepCycle(
   // ── 1. Confirmed quests fire the quest.completed rules ────────────────────
   //
   // the claim pricing in server/lib/economy.ts, guard for guard and
-  // in its order. It skips recognition (the consent route already minted it),
-  // it refuses a from_source rule outright because a quest posts no amount in
-  // any token but recognition, it stays quiet about a rule set to zero, it
+  // in its order. It skips recognition (a consent mints none since 41512d9, and
+  // Gratitude is only ever sent member to member, Rye 2026-10-23), it refuses
+  // a from_source rule outright because this model carries no quest's own
+  // list, it stays quiet about a rule set to zero, it
   // reports a rule the engine cannot honour, and it pays the CLAIMANT whatever
   // the rule's `recipient` column says.
   //
@@ -944,16 +946,11 @@ function stepCycle(
   // distribution there is and is said here rather than buried.
   const questRules = rulesForTrigger(state.mintRules ?? [], QUEST_TRIGGER);
   const questsConfirmed = confirmationsThisCycle(state.quests, assumptions.questRateMultiplier, rng);
-  const perQuestRecognition = state.quests ? state.quests.gratitudePerConfirmation : BigInt(0);
+  // NO RECOGNITION PER QUEST. This posted the average Gratitude a confirmed
+  // quest used to mint, read off the tables; no consent mints any now, and a
+  // forecast that paid it would show Gratitude arriving by a door that is shut.
   for (let q = 0; q < questsConfirmed && members.length > 0; q += 1) {
     const member = members[q % members.length];
-    // The recognition a confirmed quest pays, observed as an average off the
-    // tables. `server/index.ts:20616` posts it as a bare `postTransfer` with
-    // no `gratitude_log` row, which is why it never reaches the pool split
-    // below.
-    if (perQuestRecognition > BigInt(0) && recognition && recognition.faucet) {
-      post(book, recognition.faucet, member.accountId, RECOGNITION_SLUG, perQuestRecognition, "quest_consent");
-    }
     for (let r = 0; r < questRules.length; r += 1) {
       const rule = questRules[r];
       if (rule.tokenSlug === RECOGNITION_SLUG) continue;
@@ -1065,6 +1062,11 @@ function stepCycle(
   for (let r = 0; r < roleRules.length; r += 1) {
     const rule = roleRules[r];
     activityFor(ruleActivity, rule);
+    // Gratitude pays no role, as in `runSettlement` (server/lib/economy.ts).
+    if (rule.tokenSlug === RECOGNITION_SLUG) {
+      noteUnpayable(unpayable, rule, GRATITUDE_NEVER_PAYS);
+      continue;
+    }
     const problem = ruleCannotPay(tokens, rule.tokenSlug);
     if (problem) {
       noteUnpayable(unpayable, rule, problem);

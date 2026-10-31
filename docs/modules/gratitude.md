@@ -128,6 +128,18 @@ survive, because deleting a value row would break the conservation proof. So set
 untouched by an erasure, a departed member's sends still count toward their recipients'
 `received`, and a pool share still posts to `mem:<their id>`.
 
+**Nothing new is sent to a member who has left.** The tombstone keeps an address,
+`deleted-<id>@anonymized.invalid`, and the send doors looked recipients up by address or id and
+refused only the standing examples, so typing that address or hearting a departed member's old post
+issued Gratitude into an account nobody holds. `departedRecipient` in `server/lib/gratitude.ts`
+answers for three doors: `sendGratitude` (the wall, by address, id, typed address or old handle, and
+forum hearts), the Hearts give (`POST /api/gratitude`) and member token sends
+(`POST /api/wallet/send`). Each refuses with 404 and `DEPARTED_RECIPIENT`, before anything is written.
+The admin hand-mint and its co-signed approval ask the same question through `mintRecipientRefusal`,
+which also refuses a standing example with 409, so a steward mints nothing to either.
+Pinned by `server/lib/gratitude.tombstone.test.ts` and the last two cases of
+`server/needsTombstone.routes.e2e.test.ts`.
+
 `GET /api/profile/export` is the "everything the village holds about me" document and carries
 `gratitudeSent` and `gratitudeReceived` out of `gratitudeRepo.all()`. It carries no
 `gratitude_distributions` rows, so a member's own settled totals, their distinct-sender count
@@ -299,32 +311,28 @@ thing sits outside them:
 Recognition **issues** at send: `postTransferOn` moves it from the `sys:gratitude-pool` faucet to
 the recipient. The sender spends budget, never balance.
 
-### Recognition issues four ways, and only one of them is here
+### Recognition issues one way: a member sends it
 
-This module's dials bound the send channel and nothing else. Every one of these posts the same
-recognition token, and none of them writes `gratitude_log`, spends an allowance, or respects
-`gratitude.max_share_per_recipient`:
+Rye, 2026-10-23: "GRATITUDE is only sent from player to player using the send gratitude
+function, gratitude is not distributed in any other way!" **The send** (this module, and the
+feed's hearts through the same `sendGratitude`) is the only door, from `RECOGNITION_FAUCET`,
+bounded by `gratitude.base_budget` times the stage multiplier and by the share.
 
-1. **The send** (this module), from `RECOGNITION_FAUCET`, bounded by `gratitude.base_budget`
-   times the stage multiplier and by the share.
-2. **Quest consent**, `POST /api/admin/quest-claims/:id/consent` in `server/index.ts`, posting
-   `source: "quest_consent"` from the same faucet, at an amount a steward types out of the
-   quest's advertised `quests.gratitude` range, multiplied by `rewardMultiplierFor` (a standing
-   badge).
-3. **Work With Us acceptance**, posting `source: "proposal_accepted"` from the same faucet for
-   `gratitude.proposal_accept_award`.
-4. **The admin mint**, `POST /api/admin/tokens/:slug/mint` and
-   `POST /api/admin/mint-requests/:id/approve`, posting from `sys:mint` and bounded only by
-   `ledger.admin_mint_cycle_cap`, the co-sign threshold and the self-grant refusal.
+Every other door that used to issue it is shut, each with the same sentence
+(`GRATITUDE_ONLY_SENT`, shared/workValue.ts):
 
-`faucetFor(HEARTS)` in `server/lib/economy.ts` also routes any `mint_rules` payout of
-recognition to `sys:gratitude-pool`, and `server/lib/economySeed.ts` ships a `role.cycle` /
-HEARTS rule seeded `enabled: false` that the hourly `moon-settlement` job would pay the moment a
-village switches it on.
+- **Quest consent** mints none since 41512d9; a quest pays work tokens through `quoteWorkPay`.
+- **Work With Us acceptance** pays the Mint panel's `proposal.accepted` rules
+  (server/lib/proposalAward.ts); `gratitude.proposal_accept_award` is retired.
+- **The admin mint**, `POST /api/admin/tokens/:slug/mint` and its co-signed approval, refuses
+  Gratitude, and the Tokens tab no longer offers it.
+- **Circle treasuries** refuse a budget unit of `token:gratitude`, and funding, spending and
+  bonuses refuse it too, for a budget stored before.
+- **Role pay**: the seeded `role.cycle` / HEARTS rule pays nobody if switched on
+  (`quoteWorkPay`); **owed quest postings** and a **cycle split frozen in Gratitude** are refused.
 
-The consequence for the Sharp edge below: `gratitude.max_share_per_recipient` bounds
-concentrated voice **on gratitude sends**. Because `governance.weight_token` defaults to
-`gratitude`, standing arriving through any of the other three doors is unbounded by it.
+So `gratitude.max_share_per_recipient` bounds every unit of Gratitude anybody holds, because
+every unit arrived by a send.
 
 ### The allowance
 

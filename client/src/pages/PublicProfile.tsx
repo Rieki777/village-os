@@ -24,6 +24,8 @@ import AlignedSection from "@/components/profile/AlignedSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
 import { PersonGeneKeysCard, PersonGeneKeysSeal } from "@/components/geneKeys/ProfileGeneKeys";
 import { moonsOnLandPhrase } from "@shared/villageMoon";
+import BadgeFlower, { type FlowerBadge } from "@/components/badges/BadgeFlower";
+import BadgeRoster from "@/components/badges/BadgeRoster";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -73,6 +75,14 @@ export default function PublicProfile() {
    */
   const [archetypes, setArchetypes] = useState<Archetype[]>([]);
   const tokenName = useTokenName("Recognition");
+  /**
+   * Their badges, for the flower round the portrait. The public card shows only
+   * the ones they chose to feature; the roster behind it shows every one the
+   * badge door serves (never a warning). Read by handle, since this page never
+   * holds the id. A module that is off answers 404 and the flower draws nothing.
+   */
+  const [badges, setBadges] = useState<FlowerBadge[]>([]);
+  const [roster, setRoster] = useState(false);
 
   useEffect(() => {
     if (!params?.handle) return;
@@ -90,6 +100,15 @@ export default function PublicProfile() {
       .then((list) => setArchetypes(Array.isArray(list) ? list : []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setBadges([]);
+    if (!params?.handle) return;
+    fetch(`/api/badges/of/@${encodeURIComponent(params.handle)}`, { headers: headers() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setBadges(Array.isArray(d?.badges) ? d.badges : []))
+      .catch(() => {});
+  }, [params?.handle]);
 
   const nameOf = (key: string) => archetypes.find((a) => a.key === key)?.name ?? key;
   /*
@@ -136,6 +155,8 @@ export default function PublicProfile() {
   }
 
   const hero = sheet.party?.find((c) => c.isPrimary) ?? sheet.party?.[0] ?? null;
+  const firstName = sheet.name.split(" ")[0];
+  const featured = badges.filter((b) => b.featured);
 
   return (
     <Layout>
@@ -144,14 +165,24 @@ export default function PublicProfile() {
       </p>
       <div className="mx-auto max-w-3xl px-4 py-10">
         <header className="flex flex-col items-center gap-5 sm:flex-row sm:items-end">
-          <div className="relative">
-          <div className="h-40 w-32 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
+          {/* With featured badges the portrait turns round and wears them as a flower. */}
+          <div className={`relative ${featured.length ? "m-7" : ""}`}>
+          <BadgeFlower
+            badges={featured}
+            label={`${firstName}'s badges, ${featured.length} shown on their card. Open the roster.`}
+            onOpen={() => setRoster(true)}
+          />
+          <div
+            className={`overflow-hidden border border-gray-200 bg-gray-50 ${
+              featured.length ? "pointer-events-none relative h-36 w-36 rounded-full" : "h-40 w-32 rounded-2xl"
+            }`}
+          >
             {hero?.avatar ? (
               <img
                 src={hero.avatar}
                 alt={nameOf(hero.archetypeKey)}
                 loading="lazy"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover object-top"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
@@ -175,6 +206,15 @@ export default function PublicProfile() {
             ) : null}
           </div>
         </header>
+
+        <BadgeRoster
+          open={roster}
+          onOpenChange={setRoster}
+          badges={badges}
+          maxFeatured={null}
+          whose={firstName}
+          editable={false}
+        />
 
         {/*
           THE PORTRAITS WERE THE ONLY CARRIER, AND THEY WERE DECORATIVE.

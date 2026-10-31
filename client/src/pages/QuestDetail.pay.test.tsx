@@ -25,6 +25,7 @@ vi.mock("wouter", () => ({
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 vi.mock("@/components/QuestActions", () => ({ default: () => <div /> }));
 vi.mock("@/components/QuestCrews", () => ({ default: () => <div /> }));
+vi.mock("@/components/messages/WorkChatButton", () => ({ default: () => <div /> }));
 vi.mock("@/components/NeedChips", () => ({ default: () => <div /> }));
 vi.mock("@/components/admin/NeedTagPicker", () => ({ default: () => <div /> }));
 vi.mock("@/components/QuestCard", () => ({

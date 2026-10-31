@@ -246,19 +246,22 @@ describe.skipIf(!configured)("earned equity, claimed toward Hypha", () => {
     await bothBooksBalance();
   });
 
-  it("is seeded two rules, both switched off, so a village decides what pays it", async () => {
+  it("is seeded three rules, all switched off, so a village decides what pays it", async () => {
     await seedEconomy(pool, "local");
     const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `id`, `trigger`, `amount`, `ceiling`, `recipient`, `enabled` FROM `mint_rules` " +
         "WHERE `token_slug` = ? ORDER BY `trigger`",
       [EARNED_EQUITY],
     );
+    // An accepted proposal is work too (Rye, 2026-10-23), so it gets an Earned
+    // Equity rule beside the quest's and the role's, off like them.
     expect(rows.map((r) => ({ ...r, amount: Number(r.amount), ceiling: Number(r.ceiling) }))).toEqual([
+      { id: "rule-proposal.accepted-earned-equity", trigger: "proposal.accepted", amount: 1, ceiling: 1, recipient: "claimant", enabled: 0 },
       { id: "rule-quest.completed-earned-equity", trigger: "quest.completed", amount: 1, ceiling: 1, recipient: "claimant", enabled: 0 },
       { id: "rule-role.cycle-earned-equity", trigger: "role.cycle", amount: 1, ceiling: 1, recipient: "holder", enabled: 0 },
     ]);
     // Off means the engine never reads them.
-    for (const trigger of ["quest.completed", "role.cycle"]) {
+    for (const trigger of ["proposal.accepted", "quest.completed", "role.cycle"]) {
       expect((await rulesFor(pool, trigger)).some((r) => r.tokenSlug === EARNED_EQUITY)).toBe(false);
     }
   });

@@ -14,6 +14,8 @@ import { useModuleOn } from "@/modules/ModuleProvider";
 import { readHandleGeneKeys, readPeopleGeneKeys } from "@/lib/geneKeysApi";
 import GeneKeysSeal from "./GeneKeysSeal";
 import { GeneKeysLines, GeneKeysOwnerControls } from "./GeneKeysLines";
+import GeneKeysComplements from "./GeneKeysComplements";
+import GeneKeysMoon from "./GeneKeysMoon";
 import { useMyGeneKeys } from "./useMyGeneKeys";
 import { BTN_GOLD, EYEBROW, HINT, NIGHT_CARD } from "./ui";
 
@@ -24,8 +26,8 @@ export function MyGeneKeysSeal({ className }: { className?: string }) {
   return <GeneKeysSeal view={mine} whose={null} mine={mine} className={className} />;
 }
 
-/** The card on the member's own profile: their lines, or the invitation to find them. */
-export function ProfileGeneKeysCard() {
+/** The card on the member's own profile: their lines, or the invitation to find them. `owner` keys their Journal. */
+export function ProfileGeneKeysCard({ owner }: { owner: string | null }) {
   const { on, mine } = useMyGeneKeys();
   if (!on || mine === undefined) return null;
 
@@ -54,8 +56,10 @@ export function ProfileGeneKeysCard() {
         {mine.names}
       </h2>
       <GeneKeysLines view={mine} whose={null} />
-      <div className="mt-4">
+      <div className="mt-4 flex flex-col gap-4">
         <GeneKeysOwnerControls mine={mine} />
+        <GeneKeysComplements mine={mine} />
+        <GeneKeysMoon owner={owner} bare />
       </div>
     </section>
   );

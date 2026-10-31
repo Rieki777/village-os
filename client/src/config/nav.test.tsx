@@ -45,6 +45,7 @@ vi.mock("@/lib/gameApi", () => ({
 }));
 vi.mock("@/components/NotificationBell", () => ({ default: () => null }));
 vi.mock("@/components/NotificationToasts", () => ({ default: () => null }));
+vi.mock("@/components/RewardMoment", () => ({ default: () => null }));
 vi.mock("@/components/mobile/MobileTabBar", () => ({
   default: () => null,
   isBareRoute: () => false,

@@ -50,7 +50,10 @@ import type { ModuleLifecycle } from "../../shared/modules";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
 import { overrideInForce, seatState, type OrgAssignment, type OrgRole } from "./orgChart";
 import type { MintRule } from "./economy";
-import { rolePay } from "./workPay";
+import { payBadgeBoosts, rolePay, withPayBadges, type BadgeBoost } from "./workPay";
+
+/** Re-exported so the composition root reads the badges through the import it already has. */
+export { payBadgeBoosts };
 import type { StatedCash } from "../../shared/workValue";
 
 /**
@@ -130,6 +133,11 @@ export interface SeatProjectionCtx {
    * only: what a role pays is money, and it sits beside the terms it belongs to.
    */
   payRules?: readonly MintRule[];
+  /**
+   * The badges that multiply token pay (`payBadgeBoosts`), so a role's card
+   * names them beside the lines they multiply. Absent draws no badge.
+   */
+  payBadges?: readonly BadgeBoost[];
   /**
    * Each role's health, read once for the page by `orgRoleExtras`
    * (server/lib/orgRoleHealth.ts), at the tier that function was handed.
@@ -356,6 +364,9 @@ function recruitmentPack(role: OrgRole) {
     valueMinor: role.valueMinor ?? null,
     valueCurrency: role.valueCurrency ?? null,
     valueTokens: role.valueTokens ?? null,
+    // 0285: the cash it pays each cycle, as stored, for the same editor.
+    cashMinor: role.cashMinor ?? null,
+    cashCurrency: role.cashCurrency ?? null,
   };
 }
 
@@ -448,7 +459,7 @@ export function projectSeat(
     isExample: role.isExample,
     ...(tier.structure ? seatStructure(role, held, ctx.now) : {}),
     ...(tier.terms ? termsOffer(role) : {}),
-    ...(tier.terms && ctx.payRules ? { pay: rolePay(role, ctx.payRules, statedCash(role)) } : {}),
+    ...(tier.terms && ctx.payRules ? { pay: withPayBadges(rolePay(role, ctx.payRules, statedCash(role)), ctx.payBadges ?? []) } : {}),
     // The terms each live holder is seated on, beside what the seat offers (red team U2).
     ...(tier.terms && ctx.heldTerms ? { heldTerms: heldTermsOf(held, ctx.heldTerms, ctx) } : {}),
     // Three facts and a dot per role, never a score (PR 3 of the player card).

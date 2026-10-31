@@ -410,6 +410,27 @@ describe.skipIf(!DB_CONFIGURED)("the happy path: a new member signs in with Goog
     const body = await (await exchange(cookie)).json();
     expect(body.user.email).toBe("newcomer@example.com");
   });
+
+  /*
+   * A departed member's old handle is `departed-` and the last eight of their
+   * id, and the erasure frees it. A newcomer whose Google name slugs to that
+   * shape would have taken it, and every old link to the departed member's
+   * page would have reached them (round 3 leftover).
+   */
+  it("gives a newcomer whose name starts with Departed a handle that does not start with departed-", async () => {
+    const { state, nonce } = await beginSignIn();
+    nextResponse = {
+      status: 200,
+      claims: claimsFor({ nonce, sub: "google-sub-departed-fern", email: "fern@example.com", email_verified: true, name: "Departed Fern" }),
+    };
+    const { cookie } = await callback(state);
+    const ex = await exchange(cookie);
+    expect(ex.status).toBe(200);
+    const body = await ex.json();
+    expect(body.user.email, "the account was made").toBe("fern@example.com");
+    expect(String(body.user.handle)).not.toMatch(/^departed-/);
+    expect(String(body.user.handle), "and the handle still comes from their name").toMatch(/^fern/);
+  });
 });
 
 describe.skipIf(!DB_CONFIGURED)("the link path", () => {
@@ -934,5 +955,44 @@ describe.skipIf(!DB_CONFIGURED)("a village that joins by invitation, at the Goog
     const second = await newcomer(reuse.state, reuse.nonce, "second-on-one-link");
     expect(second.location).toBe("/login?oauth=error&reason=invitation_required");
     expect(second.cookie).toBeNull();
+  });
+
+  /*
+   * /start asks the door while the maker stands and signs only the link's id
+   * into the state, which the callback accepts for fifteen minutes. The maker
+   * is erased in between, and the sweep stops after the tombstone and before
+   * `invites-after-tombstone`, so the row still reads open. The callback's
+   * claim asks about the maker again (server/lib/inviteDoor.ts).
+   */
+  it("makes no account on a link whose maker left after the sign-in started, withdraws it, and a link from somebody who stays still opens", async () => {
+    const made = await asFounder("POST", "/api/invites");
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const invite = new URL(String(made.json.path), BASE).searchParams.get("invite")!;
+    // A maker of its own, so the founder every other case signs in as is never touched.
+    const makerId = `google-gone-maker-${PORT}`;
+    await testDb!.conn.query("INSERT INTO users (id, name, email, password_hash) VALUES (?, 'Hazel Brook', ?, '')", [makerId, `${makerId}@example.com`]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await testDb!.conn.query("UPDATE member_invites SET inviter_user_id = ? WHERE id = ?", [makerId, made.json.id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+
+    const { state, nonce } = await beginInvitedSignIn(invite);
+    expect(statePayload(state).invite, "the door said yes while the maker stood").toBe(made.json.id);
+
+    // What the tombstone step writes, with the sweep stopped before the links.
+    await testDb!.conn.query("UPDATE users SET name = 'A departed member', email = CONCAT('deleted-', id, '@anonymized.invalid') WHERE id = ?", [makerId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+
+    const refused = await newcomer(state, nonce, "after-the-maker-left");
+    expect(refused.location).toBe("/login?oauth=error&reason=invitation_used");
+    expect(refused.cookie).toBeNull();
+    const [accounts] = await testDb!.conn.query<any[]>("SELECT COUNT(*) AS n FROM users WHERE email = 'after-the-maker-left@example.com'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(Number(accounts[0].n), "an account was made on a tombstone's link").toBe(0);
+    const [links] = await testDb!.conn.query<any[]>("SELECT used_by_user_id, revoked_at FROM member_invites WHERE id = ?", [made.json.id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(links[0].used_by_user_id, "the link is spent").toBeNull();
+    expect(links[0].revoked_at, "the link is withdrawn").not.toBeNull();
+
+    // THE CONTROL, in the same case: a link from the founder, who stays, still makes the account.
+    const kept = await asFounder("POST", "/api/invites");
+    expect(kept.status, JSON.stringify(kept.json)).toBe(200);
+    const standing = await beginInvitedSignIn(new URL(String(kept.json.path), BASE).searchParams.get("invite")!);
+    const arrived = await newcomer(standing.state, standing.nonce, "on-a-standing-link");
+    expect(arrived.location).toContain("oauth=complete");
   });
 });
