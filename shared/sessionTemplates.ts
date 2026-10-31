@@ -57,6 +57,16 @@ import { cleanLine, cleanText } from "./sessions";
  *   PATCH  /api/session-templates/rooms/:sessionId/priorities/:pid   { outcome } | { text } | { remove: true } -> TemplateRoomView
  *   POST   /api/session-templates/rooms/:sessionId/shares      { kind, text, speakerNo? } -> TemplateRoomView
  *   POST   /api/session-templates/rooms/:sessionId/shares/:shareId/bring   { circleId? } -> TemplateRoomView
+ *   PATCH  /api/session-templates/rooms/:sessionId/shares/:shareId   { servesGoal } -> TemplateRoomView
+ *   GET    /api/session-templates/season?season=<id>        SeasonView (0292)
+ *
+ * SERVING THE SEASON (0292, Rye 2026-10-30). A priority and a win may name the
+ * season priority it serves: `servesGoal`, one of the season's own goals
+ * (the `goals` list on the season, app_config "season"), COPIED AS WRITTEN,
+ * the same way a member's season plan names the goal it serves
+ * (shared/seasonPlans.ts). The season's goals carry no id, so the text is the
+ * reference, and a goal renamed later leaves the old links reading as the
+ * words they were.
  */
 export const TEMPLATES_API = "/api/session-templates";
 export const templateApi = (id: number) => `${TEMPLATES_API}/${id}`;
@@ -73,6 +83,7 @@ export const templateRoomApi = (sessionId: number) => `${TEMPLATES_API}/rooms/${
  * flow names them so a template can say where in the meeting they come.
  */
 export const SECTION_KINDS = [
+  "season_priorities",
   "round",
   "talking_stick",
   "wins",
@@ -87,6 +98,7 @@ export type SectionKind = (typeof SECTION_KINDS)[number];
 export const isSectionKind = (v: unknown): v is SectionKind => typeof v === "string" && (SECTION_KINDS as readonly string[]).includes(v);
 
 export const SECTION_KIND_DEFS: Record<SectionKind, { label: string; hint: string }> = {
+  season_priorities: { label: "This season's priorities", hint: "The season's priorities, read out so the meeting serves them. Priorities and wins can each name the one they serve." },
   round: { label: "A round", hint: "Everyone speaks to the prompt, one at a time." },
   talking_stick: { label: "Talking stick", hint: "A visible stick passes around the people here. Whoever holds it shares, then passes it on." },
   wins: { label: "Wins and celebrations", hint: "What went well, said out loud and kept in the record." },
@@ -454,6 +466,8 @@ export interface PriorityRow {
   text: string;
   position: number;
   outcome: PriorityOutcome | null;
+  /** The season priority it serves, as written, or null. */
+  servesGoal: string | null;
 }
 
 /** What one earlier session of the series hands this one. */
@@ -465,7 +479,7 @@ export interface SeriesReadBack {
   rows: PriorityRow[];
 }
 
-export const SHARE_KINDS = ["grateful", "working", "not_working", "tension"] as const;
+export const SHARE_KINDS = ["grateful", "working", "not_working", "tension", "win"] as const;
 export type ShareKind = (typeof SHARE_KINDS)[number];
 export const isShareKind = (v: unknown): v is ShareKind => typeof v === "string" && (SHARE_KINDS as readonly string[]).includes(v);
 export const SHARE_KIND_LABEL: Record<ShareKind, string> = {
@@ -473,7 +487,10 @@ export const SHARE_KIND_LABEL: Record<ShareKind, string> = {
   working: "What's working",
   not_working: "What's not working",
   tension: "A tension",
+  win: "A win",
 };
+/** What a talking stick captures; a win is captured under a `wins` section. */
+export const STICK_SHARE_KINDS: readonly ShareKind[] = ["grateful", "working", "not_working", "tension"];
 
 export interface ShareRow {
   id: number;
@@ -483,6 +500,8 @@ export interface ShareRow {
   speaker: string | null;
   /** The agenda item it became, when it was brought to a later session. */
   broughtAs: number | null;
+  /** The season priority it serves, as written, or null. */
+  servesGoal: string | null;
   at: string;
 }
 
@@ -511,7 +530,185 @@ export interface TemplateRoomView {
   /** What the fed-from session carried over (a `carried_over` section). */
   carried: SeriesReadBack | null;
   shares: ShareRow[];
+  /** The running season and its priorities, or null when no season runs or it names none. */
+  season: SeasonRef | null;
 }
+
+// ── The season (0292) ───────────────────────────────────────────────────────
+
+export interface SeasonRef {
+  id: string;
+  name: string;
+  goals: string[];
+}
+
+/** A season priority a link names: one of the season's goals as written, or null. Anything else is refused. */
+export function cleanServesGoal(raw: unknown, goals: readonly string[]): { ok: true; value: string | null } | { ok: false } {
+  if (raw == null || raw === "") return { ok: true, value: null };
+  if (typeof raw !== "string") return { ok: false };
+  const t = raw.trim();
+  return goals.includes(t) ? { ok: true, value: t } : { ok: false };
+}
+
+/** The Monday a date falls in, as YYYY-MM-DD in UTC: the week a win or a priority belongs to. */
+export function weekOf(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = (d.getUTCDay() + 6) % 7;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day)).toISOString().slice(0, 10);
+}
+
+const STOP = new Set(
+  "a an and are as at be but by for from has have in is it its of on or our so that the their them there they this to was we were what when who will with you your not no do does dont nobody".split(" "),
+);
+/** The words of a tension that carry its meaning, for telling when one comes back. */
+export function tensionWords(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .map((w) => (w.length > 4 ? w.replace(/s$/, "") : w))
+      .filter((w) => w.length > 2 && !STOP.has(w)),
+  );
+}
+
+/** Two tensions are the same one coming back when at least half the meaning words of the shorter are shared, and two or more. */
+export function sameTension(a: Set<string>, b: Set<string>): boolean {
+  if (!a.size || !b.size) return false;
+  let shared = 0;
+  a.forEach((w) => {
+    if (b.has(w)) shared++;
+  });
+  return shared >= 2 && shared / Math.min(a.size, b.size) >= 0.5;
+}
+
+export interface TensionIn {
+  text: string;
+  sessionId: number;
+  at: string;
+}
+
+export interface TensionGroup {
+  /** The latest wording. Null for a viewer who was in none of the sessions it came up in. */
+  text: string | null;
+  /** How many Heart shares it came up in. */
+  sessions: number;
+  firstAt: string;
+  lastAt: string;
+  sessionIds: number[];
+}
+
+/**
+ * Tensions grouped by the one they are. A group that came up in two or more
+ * sessions is a RECURRING tension. Groups come back in the order they last
+ * came up, latest first, never by size: the view shows what keeps coming
+ * back, it does not rank it.
+ */
+export function groupTensions(list: readonly TensionIn[]): TensionGroup[] {
+  const groups: { seed: Set<string>; items: TensionIn[] }[] = [];
+  for (const t of [...list].sort((a, b) => a.at.localeCompare(b.at))) {
+    const words = tensionWords(t.text);
+    const home = groups.find((g) => sameTension(g.seed, words));
+    if (home) home.items.push(t);
+    else groups.push({ seed: words, items: [t] });
+  }
+  return groups
+    .map((g) => {
+      const ids = Array.from(new Set(g.items.map((i) => i.sessionId)));
+      const last = g.items[g.items.length - 1];
+      return { text: last.text, sessions: ids.length, firstAt: g.items[0].at, lastAt: last.at, sessionIds: ids };
+    })
+    .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+}
+
+export interface SeasonPriorityItem {
+  text: string;
+  outcome: PriorityOutcome | null;
+  sessionId: number;
+  sessionTitle: string;
+  at: string;
+}
+
+export interface SeasonWin {
+  text: string;
+  servesGoal: string | null;
+  sessionTitle: string;
+  at: string;
+}
+
+export interface SeasonGoalView {
+  text: string;
+  /** The season's own mark on the goal (set by whoever keeps the season). */
+  done: boolean;
+  priorities: SeasonPriorityItem[];
+  wins: SeasonWin[];
+}
+
+export interface SeasonWeek {
+  /** The Monday the week starts on, YYYY-MM-DD. */
+  weekOf: string;
+  wins: SeasonWin[];
+  /** Wins shared on the room's item pages that week (they name no season priority). */
+  itemWins: number;
+  prioritiesSet: number;
+  prioritiesDone: number;
+}
+
+export interface SeasonView {
+  season: { id: string; name: string; focus: string; startsOn: string; endsOn: string | null };
+  /** Every dated season, for the picker. */
+  seasons: { id: string; name: string; startsOn: string }[];
+  goals: SeasonGoalView[];
+  /** Priorities that named no season priority, or one the season no longer has. */
+  unlinked: SeasonPriorityItem[];
+  unlinkedWins: SeasonWin[];
+  weeks: SeasonWeek[];
+  tensions: TensionGroup[];
+}
+
+/** How a goal's priorities stand: how many were set, and how each was marked. A count, never a score. */
+export function prioritiesTally(items: readonly SeasonPriorityItem[]): { set: number; done: number; partly: number; carried: number; open: number } {
+  const t = { set: items.length, done: 0, partly: 0, carried: 0, open: 0 };
+  for (const i of items) t[i.outcome ?? "open"]++;
+  return t;
+}
+
+export const SEASON_VIEW_API = `${TEMPLATES_API}/season`;
+export const SEASON_VIEW_PATH = "/sessions/season";
+
+export const SEASON_COPY = {
+  heading: (name: string) => `${name}: the season so far`,
+  lede: "What the weekly meetings set out to do, what got done, what we celebrated and what keeps coming up. It is here for one question we ask together: is the way we work helping people thrive?",
+  link: "The season so far",
+  pickSeason: "Season",
+  focus: "What this season is for",
+  goalsHeading: "This season's priorities",
+  noGoals: "This season names no priorities yet. Whoever keeps the season adds them in the season settings.",
+  setLine: (set: number, done: number, partly: number, carried: number) =>
+    `${set} weekly ${set === 1 ? "priority" : "priorities"} set: ${done} done, ${partly} partly, ${carried} carried over`,
+  noneSet: "No weekly priority has named this one yet.",
+  notMarked: "Not marked yet",
+  winsFor: (n: number) => `${n} ${n === 1 ? "win" : "wins"} for it`,
+  markedDone: "The season marks this one done",
+  unlinkedHeading: "Weekly priorities that named no season priority",
+  unlinkedWinsHeading: "Wins that named no season priority",
+  weeksHeading: "Wins over time",
+  weekOf: (day: string) => `Week of ${day}`,
+  weekWins: (n: number) => `${n} ${n === 1 ? "win" : "wins"}`,
+  weekItemWins: (n: number) => `${n} more on item pages`,
+  weekPriorities: (set: number, done: number) => `${set} priorities set, ${done} done`,
+  noWeeks: "No wins or priorities yet this season.",
+  tensionsHeading: "Tensions that keep coming up",
+  tensionsLede: "From Heart share, latest first. Each one says how many Heart shares it came up in.",
+  tensionTimes: (n: number) => (n === 1 ? "Came up once" : `Came up in ${n} Heart shares`),
+  tensionHidden: "You were not in these Heart shares, so the words stay with the people who were.",
+  noTensions: "No tension has come up in a Heart share this season.",
+  serves: "Serves",
+  servesNone: "No season priority",
+  loadFailed: "The season did not load. Try again in a moment.",
+  noSeason: "No season is set up yet.",
+} as const;
 
 // ── Words ────────────────────────────────────────────────────────────────────
 
@@ -549,6 +746,8 @@ export const TEMPLATE_REFUSALS = {
   sharesFull: `A meeting keeps up to ${TEMPLATE_LIMITS.shares} shares.`,
   shareNotFound: "That share is not here any more.",
   broughtAlready: "That share is on a later session's list already.",
+  goalUnknown: "Choose one of this season's priorities, or none.",
+  seasonUnknown: "That season is not one the village keeps.",
 } as const;
 
 export const TEMPLATE_COPY = {
@@ -603,6 +802,9 @@ export const TEMPLATE_COPY = {
   stickGive: "Give it to",
   stickChoose: "Someone here",
   captureLabel: "Capture what was shared",
+  winsLabel: "Share a win",
+  winPlaceholder: "What did we win at?",
+  winsEmpty: "No wins shared yet.",
   capturePlaceholder: "One line for the record",
   captureKind: "What it is",
   capture: "Keep it",
@@ -666,7 +868,8 @@ export const DEFAULT_TEMPLATES: readonly TemplateSeed[] = [
     feedsFrom: "weekly-monday",
     flow: [
       sec("arrive", "round", "Arriving", 5, "How are you arriving, from 1 to 11?"),
-      sec("wins", "wins", "Wins and celebrations", 15, "What did you win at this week? Big or small, say it out loud."),
+      sec("season", "season_priorities", "This season's priorities", 2, "Read the season's priorities aloud. Each win can name the one it serves."),
+      sec("wins", "wins", "Wins and celebrations", 13, "What did you win at this week? Big or small, say it out loud."),
       sec("review", "priorities_review", "Last Monday's priorities", 15, "For each priority Monday chose: did we tackle it? Done, partly, or carried over."),
       sec("week", "agenda", "What happened this week", 15, "Anything the circle needs to hear or settle before the weekend."),
       sec("next", "round", "What to pick up next week", 5, "What should Monday pick up? Partly done and carried over come to Monday on their own."),
@@ -683,7 +886,8 @@ export const DEFAULT_TEMPLATES: readonly TemplateSeed[] = [
     feedsFrom: "weekly-friday",
     flow: [
       sec("arrive", "round", "Arriving", 5, "How are you arriving, from 1 to 11?"),
-      sec("carried", "carried_over", "Carried over from Friday", 10, "What Friday carried over. Take up what still matters."),
+      sec("season", "season_priorities", "This season's priorities", 2, "Read the season's priorities aloud. This week's priorities each name the one they serve."),
+      sec("carried", "carried_over", "Carried over from Friday", 8, "What Friday carried over. Take up what still matters."),
       sec("gather", "agenda", "The biggest things to tackle", 15, "Everyone adds what they think matters most this week."),
       sec("vote", "priority_vote", "Vote on priorities", 15, "Vote items up and down, and agree together what comes first."),
       sec("set", "priorities_set", "This week's priorities", 10, "Keep the chosen priorities. Friday reads them back."),
