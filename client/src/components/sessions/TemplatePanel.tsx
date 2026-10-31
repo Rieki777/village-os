@@ -16,6 +16,12 @@
  *   - A `priorities_set` section: this meeting's priorities, which the next
  *     meeting in the series reads back.
  *
+ *   - A `season_priorities` section: the running season's priorities, so the
+ *     meeting keeps them at the centre. Every priority and every win can name
+ *     the one it serves (0292), and "The season so far" opens the season view.
+ *   - A `wins` section: the wins the room shares, each naming the season
+ *     priority it serves.
+ *
  * The section's own title heads each part, so "Last Monday's priorities" is
  * the template's words, never this file's.
  *
@@ -23,13 +29,15 @@
  * the room's poll, and draws nothing for a session opened without a template.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import { Feather } from "lucide-react";
 import {
   PRIORITY_OUTCOMES,
   PRIORITY_OUTCOME_LABEL,
+  SEASON_COPY,
   SECTION_KIND_DEFS,
-  SHARE_KINDS,
   SHARE_KIND_LABEL,
+  STICK_SHARE_KINDS,
   TEMPLATES_ROOM_POLL_MS,
   TEMPLATE_COPY,
   TEMPLATE_LIMITS,
@@ -57,6 +65,49 @@ async function sentence(res: Response): Promise<string> {
   }
 }
 
+/** "Serves": one of the season's priorities, or none. Draws nothing when the season names none. */
+function ServesPicker({
+  goals,
+  value,
+  onChange,
+  disabled,
+  compact = false,
+}: {
+  goals: readonly string[];
+  value: string | null;
+  onChange(goal: string | null): void;
+  disabled?: boolean;
+  compact?: boolean;
+}) {
+  if (!goals.length) return null;
+  return (
+    <label className={`flex items-center gap-2 text-sm text-foreground ${compact ? "" : "min-w-0"}`}>
+      <span className="shrink-0 text-muted-foreground">{SEASON_COPY.serves}</span>
+      <select
+        className={`${INPUT} w-auto max-w-[16rem] truncate`}
+        value={value ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value || null)}
+      >
+        <option value="">{SEASON_COPY.servesNone}</option>
+        {goals.map((g) => (
+          <option key={g} value={g}>
+            {g}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** The season priority a row serves, as a chip. */
+const ServesChip = ({ goal }: { goal: string | null }) =>
+  goal ? (
+    <span className={CHIP}>
+      {SEASON_COPY.serves}: {goal}
+    </span>
+  ) : null;
+
 export default function TemplatePanel({ sessionId, agenda }: { sessionId: number; agenda: readonly SessionItem[] }) {
   const [view, setView] = useState<TemplateRoomView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +115,9 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
   const [shareText, setShareText] = useState("");
   const [shareKind, setShareKind] = useState<ShareKind>("grateful");
   const [priorityText, setPriorityText] = useState("");
+  const [priorityServes, setPriorityServes] = useState<string | null>(null);
+  const [winText, setWinText] = useState("");
+  const [winServes, setWinServes] = useState<string | null>(null);
   const alive = useRef(true);
 
   const read = useCallback(async () => {
@@ -116,6 +170,11 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
   const reviewSection = sectionOf(flow, "priorities_review");
   const carriedSection = sectionOf(flow, "carried_over");
   const setSection = sectionOf(flow, "priorities_set");
+  const seasonSection = sectionOf(flow, "season_priorities");
+  const winsSection = sectionOf(flow, "wins");
+  const goals = view.season?.goals ?? [];
+  const wins = view.shares.filter((s) => s.kind === "win");
+  const stickShares = view.shares.filter((s) => s.kind !== "win");
   const canHost = hosts && open;
   const nameOf = (no: number | null) => (no == null ? "" : (view.stick?.people.find((p) => p.no === no)?.name ?? ""));
 
@@ -151,6 +210,78 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
         <p role="alert" className="text-sm font-medium text-destructive">
           {error}
         </p>
+      )}
+
+      {seasonSection && (
+        <div className="space-y-2 rounded-xl border border-notice/50 px-4 py-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className={LABEL_CAPS}>{seasonSection.title}</h3>
+            <Link href="/sessions/season" className={BTN_QUIET}>
+              {SEASON_COPY.link}
+            </Link>
+          </div>
+          {seasonSection.prompt && <p className={HINT}>{seasonSection.prompt}</p>}
+          {goals.length ? (
+            <ol className="space-y-1">
+              {goals.map((g, i) => (
+                <li key={g} className="flex gap-2 text-foreground">
+                  <span className="tabular-nums text-muted-foreground">{i + 1}.</span>
+                  <span>{g}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className={HINT}>{SEASON_COPY.noGoals}</p>
+          )}
+        </div>
+      )}
+
+      {winsSection && (
+        <div className="space-y-2">
+          <h3 className={LABEL_CAPS}>{winsSection.title}</h3>
+          {winsSection.prompt && <p className={HINT}>{winsSection.prompt}</p>}
+          {wins.length ? (
+            <ul className="space-y-1.5">
+              {wins.map((w) => (
+                <li key={w.id} className={`${SOFT} flex flex-wrap items-center justify-between gap-2`}>
+                  <span className="min-w-0 flex-1 text-foreground">{w.text}</span>
+                  {joined && open && goals.length ? (
+                    <ServesPicker goals={goals} value={w.servesGoal} disabled={busy} onChange={(g) => void write(`/shares/${w.id}`, "PATCH", { servesGoal: g })} />
+                  ) : (
+                    <ServesChip goal={w.servesGoal} />
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={HINT}>{TEMPLATE_COPY.winsEmpty}</p>
+          )}
+          {joined && open && (
+            <form
+              className="flex flex-wrap items-center gap-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (await write("/shares", "POST", { kind: "win", text: winText, servesGoal: winServes })) {
+                  setWinText("");
+                  setWinServes(null);
+                }
+              }}
+            >
+              <input
+                className={`${INPUT} min-w-0 flex-1`}
+                aria-label={TEMPLATE_COPY.winsLabel}
+                placeholder={TEMPLATE_COPY.winPlaceholder}
+                value={winText}
+                maxLength={TEMPLATE_LIMITS.shareText}
+                onChange={(e) => setWinText(e.target.value)}
+              />
+              <ServesPicker goals={goals} value={winServes} onChange={setWinServes} disabled={busy} />
+              <button type="submit" className={BTN_SECONDARY} disabled={busy || !winText.trim()}>
+                {TEMPLATE_COPY.winsLabel}
+              </button>
+            </form>
+          )}
+        </div>
       )}
 
       {stickSection && (
@@ -240,7 +371,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
               <p className={LABEL_CAPS}>{TEMPLATE_COPY.captureLabel}</p>
               <div className="flex flex-wrap gap-2">
                 <select className={`${INPUT} w-auto`} aria-label={TEMPLATE_COPY.captureKind} value={shareKind} onChange={(e) => setShareKind(e.target.value as ShareKind)}>
-                  {SHARE_KINDS.map((k) => (
+                  {STICK_SHARE_KINDS.map((k) => (
                     <option key={k} value={k}>
                       {SHARE_KIND_LABEL[k]}
                     </option>
@@ -260,11 +391,11 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
             </form>
           )}
 
-          {view.shares.length > 0 && (
+          {stickShares.length > 0 && (
             <div className="space-y-2">
               <p className={LABEL_CAPS}>{TEMPLATE_COPY.sharesHeading}</p>
               <ul className="space-y-1.5">
-                {view.shares.map((s) => (
+                {stickShares.map((s) => (
                   <li key={s.id} className={`${SOFT} flex flex-wrap items-start justify-between gap-2 text-sm`}>
                     <span className="min-w-0 flex-1">
                       <span className={CHIP}>{SHARE_KIND_LABEL[s.kind]}</span> <span className="text-foreground">{s.text}</span>
@@ -300,7 +431,9 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
                 <ul className="space-y-1.5">
                   {view.review.rows.map((p) => (
                     <li key={p.id} className={`${SOFT} flex flex-wrap items-center justify-between gap-2`}>
-                      <span className="text-foreground">{p.text}</span>
+                      <span className="text-foreground">
+                        {p.text} <ServesChip goal={p.servesGoal} />
+                      </span>
                       <span className="flex flex-wrap gap-1" role="group" aria-label={TEMPLATE_COPY.outcomeAsk}>
                         {PRIORITY_OUTCOMES.map((o) => (
                           <button
@@ -341,7 +474,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
               {view.carried.rows.map((p) => (
                 <li key={p.id} className={`${SOFT} flex flex-wrap items-center justify-between gap-2`}>
                   <span className="text-foreground">
-                    {p.text} {p.outcome && <span className={CHIP}>{PRIORITY_OUTCOME_LABEL[p.outcome]}</span>}
+                    {p.text} {p.outcome && <span className={CHIP}>{PRIORITY_OUTCOME_LABEL[p.outcome]}</span>} <ServesChip goal={p.servesGoal} />
                   </span>
                   {canHost && (
                     <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void write("/priorities", "POST", { fromCarried: p.id })}>
@@ -365,9 +498,14 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
             <ol className="space-y-1.5">
               {view.priorities.map((p, i) => (
                 <li key={p.id} className={`${SOFT} flex flex-wrap items-center justify-between gap-2`}>
-                  <span className="text-foreground">
+                  <span className="min-w-0 flex-1 text-foreground">
                     <span className="tabular-nums text-muted-foreground">{i + 1}.</span> {p.text}
                   </span>
+                  {canHost && goals.length ? (
+                    <ServesPicker goals={goals} value={p.servesGoal} disabled={busy} onChange={(g) => void write(`/priorities/${p.id}`, "PATCH", { servesGoal: g })} />
+                  ) : (
+                    <ServesChip goal={p.servesGoal} />
+                  )}
                   {canHost && (
                     <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void write(`/priorities/${p.id}`, "PATCH", { remove: true })}>
                       {TEMPLATE_COPY.removePriority}
@@ -384,7 +522,10 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
               className="flex flex-wrap gap-2"
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (await write("/priorities", "POST", { text: priorityText })) setPriorityText("");
+                if (await write("/priorities", "POST", { text: priorityText, servesGoal: priorityServes })) {
+                  setPriorityText("");
+                  setPriorityServes(null);
+                }
               }}
             >
               <input
@@ -394,6 +535,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
                 maxLength={TEMPLATE_LIMITS.priorityText}
                 onChange={(e) => setPriorityText(e.target.value)}
               />
+              <ServesPicker goals={goals} value={priorityServes} onChange={setPriorityServes} disabled={busy} />
               <button type="submit" className={BTN_SECONDARY} disabled={busy || !priorityText.trim()}>
                 {TEMPLATE_COPY.addPriority}
               </button>

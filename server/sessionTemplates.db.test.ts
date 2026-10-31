@@ -122,6 +122,7 @@ describe.skipIf(!configured)("meeting templates against a real schema", () => {
       notifyAdmins: async () => undefined,
       circlesRepo: { all: () => CIRCLES },
       lapseContext: () => ({ currentSeasonId: null, cadence: "never" }),
+      seasonState: () => ({ current: null, seasons: [], timezone: "UTC" }),
       mayAct: async (_req: any, cap: string) => ({ ok: cap === "session.template" && keepers.has(whoami ?? "") }),
       guardCapability: async (_req: any, res: any, cap: string, refusal?: { status: number; body: Record<string, unknown> }) => {
         if (cap === "session.template" && keepers.has(whoami ?? "")) return true;
