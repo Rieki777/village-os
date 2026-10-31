@@ -172,6 +172,7 @@ import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
@@ -18357,6 +18358,7 @@ ${inner}
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay") });
+  registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
