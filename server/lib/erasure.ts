@@ -168,6 +168,7 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
+import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
 import { deleteDraftsOf } from "./proposalDrafts";
@@ -1575,6 +1576,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * Session cards (0296): every card that named the member, read or only
+       * welcomed, goes whole with all its lines, since its collective words
+       * may name them. A card lives only while its session is open anyway.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives.
+       */
+      name: "session-cards-after-tombstone",
+      run: async () => {
+        await forgetMemberCards(pool, target.id);
+      },
+    },
+    {
       // A chat or a draft can still land between the first pass and the
       // tombstone, so it runs again last, after every other
       // after-tombstone step. DELETEs keyed on the member, so this matches nothing when
@@ -2086,6 +2100,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "gene-keys-after-tombstone",
   "quest-crews-after-tombstone",
   "photo-report-reasons-after-tombstone",
+  "session-cards-after-tombstone",
   "companions-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);

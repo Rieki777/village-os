@@ -426,6 +426,20 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 160,
     emblem: "Sparkles",
   },
+  "session-card": {
+    promise: "A card to pull as a session opens, so the room starts present with each other and the day.",
+    benefits: [
+      "Anyone in the room can pull a card, and pull again whenever they like",
+      "Today's sky in Human Design and in Western astrology, each line labelled with its system",
+      "A collective reading that names everyone present, and a line for each person who said yes",
+      "Ways to hold the session today: a longer arrival round, sleeping on a big proposal, a tension given its own session",
+    ],
+    forWhom: "Circles that like to open a working call by tuning in to each other first.",
+    setupSummary: "Nothing to set up. Turn on Live Sessions and Gene Keys first; the card appears at drop in.",
+    dataSummary: "While a session is open: its cards and each person's line, private until they share it. Every card is deleted when its session closes.",
+    hue: 250,
+    emblem: "Orbit",
+  },
   sessions: {
     promise: "A circle's working call, held together live, from the first breath to the last action claimed.",
     benefits: [

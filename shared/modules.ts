@@ -1238,6 +1238,28 @@ export const MODULES: ModuleDef[] = [
     // surface; saved results stay in their table and return when it is on.
   },
   {
+    id: "session-card",
+    guild: [],
+    tier: "included",
+    // A card names the people present and holds a line of words for each one
+    // read, drawn from their saved Gene Keys result. Cards are deleted when
+    // their session closes (drizzle/0296).
+    dataClass: "member-pii",
+    group: "connect",
+    setup: "none",
+    name: "Session Card",
+    description:
+      "An optional card anyone in a live session can pull at the start, as often as they like. It reads today's sky in both Human Design and Western astrology, weaves in the Gene Keys of the people present who said yes, names each person, and offers the room a few ways to hold the session. Each person's own line stays private until they share it, and the cards are deleted when the session closes.",
+    // The card lives in a session's room and reads the lines Gene Keys saved.
+    requires: ["sessions", "gene-keys"],
+    recommends: [],
+    capabilities: [],
+    variableKeys: [],
+    apiPrefixes: ["/api/session-card"],
+    // No openStateCheck: it holds nothing anybody is owed, and nothing past
+    // the session it was pulled in.
+  },
+  {
     id: "sessions",
     guild: [],
     tier: "included",
