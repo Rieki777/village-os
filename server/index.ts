@@ -54,6 +54,7 @@ import { GPS_CHANGE } from "../shared/governingPurpose";
 import { pageContentProblem } from "../shared/pageContent";
 import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
 import { pageVarsFrom } from "../shared/pageContent/vars";
+import { visitProgramProblem } from "../shared/visitProgram";
 import { workWithUsAckEmail } from "./lib/workWithUsAck";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
@@ -18809,7 +18810,7 @@ ${inner}
   app.put("/api/admin/visit-config", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    const problem = ctaLinkProblemIn(req.body);
+    const problem = ctaLinkProblemIn(req.body) ?? visitProgramProblem(req.body);
     if (problem) return res.status(400).json({ error: problem });
     await visitConfigRepo.put(req.body);
     res.json({ success: true });

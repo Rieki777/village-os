@@ -23,6 +23,8 @@ import {
 } from "@shared/pageContent/resolve";
 import { pageSectionKey, type FieldSpec, type ListSpec, type PageSpec, type SectionSpec } from "@shared/pageContent/types";
 import { BrochureSwitch, PageSwitch, useBrochureSwitches } from "./PageSwitches";
+import VisitProgramEditor from "./VisitProgramEditor";
+import { VISIT_PAGE } from "@shared/pageContent/visit";
 
 type Doc = Record<string, any>;
 
@@ -294,6 +296,9 @@ export default function PagesEditor({ password }: { password: string }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const switches = useBrochureSwitches(password);
+  // The Visit page's program is its own document with its own Save, and the
+  // picker waits for it the same way it waits for the page's words.
+  const [programDirty, setProgramDirty] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -372,8 +377,8 @@ export default function PagesEditor({ password }: { password: string }) {
           id="pages-picker"
           value={spec.id}
           onChange={(e) => setPageId(e.target.value)}
-          disabled={dirty}
-          title={dirty ? "Save or reload before switching pages" : undefined}
+          disabled={dirty || programDirty}
+          title={dirty || programDirty ? "Save or reload before switching pages" : undefined}
           className="px-3 py-2 text-sm border border-gray-200 rounded-lg"
         >
           {PAGE_SPECS.map((p) => (
@@ -414,6 +419,7 @@ export default function PagesEditor({ password }: { password: string }) {
           {spec.sections.map((section) => (
             <SectionEditor key={section.id} spec={spec} section={section} draft={draft} setDraft={setDraft} />
           ))}
+          {spec.id === VISIT_PAGE.id && <VisitProgramEditor password={password} onDirtyChange={setProgramDirty} />}
           <div className="border border-gray-200 rounded-xl p-4 bg-muted/20">
             <h3 className="text-sm font-bold text-foreground">Keep the words you see now</h3>
             <p className="text-[11px] text-muted-foreground mt-1">

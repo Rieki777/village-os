@@ -62,6 +62,10 @@ export default function Visit() {
    */
   const subtitle = (cfg?.hero_subtitle ?? `Experience the land, meet the people, and decide if ${villageName} is where you belong.`).trim();
   const contactNote = (cfg?.logistics?.contact_note ?? "Fill in the form below or email the team.").trim();
+  // The cards in the village's order (Admin, Pages, Visit), for the grid and
+  // the form's choice alike. A program with none draws no empty grid: the
+  // form below still takes a message.
+  const visitTypes = cfg ? [...(cfg.visit_types ?? [])].sort((a, b) => a.order - b.order) : [];
 
   useEffect(() => {
     let alive = true;
@@ -118,6 +122,7 @@ export default function Visit() {
         </div>
       </section>
 
+      {!(cfg && visitTypes.length === 0) && (
       <section className="bg-stone-50 py-20">
         <div className="container max-w-5xl mx-auto px-4">
           <div className="text-center mb-12">
@@ -133,9 +138,9 @@ export default function Visit() {
             <div className="text-center text-stone-500">Opening the ways to visit…</div>
           ) : (
             <div className="grid md:grid-cols-3 gap-5">
-              {[...cfg.visit_types].sort((a, b) => a.order - b.order).map((v) => (
+              {visitTypes.map((v) => (
                 <div key={v.id} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col">
-                  <h3 className="font-display text-xl font-semibold text-teal-deep mb-3">{v.title}</h3>
+                  {v.title?.trim() && <h3 className="font-display text-xl font-semibold text-teal-deep mb-3">{v.title}</h3>}
                   {/* The cost line carried a dollar sign beside every village's
                       price, whatever its currency, and beside "Free". The
                       wallet says "what it costs" in no currency at all. A
@@ -145,7 +150,13 @@ export default function Visit() {
                     {v.format?.trim() && <p className="flex items-center gap-2"><MapPin className="w-4 h-4 shrink-0 text-stone-400" /> {v.format}</p>}
                     {v.cost?.trim() && <p className="flex items-center gap-2"><Wallet className="w-4 h-4 shrink-0 text-stone-400" /> {v.cost}</p>}
                   </div>
-                  <p className="text-sm text-stone-600 leading-relaxed mb-5 flex-1">{v.description}</p>
+                  {/* A cleared description draws no empty paragraph; the space
+                      it held still pushes the button to the card's foot. */}
+                  {v.description?.trim() ? (
+                    <p className="text-sm text-stone-600 leading-relaxed mb-5 flex-1">{v.description}</p>
+                  ) : (
+                    <div className="flex-1" />
+                  )}
                   {v.cta_url ? (
                     <a
                       href={v.cta_url}
@@ -174,6 +185,7 @@ export default function Visit() {
           )}
         </div>
       </section>
+      )}
 
       <section className="bg-white py-20">
         <div className="container max-w-4xl mx-auto px-4">
@@ -246,6 +258,7 @@ export default function Visit() {
                   />
                 </div>
               </div>
+              {visitTypes.length > 0 && (
               <div>
                 <label htmlFor="visit-type" className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5">Visit type</label>
                 <select
@@ -255,11 +268,12 @@ export default function Visit() {
                   className="w-full px-3 py-2 border border-stone-200 rounded-lg outline-none focus:border-teal-deep bg-white"
                 >
                   <option value="">Choose one</option>
-                  {cfg?.visit_types?.map((v) => (
+                  {visitTypes.map((v) => (
                     <option key={v.id} value={v.id}>{v.title}</option>
                   ))}
                 </select>
               </div>
+              )}
               <div>
                 <label htmlFor="visit-message" className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5">Anything we should know?</label>
                 <textarea
