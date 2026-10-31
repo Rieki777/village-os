@@ -31,6 +31,7 @@ import type { Slot } from "./playerCard";
 import { formatDay, type Read } from "./roleSheet";
 import type { SignReading } from "./roleSigns";
 import { proposeTermsHref } from "./seatTermsOffer";
+import type { WorkPay } from "./workValue";
 
 export type { Read } from "./roleSheet";
 export type { Slot } from "./playerCard";
@@ -88,6 +89,12 @@ export interface CircleRoleIn {
    * A holder with no account or no handle is `null` and gets no link.
    */
   holderHandles: Read<(string | null)[]>;
+  /**
+   * What the role pays (server/lib/workPay.ts), at the `terms.read` tier, so
+   * the Apply link never sits beside a role whose pay the reader has not seen
+   * (Rye, 2026-10-30). Absent below that tier and the row draws nothing.
+   */
+  pay?: WorkPay | null;
 }
 
 /** One published org draft that wrote this circle's words. */
@@ -178,6 +185,8 @@ export interface RoleRowOut {
   /** Apply for it: an open or partly filled real role. */
   applyHref: string | null;
   applyLabel: string;
+  /** Passed through untouched from `CircleRoleIn.pay`. */
+  pay?: WorkPay | null;
 }
 
 export interface AdoptionOut {
@@ -269,7 +278,17 @@ function roleRow(r: CircleRoleIn): RoleRowOut {
     ariaLabel: W.seeCardOf(name, i + 1, handles.length),
   }));
   const mayApply = !r.isExample && (r.state === "open" || r.state === "partial");
-  return { id: r.id, name, href: roleHref(r.id), stateWords: words, filled, holderCards, applyHref: mayApply ? proposeTermsHref(r.id) : null, applyLabel: W.apply };
+  return {
+    id: r.id,
+    name,
+    href: roleHref(r.id),
+    stateWords: words,
+    filled,
+    holderCards,
+    applyHref: mayApply ? proposeTermsHref(r.id) : null,
+    applyLabel: W.apply,
+    ...(r.pay ? { pay: r.pay } : {}),
+  };
 }
 
 function rolesSection(roles: Read<CircleRoleIn[]>, terms: boolean): CircleSection {

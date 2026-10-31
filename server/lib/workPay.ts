@@ -32,9 +32,12 @@ import {
   type MintRule,
 } from "./economy";
 import { tokenDef } from "./ledger";
+import { MAX_BADGE_MULTIPLIER, readBadgeMultipliers } from "./badges";
+import { listBadgesWithMultipliers } from "../repos/badgeMultipliers";
 import {
   GRATITUDE_NEVER_PAYS,
   readWorkValue,
+  type PayBadge,
   type PayLine,
   type StatedCash,
   type TokenAmount,
@@ -49,6 +52,9 @@ export interface ValuedWork {
   valueMinor?: number | null;
   valueCurrency?: string | null;
   valueTokens?: TokenAmount[] | null;
+  /** The cash it pays (0285), owed when it is paid and never paid by the platform. */
+  cashMinor?: number | null;
+  cashCurrency?: string | null;
 }
 
 /** The enabled rules each kind of work answers to, read once per request. */
@@ -68,8 +74,15 @@ function linesOf(work: ValuedWork, rules: readonly MintRule[], kind: "quest" | "
       token: l.token,
       name: tokenDef(l.token)?.name ?? l.token,
       amount: humanAtScale(l.units, l.decimals),
+      ...(tokenDef(l.token)?.kind === "voice" ? { voice: true } : {}),
     })),
   };
+}
+
+/** The cash a piece of work states it pays, or null. Zero pays none. */
+function workCash(work: ValuedWork) {
+  const cash = readWorkValue(work.cashMinor, work.cashCurrency);
+  return cash && cash.minor > 0 ? cash : null;
 }
 
 /**
@@ -82,13 +95,13 @@ export function questPay(quest: ValuedWork & { stayCreditReward?: number | null 
   if (stay > 0 && !ruleCannotPay(STAY_TOKEN) && toLedgerUnits(STAY_TOKEN, stay) > 0) {
     lines.push({ token: STAY_TOKEN, name: tokenDef(STAY_TOKEN)?.name ?? STAY_TOKEN, amount: stay });
   }
-  return { value: readWorkValue(quest.valueMinor, quest.valueCurrency), lines, source, cadence: "once" };
+  return { value: readWorkValue(quest.valueMinor, quest.valueCurrency), lines, source, cadence: "once", cashPay: workCash(quest) };
 }
 
 /** What a role pays each seat every cycle, for its card, with the cash its terms state. */
 export function rolePay(role: ValuedWork, rules: readonly MintRule[], cash: StatedCash | null): WorkPay {
   const { lines, source } = linesOf(role, rules, "seat");
-  return { value: readWorkValue(role.valueMinor, role.valueCurrency), lines, source, cadence: "cycle", cash };
+  return { value: readWorkValue(role.valueMinor, role.valueCurrency), lines, source, cadence: "cycle", cash, cashPay: workCash(role) };
 }
 
 /**
@@ -138,4 +151,44 @@ export function payLineProblem(rules: readonly MintRule[], token: string): strin
     return `This village has no enabled rule paying ${name} for this kind of work. Add one on the Mint panel first.`;
   }
   return null;
+}
+
+/** One badge's multipliers, as `payBadgeBoosts` reads them. */
+export interface BadgeBoost {
+  name: string;
+  multipliers: Record<string, number>;
+}
+
+/**
+ * The badges that multiply token pay, read once per request (0278). The same
+ * filter `rewardMultipliersFor` (server/lib/seasonPatterns.ts) pays from, less
+ * the holder: active, no example, never a self or a hypha badge, and not
+ * dormant this season. Public, like the badges themselves.
+ */
+export async function payBadgeBoosts(pool: Pool | PoolConnection, dormant: readonly string[]): Promise<BadgeBoost[]> {
+  const skip = new Set(dormant);
+  const out: BadgeBoost[] = [];
+  for (const r of await listBadgesWithMultipliers(pool)) {
+    if (skip.has(r.id)) continue;
+    const multipliers = readBadgeMultipliers(r.multipliers);
+    if (multipliers) out.push({ name: r.name, multipliers });
+  }
+  return out;
+}
+
+/**
+ * The work's pay with the badges that multiply its lines. A factor of 1 or
+ * less multiplies nothing and is left off, Gratitude is never a line, and no
+ * factor reads past the ceiling the payment itself applies.
+ */
+export function withPayBadges(pay: WorkPay, boosts: readonly BadgeBoost[]): WorkPay {
+  const badges: PayBadge[] = [];
+  for (const b of boosts) {
+    for (const line of pay.lines) {
+      const factor = Number(b.multipliers[line.token]);
+      if (!Number.isFinite(factor) || factor <= 1 || line.token === HEARTS) continue;
+      badges.push({ badge: b.name, token: line.token, name: line.name, factor: Math.min(factor, MAX_BADGE_MULTIPLIER) });
+    }
+  }
+  return { ...pay, badges };
 }

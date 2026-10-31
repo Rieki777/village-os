@@ -8,6 +8,9 @@
  * The read answers a guest 403 and a village with governance off 404, and
  * either way nothing is drawn: a button that leads to a refusal is worse
  * than none. Nobody signed out is asked anything.
+ *
+ * Beside it, "Download my card as text": the draft when one is open, or the
+ * current card, in the role card format (./DownloadCardText.tsx).
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
@@ -16,6 +19,8 @@ import { authToken } from "@/lib/gameApi";
 import { fetchMine, type MineOut } from "./proposalApi";
 import { RP_WORDS } from "./proposalWords";
 import { FOCUS } from "./parts";
+import DownloadCardText from "./DownloadCardText";
+import { MY_CARD_TEXT_URL } from "./roleCardApi";
 
 export default function ProposeRolesEntry() {
   const [mine, setMine] = useState<MineOut | null>(null);
@@ -41,6 +46,7 @@ export default function ProposeRolesEntry() {
         <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </Link>
       {mine.nextSeasonWords && <span className="text-sm text-muted-foreground">{mine.nextSeasonWords}</span>}
+      <DownloadCardText url={MY_CARD_TEXT_URL} />
     </div>
   );
 }

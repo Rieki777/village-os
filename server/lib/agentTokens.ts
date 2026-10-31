@@ -21,11 +21,25 @@
  * A changed echo, a missing token, an old token or someone else's token is a
  * 409 and nothing writes.
  */
-import { revokeLiveTokensOf } from "../repos/agentTokens";
+import { insertToken, revokeLiveTokensOf } from "../repos/agentTokens";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import { revokeOpenInvitesOf } from "../repos/memberInvites";
+import { removeInbox } from "./agentInbox";
+import { endVoiceGiven, type DelegationNotice } from "./delegation";
 import { recordEvent } from "./events";
-import { isTombstone } from "./oauthAccounts";
+import { revokeFeedTokens } from "./icsFeed";
+import { removeMemberKey } from "./memberSecrets";
+import { insertNotification } from "./notify";
+import { stopAddress } from "./sessionCalendar";
+import { whileSessionHolds } from "./sessionHold";
+
+/*
+ * The session lock and the tombstone test live in server/lib/sessionHold.ts,
+ * which keeps this file's imports out from under the ballots. `holderStands`
+ * is answered from here as well, for the callers that always asked here.
+ */
+export { holderStands } from "./sessionHold";
 
 export const TOKEN_PREFIX = "vat_";
 
@@ -101,16 +115,6 @@ function toRow(r: RowDataPacket): AgentTokenRow {
   };
 }
 
-/**
- * Whether a token's holder can still be acted for. "The row exists" is not the
- * test: an erasure keeps the member row as a tombstone (server/lib/erasure.ts),
- * and the resolver mints a fresh session from whatever row it finds, so without
- * this an erased member's agent read the village as them until the token ran out.
- */
-export function holderStands<T extends { email?: unknown }>(user: T | null | undefined): user is T {
-  return !!user && !isTombstone({ email: String(user.email ?? "") });
-}
-
 export function isLive(row: AgentTokenRow, now = new Date()): boolean {
   return !row.revokedAt && new Date(row.expiresAt).getTime() > now.getTime();
 }
@@ -125,13 +129,24 @@ export interface MintInput {
 
 export type MintResult =
   | { ok: true; token: string; row: AgentTokenRow }
-  | { ok: false; status: 400 | 429; error: string };
+  | { ok: false; status: 400 | 401 | 429; error: string };
 
 /**
  * Mint. The token value is in the result and nowhere else: not in the row,
  * not in the audit line, not in a log.
+ *
+ * MINTED WHILE THE SESSION HOLDS (adversarial round 4). `sessionVersion` is
+ * the tokenVersion the request's session was checked at, and
+ * `POST /api/agent/tokens` always passes it. A token reads as the member for
+ * up to a year, and a new password and an admin's revoke sessions end every
+ * token on both sides of the bump (`endAgentReach`). With a version the row
+ * is written under the member's row lock, and only while the row still
+ * carries it (`whileSessionHolds`): a change that committed first is refused
+ * with status 401 and no token, and one that comes later waits for the
+ * commit, and the end after the bump revokes the token. Without one it writes
+ * as it always has, for a caller that acts for no session.
  */
-export async function mintToken(pool: Pool, userId: string, input: MintInput): Promise<MintResult> {
+export async function mintToken(pool: Pool, userId: string, input: MintInput, sessionVersion?: number): Promise<MintResult> {
   const name = String(input.name ?? "").trim().slice(0, 80);
   if (!name) return { ok: false, status: 400, error: "Give this token a name so you can tell it apart later" };
   if (!input.scopes.length) return { ok: false, status: 400, error: "Pick at least one scope" };
@@ -156,10 +171,14 @@ export async function mintToken(pool: Pool, userId: string, input: MintInput): P
   const id = `atk-${randomBytes(8).toString("hex")}`;
   const prefix = token.slice(0, TOKEN_PREFIX.length + 6);
   const expiresAt = new Date(Date.now() + ttl * 24 * 60 * 60 * 1000);
-  await pool.query(
-    "INSERT INTO agent_tokens (id, user_id, name, token_hash, prefix, scopes, expires_at) VALUES (?,?,?,?,?,?,?)",
-    [id, userId, name, hashToken(token), prefix, JSON.stringify(input.scopes), expiresAt],
-  );
+  const write = (db: Pool | PoolConnection) =>
+    insertToken(db, { id, userId, name, tokenHash: hashToken(token), prefix, scopes: input.scopes, expiresAt });
+  if (sessionVersion === undefined) {
+    await write(pool);
+  } else {
+    const held = await whileSessionHolds(pool, userId, sessionVersion, write);
+    if (!held.ok) return { ok: false, status: 401, error: "auth_required" };
+  }
   const row = await tokenById(pool, id);
   if (!row) return { ok: false, status: 400, error: "The token did not save" };
   await recordEvent(pool, {
@@ -215,16 +234,12 @@ async function recordRevoke(pool: Pool, userId: string, id: string): Promise<voi
  * End every live token a member holds, and say how many.
  *
  * Setting a password (the first claim, a reset, a change) and an admin's
- * "revoke sessions" call this once the credential has changed. Both bump
- * tokenVersion, which ends every session, and an agent token is not a session:
- * the agent resolver (server/index.ts) mints one from the holder's CURRENT
- * tokenVersion on every call, so the bump alone never reached a token. Somebody
- * holding a stolen password could mint one for a year and keep it past the
- * reset that answered the theft.
- *
- * Call it AFTER the bump, never before: the bump is what stops an old session
- * minting a replacement. The one window left is a mint request already past its
- * session check when the bump lands, which can still insert after this returns.
+ * "revoke sessions" reach this through `endAgentReach` (set-password inside
+ * `withAgentReachEnded`). Both bump tokenVersion, which ends every session, and
+ * an agent token is not a session: the agent resolver (server/index.ts) mints
+ * one from the holder's CURRENT tokenVersion on every call, so the bump alone
+ * never reached a token. Somebody holding a stolen password could mint one for
+ * a year and keep it past the reset that answered the theft.
  *
  * One audit line per token, the line `revokeToken` writes.
  */
@@ -232,6 +247,232 @@ export async function revokeAllTokens(pool: Pool, userId: string): Promise<numbe
   const ids = await revokeLiveTokensOf(pool, userId);
   for (const id of ids) await recordRevoke(pool, userId, id);
   return ids.length;
+}
+
+/** What `endAgentReach` ended, part by part. */
+export interface AgentReachEnded {
+  /** `vat_` tokens revoked. */
+  agentTokens: number;
+  /** Private calendar feed addresses revoked. */
+  feeds: number;
+  /** The agent inbox removed, with every delivery still queued for it. */
+  inbox: boolean;
+  /** The member's own model key removed. */
+  key: boolean;
+  /** Open invitation links withdrawn. A link somebody already used stays: it records an admission. */
+  invites: number;
+  /** The circle calendar's private address stopped, 1 or 0. */
+  circleFeed: number;
+  /** The delegation the member gave, accepted or still an offer, ended (`endVoiceGiven`, lib/delegation.ts). */
+  delegation: boolean;
+}
+
+const NOTHING_ENDED: AgentReachEnded = { agentTokens: 0, feeds: 0, inbox: false, key: false, invites: 0, circleFeed: 0, delegation: false };
+
+/** What `endAgentReach` needs from its host. */
+export interface AgentReachDeps {
+  /**
+   * The notification spine as the server holds it, so the one notice this
+   * writes, the member's vote handed back to them, follows their mail
+   * preference. Absent, the notice is written to the bell with no mail
+   * (`bellOnly` below), so leaving it out loses no notice: the daily digest
+   * still carries it.
+   */
+  notify?: (notice: DelegationNotice) => Promise<unknown>;
+}
+
+/** The notification spine with no mail, for a caller that hands no `notify`: a script or a test. */
+const bellOnly = (pool: Pool) => (notice: DelegationNotice) =>
+  insertNotification(
+    {
+      pool,
+      memberById: async () => null,
+      sendEmail: async () => ({ accepted: false, status: "skipped", reason: "the reach end was handed no mailer" }),
+      origin: () => "",
+      projectName: () => "",
+      isPresent: () => false,
+    },
+    notice,
+  );
+
+/** What the audit lines say ended the feeds, the inbox, the key and the links. */
+const ENDED_BY = "a new password or a session revoke ended it";
+
+/** Thrown once every part was tried and one or more could not be ended. */
+export class AgentReachNotEnded extends Error {
+  readonly parts: string[];
+  readonly ended: AgentReachEnded;
+  constructor(parts: string[], ended: AgentReachEnded, cause: unknown) {
+    super(`could not end the member's ${parts.join(", ")}`, { cause });
+    this.name = "AgentReachNotEnded";
+    this.parts = parts;
+    this.ended = ended;
+  }
+}
+
+/**
+ * End everything a signed-in session can leave standing for an agent, and say
+ * what ended (adversarial round 1, findings 0 and 33).
+ *
+ * A token is one of six. A stolen session can also mint a private calendar
+ * feed address, which never expires and serves the member's own layers; point
+ * the agent inbox at a host it owns, so the week ahead, the weekly digest and
+ * every introduction keep arriving there signed; and store a model key on an
+ * endpoint it owns, so every question the member asks the assistant sends its
+ * prompt, the member's own note among it, to that host. All four stood past
+ * the reset that answered the theft until this ended them.
+ *
+ * Two more act in the member's name (adversarial round 3, finding 7). A
+ * session holding `member.vouch` can make up to twenty invitation links, and
+ * each one admits a stranger on the member's vouch for fourteen days, in an
+ * invite-only village too, where a link is the only way in. And it can make
+ * the circle calendar's private address, which never expires and serves the
+ * members-only meetings of the circles the member follows. Open links are
+ * withdrawn; a link somebody already used made an account and stays the
+ * record of that admission, with the arrival vouch it recorded.
+ *
+ * It only calls the functions that already end each one, so this file grows
+ * no SQL: `revokeAllTokens`, `revokeFeedTokens` (lib/icsFeed.ts),
+ * `removeInbox` (lib/agentInbox.ts, which also drops the queue),
+ * `removeMemberKey` (lib/memberSecrets.ts), `revokeOpenInvitesOf`
+ * (repos/memberInvites.ts) and `stopAddress` (lib/sessionCalendar.ts). The
+ * member's own notes, drafts and agent profile stay: a reset ends access,
+ * never what the member wrote. The member can make links and an address
+ * again from the session the reset hands back.
+ *
+ * And the vote the member handed on (round 3, finding 8, a decision for Rye
+ * built as recommended): a session needs only `ballot.vote` to hand it to an
+ * account the thief holds, and once that account accepts, every open ballot
+ * copies its choice onto the member's row. `endVoiceGiven` ends the
+ * delegation the member GAVE, derives every open ballot again and tells the
+ * member through `deps.notify`. One handed TO the member stays. A vote the
+ * stolen session cast directly stays as cast.
+ *
+ * Every part is tried even when an earlier one throws, so one bad table never
+ * leaves the others standing. Then, if any failed, it throws
+ * `AgentReachNotEnded` naming them. Idempotent: a second run ends nothing.
+ */
+export async function endAgentReach(pool: Pool, userId: string, deps: AgentReachDeps = {}): Promise<AgentReachEnded> {
+  const failed: string[] = [];
+  let cause: unknown;
+  async function part<T>(name: string, end: () => Promise<T>, none: T): Promise<T> {
+    try {
+      return await end();
+    } catch (err) {
+      failed.push(name);
+      cause ??= err;
+      return none;
+    }
+  }
+  const ended: AgentReachEnded = {
+    agentTokens: await part("agent tokens", () => revokeAllTokens(pool, userId), 0),
+    feeds: await part("calendar feed", () => revokeFeedTokens(pool, userId), 0),
+    inbox: await part("agent inbox", () => removeInbox(pool, userId, ENDED_BY), false),
+    key: await part("model key", () => removeMemberKey(pool, userId), false),
+    invites: await part("invitation links", () => revokeOpenInvitesOf(pool, userId), 0),
+    circleFeed: await part("circle calendar address", () => stopAddress(pool, { userId }), 0),
+    delegation: await part("delegation", () => endVoiceGiven(pool, userId, deps.notify ?? bellOnly(pool)), false),
+  };
+  const line = { actorUserId: userId, actorKind: "system" as const, audience: "admin" as const };
+  if (ended.feeds) {
+    await recordEvent(pool, { ...line, kind: "calendar_feed_revoked", text: `private calendar feed address revoked: ${ENDED_BY}`, entityType: "calendar", entityRef: "feed" });
+  }
+  if (ended.key) {
+    await recordEvent(pool, { ...line, kind: "agent_key", text: `own assistant key removed: ${ENDED_BY}`, entityType: "member_key", entityRef: userId });
+  }
+  if (ended.invites) {
+    const links = ended.invites === 1 ? "1 open invitation link" : `${ended.invites} open invitation links`;
+    await recordEvent(pool, { ...line, kind: "invites_withdrawn", text: `${links} withdrawn: ${ENDED_BY}`, entityType: "member_invites", entityRef: userId });
+  }
+  if (ended.circleFeed) {
+    await recordEvent(pool, { ...line, kind: "calendar_feed_revoked", text: `circle calendar address stopped: ${ENDED_BY}`, entityType: "calendar", entityRef: "circles" });
+  }
+  if (ended.delegation) {
+    await recordEvent(pool, { ...line, kind: "delegation_ended", text: `vote delegation ended: ${ENDED_BY}`, entityType: "delegation", entityRef: userId });
+  }
+  if (failed.length) throw new AgentReachNotEnded(failed, ended, cause);
+  return ended;
+}
+
+function addEnded(a: AgentReachEnded, b: AgentReachEnded): AgentReachEnded {
+  return {
+    agentTokens: a.agentTokens + b.agentTokens,
+    feeds: a.feeds + b.feeds,
+    inbox: a.inbox || b.inbox,
+    key: a.key || b.key,
+    invites: a.invites + b.invites,
+    circleFeed: a.circleFeed + b.circleFeed,
+    delegation: a.delegation || b.delegation,
+  };
+}
+
+/**
+ * Change a member's password with their agent's reach ended on BOTH sides of
+ * the change (adversarial round 1, finding 28). set-password runs its
+ * tokenVersion bump through this.
+ *
+ * An admin's revoke sessions does NOT. It has no link to keep unspent, and
+ * ending the sessions must never wait on anything else, because that revoke is
+ * the lever for a compromise. So it bumps first, then calls `endAgentReach`,
+ * whose failure answers 500 by name; pressing again finishes it.
+ *
+ * BEFORE the change, and a failure here throws: `change` never runs, so the
+ * password and tokenVersion are as they were and a set-password link is still
+ * unspent. "Try again" then really finishes the reset. The reset used to bump
+ * first, which spends the link, so a failure after it left every token
+ * standing and refused the retry as a used link.
+ *
+ * AFTER the change, because the bump is what stops an old session planting a
+ * replacement: anything planted between the two calls ends here. This end
+ * never throws. The change has landed (the link is spent), everything that
+ * stood before it is already ended, and a 500 now would only withhold the new
+ * session. It is tried twice, and a second failure is logged and recorded for
+ * an admin by name.
+ *
+ * A request already past its session check when the bump lands can still
+ * reach its write after the second end returns. Every write this end reaches
+ * closes that itself: a `vat_` token (`mintToken`), the private calendar feed
+ * (`mintFeedToken`), the inbox, the model key, an invitation link
+ * (`makeInvite`), the circle calendar address (`makeAddress`) and the
+ * delegation the member gives (`setDelegation`). Each writes under the
+ * member's row lock only while the session's tokenVersion is still the row's
+ * (`whileSessionHolds`, server/lib/sessionHold.ts), so such a write either
+ * lands before the bump, and the second end removes it, or is refused with
+ * 401 auth_required (adversarial round 2, finding 15; rounds 3 and 4).
+ */
+export async function withAgentReachEnded<T>(
+  pool: Pool,
+  userId: string,
+  change: () => Promise<T>,
+  deps: {
+    end?: (pool: Pool, userId: string, reach?: AgentReachDeps) => Promise<AgentReachEnded>;
+    log?: (message: string, err: unknown) => void;
+    /** Handed to each end (`AgentReachDeps.notify`). */
+    notify?: AgentReachDeps["notify"];
+  } = {},
+): Promise<{ changed: T; ended: AgentReachEnded }> {
+  const end = deps.end ?? endAgentReach;
+  const log = deps.log ?? ((message: string, err: unknown) => console.error(message, err));
+  const reach: AgentReachDeps = { notify: deps.notify };
+  const before = await end(pool, userId, reach);
+  const changed = await change();
+  let after = NOTHING_ENDED;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      after = addEnded(after, await end(pool, userId, reach));
+      break;
+    } catch (err) {
+      if (err instanceof AgentReachNotEnded) after = addEnded(after, err.ended);
+      if (attempt < 2) continue;
+      log(`[agent] the agent reach planted during a credential change for ${userId} was NOT ended`, err);
+      await recordEvent(pool, {
+        kind: "agent_reach",
+        text: "could not end the agent reach planted while a password changed or sessions ended; revoke sessions again",
+        actorUserId: userId, actorKind: "system", entityType: "user", entityRef: userId, audience: "admin",
+      });
+    }
+  }
+  return { changed, ended: addEnded(before, after) };
 }
 
 export type VerifyResult =

@@ -21,7 +21,7 @@
  */
 import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Feather, Hammer, Handshake, Lightbulb, Sprout, StickyNote } from "lucide-react";
+import { Feather, Hammer, Handshake, Lightbulb, PartyPopper, Sprout, StickyNote } from "lucide-react";
 import {
   ROOM_COPY,
   SESSION_SOMEONE,
@@ -37,6 +37,7 @@ import {
   type SessionPerson,
   type SessionView,
 } from "@shared/sessions";
+import { roleWithHolders } from "@shared/roleHolderLabel";
 import type { RoomActions } from "./useSessionRoom";
 
 /* The focus ring is the theme's own `--ring`, which the night sets to the
@@ -94,6 +95,7 @@ export const ENTRY_GLYPH: Record<EntryKind, LucideIcon> = {
   decision: Handshake,
   action: Hammer,
   tension: Feather,
+  win: PartyPopper,
 };
 /** What we learned, as the item's pull-quote. */
 export const LEARNED_QUOTE = "border-l-2 border-notice pl-3 font-display text-[19px] leading-snug lining-nums text-foreground";
@@ -197,6 +199,34 @@ export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
 }
 
+/**
+ * When a night ends, in the viewer's own clock: "9:00 today", "9:00 tomorrow",
+ * or "9:00 on Friday 30 October".
+ */
+export function nightWhen(at: number, now: number): string {
+  const d = new Date(at);
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((day(d) - day(new Date(now))) / 86_400_000);
+  if (days === 0) return `${time} today`;
+  if (days === 1) return `${time} tomorrow`;
+  if (days === -1) return `${time} yesterday`;
+  return `${time} on ${d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}`;
+}
+
+/** A local time for a `datetime-local` field, "2026-10-24T09:00". */
+export function localInputValue(at: number): string {
+  const d = new Date(at);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** 9:00 some days from now, in the viewer's own clock. */
+export function nineAfter(now: number, days: number): number {
+  const d = new Date(now);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days, 9, 0, 0, 0).getTime();
+}
+
 /** People who are here now. */
 export function presentPeople(view: Pick<SessionView, "people">): SessionPerson[] {
   return view.people.filter((p) => p.present);
@@ -207,12 +237,16 @@ export function agendaOrder(items: SessionItem[]): SessionItem[] {
   return [...items].sort((a, b) => a.position - b.position || a.id - b.id);
 }
 
-/** The consent answers on one target, as values and as a tally against the people here. */
-export function consentOn(view: Pick<SessionView, "responses" | "people">, target: ResponseTarget): { values: ConsentValue[]; tally: ConsentTally } {
+/** The consent answers on one target, as values and as a tally against the people here, at `now`. */
+export function consentOn(
+  view: Pick<SessionView, "responses" | "people">,
+  target: ResponseTarget,
+  now: number = Date.now(),
+): { values: ConsentValue[]; tally: ConsentTally } {
   const mine = view.responses.filter((r) => r.target === target && isConsentValue(r.value));
   const values = mine.map((r) => r.value as ConsentValue);
-  const answers = mine.map((r) => ({ who: r.userId, value: r.value as ConsentValue }));
-  return { values, tally: consentTally(answers, presentPeople(view).map((p) => p.userId)) };
+  const answers = mine.map((r) => ({ who: r.userId, value: r.value as ConsentValue, answerBy: r.answerBy ? Date.parse(r.answerBy) : null }));
+  return { values, tally: consentTally(answers, presentPeople(view).map((p) => p.userId), now) };
 }
 
 /**
@@ -250,16 +284,22 @@ export function myResponse(view: Pick<SessionView, "responses" | "me">, target: 
   return view.responses.find((r) => r.target === target && r.userId === view.me.userId) ?? null;
 }
 
-/** Who holds an action, as a line: the seat, the person, or nobody yet. */
-export function ownerLine(e: Pick<SessionEntry, "ownerSeatName" | "ownerName" | "ownerUserId">): string {
-  if (e.ownerSeatName && e.ownerName) return `${e.ownerSeatName} (${e.ownerName})`;
-  if (e.ownerSeatName) return e.ownerSeatName;
+/**
+ * Who holds an action, as a line: the seat, the person, or nobody yet. A seat comes first and
+ * the first name of who took it, or of who sits there now, follows in parentheses (Rye,
+ * 2026-10-30): "Treasurer (Rick)". A vacant seat is the seat alone.
+ */
+export function ownerLine(e: Pick<SessionEntry, "ownerSeatName" | "ownerName" | "ownerUserId" | "ownerSeatHolders">): string {
+  if (e.ownerSeatName) {
+    const taker = e.ownerName && e.ownerName !== SESSION_SOMEONE ? [e.ownerName] : null;
+    return roleWithHolders(e.ownerSeatName, taker ?? e.ownerSeatHolders);
+  }
   if (e.ownerName) return e.ownerName;
   return ROOM_COPY.nobodyHolds;
 }
 
 /** "Held by Water steward", or "Nobody holds this yet". */
-export function heldLine(e: Pick<SessionEntry, "ownerSeatName" | "ownerName" | "ownerUserId" | "ownerSeatId">): string {
+export function heldLine(e: Pick<SessionEntry, "ownerSeatName" | "ownerName" | "ownerUserId" | "ownerSeatId" | "ownerSeatHolders">): string {
   return isHeld(e) || e.ownerSeatName || e.ownerName ? `${ROOM_COPY.heldBy} ${ownerLine(e)}` : ROOM_COPY.nobodyHolds;
 }
 

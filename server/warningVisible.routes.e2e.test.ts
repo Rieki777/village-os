@@ -223,6 +223,15 @@ describe.skipIf(!DB_CONFIGURED)("a member can read a warning that is about her",
     expect(ofHer.text).not.toContain("shed-care");
     expect(ofHer.text, "the control must still travel").toContain("water-keeper");
 
+    // The same read by handle, which the public profile's badge flower uses.
+    await pool.query("UPDATE users SET handle = ? WHERE id = ?", [`mara-${PORT}`, memberId]);
+    const byHandle = await call("GET", `/api/badges/of/@mara-${PORT}`, undefined, "");
+    expect(byHandle.status, byHandle.text).toBe(200);
+    expect(byHandle.text).not.toContain("shed-care");
+    expect(byHandle.json?.badges, "the handle reaches her roster").toEqual(ofHer.json?.badges);
+    const nobody = await call("GET", "/api/badges/of/@nobody-holds-this", undefined, "");
+    expect(nobody.json?.badges).toEqual([]);
+
     const match = await call("GET", "/api/badges/match?badge=shed-care", undefined, "");
     expect(match.status, match.text).toBe(200);
     expect(JSON.stringify(match.json)).not.toContain(memberId);

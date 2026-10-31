@@ -21,6 +21,30 @@ import WorkValueEditor, { draftFrom, draftToBody, type PayOption } from "./WorkV
 const offered: PayOption[] = [{ token: "village-credits", name: "Village Credits", standard: 25, decimals: 0 }];
 const oldRole = { valueMinor: 5000, valueCurrency: "USD", valueTokens: [{ token: "village-credits", amount: 40 }] };
 
+describe("the cash a piece of work pays (0285)", () => {
+  it("opens on the stored cash and saves a typed figure in the village's currency", () => {
+    const draft = draftFrom({ ...oldRole, valueCurrency: "CRC", cashMinor: 2_000_000, cashCurrency: "CRC" }, offered, "CRC");
+    expect(draft.cash).toBe("20000");
+    const body = draftToBody({ ...draft, cash: "15000" }, offered, "CRC", { required: false });
+    expect(body.ok && body.cashMinor).toBe(1_500_000);
+  });
+
+  it("leaves the stored cash alone for a record that never carried the field", () => {
+    const draft = draftFrom(oldRole, offered, "CRC");
+    expect(draft.cash).toBeUndefined();
+    const body = draftToBody(draft, offered, "CRC", { required: false });
+    expect(body.ok && body.cashMinor).toBeUndefined();
+  });
+
+  it("clears it on an empty box, and labels the box with the cadence", () => {
+    const draft = draftFrom({ ...oldRole, valueCurrency: "CRC", cashMinor: 500, cashCurrency: "CRC" }, offered, "CRC");
+    const body = draftToBody({ ...draft, cash: "" }, offered, "CRC", { required: false });
+    expect(body.ok && body.cashMinor).toBeNull();
+    render(<WorkValueEditor draft={draft} onChange={() => {}} offered={offered} currency="CRC" cadence="cycle" inputClassName="" />);
+    expect(screen.getByText(/Cash it pays each holder, every cycle/)).toBeTruthy();
+  });
+});
+
 describe("a value saved in a currency the village has since left", () => {
   it("opens with the box empty and the old value held", () => {
     const draft = draftFrom(oldRole, offered, "CRC");

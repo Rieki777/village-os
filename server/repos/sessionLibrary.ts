@@ -70,6 +70,42 @@ export async function insertItemRow(
   return Number(r.insertId);
 }
 
+// ── Where an item came from (0279) ──────────────────────────────────────────
+
+/**
+ * Remember where an item came from. The unique key on (kind, ref) refuses a
+ * second item from the same tension: the caller reads ER_DUP_ENTRY as "sent
+ * already".
+ */
+export async function insertSource(q: Queryable, row: { libraryId: number; kind: string; ref: string; label: string; now: Date }): Promise<void> {
+  await q.query(
+    "INSERT INTO `live_session_library_sources` (`library_id`, `kind`, `ref`, `label`, `created_at`) VALUES (?, ?, ?, ?, ?)",
+    [row.libraryId, row.kind, row.ref, row.label.slice(0, 120), row.now],
+  );
+}
+
+/** The source of one tension, if it became an item already. `lock` holds the key for the rest of the transaction. */
+export async function sourceByRef(q: Queryable, kind: string, ref: string, lock = false): Promise<RowDataPacket[]> {
+  return rowsOf(q, `SELECT \`library_id\` FROM \`live_session_library_sources\` WHERE \`kind\` = ? AND \`ref\` = ? LIMIT 1${lock ? " FOR UPDATE" : ""}`, [kind, ref]);
+}
+
+/** Where some items came from. */
+export async function sourceRows(q: Queryable, libraryIds: readonly number[]): Promise<RowDataPacket[]> {
+  if (none(libraryIds)) return [];
+  return rowsOf(q, "SELECT `library_id`, `kind`, `ref`, `label` FROM `live_session_library_sources` WHERE `library_id` IN (?)", [libraryIds]);
+}
+
+/** Which of some tensions of one kind were sent on already, with the item each became. */
+export async function sentRows(q: Queryable, kind: string, refs: readonly string[]): Promise<RowDataPacket[]> {
+  if (none(refs)) return [];
+  return rowsOf(
+    q,
+    "SELECT s.`ref`, s.`library_id`, l.`circle_id` FROM `live_session_library_sources` s JOIN `live_session_library` l ON l.`id` = s.`library_id` " +
+      "WHERE s.`kind` = ? AND s.`ref` IN (?)",
+    [kind, refs],
+  );
+}
+
 /** One item. `lock` takes the row for the rest of the transaction. */
 export async function itemRow(q: Queryable, id: number, lock = false): Promise<RowDataPacket[]> {
   return rowsOf(q, `SELECT ${LIBRARY_COLUMNS} FROM \`live_session_library\` WHERE \`id\` = ? LIMIT 1${lock ? " FOR UPDATE" : ""}`, [id]);
@@ -112,6 +148,8 @@ export async function writeWords(
 export async function deleteItems(q: Queryable, ids: readonly number[]): Promise<void> {
   if (none(ids)) return;
   await q.query("DELETE FROM `live_session_library` WHERE `id` IN (?)", [ids]);
+  // Where it came from goes with it (0279), so a withdrawn tension can be sent on again, and the room says it can.
+  await q.query("DELETE FROM `live_session_library_sources` WHERE `library_id` IN (?)", [ids]);
 }
 
 /** A taken-up item waits again. Its takes stay as history. Hands back 1 or 0. */

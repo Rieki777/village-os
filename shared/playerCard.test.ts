@@ -406,7 +406,7 @@ describe("signs and load", () => {
 });
 
 describe("the timeline", () => {
-  it("labels each moon by its dates and never by a name", () => {
+  it("labels each moon by its dates, and titles it by the month its new moon falls in (the approved design)", () => {
     const t = buildPlayerCard(input()).timeline;
     expect(t.moons.length).toBeGreaterThanOrEqual(3);
     for (const m of t.moons) {
@@ -414,6 +414,7 @@ describe("the timeline", () => {
       expect(m.label).not.toMatch(/Moon|October|November|December/);
     }
     expect(t.moons[0].title).toBe("Getting started");
+    expect(t.moons.slice(1).every((m) => / Moon$/.test(m.title ?? ""))).toBe(true);
     expect(t.moons.filter((m) => m.now)).toHaveLength(1);
   });
 

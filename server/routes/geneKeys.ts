@@ -3,10 +3,11 @@
  *
  *   GET    /api/gene-keys/me              the member's own lines and settings, or null
  *   PUT    /api/gene-keys/me              save a chart read in their browser
- *   PATCH  /api/gene-keys/me              show or hide, and Maia's yes or no
+ *   PATCH  /api/gene-keys/me              show or hide, Maia's yes or no, plain talk, Who complements me
  *   DELETE /api/gene-keys/me              remove their Gene Keys
  *   GET    /api/gene-keys/people?ids=a,b  other members' shown lines, for a circle or a card
  *   GET    /api/gene-keys/people/:handle  one member's shown lines, for their profile
+ *   GET    /api/gene-keys/complements     Who complements me: opted-in members whose lines fill the asker's gaps
  *   GET    /api/gene-keys/places          the birth-town list the form searches on the device
  *
  * Every door needs a signed-in member. Another member's lines are read only
@@ -22,15 +23,18 @@ import fs from "node:fs";
 import path from "node:path";
 import type { AppDeps } from "../lib/appDeps";
 import {
-  PEOPLE_READ_MAX, changeGeneKeysSettings, geneKeysOfHandle, geneKeysOfPeople, ownGeneKeys, parseSave, parseSettings,
-  removeGeneKeys, saveGeneKeys,
+  PEOPLE_READ_MAX, changeGeneKeysSettings, complementsFor, earnLinesFound, geneKeysOfHandle, geneKeysOfPeople, ownGeneKeys,
+  parseSave, parseSettings, removeGeneKeys, saveGeneKeys, LINES_FOUND_BADGE,
 } from "../lib/geneKeys";
 import { requireModule } from "../lib/modules";
 
 /** Re-exported so server/index.ts reaches them on its one exempt import line for this module. */
-export { exportMemberGeneKeys, geneKeysForAssistant } from "../lib/geneKeys";
+export { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing } from "../lib/geneKeys";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit">;
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "notify">;
+
+/** The badge's own words for the notice, the same title cycle close sends (server/lib/cycleSettlement.ts). */
+const BADGE_TITLE = "Badge earned: Lines found";
 
 /**
  * The birth-town list, relative to the repository root and to /app in the image
@@ -45,7 +49,13 @@ const HOUR_MS = 60 * 60 * 1000;
 const SAVES_PER_HOUR = 30;
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, overLimit } = deps;
+  const { authedUser, getPool, overLimit, notify } = deps;
+  /** "Lines found" the moment it is earned, with the notice cycle close would have sent. True when it was. */
+  const earn = async (uid: string, visibility: "show" | "hide"): Promise<boolean> => {
+    if (!(await earnLinesFound(getPool(), uid, visibility))) return false;
+    await notify({ userId: uid, type: "badge", title: BADGE_TITLE, link: "/badges", dedupeKey: `rule:${LINES_FOUND_BADGE}:${uid}:tier-1` }).catch(() => {});
+    return true;
+  };
   let places: string | null = null;
 
   app.use("/api/gene-keys", requireModule("gene-keys"));
@@ -67,7 +77,7 @@ export function register(app: Express, deps: Deps): void {
     if (!save.ok) return res.status(400).json({ error: save.problem });
     const geneKeys = await saveGeneKeys(getPool(), uid, save);
     if (!geneKeys) return res.status(500).json({ error: "Your lines did not save. Try again." });
-    res.json({ geneKeys });
+    res.json({ geneKeys, badgeEarned: (await earn(uid, geneKeys.visibility)) ? "Lines found" : null });
   });
 
   app.patch("/api/gene-keys/me", async (req, res) => {
@@ -75,9 +85,11 @@ export function register(app: Express, deps: Deps): void {
     if (!me) return res.status(401).json({ error: "auth_required" });
     const patch = parseSettings(req.body);
     if (!patch.ok) return res.status(400).json({ error: patch.problem });
-    const geneKeys = await changeGeneKeysSettings(getPool(), String(me.id), { visibility: patch.visibility, maia: patch.maia });
+    const { ok: _ok, ...settings } = patch;
+    const uid = String(me.id);
+    const geneKeys = await changeGeneKeysSettings(getPool(), uid, settings);
     if (!geneKeys) return res.status(404).json({ error: "You have no Gene Keys saved yet." });
-    res.json({ geneKeys });
+    res.json({ geneKeys, badgeEarned: patch.visibility === "show" && (await earn(uid, "show")) ? "Lines found" : null });
   });
 
   app.delete("/api/gene-keys/me", async (req, res) => {
@@ -98,6 +110,12 @@ export function register(app: Express, deps: Deps): void {
     const handle = String(req.params.handle ?? "").trim();
     if (!handle) return res.status(400).json({ error: "Name a member." });
     res.json({ geneKeys: await geneKeysOfHandle(getPool(), handle) });
+  });
+
+  app.get("/api/gene-keys/complements", async (req, res) => {
+    const me = await authedUser(req);
+    if (!me) return res.status(401).json({ error: "auth_required" });
+    res.json(await complementsFor(getPool(), String(me.id)));
   });
 
   /**

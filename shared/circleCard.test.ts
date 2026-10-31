@@ -75,6 +75,22 @@ describe("the circle card model", () => {
     expect(roles.note).toBeNull();
   });
 
+  it("carries each role's pay beside its Apply link, and none where the reader may not read it (2026-10-30)", () => {
+    const pay = { value: null, lines: [{ token: "village-voice", name: "Village Voice", amount: 5, voice: true }], source: "own" as const, cadence: "cycle" as const };
+    const card = buildCircleCard(
+      base({
+        roles: [
+          { id: "r-1", name: "Seed Librarian", capacity: 1, holderCount: 0, state: "open", holderHandles: [], pay },
+          { id: "r-2", name: "Water Keeper", capacity: 1, holderCount: 0, state: "open", holderHandles: [] },
+        ],
+      }),
+    );
+    const roles = find(card.sections, "roles") as Extract<CircleSection, { kind: "roles" }>;
+    const rows = roles.slot.kind === "shown" ? roles.slot.value : [];
+    expect(rows[0]!.pay).toEqual(pay);
+    expect("pay" in rows[1]!).toBe(false);
+  });
+
   it("says once why a visitor's filled roles carry no card links", () => {
     const card = buildCircleCard(
       base({ roles: [{ id: "r-1", name: "Water Keeper", capacity: 1, holderCount: 1, state: "filled", holderHandles: undefined }] }),

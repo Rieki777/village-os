@@ -28,6 +28,10 @@
  * emails here (`TaskMailButton`). If the task layer does not answer, the record
  * still reads whole, as it was said.
  *
+ * A ROUND THAT OUTLIVED ITS CALL (0281) carries on under its proposal
+ * (`NightAfterCall`): whoever asked for a night answers it here by their
+ * time, and once no night lasts the facilitator can mark it decided.
+ *
  * AN ADMIN CAN DELETE THE RECORD, at its very foot, after everything it says
  * (`deleteRecord`, a DiscardSession the room hands in for admins only). The
  * facilitator alone cannot: a closed record belongs to everybody who was in it.
@@ -43,6 +47,11 @@ import { roomDay } from "./FromLastTime";
 import { BTN_SECONDARY, CARD, CHIP, H3, HINT, LABEL_CAPS, LEARNED_QUOTE, agendaOrder, consentOn, heldLine } from "./roomUi";
 import { FacilitationReading } from "./StageClose";
 import TaskMailButton from "./TaskMailButton";
+import NightAfterCall from "./NightAfterCall";
+import type { RoomActions } from "./useSessionRoom";
+
+/** What the record may do: answer a night, and mark a round decided after it. */
+type RecordActions = Pick<RoomActions, "answerNight" | "decideAfterNight">;
 
 /** How recently a close still counts as news to whoever opens the record. */
 const JUST_CLOSED_MS = 2 * 60 * 1000;
@@ -81,7 +90,26 @@ function TaskStanding({ task, said, today }: { task: TaskCard; said: SessionEntr
   );
 }
 
-function EntryLines({ view, list, tasks, today }: { view: SessionView; list: SessionEntry[]; tasks: TaskBook; today: string }) {
+/** The proposal a round's write landed on, and the focus moves to it. */
+export const recordDecisionId = (entryId: number) => `record-decision-${entryId}`;
+
+function EntryLines({
+  view,
+  list,
+  tasks,
+  today,
+  actions,
+  now,
+  onNightDone,
+}: {
+  view: SessionView;
+  list: SessionEntry[];
+  tasks: TaskBook;
+  today: string;
+  actions?: RecordActions;
+  now?: number;
+  onNightDone?: (entryId: number, words: string) => void;
+}) {
   const decisions = list.filter((e) => e.kind === "decision");
   const seeds = list.filter((e) => e.kind === "seed");
   const acts = list.filter((e) => e.kind === "action" && e.status !== "parked");
@@ -89,13 +117,20 @@ function EntryLines({ view, list, tasks, today }: { view: SessionView; list: Ses
   return (
     <ul className="mt-3 space-y-2">
       {decisions.map((d) => {
-        const { tally } = consentOn(view, `decision:${d.id}`);
-        const answered = tally.consent + tally.concern + tally.object + tally.sleeping;
+        const { tally } = consentOn(view, `decision:${d.id}`, now);
+        const answered = tally.consent + tally.concern + tally.object + tally.sleeping + (tally.byDefault ?? 0);
+        const round = view.nights?.find((n) => n.entryId === d.id);
         return (
-          <li key={d.id} className={`rounded-xl border px-3 py-2 text-sm ${d.status === "done" ? "border-open/50 bg-card" : "border-border bg-muted"}`}>
+          <li
+            key={d.id}
+            id={recordDecisionId(d.id)}
+            tabIndex={-1}
+            className={`rounded-xl border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${d.status === "done" ? "border-open/50 bg-card" : "border-border bg-muted"}`}
+          >
             <span className="font-semibold text-foreground">{d.status === "done" ? ROOM_COPY.decide : ROOM_COPY.proposalOpen}:</span>{" "}
             <span className="whitespace-pre-line text-foreground">{d.text}</span>
             {answered > 0 && <span className="block text-xs text-muted-foreground">{ROOM_COPY.talliedLine(tally)}</span>}
+            {round && <NightAfterCall view={view} entryId={d.id} round={round} actions={actions} now={now} onDone={(words) => onNightDone?.(d.id, words)} />}
           </li>
         );
       })}
@@ -201,7 +236,25 @@ function ShareableMinutes({ view }: { view: SessionView }) {
   );
 }
 
-export default function ClosedRecord({ view, deleteRecord }: { view: SessionView; deleteRecord?: ReactNode }) {
+export default function ClosedRecord({
+  view,
+  deleteRecord,
+  actions,
+  now,
+}: {
+  view: SessionView;
+  deleteRecord?: ReactNode;
+  actions?: RecordActions;
+  /** The room's own clock, for a round that outlived its call. */
+  now?: number;
+}) {
+  // What a round's write landed, read out from a line that outlives the round,
+  // with the focus on the proposal it landed on.
+  const [nightSaid, setNightSaid] = useState("");
+  const nightDone = (entryId: number, words: string) => {
+    setNightSaid(words);
+    requestAnimationFrame(() => document.getElementById(recordDecisionId(entryId))?.focus());
+  };
   const items = agendaOrder(view.items);
   const loose = view.entries.filter((e) => e.itemId == null || !view.items.some((i) => i.id === e.itemId));
   const backlog = view.entries.filter((e) => e.kind === "tension" || e.status === "parked");
@@ -239,6 +292,10 @@ export default function ClosedRecord({ view, deleteRecord }: { view: SessionView
 
   return (
     <div className="space-y-5">
+      {/* Mounted from the start, so a round's write is read out when its words arrive (0281). */}
+      <p aria-live="polite" className="sr-only">
+        {nightSaid}
+      </p>
       <section className={`${CARD} flex flex-wrap items-center gap-x-6 gap-y-2`}>
         {/* The dawn carries no message of its own: the status line beside it
             already says the session closed, and saying it twice talks over it. */}
@@ -288,7 +345,15 @@ export default function ClosedRecord({ view, deleteRecord }: { view: SessionView
                   </span>
                   <span>· {itemOutcome(item)}</span>
                 </p>
-                <EntryLines view={view} list={view.entries.filter((e) => e.itemId === item.id)} tasks={tasks} today={today} />
+                <EntryLines
+                  view={view}
+                  list={view.entries.filter((e) => e.itemId === item.id)}
+                  tasks={tasks}
+                  today={today}
+                  actions={actions}
+                  now={now}
+                  onNightDone={nightDone}
+                />
               </li>
             ))}
           </ol>
@@ -302,7 +367,7 @@ export default function ClosedRecord({ view, deleteRecord }: { view: SessionView
           <h3 id="record-loose" className={H3}>
             {ROOM_COPY.outsideAgenda}
           </h3>
-          <EntryLines view={view} list={loose.filter((e) => e.kind !== "tension")} tasks={tasks} today={today} />
+          <EntryLines view={view} list={loose.filter((e) => e.kind !== "tension")} tasks={tasks} today={today} actions={actions} now={now} onNightDone={nightDone} />
         </section>
       )}
 

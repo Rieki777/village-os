@@ -150,9 +150,13 @@ async function fingerprint(): Promise<Record<string, string>> {
   return Object.fromEntries(parts);
 }
 
-/** Ask the founder to hand-mint. The simplest issuance a route can be told to do. */
+/**
+ * Ask the founder to hand-mint. The simplest issuance a route can be told to do.
+ * In credits: Gratitude is refused by name before the launch is asked (Rye,
+ * 2026-10-23: it is only ever sent member to member), and this probe is about the launch.
+ */
 const tryToIssue = (reason: string) =>
-  call("POST", "/api/admin/tokens/gratitude/mint", {
+  call("POST", "/api/admin/tokens/credits/mint", {
     body: { toUserId: wrenId, amount: 5, reason },
   });
 

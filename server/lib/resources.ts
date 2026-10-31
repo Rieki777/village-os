@@ -19,6 +19,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { formatMoney } from "../../shared/money";
 import { BUDGET_MODES, isBudgetMode, type BudgetMode, type PendingModeChange } from "../../shared/circleTreasury";
 import { moduleActivity } from "./modules";
+import { GRATITUDE_ONLY_SENT } from "../../shared/workValue";
 
 // ── Vocabulary ──────────────────────────────────────────────────────────────
 // Every list carries `other` (R28): a village's own way is a real answer,
@@ -207,6 +208,9 @@ export function unitProblem(unit: unknown, tokenExists: (slug: string) => boolea
   const m = TOKEN_UNIT.exec(u);
   if (!m) return "A unit is a three letter currency code like CHF, or token:<slug> for a village token";
   if (!tokenExists(m[1])) return `No token called "${m[1]}" exists here`;
+  // A treasury in Gratitude would fund, spend and pay bonuses in it (Rye,
+  // 2026-10-23: Gratitude is only sent member to member).
+  if (m[1] === "gratitude") return GRATITUDE_ONLY_SENT;
   return null;
 }
 

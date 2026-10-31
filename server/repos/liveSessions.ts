@@ -203,7 +203,7 @@ export const MEETING_MIN_PEOPLE = 2;
  * meeting stays a meeting after one of its people leaves the village and their
  * row goes. A session closed before the count was kept reads its rows alone.
  */
-const heldWithAtLeast = (alias: string): string =>
+export const heldWithAtLeast = (alias: string): string =>
   `GREATEST((SELECT COUNT(*) FROM \`live_session_people\` \`p_${alias}\` WHERE \`p_${alias}\`.\`session_id\` = \`${alias}\`.\`id\`), ` +
   `CASE WHEN JSON_VALID(\`${alias}\`.\`summary\`) ` +
   `THEN COALESCE(CAST(JSON_EXTRACT(\`${alias}\`.\`summary\`, '$.counts.people') AS UNSIGNED), 0) ELSE 0 END) >= ?`;
@@ -340,6 +340,26 @@ export async function writeClosed(
 }
 
 /** Rebuilt minutes, after an erasure changed what a closed record may say. */
+/** A closed record's summary, written again: a round that outlived the call moved on (0281). */
+export async function writeSummary(q: Queryable, id: number, summary: string): Promise<void> {
+  await q.query("UPDATE `live_sessions` SET `summary` = ? WHERE `id` = ? AND `status` = 'closed'", [summary, id]);
+}
+
+/**
+ * The rounds on closed records where a night ended lately (0281), one row
+ * each, for the job. `since` bounds the read: a night is at most a week long,
+ * so a round whose nights all ended long ago was read many times already.
+ */
+export async function endedNightRows(q: Queryable, now: Date, since: Date): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    "SELECT DISTINCT r.`session_id`, r.`target` FROM `live_session_responses` r JOIN `live_sessions` s ON s.`id` = r.`session_id` " +
+      "WHERE s.`status` = 'closed' AND r.`value` = 'sleep' AND r.`answer_by` IS NOT NULL AND r.`answer_by` <= ? AND r.`answer_by` > ? " +
+      "ORDER BY r.`session_id` LIMIT 500",
+    [now, since],
+  );
+}
+
 export async function writeMinutes(q: Queryable, id: number, minutesPeople: string, minutesShareable: string): Promise<void> {
   await q.query(
     "UPDATE `live_sessions` SET `minutes_people` = ?, `minutes_shareable` = ?, `version` = `version` + 1 WHERE `id` = ?",
@@ -558,7 +578,7 @@ export async function deleteEntryRow(q: Queryable, id: number): Promise<void> {
 export async function responseRows(q: Queryable, sessionId: number): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
-    "SELECT `target`, `member_no`, `value`, `text` FROM `live_session_responses` " +
+    "SELECT `target`, `member_no`, `value`, `text`, UNIX_TIMESTAMP(`answer_by`) AS `answer_by_s` FROM `live_session_responses` " +
       "WHERE `session_id` = ? AND `target` <> 'facilitation' ORDER BY `id`",
     [sessionId],
   );
@@ -577,13 +597,14 @@ export async function facilitationRows(q: Queryable, sessionId: number): Promise
 /** One answer per person per target. Answering again replaces the answer. */
 export async function upsertResponse(
   q: Queryable,
-  row: { sessionId: number; target: string; memberNo: number; value: string; text: string | null; now: Date },
+  row: { sessionId: number; target: string; memberNo: number; value: string; text: string | null; answerBy?: Date | null; now: Date },
 ): Promise<void> {
+  // `answer_by` (0281) is a night's answer-by time; any other answer sets it back to NULL.
   await q.query(
-    "INSERT INTO `live_session_responses` (`session_id`, `target`, `member_no`, `value`, `text`, `created_at`, `updated_at`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `text` = VALUES(`text`), " +
-      "`updated_at` = VALUES(`updated_at`)",
-    [row.sessionId, row.target, row.memberNo, row.value, row.text, row.now, row.now],
+    "INSERT INTO `live_session_responses` (`session_id`, `target`, `member_no`, `value`, `text`, `answer_by`, `created_at`, `updated_at`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `text` = VALUES(`text`), " +
+      "`answer_by` = VALUES(`answer_by`), `updated_at` = VALUES(`updated_at`)",
+    [row.sessionId, row.target, row.memberNo, row.value, row.text, row.answerBy ?? null, row.now, row.now],
   );
 }
 
@@ -663,7 +684,7 @@ export async function memberItemRows(q: Queryable, no: number): Promise<RowDataP
 export async function memberResponseRows(q: Queryable, no: number): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
-    "SELECT `session_id`, `target`, `value`, `text`, `updated_at` FROM `live_session_responses` WHERE `member_no` = ? ORDER BY `id`",
+    "SELECT `session_id`, `target`, `value`, `text`, UNIX_TIMESTAMP(`answer_by`) AS `answer_by_s`, `updated_at` FROM `live_session_responses` WHERE `member_no` = ? ORDER BY `id`",
     [no],
   );
 }

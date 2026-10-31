@@ -28,7 +28,11 @@
  *     The offset rides the safe area so the overlap is the same on every
  *     device: the trigger's lower edge tucks about 1rem into the bar rather
  *     than floating a thumb's width above it.
- *  3. Layering: modal sheets z-[70], FAB z-[60], scrim z-[55], tab bar z-50.
+ *  3. Layering: setup walk z-[80], a card opened from inside a modal z-[75]
+ *     (the Gene Keys seal's), modal sheets z-[70], FAB z-[60], scrim z-[55],
+ *     tab bar z-50. NOTHING ENFORCES THIS: a shadcn Dialog or Sheet that sets
+ *     no tier lands at z-50, tab-bar level, under any modal it was opened
+ *     from, and a phone tap shows nothing with no error (live 2026-10-30).
  *     The scrim has to sit between the FAB and the bar, not over both — and a
  *     modal has to clear all three, or the tab bar sits on top of the sheet's
  *     own buttons (the village map's node card shipped that way at z-50).
