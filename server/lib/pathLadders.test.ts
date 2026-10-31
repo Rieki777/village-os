@@ -40,7 +40,7 @@ import {
   NO_MOONS,
   type SeatingFacts,
 } from "./pathLadders";
-import { climbLadder } from "./admission";
+import { climbLadder, type LadderStage } from "./admission";
 
 /** A village whose seatings lapse at a season turn, currently in season two. */
 const CTX: LapseContext = { currentSeasonId: "s2", cadence: "season_turn", now: new Date("2026-06-01T00:00:00Z") };
@@ -576,8 +576,8 @@ describe("holding a role lifts the Role Holder stage on its own", () => {
     const stages = GAME_CONFIG.stages;
     expect(stages.find((s) => s.id === "role-holder")?.rule.type).toBe("role");
     const member = { membershipGranted: true, stageGranted: null } as any;
-    const holdsRole = (s: (typeof stages)[number]) => s.rule.type === "role" || s.rule.type === "account" || s.rule.type === "default" || s.rule.type === "membership";
-    const none = (s: (typeof stages)[number]) => s.rule.type === "account" || s.rule.type === "default" || s.rule.type === "membership";
+    const holdsRole = (s: LadderStage) => s.rule.type === "role" || s.rule.type === "account" || s.rule.type === "default" || s.rule.type === "membership";
+    const none = (s: LadderStage) => s.rule.type === "account" || s.rule.type === "default" || s.rule.type === "membership";
     expect(climbLadder(stages, member, holdsRole)).toBe("role-holder");
     expect(climbLadder(stages, member, none)).toBe("member");
     // The role ends, and a grant made earlier still holds them where it put them.
