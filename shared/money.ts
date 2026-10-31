@@ -104,15 +104,15 @@ export function formatMoney(
  *
  * Never an invented one. The dues fallback was a compiled "$", so a village
  * pricing in colones or francs published dollars (audit, 2026-10-22). A
- * symbol that ends in a letter ("CHF", "CRC") takes a space; "$" and "₡" sit
- * against the number, as they are written.
+ * symbol with letters in it ("CHF", "CRC", "R$") takes a space; "$" and "₡"
+ * sit against the number, as they are written.
  */
 export function figureWithCurrency(amount: string, typedSymbol?: string | null, fiatCurrency?: string | null): string {
   const figure = String(amount ?? "").trim();
   if (!figure) return "";
   const symbol = String(typedSymbol ?? "").trim() || currencySymbol(String(fiatCurrency ?? ""));
   if (!symbol) return figure;
-  return /\p{L}$/u.test(symbol) ? `${symbol} ${figure}` : `${symbol}${figure}`;
+  return /[A-Za-z]/.test(symbol) ? `${symbol} ${figure}` : `${symbol}${figure}`;
 }
 
 /**
