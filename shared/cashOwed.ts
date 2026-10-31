@@ -86,6 +86,13 @@ export function cashTransferNote(transferDate: string, reference: string): strin
   return `Bank transfer on ${transferDate}. Reference: ${reference}`;
 }
 
+/** The calendar years a member has any paid line in, newest first. */
+export function cashYearsPaid(entries: ReadonlyArray<CashOwedEntry>): number[] {
+  const years = new Set<number>();
+  for (const e of entries) if (e.state === "paid" && e.paidAt) years.add(new Date(e.paidAt).getUTCFullYear());
+  return Array.from(years).sort((a, b) => b - a);
+}
+
 /** Sum amounts per currency. Amounts in two currencies are never added together. */
 export function cashTotalsByCurrency(rows: ReadonlyArray<{ amountMinor: number; currency: string }>): Array<{ currency: string; minor: number }> {
   const sums = new Map<string, number>();
