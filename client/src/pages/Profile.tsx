@@ -53,6 +53,7 @@ import type { StageAdvance } from "@/components/StageAdvanced";
 import StatRow from "@/components/profileDash/StatRow";
 import StagePanel from "@/components/profileDash/StagePanel";
 import TodayStrip from "@/components/profileDash/TodayStrip";
+import YourCompanions from "@/components/profileDash/YourCompanions";
 import TreasuryPanel from "@/components/profileDash/TreasuryPanel";
 import LevelUpMoment from "@/components/profileDash/LevelUpMoment";
 import ProfileTabs, { phoneTab, type ProfileTab } from "@/components/profileDash/ProfileTabs";
@@ -505,6 +506,11 @@ export default function Profile() {
 
             <div className={tabOf("today")}>
               <TodayStrip data={dash} />
+            </div>
+
+            {/* YOUR COMPANIONS, beside the tasks on a desktop and on the Quests tab on a phone. */}
+            <div className={tabOf("quests")}>
+              <YourCompanions />
             </div>
 
             <div className={tabOf("treasury")}>
