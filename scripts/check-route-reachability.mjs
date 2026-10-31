@@ -73,6 +73,12 @@ const ALLOWLIST = {
   // purpose. Excluded from the route list by the deriver too; belt and braces.
   "/404": "the not-found page, reached by failing to reach something else",
 
+  // The treasurer's payout list outside /admin (Rye, 2026-10-30), for a finance
+  // role holding cash.pay without being an admin. Its one door is the books half
+  // of the profile cash card, which renders only for a key holder; a nav entry
+  // would show every member a page that refuses them. Admins keep their own tab.
+  "/cash-payouts": "entered from the profile cash card, shown only to a holder of cash.pay",
+
   // Password flows arrive from an EMAIL, not from the site. The set-password
   // link carries a one-time token and is useless without it, so a nav entry
   // would be a link to an error message. /forgot-password keeps its one door

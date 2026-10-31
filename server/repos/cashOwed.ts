@@ -102,6 +102,62 @@ export async function markCashOwedPaidRow(pool: Pool, id: string, paidBy: string
   return res;
 }
 
+/** Rows by id, in no particular order. Absent ids are simply absent. */
+export async function cashOwedRowsByIds(pool: Pool, ids: readonly string[]): Promise<RowDataPacket[]> {
+  if (ids.length === 0) return [];
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT * FROM `cash_owed` WHERE `id` IN (?)", [ids]);
+  return rows;
+}
+
+/** Every row, unpaid first then paid, for the accounts' export. */
+export async function allCashRows(pool: Pool, limit: number): Promise<RowDataPacket[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT * FROM `cash_owed` ORDER BY (`state` = 'paid') ASC, `owed_at` ASC, `id` ASC LIMIT ?",
+    [limit],
+  );
+  return rows;
+}
+
+/**
+ * Pay several of ONE member's rows in one transaction, all or none.
+ *
+ * The compare-and-set is the same as `markCashOwedPaidRow`: only a row still
+ * owed or claimed, and only that member's, is touched. When fewer rows match
+ * than were asked for (one was paid by somebody else a moment ago, or belongs
+ * to another member), the whole transaction rolls back and the answer is 0, so
+ * a transfer never records half of itself and no line is ever paid twice.
+ * mysql2 connects with FOUND_ROWS, so `affectedRows` counts the rows the WHERE
+ * matched, which is exactly the count this needs.
+ */
+export async function payCashRowsTogether(
+  pool: Pool,
+  ids: readonly string[],
+  userId: string,
+  paidBy: string,
+  note: string,
+): Promise<number> {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [res] = await conn.query<ResultSetHeader>(
+      "UPDATE `cash_owed` SET `state` = 'paid', `paid_at` = CURRENT_TIMESTAMP, `paid_by` = ?, `paid_note` = ? " +
+        "WHERE `id` IN (?) AND `user_id` = ? AND `state` IN ('owed', 'claimed')",
+      [paidBy, note, ids, userId],
+    );
+    if (res.affectedRows !== ids.length) {
+      await conn.rollback();
+      return 0;
+    }
+    await conn.commit();
+    return res.affectedRows;
+  } catch (err) {
+    await conn.rollback().catch(() => {});
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 /**
  * Every live seat on a role that pays cash, with the role's cash and name.
  *

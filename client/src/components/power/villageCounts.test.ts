@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { circleCounts, countable, headlineFor, villageCounts } from "./villageCounts";
+import { circleCounts, countable, headlineFor, isCalling, seatWord, villageCounts } from "./villageCounts";
 import type { PowerCircle, PowerSeat } from "./types";
 
 const circle = (id: string, extra: Partial<PowerCircle> = {}): PowerCircle => ({ id, name: id, ...extra });
@@ -50,6 +50,33 @@ describe("villageCounts", () => {
 
   it("never counts more held than there are places", () => {
     expect(villageCounts({ circles: [], roles: [role("r", null, 1, 3)] }).openings).toBe(0);
+  });
+});
+
+describe("one rule for an opening", () => {
+  /*
+   * Live on 2026-10-30: the side panel said 16 "open calls" and the legend
+   * said 15, in the same words. One role was forming: the panel counted it
+   * (it has a vacancy) and the legend did not (its state is forming). A
+   * forming role is not calling anyone, so it is neither an opening nor an
+   * open role, and every surface counts through the same helpers.
+   */
+  const withForming = {
+    circles: [circle("a", { status: "active" })],
+    roles: [role("o", "a", 1, 0), role("p", "a", 3, 1, { state: "partial" }), role("f", "a", 1, 0, { state: "forming" })],
+  };
+
+  it("leaves a forming role's place out of the openings and the open roles", () => {
+    const c = villageCounts(withForming);
+    expect(c.openings).toBe(3);
+    expect(c.openRoles).toBe(2);
+    expect(circleCounts("a", withForming).openings).toBe(3);
+  });
+
+  it("agrees with the legend's tally of the states that call", () => {
+    const calling = withForming.roles.filter((r) => ["open", "partial"].includes(seatWord(r)));
+    expect(villageCounts(withForming).openRoles).toBe(calling.length);
+    expect(withForming.roles.filter(isCalling).map((r) => r.id)).toEqual(["o", "p"]);
   });
 });
 
