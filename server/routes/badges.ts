@@ -4,7 +4,7 @@
  * Fourteen routes, lifted out of server/index.ts unchanged:
  *
  *   GET    /api/badges                     the catalogue plus the viewer's own
- *   GET    /api/badges/of/:userId          somebody else's, as they allow
+ *   GET    /api/badges/of/:userId          somebody else's, as they allow (or /of/@handle)
  *   PUT    /api/badges/featured            pin up to three on a profile
  *   GET    /api/badges/match               who holds the skills a quest asks for
  *   POST   /api/badges/:id/claim           claim a self-claimable badge
@@ -57,6 +57,7 @@ import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow, isExampleUser, onRealItemPublished } from "../lib/examples";
 import { requireModule } from "../lib/modules";
 import { numberVar } from "../lib/variables";
+import { userIdForHandle } from "../lib/profile";
 
 type Deps = Pick<
   AppDeps,
@@ -195,12 +196,20 @@ export function register(app: Express, deps: Deps): void {
    * /api/badges view and the admin surfaces carry warnings.
    */
   app.get("/api/badges/of/:userId", async (req, res) => {
+    /*
+     * `@handle` reaches the same answer by the name a stranger knows. The
+     * public profile is keyed by handle and never carries the id, and the
+     * badge flower on it needs this read. A handle nobody holds is an empty
+     * roster, the same answer an unknown id already gets.
+     */
+    const param = String(req.params.userId);
+    const userId = param.startsWith("@") ? ((await userIdForHandle(getPool(), param.slice(1))) ?? "") : param;
     const [rows] = await getPool().query<any[]>(
       "SELECT b.id, b.name, b.kind, b.description, a.count, a.expires_at, a.featured FROM badge_awards a " +
         "JOIN badges b ON b.id = a.badge_id " +
         "WHERE a.user_id = ? AND b.active = 1 AND b.kind <> 'warning' " +
         "AND (a.expires_at IS NULL OR a.expires_at > NOW()) ORDER BY a.featured DESC, b.name",
-      [String(req.params.userId)],
+      [userId],
     );
     res.json({
       badges: rows.map((r) => ({
@@ -211,7 +220,7 @@ export function register(app: Express, deps: Deps): void {
         // right up to the day it vanished. Same spelling as /api/badges.
         expiresAt: r.expires_at ? new Date(r.expires_at).toISOString() : null,
       })),
-      skills: await skillsFor(getPool(), String(req.params.userId)),
+      skills: await skillsFor(getPool(), userId),
       maxFeatured: numberVar("badges.max_featured"),
     });
   });
