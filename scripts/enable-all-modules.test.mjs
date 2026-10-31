@@ -72,7 +72,7 @@ check("every TARGETS entry names a module the registry has, once", () => {
   const stale = TARGETS.map(([id]) => id).filter((id) => !ids.has(id));
   assert.deepStrictEqual(stale, [], `TARGETS names no such module: ${stale.join(", ")}`);
   assert.strictEqual(new Set(TARGETS.map(([id]) => id)).size, TARGETS.length, "a module is named twice in TARGETS");
-  for (const [id, t] of TARGETS) assert.ok(["public", "members"].includes(t), `${id}: posture ${t}`);
+  for (const [id, t] of TARGETS) assert.ok(["public", "members", "held"].includes(t), `${id}: posture ${t}`);
 });
 
 check("on the real registry every module opens after what it requires, at a posture what it requires allows", () => {
@@ -86,7 +86,23 @@ check("on the real registry every module opens after what it requires, at a post
       assert.ok(at.get(dep) < at.get(st.id), `${st.id} opens before ${dep}, which it requires`);
     }
   }
-  assert.ok(at.get("session-card") > at.get("sessions") && at.get("session-card") > at.get("gene-keys"));
+  for (const [child, parent] of [["feed", "forum"], ["introductions", "messaging"], ["resources", "map"]]) assert.ok(at.get(child) > at.get(parent), `${child} before ${parent}`);
+});
+
+check("a held module is named, reported, and never sent: session-card waits on its security review", () => {
+  const plan = planRun(listed(registry));
+  assert.deepStrictEqual(plan.held.map((h) => h.id), ["session-card"]);
+  assert.ok(plan.held[0].reason.length > 0, "a held module says why");
+  assert.ok(!plan.steps.some((s) => s.id === "session-card"), "session-card would be switched on");
+  assert.ok(!plan.missing.includes("session-card"), "a held module is accounted for, not missing");
+  // With --preview too: held means not sent at all.
+  assert.ok(!planRun(listed(registry), TARGETS, { preview: true }).steps.some((s) => s.id === "session-card"));
+});
+
+check("ATTACK: a module that requires a held one is blocked, not opened over it", () => {
+  const plan = planRun([mod("base"), mod("lens", { requires: ["base"] })], [["base", "held", "review pending"], ["lens", "members"]]);
+  assert.deepStrictEqual(plan.held.map((h) => h.id), ["base"]);
+  assert.deepStrictEqual(plan.steps.find((s) => s.id === "lens").blockedBy, ["base"]);
 });
 
 check("a probe is only written for a module that opens to the public", () => {
@@ -142,10 +158,10 @@ check("ATTACK: a TARGETS entry this server does not offer is skipped, not sent",
 
 check("ATTACK: on a village where every module ships off, every step is a change, and --preview opens each to preview", () => {
   const plan = planRun(listed(registry));
-  assert.ok(plan.steps.length >= TARGETS.length - 1);
   assert.ok(plan.steps.every((s) => s.from === "off"));
   const preview = planRun(listed(registry), TARGETS, { preview: true });
   assert.ok(preview.steps.every((s) => s.want === "preview" && s.blockedBy.length === 0));
+  assert.strictEqual(plan.steps.length + plan.held.length, TARGETS.length);
 });
 
 console.log(`\n${run} check(s) passed`);

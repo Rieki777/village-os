@@ -18,7 +18,9 @@
  *
  * What a module is opened to is decided here, by hand, in TARGETS: whether a
  * stranger may read it is a judgment about the village, not a fact the
- * registry holds. Everything else is read from the server: the ORDER comes
+ * registry holds. A third posture, "held", names a module this script must
+ * not open yet (with the reason as a third element): it is reported and never
+ * sent, and anything that requires it is blocked with it. Everything else is read from the server: the ORDER comes
  * from each module's `requires`, a posture wider than what a module requires
  * allows is narrowed to it, and a module the server does not offer is skipped.
  * `scripts/enable-all-modules.test.mjs` holds this list to the registry in
@@ -84,10 +86,11 @@ export const TARGETS = [
   // A member's own chart, shown only to the members they choose; no public
   // surface to probe.
   ["gene-keys", "members"],
-  // Read in a live session, for the people in it. It requires sessions and
-  // gene-keys, and the run's order comes from that, not from where it sits in
-  // this list.
-  ["session-card", "members"],
+  // HELD. A member-pii module that reached main before the human security
+  // review Module Library Contract clause 13 requires. It stays off in every
+  // fork until that review closes and Rye signs off; then this line becomes
+  // ["session-card", "members"] (it requires sessions and gene-keys).
+  ["session-card", "held", "security review pending (Module Library Contract clause 13)"],
 ];
 
 /** A public probe per module: what a signed-out visitor should be able to reach. */
@@ -122,6 +125,8 @@ const RANK = { off: 0, preview: 1, members: 2, public: 3 };
  *   accounts for. A run refuses while this is not empty.
  * - `absent`: TARGETS entries this server does not offer (an older or newer
  *   release). Skipped, never sent.
+ * - `held`: TARGETS entries with the posture "held", each with its reason.
+ *   Reported, never sent, and treated as off by anything that requires them.
  * - `steps`: the rest, each after every module it requires. `want` is narrowed
  *   to the widest posture its requirements allow, with `narrowedFrom` set when
  *   that happened; `blockedBy` names a requirement that is neither core, nor in
@@ -130,6 +135,8 @@ const RANK = { off: 0, preview: 1, members: 2, public: 3 };
 export function planRun(modules, targets = TARGETS, { preview = false } = {}) {
   const byId = new Map(modules.map((m) => [m.id, m]));
   const posture = new Map(targets.map(([id, t]) => [id, t]));
+  const held = targets.filter(([id, t]) => t === "held" && byId.has(id)).map(([id, , reason]) => ({ id, reason: reason ?? "held" }));
+  const isHeld = (id) => posture.get(id) === "held";
   const listings = modules.filter((m) => m.tier && m.tier !== "included");
   const isListing = (id) => listings.some((l) => l.id === id);
   const needSetup = modules.filter((m) => !m.core && m.setup === "required" && !posture.has(m.id) && !isListing(m.id));
@@ -145,13 +152,13 @@ export function planRun(modules, targets = TARGETS, { preview = false } = {}) {
     if (placed.has(id) || visiting.has(id)) return;
     visiting.add(id);
     const def = byId.get(id);
-    for (const dep of def.requires ?? []) if (posture.has(dep) && byId.has(dep)) place(dep);
+    for (const dep of def.requires ?? []) if (posture.has(dep) && !isHeld(dep) && byId.has(dep)) place(dep);
     let want = preview ? "preview" : posture.get(id);
     let narrowedFrom = null;
     const blockedBy = [];
     for (const dep of def.requires ?? []) {
       const d = byId.get(dep);
-      const depLevel = d?.core ? "public" : placed.has(dep) ? placed.get(dep) : d?.served ?? d?.lifecycle ?? "off";
+      const depLevel = d?.core ? "public" : isHeld(dep) ? "off" : placed.has(dep) ? placed.get(dep) : d?.served ?? d?.lifecycle ?? "off";
       if (depLevel === "off") {
         blockedBy.push(dep);
         continue;
@@ -165,8 +172,8 @@ export function planRun(modules, targets = TARGETS, { preview = false } = {}) {
     placed.set(id, want);
     steps.push({ id, want, from: def.lifecycle ?? "off", narrowedFrom, blockedBy });
   };
-  for (const [id] of targets) if (byId.has(id)) place(id);
-  return { listings, needSetup, missing, absent, steps };
+  for (const [id] of targets) if (byId.has(id) && !isHeld(id)) place(id);
+  return { listings, needSetup, missing, absent, held, steps };
 }
 
 async function api(method, path, body, token) {
@@ -278,6 +285,9 @@ async function main() {
     );
   }
 
+  for (const h of plan.held) {
+    console.log(`\nHeld, not sent: ${h.id}, ${h.reason}. It stays as it is on this village.`);
+  }
   if (plan.absent.length) {
     console.log(`\nNot on this server, so not sent: ${plan.absent.join(", ")}.`);
   }
