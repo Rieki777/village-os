@@ -238,18 +238,27 @@ export function chartProblems(chart: unknown): string[] {
 /**
  * The words genekeys.com shows for each line, per sphere. They depend on the
  * sphere and the line, never on the key: Life's Work line 2 reads Dancer for
- * key 12, 38, 54 and 55 alike (17 births read off the profiler, 2026-10-22).
+ * key 12, 38, 54 and 55 alike (17 births read off the profiler, 2026-10-22;
+ * the last four, Culture 3 and 5 and Pearl 4 and 5, from 7 more on 2026-10-30,
+ * which also matched every one of the 77 key.lines to the profiler's).
  * Richard Rudd has agreed to Amora using Gene Keys naming.
  *
  * The seal and the circle view use the LIFE'S WORK words for both numbers of a
  * profile, so a member and their team share one set of six words; the lines
  * card shows each sphere's own word.
  */
-export const LINE_WORDS: Record<"lifesWork" | "evolution" | "radiance" | "purpose", readonly string[]> = {
+export const LINE_WORDS: Record<Sphere, readonly string[]> = {
   lifesWork: ["Creator", "Dancer", "Changer", "Server", "Fixer", "Teacher"],
   evolution: ["Self & Empowerment", "Passion & Relationship", "Energy & Experience", "Love & Community", "Power & Projection", "Education & Surrender"],
   radiance: ["Solitude", "Marriage", "Interaction", "Friendship", "Impact", "Nurture"],
   purpose: ["Physicality", "Posture", "Movement", "Breath", "Voice", "Intent"],
+  attraction: ["Sterility / Fertility", "Lust / Passion", "Promiscuity / Playfulness", "Frigidity / Romance", "Entrapment / Sensuality", "Disappointment / Innocence"],
+  iq: ["The Contemplative mind", "The Brilliant mind", "The Flexible mind", "The Influential mind", "The Practical mind", "The Objective mind"],
+  eq: ["Self-esteem / Self-sabotage", "Courtesy / Aggression", "Sympathy / Apathy", "Kindness / Meanness", "Respect / Disrespect", "Reverence / Alienation"],
+  sq: ["Certainty", "Freedom", "Pleasure", "Belonging", "Mentoring", "Patience"],
+  core: ["Repression / Honesty", "Denial / Ease", "Shame / Humour", "Rejection / Gentleness", "Guilt / Forgiveness", "Isolation / Care"],
+  culture: ["Individual", "Partnership", "Unit", "Network", "Society", "System"],
+  pearl: ["Simplicity", "Recognition", "Celebration", "Charity", "Power", "Nature"],
 };
 
 /** The one word for a line wherever a single word is needed: the seal, the circle view. */
@@ -257,19 +266,24 @@ export function lineWord(line: number): string {
   return LINE_WORDS.lifesWork[line - 1] ?? "";
 }
 
-/** Richard's own one-line taglines for the Activation spheres, as genekeys.com prints them. */
+/**
+ * One-line taglines. The four Activation lines are Richard's own, as
+ * genekeys.com prints them. The free profile prints none for the Venus and
+ * Pearl spheres, so those seven are AMORA'S words, plain and short, and are
+ * never presented as Richard's.
+ */
 export const SPHERE_WORDS: Record<Sphere, { name: string; tagline: string | null }> = {
   lifesWork: { name: "Life's Work", tagline: "what I'm here to do" },
   evolution: { name: "Evolution", tagline: "what I'm here to learn" },
   radiance: { name: "Radiance", tagline: "what keeps me healthy" },
   purpose: { name: "Purpose", tagline: "what deeply fulfils me" },
-  attraction: { name: "Attraction", tagline: null },
-  iq: { name: "IQ", tagline: null },
-  eq: { name: "EQ", tagline: null },
-  sq: { name: "SQ", tagline: null },
-  core: { name: "Core", tagline: null },
-  culture: { name: "Culture", tagline: null },
-  pearl: { name: "Pearl", tagline: null },
+  attraction: { name: "Attraction", tagline: "who and what I draw to me" },
+  iq: { name: "IQ", tagline: "how my mind works best" },
+  eq: { name: "EQ", tagline: "how I meet other people's feelings" },
+  sq: { name: "SQ", tagline: "how my heart opens" },
+  core: { name: "Core", tagline: "where my deepest healing lies" },
+  culture: { name: "Culture", tagline: "how I serve the whole" },
+  pearl: { name: "Pearl", tagline: "where my prosperity comes from" },
 };
 
 export const STRATEGY_WORDS: Record<HdType, { strategy: string; line: string }> = {
@@ -328,7 +342,12 @@ export interface GeneKeysView {
   /** The two profile lines as one word each, "Dancer · Fixer". */
   names: string;
   lines: [number, number];
+  /** The Activation Sequence: Life's Work, Evolution, Radiance, Purpose. */
   spheres: SphereView[];
+  /** The Venus Sequence: Attraction, IQ, EQ, SQ, Core. */
+  love: SphereView[];
+  /** The Pearl Sequence: Culture, Pearl. */
+  prosperity: SphereView[];
   type: HdType;
   strategy: string;
   strategyLine: string;
@@ -340,21 +359,63 @@ export interface GeneKeysView {
 export interface OwnGeneKeysView extends GeneKeysView {
   visibility: GeneKeysVisibility;
   maia: boolean;
+  /** Listed in "Who complements me", for others who listed themselves too. */
+  complement: boolean;
+  /** "Talk to me plainly": Maia never adapts her wording to the type. */
+  maiaPlain: boolean;
   source: GeneKeysSource;
   /** Computed by an older calculator than this release runs: ask the member to read the sky again. */
   stale: boolean;
 }
 
+/** One person in "Who complements me" (GET /api/gene-keys/complements). */
+export interface Complement {
+  name: string;
+  handle: string | null;
+  view: GeneKeysView;
+  /** Their lines that the asker does not carry, lowest first. Never empty. */
+  fills: number[];
+}
+
 /**
- * The spheres any reader is shown today: the Activation Sequence (Rye,
- * 2026-10-22). The stored chart holds the Venus and Pearl spheres too; this is
- * the one line that opens them, after their own live test.
+ * What "Who complements me" answers. Opt-in on both sides: until the asker
+ * shows their own lines and joins, the answer says which of those is missing
+ * and lists nobody.
+ */
+export type ComplementsAnswer =
+  | { state: "no-lines" }
+  | { state: "hidden" }
+  | { state: "not-joined" }
+  | { state: "joined"; people: Complement[] };
+
+/**
+ * The three sequences, in the order genekeys.com reads them. Launch showed the
+ * Activation Sequence only (Rye, 2026-10-22); Love and Prosperity opened after
+ * their live test passed, 77 of 77 key.lines against genekeys.com
+ * (2026-10-30), as Rye asked ("10. Great!", 2026-10-23).
  */
 export const SHOWN_SPHERES: readonly Sphere[] = ["lifesWork", "evolution", "radiance", "purpose"];
+export const LOVE_SPHERES: readonly Sphere[] = ["attraction", "iq", "eq", "sq", "core"];
+export const PROSPERITY_SPHERES: readonly Sphere[] = ["culture", "pearl"];
+
+/** Attraction follows the design Moon, which changes line every couple of hours: a chosen birth time may misread it. */
+export const MOON_SPHERES: ReadonlySet<Sphere> = new Set<Sphere>(["attraction"]);
 
 function wordFor(sphere: Sphere, line: number): string {
-  const set = (LINE_WORDS as Record<string, readonly string[]>)[sphere];
-  return set ? set[line - 1] ?? "" : "";
+  return LINE_WORDS[sphere][line - 1] ?? "";
+}
+
+function sphereView(chart: Chart, sphere: Sphere): SphereView {
+  const act = sphereOf(chart, sphere);
+  return {
+    sphere,
+    name: SPHERE_WORDS[sphere].name,
+    tagline: SPHERE_WORDS[sphere].tagline,
+    keyLine: `${act.gate}.${act.line}`,
+    gate: act.gate,
+    line: act.line,
+    word: wordFor(sphere, act.line),
+  };
 }
 
 /** What a reader sees of a chart. The server builds it to answer; the browser builds it to preview before a save. */
@@ -366,18 +427,9 @@ export function viewOf(chart: Chart): GeneKeysView {
     profile: profileOf(chart),
     names: `${lineWord(p)} · ${lineWord(d)}`,
     lines: [p, d],
-    spheres: SHOWN_SPHERES.map((sphere) => {
-      const act = sphereOf(chart, sphere);
-      return {
-        sphere,
-        name: SPHERE_WORDS[sphere].name,
-        tagline: SPHERE_WORDS[sphere].tagline,
-        keyLine: `${act.gate}.${act.line}`,
-        gate: act.gate,
-        line: act.line,
-        word: wordFor(sphere, act.line),
-      };
-    }),
+    spheres: SHOWN_SPHERES.map((sphere) => sphereView(chart, sphere)),
+    love: LOVE_SPHERES.map((sphere) => sphereView(chart, sphere)),
+    prosperity: PROSPERITY_SPHERES.map((sphere) => sphereView(chart, sphere)),
     type: design.type,
     strategy: s.strategy,
     strategyLine: s.line,

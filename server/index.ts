@@ -73,6 +73,7 @@ import { register as registerBrochurePagesRoutes } from "./routes/brochurePages"
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
+import { register as registerGratitudeNudgeRoutes } from "./routes/gratitudeNudge";
 import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
 import { register as registerTrainingRoutes } from "./routes/training";
@@ -85,7 +86,7 @@ import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
-import { register as registerOrgDraftDecideRoutes } from "./routes/orgDraftDecide";
+import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
 import { register as registerSeasonRoutes } from "./routes/seasons";
 import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
@@ -164,12 +165,14 @@ import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerSessionLibraryRoutes } from "./routes/sessionLibrary";
 import { register as registerSessionRhythmRoutes } from "./routes/sessionRhythm";
+import { register as registerSessionTemplateRoutes } from "./routes/sessionTemplates";
 import { register as registerSessionCalendarRoutes } from "./routes/sessionCalendar";
 import { register as registerSessionDecisionRoutes } from "./routes/sessionDecisions";
 import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
@@ -625,6 +628,7 @@ import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
+import { grantCashPayToTreasury, seedStarterRoles } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
@@ -1450,12 +1454,12 @@ const circlesRepo = dbCollection(getPool(), {
      * that did not save.
      */
     { js: "homeStructureKey", db: "home_structure_key" },
+    { js: "layer", db: "layer" }, // 0286: the governance layer the map ranks by; listed for the reason above
     /*
      * `replaceAll` is DELETE-all plus a re-INSERT of exactly the columns in
      * this spec, so a column left out is not preserved: it is re-defaulted.
      * `circles.created_at` is `NOT NULL DEFAULT CURRENT_TIMESTAMP`, so every
-     * admin circle edit was resetting EVERY circle's birth date to the moment
-     * of that edit.
+     * admin circle edit was resetting EVERY circle's birth date to that moment.
      *
      * Nothing reads it today, which is why this was quiet rather than
      * harmless: the next feature wanting "how long has this circle existed"
@@ -1877,18 +1881,7 @@ async function ensureDataFiles() {
       console.error("[seed] circles seed failed (continuing)", e);
     }
   }
-  if (rolesRepo.all().length === 0 && fs.existsSync(ROLES_SEED_FILE)) {
-    try {
-      const seed = JSON.parse(fs.readFileSync(ROLES_SEED_FILE, "utf-8"));
-      if (Array.isArray(seed) && seed.length) {
-        // Seed rows predate the map columns (0018): default what NOT NULL needs.
-        await rolesRepo.replaceAll(seed.map((r: any) => ({ seats: 1, circleId: null, ...r })));
-        console.log(`[seed] ${seed.length} starter role(s) seeded`);
-      }
-    } catch (e) {
-      console.error("[seed] roles seed failed (continuing)", e);
-    }
-  }
+  await seedStarterRoles(rolesRepo, ROLES_SEED_FILE); // server/lib/starterRoles.ts
   if (trainingRepo.all().length === 0) {
     // Built here rather than at module load: the descriptions carry the
     // village's own name and the brand overlay is only readable once the
@@ -1932,6 +1925,7 @@ async function ensureDataFiles() {
   });
   await runOnce("currency-name-into-tokens-2026-08-14", migrateCurrencyNameIntoTokens);
   await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
+  await runOnce("cash-pay-to-treasury-2026-10-30", () => grantCashPayToTreasury(rolesRepo).then(() => undefined)); // Rye, 2026-10-30
   await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
@@ -6526,7 +6520,7 @@ async function startServer() {
      */
     const AGENT_INTENT_WRITE = process.env.AGENT_INTENT_WRITE === "1";
     const SKILLS_DIR = path.join(process.cwd(), "docs", "skills");
-    const SKILL_NAMES = ["village-calendar", "village-directory", "village-intents", "village-map"] as const;
+    const SKILL_NAMES = ["village-calendar", "village-circles", "village-directory", "village-intents", "village-map"] as const;
     const skillFile = (name: string) => path.join(SKILLS_DIR, name, "SKILL.md");
     const OPENAPI_FILE = path.join(SKILLS_DIR, "references", "openapi.json");
 
@@ -9568,7 +9562,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     notifyDeps,
     notifyReportReviewed,
     overLimit,
-    getPool,
+    getPool, lapseContext,
   });
 
   // â”€â”€ S19-S23: the village map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€─
@@ -9767,7 +9761,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       viewer: {
         viewPeople,
         canContact: false, mayStyleMap: admin, mayEditWalk: admin, mayNameMapThings: admin, // the three map editors: admin today because their endpoints are, see power/types.ts
-        mayArrange: admin, // the drag publishes an org draft: admin until the decide gate lands
+        ...(await arrangeViewer(getPool(), viewer, admin, liveHoldersOf)), // who may drag circles into place, and through which door: whoever may publish the org draft
         // Where this viewer may declare (P10): "village" and/or circle ids.
         // The pencil shows where this says; the server re-checks on write.
         // 0103: a LOOK, and the admin door stays OPEN here. The pencil this
@@ -18321,12 +18315,13 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
-  registerGeneKeysRoutes(app, { authedUser, getPool, overLimit });
+  registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
   registerSessionRhythmRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify, lapseContext });
+  registerSessionTemplateRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, guardCapability, mayAct, lapseContext });
   registerSessionCalendarRoutes(app, { authedUser, getPool, overLimit, members, circlesRepo, clientIp, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionDecisionRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, lapseContext, members, notify });
   registerRoleTensionRoutes(app, { authedUser, isAdmin, getPool, overLimit, notify, seasonState });
@@ -18343,6 +18338,7 @@ ${inner}
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay") });
+  registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -19560,6 +19556,7 @@ ${inner}
 
   // The hero and the wall, both in server/routes/gratitudeVoices.ts.
   registerGratitudeVoiceRoutes(app, { getPool, gratitudeLog: () => gratitudeRepo.all() });
+  registerGratitudeNudgeRoutes(app, { getPool, authedUser, members, notify, notifyDeps, remainingFor: async (u) => (await gratitudeBudget(u)).remaining });
 
   // Gratitude: my journal (received + sent, with amounts)
   app.get("/api/game/gratitude/me", async (req, res) => {

@@ -566,6 +566,12 @@ owed row paid before it is claimed, when the money went out first. Nobody marks 
 paid, the witness rule `canConfirm` holds for consent. With nobody holding the key, the one gate
 falls through to admin. The member is told when it is marked paid, with the note.
 
+**Who holds `cash.pay`** (Rye, 2026-10-30: "yes and this one is then given to a finance role as
+well"). It is in the founding stewards' handover set, so a village that launches holds it in the
+founding seat and can hand it over like any other steward power. The seeded Treasury role grants it
+too: a new village gets that from `server/seeds/roles-seed.json`, and a running village gets it
+once from the `cash-pay-to-treasury-2026-10-30` boot step, on its role with the id `treasury`.
+
 **An erasure leaves these rows.** They are the village's record of money it owed and paid, and a
 row holds an account id and an amount, never a name, so an erased member reads as the tombstone
 everywhere else does.

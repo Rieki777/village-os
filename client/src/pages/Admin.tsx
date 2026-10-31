@@ -23,7 +23,8 @@ import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
-import { BulkStageGrant, StageFloorPicker } from "@/components/admin/StageFloorPicker";
+import { BulkStageGrant } from "@/components/admin/StageFloorPicker";
+import { PlayerCard, PlayersKey, type LadderStage, type PathOption, type Player } from "@/components/admin/PlayerCard";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
@@ -2734,17 +2735,12 @@ function QuestClaimsTab() {
  */
 // ── Game Admin: Players + stage grants ───────────────────────────────────────
 
-const ROLE_STYLE: Record<string, string> = {
-  founder: "bg-amber-100 text-amber-800 border-amber-200",
-  admin: "bg-violet-100 text-violet-700 border-violet-200",
-  member: "bg-gray-100 text-gray-500 border-gray-200",
-};
-
 function PlayersTab({ password }: { password: string }) {
   const { user: me } = useAuth();
   const iAmFounder = me?.role === "founder";
-  const [players, setPlayers] = useState<any[]>([]);
-  const [stages, setStages] = useState<{ id: string; name: string }[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [stages, setStages] = useState<LadderStage[]>([]);
+  const [paths, setPaths] = useState<PathOption[]>([]);
   /*
    * R90: THE FOUNDER ROLE ENDS WHEN THE VILLAGE STARTS ITS GAME, so who may
    * work the control below changes at that moment and this tab has to know it.
@@ -2773,6 +2769,7 @@ function PlayersTab({ password }: { password: string }) {
       const m = await mRes.json();
       setPlayers(Array.isArray(p) ? p : []);
       setStages(c?.stages ?? []);
+      setPaths(c?.paths ?? []);
       setGameStarted(m?.gameStart?.started === true);
     } catch { setPlayers([]); }
     setLoading(false);
@@ -2816,7 +2813,7 @@ function PlayersTab({ password }: { password: string }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(refusal(data, "failed"));
-      toast.success(`${name} is now ${role}`);
+      toast.success(`${name} now has ${role} access`);
       load();
     } catch (e: any) { toast.error(e?.message || "Role change failed"); }
   };
@@ -2835,74 +2832,37 @@ function PlayersTab({ password }: { password: string }) {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-4">
         <h2 className="text-xl font-bold text-gray-900">Players</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Stages compute automatically from real acts; grant the ceremony-based stages here.
+          Everyone with an account: what they may do on this site, and where they stand in village life.
         </p>
       </div>
       {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : players.length === 0 ? (
         <p className="text-sm text-gray-400">No players yet.</p>
       ) : (
-        <div className="space-y-2">
-          {picked.length > 0 && <BulkStageGrant stages={stages} ids={picked} password={password} onDone={() => { setPicked([]); load(); }} />}
-          {players.map((p) => (
-            <div key={p.id} className="border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
-              <input type="checkbox" aria-label={`Select ${p.name}`} checked={picked.includes(p.id)} onChange={(e) => setPicked((s) => (e.target.checked ? [...s, p.id] : s.filter((x) => x !== p.id)))} className="h-5 w-5" />
-              <div className="flex-1 min-w-[180px]">
-                <div className="font-medium text-gray-900">
-                  {p.name}
-                  {p.handle && <span className="text-gray-400 font-normal"> @{p.handle}</span>}
-                </div>
-                <div className="text-xs text-gray-400">{p.email} · joined {new Date(p.joinedAt).toLocaleDateString()}</div>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium border ${ROLE_STYLE[p.role] ?? ROLE_STYLE.member}`}>
-                {p.role}
-              </span>
-              <span className="text-xs bg-teal-deep/10 text-teal-deep px-2 py-1 rounded-full font-medium">
-                {stages.find((s) => s.id === p.stageComputed)?.name ?? p.stageComputed}
-              </span>
-              <span className="text-xs text-gray-500">{p.balance} earned</span>
-              {(gameStarted || iAmFounder) && (
-                <select
-                  value={p.role}
-                  onChange={(e) => setRole(p.id, e.target.value, p.name)}
-                  title={
-                    gameStarted
-                      ? "Change this member's role. The founder role ended when the village started its Game, so an administrator is the most this can set"
-                      : "Founders run the admins: change this member's role"
-                  }
-                  className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-                >
-                  <option value="member">member</option>
-                  <option value="admin">admin</option>
-                  {/* Only while the role still exists, or on the row of
-                      somebody who already holds it. After launch the server
-                      refuses a new one, and an option that can only ever
-                      produce a refusal is worse than no option. Dropping it
-                      from a founder's OWN row would be worse again: the select
-                      would have no option matching the value and would show
-                      that person as a member beside a badge saying founder. */}
-                  {(!gameStarted || p.role === "founder") && <option value="founder">founder</option>}
-                </select>
-              )}
-              <button
-                onClick={() => revokeSessions(p.id, p.name)}
-                title="Sign this member out everywhere (their password keeps working)"
-                className="text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 font-medium"
-              >
-                Sign out all
-              </button>
-              <StageFloorPicker stages={stages} value={p.stageGranted ?? null} onChange={(id) => grant(p.id, id ?? "")} />
-              <button
-                onClick={() => remove(p.id, p.email)}
-                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5 font-medium"
-              >
-                Delete
-              </button>
-            </div>
-          ))}
-        </div>
+        <>
+          <PlayersKey players={players} stages={stages} gameStarted={gameStarted} />
+          <div className="space-y-3">
+            {picked.length > 0 && <BulkStageGrant stages={stages} ids={picked} password={password} onDone={() => { setPicked([]); load(); }} />}
+            {players.map((p) => (
+              <PlayerCard
+                key={p.id}
+                player={p}
+                stages={stages}
+                paths={paths}
+                canSetAccess={gameStarted || iAmFounder}
+                gameStarted={gameStarted}
+                picked={picked.includes(p.id)}
+                onPick={(on) => setPicked((s) => (on ? [...s, p.id] : s.filter((x) => x !== p.id)))}
+                onAccess={(role) => setRole(p.id, role, p.name)}
+                onStage={(id) => grant(p.id, id ?? "")}
+                onSignOut={() => revokeSessions(p.id, p.name)}
+                onDelete={() => remove(p.id, p.email)}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -4920,7 +4880,7 @@ function BadgesAdminTab({ password }: { password: string }) {
   // or denied from here at all. Reading the registry means a new capability
   // shows up the moment it is added.
   const CAPS = ALL_CAPABILITIES;
-  const METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth"];
+  const METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth", "gene_keys_shown"];
   const [data, setData] = useState<any>(null);
   const [off, setOff] = useState(false);
   const [loading, setLoading] = useState(true);

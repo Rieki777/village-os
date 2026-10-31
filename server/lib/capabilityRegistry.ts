@@ -320,11 +320,6 @@ export const WIRED_BUT_HELD_BACK: Readonly<Record<string, string>> = {
     "door for an administrator to be turned away from, so handing it over would record a " +
     "promise the code could not keep. Open a rule change on the rung that decides who is on " +
     "the roll, and the whole roll decides it.",
-  "cash.pay":
-    "Marking cash paid is a treasurer's job and a village can give it to a role today. Whether it " +
-    "also joins the powers the founding stewards hold at launch and hand over is waiting on the " +
-    "founder's word, because that set is his reading of every steward power. Until he says, an " +
-    "administrator holds it alongside whoever the village gives it to.",
 };
 
 /**

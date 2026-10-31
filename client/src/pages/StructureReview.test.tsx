@@ -30,7 +30,7 @@ vi.mock("wouter", async (orig) => ({
   useParams: () => ({ batchId: "sync-1" }),
 }));
 
-import StructureReview from "./StructureReview";
+import StructureReview, { sourcePayWords } from "./StructureReview";
 
 const PROPOSALS: PlanProposal[] = [
   {
@@ -180,5 +180,30 @@ describe("the structure review page", () => {
     expect(within(list).getByText("Community Anchor")).toBeTruthy();
     fireEvent.click(within(list).getByRole("button", { name: "Marketing Lead" }));
     expect(document.getElementById("row-xp-structure#3")!.className).toContain("bg-muted");
+  });
+});
+
+describe("what the source holds a role to pay, in words", () => {
+  const pay = (over: Partial<Parameters<typeof sourcePayWords>[0]>) =>
+    sourcePayWords({ model: null, standing: null, statusLabel: null, terms: null, monthlyUsd: null, ...over }, "Saberra");
+
+  it("says the figure is for the whole arrangement, by its standing", () => {
+    expect(pay({ model: "Stipend", standing: "settled", statusLabel: "Active", monthlyUsd: 1200 })).toEqual([
+      "Pay in Saberra: Stipend, $1,200 a month for the whole arrangement",
+    ]);
+    expect(pay({ model: "Stipend", standing: "pending", statusLabel: "Under Review", monthlyUsd: 1500.5 })).toEqual([
+      "Pay in Saberra, still pending: Stipend, $1,500.50 a month for the whole arrangement",
+    ]);
+  });
+
+  it("keeps Deferred apart from pending, and gives the terms their own line", () => {
+    expect(pay({ model: "Hybrid", standing: "agreed-not-paying", statusLabel: "Deferred", terms: "Starts when the build fund lands." })).toEqual([
+      "Pay in Saberra, agreed and not paying yet: Hybrid",
+      "Pay terms in Saberra: Starts when the build fund lands.",
+    ]);
+  });
+
+  it("names a status it does not know as the source wrote it", () => {
+    expect(pay({ standing: "other", statusLabel: "Paused" })).toEqual(["Pay in Saberra, marked Paused"]);
   });
 });

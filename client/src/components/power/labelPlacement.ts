@@ -26,7 +26,7 @@
  * EVERYTHING, and by the smallest step that gets there, so no move can trade
  * one collision for another or carry a name away from its circle.
  */
-import { wrapLabel } from "@shared/mapLayout";
+import { wrapLabel, type NestedBand, type NestedCircle } from "@shared/mapLayout";
 import { CHAR_W, fitLabelToScreen } from "./labelFit";
 
 export interface LabelBox {
@@ -167,6 +167,35 @@ export interface PlacedLabel {
 }
 
 /**
+ * THE FORMING BAND AS SOMETHING A NAME MUST NOT LAND ON (2026-10-23).
+ *
+ * A name promoted above a circle at the top of a pack reached into the band
+ * the forming circles ride, and one name was drawn across another's arc.
+ * Measured on the live village at 1440x1000: "Leadership Circle" over
+ * "Permaculture". The band is covered by squares a band wide, centred along
+ * its middle, so a diagonal arc never blocks the open ground inside it the
+ * way one bounding box of the whole arc would.
+ */
+export function bandObstacles(bands: NestedBand[], riders: NestedCircle[]): LabelBox[] {
+  const boxes: LabelBox[] = [];
+  for (const band of bands) {
+    const width = band.outer - band.inner;
+    const mid = (band.inner + band.outer) / 2;
+    const step = width / mid;
+    for (const r of riders) {
+      if (!r.band || r.band.containerId !== band.containerId) continue;
+      for (let a = r.band.a0; a <= r.band.a1 + step / 2; a += step) {
+        const at = Math.min(a, r.band.a1);
+        const x = band.x + mid * Math.cos(at);
+        const y = band.y + mid * Math.sin(at);
+        boxes.push({ x, top: y - width / 2, bottom: y + width / 2, halfWidth: width / 2 });
+      }
+    }
+  }
+  return boxes;
+}
+
+/**
  * Where every name goes, in one pass over the drawn circles.
  *
  * Fixed names (centred in a circle, or just inside a container's top edge) go
@@ -176,7 +205,12 @@ export interface PlacedLabel {
  * picture before the next name is asked, so two promoted names cannot resolve
  * onto each other, and a move only ever removes a collision.
  */
-export function buildLabelPlan(circles: PlanInput[], pxPerWorld: number): Map<string, PlacedLabel> {
+export function buildLabelPlan(
+  circles: PlanInput[],
+  pxPerWorld: number,
+  /** Ground a promoted name must also keep off, beyond the other names: the forming band. */
+  obstacles: LabelBox[] = [],
+): Map<string, PlacedLabel> {
   const placed = circles.map((c) => {
     const wrapped = wrapLabel(c.name, c.r, c.depth);
     const fit = fitLabelToScreen(wrapped, c.r, pxPerWorld);
@@ -196,7 +230,7 @@ export function buildLabelPlan(circles: PlanInput[], pxPerWorld: number): Map<st
   const drawn = placed.filter((p) => p.input.shown);
   for (const entry of drawn) {
     if (!entry.label.outside) continue;
-    const others = drawn.filter((o) => o !== entry).map((o) => o.box);
+    const others = [...drawn.filter((o) => o !== entry).map((o) => o.box), ...obstacles];
     const at = promotedLabelTop(entry.shape, entry.input.x, others);
     entry.label.top = at.top;
     entry.label.below = at.below;

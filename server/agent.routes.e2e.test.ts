@@ -185,7 +185,7 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
   it("serves the four skills and the OpenAPI slice to anyone", async () => {
     const skills = await call("GET", "/api/agent/v1/skills", undefined, "");
     expect(skills.status).toBe(200);
-    expect(skills.json.skills.map((s: any) => s.name).sort()).toEqual(["village-calendar", "village-directory", "village-intents", "village-map"]);
+    expect(skills.json.skills.map((s: any) => s.name).sort()).toEqual(["village-calendar", "village-circles", "village-directory", "village-intents", "village-map"]);
     const one = await call("GET", "/api/agent/v1/skills/village-calendar/SKILL.md", undefined, "");
     expect(one.status).toBe(200);
     expect(one.text).toContain("name: village-calendar");

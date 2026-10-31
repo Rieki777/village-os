@@ -11,6 +11,7 @@ import WalletCard from "@/components/WalletCard";
 import SendTokensCard from "@/components/SendTokensCard";
 import RedemptionPanel from "@/components/RedemptionPanel";
 import CashOwedPanel from "@/components/CashOwedPanel";
+import SeasonSummarySection from "@/components/seasonSummary/SeasonSummarySection";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
@@ -484,7 +485,7 @@ export default function Profile() {
 
               {/* The journal's door on the profile; renders nothing while it is off. */}
               <div className="scroll-mt-28"><ProfileJournalCard /></div>
-              <div className="scroll-mt-28"><ProfileGeneKeysCard /></div>
+              <div className="scroll-mt-28"><ProfileGeneKeysCard owner={user?.id ? String(user.id) : null} /></div>
 
               {/* R20: what this member needs, and how they are doing on it.
                   Private to them; the village only ever reads counts. */}
@@ -891,6 +892,7 @@ export default function Profile() {
                 */}
               {user && redemptionModule && <RedemptionPanel />}
               {user && <CashOwedPanel /> /* 0285: cash owed, and the books for whoever holds cash.pay */}
+              {user && <SeasonSummarySection /> /* idea 4: your season summed up, shareable as a picture */}
 
               {/* S47: on-chain holdings, renders nothing until the village
                   turns the economics section on */}

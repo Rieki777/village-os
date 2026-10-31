@@ -13,7 +13,7 @@ import Layout from "@/components/Layout";
 import NotFound from "@/pages/NotFound";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useRoute } from "wouter";
+import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
@@ -22,7 +22,7 @@ import { reportFeedback } from "@/lib/reportFeedback";
 import { actionError } from "@/lib/actionOutcome";
 import {
   ArrowLeft, Bell, BellOff, Crown, Flag, LogOut, Pencil, Plus, Search, Send, Trash2,
-  UserMinus, UserPlus, Users, X,
+  ListChecks, Scroll, UserMinus, UserPlus, Users, X,
 } from "lucide-react";
 import {
   canManageMembers,
@@ -30,11 +30,15 @@ import {
   groupMessagesByDay,
   initialsOf,
   inboxUnreadTotal,
+  isWorkThread,
   memberSummary,
   relativeTime,
   sortInbox,
+  splitInbox,
   threadTitle,
   unreadBadge,
+  workHref,
+  workLabel,
   type ConversationMemberView,
   type InboxConversation,
   type ThreadMessage,
@@ -76,6 +80,15 @@ function Inbox() {
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(false);
+  // `?new=1` opens the composer: the shortcuts button's "New conversation".
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    if (new URLSearchParams(search).get("new") === "1") {
+      setComposing(true);
+      navigate("/messages", { replace: true });
+    }
+  }, [search, navigate]);
 
   const load = useCallback(() => {
     // Signed out, the inbox is the sign-in card below and the route would
@@ -95,6 +108,7 @@ function Inbox() {
   useEffect(load, [load]);
 
   const ordered = useMemo(() => sortInbox(conversations), [conversations]);
+  const { work, people } = useMemo(() => splitInbox(ordered), [ordered]);
   const total = useMemo(() => inboxUnreadTotal(conversations), [conversations]);
   const now = new Date();
 
@@ -134,51 +148,82 @@ function Inbox() {
           </div>
         )}
 
-        <ul className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
-          {ordered.map((c) => {
-            const title = c.title || threadTitle(c, user.id);
-            const badge = unreadBadge(c.unreadCount);
-            return (
-              <li key={c.id}>
-                <Link
-                  href={`/messages/${c.id}`}
-                  className={`flex items-center gap-3 px-4 py-3 ${TAP} hover:bg-muted/50 transition-colors`}
-                >
-                  <span
-                    className="shrink-0 w-11 h-11 rounded-full bg-teal-deep/10 text-teal-deep grid place-items-center font-semibold text-sm"
-                    aria-hidden="true"
-                  >
-                    {c.kind === "direct" ? initialsOf(title) : <Users className="w-5 h-5" />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline gap-2">
-                      <span className={`truncate ${c.unreadCount ? "font-bold" : "font-semibold"} text-foreground`}>
-                        {title}
-                      </span>
-                      {c.kind !== "direct" && (
-                        <span className="text-xs text-muted-foreground shrink-0">{c.memberCount}</span>
-                      )}
-                      <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                        {relativeTime(c.lastMessageAt, now)}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <span className="truncate text-sm text-muted-foreground">{c.preview || "No messages yet"}</span>
-                      {badge && (
-                        <span className="ml-auto shrink-0 min-w-[22px] h-[22px] px-1.5 rounded-full bg-teal-deep text-white text-xs font-bold grid place-items-center">
-                          {badge}
-                        </span>
-                      )}
-                      {c.muted && <BellOff className="w-3.5 h-3.5 text-muted-foreground shrink-0" aria-label="Muted" />}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        {/* The quests and tasks this member shares with others, each its own chat. */}
+        {work.length > 0 && (
+          <section aria-labelledby="shared-work-heading" className="mb-6">
+            <h2 id="shared-work-heading" className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2 px-1">
+              Shared work
+            </h2>
+            <InboxList list={work} viewerId={user.id} now={now} />
+          </section>
+        )}
+
+        {work.length > 0 && people.length > 0 && (
+          <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2 px-1">Conversations</h2>
+        )}
+        <InboxList list={people} viewerId={user.id} now={now} />
       </div>
     </Layout>
+  );
+}
+
+/** One run of conversation rows. Shared work rows say what they are about. */
+function InboxList({ list, viewerId, now }: { list: InboxConversation[]; viewerId: string; now: Date }) {
+  if (!list.length) return null;
+  return (
+    <ul className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
+      {list.map((c) => {
+        const title = c.title || threadTitle(c, viewerId);
+        const badge = unreadBadge(c.unreadCount);
+        const work = isWorkThread(c);
+        return (
+          <li key={c.id}>
+            <Link
+              href={`/messages/${c.id}`}
+              className={`flex items-center gap-3 px-4 py-3 ${TAP} hover:bg-muted/50 transition-colors`}
+            >
+              <span
+                className="shrink-0 w-11 h-11 rounded-full bg-teal-deep/10 text-teal-deep grid place-items-center font-semibold text-sm"
+                aria-hidden="true"
+              >
+                {c.kind === "direct" ? (
+                  initialsOf(title)
+                ) : work ? (
+                  c.contextType === "task" ? <ListChecks className="w-5 h-5" /> : <Scroll className="w-5 h-5" />
+                ) : (
+                  <Users className="w-5 h-5" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline gap-2">
+                  <span className={`truncate ${c.unreadCount ? "font-bold" : "font-semibold"} text-foreground`}>
+                    {title}
+                  </span>
+                  {c.kind !== "direct" && (
+                    <span className="text-xs text-muted-foreground shrink-0">{c.memberCount}</span>
+                  )}
+                  <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                    {relativeTime(c.lastMessageAt, now)}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="truncate text-sm text-muted-foreground">
+                    {work && <span className="font-medium">{workLabel(c)} · </span>}
+                    {c.preview || "No messages yet"}
+                  </span>
+                  {badge && (
+                    <span className="ml-auto shrink-0 min-w-[22px] h-[22px] px-1.5 rounded-full bg-teal-deep text-white text-xs font-bold grid place-items-center">
+                      {badge}
+                    </span>
+                  )}
+                  {c.muted && <BellOff className="w-3.5 h-3.5 text-muted-foreground shrink-0" aria-label="Muted" />}
+                </span>
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -469,6 +514,8 @@ interface ThreadData {
   latestSeq: number;
   members: ConversationMemberView[];
   messages: ThreadMessage[];
+  contextType?: string | null;
+  contextId?: string | null;
 }
 
 function ThreadView({ id }: { id: string }) {
@@ -630,6 +677,8 @@ function ThreadView({ id }: { id: string }) {
   const days = groupMessagesByDay(thread.messages, new Date());
   const subtitle =
     thread.kind === "direct" ? "Direct message" : memberSummary(thread.members, user.id);
+  const workThread = isWorkThread(thread);
+  const workPage = workThread ? workHref(thread) : null;
 
   return (
     <Layout>
@@ -754,18 +803,31 @@ function ThreadView({ id }: { id: string }) {
                     Rename
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!window.confirm("Leave this conversation?")) return;
-                    if (await act("/leave", { method: "POST" })) navigate("/messages");
-                  }}
-                  className={`inline-flex items-center gap-1.5 ${TAP} px-3 rounded-lg border border-border text-sm text-destructive`}
-                >
-                  <LogOut className="w-4 h-4" aria-hidden="true" />
-                  Leave
-                </button>
+                {workThread ? (
+                  workPage && (
+                    <Link href={workPage} className={`inline-flex items-center ${TAP} px-3 rounded-lg border border-border text-sm`}>
+                      Open the {workLabel(thread).toLowerCase()}
+                    </Link>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm("Leave this conversation?")) return;
+                      if (await act("/leave", { method: "POST" })) navigate("/messages");
+                    }}
+                    className={`inline-flex items-center gap-1.5 ${TAP} px-3 rounded-lg border border-border text-sm text-destructive`}
+                  >
+                    <LogOut className="w-4 h-4" aria-hidden="true" />
+                    Leave
+                  </button>
+                )}
               </div>
+              {workThread && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Everyone on this {workLabel(thread).toLowerCase()} is in this chat while they are on it. Mute it to quiet it.
+                </p>
+              )}
               {canManageMembers(thread) && (
                 <p className="text-xs text-muted-foreground mt-2">
                   You own this conversation, so you can add people, remove them, and hand it on.

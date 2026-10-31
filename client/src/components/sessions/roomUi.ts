@@ -21,7 +21,7 @@
  */
 import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Feather, Hammer, Handshake, Lightbulb, Sprout, StickyNote } from "lucide-react";
+import { Feather, Hammer, Handshake, Lightbulb, PartyPopper, Sprout, StickyNote } from "lucide-react";
 import {
   ROOM_COPY,
   SESSION_SOMEONE,
@@ -37,6 +37,7 @@ import {
   type SessionPerson,
   type SessionView,
 } from "@shared/sessions";
+import { roleWithHolders } from "@shared/roleHolderLabel";
 import type { RoomActions } from "./useSessionRoom";
 
 /* The focus ring is the theme's own `--ring`, which the night sets to the
@@ -94,6 +95,7 @@ export const ENTRY_GLYPH: Record<EntryKind, LucideIcon> = {
   decision: Handshake,
   action: Hammer,
   tension: Feather,
+  win: PartyPopper,
 };
 /** What we learned, as the item's pull-quote. */
 export const LEARNED_QUOTE = "border-l-2 border-notice pl-3 font-display text-[19px] leading-snug lining-nums text-foreground";
@@ -282,16 +284,22 @@ export function myResponse(view: Pick<SessionView, "responses" | "me">, target: 
   return view.responses.find((r) => r.target === target && r.userId === view.me.userId) ?? null;
 }
 
-/** Who holds an action, as a line: the seat, the person, or nobody yet. */
-export function ownerLine(e: Pick<SessionEntry, "ownerSeatName" | "ownerName" | "ownerUserId">): string {
-  if (e.ownerSeatName && e.ownerName) return `${e.ownerSeatName} (${e.ownerName})`;
-  if (e.ownerSeatName) return e.ownerSeatName;
+/**
+ * Who holds an action, as a line: the seat, the person, or nobody yet. A seat comes first and
+ * the first name of who took it, or of who sits there now, follows in parentheses (Rye,
+ * 2026-10-30): "Treasurer (Rick)". A vacant seat is the seat alone.
+ */
+export function ownerLine(e: Pick<SessionEntry, "ownerSeatName" | "ownerName" | "ownerUserId" | "ownerSeatHolders">): string {
+  if (e.ownerSeatName) {
+    const taker = e.ownerName && e.ownerName !== SESSION_SOMEONE ? [e.ownerName] : null;
+    return roleWithHolders(e.ownerSeatName, taker ?? e.ownerSeatHolders);
+  }
   if (e.ownerName) return e.ownerName;
   return ROOM_COPY.nobodyHolds;
 }
 
 /** "Held by Water steward", or "Nobody holds this yet". */
-export function heldLine(e: Pick<SessionEntry, "ownerSeatName" | "ownerName" | "ownerUserId" | "ownerSeatId">): string {
+export function heldLine(e: Pick<SessionEntry, "ownerSeatName" | "ownerName" | "ownerUserId" | "ownerSeatId" | "ownerSeatHolders">): string {
   return isHeld(e) || e.ownerSeatName || e.ownerName ? `${ROOM_COPY.heldBy} ${ownerLine(e)}` : ROOM_COPY.nobodyHolds;
 }
 
