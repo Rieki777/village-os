@@ -97,6 +97,7 @@ export function planFromDraft(
     sourceStatusLabel: null,
     otherCircles: [],
     circleUnresolvedAtSource: false,
+    sourcePay: null,
     sent: {},
   });
 

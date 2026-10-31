@@ -219,6 +219,7 @@ const Wallet = lazyPage(() => import("./pages/Wallet"));
 const Badges = lazyPage(() => import("./pages/Badges"));
 const Powers = lazyPage(() => import("./pages/Powers"));
 const Review = lazyPage(() => import("./pages/Review"));
+const CashPayouts = lazyPage(() => import("./pages/CashPayouts"));
 const StructureReview = lazyPage(() => import("./pages/StructureReview"));
 const Library = lazyPage(() => import("./pages/Library"));
 const VillageHealth = lazyPage(() => import("./pages/VillageHealth"));
@@ -313,6 +314,8 @@ function Router() {
       <Route path="/powers" component={Powers} />
       <Route path="/review/structure/:batchId" component={StructureReview} />
       <Route path="/review" component={Review} />
+      {/* The treasurer's payout list, for a finance role holding cash.pay without admin */}
+      <Route path="/cash-payouts" component={CashPayouts} />
       <Route path="/library" component={Library} />
       {/* /village-health, not /health: the server owns /health as the ops probe */}
       <Route path="/village-health" component={VillageHealth} />
