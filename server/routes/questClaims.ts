@@ -51,7 +51,7 @@ import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { issuanceRefusal } from "../lib/gameStart";
 import { departedById } from "../lib/departed";
 import { tokenDef } from "../lib/ledger";
-import { questPay, questPayRules } from "../lib/workPay";
+import { payBadgeBoosts, questPay, questPayRules, withPayBadges } from "../lib/workPay";
 import { STAY_CREDIT } from "../lib/stays";
 import { boolVar, numberVar } from "../lib/variables";
 import {
@@ -200,12 +200,15 @@ export function register(app: Express, deps: Deps): void {
      * card gives and the consent prices from (server/lib/workPay.ts). A claim
      * whose quest was deleted carries none: nothing is advertised.
      */
-    const rules = await questPayRules(getPool());
+    const [rules, boosts] = await Promise.all([
+      questPayRules(getPool()),
+      deps.dormantBadgeIds().then((dormant) => payBadgeBoosts(getPool(), dormant)).catch(() => []),
+    ]);
     const questsById = new Map(quests.map((q) => [q.id, q]));
     res.json(
       claims.map((c) => {
         const quest = questsById.get(c.questId);
-        return { ...c, pay: quest ? questPay(quest, rules) : null };
+        return { ...c, pay: quest ? withPayBadges(questPay(quest, rules), boosts) : null };
       }),
     );
   });
