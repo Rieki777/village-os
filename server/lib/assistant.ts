@@ -41,7 +41,8 @@ export type AssistantMode =
   | "studio"
   | "synthesize"
   | "journal"
-  | "roleGuide";
+  | "roleGuide"
+  | "card";
 
 export interface ModeSpec {
   audience: "public" | "member" | "admin";
@@ -76,6 +77,11 @@ export const ASSISTANT_MODES: Record<AssistantMode, ModeSpec> = {
   // whole role card, so it needs the room a draft does. No tools: the member's
   // proposal, their circle's charter and the season goals arrive prefetched.
   roleGuide: { audience: "member", dailyBudget: 150, maxTokens: 2400, toolCalls: 0 },
+  // A live session's card (server/lib/sessionCard.ts): Maia weaves a reading
+  // from facts the card already computed. Its own bucket, so a room pulling
+  // card after card cannot spend the journal's day. No tools: the facts arrive
+  // prefetched, and a card that cannot be woven is served plain.
+  card: { audience: "member", dailyBudget: 120, maxTokens: 1400, toolCalls: 0 },
 };
 
 /** Conversation limits, shared so no mode can quietly widen them. */

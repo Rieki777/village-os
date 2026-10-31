@@ -134,6 +134,7 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
+import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
 import { deleteDraftsOf } from "./proposalDrafts";
@@ -1153,6 +1154,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "gene-keys-after-tombstone",
       run: async () => {
         await forgetMemberGeneKeys(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Session cards (0293): every card that named the member, read or only
+       * welcomed, goes whole with all its lines, since its collective words
+       * may name them. A card lives only while its session is open anyway.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives.
+       */
+      name: "session-cards-after-tombstone",
+      run: async () => {
+        await forgetMemberCards(pool, target.id);
       },
     },
     {

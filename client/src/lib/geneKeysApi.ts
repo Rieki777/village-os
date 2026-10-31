@@ -48,6 +48,8 @@ export interface GeneKeysSettings {
   complement?: boolean;
   /** "Talk to me plainly". */
   maiaPlain?: boolean;
+  /** "Leave me out of session cards". */
+  cardOut?: boolean;
 }
 
 export async function changeMyGeneKeys(patch: GeneKeysSettings): Promise<OwnGeneKeysView> {
