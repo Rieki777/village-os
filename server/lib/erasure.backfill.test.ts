@@ -112,6 +112,8 @@ const GIVEN_TO_IT = [
   "gene-keys-after-tombstone",
   "quest-crews-after-tombstone",
   "photo-report-reasons-after-tombstone",
+  "session-cards-after-tombstone",
+  "companions-after-tombstone",
   "product-subscriptions-after-tombstone",
 ];
 
