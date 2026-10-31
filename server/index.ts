@@ -174,6 +174,7 @@ import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
+import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
@@ -18361,6 +18362,7 @@ ${inner}
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay") });
   registerOwnHoldingsRoutes(app, { authedUser, getPool });
+  registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
   registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
 
