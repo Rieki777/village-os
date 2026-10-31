@@ -24,6 +24,7 @@ import { useId, type ReactNode } from "react";
 import { Bot, ChevronRight, Hourglass, Plus, UserRound } from "lucide-react";
 import { SHEET_WORDS, type Spot } from "@shared/roleSheet";
 import { initialsFrom } from "./holderFace";
+import HolderGeneKeys from "@/components/geneKeys/HolderGeneKeys";
 
 /**
  * A small section heading on a night card. The `!` is load-bearing: the
@@ -151,8 +152,15 @@ export default function SeatRoster({
       {spots.length > 0 && (
         <ul className="mt-2 grid gap-1">
           {spots.map((spot) => (
-            <li key={spot.key}>
-              <SpotRow spot={spot} onPickPerson={onPickPerson} />
+            <li key={spot.key} className="flex items-center gap-1">
+              <div className="min-w-0 flex-1">
+                <SpotRow spot={spot} onPickPerson={onPickPerson} />
+              </div>
+              {/* THEIR LINES, BESIDE THE ROW (Rye, 2026-10-30): the person's Gene Keys
+                  seal, its own button, so a tap opens their lines card and never the
+                  row's person filter. It draws nothing while the module is off or the
+                  person skipped or hides their lines; that rule is the Gene Keys lane's. */}
+              {spot.kind === "person" && spot.userId && <HolderGeneKeys userId={spot.userId} name={spot.title} size={30} />}
             </li>
           ))}
         </ul>

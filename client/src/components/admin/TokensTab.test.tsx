@@ -5,11 +5,10 @@
  *
  * Three things are pinned here that no unit test can reach:
  *
- *   1. Every listed token carries its plain sentence and its slug marked
- *      FIXED. Those two are the whole reason the Setup Wizard's rival naming
- *      boxes could be deleted: a registry that prints a slug and a kind never
- *      told anybody what a token was for, so the wrong box looked as
- *      authoritative as the right one.
+ *   1. Every listed token carries what it means IN THE VILLAGE'S OWN WORDS
+ *      (0283), or says nothing has been written, and its slug marked FIXED.
+ *      The platform no longer writes that sentence: Rye ruled on 2026-10-22
+ *      that shipped copy never says what a token does.
  *   2. A module's token is absent while its module is off, and an issued one
  *      stays with its module named. That is the founder's ruling in the one
  *      place a steward would go looking for a balance.
@@ -29,7 +28,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import TokensTab from "./TokensTab";
 
 const TOKENS = [
-  { slug: "gratitude", name: "Gratitude", kind: "recognition", governance: "platform", transferable: true, active: true, issuedBy: {} },
+  { slug: "gratitude", name: "Gratitude", kind: "recognition", governance: "platform", transferable: true, active: true, issuedBy: {}, description: "How we thank each other here." },
   { slug: "credits", name: "Village Credits", kind: "credit", governance: "platform", transferable: true, active: true, issuedBy: {} },
   { slug: "stay-credit", name: "Stay Credits", kind: "credit", governance: "platform", transferable: false, active: true, issuedBy: {} },
   { slug: "library-credit", name: "Library Credits", kind: "credit", governance: "platform", transferable: false, active: true, issuedBy: { "sys:mint": 12 } },
@@ -74,13 +73,71 @@ describe("TokensTab", () => {
     vi.clearAllMocks();
   });
 
-  it("says what each token is and marks its slug fixed", async () => {
+  it("says what each token means in the village's words and marks its slug fixed", async () => {
     renderTab({ stays: "members", library: "members" });
     await loaded();
     const row = within(rowFor("Gratitude"));
-    expect(row.getByText(/Members send it to each other/)).toBeInTheDocument();
+    expect(row.getByText("How we thank each other here.")).toBeInTheDocument();
+    expect(row.getByRole("button", { name: "edit what it means" })).toBeInTheDocument();
     expect(row.getByText(/fixed for good/)).toBeInTheDocument();
     expect(row.getByText("gratitude")).toBeInTheDocument();
+    // A token the village has said nothing about says so, and suggests nothing.
+    const credits = within(rowFor("Village Credits"));
+    expect(credits.getByText("Nothing written yet about what this token means here.")).toBeInTheDocument();
+    expect(credits.getByRole("button", { name: "write what it means" })).toBeInTheDocument();
+  });
+
+  it("saves what a token means through the token's own route, trimmed", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    const puts: { url: string; body: any }[] = [];
+    const base = (globalThis.fetch as any);
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        puts.push({ url: String(url), body: JSON.parse(String(init.body)) });
+        return { ok: true, json: async () => ({ success: true }) };
+      }
+      return base(url, init);
+    }));
+    renderTab({ stays: "members", library: "members" });
+    await loaded();
+    await user.click(within(rowFor("Village Credits")).getByRole("button", { name: "write what it means" }));
+    const box = screen.getByRole("textbox", { name: "What Village Credits means" });
+    expect(box.getAttribute("placeholder")).toBe("Say in your own words what this token means here");
+    await user.type(box, "  What we pay each other in.  ");
+    await user.click(within(rowFor("Village Credits")).getByRole("button", { name: "Save" }));
+    expect(puts).toEqual([{ url: "/api/admin/tokens/credits", body: { description: "What we pay each other in." } }]);
+  });
+
+  it("lets a Base mirror say what it means while its name stays fixed", async () => {
+    renderTab({ stays: "members", library: "members" });
+    await loaded();
+    const mirror = within(rowFor("Village Equity"));
+    expect(mirror.queryByText("rename")).toBeNull();
+    expect(mirror.getByRole("button", { name: "write what it means" })).toBeInTheDocument();
+  });
+
+  it("names all the tokens together with the umbrella word, Village Tokens until it is set", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    const puts: any[] = [];
+    const base = (globalThis.fetch as any);
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith("/admin/brand")) {
+        if (init?.method === "PUT") {
+          const body = JSON.parse(String(init.body));
+          puts.push(body);
+          return { ok: true, json: async () => ({ success: true, brand: { currency: body.currency } }) };
+        }
+        return { ok: true, json: async () => ({ brand: { currency: { collectiveName: "" } }, defaults: { currency: { collectiveName: "Village Tokens" } } }) };
+      }
+      return base(url, init);
+    }));
+    renderTab({ stays: "members", library: "members" });
+    await loaded();
+    const box = screen.getByLabelText("What your tokens are called together");
+    expect(box.getAttribute("placeholder")).toBe("Village Tokens");
+    await user.type(box, "Seed Bank");
+    await user.click(box.parentElement!.querySelector("button")!);
+    expect(puts).toEqual([{ currency: { collectiveName: "Seed Bank" } }]);
   });
 
   it("calls a Base token a read-only mirror rather than a governance word", async () => {
@@ -128,7 +185,9 @@ describe("TokensTab", () => {
       .find((el) => within(el).queryByText("Token…"))!;
     const options = within(picker).getAllByRole("option").map((o) => o.textContent);
     expect(options).not.toContain("Stay Credits");
-    expect(options).toContain("Gratitude");
+    // Gratitude is never minted by hand: it is only sent member to member (Rye,
+    // 2026-10-23), and the route refuses it, so the picker does not offer it.
+    expect(options).not.toContain("Gratitude");
     // Library credits are held by somebody, so they stay listed and stay
     // mintable: the row is still real and a steward may still need to grant.
     expect(options).toContain("Library Credits");

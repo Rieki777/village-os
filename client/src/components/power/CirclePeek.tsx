@@ -24,16 +24,14 @@ import { useRef } from "react";
 import { ArrowLeft, ChevronUp } from "lucide-react";
 import { cssColourForCircle } from "@shared/circleView";
 import type { PowerCircle, PowerData } from "./types";
+import { circleCounts } from "./villageCounts";
 
 /** How far up a swipe travels, in px, before it counts as asking for the card. */
 export const PEEK_SWIPE_PX = 24;
 
 /** One line of counts: what is inside, then how many seats are held. */
 export function peekSummary(circle: PowerCircle, data: PowerData): string {
-  const seats = data.roles.filter((r) => r.circleId === circle.id);
-  const held = seats.reduce((n, s) => n + s.holderCount, 0);
-  const places = seats.reduce((n, s) => n + s.seats, 0);
-  const inside = data.circles.filter((c) => c.parentCircleId === circle.id).length;
+  const { held, places, inside } = circleCounts(circle.id, data);
   const seatLine = places > 0 ? `${held} of ${places} held` : "no roles yet";
   if (inside === 0) return seatLine.charAt(0).toUpperCase() + seatLine.slice(1);
   return `${inside} circle${inside === 1 ? "" : "s"} inside · ${seatLine}`;

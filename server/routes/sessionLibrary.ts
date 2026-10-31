@@ -9,6 +9,7 @@
  *   PATCH  /api/sessions/library/:itemId         Partial<LibraryInput> -> { item }
  *   DELETE /api/sessions/library/:itemId         { ok }, withdraw it
  *   POST   /api/sessions/library/:itemId/again   {} -> { item }, bring a taken-up item again
+ *   POST   /api/sessions/library/from-tension    { sessionId, entryId, circleId } -> { item }, a room's tension sent on
  *   GET    /api/sessions/:id/library             { items }, what this viewer may bring into this open room
  *   POST   /api/sessions/:id/library             { ids } -> { ids }, onto this room's agenda
  *
@@ -39,6 +40,7 @@ import { requireModule } from "../lib/modules";
 import {
   bringItem,
   bringItemAgain,
+  sendRoomTension,
   changeItem,
   noticesAfterTakes,
   roomLibrary,
@@ -46,7 +48,7 @@ import {
   type LibraryDeps,
 } from "../lib/sessionLibrary";
 import { SESSION_REFUSALS as R } from "../../shared/sessions";
-import { LIBRARY_API, LIBRARY_LIMITS, LIBRARY_REFUSALS } from "../../shared/sessionLibrary";
+import { LIBRARY_API, LIBRARY_LIMITS, LIBRARY_REFUSALS, LIBRARY_TENSION_API } from "../../shared/sessionLibrary";
 
 /**
  * What this module touches, and why. `members` names the people on a card,
@@ -139,6 +141,15 @@ export function register(app: Express, deps: Deps): void {
     const id = parseId(req.params?.itemId);
     if (id == null) return res.status(404).json({ error: LIBRARY_REFUSALS.notFound });
     answer(res, await bringItemAgain(getPool(), who, id, lib), (v) => ({ item: v.item }));
+  });
+
+  // ── A room's tension, sent on ─────────────────────────────────────────────
+
+  /** One more agenda item, from a tension a room named: the same bucket as adding one. */
+  app.post(LIBRARY_TENSION_API, async (req, res) => {
+    const who = await signedIn(req, res, adds);
+    if (!who) return;
+    answer(res, await sendRoomTension(getPool(), who, req.body, liveCircleIds(), lib), (v) => ({ item: v.item }));
   });
 
   // ── An open room's own list ───────────────────────────────────────────────

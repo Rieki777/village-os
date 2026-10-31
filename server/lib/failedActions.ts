@@ -21,7 +21,9 @@
  *
  *  - A deletion that stopped BEFORE the tombstone step leaves an account that
  *    still works, and somebody may be using it. Finishing it unattended could
- *    wipe an account in use, so a steward decides at /review.
+ *    wipe an account in use, so a steward decides at /review. The account is
+ *    read as well as the record (`erasureStanding`): one that is already a
+ *    tombstone is closed, whatever the record's steps say.
  *  - A payment, a seat fee or a governance landing changes what somebody holds
  *    or may do. Each is already retried by its own mechanism or is a human
  *    act, and a second automatic path would race the first.
@@ -36,6 +38,10 @@
  * as long as a dispute stayed open. The retry spaces its attempts out, claims
  * each sweep before running it so a steward's press is never run twice at once,
  * and stops after ten.
+ *
+ * One more write rides on that pass, and it reruns nothing: a FINISHED deletion
+ * still holding who it was for lets go of it (`clearFinishedIdentities`,
+ * server/repos/memberErasure.ts, says how one comes to hold it).
  *
  * ── EVERY SENTENCE WAS CHECKED AGAINST THE CODE ─────────────────────────────
  *
@@ -125,7 +131,14 @@ import {
   type TroubledPeerRow,
 } from "../repos/failureSources";
 import { isReleaseFailure, stuckLandings, type StuckLanding } from "../repos/governanceExecutorPending";
-import { claimResume, countUnfinishedErasures, unfinishedErasuresWithAge } from "../repos/memberErasure";
+import {
+  claimResume,
+  clearFinishedIdentities,
+  countUnfinishedErasures,
+  // A sweep with no failing step whose last attempt began this recently may still be going.
+  MAY_STILL_BE_RUNNING_SECONDS,
+  unfinishedErasuresWithAge,
+} from "../repos/memberErasure";
 import { withNamedLock } from "../repos/namedLock";
 
 export const FAILED_ACTIONS_JOB = "failed-actions";
@@ -232,12 +245,11 @@ export interface ErasureRowForReport {
   sinceLastAttemptSeconds: number | null;
   /** Seconds since the deletion first began, by the database's clock. */
   sinceStartSeconds?: number | null;
+  /** The member's own account is a tombstone (`isTombstone`), whatever the steps say. */
+  accountClosed?: boolean;
 }
 
 export type ErasureStanding = "running" | "before-close" | "after-close" | "needs-a-person";
-
-/** A sweep with no failing step whose last attempt began this recently may still be going. */
-const MAY_STILL_BE_RUNNING_SECONDS = 10 * 60;
 
 /**
  * Where an unfinished deletion stands. The tombstone step is what closes the
@@ -247,11 +259,20 @@ const MAY_STILL_BE_RUNNING_SECONDS = 10 * 60;
  * step, and its last attempt began under ten minutes ago. A sweep takes
  * seconds, so the hourly report meeting one mid-way is rare, and reporting it
  * as stopped or resuming it beside itself would both be wrong. It is neither.
+ *
+ * CLOSED IS READ OFF THE ACCOUNT AS WELL AS THE RECORD (round 3). A record can
+ * lack "tombstone" over an account that already is one: the write committed
+ * and its note was lost, or a second resolve over the closed account emptied
+ * the steps and stopped early. Read off the steps alone, that account sat in
+ * "before-close", which this job never resumes, so it waited for a steward
+ * while the report placed it before the close. Nobody can be using a
+ * tombstone, which is the whole reason a closed account is this job's to
+ * finish, and `resumeErasure` restarts it to the end by the same rule.
  */
 export function erasureStanding(r: ErasureRowForReport): ErasureStanding {
   const recent = r.sinceLastAttemptSeconds != null && r.sinceLastAttemptSeconds < MAY_STILL_BE_RUNNING_SECONDS;
   if (r.failedStep == null && recent) return "running";
-  if (!r.stepsDone.includes("tombstone")) return "before-close";
+  if (!r.stepsDone.includes("tombstone") && !r.accountClosed) return "before-close";
   if (r.attempts >= GIVE_UP_AFTER_ATTEMPTS || r.failedStep === "load-member") return "needs-a-person";
   return "after-close";
 }
@@ -345,6 +366,11 @@ export function erasureFindings(rows: readonly ErasureRowForReport[], total: num
  * Only a row `mayResumeUnattended` allows, never an example account, and only
  * once `claimResume` has taken the row, so a sweep a steward pressed moments ago
  * is left to that press.
+ *
+ * FIRST, and on every run whether or not anything is left to resume, a finished
+ * record lets go of who it was for (`clearFinishedIdentities` says how one comes
+ * to hold it). That is a write, and it is the only one this job makes to a
+ * finished record: the row stays finished and keeps every step it names.
  */
 export async function resumeClosedErasures(
   pool: Pool,
@@ -352,6 +378,7 @@ export async function resumeClosedErasures(
   deadline: number,
   now: () => number = Date.now,
 ): Promise<string | null> {
+  await clearFinishedIdentities(pool);
   const rows = await unfinishedErasuresWithAge(pool, ERASURE_ROWS_READ);
   let resumed = 0;
   let finished = 0;

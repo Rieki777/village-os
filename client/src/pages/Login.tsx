@@ -6,6 +6,7 @@ import { internalPath } from "@/lib/internalPath";
 import { motion } from "framer-motion";
 import { Heart, ArrowRight, Mail, Lock } from "lucide-react";
 import { useState } from "react";
+import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
 import { useLocation } from "wouter";
 
 export default function Login() {
@@ -13,6 +14,7 @@ export default function Login() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   // Google sends members back to this page. The hook finishes the exchange and
@@ -138,13 +140,14 @@ export default function Login() {
                     id="login-password"
                     name="password"
                     autoComplete="current-password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep"
+                    className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep"
                     required
                   />
+                  <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
                 </div>
               </div>
 

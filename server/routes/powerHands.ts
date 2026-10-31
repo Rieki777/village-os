@@ -74,10 +74,13 @@ import type { Express } from "express";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
 import {
   asOffer,
+  handOffered,
+  handVoteReason,
   POWER_APPLICATION,
   publicHands,
   putToVillageRefusal,
   raiseHandRefusal,
+  SEAT_VOTE_REASON_HEADING,
   standingHands,
   whoMayPutHandToVillage,
   type PublicHand,
@@ -99,6 +102,7 @@ import type { LandingDeps } from "../lib/applyDue";
 import type { RollNotice } from "../lib/ballotNotices";
 import { openBallot, type BallotRow } from "../lib/ballots";
 import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "../lib/examples";
+import { isTombstone } from "../lib/oauthAccounts";
 import type { WeightModeSnapshot } from "../lib/governanceWeights";
 import { seatVoteLandsAt } from "../lib/seatTermLanding";
 import { STEWARD_VETO } from "../lib/stewardship";
@@ -283,7 +287,7 @@ export function register(app: Express, deps: Deps): void {
       });
       // Keyed by the row, as a seat hand's bell is: each hand is its own
       // summons, and a retry that stored nothing rings nothing.
-      await notifyAdmins("submission", said, `${POWER_APPLICATION}:${entry.id}`, "/admin?tab=submissions");
+      await notifyAdmins("submission", said, `${POWER_APPLICATION}:${entry.id}`, "/admin?tab=submissions", [], { actorUserId: userId });
       res.json({ success: true, hand: { status: "new", submittedAt } });
     });
   });
@@ -347,10 +351,10 @@ export function register(app: Express, deps: Deps): void {
    * as it leaves the member's own profile. Its note stays where every
    * submission's note has always been, in the founders' inbox.
    *
-   * A MEMBER WHO ASKED TO BE FORGOTTEN IS NOT LISTED EITHER. The erasure step
-   * anonymises an inbox row and keeps it, and `note` is not among the fields it
-   * scrubs, so their writing survives. It survives in the admin inbox where it
-   * always was; it does not join a list members read.
+   * A MEMBER WHO ASKED TO BE FORGOTTEN IS NOT LISTED EITHER. The erasure keeps
+   * an inbox row and takes their words off it, the note among them
+   * (server/lib/submissionWords.ts), and a hand whose member is gone is not
+   * one anybody can still answer, so it does not join a list members read.
    */
   app.get("/api/powers/hands", async (req, res) => {
     const user = await authedUser(req);
@@ -456,18 +460,8 @@ export function register(app: Express, deps: Deps): void {
     }
 
     const said = String(req.body?.reason ?? "").trim().slice(0, 16000);
-    const offered = hand.powerLabel ? `to ${asOffer(hand.powerLabel)}` : `for the power ${hand.capability}`;
-    const quoted = hand.note.trim()
-      ? `They wrote:\n\n${hand.note.trim().split("\n").map((l) => `> ${l}`).join("\n")}`
-      : "They wrote nothing with it.";
-    const reason = [
-      `${hand.userName || "A member"} raised a hand ${offered} on ${hand.submittedAt.slice(0, 10)}.`,
-      quoted,
-      said,
-      `${firstName(user.name)} put that hand to the village.`,
-    ]
-      .filter((part) => part.trim() !== "")
-      .join("\n\n");
+    const offered = handOffered(hand);
+    const reason = handVoteReason(hand, said, firstName(user.name));
 
     const opened = await openSeatVote({
       userId: hand.userId,
@@ -627,7 +621,10 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): OpenSeatVote
       });
     }
     const member = await members.byId(userId);
-    if (!member) return no(404, { error: "There is no member by that id." });
+    // A member who has left is a tombstone row, and a vote to seat one would
+    // carry and seat "A departed member", whom every count of the role's
+    // holders would then count.
+    if (!member || isTombstone({ email: String(member.email ?? "") })) return no(404, { error: "There is no member by that id." });
     if (isExampleUser(member)) return no(409, EXAMPLE_REFUSAL_BODY);
     if (loadRoleHolders().some((h) => h.roleId === roleId && h.userId === userId)) {
       return no(409, {
@@ -680,7 +677,7 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): OpenSeatVote
         ? `From the day this carries, with no further vote:\n\n${can.map((c) => `- ${c}`).join("\n")}`
         : `${who} carries no powers today, so this seats somebody in a role that grants nothing yet. If the village later votes ${who} a power, whoever is sitting in it holds that power from that day.`,
       "",
-      `## Why this person`,
+      SEAT_VOTE_REASON_HEADING,
       "",
       reason,
       "",

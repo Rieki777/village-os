@@ -341,6 +341,35 @@ export function expandOccurrences(row: CalendarRow, from: Date, to: Date, timeZo
   return out;
 }
 
+/** A recurring gathering's evening keys look like this; a one-off's is "". */
+const OCC_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * One evening of a gathering, or null when the gathering has no such evening:
+ * a key that is not a date, a date the rule never lands on, or one the host
+ * took out of the series. A one-off answers its one occurrence whatever key it
+ * is asked for, the way `rsvp()` stores "" for it.
+ *
+ * The guest emails read an evening through this, and so does the seat-fee
+ * settle, which keeps a fee only once the evening that fee paid for is over.
+ */
+export function occurrenceOf(row: CalendarRow, occurrenceKey: string, timeZone: string): Occurrence | null {
+  if (!row.recurrence) {
+    return { row, occurrenceKey: "", startsAt: row.startsAt, endsAt: row.endsAt, title: row.title, cancelled: false };
+  }
+  if (!OCC_KEY.test(occurrenceKey)) return null;
+  const [y, m, d] = occurrenceKey.split("-").map(Number);
+  // The window holds both the evening's own date and wherever the host moved
+  // it to, because the rule is expanded from the date and the override then
+  // places it.
+  const day = zonedTimeToUtc(y, m, d, 12, 0, timeZone).getTime();
+  const moved = row.recurrence.overrides?.[occurrenceKey]?.startsAt;
+  const movedAt = moved ? new Date(moved).getTime() : day;
+  const from = new Date(Math.min(day, movedAt) - 3 * 86_400_000);
+  const to = new Date(Math.max(day, movedAt) + 3 * 86_400_000);
+  return expandOccurrences(row, from, to, timeZone).find((o) => o.occurrenceKey === occurrenceKey) ?? null;
+}
+
 function ymd(d: Date, timeZone: string): [number, number, number] {
   const c = civilParts(d, timeZone);
   return [c.year, c.month, c.day];

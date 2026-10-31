@@ -14,13 +14,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import { fixturePayload, fixtureRole } from "@/test/playerCardFixture";
-import { proposalWith } from "@/test/roleProposalFixture";
+import { consentOf, proposalWith } from "@/test/roleProposalFixture";
+import { CONSENT_WORDS } from "@shared/roleProposalConsent";
 import type { SharedOut } from "./proposalApi";
 
 vi.mock("@/lib/gameApi", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/gameApi")>()), authToken: () => "t" }));
 
 import SharedProposal from "./SharedProposal";
-import { RP_WORDS } from "./proposalWords";
+import { RP_WORDS, STATE_HEADINGS } from "./proposalWords";
 
 const TOKEN = "T".repeat(32);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -93,6 +94,22 @@ describe("a member with the link", () => {
     draw({ proposal: { ...proposal, status: "submitted" }, card: null, you: { isOwner: false, mayComment: false, tier: "member" } });
     expect(await screen.findByText(RP_WORDS.submittedNoFeedback)).toBeTruthy();
     expect(screen.queryByRole("textbox", { name: RP_WORDS.feedbackLabel })).toBeNull();
+  });
+
+  it("reads where a submitted proposal stands, by role title, with no buttons (PR D)", async () => {
+    const consent = consentOf("objected", { asked: 2, objected: 1, objections: ["Two of us already keep the gate."], roles: { asked: ["Gate keeper", "Orchard keeper"], consented: [], objected: ["Gate keeper"] } });
+    draw({ proposal: { ...proposal, status: "submitted", consent }, card: null, you: { isOwner: false, mayComment: false, tier: "member" } });
+    expect(await screen.findByText(STATE_HEADINGS.objected)).toBeTruthy();
+    expect((document.querySelector('[data-tally="objected"]') as HTMLElement).textContent).toBe("Objected1 (Gate keeper)");
+    expect(screen.getByText("Two of us already keep the gate.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: CONSENT_WORDS.consentButton })).toBeNull();
+  });
+});
+
+describe("the consent state on a public read", () => {
+  it("is never drawn, even if a payload carried one", () => {
+    draw({ proposal: { ...proposal, status: "submitted", consent: consentOf("open") }, card: null, you: { isOwner: false, mayComment: false, tier: "public" } });
+    expect(document.querySelector("[data-consent-summary]")).toBeNull();
   });
 });
 

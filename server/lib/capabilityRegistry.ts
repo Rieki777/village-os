@@ -179,6 +179,12 @@ export const POWERS: readonly PowerEntry[] = [
     routes: ["/api/redemptions/:id/confirm", "/api/redemptions/:id/refuse"],
   },
   {
+    capability: "cash.pay",
+    title: "The cash the village owes",
+    surface: "Reading what members are owed in cash, and marking a payment made once the money has gone out",
+    routes: ["/api/cash-owed/queue", "/api/cash-owed/:id/paid"],
+  },
+  {
     capability: "module.switch",
     title: "Which modules the village runs",
     surface: "Turning a module on after launch, without a vote",

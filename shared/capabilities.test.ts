@@ -375,7 +375,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is twenty-two keys: the nineteen the ruling was given in, the comms power, the decide power, and module.switch", () => {
+    it("is twenty-three keys: the nineteen the ruling was given in, the comms power, the decide power, module.switch and cash.pay", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -418,11 +418,19 @@ describe("hasCapability truth table", () => {
        * A FURTHER transferable power still needs his word. The count is a reading
        * of "all steward powers", not an implementation detail, and the check below
        * exists so the next one asks him rather than drifting past.
+       *
+       * TWENTY-THREE WITH `cash.pay`, and it asked him. It was born held back
+       * (0285) for exactly the reason above, this test refused the 23rd power
+       * when it tried to cross without his word, and he gave it on 2026-10-30:
+       * "yes and this one is then given to a finance role as well". The seeded
+       * Treasury role grants it too (server/lib/starterRoles.ts). A key
+       * RECLASSIFIED from held back, so the complement fell from 17 to 16.
        */
-      expect(HANDOVER_SET).toHaveLength(22);
+      expect(HANDOVER_SET).toHaveLength(23);
       expect(HANDOVER_SET).toContain("comms.manage");
       expect(HANDOVER_SET).toContain("org.decide");
       expect(HANDOVER_SET).toContain("module.switch");
+      expect(HANDOVER_SET).toContain("cash.pay");
     });
 
     it("keeps the comment above HANDOVER_SET honest about its own two numbers", async () => {

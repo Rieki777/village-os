@@ -84,9 +84,17 @@ it; a plain admin may not target a founder) and the existing
 Note the session semantics, because members notice: `tokenVersion` is the only
 revocation lever there is, so **signing out, or setting a new password, ends
 every session on every device**. Per-session sign-out would need a sessions
-table. Setting a new password and `revoke-sessions` also revoke every agent
-token (`vat_`) the member made (`revokeAllTokens`, `server/lib/agentTokens.ts`);
-signing out leaves those standing.
+table. Setting a new password and `revoke-sessions` also end everything a
+session can leave standing for the member's agent (`endAgentReach`,
+`server/lib/agentTokens.ts`): every agent token (`vat_`), the private calendar
+feed address, the agent inbox with its queued deliveries, and the member's own
+model key. A new password ends them before the tokenVersion bump and again
+after it (`withAgentReachEnded`), so a failure leaves the set-password link
+unspent and the retry finishes the reset. `revoke-sessions` bumps first, so the
+sessions end whatever happens next, then ends the rest; a failure answers 500
+and pressing again finishes it. The member's notes, drafts and agent profile stay.
+Signing out leaves all of these standing. A member who relied on a calendar
+subscription or an inbox sets it up again after a reset.
 
 ## Game mechanics: rings, the public snapshot, the amendment ledger
 
@@ -168,6 +176,20 @@ above the size of a gathering, not to the size of one person's usage.
   ("Make This Yours"): identity, images (uploaded, sharp-compressed), dues,
   personas.
 - Game variables: only CHANGED values are stored; platform defaults inherit.
+- Finished erasures, given the steps they predate (no migration, no env var):
+  late in boot, once per list of steps (the runOnce id is
+  `erasure-steps-backfill-<digest>`), every finished `member_erasures` record
+  and every tombstone with no record at all is given the steps after the
+  tombstone that it lacks and that find their rows by user id
+  (`backfillFinishedErasures`, `server/lib/erasure.ts`). On a village that
+  erased somebody on an older release, this ends the agent token, open
+  invitation link, place at a gathering, vouch for somebody still waiting,
+  group ownership and delegation that outlived them, and takes off the
+  `departed-<id>` handle an old tombstone kept, so no profile page answers to
+  it (`handle-after-tombstone`). A fee for a place ahead
+  comes back once, and a freed seat goes to whoever was waiting, who is told.
+  Look for `[erasure] finished-erasure backfill:` in the boot log. A member it
+  stopped part way is counted there and tried again on the next boot.
 - Earned equity (0266, no env var): the migration seeds the `earned-equity`
   token with `sys:equity-mint`, `sys:equity-bridge` and `sys:equity-settled`,
   and `seedEconomy` adds its two mint rules (`quest.completed`, `role.cycle`)
@@ -1229,6 +1251,7 @@ the seeded roles whose descriptions already claimed the work
 | `health.record` | Steward Circle |
 | `event.manage` | Steward Circle |
 | `exchange.manage` | Treasury |
+| `cash.pay` | Treasury (Rye, 2026-10-30; also in the founding stewards' handover set) |
 | `org.declare` | Founders Circle |
 | `org.seat`, `org.decide` | Founders Circle (Rye, 2026-10-20) |
 | `map.edit`, `map.publish` | the Cartographer badge (0063) |
@@ -1239,6 +1262,15 @@ through the role editor. A fresh fork gets them at first boot. A role grants
 nothing until somebody holds it, exactly like a badge. That is why seating
 people and publishing a change to the org chart reach a village that already
 runs only when an admin adds `org.seat` and `org.decide` to the role there.
+
+`cash.pay` is the one exception, and it is a boot step rather than a seed:
+the `cash-pay-to-treasury-2026-10-30` runOnce (`grantCashPayToTreasury`,
+`server/lib/starterRoles.ts`) adds it to a running village's role with the id
+`treasury`, if one exists and does not already carry it, and changes nothing
+else on that role. The power is new, so no village can have taken it off on
+purpose. Nothing to provision. Look for `the Treasury role now grants cash.pay`
+in the boot log. A village with no Treasury role gets no line, and its admins
+and founding stewards still hold the power.
 
 - Seeds: `server/seeds/quests-seed.json` carries the story layer per quest (0068: `subtitle`, `story`, `firstStep`, `steps`, `deliverable`, `tips`, optional `imageUrl`). On an already-running village the `quest-story-2026-08-10` runOnce fills those fields from the seed ONLY where the live row is empty, so admin-written copy is never overwritten, and `quest-posters-2026-08-10` replays the same fill to pick up `imageUrl` on villages that ran the first one. Both throw when the seed file is missing or unreadable, so a broken deploy retries on the next boot instead of recording itself as applied. Look for `filled N quest(s)` or `found nothing to fill` in the boot log: those are different facts.
 - Quest poster art: a quest's `imageUrl` must be a path under `/api/uploads/` (the API refuses anything else, the same rule the forum's image field follows), so posters are uploaded into the `data/uploads/` volume, never committed to `client/public`. That directory is served one-year-immutable and is not content-hashed, and CI caps `dist/public` at 6 MB total and 400 KB per image. A village with no poster files needs no action: each card paints a gradient scene from its circle, and a quest whose `imageUrl` points at a missing file falls back to the same scene rather than showing a broken image.

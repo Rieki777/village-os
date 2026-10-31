@@ -119,7 +119,7 @@ describe("navGroups", () => {
       "stays-admin", "exchange-admin", "crowdpool-admin", "calls-admin", "intents-admin",
       "health-admin",
     ]],
-    ["Money and agreements", ["tokens", "ledger", "cycles", "products", "resources-admin", "exits-admin", "settings"]],
+    ["Money and agreements", ["tokens", "ledger", "cash-payouts", "cycles", "products", "resources-admin", "exits-admin", "settings"]],
     ["Day to day", ["submissions", "feedback", "quest-claims", "forum-moderation", "message-reports", "drafts", "brain", "failures"]],
     // Village Comms (the comms build spec 6): after the week's queues.
     ["Comms", ["comms-overview", "comms-journeys", "comms-words", "comms-people", "comms-letters", "comms-sent", "comms-settings"]],
@@ -172,6 +172,8 @@ describe("navGroups", () => {
       "pages",
       // Paths & Stages, 2026-10-23: the join form's paths and the stage ladder, in the village's words.
       "paths-stages",
+      // Cash to pay out, 2026-10-30: the treasurer's record of bank transfers (0285).
+      "cash-payouts",
     ];
     // Rows that LEFT the rail, each with a key that still renders a screen, so
     // a deep link to it still lands. `email-settings` renders Comms Settings.

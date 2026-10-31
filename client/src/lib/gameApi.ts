@@ -91,6 +91,8 @@ export interface PublicGameConfig {
   currency: {
     name: string;
     nameLower: string;
+    /** What the village calls all its tokens together (Admin then Tokens). Older servers omit it. */
+    collectiveName?: string;
     /** The VALUE token the cycle pool distributes across recognition — named
      *  in the token registry (Admin → Tokens), so a fork's rename reaches
      *  every page that mentions it. Recognition itself carries no financial

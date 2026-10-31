@@ -34,8 +34,7 @@ import { gatheringWhen } from "../../../shared/comms/mergeFields";
 import { contactIdOfGuestKey } from "../../../shared/comms/kinds";
 import { recapComposerPath } from "../../../shared/comms/recap";
 import type { AttendanceMode, CalendarKind, CalendarLayer, EventStatus } from "../../../shared/gatherings";
-import { zonedTimeToUtc } from "../../../shared/lunar";
-import { expandOccurrences, getCalendarRow, type CalendarRow, type Occurrence } from "../calendar";
+import { expandOccurrences, getCalendarRow, occurrenceOf, type CalendarRow, type Occurrence } from "../calendar";
 import { usersRepo } from "../../repos/users";
 import { contactById } from "../../repos/commsContacts";
 import { eventCreatorOf, readEventComms } from "../../repos/eventComms";
@@ -67,31 +66,13 @@ export interface GatheringSnapshot {
   removed: boolean;
 }
 
-/** A recurring gathering's evening keys look like this; a one-off's is "". */
-const OCC_KEY = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
- * One evening of a gathering, or null when the gathering has no such evening:
- * a key that is not a date, a date the rule never lands on, or one the host
- * took out of the series. A one-off answers its one occurrence whatever key it
- * is asked for, the way `rsvp()` stores "" for it.
+ * One evening of a gathering by its key. It lives in server/lib/calendar.ts
+ * beside the expansion it reads, so the seat-fee settle reads the same answer
+ * the guest emails do without importing an email module. Re-exported here for
+ * the comms callers that already import it from this file.
  */
-export function occurrenceOf(row: CalendarRow, occurrenceKey: string, timeZone: string): Occurrence | null {
-  if (!row.recurrence) {
-    return { row, occurrenceKey: "", startsAt: row.startsAt, endsAt: row.endsAt, title: row.title, cancelled: false };
-  }
-  if (!OCC_KEY.test(occurrenceKey)) return null;
-  const [y, m, d] = occurrenceKey.split("-").map(Number);
-  // The window holds both the evening's own date and wherever the host moved
-  // it to, because the rule is expanded from the date and the override then
-  // places it.
-  const day = zonedTimeToUtc(y, m, d, 12, 0, timeZone).getTime();
-  const moved = row.recurrence.overrides?.[occurrenceKey]?.startsAt;
-  const movedAt = moved ? new Date(moved).getTime() : day;
-  const from = new Date(Math.min(day, movedAt) - 3 * DAY_MS);
-  const to = new Date(Math.max(day, movedAt) + 3 * DAY_MS);
-  return expandOccurrences(row, from, to, timeZone).find((o) => o.occurrenceKey === occurrenceKey) ?? null;
-}
+export { occurrenceOf };
 
 /** The next evening that has not ended, or null when there is none in the coming year. */
 export function nextOccurrence(row: CalendarRow, timeZone: string, now: Date): Occurrence | null {

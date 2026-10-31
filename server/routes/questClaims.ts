@@ -43,11 +43,15 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { markAdminGate } from "../lib/adminGate";
 import { humanAtScale, owedForClaim } from "../lib/economy";
+import { oweQuestCash } from "../lib/cashOwed";
+import { readWorkValue } from "../../shared/workValue";
+import { rewardMultipliersFor } from "../lib/seasonPatterns";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { issuanceRefusal } from "../lib/gameStart";
+import { departedById } from "../lib/departed";
 import { tokenDef } from "../lib/ledger";
-import { questPay, questPayRules } from "../lib/workPay";
+import { payBadgeBoosts, questPay, questPayRules, withPayBadges } from "../lib/workPay";
 import { STAY_CREDIT } from "../lib/stays";
 import { boolVar, numberVar } from "../lib/variables";
 import {
@@ -98,7 +102,7 @@ type Deps = Pick<
   ): Promise<void>;
   /**
    * The seasonal badges whose season is not running, cached for a few seconds
-   * in server/index.ts. The reward multiplier below asks it so a badge that is
+   * in server/index.ts. The badge multipliers below ask it so a badge that is
    * asleep does not multiply anybody's consent.
    */
   dormantBadgeIds(): Promise<string[]>;
@@ -196,12 +200,15 @@ export function register(app: Express, deps: Deps): void {
      * card gives and the consent prices from (server/lib/workPay.ts). A claim
      * whose quest was deleted carries none: nothing is advertised.
      */
-    const rules = await questPayRules(getPool());
+    const [rules, boosts] = await Promise.all([
+      questPayRules(getPool()),
+      deps.dormantBadgeIds().then((dormant) => payBadgeBoosts(getPool(), dormant)).catch(() => []),
+    ]);
     const questsById = new Map(quests.map((q) => [q.id, q]));
     res.json(
       claims.map((c) => {
         const quest = questsById.get(c.questId);
-        return { ...c, pay: quest ? questPay(quest, rules) : null };
+        return { ...c, pay: quest ? withPayBadges(questPay(quest, rules), boosts) : null };
       }),
     );
   });
@@ -263,6 +270,8 @@ export function register(app: Express, deps: Deps): void {
           : `${firstName(user.name)} flagged a wobble on ${questTitle}`,
         `quest-confidence:${req.params.id}:${value}`,
         "/review",
+        [],
+        { actorUserId: user.id },
       );
     }
     res.json({ success: true });
@@ -388,6 +397,15 @@ export function register(app: Express, deps: Deps): void {
     // clearable, and declining creates nothing.
     if (approve !== false && (await isExampleRow(getPool(), "quests", claim.questId))) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    }
+    // NOR IS WORK PAID TO A MEMBER WHO HAS LEFT (round 4, finding 3). A claim
+    // submitted before the member left survives the erasure, renamed, and a
+    // consent here minted its tokens into the tombstone's account and wrote
+    // cash owed to nobody. Refused before anything is recorded, ahead of the
+    // launch question so the steward hears the reason that will not change;
+    // the decline stays open, because that is how the claim is cleared.
+    if (approve !== false && (await departedById(getPool(), claim.userId))) {
+      return res.status(409).json({ error: "That member has left the village, so nothing can be paid to them. Decline the claim to clear it." });
     }
     // NO SELF-CONSENT — load-bearing, not decorative. Consent mints
     // recognition from the faucet, grants stay credits and advances stages;
@@ -537,6 +555,9 @@ export function register(app: Express, deps: Deps): void {
     // equal and the advancement event would never fire.
     const claimant = await members.byId(claim.userId);
     const stageBefore = claimant ? await stageOf(claimant) : null;
+    // The claimant's badge multipliers, token by token (Rye, 2026-10-23), read
+    // before the transaction: which badges are awake depends on the season.
+    const boost = claimant ? await rewardMultipliersFor(getPool(), claim.userId, await deps.dormantBadgeIds()) : undefined;
 
     // One commit: the status check, the flip and what the consent owes, or
     // none of them. The account of why is on `consentOnce` in server/repos/quests.ts.
@@ -572,9 +593,19 @@ export function register(app: Express, deps: Deps): void {
           userId: c.userId,
           stay: stayReward > 0 ? { reward: stayReward, questTitle: c.questTitle } : undefined,
           valueTokens: consentedQuest?.valueTokens ?? null,
+          boost,
         });
         if (priced.skipped) console.log(`[economy] claim ${c.id}: no rule priced (${priced.skipped})`);
         await recordOwed(conn, c.id, priced.owed);
+        // THE CASH IT PAYS (0285), owed in this same commit. The platform never
+        // pays it; the village now owes it, and the treasurer reads it there.
+        await oweQuestCash(conn, {
+          claimId: c.id,
+          userId: c.userId,
+          questId: c.questId,
+          questTitle: c.questTitle,
+          cash: readWorkValue(consentedQuest?.cashMinor, consentedQuest?.cashCurrency),
+        });
         return { ok: true as const };
       },
     );

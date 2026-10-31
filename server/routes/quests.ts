@@ -73,7 +73,8 @@ import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
 import { questClosed } from "../repos/quests";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
-import { payLineProblem, payableTokens, questPay, questPayRules, rolePayRules } from "../lib/workPay";
+import { payBadgeBoosts, payLineProblem, payableTokens, questPay, questPayRules, rolePayRules, withPayBadges } from "../lib/workPay";
+import { seasonallyDormantBadgeIds } from "../lib/seasonPatterns";
 import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput } from "../../shared/workValue";
 
@@ -147,9 +148,22 @@ export function register(app: Express, deps: Deps): void {
    * then says to inquire.
    */
   app.get("/api/quests", async (_req, res) => {
-    const [quests, rules] = await Promise.all([questsRepo.all(), questPayRules(getPool())]);
-    res.json(quests.map((q) => ({ ...q, pay: questPay(q, rules) })));
+    const [quests, rules, boosts] = await Promise.all([questsRepo.all(), questPayRules(getPool()), questBadgeBoosts()]);
+    res.json(quests.map((q) => ({ ...q, pay: withPayBadges(questPay(q, rules), boosts) })));
   });
+
+  /*
+   * THE BADGES THAT MULTIPLY WHAT A QUEST PAYS, so a member sees the whole of
+   * it before taking the quest on (Rye, 2026-10-30). One read per request,
+   * public like the badges. A failed read shows no badge, never a wrong one.
+   */
+  async function questBadgeBoosts() {
+    try {
+      return await payBadgeBoosts(getPool(), await seasonallyDormantBadgeIds(getPool(), currentPatternId()));
+    } catch {
+      return [];
+    }
+  }
 
   /*
    * WHAT A STEWARD MAY PUT ON A QUEST OR A ROLE: the currency a value is
@@ -188,6 +202,8 @@ export function register(app: Express, deps: Deps): void {
     delete body.valueMinor;
     delete body.valueCurrency;
     delete body.valueTokens;
+    delete body.cashMinor;
+    delete body.cashCurrency;
     // `pay` is what this route SENDS. A client that posts a quest back as it
     // received it must not have the projection written onto the row.
     delete body.pay;
@@ -208,6 +224,11 @@ export function register(app: Express, deps: Deps): void {
       out.valueCurrency = input.valueMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
     }
     if (input.tokens !== undefined) out.valueTokens = input.tokens;
+    // The cash it pays (0285), stamped with the same currency for the same reason.
+    if (input.cashMinor !== undefined) {
+      out.cashMinor = input.cashMinor;
+      out.cashCurrency = input.cashMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+    }
     return out;
   };
 
@@ -299,9 +320,9 @@ export function register(app: Express, deps: Deps): void {
      * the two facts never arrive looking the same.
      */
     // What each quest pays, the same answer the board gives (see `/api/quests`).
-    const rules = await questPayRules(getPool());
-    const priced = { ...quest, pay: questPay(quest, rules) };
-    const pricedRelated = related.map((q) => ({ ...q, pay: questPay(q, rules) }));
+    const [rules, boosts] = await Promise.all([questPayRules(getPool()), questBadgeBoosts()]);
+    const priced = { ...quest, pay: withPayBadges(questPay(quest, rules), boosts) };
+    const pricedRelated = related.map((q) => ({ ...q, pay: withPayBadges(questPay(q, rules), boosts) }));
     const viewer = await authedUser(req);
     if (!viewer) return res.json({ quest: priced, related: pricedRelated });
     const needs = await linksForSubject(getPool(), "quest", id);
@@ -872,6 +893,7 @@ export function register(app: Express, deps: Deps): void {
             body: "Read what they did and consent when you are ready. Value moves when a steward says so.",
             link: "/review",
             dedupeKey: `quest-submission:${active.id}:${recipientId}`,
+            actorUserId: user.id,
           });
         } catch (bell) {
           console.error(`[quests] claim ${active.id}: the submission bell for ${recipientId} did not send`, bell);

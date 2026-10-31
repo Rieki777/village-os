@@ -25,7 +25,11 @@
  *      display name, in the header. A holder, a raiser or a candidate is
  *      never copied from any input into the card.
  *   5. LOAD IS FACTS: counts, never an adjective.
- *   6. MOONS ARE DATED, NEVER NAMED (the CycleClock ruling).
+ *   6. A MOON'S LABEL IS ITS DATES. Its title is its name, "October Moon",
+ *      by the month its new moon falls in: the approved design names moons
+ *      (Rye 2026-10-22), where this rule used to keep every moon unnamed.
+ *      The hero, its moon pill and the moon track are built in
+ *      `shared/playerCardHero.ts`.
  *   7. PAY IS WORDS. No figure is ever typed on the card.
  *
  * An archetype chip row appears only when the role's own `archetypes` list
@@ -47,6 +51,8 @@ import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applic
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 import type { AccomplishmentMoon } from "./taskAccomplishments";
 import { roleProposalsOut, type RoleProposalIn, type RoleProposalOut } from "./playerCardProposals";
+import { heroOf, moonLineOf, moonNameOf, trackOf, type HeroOut, type TrackOut } from "./playerCardHero";
+import { roleIcon, type RoleIcon } from "./roleIcons";
 
 export * from "./playerCardWords";
 export type { Read } from "./roleSheet";
@@ -319,11 +325,21 @@ export interface HeaderOut {
   name: string;
   rolesLine: string;
   day: Slot<{ words: string; day: Figure; of: Figure }>;
+  /** "Riverbend · Season of Foundations", over the name (shared/playerCardHero.ts). */
+  eyebrow: HeroOut["eyebrow"];
+  /** "Three roles in the Community Anchor · Full-time", under the name. */
+  tagline: HeroOut["tagline"];
+  /** "1 October to 31 December 2026": the adopted term, or the season. */
+  span: HeroOut["span"];
+  /** The pill under the portrait: "October Moon · Day 22 of 92". */
+  moon: HeroOut["moon"];
 }
 
 export interface TileOut {
   roleId: string;
   title: string;
+  /** The gold line icon on the tile, from the role's name and domain (shared/roleIcons.ts). */
+  icon: RoleIcon;
   /** The role's section on this card. */
   anchor: string;
   /** Three facts and a dot, never a score. Null when nothing could be read. */
@@ -350,7 +366,11 @@ export interface AcrossOut {
   seasonalGoals: { heading: string; lede: string; items: Slot<{ title: string; doneWhen: string | null }[]> };
   goals: Slot<{ goal: string; howItHelps: string }[]>;
   tasks: Slot<{ id: string; title: string; roleTitle: string | null; state: string; doneWhen: string | null }[]>;
+  /** "October Moon, 10 Oct to 8 Nov": the moon this moon's tasks belong to. */
+  moonLine: string;
   signs: Slot<SignOut[]>;
+  /** "Only signs Riverbend can count by itself...", over the signs. */
+  signsLede: string;
   load: {
     heading: string;
     words: string;
@@ -432,8 +452,9 @@ export interface MarkerOut {
 }
 
 export interface MoonOut {
+  /** The moon's dates, "10 Oct to 8 Nov". */
   label: string;
-  /** "Getting started" for the days before the season's first new moon. */
+  /** "October Moon", by the month its new moon falls in; "Getting started" for the days before the season's first new moon. */
   title: string | null;
   startsAt: string;
   endsAt: string;
@@ -446,6 +467,8 @@ export interface TimelineOut {
   lede: string;
   moons: MoonOut[];
   rhythm: string[];
+  /** The track over the moons: new and full moons, invoices, today. Null with no moon to draw. */
+  track: TrackOut | null;
 }
 
 export interface ApplicationOut {
@@ -552,7 +575,17 @@ function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): Head
       });
     }
   }
-  return { portrait: portraitOf(input.owner), name: input.owner.displayName, rolesLine, day };
+  const hero = heroOf({
+    now: input.now,
+    timeZone: input.timeZone,
+    ownerUserId: input.owner.userId,
+    villageName: input.villageName,
+    season: input.season,
+    roles,
+    applications: input.applications,
+    proposal: input.mode === "proposal",
+  });
+  return { portrait: portraitOf(input.owner), name: input.owner.displayName, rolesLine, day, ...hero };
 }
 
 /** The class chips a role's own tags earn, named by the village. */
@@ -811,7 +844,9 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
     seasonalGoals,
     goals,
     tasks,
+    moonLine: moonLineOf(input.now, input.timeZone),
     signs,
+    signsLede: W.signsLede(clean(input.villageName ?? null)),
     load: { heading: W.load, words, roles: rolesFig, openTasks, own, caption: W.loadCaption },
     growingEdge: { heading: W.growingEdge, text: input.growingEdge === undefined ? UNREAD : textSlot(input.growingEdge, W.notWritten) },
     whoCouldHoldNext: {
@@ -832,14 +867,14 @@ function timeline(input: PlayerCardInput, roles: PlayerRoleIn[]): TimelineOut {
 
   // Moon spans: [from, first new moon) is "Getting started" when the season
   // opens between new moons; then one span per moon until the season ends.
-  const spans: { start: Date; end: Date; title: string | null }[] = [];
+  const spans: { start: Date; end: Date; title: string; starting: boolean }[] = [];
   const first = LUNAR_CLOCK.boundsFor(from);
   let cursor = first.startsAt.getTime() === from.getTime() ? first.startsAt : first.endsAt;
-  if (cursor.getTime() > from.getTime()) spans.push({ start: from, end: cursor, title: W.gettingStarted });
+  if (cursor.getTime() > from.getTime()) spans.push({ start: from, end: cursor, title: W.gettingStarted, starting: true });
   let guard = 0;
   while (cursor.getTime() <= to.getTime() && guard++ < 24) {
     const b = LUNAR_CLOCK.boundsFor(cursor);
-    spans.push({ start: b.startsAt, end: b.endsAt, title: null });
+    spans.push({ start: b.startsAt, end: b.endsAt, title: moonNameOf(b.startsAt, tz), starting: false });
     cursor = b.endsAt;
   }
 
@@ -852,8 +887,8 @@ function timeline(input: PlayerCardInput, roles: PlayerRoleIn[]): TimelineOut {
     markers.push({ kind, at: at.toISOString(), day: formatDay(at.toISOString(), false, tz) ?? "", words, t });
   };
   spans.forEach((s, i) => {
-    if (s.title !== null) return;
-    const firstMoon = i === 0 || spans[i - 1].title !== null;
+    if (s.starting) return;
+    const firstMoon = i === 0 || spans[i - 1].starting;
     const words = [W.newMoon, W.tasksAgreed, ...(anyEquity && !firstMoon ? [W.signedOff] : [])].join(". ");
     mark("new-moon", s.start, words);
   });
@@ -885,7 +920,8 @@ function timeline(input: PlayerCardInput, roles: PlayerRoleIn[]): TimelineOut {
         .map(({ t: _t, ...m }) => m),
     };
   });
-  return { heading: W.timeline, lede: W.timelineLede, moons, rhythm };
+  const invoices = markers.filter((m) => m.kind === "invoice").map((m) => m.at);
+  return { heading: W.timeline, lede: W.timelineLede, moons, rhythm, track: trackOf(spans, invoices, input.now, tz) };
 }
 
 // ── Applications ───────────────────────────────────────────────────────────
@@ -1062,6 +1098,7 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
               list.map((r, i) => ({
                 roleId: r.id,
                 title: r.name,
+                icon: roleIcon(r.name, r.domain),
                 anchor: ROLE_ANCHOR(r.id),
                 // A proposal holds nothing yet, so it has no health to read.
                 health: input.mode === "proposal" ? null : roleHealth(r, roleOuts[i].working.items, input.now, input.timeZone),
