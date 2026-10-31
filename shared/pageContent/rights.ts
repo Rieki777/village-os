@@ -128,7 +128,7 @@ function rightsPage(words: RightsPageWords): PageSpec {
     },
     {
       id: "ownership",
-      label: "Co-ownership card",
+      label: "Card under the top",
       shows: "The single card just under the top of the page.",
       hideable: true,
       fields: [

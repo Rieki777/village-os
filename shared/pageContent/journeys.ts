@@ -803,7 +803,7 @@ export const RESIDENT_JOURNEY: PageSpec = buildJourney({
   beforeSteps: [
     {
       id: "tenure",
-      label: "Land share agreements",
+      label: "How residents hold their homes",
       shows: "The band just under the top of the page, about how residents hold their land.",
       hideable: true,
       fields: [
@@ -983,7 +983,7 @@ export const PROSPERITY_JOURNEY: PageSpec = buildJourney({
   beforeSteps: [
     {
       id: "economy",
-      label: "Shared enterprise and co-ownership",
+      label: "Two columns about business here",
       shows: "The two short columns under the top of the page.",
       hideable: true,
       fields: [
@@ -1047,7 +1047,7 @@ export const PROSPERITY_JOURNEY: PageSpec = buildJourney({
         },
       ],
     },
-    ctaBand("packet", "Packet invitation", "The band inviting a packet request. It hides when its button has nowhere to go.", {
+    ctaBand("packet", "Invitation to write", "The band inviting a would-be business to write to you. It hides when its button has nowhere to go.", {
       heading: "Ready to Explore Opportunities?",
       body: "Write to {village} to learn what it takes to start a business here.",
       cta: ["Email the Village", JOURNEY_TARGETS.contact],
