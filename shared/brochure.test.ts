@@ -44,6 +44,12 @@ describe("whether a page is served", () => {
     expect(brochurePathServed(on, "/housing?from=menu")).toBe(false);
   });
 
+  it("cannot be walked round by spelling the address in capitals, which the router still opens", () => {
+    expect(brochurePathServed(on, "/HOUSING")).toBe(false);
+    expect(brochurePathServed(on, "/Housing/")).toBe(false);
+    expect(brochurePathServed({ enabled: false, hidden: [] }, "/Visit")).toBe(false);
+  });
+
   it("serves no story page while the master switch is off, whatever the list says", () => {
     expect(brochurePathServed({ enabled: false, hidden: [] }, "/visit")).toBe(false);
   });

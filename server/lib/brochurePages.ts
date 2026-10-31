@@ -56,6 +56,16 @@ export function brochurePageServed(path: string): boolean {
   return brochurePathServed({ enabled: brochurePagesOn(), hidden: brochureHiddenPages() }, path);
 }
 
+/**
+ * True when `path` is a story page switched off on its own. The question for
+ * a link drawn somewhere that has always linked a story page whatever the
+ * master switch said (the map's chips): it drops what this village switched
+ * off by name, and changes nothing else.
+ */
+export function brochurePageOffAlone(path: string): boolean {
+  return !brochurePathServed({ enabled: true, hidden: brochureHiddenPages() }, path);
+}
+
 /** Both switches, the way `/api/game/config` hands them to the client. */
 export function brochureConfig(): { brochurePages: boolean; brochureHidden: BrochurePath[] } {
   return { brochurePages: brochurePagesOn(), brochureHidden: brochureHiddenPages() };

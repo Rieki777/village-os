@@ -12,7 +12,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
-import { brochurePage, useBrochurePages } from "./lib/brochure";
+import { brochurePage, storyPageShown, useBrochurePages } from "./lib/brochure";
 
 /**
  * "/" means the welcome page, for everyone, every time. The map was going to
@@ -77,6 +77,7 @@ function PageTitle() {
   const [location] = useLocation();
   const [village, setVillage] = useState<string>("");
   const [commitment, setCommitment] = useState<string>("");
+  const [switches, setSwitches] = useState<{ brochurePages?: boolean; brochureHidden?: string[] } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -86,6 +87,7 @@ function PageTitle() {
         if (!alive) return;
         setVillage(d?.project?.name ?? "");
         setCommitment(d?.project?.commitmentName ?? "");
+        setSwitches({ brochurePages: d?.brochurePages, brochureHidden: d?.brochureHidden });
         // The tab ICON is identity too. index.html ships a neutral platform
         // favicon (a static file cannot know which village it serves); this
         // swaps in the village's own the moment config arrives, same
@@ -109,8 +111,10 @@ function PageTitle() {
 
   useEffect(() => {
     if (!village) return;
-    document.title = documentTitle(location, village, { commitment });
-  }, [location, village, commitment]);
+    // A story page this village does not serve answers not found, so its tab
+    // names the village alone, the same as its share card (server/lib/pageMeta.ts).
+    document.title = documentTitle(storyPageShown(switches, location) ? location : "/", village, { commitment });
+  }, [location, village, commitment, switches]);
 
   return null;
 }

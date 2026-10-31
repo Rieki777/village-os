@@ -74,9 +74,13 @@ export type BrochurePath = (typeof BROCHURE_PATHS)[number];
 
 const SET: ReadonlySet<string> = new Set(BROCHURE_PATHS);
 
-/** The path alone: no query string, no hash, no trailing slash. */
+/**
+ * The path alone: no query string, no hash, no trailing slash, lower case.
+ * The router matches a route whatever its case (`/HOUSING` opens `/housing`),
+ * so a switch that only knew the lower-case spelling could be walked round.
+ */
 function barePath(path: string): string {
-  return path.split(/[?#]/, 1)[0].replace(/\/+$/, "") || "/";
+  return path.split(/[?#]/, 1)[0].replace(/\/+$/, "").toLowerCase() || "/";
 }
 
 /** True for a brochure route, ignoring any query string or hash. */

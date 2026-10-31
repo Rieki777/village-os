@@ -94,7 +94,6 @@ export const VISIT_LOGISTICS_FIELDS: readonly VisitField<keyof VisitLogistics>[]
   { key: "contact_note", label: "Line above the form", help: "Under \"Tell us you're coming\". Leave blank for none.", kind: "long", max: 200 },
 ];
 
-const ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Characters as a person counts them, so an accented name is not charged twice. */
 function count(s: string): number {
@@ -111,11 +110,16 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 export function normalizeVisitProgram(doc: unknown): VisitProgram {
   const d = (doc && typeof doc === "object" ? doc : {}) as Record<string, unknown>;
   const rawTypes = Array.isArray(d.visit_types) ? d.visit_types : [];
+  const taken: string[] = [];
   const types = rawTypes
     .filter((t): t is Record<string, unknown> => !!t && typeof t === "object" && !Array.isArray(t))
     .map((t, i) => ({
       ...t,
-      id: str(t.id),
+      // A card saved with no id, or with another card's, gets one of its own,
+      // so the editor can always save what it read.
+      id: ((id) => (taken.push(id), id))(
+        str(t.id).trim() && !taken.includes(str(t.id)) && count(str(t.id)) <= 64 ? str(t.id) : newVisitTypeId(taken, `${i + 1}`),
+      ),
       title: str(t.title),
       duration: str(t.duration),
       format: str(t.format),
@@ -185,7 +189,7 @@ export function visitProgramProblems(body: unknown): string[] {
           return;
         }
         const t = raw as Record<string, unknown>;
-        if (typeof t.id !== "string" || !ID.test(t.id)) out.push(`${where}its id must be letters, numbers, - or _.`);
+        if (typeof t.id !== "string" || !t.id.trim() || count(t.id) > 64) out.push(`${where}its id must be a name of up to 64 characters.`);
         else if (ids.includes(t.id)) out.push(`${where}another card already has the id ${t.id}.`);
         else ids.push(t.id);
         if (t.order !== undefined && (typeof t.order !== "number" || !Number.isFinite(t.order))) out.push(`${where}its order must be a number.`);

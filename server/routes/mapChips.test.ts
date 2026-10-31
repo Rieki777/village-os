@@ -25,6 +25,7 @@ import { currentCycle } from "../lib/gratitude-cycles";
 import { usersRepo } from "../repos/users";
 import { claimsRepo, questsRepo } from "../repos/quests";
 import { gratitudeLogRepo } from "../repos/gratitude";
+import { loadBrochurePages, updateBrochurePages } from "../lib/brochurePages";
 import { register } from "./mapChips";
 
 const configured = testDbConfigured();
@@ -268,6 +269,24 @@ describe.skipIf(!configured)("the crown bar's chips (routes, real schema)", () =
     expect((await live())[0].value, "held for a moment").toBe("3");
     await save([chip("people", "members")]);
     expect((await live())[0].value, "a founder's save asks again").toBe("4");
+  });
+
+  it("keeps a chip and drops its link while the story page it leads to is switched off on its own", async () => {
+    await save([chip("people", "members", { link: "/team" }), chip("work", "quests_open", { link: "/quests" })]);
+    await loadBrochurePages(pool);
+    try {
+      await updateBrochurePages({ enabled: true, pages: { "/team": false } });
+      const off = await live();
+      expect(off.map((c) => [c.id, c.link])).toEqual([
+        ["people", ""],
+        ["work", "/quests"],
+      ]);
+      await updateBrochurePages({ pages: { "/team": true } });
+      expect((await live()).map((c) => c.link)).toEqual(["/team", "/quests"]);
+    } finally {
+      await pool.query("DELETE FROM `app_config` WHERE `config_key` = 'brochure-pages'"); // module-review-ok: scratch-schema reset after the case
+      await loadBrochurePages(pool);
+    }
   });
 
   describe("the treasury (Rye, 2026-10-05: treasury balance shown to members only)", () => {

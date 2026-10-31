@@ -69,6 +69,15 @@ describe("reading and ordering the program", () => {
     expect(doc.logistics.contact_note).toBe("");
   });
 
+  it("gives a card with no id, or another card's id, one of its own, so what was read can be saved", () => {
+    const doc = normalizeVisitProgram({ visit_types: [{ id: "a", title: "A" }, { id: "a", title: "B" }, { title: "C" }, { id: "Ünïcode id", title: "D" }] });
+    const ids = doc.visit_types.map((t) => t.id);
+    expect(ids[0]).toBe("a");
+    expect(ids[3]).toBe("Ünïcode id");
+    expect(new Set(ids).size).toBe(4);
+    expect(visitProgramProblems(doc)).toEqual([]);
+  });
+
   it("numbers the cards in the order they are listed", () => {
     expect(renumberVisitTypes([card("b", { order: 9 }), card("a", { order: 3 })] as never).map((t) => [t.id, t.order])).toEqual([
       ["b", 1],

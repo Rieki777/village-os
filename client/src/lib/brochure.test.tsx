@@ -96,6 +96,14 @@ describe("a story page switched off on its own", () => {
     expect(loader).not.toHaveBeenCalled();
   });
 
+  it("stays off when the address is typed in capitals, which the router still opens", async () => {
+    config.current = { brochurePages: true, brochureHidden: ["/housing"] };
+    const loader = vi.fn(async () => ({ default: () => <h1>Our homes</h1> }));
+    visit("/housing", "/HOUSING/", loader);
+    expect(await screen.findByText("Off the trail")).toBeTruthy();
+    expect(loader).not.toHaveBeenCalled();
+  });
+
   it("leaves every other story page served, the control for the case above", async () => {
     config.current = { brochurePages: true, brochureHidden: ["/housing"] };
     visit("/visit", "/visit", async () => ({ default: () => <h1>Come and see</h1> }));
