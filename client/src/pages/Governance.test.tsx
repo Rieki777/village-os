@@ -12,7 +12,7 @@
  *     it used to describe one to every village.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 import { GOVERNANCE_PAGE } from "@shared/pageContent/governance";
@@ -186,6 +186,29 @@ describe("the steward's veto window follows governance.veto_hours", () => {
     expect(screen.getByText(/a steward has 100 hours to stop it/)).toBeInTheDocument();
   });
 
+  // The setting refuses anything under 72 and the engine floors a stored one
+  // there (`vetoHoursFrom`), so a row from before the floor still gets the
+  // three days the engine actually gives. The page never promises less.
+  for (const below of [0, 1, 24, 71]) {
+    it(`says the 72-hour floor for a stored ${below}, as the engine enforces it`, async () => {
+      mechanics = { vetoHours: below };
+      renderPage();
+      await stewardsHeading();
+
+      expect(screen.getByText(/a steward has three days to stop it before it takes effect\./)).toBeInTheDocument();
+    });
+  }
+
+  it("says a whole number of days past the floor in words, and 30 days in figures", async () => {
+    for (const [hours, words] of [[96, "four days"], [720, "30 days"], [73, "73 hours"]] as const) {
+      mechanics = { vetoHours: hours };
+      const { unmount } = renderPage();
+      await stewardsHeading();
+      expect(screen.getByText(new RegExp(`a steward has ${words} to stop it`))).toBeInTheDocument();
+      unmount();
+    }
+  });
+
   it("follows the setting inside words the village wrote itself", async () => {
     mechanics = { vetoHours: 168 };
     stored["page-governance"] = { stewards: { first: "Our stewards get {veto} to pause a passed change." } };
@@ -201,6 +224,26 @@ describe("the steward's veto window follows governance.veto_hours", () => {
     await stewardsHeading();
 
     expect(screen.getByText(/a steward has at least three days to stop it/)).toBeInTheDocument();
+  });
+});
+
+describe("a village that hides every section it may", () => {
+  it("keeps the top of the page and draws nothing else, the Hypha note included", async () => {
+    hyphaConfigured = false;
+    isAdmin = true;
+    stored["page-governance"] = Object.fromEntries(
+      GOVERNANCE_PAGE.sections.filter((s) => s.hideable).map((s) => [s.id, { hidden: true }]),
+    );
+    renderPage();
+    await headline();
+    // Let the veto window arrive, so a steward section held back only for it would show up here.
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/game/mechanics"));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(document.querySelectorAll("h2, h3")).toHaveLength(0);
+    expect(document.querySelectorAll("a")).toHaveLength(0);
+    expect(screen.queryByText(/Only admins see this note/)).toBeNull();
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
   });
 });
 
