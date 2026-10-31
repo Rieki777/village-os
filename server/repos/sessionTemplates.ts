@@ -262,7 +262,7 @@ export async function prioritiesInWindow(q: Queryable, from: Date, to: Date): Pr
     q,
     "SELECT p.`id`, p.`text`, p.`outcome`, p.`serves_goal`, p.`session_id`, s.`title` AS `session_title`, s.`created_at` AS `session_at` " +
       "FROM `live_session_priorities` p JOIN `live_sessions` s ON s.`id` = p.`session_id` " +
-      "WHERE s.`created_at` >= ? AND s.`created_at` < ? ORDER BY s.`created_at`, p.`position`, p.`id`",
+      "WHERE s.`created_at` >= ? AND s.`created_at` < ? ORDER BY s.`created_at`, s.`id`, p.`position`, p.`id`",
     [from, to],
   );
 }
@@ -274,7 +274,7 @@ export async function sharesInWindow(q: Queryable, kinds: readonly string[], fro
     q,
     "SELECT sh.`kind`, sh.`text`, sh.`serves_goal`, sh.`session_id`, sh.`created_at`, s.`created_at` AS `session_at`, s.`title` AS `session_title` " +
       "FROM `live_session_shares` sh JOIN `live_sessions` s ON s.`id` = sh.`session_id` " +
-      "WHERE sh.`kind` IN (?) AND s.`created_at` >= ? AND s.`created_at` < ? ORDER BY s.`created_at`, sh.`id`",
+      "WHERE sh.`kind` IN (?) AND s.`created_at` >= ? AND s.`created_at` < ? ORDER BY s.`created_at`, s.`id`, sh.`id`",
     [kinds, from, to],
   );
 }
