@@ -26,6 +26,7 @@ import { exportMemberSessions, register as registerRoom } from "./routes/liveSes
 import { register as registerLibrary } from "./routes/sessionLibrary";
 import { register as registerRhythm } from "./routes/sessionRhythm";
 import { register as registerCalendar } from "./routes/sessionCalendar";
+import { usersRepo } from "./repos/users";
 import { CALENDAR_REFUSALS, CIRCLE_FEED_PATH, MIRROR_SOURCE, type FollowPayload } from "../shared/sessionCalendar";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
@@ -124,6 +125,10 @@ describe.skipIf(!configured)("circle meetings on a calendar against a real schem
     pool = testPool(db, { connectionLimit: 4 });
     await q("INSERT INTO `module_settings` (`module_id`, `lifecycle`) VALUES ('sessions', 'members')"); // module-review-ok: turns Live Sessions on in the scratch schema this suite provisioned, since the feed and the mirror measure the module's state
     await loadModuleSettings(pool);
+    // Each person stands in the users table too: the address is written under
+    // the member's own row, at the tokenVersion a session signed now carries
+    // (`whileSessionHolds`), and a member with no row is refused.
+    for (const p of Object.values(PEOPLE)) await usersRepo(pool).add({ id: p.id, name: p.name, email: p.email, passwordHash: "x", paths: [] });
     const c = collect();
     const deps = {
       authedUser: async () => (whoami ? { ...(PEOPLE[whoami] ?? { id: whoami }), id: whoami } : null),
@@ -270,5 +275,27 @@ describe.skipIf(!configured)("circle meetings on a calendar against a real schem
     await forgetMemberSessions(pool, "m-ben", async (id) => PEOPLE[id] ?? null);
     expect(await q("SELECT * FROM `live_session_follows` WHERE `member_no` = ?", [no])).toEqual([]);
     expect(await q("SELECT * FROM `live_session_feed_keys` WHERE `member_no` = ?", [no])).toEqual([]);
+  });
+
+  /*
+   * THE ADDRESS IS WRITTEN ONLY WHILE THE SESSION HOLDS (adversarial round 3).
+   * The door hands the write the tokenVersion its session was signed at. Hal
+   * reset his password, so his row and the session it handed back carry
+   * version 1, and a session signed before the reset still carries 0.
+   */
+  it("makes an address for the session the member's row still carries, and answers 401 with no address to one a new password ended", async () => {
+    PEOPLE["m-hal"] = { id: "m-hal", name: "Hal Brook", email: "hal@village.example.test", membershipGranted: true, tokenVersion: 0 };
+    await usersRepo(pool).add({ id: "m-hal", name: "Hal Brook", email: "hal@village.example.test", passwordHash: "x", paths: [] });
+    await usersRepo(pool).update("m-hal", (u) => { u.tokenVersion = 1; });
+
+    const ended = await as("m-hal", "POST /api/sessions/circles/following/key");
+    expect(ended.status, "an address for a session the reset ended was made").toBe(401);
+    expect(ended.body).toEqual({ error: "auth_required" });
+    expect((await following("m-hal")).address, "a refused address was written").toBeNull();
+
+    PEOPLE["m-hal"].tokenVersion = 1;
+    const current = await as("m-hal", "POST /api/sessions/circles/following/key");
+    expect(current.status, `the member's current session was refused: ${JSON.stringify(current.body)}`).toBe(200);
+    expect((await following("m-hal")).address).not.toBeNull();
   });
 });

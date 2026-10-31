@@ -521,6 +521,17 @@ consent (`OwedClaim.boost`), each seat at settlement (`runSettlement`'s `boostFo
 accepted proposal, all through `quoteWorkPay`'s `boost`. The old single `badges.multiplier`
 names no token and multiplies nothing.
 
+**A card NAMES the multiplier and never applies it (Rye, 2026-10-30: each quest and role shows
+its full pay, cash, tokens, Voice and badge, before you take it on).** `payBadgeBoosts` and
+`withPayBadges` (`server/lib/workPay.ts`) read the same badges `rewardMultipliersFor` pays from
+(awake, no example, never self or hypha) and list, on `WorkPay.badges`, each one that multiplies
+one of the work's own lines: "×2 Village Voice with the Builder badge". The line's amount stays
+the base figure, because who holds the badge is only known at payment. A Voice token's line
+carries `voice: true`, so the card can say what Voice is. The quest board and detail, the
+consent queue, role cards at the `terms.read` tier, the circle card page and the Stay page's
+"Earn your nights" list (`server/routes/stays.ts`, which now sends each quest's whole `pay`
+beside its stay credits) all carry it. None of this posts anything.
+
 ### The cash work pays, and the record of it (0285)
 
 Rye, 2026-10-23: "roles and quests and more can be paid in cash, tokens (equity, credits,
@@ -565,6 +576,12 @@ because a payment with no stated method is not a record anybody can check. A hol
 owed row paid before it is claimed, when the money went out first. Nobody marks their own cash
 paid, the witness rule `canConfirm` holds for consent. With nobody holding the key, the one gate
 falls through to admin. The member is told when it is marked paid, with the note.
+
+**Who holds `cash.pay`** (Rye, 2026-10-30: "yes and this one is then given to a finance role as
+well"). It is in the founding stewards' handover set, so a village that launches holds it in the
+founding seat and can hand it over like any other steward power. The seeded Treasury role grants it
+too: a new village gets that from `server/seeds/roles-seed.json`, and a running village gets it
+once from the `cash-pay-to-treasury-2026-10-30` boot step, on its role with the id `treasury`.
 
 **An erasure leaves these rows.** They are the village's record of money it owed and paid, and a
 row holds an account id and an amount, never a name, so an erased member reads as the tombstone
@@ -766,8 +783,11 @@ because their balances are being settled and a notice period has been quoted to
 them. A member who is simply away wanes like anybody else, which is the whole
 mechanism. **So does a former member** (section 14): the exemption reads an OPEN
 exit through `openExitFor`, and a resolved exit is not one, so Voice a leaver kept
-under the ruling of 2026-10-23 wanes each moon like any other holding. Whether it
-should is a founder's question and is not answered here.
+under the ruling of 2026-10-23 wanes each moon like any other holding. On 2026-10-30
+the founder approved the suggestion that it should, "keep it, the same rule as for
+everyone" ("yes build all the exit suggestions!"), and the platform's default exit
+terms now say so (`DEFAULT_EXIT_POLICY`, section 14),
+so a leaver reads it before they go.
 
 `SettlementResult` carries a field named `decay`, always present and filled with
 zeros when the step did not run, so a reader cannot mistake "the engine never
@@ -2696,10 +2716,12 @@ this class at all.
    answers what contributed value is honoured at. The code declines to decide that
    and says so on the member's screen. **What a leaver KEEPS is decided** (Rye,
    2026-10-23: members keep their tokens, "a if b hasn't already happened"): a
-   leaver still holding value stays on as a former member, section 14. Five
-   questions that ruling raised are still open and listed there: kept Voice on a
-   roll frozen before the departure, delegations a former member carries, their
-   vouches, waning, and whether the erasure door warns a holder.
+   leaver still holding value stays on as a former member, section 14. The five
+   questions that ruling raised (kept Voice on a roll frozen before the
+   departure, delegations a former member carries, their vouches, waning, and
+   whether the erasure door warns a holder) were answered on 2026-10-30, with a
+   sixth that makes unpaid cash owed count as value. Section 14 has each answer
+   and where it lives.
 
 ---
 
@@ -3106,6 +3128,38 @@ forever. Re-running it moves nothing.
   still hold anything of value? Either way their roles are vacated and the
   stewards are told which. Value rows are never deleted, so conservation holds
   through every departure.
+- **An admin can cancel** ("They're staying", `POST /api/admin/exits/:id/cancel`,
+  which calls `cancelExit` in `server/lib/exit.ts`): the exit closes without a
+  tombstone and moves no value. A balance an earlier settle already swept stays
+  where that sweep posted it; nothing in the cancel gives it back. If a resolve
+  on the tombstone path (below) had begun the erasure and stopped before the
+  account closed, the cancel ends
+  that erasure record first, so no later resume closes the account of a member
+  who stayed, and it names the steps the stopped sweep had already run (role
+  holdings, skill tags and the like), which it does not undo. Once the account
+  is closed the cancel is refused (round 2 of the erasure review, finding 1).
+- **A recurring payment informs and never blocks** (round 3, finding 5). The
+  enumeration's `subscriptions` domain (`subscriptionsState`) names each Stripe
+  subscription the member's purchases hold, and says the deletion cancels it in
+  Stripe and refunds nothing already paid. It cannot block, because no door lets
+  a member cancel one first. The erasure's `product-subscriptions-after-tombstone`
+  step does the cancelling and moves no token; with no Stripe key it asks the
+  admins to cancel each one by hand and finishes. A charge that lands after the
+  account is gone posts no `product_grant` from the treasury: `settleProductPurchase`
+  refuses a buyer who has left on every period, banks the money in `fiat_charges`
+  as it does for any refused renewal, and asks the admins to refund it. That
+  refusal also cancels the subscription (round 4), so a checkout paid after the
+  delete stops charging; with no key, or a failing Stripe, the cancel is owed
+  on `/review` until Finish, the hourly job or a person settles it. On the exit
+  path a member who holds tokens, or is owed cash, reads that resolving keeps them a former
+  member and the payments keep renewing until an admin cancels them.
+- **The exit desk shows the cash the village still owes them** as a
+  NON-blocking `cash` domain: the `cash_owed` rows (0285) in state `owed` or
+  `claimed`, totalled per currency, with the sentence `is owed <amount> in cash
+  the village has not paid yet. Unpaid cash keeps the account at resolve, so they
+  stay on as a former member and can still sign in to see it marked paid`. The
+  platform moves no money, so a debt the village owes a leaver never holds the
+  leaver.
 
 ### A former member, or a tombstone (the ruling of 2026-10-23)
 
@@ -3116,10 +3170,12 @@ their voice and equity across to Hypha, he answered: **"a if b hasn't already
 happened."**
 
 `resolveExit` in `server/lib/exitResolve.ts` is that sentence. Once the blocking
-domains are clean it reads the member's own account (`heldValueOf`):
+domains are clean it reads the member's own account (`heldValueOf`) and the cash
+the village still owes them (`unpaidCashOf`, `server/lib/formerMember.ts`):
 
 - **Something of value is still there**: a POSITIVE balance in a
-  platform-governed token whose kind is not `recognition`. The member stays on as
+  platform-governed token whose kind is not `recognition`, or, since 2026-10-30,
+  a `cash_owed` row in state `owed` or `claimed`. The member stays on as
   a **former member**. The account, the sign-in, the sessions and every balance
   stay exactly where they are. Membership ends (`membershipGranted` and
   `stageGranted` both clear, because either one admits somebody, see
@@ -3127,12 +3183,15 @@ domains are clean it reads the member's own account (`heldValueOf`):
   `member`, and their roles go by the calls the erasure makes: alignment texts
   marked `party_left`, permission holdings ended (`endPermissionHoldings`), org
   seatings released (`releaseSeatingsForUser`), unseated seat applications
-  withdrawn. The exit is marked resolved with a dated line,
-  `kept as a former member: still holds <amount> <token>, ...`, in human units,
-  and the response says `outcome: "former"` and lists what is held.
-- **Nothing of value is left**, because they carried it across to Hypha or never
-  held any: the anonymize tombstone runs exactly as it always has, and the
-  response says `outcome: "erased"`.
+  withdrawn, and every delegation they gave or carried ended (`endDelegationsOf`).
+  The exit is marked resolved with a dated line,
+  `kept as a former member: still holds <amount> <token>, ...; is owed <amount>
+  <currency> in cash`, in human units, each half present only when it applies,
+  and the response says `outcome: "former"` and lists what is `held` and `owed`.
+- **Nothing of value is left**, because they carried it across to Hypha, never
+  held any, and are owed no unpaid cash: the anonymize tombstone runs exactly as
+  it always has, and the response says `outcome: "erased"`. Cash already marked
+  `paid` keeps nothing.
 
 Recognition never keeps an account alive. It is a record of thanks and it is what
 shares the cycle pool, so `exit.keep_pct.recognition` stays at 0 with its
@@ -3148,32 +3207,86 @@ former member meets the same answer as everybody else. An admin can admit them
 again through any door that admits anybody: a stage grant at Member, an accepted
 membership signing, or the vouch count being met.
 
-**What this does not decide, and who does.** None of these is changed here, and
-each is the founder's call:
+**What a former member is, structurally.** `isFormerMember` in
+`server/lib/formerMember.ts`, asked at the moment it matters: the account has a
+RESOLVED exit (`exits.status`), is not a tombstone, and is not admitted now
+(`isAdmitted`). Never the resolution note's text, which is display copy. The last
+fact is why coming back costs nothing extra: admitted again, they read as a member
+everywhere at once, with no flag to clear.
 
-- **Voice in votes.** `buildElectorate` takes every present (not tombstoned)
-  account for which `ballot.vote` holds. A former member has no admission, no
-  stage grant, no roles and no admin tier, so `ballot.vote` (Member and above)
-  closes for them and they leave every roll built afterwards, unless a badge they
-  still hold grants `ballot.vote` (`BADGE_GRANTABLE` allows it) or a village has
-  lowered that key's stage. In `token` weight mode a former member on a roll
-  would weigh by their kept `governance.weight_token` balance. A ballot that
-  opened BEFORE the resolve froze them into its roll, and `castVote` reads only
-  the frozen roll, so they can still vote on it at the weight it froze.
-- **Delegations.** The erasure ends every delegation a leaver gave or carried;
-  the former-member path does not. A member who handed a former member their
-  voice keeps that delegation, and since a delegate off the roll casts nothing,
-  their vote goes uncast on ballots the former member is not on.
-- **Vouches.** `livingVouchesFor` drops only a tombstone's vouches, so a former
-  member's vouches still count toward admitting somebody else.
-- **Waning.** Kept Voice wanes like any other holding (section 6).
-- **The two erasure doors.** `DELETE /api/admin/players/:id` and
-  `POST /api/profile/delete-account` are unchanged: an erasure a member asks for
-  is their right (Costa Rica Law 8968). Neither reads held value. A member who
-  erases their account while holding tokens loses access to all of it: the
-  balances stay on the tombstone's ledger account, so conservation holds, but
-  nobody can sign in to spend or claim them, and no claim to Hypha can start
-  from a tombstone. Whether that door should warn first is open.
+**What the founder decided on 2026-10-30**, when the questions the first ruling
+raised were put to him with suggestions ("yes build all the exit suggestions!"),
+and where each answer lives. `server/exitLevers.routes.e2e.test.ts` drives all of
+them through the built server.
+
+- **Votes already open.** A vote they cast before leaving stands. After they
+  leave they cast no new one, on any ballot: `castVote` (`server/lib/ballots.ts`)
+  refuses with `LEFT_THE_VILLAGE_VOTE`, read by the vote route through
+  `leftTheVillage`, and `fileObjection` refuses an objection filed directly the
+  same way, because on a consent ballot that is a no. A roll frozen before the
+  departure is never rewritten, so they still count on it and the quorum does not
+  shift mid-vote.
+- **Voting power.** A former member is on no new ballot's roll, whatever badges
+  they hold or whatever rung a village lowered `ballot.vote` to:
+  `buildElectorate` runs `withoutFormerMembers` before it asks the gate. Their
+  Voice stays theirs, and counts again on the next roll once they are admitted
+  again. Giving or accepting a delegation is refused to them for the same reason
+  (`server/routes/delegation.ts`).
+- **Delegations and vouches.** `keepAsFormerMember` calls `endDelegationsOf`, the
+  erasure's own call, notices included: each member who handed them a voice is
+  told (`DELEGATE_LEFT_NOTICE`, one stable key per delegator) and decides their own
+  votes again, and a vote copied from them onto an open ballot is no longer cast.
+  A vouch that already admitted somebody stands. A vouch they gave somebody still
+  waiting stops counting, because a vouch is a member's ongoing promise:
+  `livingVouchesFor` (`server/repos/vouches.ts`) leaves it out of the count, and
+  the row is never deleted, so it counts again if they come back.
+- **Waning.** Kept Voice wanes like everyone's (section 6), and the default exit
+  terms say so (below).
+- **Deleting your own account.** The delete screen reads
+  `GET /api/me/holdings` (`server/routes/ownHoldings.ts`, the same `heldValueOf`
+  and `unpaidCashOf` resolve reads) when it opens, lists what the member holds,
+  says none of it can be recovered, and offers "Leave the village instead", which
+  opens the departure process on `/exit-policy`. `DELETE /api/admin/players/:id`
+  and `POST /api/profile/delete-account` themselves are unchanged: an erasure a
+  member asks for is their right (Costa Rica Law 8968), so the door is never
+  closed. A member who erases their account while holding tokens still loses
+  access to all of it: the balances stay on the tombstone's ledger account, so
+  conservation holds, and nobody can sign in to spend or claim them.
+- **Cash owed keeps the account.** Unpaid `cash_owed` counts as value at resolve
+  (above), so somebody owed cash and holding no tokens stays on, signs in, and
+  reads it marked paid. The exit desk shows it as the non-blocking `cash` line.
+
+**One gap this leaves, named.** A member resolved as a former member BEFORE
+2026-10-30 kept their delegations, because the former-member path did not end them
+then. Nothing ends those retroactively: they stand until either side revokes them,
+and a delegate who left casts nothing new, so the delegator's vote goes uncast on
+any ballot until they act.
+
+**Nothing new reaches a tombstone.** Its row keeps an address,
+`deleted-<id>@anonymized.invalid`, and the doors that pay a recipient a member
+names used to refuse only the standing examples, so that address, the tombstone's
+id or a heart on a departed member's old post issued Gratitude from the faucet,
+or moved credits, into an account nobody holds. `departedRecipient` in
+`server/lib/gratitude.ts` now refuses it on all three: `sendGratitude` (the wall
+and forum hearts), the Hearts give (`POST /api/gratitude`) and member sends
+(`POST /api/wallet/send`), with 404 and "That member has left the village, so
+nothing can be sent to them." before anything is written, so no allowance is
+spent and no ledger leg posts. A former member keeps their address and is not a
+tombstone, so they can still be paid.
+
+**The admin hand-mint refuses a tombstone too.** `POST /api/admin/tokens/:slug/mint`
+used to refuse only a missing recipient, so a steward could issue any platform
+token from `sys:mint` into a tombstone's account, or a standing example's. It now
+asks `mintRecipientRefusal` in `server/lib/gratitude.ts` before anything is
+recorded or moved: a tombstone gets 404 and the same sentence as the send doors,
+and a standing example gets 409 and the example refusal every admin door gives,
+under the co-sign line and over it, so no grant waits for a second steward in a
+departed member's name. The co-signed approval
+(`POST /api/admin/mint-requests/:id/approve`) asks it again when the second
+steward signs, so a grant asked for while a member was here mints nothing once
+they have left; it stays pending, and a steward can decline it. A former member
+can still be minted to. Pinned by `server/lib/gratitude.tombstone.test.ts` and
+`server/needsTombstone.routes.e2e.test.ts`.
 
 ### What the village owes
 
@@ -3185,16 +3298,22 @@ the gap for a founder to fall into.**
 
 > To be decided by the community: how contributed value is honored when someone
 > leaves. Until then, a member who leaves keeps their tokens and their account,
-> and stays on as a former member. Recognition stays on the village's books. The
-> exit records what they still hold.
+> and stays on as a former member. Recognition stays on the village's books.
+> Voice a former member keeps wanes under the same rule as everyone's. The exit
+> records what they still hold.
+
+and its fifth voluntary step reads "Anyone still holding tokens, or still owed
+cash, stays on as a former member, with their account and balances".
 
 It said "settled balances are held in exit settlement" until 2026-10-23, and the
-voluntary steps ended "The account becomes a tombstone". Both wordings are kept in
-`RETIRED_DEFAULT_TERMS`, for a reason worth knowing: a stored policy document is
-never merged with the defaults, so a village that saved its draft before that day
-still holds the old words. `platformDefaultTerms` treats them as the platform's,
-so the draft banner still cannot be cleared over them, and `withPolicyDefaults`
-reads today's wording in their place while the banner stands.
+voluntary steps ended "The account becomes a tombstone". From 2026-10-23 to
+2026-10-30 it said nothing of waning, and the fifth step named tokens alone. Every
+one of those wordings is kept in `RETIRED_DEFAULT_TERMS`, for a reason worth
+knowing: a stored policy document is never merged with the defaults, so a village
+that saved its draft before either day still holds the old words.
+`platformDefaultTerms` treats them as the platform's, so the draft banner still
+cannot be cleared over them, and `withPolicyDefaults` reads today's wording in
+their place while the banner stands.
 
 `/exit-policy` prints a caution card above the terms while that flag stands. The
 flag is not a checkbox an admin can simply clear: `platformDefaultTerms` compares

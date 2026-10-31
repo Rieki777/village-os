@@ -248,9 +248,20 @@ describe("getting the room ready from the start card", () => {
       </Router>,
     );
     fireEvent.click(await screen.findByRole("button", { name: RHYTHM_COPY.getReady }));
-    expect((screen.getByLabelText(SESSION_LIST_COPY.titleLabel) as HTMLTextAreaElement).value).toMatch(/^Garden circle, /);
-    expect((screen.getByLabelText(SESSION_COPY.circleLabel) as HTMLSelectElement).value).toBe("garden");
-    expect((screen.getByLabelText(SESSION_COPY.durationLabel) as HTMLInputElement).value).toBe("45");
+    /*
+     * THE FORM FILLS ITSELF ASYNCHRONOUSLY, so these wait rather than read once.
+     * The duration starts at the payload default (60) and the row's own durationMin
+     * (45) arrives after, so a synchronous read catches 60 under shard load and the
+     * failure reads "expected '60' to be '45'" on a pull request that touched
+     * nothing here. It did exactly that on #606 and again on 2026-10-30. The
+     * checkbox below already waited; these three were simply the ones nobody had
+     * lost a run to yet.
+     */
+    await waitFor(() => {
+      expect((screen.getByLabelText(SESSION_LIST_COPY.titleLabel) as HTMLTextAreaElement).value).toMatch(/^Garden circle, /);
+      expect((screen.getByLabelText(SESSION_COPY.circleLabel) as HTMLSelectElement).value).toBe("garden");
+      expect((screen.getByLabelText(SESSION_COPY.durationLabel) as HTMLInputElement).value).toBe("45");
+    });
     await waitFor(() => expect((screen.getByRole("checkbox", { name: /Shed roof/ }) as HTMLInputElement).checked).toBe(true));
     // The item for no circle is offered, and left for the person to choose.
     expect((screen.getByRole("checkbox", { name: /Picnic/ }) as HTMLInputElement).checked).toBe(false);

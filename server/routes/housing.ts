@@ -68,6 +68,7 @@ import {
   setAvailability as setHousingAvailability,
   setHomeType,
   setReservationStatus,
+  teamAlertSubject,
 } from "../lib/housing";
 
 type Deps = Pick<
@@ -445,7 +446,7 @@ export function register(app: Express, deps: Deps): void {
           // The person who asked, so a founder can hit reply and be talking
           // to them. Same move the contact relay makes.
           replyTo: email,
-          subject: `[${notifyDeps.projectName()}] Home reservation request from ${name}`,
+          subject: teamAlertSubject(notifyDeps.projectName(), name),
           html:
             `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">` +
             `<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">` +

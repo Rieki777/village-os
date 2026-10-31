@@ -291,6 +291,12 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     const v = await view("m-ana", sid);
     const tank = v.body.entries.find((e: any) => e.id === fixTank);
     expect(tank).toMatchObject({ itemId: waterItem, ownerSeatId: "seat-water", ownerSeatName: "Water keeper", dueOn: "2026-10-31", ownerUserId: null });
+    // The room names the role first and who sits there now by first name (Rye, 2026-10-30), read from the roster.
+    expect(tank.ownerSeatHolders).toEqual(["Cai"]);
+    // Somebody signed out is refused the room whole, so the parenthesis never reaches a public reader.
+    const signedOut = await as(null, "GET /api/sessions/:id", { params: room(sid) });
+    expect(signedOut.status).toBe(401);
+    expect(JSON.stringify(signedOut.body)).not.toContain("Cai");
   });
 
   it("decides a proposal only once everyone here consents, and only the facilitator marks it", async () => {
@@ -465,6 +471,9 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       expect(row.minutes_shareable, name).not.toContain(name);
     }
     expect(row.minutes_shareable).toContain("Fix the water tank before the rains, held by Water keeper, by 2026-10-31.");
+    // The seat's holder is a live reading for the room, never written into either minutes.
+    for (const minutes of [row.minutes_people, row.minutes_shareable]) expect(minutes).not.toContain("Water keeper (");
+    expect(row.minutes_shareable).not.toContain("Cai");
     expect(row.minutes_shareable).toContain("held by a member");
     expect(row.minutes_shareable).toContain("3 people took part.");
 
@@ -559,7 +568,7 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       ].sort(),
     );
     expect(JSON.stringify(ben)).not.toContain("Ana Reyes");
-    // A member who never joined a room exports sixteen empty lists: the task layer's two, the agenda library's three, the rhythms they set, the circles they follow, their calendar address, the circle calendars they attached, the review dates they set, and the advice process's two included.
+    // A member who never joined a room exports twenty empty lists: the task layer's two, the agenda library's three, the rhythms they set, the circles they follow, their calendar address, the circle calendars they attached, the review dates they set, the advice process's two, what was filled in for them, their agenda votes, and the meeting templates' two included.
     expect(await exportMemberSessions(pool, "m-never")).toEqual({
       sessions: [],
       items: [],
@@ -577,6 +586,10 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       reviewsSet: [],
       adviceAsked: [],
       adviceGiven: [],
+      filledIn: [],
+      agendaVotes: [],
+      heartShares: [],
+      prioritiesWritten: [],
     });
   });
 

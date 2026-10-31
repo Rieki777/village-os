@@ -10,6 +10,9 @@ import { authToken } from "@/lib/gameApi";
 import { DoorOpen, HeartHandshake, ShieldQuestion } from "lucide-react";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import LeavingEnds, { useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
+import { CashOwedNotice, VotesCastNotice, useUnpaidCash } from "@/components/LeavingKeeps";
+import LeavingNotices, { useLeavingNotices } from "@/components/LeavingNotices";
+import { useFocusTarget } from "@/lib/useFocusTarget";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -28,6 +31,11 @@ export default function ExitPolicy() {
   const identity = useIdentityConfirm("request-exit");
   // The aligned terms a departure ends when it is resolved (seat settings PR8). Signed in only.
   const endingTerms = useTermsLeavingEnds(!!user);
+  // Cash the village still owes keeps a leaver on as a former member (round 4, R4-4). Signed in only.
+  const cashOwed = useUnpaidCash(!!user);
+  // And their recurring payments: cancelled when the departure erases the account, still
+  // renewing when holding tokens or being owed cash keeps them a former member. The server says which. Signed in only.
+  const leavingNotices = useLeavingNotices(!!user, "exit");
 
   useEffect(() => {
     fetch("/api/exit-policy").then((r) => r.json()).then(setData).catch(() => {});
@@ -35,6 +43,8 @@ export default function ExitPolicy() {
 
   const policy = data?.policy;
   const shownError = error || identity.returnError;
+  // The departure card renders once the member is known, so look again then.
+  useFocusTarget([!!user, !!data]);
 
   const requestExit = () => {
     setError(""); setMsg("");
@@ -164,14 +174,19 @@ export default function ExitPolicy() {
           </div>
 
           {user && (
-            <div className="bg-card border border-border rounded-xl p-5">
+            // The delete screen's "Leave the village instead" lands here (`?focus=begin-departure`).
+            <div id="begin-departure" className="bg-card border border-border rounded-xl p-5 scroll-mt-24">
               <p className="font-semibold text-foreground text-sm mb-2">Begin your own departure</p>
               <p className="text-xs text-muted-foreground mb-3">
                 This opens the process above. It does not close your account.
-                If you still hold tokens when it ends, you stay on as a former
-                member and keep your account and balances. Otherwise your identity is removed at the end and your contributions stay part of the village's record.
+                If you still hold tokens, or the village still owes you cash,
+                when it ends, you stay on as a former member and keep your
+                account and balances. Otherwise your identity is removed at the end and your contributions stay part of the village's record.
               </p>
               <LeavingEnds titles={endingTerms} />
+              <CashOwedNotice count={cashOwed} door="departure" />
+              <VotesCastNotice />
+              <LeavingNotices notices={leavingNotices} />
               <div className="space-y-2">
                 <IdentityConfirmField state={identity} action="request-exit"
                   password={password} onPassword={setPassword}

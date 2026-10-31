@@ -37,6 +37,8 @@
  * COPY RULES. Platform code carries no village's name. No em-dashes, and every
  * string a member reads lives in this file so the voice gate reads it.
  */
+import type { FilledIn } from "./sessionOnBehalf";
+import type { ItemVotes } from "./sessionVotes";
 import type { TaskCard } from "./sessionTasks";
 
 // ── Stages ───────────────────────────────────────────────────────────────────
@@ -161,8 +163,11 @@ export type ItemStatus = (typeof ITEM_STATUSES)[number];
  * decision  a proposal text that a consent round runs on
  * action    something to do, which must leave with an owner
  * tension   something sensed that wants its own time; it goes to the backlog
+ * win       a win or a celebration somebody shares (Rye, 2026-10-30: "add a
+ *           section for 'wins and celebrations' to share about things
+ *           they've won at!"); it goes into the record under its item
  */
-export const ENTRY_KINDS = ["note", "idea", "seed", "decision", "action", "tension"] as const;
+export const ENTRY_KINDS = ["note", "idea", "seed", "decision", "action", "tension", "win"] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 
 export function isEntryKind(v: unknown): v is EntryKind {
@@ -176,7 +181,26 @@ export const ENTRY_LABELS: Record<EntryKind, string> = {
   decision: "Proposal",
   action: "Action",
   tension: "Tension",
+  win: "Win",
 };
+
+/**
+ * The sections an item's page shows, by name, so a meeting template can
+ * switch each on or off (a Friday session that recounts the week leads with
+ * `wins`). A view that names none shows them all.
+ */
+export const ITEM_SECTIONS = ["notes", "ideas", "wins", "proposal", "learned", "actions"] as const;
+export type ItemSection = (typeof ITEM_SECTIONS)[number];
+
+export function isItemSection(v: unknown): v is ItemSection {
+  return typeof v === "string" && (ITEM_SECTIONS as readonly string[]).includes(v);
+}
+
+/** The sections on, from whatever a template named: unknown names drop, and none named means every one. */
+export function itemSectionsOn(named: readonly unknown[] | null | undefined): Set<ItemSection> {
+  const known = (named ?? []).filter(isItemSection);
+  return new Set(named == null ? ITEM_SECTIONS : known);
+}
 
 /** open: live. done: an action finished or a decision consented. parked: moved to the backlog. */
 export const ENTRY_STATUSES = ["open", "done", "parked"] as const;
@@ -383,6 +407,36 @@ export function breathAt(b: { pattern: BreathKey; rounds: number; startedAt: num
   return { state: "done" };
 }
 
+// ── The sit ──────────────────────────────────────────────────────────────────
+
+/**
+ * A meditation drop in: a quiet the whole room keeps for a few minutes, read
+ * against the room's clock like the breath, so every screen ends together and
+ * every bowl rings at the same moment.
+ */
+export const SIT_MINUTES = [1, 3, 5, 10] as const;
+
+/**
+ * How long the light keeps moving after the bowl rings: one slow climb from
+ * the root to the crown and one slow fall back.
+ */
+export const SIT_SETTLE_SECS = 8;
+
+export type SitMoment =
+  | { state: "idle" }
+  | { state: "sitting"; progress: number; secondsLeft: number; elapsed: number }
+  | { state: "done"; sinceEnd: number };
+
+/** Where a shared sit is at `now`. */
+export function sitAt(s: { minutes: number; startedAt: number | null }, now: number): SitMoment {
+  if (s.startedAt == null) return { state: "idle" };
+  const total = s.minutes * 60;
+  const t = (now - s.startedAt) / 1000;
+  if (t < 0) return { state: "idle" };
+  if (t >= total) return { state: "done", sinceEnd: t - total };
+  return { state: "sitting", progress: t / total, secondsLeft: Math.ceil(total - t), elapsed: t };
+}
+
 // ── The room's state, which the facilitator moves ────────────────────────────
 
 export interface SessionState {
@@ -396,8 +450,16 @@ export interface SessionState {
   /** Grace minutes the room consented to add to the active item. */
   itemExtraMin: number;
   breath: { pattern: BreathKey; rounds: number; startedAt: number | null };
+  /** A meditation drop in the whole room sits together. */
+  sit: { minutes: number; startedAt: number | null };
   /** A speaking round: the order people speak in and who is speaking now. */
   round: { label: string | null; order: number[]; at: number };
+  /**
+   * The facilitator set the agenda's order (0290, shared/sessionVotes.ts):
+   * the room's vote is closed. False while the room votes and the agenda
+   * sorts itself by the score.
+   */
+  orderSet: boolean;
 }
 
 export function defaultSessionState(): SessionState {
@@ -409,7 +471,9 @@ export function defaultSessionState(): SessionState {
     itemStartedAt: null,
     itemExtraMin: 0,
     breath: { pattern: "settle", rounds: 6, startedAt: null },
+    sit: { minutes: 3, startedAt: null },
     round: { label: null, order: [], at: 0 },
+    orderSet: false,
   };
 }
 
@@ -426,6 +490,7 @@ export function normalizeSessionState(raw: unknown): SessionState {
     src = raw as Record<string, any>;
   }
   const breathIn = src.breath && typeof src.breath === "object" ? src.breath : {};
+  const sitIn = src.sit && typeof src.sit === "object" ? src.sit : {};
   const roundIn = src.round && typeof src.round === "object" ? src.round : {};
   const order = Array.isArray(roundIn.order)
     ? (roundIn.order as unknown[]).filter((x): x is number => intOrNull(x, 1, 2 ** 31) != null).slice(0, SESSION_LIMITS.maxPeople)
@@ -442,11 +507,16 @@ export function normalizeSessionState(raw: unknown): SessionState {
       rounds: (BREATH_ROUNDS as readonly number[]).includes(breathIn.rounds) ? breathIn.rounds : base.breath.rounds,
       startedAt: intOrNull(breathIn.startedAt, 0, 2 ** 53),
     },
+    sit: {
+      minutes: (SIT_MINUTES as readonly number[]).includes(sitIn.minutes) ? sitIn.minutes : base.sit.minutes,
+      startedAt: intOrNull(sitIn.startedAt, 0, 2 ** 53),
+    },
     round: {
       label: typeof roundIn.label === "string" ? cleanLine(roundIn.label, 60) : null,
       order,
       at: intOrNull(roundIn.at, 0, Math.max(0, order.length)) ?? 0,
     },
+    orderSet: src.orderSet === true,
   };
 }
 
@@ -459,6 +529,7 @@ export type SessionAction =
   | { type: "go"; stage: SessionStage }
   | { type: "start" }
   | { type: "breath"; pattern?: BreathKey; rounds?: number; run: boolean }
+  | { type: "sit"; minutes?: number; run: boolean }
   | { type: "item"; itemId: number | null }
   | { type: "extend"; minutes: number }
   | { type: "round"; label: string | null; order: number[] }
@@ -485,6 +556,12 @@ export function parseSessionAction(raw: unknown): SessionAction | null {
         out.rounds = a.rounds;
       }
       return out;
+    }
+    case "sit": {
+      if (typeof a.run !== "boolean") return null;
+      if (a.minutes === undefined) return { type: "sit", run: a.run };
+      if (!(SIT_MINUTES as readonly number[]).includes(a.minutes)) return null;
+      return { type: "sit", minutes: a.minutes, run: a.run };
     }
     case "item":
       return a.itemId === null || intOrNull(a.itemId, 1, 2 ** 31) != null ? { type: "item", itemId: a.itemId } : null;
@@ -524,6 +601,8 @@ export function applySessionAction(state: SessionState, action: SessionAction, n
           startedAt: action.run ? now : null,
         },
       };
+    case "sit":
+      return { ...state, sit: { minutes: action.minutes ?? state.sit.minutes, startedAt: action.run ? now : null } };
     case "item":
       if (action.itemId === state.activeItemId) return state;
       return { ...state, activeItemId: action.itemId, itemStartedAt: action.itemId == null ? null : now, itemExtraMin: 0 };
@@ -791,6 +870,8 @@ export interface SessionPerson {
    * village's own art, and nothing they uploaded leaves their profile this way.
    */
   avatar?: string | null;
+  /** While open: the facilitator gave this arrival for them (0288, shared/sessionOnBehalf.ts). */
+  arrivalFilledIn?: FilledIn | null;
 }
 
 export interface SessionItem {
@@ -815,6 +896,10 @@ export interface SessionItem {
    */
   libraryId?: number | null;
   broughtBy?: string | null;
+  /** The latest fill-in on it that still stands (0288, shared/sessionOnBehalf.ts). */
+  filledIn?: FilledIn | null;
+  /** The room's vote on it (0290, shared/sessionVotes.ts). Optional so older fixtures still type. */
+  votes?: ItemVotes;
 }
 
 export interface SessionEntry {
@@ -828,8 +913,16 @@ export interface SessionEntry {
   ownerName: string | null;
   ownerSeatId: string | null;
   ownerSeatName: string | null;
+  /**
+   * First names of the people who sit in the owning seat now, read from the roster when the
+   * room is read, so a line can say "Treasurer (Rick)" (Rye, 2026-10-30). Only the signed-in
+   * room view fills it; the minutes and anything that leaves the village never carry it.
+   */
+  ownerSeatHolders?: string[];
   dueOn: string | null;
   createdAt: string;
+  /** The latest fill-in on it that still stands (0288, shared/sessionOnBehalf.ts). */
+  filledIn?: FilledIn | null;
 }
 
 /**
@@ -865,6 +958,11 @@ export interface SeatOption {
 }
 
 export interface SessionView {
+  /**
+   * The sections each item's page shows, when a meeting template named them
+   * (`ITEM_SECTIONS`). Absent or null shows every one.
+   */
+  itemSections?: ItemSection[] | null;
   id: number;
   title: string;
   circleId: string | null;
@@ -955,6 +1053,7 @@ export interface SessionListRow {
  *
  *   GET    /api/sessions                          { open: SessionListRow[], recent: SessionListRow[], circles: {id,name}[], library }
  *   POST   /api/sessions                          { title, circleId?, durationMin?, libraryIds? } -> { id }
+ *     (`templateId?` opens it from a meeting template and links it to that series: shared/sessionTemplates.ts)
  *          (the agenda library's own doors are listed in shared/sessionLibrary.ts)
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
  *   PATCH  /api/sessions/:id                      SessionPatch { title } -> { ok }
@@ -967,7 +1066,8 @@ export interface SessionListRow {
  *   POST   /api/sessions/:id/entries              { kind, text, itemId?, ownerSeatId?, dueOn? } -> { id }
  *   PATCH  /api/sessions/:id/entries/:entryId     { claim?, release?, ownerSeatId?, text?, dueOn?, status? } -> { ok }
  *   DELETE /api/sessions/:id/entries/:entryId     { ok }
- *   POST   /api/sessions/:id/respond              { target, value, text? } -> { ok }
+ *   POST   /api/sessions/:id/respond              { target, value, text? } -> { ok } (never for someone else)
+ *   POST   /api/sessions/:id/on-behalf/:fillId/undo   {} -> { ok } (shared/sessionOnBehalf.ts)
  *   POST   /api/sessions/:id/act                  { action: SessionAction } -> { ok, state }
  *   POST   /api/sessions/:id/hosts                { facilitatorUserId?, secretaryUserId? } -> { ok }
  *   POST   /api/sessions/:id/close                {} -> { ok } or 409 { error, unowned: number[] }
@@ -1071,6 +1171,7 @@ export function buildMinutes(input: MinutesInput, audience: MinutesAudience): st
       lines.push(`- **${how}:** ${text(d.text)}${counts}`);
     }
     for (const s of list.filter((e) => e.kind === "seed")) lines.push(`- **What we learned:** ${text(s.text)}`);
+    for (const w of list.filter((e) => e.kind === "win")) lines.push(`- **Win:** ${text(w.text)}`);
     for (const a of list.filter((e) => e.kind === "action" && e.status !== "parked")) {
       lines.push(`- **Action:** ${text(a.text)}, held by ${owner(a)}${a.dueOn ? `, by ${a.dueOn}` : ""}.`);
     }
@@ -1146,6 +1247,7 @@ export const SESSION_COPY = {
   overChoices: "Time is up for this item. Add five minutes with the room's consent, park it, or wrap it up.",
   addNote: "Add a note",
   addIdea: "Add an idea",
+  addWin: "Share a win",
   addAction: "Add an action",
   addTension: "Name a tension",
   addDecision: "Write the proposal",
@@ -1348,6 +1450,28 @@ export const ROOM_COPY = {
   breathCounts: (secs: readonly number[]) => secs.join(" · "),
   breathStartedSay: (rounds: number) => `The shared breath has started, ${rounds} rounds.`,
 
+  sitTitle: "Sit together",
+  sitIdle: "A few minutes of quiet for the whole room. A singing bowl rings on every screen when it ends.",
+  sitMinutes: "Minutes",
+  sitStart: "Start the sit",
+  sitStop: "End the sit early",
+  sitAgain: "Sit again",
+  sitMinutesWord: (n: number) => (n === 1 ? "1 minute" : `${n} minutes`),
+  sitLeft: (secondsLeft: number) => {
+    const m = Math.floor(secondsLeft / 60);
+    const s = secondsLeft % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  },
+  sitLeftHint: "left in the quiet",
+  sitSitting: "Rest your eyes. The bowl will call you back.",
+  sitDone: "The bowl has rung. Come back slowly.",
+  sitStartedSay: (minutes: number) => `The sit has started, ${minutes === 1 ? "1 minute" : `${minutes} minutes`}.`,
+  sitEndedSay: "The sit has ended.",
+  bellOn: "Bell on this screen",
+  bellOff: "Turn the bell on",
+  bellHint: "Browsers stay silent until you tap once. Tap here so the bowl can ring for you.",
+  bellMuted: "Sound is muted on this device, so the bowl will not ring.",
+
   giveNumber: "Give my number",
   changeNumber: "Change my number",
   theRoom: "The room",
@@ -1421,6 +1545,19 @@ export const ROOM_COPY = {
   extendFive: "Add five minutes",
   wrapNext: "Wrap up and start the next",
   wrapUp: "Wrap it up",
+  /** The facilitator's next-step bar: the one next thing to do, named, on the agenda, the items and the close. */
+  nextStepLabel: "Next step",
+  upNext: (title: string) => `Up next: ${title}`,
+  nowOn: (title: string) => `Now: ${title}`,
+  lastItem: "This is the last item on the agenda.",
+  timeUpFor: (title: string) => `Time is up for ${title}.`,
+  startFirst: "Start the first item",
+  startNext: "Start the next item",
+  itemsDone: "Every item on the agenda is done.",
+  agendaReady: "When the agenda is ready, start the first item.",
+  agendaNone: "Add an item to the agenda, or move on.",
+  closeLast: "Last step: one word each, then close the session.",
+  goToClose: "Go to Close the session",
   timeLeft: (seconds: number) => `${roomClock(seconds)} left`,
   timeOver: (seconds: number) => `${roomClock(seconds)} over`,
   leftWord: "left",
@@ -1430,6 +1567,8 @@ export const ROOM_COPY = {
   proposal: "Proposal",
   seed: "What we learned",
   seedHelp: "One sentence the circle wants to remember from this item. It goes into the record.",
+  wins: "Wins and celebrations",
+  winsHelp: "Something you won at, finished, or want the circle to celebrate. It goes into the record.",
   actionsHere: "Actions",
   nothingYet: "Nothing here yet.",
   writeHere: "Write it here",

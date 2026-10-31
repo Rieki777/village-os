@@ -26,6 +26,7 @@ import type { PlayerCardPayload } from "@shared/playerCardPayload";
 import type { ConsentAnswer, ConsentState } from "@shared/roleProposalConsent";
 import type { ProposalStatus, ShareAudience, WordValue } from "@shared/roleProposals";
 import type { SeatSettings } from "@shared/seatSettings";
+import type { WorkPay } from "@shared/workValue";
 
 export const PROPOSALS_URL = "/api/governance/role-proposals";
 
@@ -218,6 +219,8 @@ export interface OrgRoleIn {
   holders?: Array<{ userId?: string | null }>;
   isExample?: boolean;
   runbook?: string | null;
+  /** What the role pays, at the `terms.read` tier (server/lib/workPay.ts). Absent below it. */
+  pay?: WorkPay | null;
 }
 
 export interface OrgCircleIn {

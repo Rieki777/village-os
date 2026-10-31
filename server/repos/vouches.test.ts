@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
-import { recordVouch, vouchesBy, vouchesFor, vouchesForMany } from "./vouches";
+import { livingVouchesFor, recordVouch, vouchesBy, vouchesFor, vouchesForMany } from "./vouches";
 
 const configured = testDbConfigured();
 
@@ -81,5 +81,26 @@ describe.skipIf(!configured)("member_vouches on a real database", () => {
     expect(many.get("new-2")?.[0]?.kind).toBe("super");
     expect(many.has("nobody")).toBe(false);
     expect((await vouchesForMany(pool, [])).size).toBe(0);
+  });
+
+  it("the admission count leaves out a FORMER MEMBER'S vouch while they are away, and never a row (Rye, 2026-10-30)", async () => {
+    const q = (sql: string, params: unknown[]) => pool.query(sql, params); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const user = (id: string, membership: number, stage: string | null) =>
+      q("INSERT INTO users (id, name, email, password_hash, membership_granted, stage_granted) VALUES (?,?,?,?,?,?)", [id, id, `${id}@example.test`, "x", membership, stage]);
+    // Four vouchers: still here; left (resolved exit, no admission); left and admitted again; and one whose exit was cancelled.
+    await user("vt-here", 1, null);
+    await user("vt-left", 0, null);
+    await user("vt-back", 0, "member");
+    await user("vt-stayed", 0, null);
+    await q("INSERT INTO exits (id, user_id, status, opened_by) VALUES (?,?,?,?)", ["vt-exit-1", "vt-left", "resolved", "vt-left"]);
+    await q("INSERT INTO exits (id, user_id, status, opened_by) VALUES (?,?,?,?)", ["vt-exit-2", "vt-back", "resolved", "vt-back"]);
+    await q("INSERT INTO exits (id, user_id, status, opened_by) VALUES (?,?,?,?)", ["vt-exit-3", "vt-stayed", "cancelled", "vt-stayed"]);
+    for (const voucher of ["vt-here", "vt-left", "vt-back", "vt-stayed", "vt-no-row"]) {
+      await recordVouch(pool, { id: nextId(), voucherUserId: voucher, vouchedUserId: "vt-waiting", kind: "member" });
+    }
+
+    const counted = (await livingVouchesFor(pool, "vt-waiting")).map((v) => v.voucherUserId).sort();
+    expect(counted, "everybody except the member who left and has not come back").toEqual(["vt-back", "vt-here", "vt-no-row", "vt-stayed"]);
+    expect((await vouchesFor(pool, "vt-waiting")).length, "every row is still on the table").toBe(5);
   });
 });

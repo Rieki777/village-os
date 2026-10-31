@@ -72,7 +72,7 @@ const openKeys = async () => (await items.openItems(pool)).map((i) => `${i.sourc
 function deps(): ErasureDeps {
   const real = usersRepo(pool);
   return {
-    members: { byId: (id: string) => real.byId(id), update: (id: string, fn: any) => real.update(id, fn) },
+    members: { byId: (id: string) => real.byId(id), update: (id: string, fn: any, opts?: { erasure?: boolean }) => real.update(id, fn, opts) },
     submissionsRepo: { all: () => [], replaceAll: async () => undefined },
     roleHoldersRepo: { remove: async () => undefined },
     withRoleHolderLock: (fn) => fn(),
@@ -945,6 +945,45 @@ describe.skipIf(!configured)("the failed-actions report, against a real database
       expect(await erasureRecord(pool, MEMBER)).toMatchObject({ attempts: 1, finishedAt: null });
     });
 
+    /*
+     * Round 3, the engine lane's leftover. A record can lack "tombstone" over
+     * an account that already is one: the write committed and its note was
+     * lost (a deploy's SIGTERM between the step and `noteStepDone`), or a
+     * second resolve over the closed account emptied the steps and stopped
+     * early. Nobody can be using that account, so it is the job's to finish,
+     * the same as any closed account, and the report says it is closed.
+     */
+    it.each([
+      ["whose tombstone note was lost", null],
+      ["resolved a second time, whose fresh sweep emptied the steps and stopped early", "role-holdings"],
+    ])("finishes a closed account %s, and the report places it after the close", async (_case, failedStep) => {
+      const id = "failures-closed-unnoted";
+      const address = `deleted-${id}@anonymized.invalid`;
+      await q(
+        "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `is_example`) VALUES (?, 'A departed member', ?, '', 0) " +
+          "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `email` = VALUES(`email`), `password_hash` = ''",
+        [id, address],
+      );
+      await beginErasure(pool, id);
+      if (failedStep) await noteErasureFailed(pool, id, failedStep, "the role holder write was refused");
+      else await noteStepDone(pool, id, "role-holdings");
+      await q("UPDATE `member_erasures` SET `last_attempt_at` = CURRENT_TIMESTAMP - INTERVAL 3 HOUR WHERE `user_id` = ?", [id]);
+      expect((await erasureRecord(pool, id))!.stepsDone, "the note must be missing, or this is a different case").not.toContain("tombstone");
+
+      expect(
+        (await defaultSources(pool)[0].find()).map((f) => f.key),
+        "the report read a closed account as one that still works",
+      ).toEqual(["after-close"]);
+      expect(await resumeClosedErasures(pool, deps(), soon()), "the job left a closed account's deletion unfinished").toBe(
+        "resumed 1 closed deletion, 1 finished",
+      );
+      const record = (await erasureRecord(pool, id))!;
+      expect(record.finishedAt).toBeTruthy();
+      expect(record.stepsDone).toEqual(expect.arrayContaining(["tombstone", "member-agent-after-tombstone", "external-stores"]));
+      const [rows] = await q("SELECT `email` FROM `users` WHERE `id` = ?", [id]);
+      expect(rows).toEqual([{ email: address }]);
+    });
+
     it("waits out its backoff", async () => {
       await stalledAfterClose(1);
 
@@ -965,6 +1004,26 @@ describe.skipIf(!configured)("the failed-actions report, against a real database
 
       expect(await resumeClosedErasures(pool, deps(), soon())).toBeNull();
       expect(await erasureRecord(pool, MEMBER)).toMatchObject({ attempts: 1, finishedAt: null });
+    });
+
+    /*
+     * Round 2, finding 2. A release from before 0282 finishes sweeps without
+     * knowing `erased_identity` exists, so a village that rolled back and came
+     * forward again holds a departed member's name and address on a record
+     * that reads finished. Only another member's finished erasure used to take
+     * it, and a small village can go months without one.
+     */
+    it("lets go of who a finished deletion was for on its next run, with nothing to resume", async () => {
+      await q(
+        "INSERT INTO `member_erasures` (`user_id`, `finished_at`, `attempts`, `steps_done`, `erased_identity`) VALUES (?, CURRENT_TIMESTAMP, 1, JSON_ARRAY('tombstone'), ?)",
+        [MEMBER, JSON.stringify({ name: "Wren Halloway", email: "wren@examples.invalid", handle: null })],
+      );
+      const held = async () => ((await q("SELECT `erased_identity` AS v FROM `member_erasures` WHERE `user_id` = ?", [MEMBER]))[0] as any[])[0]?.v ?? null;
+      expect(await held(), "the fixture must hold an identity, or this is a different case").not.toBeNull();
+
+      expect(await resumeClosedErasures(pool, deps(), soon())).toBeNull();
+      expect(await held(), "a finished deletion still held the member's name and address").toBeNull();
+      expect((await erasureRecord(pool, MEMBER))!.finishedAt, "the record stays finished").toBeTruthy();
     });
 
     it("claims a sweep before running it, so one somebody attempted moments ago is left to that attempt", async () => {

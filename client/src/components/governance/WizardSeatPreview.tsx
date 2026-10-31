@@ -12,6 +12,10 @@
  * picker made, so the card can never be a seat the picker did not offer.
  * Nothing renders until the seat is picked and found.
  *
+ * What the seat pays (cash, tokens, Voice, badges) sits above the terms, the
+ * same block the seat's card on the map shows, so the member reads it before
+ * sending (Rye, 2026-10-30). Absent below the `terms.read` tier.
+ *
  * The terms are parsed with the editor's own parser. Mid-edit terms that do
  * not parse yet leave the drawer saying so, instead of drawing half a term.
  */
@@ -23,6 +27,7 @@ import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { parseSeatSettings } from "@shared/seatSettings";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatTermsDrawer from "@/components/power/SeatTermsDrawer";
+import WorkPayBlock from "@/components/WorkPayBlock";
 import { loadOrg } from "./pickSources";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 
@@ -82,13 +87,19 @@ export default function WizardSeatPreview({
           ctx={{ now: new Date(), season: seasonForSheet(season), classNames: null }}
           faces="stacked"
           settings={
-            parsed ? (
-              <SeatTermsDrawer
-                settings={parsed.ok ? parsed.settings : null}
-                unreadable={!parsed.ok}
-                villagePresets={villagePresets}
-                defaultOpen
-              />
+            parsed || row.pay ? (
+              <div className="space-y-2">
+                {/* What the seat pays, beside the terms asked for (Rye, 2026-10-30). */}
+                {row.pay && <WorkPayBlock pay={row.pay} variant="full" />}
+                {parsed && (
+                  <SeatTermsDrawer
+                    settings={parsed.ok ? parsed.settings : null}
+                    unreadable={!parsed.ok}
+                    villagePresets={villagePresets}
+                    defaultOpen
+                  />
+                )}
+              </div>
             ) : undefined
           }
         />

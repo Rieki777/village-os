@@ -44,6 +44,27 @@ export interface PayLine {
   name: string;
   /** Human units, in full: no ceiling binds work (WORK_PAY_TRIGGERS). */
   amount: number;
+  /**
+   * A voice token: governance weight, a say in village decisions, paid like
+   * any other line (Rye, 2026-10-23: "cash, tokens ... and voice"). Absent on
+   * every other token, and on an older server.
+   */
+  voice?: boolean;
+}
+
+/**
+ * A badge whose holders are paid more of one of this work's tokens (0278, Rye
+ * 2026-10-23: "badges that have multipliers should multiply token pay"). The
+ * multiplier is applied at payment, never to the card's figures, so a card
+ * states it beside the line instead: "x2 with the Builder badge".
+ */
+export interface PayBadge {
+  badge: string;
+  /** The token it multiplies, one of the work's own lines. */
+  token: string;
+  /** The token's live display name. */
+  name: string;
+  factor: number;
 }
 
 /**
@@ -80,6 +101,11 @@ export interface WorkPay {
    * `cadence`, like the token lines. Null or absent pays no cash.
    */
   cashPay?: WorkValue | null;
+  /**
+   * The badges that multiply one of `lines` for whoever holds them. Absent is
+   * an older server or a surface that did not ask; [] is no badge does.
+   */
+  badges?: PayBadge[];
 }
 
 /** The most token lines one piece of work may name. */

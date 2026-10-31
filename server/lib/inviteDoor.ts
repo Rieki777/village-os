@@ -25,9 +25,17 @@
  * the sentence a withdrawn link gets; a `claim` refused this way reads to the
  * doors as a link already taken. Either way the stranger holding the link never
  * reads the tombstone's name.
+ *
+ * A FORMER MEMBER'S LINKS OPEN NOTHING EITHER (round 6). A resolve that keeps a
+ * leaver as a former member withdraws their open links (the 'invitations' step,
+ * server/lib/exitResolve.ts), but it cannot see a link a sign-up had already
+ * taken, and that sign-up can give it back open, or welcome its newcomer, after
+ * membership ended. So the door also refuses a former member (`leftTheVillage`:
+ * a resolved departure and not admitted again), at the same three steps.
  */
 import type { Pool } from "mysql2/promise";
 
+import { leftTheVillage } from "./formerMember";
 import { claimInvite, inviteByHash, releaseInvite, revokeInvite } from "../repos/memberInvites";
 import { livingVouchesFor, recordVouch } from "../repos/vouches";
 import { INVITATION_NEEDED, INVITE_REFUSALS, hashInviteToken, inviteStanding } from "./invites";
@@ -50,11 +58,19 @@ export type InviteLookup =
 interface InviterFacts {
   name?: unknown;
   email?: unknown;
+  membershipGranted?: unknown;
+  stageGranted?: unknown;
 }
 
 /** A maker whose link may still open the door: a member row that is not a tombstone. */
 function makerStands(maker: InviterFacts | null | undefined): maker is InviterFacts {
   return !!maker && !isTombstone({ email: String(maker.email ?? "") });
+}
+
+/** `makerStands`, and not a former member (`leftTheVillage`, server/lib/formerMember.ts). */
+async function makerStill(pool: Pool, makerId: string, maker: InviterFacts | null | undefined): Promise<boolean> {
+  if (!makerStands(maker)) return false;
+  return !(await leftTheVillage(pool, { ...maker, id: makerId }));
 }
 
 export interface InviteDoor {
@@ -90,7 +106,7 @@ export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
       const standing = inviteStanding(row);
       if (standing !== "open") return { ok: false, error: INVITE_REFUSALS[standing] };
       const maker = await host.members.byId(row.inviterUserId);
-      if (!makerStands(maker)) return { ok: false, error: INVITE_REFUSALS.revoked };
+      if (!maker || !(await makerStill(host.getPool(), row.inviterUserId, maker))) return { ok: false, error: INVITE_REFUSALS.revoked };
       return { ok: true, id: row.id, inviterName: String(maker.name ?? ""), secondsLeft: row.secondsLeft };
     },
 
@@ -110,14 +126,14 @@ export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
       const pool = host.getPool();
       const inviter = await claimInvite(pool, inviteId, userId);
       if (!inviter) return null;
-      let maker: InviterFacts | null;
+      let stands: boolean;
       try {
-        maker = await host.members.byId(inviter);
+        stands = await makerStill(pool, inviter, await host.members.byId(inviter));
       } catch (err) {
         await releaseInvite(pool, inviteId, userId).catch(() => undefined);
         throw err;
       }
-      if (makerStands(maker)) return inviter;
+      if (stands) return inviter;
       await releaseInvite(pool, inviteId, userId);
       await revokeInvite(pool, inviteId, inviter);
       return null;
@@ -141,7 +157,7 @@ export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
      */
     async welcome(inviterUserId, userId) {
       try {
-        if (!makerStands(await host.members.byId(inviterUserId))) return;
+        if (!(await makerStill(host.getPool(), inviterUserId, await host.members.byId(inviterUserId)))) return;
         const needed = vouchBar(numberVar("membership.vouches_required"));
         const refusal = refuseVouch({
           voucherUserId: inviterUserId,

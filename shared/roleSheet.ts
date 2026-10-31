@@ -340,6 +340,8 @@ export interface Spot {
   avatar: string | null;
   /** The person filter's key (userId, else name). People only. */
   pickKey: string | null;
+  /** The member's account id, when the payload carries one: what a person's Gene Keys seal reads. People only. */
+  userId?: string | null;
 }
 
 export type ActionKind = "raise" | "signIn" | "contact" | "unreachable" | "none";
@@ -679,6 +681,7 @@ export function rosterFor(
       subIsDate: isDate,
       avatar: h.avatar ?? null,
       pickKey: h.userId ?? name,
+      userId: h.userId ?? null,
     });
   });
   for (let i = 0; i < Math.max(0, holderCount - holders.length); i++) {

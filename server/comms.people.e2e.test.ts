@@ -18,7 +18,10 @@
  *   - stop everything suppresses, and the People screen shows the person,
  *     their stop and their emails, to the founder and to nobody signed out;
  *   - a member chooses from their own account, their export carries it, and
- *     deleting their account takes every comms row of theirs with it.
+ *     deleting their account takes every comms row of theirs with it;
+ *   - and a member who asked to join signed out, was appointed and then left
+ *     takes with them the request's words, the team alert's subject and the
+ *     pulse line that named them.
  *
  * Links are signed in this process with the same VILLAGE_SECRETS_KEY the
  * server is given, which is exactly the key the server derives its own from.
@@ -59,6 +62,8 @@ const EARLY_EMAIL = "early.member@example.test";
 const FORM_EMAIL = "form.person@example.test";
 const HOUSING_EMAIL = "housing.person@example.test";
 const LEAVER_EMAIL = `leaver-${PORT}@example.test`;
+const WREN_EMAIL = `wren-${PORT}@example.test`;
+const TEAM_INBOX = "team.inbox@village.example.test";
 
 let child: ChildProcess | undefined;
 let testDb: TestDb | undefined;
@@ -336,5 +341,51 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the address book", () => {
       theirEmails.map(() => ({ to_email: "[removed]", subject: "[removed with the person]", contact_id: null })),
     );
     expect(await q("SELECT email_key FROM comms_suppressions WHERE email_key = ?", [LEAVER_EMAIL])).toHaveLength(0);
+  });
+
+  /*
+   * Adversarial round 2, findings 7 and 11, through the routes a person and a
+   * founder actually use: the request sent before an account existed, the
+   * team alert it set off, and the appointment line the pulse shows anybody.
+   */
+  it("forgets, with a member who leaves, the request they sent signed out, its alert's subject, and the pulse line naming them", async () => {
+    expect((await call("PUT", "/api/admin/email-config", { body: { resident: TEAM_INBOX } })).status).toBe(200);
+    const asked = await call("POST", "/api/forms/submit", {
+      body: { type: "membership-request", data: { name: "Wren Halloway", email: WREN_EMAIL, why: "My grandmother lived on Calle 3", heardFrom: "Rowan at the market" } },
+      token: null,
+    });
+    expect(asked.status, asked.text).toBe(200);
+    // The alert goes out after the answer, so it is waited for.
+    const alerts = () => q("SELECT id, subject FROM comms_messages WHERE origin = 'forms.team_alert' AND subject LIKE '%from Wren Halloway'");
+    let alert: RowDataPacket[] = [];
+    for (let i = 0; i < 50 && !(alert = await alerts()).length; i++) await settle(200);
+    expect(alert, "the team was told, by name").toHaveLength(1);
+
+    const reg = await call("POST", "/api/auth/register", { body: { name: "Wren Halloway", email: WREN_EMAIL, password: PASSWORD, paths: ["resident"] }, token: null });
+    expect(reg.status, reg.text).toBe(200);
+    const wrenToken = String(reg.json?.token ?? "");
+    const wrenId = String(reg.json?.user?.id ?? "");
+    const seated = await call("POST", "/api/admin/roles/founders-circle/holders", { body: { userId: wrenId, action: "add" } });
+    expect(seated.status, seated.text).toBe(200);
+    // Another Wren lives here, so the line can only be found by the subject the
+    // appointment recorded: its words read the same for either of them.
+    await q("INSERT INTO users (id, name, email, password_hash) VALUES ('people-e2e-wren-oak', 'Wren Oak', 'wren.oak@example.test', 'x')");
+    const pulse = async () => ((await call("GET", "/api/game/pulse", { token: null })).json as any[]).map((e) => String(e.text));
+    expect(await pulse(), "the control: a signed-out visitor reads the appointment").toContain("Wren joined the Founders Circle");
+
+    const gone = await call("POST", "/api/profile/delete-account", { body: { password: PASSWORD }, token: wrenToken });
+    expect(gone.status, gone.text).toBe(200);
+
+    const after = await pulse();
+    expect(after.filter((t) => t.includes("Wren")), "no line a signed-out visitor reads names them").toEqual([]);
+    expect(after, "the founder's appointment is still on the record").toContain("A departed member joined the Founders Circle");
+    const inbox = await call("GET", "/api/admin/submissions");
+    expect(inbox.status, inbox.text).toBe(200);
+    const request = (inbox.json as any[]).find((s) => s.type === "membership-request");
+    expect(request, "the request stays as the village's record of it").toBeTruthy();
+    for (const word of ["Wren", WREN_EMAIL, "grandmother", "Rowan at the market"]) {
+      expect(JSON.stringify(inbox.json), `"${word}" is gone from the inbox`).not.toContain(word);
+    }
+    expect((await q("SELECT subject FROM comms_messages WHERE id = ?", [alert[0].id]))[0].subject).toBe("[removed with the person]");
   });
 });

@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { WorkPay } from "@shared/workValue";
-import { cashWords, conversionTarget, lineWords, linesWords, payHeadline, paySummary, summaryWords, valueWords } from "./workPay";
+import { badgeWords, cashWords, conversionTarget, factorWords, lineWords, linesWords, payHeadline, paySummary, summaryWords, valueWords, voiceNames } from "./workPay";
 
 const RATES = { base: "EUR", asOf: "2026-10-21", rates: { CRC: 500, USD: 1.1, CHF: 0.95 } };
 
@@ -83,5 +83,25 @@ describe("a summary of many", () => {
 
   it("says nothing when nothing is valued or paid", () => {
     expect(summaryWords(paySummary([pay(), pay()]))).toBeNull();
+  });
+});
+
+describe("Voice and badges, the rest of the full pay (2026-10-30)", () => {
+  it("names the badge beside the token it multiplies, never as a new figure", () => {
+    const b = { badge: "Builder", token: "village-voice", name: "Village Voice", factor: 2 };
+    expect(badgeWords(b)).toBe("×2 Village Voice with the Builder badge");
+    expect(factorWords(1.5)).toBe("×1.5");
+    expect(factorWords(1.333333)).toBe("×1.33");
+  });
+
+  it("finds the Voice lines by the server's flag, not by the token's name", () => {
+    const p = pay({
+      lines: [
+        { token: "village-credit", name: "Village Credits", amount: 40 },
+        { token: "village-voice", name: "Say", amount: 5, voice: true },
+      ],
+    });
+    expect(voiceNames(p)).toEqual(["Say"]);
+    expect(voiceNames(pay())).toEqual([]);
   });
 });

@@ -62,6 +62,7 @@ import { villageTimezone } from "./villageReaders";
 import { ensureMemberNo, mapSession, maySee, memberNo, namesFor, rolesIn, type MemberLookup, type Named, type Outcome, type Refusal, type SessionRec, type Viewer } from "./liveSessions";
 import { civilDateKey } from "../../shared/lunar";
 import { SESSION_COPY, SESSION_REFUSALS, SESSION_SOMEONE } from "../../shared/sessions";
+import { holderFirstName } from "../../shared/roleHolderLabel";
 import { currentAccomplishments, groupByMoon, type AccomplishmentEvent, type AccomplishmentMoon } from "../../shared/taskAccomplishments";
 import type { WaitingAcceptance } from "../../shared/waitingOnYou";
 import {
@@ -338,14 +339,16 @@ async function bookFor(
   const seatHolders = new Map<string, string[]>();
   if (seats.size) {
     for (const role of await listOrgRoles(pool as Pool)) if (seats.has(role.id)) seatName.set(role.id, role.name);
+    // First names only: the card says "Held by Treasurer (Rick)" (Rye, 2026-10-30), so a
+    // surname would be a name sent for nothing.
     for (const seat of Array.from(seats)) {
       const holders = await Promise.all(
         liveHoldersOf(seatings, seat).map(async (userId) => {
           const m = await lookup(userId).catch(() => null);
-          return m && typeof m.name === "string" && m.name.trim() ? m.name.trim() : SESSION_SOMEONE;
+          return m && typeof m.name === "string" ? holderFirstName(m.name) : "";
         }),
       );
-      seatHolders.set(seat, holders);
+      seatHolders.set(seat, holders.filter(Boolean));
     }
   }
   return { names, seatName, seatHolders, noAcceptor: await nobodyAccepts(pool, rows, seatings, acceptors) };

@@ -21,6 +21,7 @@ import {
   type SaveOutcome,
   type SaveResult,
 } from "@/lib/journalOutbox";
+import GeneKeysMoon from "@/components/geneKeys/GeneKeysMoon";
 import GuidePanel from "./GuidePanel";
 import PracticePicker from "./PracticePicker";
 import SittingFlow from "./SittingFlow";
@@ -181,6 +182,8 @@ export default function TodayTab({
         </p>
       )}
 
+      {/* Maia's contemplation for this moon, once a member has Gene Keys lines (draws nothing otherwise). */}
+      {!sitting ? <GeneKeysMoon owner={owner} className="mb-6" /> : null}
       {!sitting ? (
         <PracticePicker
           depth={depth}
