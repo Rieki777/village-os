@@ -13,6 +13,12 @@
  *     words reach the people who were in those Heart shares; everybody else
  *     reads that it came up and how often.
  *
+ * SINCE 0298: a season priority is found by its id, so a reworded goal keeps
+ * its links and a removed one leaves them saying what they served; wins from
+ * an agenda item's page count with the meeting's own; and the people who were
+ * in a Heart share can say two of its tensions are the same one, or keep one
+ * apart, where the word guess got it wrong.
+ *
  * It is here for the question Heart share asks: is the way we work helping
  * people thrive? Behind the `sessions` module, members only.
  */
@@ -32,7 +38,7 @@ import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import { LIST_UI } from "@/components/sessions/SessionList";
-import { CHIP, HINT, LABEL_CAPS, SOFT, STAGE_LEDE, STAGE_TITLE } from "@/components/sessions/roomUi";
+import { BTN_QUIET, CHIP, HINT, INPUT, LABEL_CAPS, SOFT, STAGE_LEDE, STAGE_TITLE } from "@/components/sessions/roomUi";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch } from "@/lib/gameApi";
 import { useModules } from "@/modules/ModuleProvider";
@@ -51,6 +57,7 @@ function PriorityList({ items }: { items: readonly SeasonPriorityItem[] }) {
         <li key={`${p.sessionId}-${i}`} className="flex flex-wrap items-baseline gap-2 text-sm">
           <span className="text-foreground">{p.text}</span>
           <span className={CHIP}>{p.outcome ? PRIORITY_OUTCOME_LABEL[p.outcome] : SEASON_COPY.notMarked}</span>
+          {p.servedGoal && <span className="text-xs italic text-muted-foreground">{SEASON_COPY.servedGone(p.servedGoal)}</span>}
           <span className="text-xs text-muted-foreground">
             {p.sessionTitle}, {dayLabel(p.at)}
           </span>
@@ -65,7 +72,8 @@ function WinList({ wins }: { wins: readonly SeasonWin[] }) {
     <ul className="space-y-1">
       {wins.map((w, i) => (
         <li key={`${w.at}-${i}`} className="text-sm text-foreground">
-          {w.text} <span className="text-xs text-muted-foreground">{dayLabel(w.at)}</span>
+          {w.text} {w.source === "item" && <span className={CHIP}>{SEASON_COPY.fromItem}</span>}{" "}
+          <span className="text-xs text-muted-foreground">{dayLabel(w.at)}</span>
         </li>
       ))}
     </ul>
@@ -78,6 +86,8 @@ export default function SessionSeason() {
   const on = (modules.modules ?? []).some((m) => m.id === "sessions" && m.lifecycle !== "off");
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [seasonId, setSeasonId] = useState<string | null>(null);
+  const [regrouping, setRegrouping] = useState(false);
+  const [regroupError, setRegroupError] = useState<string | null>(null);
 
   const read = useCallback(async (id: string | null) => {
     setLoad({ kind: "loading" });
@@ -90,6 +100,22 @@ export default function SessionSeason() {
       setLoad({ kind: "failed" });
     }
   }, []);
+
+  /** Say how a tension groups; the answer is the season view as it now stands. */
+  const regroup = async (shareId: number, body: { sameAsId?: number | null; standsAlone?: boolean }) => {
+    setRegrouping(true);
+    setRegroupError(null);
+    try {
+      const res = await gameFetch(`${SEASON_VIEW_API}/tensions/${shareId}`, { method: "POST", body: JSON.stringify({ ...body, season: seasonId ?? undefined }) });
+      const out = (await res.json().catch(() => null)) as { view?: SeasonView; error?: string } | null;
+      if (!res.ok || !out?.view) return setRegroupError(typeof out?.error === "string" ? out.error : SEASON_COPY.regroupFailed);
+      setLoad({ kind: "ready", view: out.view });
+    } catch {
+      setRegroupError(SEASON_COPY.regroupFailed);
+    } finally {
+      setRegrouping(false);
+    }
+  };
 
   useEffect(() => {
     if (on && user) void read(seasonId);
@@ -162,7 +188,7 @@ export default function SessionSeason() {
               {view.goals.map((g) => {
                 const t = prioritiesTally(g.priorities);
                 return (
-                  <article key={g.text} className={`${SOFT} space-y-2`}>
+                  <article key={g.id} className={`${SOFT} space-y-2`}>
                     <h3 className="font-display text-xl text-foreground">
                       {g.text} {g.done && <span className={CHIP}>{SEASON_COPY.markedDone}</span>}
                     </h3>
@@ -221,7 +247,6 @@ export default function SessionSeason() {
                       <p className="flex flex-wrap items-baseline gap-2">
                         <span className="font-semibold text-foreground">{SEASON_COPY.weekOf(dayLabel(w.weekOf))}</span>
                         <span className={CHIP}>{SEASON_COPY.weekWins(w.wins.length)}</span>
-                        {w.itemWins > 0 && <span className={CHIP}>{SEASON_COPY.weekItemWins(w.itemWins)}</span>}
                         {w.prioritiesSet > 0 && <span className={CHIP}>{SEASON_COPY.weekPriorities(w.prioritiesSet, w.prioritiesDone)}</span>}
                       </p>
                       {w.wins.length > 0 && <WinList wins={w.wins} />}
@@ -236,12 +261,17 @@ export default function SessionSeason() {
                 {SEASON_COPY.tensionsHeading}
               </h2>
               <p className={HINT}>{SEASON_COPY.tensionsLede}</p>
+              {regroupError && (
+                <p role="alert" className="text-sm font-medium text-destructive">
+                  {regroupError}
+                </p>
+              )}
               {view.tensions.length === 0 ? (
                 <p className={HINT}>{SEASON_COPY.noTensions}</p>
               ) : (
                 <ul className="space-y-2">
                   {view.tensions.map((t, i) => (
-                    <li key={`${t.lastAt}-${i}`} className={`${SOFT} space-y-1`}>
+                    <li key={`${t.lastAt}-${i}`} className={`${SOFT} space-y-2`}>
                       <p className={t.text ? "text-foreground" : "text-sm italic text-muted-foreground"}>{t.text ?? SEASON_COPY.tensionHidden}</p>
                       <p className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                         <span className={t.sessions > 1 ? "font-semibold text-foreground" : undefined}>{SEASON_COPY.tensionTimes(t.sessions)}</span>
@@ -250,6 +280,53 @@ export default function SessionSeason() {
                           {t.sessions > 1 ? ` to ${dayLabel(t.lastAt)}` : ""}
                         </span>
                       </p>
+                      {/* The people who were there say how it groups: each wording they heard, kept apart or joined. */}
+                      {t.members && t.members.length > 0 && (
+                        <div className="space-y-1.5 border-t border-border pt-2">
+                          {t.members.length > 1 && (
+                            <ul className="space-y-1">
+                              {t.members.map((m) => (
+                                <li key={m.shareId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                  <span className="text-foreground">
+                                    {m.text} <span className="text-xs text-muted-foreground">{dayLabel(m.at)}</span>
+                                  </span>
+                                  <button type="button" className={BTN_QUIET} disabled={regrouping} onClick={() => void regroup(m.shareId, { standsAlone: true })}>
+                                    {SEASON_COPY.standsAlone}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {t.members.length === 1 && t.members[0].standsAlone && (
+                            <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              {SEASON_COPY.standsAloneNote}
+                              <button type="button" className={BTN_QUIET} disabled={regrouping} onClick={() => void regroup(t.members![0].shareId, { standsAlone: false })}>
+                                {SEASON_COPY.backTogether}
+                              </button>
+                            </p>
+                          )}
+                          {view.tensions.some((o) => o !== t && o.members?.length) && (
+                            <label className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+                              <span className="text-muted-foreground">{SEASON_COPY.sameAs}</span>
+                              <select
+                                className={`${INPUT} w-auto max-w-[18rem] truncate`}
+                                value=""
+                                disabled={regrouping}
+                                onChange={(e) => e.target.value && void regroup(t.members![t.members!.length - 1].shareId, { sameAsId: Number(e.target.value) })}
+                              >
+                                <option value="">{SEASON_COPY.sameAsPick}</option>
+                                {view.tensions
+                                  .filter((o) => o !== t && o.members?.length)
+                                  .map((o) => (
+                                    <option key={o.members![0].shareId} value={o.members![0].shareId}>
+                                      {o.text}
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+                          )}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
