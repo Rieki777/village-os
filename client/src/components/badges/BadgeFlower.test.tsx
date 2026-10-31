@@ -25,7 +25,7 @@ describe("BadgeFlower", () => {
 
   it("draws one petal per badge on both screens, each naming its badge", () => {
     const { container } = render(<BadgeFlower badges={many(5)} label="Your badges" onOpen={() => {}} />);
-    const [phone, wide] = container.querySelectorAll("svg");
+    const [phone, wide] = Array.from(container.querySelectorAll("svg"));
     expect(phone.querySelectorAll("path")).toHaveLength(5);
     expect(wide.querySelectorAll("path")).toHaveLength(5);
     expect(wide.querySelector("title")?.textContent).toMatch(/^Badge \d$/);
@@ -34,7 +34,7 @@ describe("BadgeFlower", () => {
 
   it("caps the phone at one ring and counts the rest", () => {
     const { container } = render(<BadgeFlower badges={many(100)} label="Your badges" onOpen={() => {}} />);
-    const [phone, wide] = container.querySelectorAll("svg");
+    const [phone, wide] = Array.from(container.querySelectorAll("svg"));
     expect(phone.querySelectorAll("path")).toHaveLength(PHONE_CAP);
     expect(wide.querySelectorAll("path")).toHaveLength(Math.min(100, DESKTOP_CAP));
     expect(container.textContent).toContain(`+${100 - PHONE_CAP}`);
@@ -42,7 +42,7 @@ describe("BadgeFlower", () => {
 
   it("colours a petal by its kind with a token", () => {
     const { container } = render(<BadgeFlower badges={many(3)} label="Your badges" onOpen={() => {}} />);
-    for (const p of container.querySelectorAll("path")) expect(p.getAttribute("fill")).toMatch(/^var\(--color-dash-/);
+    for (const p of Array.from(container.querySelectorAll("path"))) expect(p.getAttribute("fill")).toMatch(/^var\(--color-dash-/);
   });
 
   it("opens the roster on a click", () => {
