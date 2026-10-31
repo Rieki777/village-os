@@ -90,13 +90,11 @@ describe.skipIf(!configured)("which token does which job", () => {
       expect(jobs[id].tokens, id).toEqual([]);
       expect(jobs[id].setBy, id).toEqual({ kind: "nothing" });
     }
-    expect(jobs["proposal.award"].setBy).toEqual({ kind: "dial", key: "gratitude.proposal_accept_award" });
-    expect((await setVariable(pool, "gratitude.proposal_accept_award", "0")).ok).toBe(true);
-    try {
-      expect((await byId())["proposal.award"].tokens).toEqual([]);
-    } finally {
-      await setVariable(pool, "gratitude.proposal_accept_award", "100");
-    }
+    // An accepted proposal pays its own mint rules (Rye, 2026-10-23), seeded at
+    // Voice and Credits, and never Gratitude.
+    expect(jobs["proposal.award"].setBy).toEqual({ kind: "mint_rules", trigger: "proposal.accepted" });
+    expect(slugs(jobs["proposal.award"])).toEqual(expect.arrayContaining([CREDITS, VILLAGE_VOICE]));
+    expect(slugs(jobs["proposal.award"])).not.toContain(HEARTS);
   });
 
   it("names each token by its live registry name, so a rename reaches the screen", async () => {

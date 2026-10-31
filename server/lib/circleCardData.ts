@@ -27,6 +27,7 @@ import { charterFromRow } from "../../shared/circleCharter";
 import { circleWordKeysOf, parseCircleWords } from "../../shared/circleCharterParse";
 import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
 import { projectSeats, type SeatTier } from "./seatProjection";
+import { payBadgeBoosts, rolePayRules } from "./workPay";
 import { readCircleLive } from "./circleLive";
 import { circleSummary, type RhythmDeps } from "./sessionRhythm";
 import type { CycleClock } from "../../shared/cycleClock";
@@ -61,6 +62,8 @@ export interface CircleCardCtx {
   viewer: { userId: string; admin: boolean } | null;
   /** What `circleSummary` reads the circles from. */
   sessionsDeps: RhythmDeps;
+  /** Badges asleep this season, so a card names no multiplier the payment would skip. */
+  dormantBadges?: readonly string[];
 }
 
 /**
@@ -75,12 +78,15 @@ export async function buildCircleCardFor(
 ): Promise<CircleCard> {
   // The words an open draft would change are read where the holder rows are: the member tier.
   const memberTier = ctx.tier.people === "member";
-  const [roles, assignments, charterRow, adoptions, openProposals] = await Promise.all([
+  const [roles, assignments, charterRow, adoptions, openProposals, payRules, payBadges] = await Promise.all([
     listOrgRoles(pool),
     listOrgAssignments(pool, ctx.lapse),
     readCharterRow(pool, circle.id),
     readCircleAdoptions(pool, circle.id),
     memberTier ? openCircleWordProposals(pool, circle.id) : Promise.resolve(null),
+    // What each role pays, at the tier `/api/org` reads it (Rye, 2026-10-30: the full pay before you take it on).
+    ctx.tier.terms ? rolePayRules(pool) : Promise.resolve(undefined),
+    ctx.tier.terms ? payBadgeBoosts(pool, ctx.dormantBadges ?? []).catch(() => []) : Promise.resolve(undefined),
   ]);
   const inCircle = roles.filter((r) => r.active && r.circleId === circle.id);
   const ids = new Set(inCircle.map((r) => r.id));
@@ -96,6 +102,8 @@ export async function buildCircleCardFor(
     nameOf: () => "",
     firstName: (s) => s,
     ...(memberTier ? { handleOf: (id: string) => handles.get(String(id)) ?? null } : {}),
+    payRules,
+    payBadges,
   });
   // The live parts, at the tier the player card counts its signs at (`terms.read`).
   // The meeting rhythm, the next meeting, the last one and what waits come through Live Sessions' own
@@ -123,6 +131,7 @@ export async function buildCircleCardFor(
     holderCount: Number(s.holderCount) || 0,
     state: String(s.state ?? "open"),
     isExample: !!s.isExample,
+    ...(s.pay ? { pay: s.pay } : {}),
     holderHandles: memberTier
       ? (Array.isArray(s.holders) ? s.holders : [])
           .filter((h: any) => h?.kind === "member" && !h?.isAgent)

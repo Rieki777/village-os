@@ -24,6 +24,7 @@ import { ArrowLeft, Hand } from "lucide-react";
 import CircleScene from "@/components/CircleScene";
 import { ExampleChip } from "@/components/ExamplesBanner";
 import SeatGlyph from "./SeatGlyph";
+import { openingsOf } from "./villageCounts";
 import type { PowerCircle, PowerData, PowerSeat } from "./types";
 
 export default function CircleCard({
@@ -45,7 +46,8 @@ export default function CircleCard({
 
   const held = seats.reduce((n, s) => n + s.holderCount, 0);
   const places = seats.reduce((n, s) => n + s.seats, 0);
-  const open = Math.max(0, places - held);
+  // The page's one rule for an opening: a forming role's place is not one.
+  const open = openingsOf(seats);
 
   /*
    * THE DOMAIN, SUMMARISED, BECAUSE THE RAW FIELD IS AN ESSAY.
@@ -161,7 +163,7 @@ export default function CircleCard({
       {open > 0 && (
         <p className="text-xs text-amber-700 mb-3 flex items-center gap-1.5">
           <Hand className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-          {open} open call{open === 1 ? "" : "s"}. Tap a dashed opening to raise your hand.
+          {open} opening{open === 1 ? "" : "s"}. Tap a dashed one to raise your hand.
         </p>
       )}
 

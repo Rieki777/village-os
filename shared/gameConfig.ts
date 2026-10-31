@@ -113,6 +113,8 @@ export interface NextActionRule {
     | "membership-waiting"
     | "no-membership"
     | "no-quest-claimed"
+    /** The gene-keys module is on and this member has no lines saved (server/lib/geneKeys.ts). */
+    | "no-gene-keys"
     | "quest-in-progress"
     | "gratitude-unspent"
     | "always";
@@ -234,6 +236,10 @@ export interface GameConfig {
     name: string;
     /** Sentence-position variant, e.g. "gratitude" in "send gratitude". */
     nameLower: string;
+    /** What the village calls ALL its tokens together, the umbrella word. Rye,
+     *  2026-10-23: "Village Tokens is the umbrella word, which should be able
+     *  to be set in admin". Set in Admin then Tokens; pages say it as `{tokens}`. */
+    collectiveName: string;
     /** The project's EQUITY token, on Base, governed by Hypha. The platform
      *  never mints, moves, or prices it: it reads balances and displays them. */
     equity: TokenRef;
@@ -500,6 +506,8 @@ export const GAME_CONFIG: GameConfig = {
      *  and reaches this stored value only when the name is empty. Held in
      *  agreement with name by shared/currencyDefaults.test.ts. */
     nameLower: "gratitude",
+    /** The umbrella word's platform default, Rye's own (2026-10-23). A village renames it in Admin then Tokens. */
+    collectiveName: "Village Tokens",
     // Platform-neutral defaults. A project's real token names and symbols are
     // its own identity (Amora calls its equity token "Amora" per the
     // project's wish); that belongs in the project's own fork of this file,
@@ -598,6 +606,9 @@ export const GAME_CONFIG: GameConfig = {
     { id: "first-quest", when: "no-quest-claimed", label: "Take your first Quest", href: "/quests" },
     { id: "finish-quest", when: "quest-in-progress", label: "Turn in your Quest", href: "/quests" },
     { id: "send-gratitude", when: "gratitude-unspent", label: "Thank someone this cycle", href: "/gratitude" },
+    // Gene Keys are a choice a member may skip (Rye, 2026-10-22), and nothing remembers a skip, so this step
+    // stands only where the catch-all would: it never hides a letter, a Quest or a thank-you behind it.
+    { id: "gene-keys", when: "no-gene-keys", label: "Find your lines", href: "/profile/gene-keys" },
     { id: "explore", when: "always", label: "Find your next Quest", href: "/quests" },
   ],
 

@@ -100,6 +100,10 @@ export interface PowerCircle {
   status?: string;
   order?: number;
   color?: string | null;
+  /** The lucide icon name the circle stores; `iconFor` in lib/circleIcons draws it. */
+  icon?: string | null;
+  /** The circle's governance layer (link, lead, operating, advisory, council), once a village sets one. */
+  layer?: string | null;
   isExample?: boolean;
   decidesBy?: string | null;
   decidesByGloss?: string | null;
@@ -137,6 +141,8 @@ export interface PowerData {
     mayDeclare?: string[];
     /** Arrange mode: this reader may drag circles into each other (0208). */
     mayArrange?: boolean;
+    /** Which door an arrangement publishes through: the holder's power, or the admin panel's (0286). */
+    arrangeDoor?: "power" | "admin" | null;
     /*
      * THE THREE MAP EDITORS, and why there are three of them reading one
      * source. The reasoning lives here rather than beside the fields in

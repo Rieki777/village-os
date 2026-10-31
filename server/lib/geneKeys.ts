@@ -9,24 +9,26 @@
  *   - the member themselves: everything, their settings included;
  *   - another signed-in member: the Activation Sequence, the profile, type,
  *     strategy and authority, and only when the owner shows their lines;
- *   - Maia: a short paragraph, and only when the owner said yes to it.
+ *   - Maia: a short paragraph, and only when the owner said yes to it;
+ *   - "Who complements me": other members who opted in and show their lines,
+ *     and only to a member who opted in and shows theirs (0287).
  *
- * AT LAUNCH ONLY THE ACTIVATION SEQUENCE IS SHOWN (Rye, 2026-10-22). The
- * stored chart already holds the Venus and Pearl spheres; `SHOWN_SPHERES` (shared) is
- * the one line that opens them later, after their own live test (the Venus
- * sequence leans on the Moon, which changes line every couple of hours).
+ * LAUNCH SHOWED ONLY THE ACTIVATION SEQUENCE (Rye, 2026-10-22). Love and
+ * Prosperity (the Venus and Pearl spheres) opened once their live test passed,
+ * 77 of 77 against genekeys.com (2026-10-30); `viewOf` (shared) builds all three.
  *
  * Contract: shared/geneKeys.ts. Table: drizzle/0272. Statements: server/repos/geneKeys.ts.
  */
 import type { Pool } from "mysql2/promise";
 import { effectiveLifecycle } from "./modules";
+import { awardFirstTierNow } from "./badges";
 import {
   BODIES, GENE_KEYS_CALC_VERSION, analyse, chartProblems, profileOf, viewOf, withArticle,
-  type Chart, type GeneKeysView, type OwnGeneKeysView,
+  type Chart, type Complement, type ComplementsAnswer, type GeneKeysView, type OwnGeneKeysView,
 } from "../../shared/geneKeys";
 import {
-  deleteGeneKeys, readGeneKeys, shownGeneKeysByHandle, shownGeneKeysFor, updateGeneKeysSettings, writeGeneKeys,
-  type GeneKeysRow,
+  complementCandidates, deleteGeneKeys, readGeneKeys, shownGeneKeysByHandle, shownGeneKeysFor, updateGeneKeysSettings, writeGeneKeys,
+  type GeneKeysRow, type GeneKeysSettingsPatch,
 } from "../repos/geneKeys";
 import type { GeneKeysSource, GeneKeysVisibility } from "../../shared/geneKeys";
 
@@ -45,6 +47,8 @@ function ownViewOf(row: GeneKeysRow): OwnGeneKeysView | null {
     ...viewOf(chart),
     visibility: row.visibility,
     maia: row.maia,
+    complement: row.complement,
+    maiaPlain: row.maiaPlain,
     source: row.source,
     stale: row.calcVersion < GENE_KEYS_CALC_VERSION,
   };
@@ -86,14 +90,24 @@ export function parseSave(body: unknown): SaveParse {
   };
 }
 
-export type SettingsParse = { ok: true; visibility?: GeneKeysVisibility; maia?: boolean } | { ok: false; problem: string };
+export type SettingsParse = ({ ok: true } & GeneKeysSettingsPatch) | { ok: false; problem: string };
 
 export function parseSettings(body: unknown): SettingsParse {
   const b = (body ?? {}) as Record<string, unknown>;
   if (b.visibility !== undefined && b.visibility !== "show" && b.visibility !== "hide") return { ok: false, problem: "Lines are shown or hidden." };
   if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "Maia's permission is a yes or a no." };
-  if (b.visibility === undefined && b.maia === undefined) return { ok: false, problem: "Nothing to change." };
-  return { ok: true, visibility: b.visibility as GeneKeysVisibility | undefined, maia: b.maia as boolean | undefined };
+  if (b.complement !== undefined && typeof b.complement !== "boolean") return { ok: false, problem: "Who complements me is a yes or a no." };
+  if (b.maiaPlain !== undefined && typeof b.maiaPlain !== "boolean") return { ok: false, problem: "Talking plainly is a yes or a no." };
+  if (b.visibility === undefined && b.maia === undefined && b.complement === undefined && b.maiaPlain === undefined) {
+    return { ok: false, problem: "Nothing to change." };
+  }
+  return {
+    ok: true,
+    visibility: b.visibility as GeneKeysVisibility | undefined,
+    maia: b.maia as boolean | undefined,
+    complement: b.complement as boolean | undefined,
+    maiaPlain: b.maiaPlain as boolean | undefined,
+  };
 }
 
 // ── The doors the routes call ───────────────────────────────────────────────
@@ -101,6 +115,27 @@ export function parseSettings(body: unknown): SettingsParse {
 export async function ownGeneKeys(pool: Pool, userId: string): Promise<OwnGeneKeysView | null> {
   const row = await readGeneKeys(pool, userId);
   return row ? ownViewOf(row) : null;
+}
+
+// ── The badge ───────────────────────────────────────────────────────────────
+
+/** Seeded by drizzle/0287. Earned, no multiplier (Rye, 2026-10-30), never Gratitude. */
+export const LINES_FOUND_BADGE = "lines-found";
+
+/**
+ * "Lines found", the moment the member's lines are saved AND shown. A hidden
+ * member is never marked by a public badge; showing later earns it then. True
+ * only when this call awarded it, so the route sends one notice. A failure
+ * here never fails the save: the engine awards the same tier at cycle close.
+ */
+export async function earnLinesFound(pool: Pool, userId: string, visibility: GeneKeysVisibility): Promise<boolean> {
+  if (visibility !== "show" || effectiveLifecycle("badges") === "off") return false;
+  try {
+    return await awardFirstTierNow(pool, LINES_FOUND_BADGE, userId);
+  } catch (e) {
+    console.error("[gene-keys] the Lines found badge did not award; cycle close will", e);
+    return false;
+  }
 }
 
 export async function saveGeneKeys(pool: Pool, userId: string, save: Extract<SaveParse, { ok: true }>): Promise<OwnGeneKeysView | null> {
@@ -119,11 +154,7 @@ export async function saveGeneKeys(pool: Pool, userId: string, save: Extract<Sav
   return ownGeneKeys(pool, userId);
 }
 
-export async function changeGeneKeysSettings(
-  pool: Pool,
-  userId: string,
-  patch: { visibility?: GeneKeysVisibility; maia?: boolean },
-): Promise<OwnGeneKeysView | null> {
+export async function changeGeneKeysSettings(pool: Pool, userId: string, patch: GeneKeysSettingsPatch): Promise<OwnGeneKeysView | null> {
   const found = await updateGeneKeysSettings(pool, userId, patch);
   return found ? ownGeneKeys(pool, userId) : null;
 }
@@ -149,6 +180,38 @@ export async function geneKeysOfHandle(pool: Pool, handle: string): Promise<Gene
   return chart ? viewOf(chart) : null;
 }
 
+// ── Who complements me ──────────────────────────────────────────────────────
+
+/** At most this many people in the list: enough to start a team, few enough to read. */
+export const COMPLEMENTS_MAX = 12;
+
+/**
+ * The people whose lines fill this member's gaps. OPT-IN ON BOTH SIDES (Rye,
+ * 2026-10-23): the member must have said yes and show their own lines before
+ * they see anybody, and they see only others who did the same. Ranked by how
+ * many of the member's missing lines a person brings, then by a Human Design
+ * type the member does not have, then by name.
+ */
+export async function complementsFor(pool: Pool, userId: string): Promise<ComplementsAnswer> {
+  const mine = await readGeneKeys(pool, userId);
+  const myChart = mine ? chartOf(mine) : null;
+  if (!mine || !myChart) return { state: "no-lines" };
+  if (mine.visibility !== "show") return { state: "hidden" };
+  if (!mine.complement) return { state: "not-joined" };
+  const me = viewOf(myChart);
+  const people: Array<Complement & { otherType: boolean }> = [];
+  for (const row of await complementCandidates(pool, userId)) {
+    const chart = chartOf(row);
+    if (!chart) continue;
+    const view = viewOf(chart);
+    const fills = Array.from(new Set(view.lines)).filter((l) => !me.lines.includes(l)).sort((a, b) => a - b);
+    if (!fills.length) continue;
+    people.push({ name: row.name, handle: row.handle, view, fills, otherType: view.type !== me.type });
+  }
+  people.sort((a, b) => b.fills.length - a.fills.length || Number(b.otherType) - Number(a.otherType) || a.name.localeCompare(b.name));
+  return { state: "joined", people: people.slice(0, COMPLEMENTS_MAX).map(({ otherType: _o, ...p }) => p) };
+}
+
 // ── Maia ────────────────────────────────────────────────────────────────────
 
 /**
@@ -163,14 +226,51 @@ export async function geneKeysForAssistant(pool: Pool, userId: string): Promise<
   if (!row?.maia) return null;
   const chart = chartOf(row);
   if (!chart) return null;
-  const v = viewOf(chart);
+  return assistantNoteFor(viewOf(chart), row.maiaPlain);
+}
+
+/**
+ * The paragraph itself, apart from the read so it can be pinned by a test.
+ *
+ * Rye asked to talk "Maia speaks your type" through before building it, then
+ * said build all of it (2026-10-30), so it follows the lean put to him on
+ * 2026-10-23: VISIBLE (she says when she is shaping something, in a few
+ * words), LIGHT (her wording changes, what is on offer does not), she NUDGES
+ * THE CIRCLE rather than inviting on its behalf, and a member can ask her to
+ * talk plainly, which keeps the lines for choosing what to suggest and drops
+ * every trace of them from her wording.
+ */
+export function assistantNoteFor(v: GeneKeysView, plain: boolean): string {
+  const facts =
+    `Their Gene Keys profile is ${v.profile} (${v.names}). In Human Design they are ${withArticle(v.type)}, ` +
+    `with ${withArticle(v.authorityName)} authority. `;
+  const never = "Never tell them what they are able to do, and never steer them away from a role because of their lines.";
+  if (plain) {
+    return (
+      facts +
+      "They asked you to talk to them plainly. Let this shape only which things you suggest, never your wording: " +
+      "do not mention their profile, type or authority, and do not adapt your tone to them, unless they ask. " +
+      never
+    );
+  }
   return (
-    `Their Gene Keys profile is ${v.profile} (${v.names}). In Human Design they are ${withArticle(v.type)}. ` +
+    facts +
     `Strategy: ${v.strategy}. ${v.strategyLine} Authority: ${v.authorityName}. ${v.authorityLine} ` +
-    "Let this shape how you offer things: options to respond to for Generators, a named invitation for Projectors, " +
-    "room to start plus a nudge to tell their circle for Manifestors, and time to sleep on it for emotional authority. " +
-    "Never tell them what they are able to do, and never steer them away from a role because of their lines."
+    "Let this shape how you put things, lightly: the same options everyone gets, worded the way they decide best. " +
+    "When you shape something to how they work, say so in a few plain words the first time it matters, " +
+    "for example \"no rush on this one, you decide best after a night\". " +
+    "Never send an invitation on a circle's behalf. When a Projector would suit some work, suggest they tell the circle " +
+    "which work they would welcome an invitation to, or suggest a circle member invite them by name. " +
+    never
   );
+}
+
+// ── The Trail ───────────────────────────────────────────────────────────────
+
+/** For the next-step rule `no-gene-keys`: the module is on and this member has nothing saved. */
+export async function geneKeysMissing(pool: Pool, userId: string): Promise<boolean> {
+  if (effectiveLifecycle("gene-keys") === "off") return false;
+  return (await readGeneKeys(pool, String(userId))) === null;
 }
 
 // ── Erasure and export ──────────────────────────────────────────────────────

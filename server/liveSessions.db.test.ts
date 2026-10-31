@@ -291,6 +291,12 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     const v = await view("m-ana", sid);
     const tank = v.body.entries.find((e: any) => e.id === fixTank);
     expect(tank).toMatchObject({ itemId: waterItem, ownerSeatId: "seat-water", ownerSeatName: "Water keeper", dueOn: "2026-10-31", ownerUserId: null });
+    // The room names the role first and who sits there now by first name (Rye, 2026-10-30), read from the roster.
+    expect(tank.ownerSeatHolders).toEqual(["Cai"]);
+    // Somebody signed out is refused the room whole, so the parenthesis never reaches a public reader.
+    const signedOut = await as(null, "GET /api/sessions/:id", { params: room(sid) });
+    expect(signedOut.status).toBe(401);
+    expect(JSON.stringify(signedOut.body)).not.toContain("Cai");
   });
 
   it("decides a proposal only once everyone here consents, and only the facilitator marks it", async () => {
@@ -303,7 +309,9 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     const mark = (who: string) => as(who, "PATCH /api/sessions/:id/entries/:entryId", { params: room(sid, { entryId: String(proposal) }), body: { status: "done" } });
     expect(await mark("m-ana")).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
     // Sleeping on it needs no sentence and is never an objection, and the round waits for the answer after the night.
-    expect((await answer("m-dee", "sleep")).status).toBe(200);
+    // Since 0281 a night names when it ends, and the round waits until then.
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
+    expect((await as("m-dee", "POST /api/sessions/:id/respond", { params: room(sid), body: { target: `decision:${proposal}`, value: "sleep", answerBy: tomorrow } })).status).toBe(200);
     expect(await mark("m-ana")).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
     await answer("m-dee", "consent");
     expect(await mark("m-ben")).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.facilitatorOnly } });
@@ -463,6 +471,9 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       expect(row.minutes_shareable, name).not.toContain(name);
     }
     expect(row.minutes_shareable).toContain("Fix the water tank before the rains, held by Water keeper, by 2026-10-31.");
+    // The seat's holder is a live reading for the room, never written into either minutes.
+    for (const minutes of [row.minutes_people, row.minutes_shareable]) expect(minutes).not.toContain("Water keeper (");
+    expect(row.minutes_shareable).not.toContain("Cai");
     expect(row.minutes_shareable).toContain("held by a member");
     expect(row.minutes_shareable).toContain("3 people took part.");
 
@@ -557,7 +568,7 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       ].sort(),
     );
     expect(JSON.stringify(ben)).not.toContain("Ana Reyes");
-    // A member who never joined a room exports twelve empty lists: the task layer's two, the agenda library's three, the rhythms they set, the circles they follow and their calendar address included.
+    // A member who never joined a room exports twenty empty lists: the task layer's two, the agenda library's three, the rhythms they set, the circles they follow, their calendar address, the circle calendars they attached, the review dates they set, the advice process's two, what was filled in for them, their agenda votes, and the meeting templates' two included.
     expect(await exportMemberSessions(pool, "m-never")).toEqual({
       sessions: [],
       items: [],
@@ -571,6 +582,14 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       rhythmsSet: [],
       circlesFollowed: [],
       calendarAddress: [],
+      ownCalendarsAttached: [],
+      reviewsSet: [],
+      adviceAsked: [],
+      adviceGiven: [],
+      filledIn: [],
+      agendaVotes: [],
+      heartShares: [],
+      prioritiesWritten: [],
     });
   });
 

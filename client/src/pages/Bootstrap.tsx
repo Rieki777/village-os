@@ -1,6 +1,7 @@
 import Layout from "@/components/Layout";
 import { KeyRound, ArrowRight, Mail, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
 
 /**
  * The founder's way in on day one, and the way back in after a lockout.
@@ -32,6 +33,7 @@ export default function Bootstrap() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
@@ -226,14 +228,15 @@ export default function Bootstrap() {
                     />
                     <input
                       id="bootstrap-password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       required
                       autoComplete="off"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full rounded-lg border border-amber-ink/15 py-2.5 pl-9 pr-3 text-amber-ink focus:border-teal-deep focus:outline-none focus:ring-2 focus:ring-teal-deep"
+                      className="w-full rounded-lg border border-amber-ink/15 py-2.5 pl-9 pr-12 text-amber-ink focus:border-teal-deep focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       placeholder="From your hosting environment"
                     />
+                    <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
                   </div>
                   <p className="mt-1 text-xs text-amber-ink">
                     This is the <code className="font-mono">ADMIN_PASSWORD</code> variable where

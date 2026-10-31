@@ -147,6 +147,25 @@ describe("reading a vendor record", () => {
     expect(r.droppedForAnAddress).toEqual(["Body"]);
   });
 
+  it("takes what the source holds a role to pay, and drops pay terms carrying an address", () => {
+    // The four fields as the source's Operations role described them on
+    // 2026-10-30: two selects, free text, and one monthly dollar figure.
+    const r = readVendorRecord("role", {
+      "Role Name": "Finance Steward",
+      "Compensation Model": { name: "Stipend" },
+      "Compensation Status": { name: "Deferred" },
+      "Compensation Target (Monthly)": 1200,
+      "Compensation Terms": "Paid once the grant lands. Questions to kai@example.test.",
+    });
+    expect(r.fields).toEqual({
+      "Role Name": "Finance Steward",
+      "Compensation Model": { name: "Stipend" },
+      "Compensation Status": { name: "Deferred" },
+      "Compensation Target (Monthly)": 1200,
+    });
+    expect(r.droppedForAnAddress).toEqual(["Compensation Terms"]);
+  });
+
   it("can say what it will show, so a card never promises a field this drops", () => {
     expect(shownFields("role")).toContain("Role Name");
     expect(shownFields("role")).not.toContain("Active Holders");

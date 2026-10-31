@@ -120,6 +120,8 @@ export async function cardContext(deps: CardDeps, viewerId: string | null, viewe
     firstName: deps.firstName,
     // 0274: the role card shows the CCOS terms under the circle card's own switch.
     frameworkTerms: deps.boolVar("org.ccos_terms"),
+    // The owner's character portrait in the hero's gold ring.
+    villageId: villageId(),
   };
 }
 

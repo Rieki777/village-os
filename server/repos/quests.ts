@@ -123,6 +123,14 @@ export interface QuestRecord {
    * it; an empty list means it pays no tokens. Read through `readValueTokens`.
    */
   valueTokens?: TokenAmount[] | null;
+  /**
+   * The cash the quest pays at consent, in minor units of `cashCurrency`
+   * (0285). The platform never pays it: the consent records it as owed
+   * (`oweQuestCash`, server/lib/cashOwed.ts). NULL pays no cash.
+   */
+  cashMinor?: number | null;
+  /** The village's currency when the cash was set, stamped by the server. */
+  cashCurrency?: string | null;
 }
 
 /**
@@ -174,7 +182,7 @@ const QUEST_SELECT =
   // is_example is selected so consumers can filter. Without it no downstream
   // code could tell an example quest from a real one â€” the work-exchange
   // suggester was offering seeded quests to real guests as paid work.
-  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens FROM quests";
+  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency FROM quests";
 
 /** JSON column â†’ string array, tolerant of junk: an empty list renders fine. */
 function toList(v: unknown): string[] {
@@ -220,6 +228,8 @@ function rowToQuest(r: RowDataPacket): QuestRecord {
     valueMinor: readWorkValue(r.value_minor, r.value_currency)?.minor ?? null,
     valueCurrency: readWorkValue(r.value_minor, r.value_currency)?.currency ?? null,
     valueTokens: readValueTokens(r.value_tokens),
+    cashMinor: readWorkValue(r.cash_minor, r.cash_currency)?.minor ?? null,
+    cashCurrency: readWorkValue(r.cash_minor, r.cash_currency)?.currency ?? null,
   };
 }
 
@@ -272,11 +282,15 @@ function questParams(q: QuestRecord): any[] {
     q.valueMinor == null || !q.valueCurrency ? null : Math.trunc(Number(q.valueMinor)),
     q.valueMinor == null || !q.valueCurrency ? null : String(q.valueCurrency).toUpperCase(),
     valueTokensToStore(q.valueTokens),
+    // The cash it pays (0285), appended for the same reason. Zero or no
+    // currency stores neither half: a quest that pays no cash has no row here.
+    !q.cashMinor || !q.cashCurrency ? null : Math.trunc(Number(q.cashMinor)),
+    !q.cashMinor || !q.cashCurrency ? null : String(q.cashCurrency).toUpperCase(),
   ];
 }
 
 const QUEST_COLS =
-  "(id, title, description, impact, gratitude, gratitude_min, gratitude_max, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, subtitle, story, first_step, steps, deliverable, tips, image_url, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens)";
+  "(id, title, description, impact, gratitude, gratitude_min, gratitude_max, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, subtitle, story, first_step, steps, deliverable, tips, image_url, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency)";
 
 /**
  * The quest's calendar row (0085): written on the quest's own save path, so a
@@ -309,7 +323,7 @@ export function questsRepo(pool: Pool): QuestsRepo {
 
     async add(q) {
       await pool.query(
-        `INSERT INTO quests ${QUEST_COLS} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO quests ${QUEST_COLS} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         questParams(q),
       );
       await syncQuestCalendar(pool, q);
@@ -332,7 +346,7 @@ export function questsRepo(pool: Pool): QuestsRepo {
           "UPDATE quests SET title=?, description=?, impact=?, gratitude=?, gratitude_min=?, gratitude_max=?, " +
             "duration=?, difficulty=?, circle=?, status=?, icon=?, role_required=?, min_stage=?, requires_role=?, stay_credit_reward=?, tags=?, sort_order=?, " +
             "subtitle=?, story=?, first_step=?, steps=?, deliverable=?, tips=?, image_url=?, starts_at=?, ends_at=?, due_at=?, " +
-            "value_minor=?, value_currency=?, value_tokens=? WHERE id=?",
+            "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=? WHERE id=?",
           [...p.slice(1), id],
         );
         await conn.commit();

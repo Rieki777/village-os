@@ -91,7 +91,7 @@ export function register(app: Express, deps: Deps): void {
       res.status(429).json({ error: bucket.error });
       return null;
     }
-    return { userId };
+    return { userId, sessionVersion: Number(user.tokenVersion ?? 0) };
   };
 
   app.get(FOLLOW_API, async (req, res) => {
@@ -111,7 +111,7 @@ export function register(app: Express, deps: Deps): void {
     const who = await signedIn(req, res, { name: "sessions-feed-key", max: CALENDAR_LIMITS.keysPerDay, windowMs: DAY_MS, error: CALENDAR_REFUSALS.tooManyAddresses });
     if (!who) return;
     res.setHeader("Cache-Control", "no-store");
-    res.json({ url: await makeAddress(getPool(), who, originOf(req) || deps.deploymentOrigin()) });
+    answer(res, await makeAddress(getPool(), who, originOf(req) || deps.deploymentOrigin(), who.sessionVersion), (url) => ({ url }));
   });
 
   app.delete(FOLLOW_KEY_API, async (req, res) => {

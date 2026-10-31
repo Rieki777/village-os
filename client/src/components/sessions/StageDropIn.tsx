@@ -1,6 +1,7 @@
 /**
- * DROP IN. The place line read out loud, a breath taken together, and a look
- * at who is here. Nothing is asked of anybody yet.
+ * DROP IN. The place line read out loud, a breath taken together, a few
+ * minutes sat in quiet if the facilitator starts one, and a look at who is
+ * here. Nothing is asked of anybody yet.
  *
  * Each thing is said once: the moon and the season sit in the room's header,
  * so this stage leaves them out, and the people are listed here in full while
@@ -12,6 +13,7 @@
 import { ROOM_COPY, SESSION_COPY } from "@shared/sessions";
 import PeopleHere from "./PeopleHere";
 import SharedBreath from "./SharedBreath";
+import SharedSit from "./SharedSit";
 import { CARD, H3 } from "./roomUi";
 import type { StageProps } from "./roomUi";
 
@@ -26,6 +28,9 @@ export default function StageDropIn({ view, actions, offset }: StageProps & { of
       </figure>
       <div className={CARD}>
         <SharedBreath breath={view.state.breath} offset={offset} facilitates={view.me.facilitates} actions={actions} />
+      </div>
+      <div className={CARD}>
+        <SharedSit sit={view.state.sit} offset={offset} facilitates={view.me.facilitates} actions={actions} />
       </div>
       <section className={CARD} aria-labelledby="dropin-who">
         <h3 id="dropin-who" className={`${H3} mb-3`}>

@@ -35,6 +35,7 @@ const WORDS: [string, string][] = [
   ["{role}", "what a role is called"],
   ["{token}", "your recognition token"],
   ["{value}", "your value token"],
+  ["{tokens}", "what your village calls its tokens together"],
 ];
 
 function clip(text: string, max: number): string {

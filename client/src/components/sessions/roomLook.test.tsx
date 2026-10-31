@@ -71,6 +71,8 @@ function doors(): RoomActions {
     patchEntry: (...a) => ok("patchEntry", ...a),
     deleteEntry: (...a) => ok("deleteEntry", ...a),
     respond: (...a) => ok("respond", ...a),
+    answerNight: (...a) => ok("answerNight", ...a),
+    decideAfterNight: (...a) => ok("decideAfterNight", ...a),
     act: (...a) => ok("act", ...a),
     hosts: (...a) => ok("hosts", ...a),
     close: (...a) => ok("close", ...a),
@@ -78,6 +80,7 @@ function doors(): RoomActions {
     discard: (...a) => ok("discard", ...a),
     library: async () => [],
     bringFromLibrary: (...a) => ok("bringFromLibrary", ...a),
+    sendTension: (...a) => ok("sendTension", ...a),
   };
 }
 

@@ -60,6 +60,7 @@ const card = (over: Partial<LibraryCard>): LibraryCard => ({
   canMoveCircle: false,
   canWithdraw: false,
   canBringAgain: false,
+  source: null,
   ...over,
 });
 

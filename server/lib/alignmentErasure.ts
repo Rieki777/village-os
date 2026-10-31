@@ -54,8 +54,13 @@
  *
  * It runs AFTER the tombstone, as the journal step does, and is handed the
  * name and handle the member had before it: by then the user row holds the
- * tombstone's. A resumed erasure that only has the tombstone's name scrubs
- * nothing new, which is the honest outcome of a step that already ran.
+ * tombstone's. On a first run that is the record read before the sweep; on a
+ * resume it is the identity `member_erasures` held from before the tombstone
+ * (0282, `asTheyWere` in server/lib/erasure.ts), because a resume never
+ * re-runs a step it already finished and this step had not run. The step is
+ * skipped when only the tombstone's strings are left, a record from before
+ * 0282: those name nobody, and scrubbing them would rewrite every departed
+ * member in other people's words.
  */
 import type { Pool } from "mysql2/promise";
 import { SEAT_PRESETS_DOC } from "../../shared/seatTermsOffer";

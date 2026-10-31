@@ -15,13 +15,28 @@
  * THE ERASURE IS THE ONE EXCEPTION, at the end of this file, and it demotes
  * nobody. The vouches FOR a member who asked to be forgotten go, because they
  * are other people's sentences about that person and the membership they
- * admitted ended with the tombstone. The vouches a departed member GAVE stay,
- * because each one is the record of somebody else's admission, and only the
- * words they wrote on them go.
+ * admitted ended with the tombstone. A vouch a departed member GAVE somebody
+ * already admitted stays, because it is the record of that admission, and
+ * only the words they wrote on it go. A vouch they gave somebody STILL
+ * WAITING goes whole: it records no admission yet, and kept, it would count
+ * toward one in the name of somebody gone. Removing it demotes nobody, which
+ * is the whole reason a vouch otherwise stands.
+ *
+ * A TOMBSTONE'S VOUCH ADMITS NOBODY, read here as well as swept there. The
+ * two doors that admit on a count (the vouch route and the invitation door)
+ * count `livingVouchesFor`, so a sweep that stopped between the tombstone and
+ * the vouches step, or an erasure that finished before that step existed,
+ * still lets nobody in on a departed member's word.
+ *
+ * NOR DOES A FORMER MEMBER'S, read in the same place and never swept: somebody
+ * who left and kept their account (server/lib/exitResolve.ts) keeps every
+ * vouch row they wrote, and the count leaves out the ones for somebody still
+ * waiting for as long as they stay away (`livingVouchesFor`).
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
 import type { Vouch } from "../lib/vouches";
+import { isFormerMember } from "../lib/formerMember";
 
 const VILLAGE = "local";
 
@@ -43,6 +58,48 @@ export async function vouchesFor(pool: Pool, userId: string): Promise<Array<Vouc
     [VILLAGE, userId],
   );
   return rows.map(toRow);
+}
+
+/**
+ * The vouches this member has received from somebody still here: every one
+ * whose voucher is not a tombstone and not a FORMER MEMBER, oldest first. What
+ * the admission count reads (see the header). A voucher with no member row at
+ * all still counts, as it always has.
+ *
+ * A FORMER MEMBER'S VOUCH STOPS COUNTING HERE (Rye, 2026-10-30): a vouch is a
+ * member's ongoing promise, and somebody who left the village is no longer
+ * here to keep it. The row is never deleted, so the vouch that already
+ * admitted somebody stands as the record of it, and a former member admitted
+ * again finds their word counting again. Who counts as a former member is
+ * `isFormerMember` (server/lib/formerMember.ts), handed the voucher's own
+ * record and whether they have a resolved exit, so this read and every other
+ * reader of that question answer it the same way.
+ */
+export async function livingVouchesFor(pool: Pool, userId: string): Promise<Array<Vouch & { id: string; note: string | null }>> {
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: member_vouches read beside the voucher's users row and exits, the tombstone and former-member tests
+    "SELECT v.id, v.voucher_user_id, v.vouched_user_id, v.kind, v.note, v.created_at, " +
+      "u.email AS voucher_email, u.membership_granted AS voucher_membership_granted, u.stage_granted AS voucher_stage_granted, " +
+      "EXISTS (SELECT 1 FROM exits e WHERE e.user_id = v.voucher_user_id AND e.status = 'resolved') AS voucher_left " +
+      "FROM member_vouches v " +
+      "LEFT JOIN users u ON u.id = v.voucher_user_id " +
+      "WHERE v.village_id = ? AND v.vouched_user_id = ? AND (u.email IS NULL OR LOWER(u.email) NOT LIKE '%@anonymized.invalid') " +
+      "ORDER BY v.created_at, v.id",
+    [VILLAGE, userId],
+  );
+  return rows
+    .filter(
+      (r) =>
+        r.voucher_email == null ||
+        !isFormerMember(
+          {
+            email: r.voucher_email,
+            membershipGranted: Number(r.voucher_membership_granted ?? 0) === 1,
+            stageGranted: r.voucher_stage_granted ?? null,
+          },
+          Number(r.voucher_left) === 1,
+        ),
+    )
+    .map(toRow);
 }
 
 /** Every vouch this member has GIVEN, for the reputation mechanic to come. */
@@ -109,20 +166,37 @@ export async function recordVouch(
 /**
  * A member who asked to be forgotten, for the erasure's
  * `vouches-after-tombstone` step (server/lib/erasure.ts). See the header for
- * why the two halves differ: the vouches written about them go whole, and the
- * vouches they gave stay without their words.
+ * why the three parts differ: the vouches written about them go whole, the
+ * vouches they gave somebody still waiting go whole, and the vouches that
+ * admitted somebody stay without their words.
  *
- * Idempotent: a DELETE keyed on the member and an UPDATE writing NULL, so a
+ * "Still waiting" is `membership_granted` off, the same reading the vouch
+ * route refuses a vouch on ("They are already a member"), so a row this keeps
+ * is one no vouch could still be added beside.
+ *
+ * Idempotent: two DELETEs keyed on the member and an UPDATE writing NULL, so a
  * second run matches nothing.
  */
-export async function forgetVouchesOf(pool: Pool, userId: string): Promise<{ received: number; wordsCleared: number }> {
+export async function forgetVouchesOf(
+  pool: Pool,
+  userId: string,
+): Promise<{ received: number; pendingGiven: number; wordsCleared: number }> {
   const [gone]: any = await pool.query(
     "DELETE FROM member_vouches WHERE village_id = ? AND vouched_user_id = ?",
+    [VILLAGE, userId],
+  );
+  const [pending]: any = await pool.query( // module-review-ok: member_vouches joined to the subject's users row, to tell a waiting candidate from an admitted member
+    "DELETE v FROM member_vouches v JOIN users u ON u.id = v.vouched_user_id " +
+      "WHERE v.village_id = ? AND v.voucher_user_id = ? AND COALESCE(u.membership_granted, 0) = 0",
     [VILLAGE, userId],
   );
   const [cleared]: any = await pool.query(
     "UPDATE member_vouches SET note = NULL WHERE village_id = ? AND voucher_user_id = ? AND note IS NOT NULL",
     [VILLAGE, userId],
   );
-  return { received: Number(gone?.affectedRows ?? 0), wordsCleared: Number(cleared?.affectedRows ?? 0) };
+  return {
+    received: Number(gone?.affectedRows ?? 0),
+    pendingGiven: Number(pending?.affectedRows ?? 0),
+    wordsCleared: Number(cleared?.affectedRows ?? 0),
+  };
 }

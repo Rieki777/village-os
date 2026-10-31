@@ -1,14 +1,16 @@
 /**
- * The registry page's two promises, pinned.
+ * The registry page's promises, pinned.
  *
- * One: every token gets a sentence, including one this file has never heard of,
- * because a village mints its own and the page exists to say what a token is.
+ * One: no sentence about what a token does ships from here. A token's meaning
+ * is the village's own words (drizzle/0283, TokenMeaningField.tsx), per Rye's
+ * 2026-10-22 ruling that platform copy never says what a token does.
  * Two: a module's token goes dark with its module, and an issued one does not
  * vanish while somebody is holding it.
  */
 import { describe, expect, it } from "vitest";
 import type { ModuleLifecycle } from "@shared/modules";
-import { TOKEN_NOTES, describeToken, tokenModule, tokenModuleIsOff, visibleTokens } from "./tokenCatalog";
+import * as catalog from "./tokenCatalog";
+import { TOKEN_MODULES, tokenModule, tokenModuleIsOff, visibleTokens } from "./tokenCatalog";
 
 /**
  * The eight tokens a fresh village ships, as `GET /api/admin/tokens` returns
@@ -17,8 +19,7 @@ import { TOKEN_NOTES, describeToken, tokenModule, tokenModuleIsOff, visibleToken
  * The equity row's slug is deliberately NOT the one `drizzle/0006` happens to
  * seed: that literal is one village's own name, scripts/check-brand-refs.mjs
  * fails a build that puts it in platform code, and none of the behaviour under
- * test cares what it is called. Same reason the Hypha mirrors have no entry in
- * TOKEN_NOTES.
+ * test cares what it is called.
  */
 const FRESH = [
   { slug: "gratitude", name: "Gratitude", kind: "recognition", governance: "platform" },
@@ -34,40 +35,12 @@ const FRESH = [
 const ALL_OFF: Record<string, ModuleLifecycle> = { stays: "off", library: "off" };
 const ALL_ON: Record<string, ModuleLifecycle> = { stays: "members", library: "public" };
 
-describe("describeToken", () => {
-  it("gives every shipped token a sentence, written or composed", () => {
-    for (const t of FRESH) {
-      const line = describeToken(t);
-      expect(line.length, t.slug).toBeGreaterThan(20);
-      const written = TOKEN_NOTES[t.slug]?.what;
-      if (written) expect(line, t.slug).toBe(written);
-    }
-    // The six platform rows carry a written line; the two Hypha mirrors are
-    // composed from kind and governance so no village's brand is compiled in.
-    expect(Object.keys(TOKEN_NOTES).sort()).toEqual(
-      ["credits", "earned-equity", "gratitude", "library-credit", "stay-credit", "village-voice"],
-    );
-  });
-
-  it("tells the two Hypha mirrors apart without naming either slug", () => {
-    expect(describeToken({ slug: "village-equity", kind: "equity", governance: "hypha" }))
-      .toMatch(/equity/);
-    expect(describeToken({ slug: "voice", kind: "voice", governance: "hypha" }))
-      .toMatch(/Read here, decided there/);
-  });
-
-  it("still answers for a token the village minted itself", () => {
-    expect(describeToken({ slug: "cafe-credit", kind: "credit", governance: "platform" }))
-      .toMatch(/credit this village minted/);
-    expect(describeToken({ slug: "thanks", kind: "recognition", governance: "platform" }))
-      .toMatch(/no financial value/);
-    expect(describeToken({ slug: "seat", kind: "voice", governance: "platform" }))
-      .toMatch(/governance-weight/);
-  });
-
-  it("never promises a chain token can be minted here", () => {
-    const line = describeToken({ slug: "somebody-elses", kind: "equity", governance: "hypha" });
-    expect(line).toMatch(/never mint/);
+describe("what a token means", () => {
+  it("is never written by the platform: the catalog carries no sentence about any token", () => {
+    // The old `describeToken` and `TOKEN_NOTES[slug].what` are gone. Only
+    // the module map is left, and it names modules, never what a token does.
+    expect(Object.keys(catalog).sort()).toEqual(["TOKEN_MODULES", "tokenModule", "tokenModuleIsOff", "visibleTokens"]);
+    expect(TOKEN_MODULES).toEqual({ "stay-credit": "stays", "library-credit": "library" });
   });
 });
 
