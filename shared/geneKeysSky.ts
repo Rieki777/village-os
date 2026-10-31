@@ -1,6 +1,9 @@
 /**
  * THE SKY AT A BIRTH, READ IN THE MEMBER'S BROWSER.
  *
+ * And, at the end, the sky of the day for a session card (`skyAt`): no birth,
+ * the same sky over everybody, read in the browser of whoever pulls the card.
+ *
  * Birth date, time and place go in; a Chart (shared/geneKeys.ts) comes out, and
  * only the Chart is ever sent anywhere. This is the one file that imports
  * astronomy-engine, and the server must never import it: the library is for the
@@ -25,6 +28,7 @@
  */
 import * as Astronomy from "astronomy-engine";
 import { analyse, gateLine, normDeg, profileOf, sphereOf, type Activations, type Chart, type Design } from "./geneKeys";
+import { RETRO_BODIES, WESTERN_BODIES, type CardSky, type WesternBody } from "./sessionCard";
 
 type AstroTime = Astronomy.AstroTime;
 
@@ -150,4 +154,84 @@ export function resultsAcross(
   }
   windows.push({ from: start, to: toMinute + 1, result: prev });
   return windows;
+}
+
+// ── THE SKY OF THE DAY, FOR A SESSION CARD ──────────────────────────────────
+//
+// Not a birth: the sky over everybody at the moment somebody pulls a card
+// (shared/sessionCard.ts). Read here because this is the file that may hold the
+// ephemeris; the server checks the shape and keeps it (`parseSky`).
+
+const WESTERN_LON: Record<WesternBody, (t: AstroTime) => number> = {
+  Sun: sunLon,
+  Moon: (t) => Astronomy.EclipticGeoMoon(t).lon,
+  ...(Object.fromEntries(
+    PLANETS.map((p) => [p, (t: AstroTime) => Astronomy.Ecliptic(Astronomy.GeoVector(Astronomy.Body[p], t, true)).elon]),
+  ) as Record<(typeof PLANETS)[number], (t: AstroTime) => number>),
+};
+
+/**
+ * The major aspects as points on the Moon's elongation from a body, 0 to 360:
+ * conjunction, sextile, square, trine, opposition, and the waning side's trine,
+ * square and sextile. The Moon outruns every body, so its elongation from each
+ * only grows, and an aspect is made exact when it passes one of these.
+ */
+const ASPECT_POINTS = [0, 60, 90, 120, 180, 240, 270, 300, 360];
+/** Whether the elongation passed an aspect point between two readings an hour apart. */
+function crossedAspect(before: number, after: number): boolean {
+  const b = normDeg(before);
+  let a = normDeg(after);
+  if (a < b) a += 360;
+  return ASPECT_POINTS.some((p) => (b < p && p <= a) || (b < p + 360 && p + 360 <= a));
+}
+
+/**
+ * When the Moon makes no further major aspect to the Sun or a planet before it
+ * leaves its sign, the instant it leaves; else null. Stepped by the hour (the
+ * Moon moves about half a degree in one); an aspect made in the same hour as
+ * the ingress counts, so the Moon is never called void a little early.
+ */
+export function moonVoidUntil(t: AstroTime): Date | null {
+  const sign = Math.floor(normDeg(WESTERN_LON.Moon(t)) / 30);
+  const others = WESTERN_BODIES.filter((b) => b !== "Moon");
+  const elongations = (u: AstroTime) => {
+    const moon = WESTERN_LON.Moon(u);
+    return others.map((b) => moon - WESTERN_LON[b](u));
+  };
+  let prev = elongations(t);
+  for (let h = 1; h <= 72; h++) {
+    const u = t.AddDays(h / 24);
+    const cur = elongations(u);
+    if (cur.some((c, i) => crossedAspect(prev[i], c))) return null;
+    if (Math.floor(normDeg(WESTERN_LON.Moon(u)) / 30) !== sign) {
+      // Into the next sign with no aspect on the way: find the ingress to the minute.
+      let lo = t.AddDays((h - 1) / 24), hi = u;
+      for (let i = 0; i < 12; i++) {
+        const mid = Astronomy.MakeTime((lo.ut + hi.ut) / 2);
+        if (Math.floor(normDeg(WESTERN_LON.Moon(mid)) / 30) === sign) lo = mid; else hi = mid;
+      }
+      return hi.date;
+    }
+    prev = cur;
+  }
+  return null;
+}
+
+export function skyAt(utc: Date): CardSky {
+  const t = Astronomy.MakeTime(utc);
+  const signs = {} as Record<WesternBody, number>;
+  for (const b of WESTERN_BODIES) signs[b] = Math.floor(normDeg(WESTERN_LON[b](t)) / 30);
+  const retro = RETRO_BODIES.filter((b) => {
+    const step = normDeg(WESTERN_LON[b](t.AddDays(0.5)) - WESTERN_LON[b](t.AddDays(-0.5)));
+    return step > 180;
+  });
+  const void_ = moonVoidUntil(t);
+  return {
+    at: utc.toISOString(),
+    gates: activationsAt(t),
+    signs,
+    retro,
+    moonPhase: normDeg(WESTERN_LON.Moon(t) - sunLon(t)) / 360,
+    moonVoidUntil: void_ ? void_.toISOString() : null,
+  };
 }
