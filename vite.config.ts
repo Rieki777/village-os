@@ -220,6 +220,15 @@ export default defineConfig({
          * Verify any chunking change with `node scripts/check-dist-budget.mjs`,
          * which prints both measures.
          */
+        /*
+         * ON AGAIN AT 8192, 2026-10-30. The profile dashboard (#664) on that
+         * day's main measured 6604 KB of 6600 with nothing added, and the
+         * companions section (0295) took it to 6632. With this on, the same
+         * tree is 6380 KB block-charged and main JS 634 KB (off: 614). Take
+         * it off the day the
+         * total has room again, for the reasons in the note above.
+         */
+        experimentalMinChunkSize: 8192,
         manualChunks: (id: string) => {
           if (id.includes("lucide-react")) return "icons";
           /*
