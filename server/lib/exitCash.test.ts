@@ -22,9 +22,9 @@ import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import type { ErasureDeps } from "./erasure";
-import { loadTokenRegistry } from "./ledger";
+import { loadTokenRegistry, memberAccount, MINT_FAUCET, postTransfer } from "./ledger";
 import { createExit, exitById, exitOpenState, blockingStates } from "./exit";
-import { resolveExit } from "./exitResolve";
+import { keepsAsFormerMember, resolveExit } from "./exitResolve";
 import { cashNotGivenUp, unpaidCashOf } from "./cashOwed";
 import { usersRepo } from "../repos/users";
 import { insertCashOwedRow } from "../repos/cashOwed";
@@ -156,6 +156,40 @@ describe.skipIf(!configured)("cash the village owes a leaver keeps them on, and 
     // A truthy string is not consent: only an explicit true.
     expect(await cashNotGivenUp(pool, id, { [CASH_GIVE_UP_FIELD]: "yes" })).not.toBeNull();
     expect(await cashNotGivenUp(pool, id, { [CASH_GIVE_UP_FIELD]: true })).toBeNull();
+  });
+
+  /** Platform credits on the member's own account, a balance `heldValueOf` counts. */
+  async function credits(id: string): Promise<void> {
+    const r = await postTransfer(pool, {
+      from: MINT_FAUCET,
+      to: memberAccount(id),
+      tokenType: "credits",
+      amount: 500,
+      source: "test_seed",
+      idempotencyKey: `exit-cash-credits:${id}`,
+    });
+    if (!r.ok) throw new Error(`could not seed credits: ${r.error}`);
+  }
+
+  // R5-0 / R5-1: the departure notices and resolve must ask one rule, so the rule has one home.
+  it("(d) keepsAsFormerMember: tokens alone keep a leaver on", async () => {
+    const id = await member([]);
+    await credits(id);
+    expect(await keepsAsFormerMember(pool, id), "a token holder would be erased").toBe(true);
+  });
+
+  it("(d) keepsAsFormerMember: cash owed alone keeps a leaver on, the same rule resolve follows", async () => {
+    const id = await member(["owed"]);
+    expect(await keepsAsFormerMember(pool, id), "a leaver owed cash and holding no tokens is not kept").toBe(true);
+    const out = await resolveExit(pool, { exitId: await exitFor(id), target: await usersRepo(pool).byId(id), actorId: "admin-1", deps: deps() });
+    expect(out.outcome).toBe("former");
+  });
+
+  it("(d) keepsAsFormerMember: neither tokens nor unpaid cash, and resolve erases", async () => {
+    const id = await member(["paid"]);
+    expect(await keepsAsFormerMember(pool, id)).toBe(false);
+    const out = await resolveExit(pool, { exitId: await exitFor(id), target: await usersRepo(pool).byId(id), actorId: "admin-1", deps: deps() });
+    expect(out.outcome).toBe("erased");
   });
 
   it("(c) a member owed nothing is never asked", async () => {
