@@ -15,6 +15,13 @@
  * the room's growing box, full width, so the words are read whole as they are
  * typed.
  *
+ * WINS AND CELEBRATIONS (Rye, 2026-10-30): anyone shares something they won
+ * at, with the mic like every box, and it goes into the record under the item.
+ *
+ * EACH SECTION HAS A NAME (`ITEM_SECTIONS`), so a meeting template switches
+ * sections on and off by name through `view.itemSections`; a view that names
+ * none shows them all.
+ *
  * WHAT WE LEARNED. The record keeps one sentence per lesson, under its own
  * heading and a line that says what it is for. It is stored as the kind
  * `seed`, and the room never calls it that.
@@ -22,9 +29,12 @@
  * When its time is up everyone reads the three choices, and the facilitator
  * makes one: add five minutes with the room's consent, park it, or wrap it up
  * (start the next item, or none). An item that is done early is wrapped up
- * the same way, from a quiet button beside its clock.
+ * the same way, from the strong button beside its clock (Rye, 2026-10-30:
+ * "make this a more obvious button"), and the facilitator's next-step bar
+ * (NextStepBar) names what comes after it.
  */
 import { useState } from "react";
+import { ArrowRight } from "lucide-react";
 import {
   AIM_DEFS,
   ROOM_COPY,
@@ -33,6 +43,7 @@ import {
   SESSION_REFUSALS,
   cleanLine,
   cleanText,
+  itemSectionsOn,
   timebox,
   type SessionItem,
 } from "@shared/sessions";
@@ -45,7 +56,6 @@ import Proposal from "./Proposal";
 import TimeboxRing from "./TimeboxRing";
 import {
   BTN_PRIMARY,
-  BTN_QUIET,
   BTN_SECONDARY,
   EYEBROW,
   HERO_CONTENT,
@@ -138,6 +148,7 @@ export default function ItemPage({ view, now, actions, item }: StageProps & { it
   const itemActions = entries.filter((e) => e.kind === "action");
   const canAdd = view.me.joined && view.status === "open";
   const nextItem = agendaOrder(view.items).find((i) => i.status === "waiting" && i.id !== item.id) ?? null;
+  const on = itemSectionsOn(view.itemSections);
   const ids = { title: `item-${item.id}-title`, proposal: `item-${item.id}-proposal`, seed: `item-${item.id}-seed`, actions: `item-${item.id}-actions` };
 
   const choose = async (choice: "extend" | "park" | "wrap") => {
@@ -193,8 +204,9 @@ export default function ItemPage({ view, now, actions, item }: StageProps & { it
               <p className={`${HINT} mt-1`}>{AIM_DEFS[item.aim].hint}</p>
             </div>
             {live && box.phase !== "over" && leads(view) && (
-              <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void choose("wrap")}>
+              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void choose("wrap")}>
                 {nextItem ? ROOM_COPY.wrapNext : ROOM_COPY.wrapUp}
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
           </header>
@@ -218,73 +230,97 @@ export default function ItemPage({ view, now, actions, item }: StageProps & { it
             </div>
           )}
 
-          <div className={ITEM_STREAMS}>
-            <EntryStream view={view} actions={actions} kind="note" itemId={item.id} title={ROOM_COPY.notes} addLabel={SESSION_COPY.addNote} />
-            <EntryStream view={view} actions={actions} kind="idea" itemId={item.id} title={ROOM_COPY.ideas} addLabel={SESSION_COPY.addIdea} />
-          </div>
-
-          <section className="space-y-3" aria-labelledby={ids.proposal}>
-            <h4 id={ids.proposal} className={LABEL_CAPS}>
-              {ROOM_COPY.proposal}
-            </h4>
-            {proposals.map((p) => (
-              <Proposal key={p.id} view={view} actions={actions} entry={p} now={now} />
-            ))}
-            {canAdd && (proposals.length === 0 || item.aim === "decide") && (
-              <AddBox
-                draftKey={`${view.id}:${item.id}:decision`}
-                label={SESSION_COPY.addDecision}
-                button={ROOM_COPY.add}
-                minRows={3}
-                onSend={async (text) => (await actions.addEntry({ kind: "decision", text, itemId: item.id })).ok}
-              />
-            )}
-          </section>
-
-          <section className="space-y-3" aria-labelledby={ids.seed}>
-            <div>
-              <h4 id={ids.seed} className={LABEL_CAPS}>
-                {ROOM_COPY.seed}
-              </h4>
-              <p id={`${ids.seed}-help`} className={`${HINT} mt-1`}>
-                {ROOM_COPY.seedHelp}
-              </p>
+          {(on.has("notes") || on.has("ideas")) && (
+            <div className={ITEM_STREAMS}>
+              {on.has("notes") && (
+                <EntryStream view={view} actions={actions} kind="note" itemId={item.id} title={ROOM_COPY.notes} addLabel={SESSION_COPY.addNote} />
+              )}
+              {on.has("ideas") && (
+                <EntryStream view={view} actions={actions} kind="idea" itemId={item.id} title={ROOM_COPY.ideas} addLabel={SESSION_COPY.addIdea} />
+              )}
             </div>
-            {learned.length > 0 && (
-              <ul className="space-y-2">
-                {learned.map((s) => (
-                  <li key={s.id}>
-                    <EntryCard view={view} actions={actions} entry={s} quote singleLine />
-                  </li>
-                ))}
-              </ul>
-            )}
-            {canAdd && (
-              <AddBox
-                draftKey={`${view.id}:${item.id}:seed`}
-                label={SESSION_COPY.itemSeedPrompt}
-                button={ROOM_COPY.seedSave}
-                singleLine
-                minRows={2}
-                describedBy={`${ids.seed}-help`}
-                onSend={async (text) => (await actions.addEntry({ kind: "seed", text, itemId: item.id })).ok}
-              />
-            )}
-          </section>
+          )}
 
-          <section className="space-y-3" aria-labelledby={ids.actions}>
-            <h4 id={ids.actions} className={LABEL_CAPS}>
-              {ROOM_COPY.actionsHere}
-            </h4>
-            {itemActions.length > 0 && (
-              <ul className="space-y-2">
-                {itemActions.map((e) => (
-                  <ActionRow key={e.id} view={view} actions={actions} entry={e} />
-                ))}
-              </ul>
-            )}
-            <AddAction view={view} actions={actions} itemId={item.id} />
-          </section>
+          {on.has("wins") && (
+            <EntryStream
+              view={view}
+              actions={actions}
+              kind="win"
+              itemId={item.id}
+              title={ROOM_COPY.wins}
+              addLabel={SESSION_COPY.addWin}
+              help={ROOM_COPY.winsHelp}
+            />
+          )}
+
+          {on.has("proposal") && (
+            <section className="space-y-3" aria-labelledby={ids.proposal}>
+              <h4 id={ids.proposal} className={LABEL_CAPS}>
+                {ROOM_COPY.proposal}
+              </h4>
+              {proposals.map((p) => (
+                <Proposal key={p.id} view={view} actions={actions} entry={p} now={now} />
+              ))}
+              {canAdd && (proposals.length === 0 || item.aim === "decide") && (
+                <AddBox
+                  draftKey={`${view.id}:${item.id}:decision`}
+                  label={SESSION_COPY.addDecision}
+                  button={ROOM_COPY.add}
+                  minRows={3}
+                  onSend={async (text) => (await actions.addEntry({ kind: "decision", text, itemId: item.id })).ok}
+                />
+              )}
+            </section>
+          )}
+
+          {on.has("learned") && (
+            <section className="space-y-3" aria-labelledby={ids.seed}>
+              <div>
+                <h4 id={ids.seed} className={LABEL_CAPS}>
+                  {ROOM_COPY.seed}
+                </h4>
+                <p id={`${ids.seed}-help`} className={`${HINT} mt-1`}>
+                  {ROOM_COPY.seedHelp}
+                </p>
+              </div>
+              {learned.length > 0 && (
+                <ul className="space-y-2">
+                  {learned.map((s) => (
+                    <li key={s.id}>
+                      <EntryCard view={view} actions={actions} entry={s} quote singleLine />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {canAdd && (
+                <AddBox
+                  draftKey={`${view.id}:${item.id}:seed`}
+                  label={SESSION_COPY.itemSeedPrompt}
+                  button={ROOM_COPY.seedSave}
+                  singleLine
+                  minRows={2}
+                  describedBy={`${ids.seed}-help`}
+                  onSend={async (text) => (await actions.addEntry({ kind: "seed", text, itemId: item.id })).ok}
+                />
+              )}
+            </section>
+          )}
+
+          {on.has("actions") && (
+            <section className="space-y-3" aria-labelledby={ids.actions}>
+              <h4 id={ids.actions} className={LABEL_CAPS}>
+                {ROOM_COPY.actionsHere}
+              </h4>
+              {itemActions.length > 0 && (
+                <ul className="space-y-2">
+                  {itemActions.map((e) => (
+                    <ActionRow key={e.id} view={view} actions={actions} entry={e} />
+                  ))}
+                </ul>
+              )}
+              <AddAction view={view} actions={actions} itemId={item.id} />
+            </section>
+          )}
         </div>
       </div>
     </article>

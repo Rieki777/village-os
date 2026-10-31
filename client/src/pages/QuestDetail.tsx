@@ -25,6 +25,7 @@ import { fetchGameMe, gameFetch, QuestClaim, useGameConfig } from "@/lib/gameApi
 import WorkPayBlock from "@/components/WorkPayBlock";
 import QuestActions from "@/components/QuestActions";
 import QuestCrews from "@/components/QuestCrews";
+import WorkChatButton from "@/components/messages/WorkChatButton";
 import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/QuestCard";
 import NeedChips, { type NeedTag } from "@/components/NeedChips";
 import NeedTagPicker from "@/components/admin/NeedTagPicker";
@@ -406,6 +407,12 @@ export default function QuestDetail() {
                 pay={quest.pay}
                 onChanged={refreshClaims}
               />
+              {/* The chat everyone on this quest shares, once two people are on it. */}
+              {!quest.isExample && (
+                <div className="px-6 pb-5 empty:hidden">
+                  <WorkChatButton kind="quest" id={quest.id} probe className="w-full" />
+                </div>
+              )}
             </div>
 
             {/* The gate, in full color, saying what opens it */}

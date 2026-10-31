@@ -21,7 +21,7 @@
  */
 import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Feather, Hammer, Handshake, Lightbulb, Sprout, StickyNote } from "lucide-react";
+import { Feather, Hammer, Handshake, Lightbulb, PartyPopper, Sprout, StickyNote } from "lucide-react";
 import {
   ROOM_COPY,
   SESSION_SOMEONE,
@@ -95,6 +95,7 @@ export const ENTRY_GLYPH: Record<EntryKind, LucideIcon> = {
   decision: Handshake,
   action: Hammer,
   tension: Feather,
+  win: PartyPopper,
 };
 /** What we learned, as the item's pull-quote. */
 export const LEARNED_QUOTE = "border-l-2 border-notice pl-3 font-display text-[19px] leading-snug lining-nums text-foreground";

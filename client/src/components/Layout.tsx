@@ -7,7 +7,9 @@ import { useModules } from "@/modules/ModuleProvider";
 import NotificationBell from "@/components/NotificationBell";
 import NotificationToasts from "@/components/NotificationToasts";
 import RewardMoment from "@/components/RewardMoment";
+import SeasonSummaryOffer from "@/components/seasonSummary/SeasonSummaryOffer";
 import TaskCountBadge from "@/components/tasks/TaskCountBadge";
+import MessageCountBadge from "@/components/messages/MessageCountBadge";
 import { altOr, useGameConfig } from "@/lib/gameApi";
 import { NAV, ACCOUNT_MENU, isGroup, type NavLink, type NavGroup } from "@/config/nav";
 import { useTokenName } from "@/hooks/useTokenNames";
@@ -318,6 +320,7 @@ export default function Layout({ children }: LayoutProps) {
                           >
                             {item.label}
                             {item.count === "tasks" && <TaskCountBadge who={user.id} />}
+                            {item.count === "messages" && <MessageCountBadge who={user.id} />}
                           </Link>
                         ))}
                         <button
@@ -460,6 +463,7 @@ export default function Layout({ children }: LayoutProps) {
                         >
                           {item.label === "My Profile" ? `My Profile (${user.name.split(" ")[0]})` : item.label}
                           {item.count === "tasks" && <TaskCountBadge who={user.id} />}
+                          {item.count === "messages" && <MessageCountBadge who={user.id} />}
                         </Link>
                       ))}
                       <button
@@ -838,6 +842,7 @@ export default function Layout({ children }: LayoutProps) {
           member never sees the same moment twice. */}
       {user && <NotificationToasts />}
       {user && <RewardMoment />}
+      {user && <SeasonSummaryOffer /> /* idea 4: once, after a season turns */}
     </div>
   );
 }

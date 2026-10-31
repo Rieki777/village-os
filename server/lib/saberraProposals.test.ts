@@ -79,6 +79,39 @@ describe("suggesting a structure", () => {
     expect(r.unmapped).toEqual(["Assignment Method", "Next Audit Date", "Role Type"]);
   });
 
+  it("CARRIES WHAT THE SOURCE HOLDS A ROLE TO PAY beside the seat, and never into it", () => {
+    const r = proposeStructure(
+      [
+        role("r-1", {
+          "Role Name": "Finance Steward",
+          "Compensation Model": { name: "Part-Time Salaried" },
+          "Compensation Status": { name: "Active" },
+          "Compensation Terms": [{ plain_text: "Twenty hours a week." }],
+          "Compensation Target (Monthly)": { number: 1500 },
+        }),
+      ],
+      { sourceName: SOURCE },
+    );
+    expect(r.payload.seats[0]).toEqual({
+      name: "Finance Steward",
+      sourcePay: { model: "Part-Time Salaried", status: "Active", terms: "Twenty hours a week.", monthlyUsd: 1500 },
+      id: "r-1",
+    });
+    // Read, so never reported as a field this chart has no home for.
+    expect(r.unmapped).toEqual([]);
+    // Nothing a seat is paid with is set from it.
+    for (const k of ["valueMinor", "valueTokens", "cashMinor", "termsOffer"]) {
+      expect(r.payload.seats[0]).not.toHaveProperty(k);
+    }
+  });
+
+  it("carries no pay at all when the source holds none", () => {
+    const r = proposeStructure([role("r-1", { "Role Name": "Greeter", "Compensation Target (Monthly)": null })], {
+      sourceName: SOURCE,
+    });
+    expect(r.payload.seats[0]).not.toHaveProperty("sourcePay");
+  });
+
   it("skips a seat with no name rather than proposing a blank one", () => {
     const r = proposeStructure([role("r-1", { Status: "Active", Body: "Someone should do this." })], {
       sourceName: SOURCE,

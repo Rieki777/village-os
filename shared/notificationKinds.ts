@@ -533,6 +533,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} decisions made after asking for your advice.",
     celebrate: false,
   },
+  // A facilitator filled in for a member (0288, shared/sessionOnBehalf.ts):
+  // the person hears what went in under their name, and can undo it.
+  session_filled_in: {
+    group: "work",
+    blurb: "The Facilitator filled something in for you during a session. You can change it or undo it there.",
+    many: "{n} things the Facilitator filled in for you.",
+    celebrate: false,
+  },
   // A night on a proposal (0281): whoever asked for one hears where to answer
   // once the call has closed, and the facilitator hears when no night lasts.
   session_night_open: {

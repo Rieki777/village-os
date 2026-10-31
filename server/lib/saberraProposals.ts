@@ -112,9 +112,20 @@ export interface StructureProposal {
  * The role fields this translator reads, each by its own rule below. A field
  * that crosses the boundary and is not one of these is reported as unmapped.
  * `Notes` is deliberately not read as an aim: it is the vendor's working
- * notes ("superseded by...") and not what a seat is for.
+ * notes ("superseded by...") and not what a seat is for. The four
+ * `Compensation` fields are read into `sourcePay`, information beside the
+ * seat for the structure review, and never into the seat itself.
  */
-const ROLE_READS = new Set(["Role Name", "Circle", "Body", "Status"]);
+const ROLE_READS = new Set([
+  "Role Name",
+  "Circle",
+  "Body",
+  "Status",
+  "Compensation Model",
+  "Compensation Status",
+  "Compensation Terms",
+  "Compensation Target (Monthly)",
+]);
 /** The circle fields read here: its name, to resolve relations, and its status. */
 const CIRCLE_READS = new Set(["Circle Name", "Status"]);
 
@@ -125,6 +136,30 @@ function text(v: unknown): string | null {
 }
 
 const isArchived = (label: string | null | undefined): boolean => (label ?? "").trim().toLowerCase() === "archived";
+
+/** A number property in whatever shape it arrives: a number, `{ number }`, or text. */
+function numberOf(v: unknown): number | string | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const n = (v as Record<string, unknown>).number;
+    if (typeof n === "number" && Number.isFinite(n)) return n;
+  }
+  return plainText(v);
+}
+
+/** The four `Compensation` fields of a read role, or null when it carries none. */
+function sourcePayOf(fields: Record<string, unknown>): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  const model = labelOf(fields["Compensation Model"]);
+  if (model) out.model = model;
+  const status = labelOf(fields["Compensation Status"]);
+  if (status) out.status = status;
+  const terms = plainText(fields["Compensation Terms"]);
+  if (terms) out.terms = terms;
+  const target = numberOf(fields["Compensation Target (Monthly)"]);
+  if (target !== null) out.monthlyUsd = target;
+  return Object.keys(out).length ? out : null;
+}
 
 /**
  * One structure proposal from a set of records.
@@ -224,6 +259,13 @@ export function proposeStructure(
     // THE STATUS, carried as the source wrote it. The plan says what it means.
     const status = labelOf(read.fields.Status);
     if (status) seat.sourceStatus = status;
+
+    // WHAT THE SOURCE HOLDS IT TO PAY, carried beside the seat as the source
+    // wrote it; `readSourcePay` in the plan says what the status means. The
+    // target is one blended monthly dollar figure, so it is kept as a number
+    // and never split here.
+    const pay = sourcePayOf(read.fields);
+    if (pay) seat.sourcePay = pay;
 
     // The vendor's id rides along so a second read updates this seat rather
     // than proposing it twice.
