@@ -36,7 +36,7 @@ function Box({ id, field, value, onChange }: { id: string; field: VisitField<str
   const n = chars(value);
   const full = n >= field.max;
   const clip = (v: string) => (chars(v) > field.max ? Array.from(v).slice(0, field.max).join("") : v);
-  const cls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-teal-deep/40";
+  const cls = "w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40";
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 mb-1">
