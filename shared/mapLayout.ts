@@ -153,6 +153,14 @@ export const BAND_WIDTH = 38;
 export const BAND_FONT = 11;
 const BAND_NAME_PAD = 22;
 const BAND_ARC_GAP = 6;
+/**
+ * Ground between the pack and its band, for the names promoted outside the
+ * circles at the edge of the pack. With the band flush against the pack, a
+ * small ring circle had a band above it and a disc below, so its name had
+ * nowhere to go and was drawn over one of them (live, 2026-10-30, "Leadership
+ * Circle" on "Permaculture"). Two lines of a name at village zoom.
+ */
+const BAND_NAME_ROOM = 40;
 /** The village draws no name inside its ring; its band still leaves the top
  *  open for the word that says what the band is. */
 const VILLAGE_BAND_CROWN = 0.35;
@@ -393,7 +401,7 @@ function sizeBand(
 ): NonNullable<PackedNode["band"]> {
   const lengths = riders.map((n) => bandArcLength(n.input.name) + BAND_ARC_GAP);
   const need = lengths.reduce((s, l) => s + l, 0);
-  let inner = contentR + PACK_GAP;
+  let inner = contentR + PACK_GAP + BAND_NAME_ROOM;
   let crown = crownAt(inner + BAND_WIDTH);
   for (let pass = 0; pass < 3; pass++) {
     inner = Math.max(inner, need / (2 * Math.PI - 2 * crown) - BAND_WIDTH / 2);
