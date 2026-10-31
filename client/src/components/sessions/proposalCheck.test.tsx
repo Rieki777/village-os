@@ -162,6 +162,21 @@ describe("the card", () => {
     expect(screen.getByText(CHECK_COPY.noRoles)).toBeInTheDocument();
   });
 
+  it("says the purpose was written, not rewritten, when there was none at the check", () => {
+    const before: EntryCheck = { ...CHECK, purposeChanged: true, read: { ...CHECK.read, hasPurpose: false, purposeWrittenAt: "" } };
+    const view = roomWith({ me: OTHER, check: offer({ "80": before }) });
+    render(<Proposal view={view} actions={doors()} entry={view.entries[0]!} now={T0} />);
+    expect(screen.getByText(CHECK_COPY.purposeWritten)).toBeInTheDocument();
+    expect(screen.queryByText(CHECK_COPY.purposeRewritten)).toBeNull();
+  });
+
+  it("on a decided proposal whose words changed, says so without asking for another check", () => {
+    const view = roomWith({ me: FACILITATOR, entries: [proposal({ status: "done" })], check: offer({ "80": { ...CHECK, changed: true } }) });
+    render(<Proposal view={view} actions={doors()} entry={view.entries[0]!} now={T0} />);
+    expect(screen.getByText(CHECK_COPY.changedDecided)).toBeInTheDocument();
+    expect(screen.queryByText(CHECK_COPY.changed)).toBeNull();
+  });
+
   it("keeps the card on a decided proposal, with no button", () => {
     const view = roomWith({ me: FACILITATOR, entries: [proposal({ status: "done" })], check: offer({ "80": CHECK }) });
     render(<Proposal view={view} actions={doors()} entry={view.entries[0]!} now={T0} />);

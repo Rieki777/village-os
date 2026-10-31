@@ -87,26 +87,28 @@ export function DecideButton({ view, actions, entry, className = "" }: Omit<Stag
 }
 
 /** One proposal's check, as the whole room reads it. */
-function CheckCard({ check, agent, purpose, now }: { check: EntryCheck; agent: string; purpose: string | null; now: number }) {
+function CheckCard({ check, agent, purpose, now, decided }: { check: EntryCheck; agent: string; purpose: string | null; now: number; decided: boolean }) {
   const { read } = check;
   return (
     <section className="mt-2 rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground" aria-label={CHECK_COPY.title} data-check="">
       <h4 className={H3}>{CHECK_COPY.title}</h4>
       <p className={`${HINT} mt-1`}>{CHECK_COPY.lead}</p>
-      {check.changed && <p className="mt-2 font-semibold text-notice">{CHECK_COPY.changed}</p>}
+      {check.changed && <p className="mt-2 font-semibold text-notice">{decided ? CHECK_COPY.changedDecided : CHECK_COPY.changed}</p>}
       <dl className="mt-3 space-y-3">
         <div>
           <dt className="font-semibold">{CHECK_COPY.purposeTitle}</dt>
           <dd className="mt-0.5">{purpose ? <ClampedNote text={purpose} /> : CHECK_COPY.noPurpose}</dd>
-          {check.purposeChanged && <dd className={`${HINT} mt-0.5`}>{CHECK_COPY.purposeRewritten}</dd>}
+          {check.purposeChanged && (
+            <dd className={`${HINT} mt-0.5`}>{read.hasPurpose ? CHECK_COPY.purposeRewritten : CHECK_COPY.purposeWritten}</dd>
+          )}
         </div>
         <div>
           <dt className="font-semibold">{CHECK_COPY.prioritiesTitle(read.season)}</dt>
           {read.priorities.length ? (
             <dd>
               <ul className="mt-0.5 space-y-1">
-                {read.priorities.map((p) => (
-                  <li key={p.text} data-named={p.named ? "" : undefined}>
+                {read.priorities.map((p, i) => (
+                  <li key={`${i}:${p.text}`} data-named={p.named ? "" : undefined}>
                     {p.text}
                     {p.named && <span className={`${CHIP} ml-2`}>{CHECK_COPY.named}</span>}
                   </li>
@@ -122,8 +124,8 @@ function CheckCard({ check, agent, purpose, now }: { check: EntryCheck; agent: s
           {read.roles.length ? (
             <dd>
               <ul className="mt-0.5 space-y-1">
-                {read.roles.map((r) => (
-                  <li key={r.seatId}>
+                {read.roles.map((r, i) => (
+                  <li key={`${i}:${r.seatId}`}>
                     {r.name}: {CHECK_COPY.holder[r.holder]}
                   </li>
                 ))}
@@ -170,7 +172,7 @@ function ProposalCheck({ view, actions, entry, now }: Omit<StageProps, "now"> & 
           {busy ? CHECK_COPY.checking : done ? CHECK_COPY.again : CHECK_COPY.button(offer.agent)}
         </button>
       )}
-      {done && <CheckCard check={done} agent={offer.agent} purpose={offer.purpose} now={now ?? Date.now()} />}
+      {done && <CheckCard check={done} agent={offer.agent} purpose={offer.purpose} now={now ?? Date.now()} decided={entry.status === "done"} />}
     </div>
   );
 }

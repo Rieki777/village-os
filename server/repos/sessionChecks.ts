@@ -23,7 +23,8 @@ export async function checkRows(q: Queryable, sessionId: number): Promise<RowDat
 export async function writeCheck(q: Queryable, row: { entryId: number; sessionId: number; hash: string; read: string; now: Date }): Promise<void> {
   await q.query(
     "INSERT INTO `live_session_checks` (`entry_id`, `session_id`, `checked_at`, `checked_hash`, `read_json`) VALUES (?, ?, ?, ?, ?) " +
-      "ON DUPLICATE KEY UPDATE `checked_at` = VALUES(`checked_at`), `checked_hash` = VALUES(`checked_hash`), `read_json` = VALUES(`read_json`)",
+      "ON DUPLICATE KEY UPDATE `session_id` = VALUES(`session_id`), `checked_at` = VALUES(`checked_at`), `checked_hash` = VALUES(`checked_hash`), " +
+      "`read_json` = VALUES(`read_json`)",
     [row.entryId, row.sessionId, row.now, row.hash, row.read],
   );
 }
@@ -32,6 +33,21 @@ export async function writeCheck(q: Queryable, row: { entryId: number; sessionId
 export async function deleteChecksForEntries(q: Queryable, entryIds: readonly number[]): Promise<void> {
   if (!entryIds.length) return;
   await q.query("DELETE FROM `live_session_checks` WHERE `entry_id` IN (?)", [entryIds]);
+}
+
+/**
+ * Every check whose proposal is gone. A release older than 0297's code, run
+ * back over a migrated database, removes proposals without their checks; the
+ * erasure and a discard sweep up after it, so an erased member's words never
+ * stay behind as a read.
+ */
+export async function deleteOrphanChecks(q: Queryable): Promise<void> {
+  // A plain read first, which takes no locks, then a delete by primary key: a
+  // DELETE joined to the entries would hold a shared lock on every entry it read.
+  const [rows] = await q.query<RowDataPacket[]>(
+    "SELECT `c`.`entry_id` FROM `live_session_checks` `c` LEFT JOIN `live_session_entries` `e` ON `e`.`id` = `c`.`entry_id` WHERE `e`.`id` IS NULL",
+  );
+  await deleteChecksForEntries(q, rows.map((r) => Number(r.entry_id)));
 }
 
 /** A discarded session takes its checks with it. */

@@ -1563,7 +1563,11 @@ export async function checkEntry(
   ctx: CheckContext,
   now = new Date(),
 ): Promise<Outcome<null>> {
+  // Read before the room's lock: the transaction holds the session row on one
+  // of the pool's few connections, and a read that reached back to the pool
+  // from inside it could wait behind writers queued on that same row.
   const purpose = await governingPurpose(pool);
+  const seatings = await listOrgAssignments(pool, ctx.lapseContext?.());
   return inRoom(pool, sessionId, actor, async ({ conn, s, roles }) => {
     const rows = await repo.entryRow(conn, sessionId, entryId);
     if (!rows.length) return refuse(404, R.entryUnknown);
@@ -1571,8 +1575,8 @@ export async function checkEntry(
     if (e.kind !== "decision") return refuse(409, CR.notAProposal);
     if (!roles.runs && e.authorNo !== actor.no) return refuse(403, CR.notYours);
     if (e.status === "done") return refuse(409, CR.decided);
+    if (e.status !== "open") return refuse(409, CR.notOpen);
     const seats = (await seatBook(conn, s.circleId)).options;
-    const seatings = await listOrgAssignments(pool, ctx.lapseContext?.());
     const nowMs = now.getTime();
     const here = new Set((await repo.peopleRows(conn, sessionId)).map(mapPerson).filter((p) => isPresentAt(p, nowMs)).map((p) => p.no));
     // Only the roles the words name are asked after: one read of who sits where, and a number per holder.

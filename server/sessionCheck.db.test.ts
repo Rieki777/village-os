@@ -108,6 +108,7 @@ describe.skipIf(!testDbConfigured())("a proposal is checked in a live session", 
     (await as(who, "POST /api/sessions/:id/entries", { params: room(), body: { kind, text } })).body.id as number;
   const check = (who: string, entryId: number) => as(who, "POST /api/sessions/:id/entries/:entryId/check", { params: room({ entryId: String(entryId) }) });
   const checkRow = async (entryId: number) => (await q("SELECT * FROM `live_session_checks` WHERE `entry_id` = ?", [entryId]))[0] ?? null;
+  const noOf = async (userId: string) => Number((await q("SELECT `no` FROM `live_session_members` WHERE `user_id` = ?", [userId]))[0].no);
 
   let tank = 0;
   let note = 0;
@@ -235,6 +236,37 @@ describe.skipIf(!testDbConfigured())("a proposal is checked in a live session", 
     expect(out.body.error).toBe(CHECK_REFUSALS.decided);
   });
 
+  it("refuses a parked proposal", async () => {
+    const parked = await propose("m-ben", "We paint the shed");
+    await q("UPDATE `live_session_entries` SET `status` = 'parked' WHERE `id` = ?", [parked]); // module-review-ok: parks a fixture proposal
+    const out = await check("m-ben", parked);
+    expect(out.status).toBe(409);
+    expect(out.body.error).toBe(CHECK_REFUSALS.notOpen);
+  });
+
+  it("lets an admin who is in the room check, never one outside it, and never the secretary", async () => {
+    const shed = await propose("m-ben", "The Kitchen moves to the shed");
+    // The admin has not joined: refused before anything is read.
+    expect((await check("m-founder", shed)).status).toBe(403);
+    expect((await as("m-founder", "POST /api/sessions/:id/join", { params: room() })).status).toBe(200);
+    expect((await check("m-founder", shed)).status).toBe(200);
+    // The secretary keeps the notes; checking is the facilitator's and the proposer's.
+    expect((await as("m-ana", "POST /api/sessions/:id/hosts", { params: room(), body: { secretaryUserId: await noOf("m-cai") } })).status).toBe(200);
+    const out = await check("m-cai", shed);
+    expect(out.status).toBe(403);
+    expect(out.body.error).toBe(CHECK_REFUSALS.notYours);
+  });
+
+  it("takes the check with a proposal the facilitator filled in and then took back", async () => {
+    const added = await as("m-ana", "POST /api/sessions/:id/entries", { params: room(), body: { kind: "decision", text: "The Kitchen closes on Mondays", forUserId: await noOf("m-ben") } });
+    expect(added.status).toBe(200);
+    expect((await check("m-ana", added.body.id)).status).toBe(200);
+    const fill = (await view("m-ana")).entries.find((e: any) => e.id === added.body.id).filledIn;
+    expect(fill?.canUndo).toBe(true);
+    expect((await as("m-ana", "POST /api/sessions/:id/on-behalf/:fillId/undo", { params: room({ fillId: String(fill.id) }) })).status).toBe(200);
+    expect(await checkRow(added.body.id)).toBeNull();
+  });
+
   it("takes the check with the proposal when it is removed", async () => {
     const gone = await propose("m-ben", "The Treasurer buys a pump");
     expect((await check("m-ben", gone)).status).toBe(200);
@@ -243,11 +275,14 @@ describe.skipIf(!testDbConfigured())("a proposal is checked in a live session", 
     expect(await checkRow(gone)).toBeNull();
   });
 
-  it("takes the checks on a member's proposals with them when they are erased, and leaves the rest", async () => {
+  it("takes the checks on a member's proposals with them when they are erased, sweeps up any orphan, and leaves the rest", async () => {
     const anas = await propose("m-ana", "The Kitchen cooks on Fridays");
     expect((await check("m-ana", anas)).status).toBe(200);
+    // A check whose proposal went under an older release, which knew nothing of checks.
+    await q("INSERT INTO `live_session_checks` (`entry_id`, `session_id`, `checked_hash`, `read_json`) VALUES (987654, ?, ?, '{}')", [sid, "0".repeat(64)]); // module-review-ok: a fixture orphan in this scratch schema
     await forgetMemberSessions(pool, "m-ben", async (id) => PEOPLE[id] ?? null);
     expect(await checkRow(tank)).toBeNull();
+    expect(await checkRow(987654)).toBeNull();
     expect(await checkRow(anas)).not.toBeNull();
   });
 

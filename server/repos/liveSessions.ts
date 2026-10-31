@@ -34,7 +34,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { lostConcurrencyRace } from "../db/concurrency";
-import { deleteChecksForEntries, deleteChecksForSession } from "./sessionChecks";
+import { deleteChecksForEntries, deleteChecksForSession, deleteOrphanChecks } from "./sessionChecks";
 
 /** A pool, or the one connection a transaction runs on. */
 export type Queryable = Pool | PoolConnection;
@@ -650,6 +650,7 @@ export async function deleteSessionRows(q: Queryable, sessionId: number): Promis
   const carried = (await rowsOf(q, "SELECT `id` FROM `live_session_items` WHERE `from_session_id` = ?", [sessionId])).map((r) => Number(r.id));
   if (!none(carried)) await q.query("UPDATE `live_session_items` SET `from_session_id` = NULL WHERE `id` IN (?)", [carried]);
   const [r] = await q.query<any>("DELETE FROM `live_sessions` WHERE `id` = ?", [sessionId]);
+  await deleteOrphanChecks(q);
   return Number(r.affectedRows ?? 0);
 }
 
@@ -730,6 +731,7 @@ export async function forgetMemberRows(q: Queryable, no: number, entryIds: reado
     await deleteChecksForEntries(q, entryIds);
     await q.query("DELETE FROM `live_session_entries` WHERE `id` IN (?)", [entryIds]);
   }
+  await deleteOrphanChecks(q);
   await q.query("UPDATE `live_session_entries` SET `owner_no` = NULL, `claimed_at` = NULL WHERE `owner_no` = ?", [no]);
   await q.query("UPDATE `live_session_items` SET `added_by_no` = 0 WHERE `added_by_no` = ?", [no]);
   await q.query("UPDATE `live_session_items` SET `presenter_no` = NULL WHERE `presenter_no` = ?", [no]);

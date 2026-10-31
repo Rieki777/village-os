@@ -529,12 +529,14 @@ module is open to members. Everybody in the room sees the same card under the pr
 - **This season's priorities**, every one of them, each marked "Named" when the proposal's words name it:
   the priority word for word, or every meaningful word of it when it has two or more.
 - **The roles the words name**, the role the proposal sits with first, and for each whether its holder
-  is here, is not here, or whether nobody holds it now. Never who.
+  was here when the check ran, was not here, or whether nobody held it. Never who. A role of one word
+  counts only where the proposal writes it with a capital ("the Host welcomes", never "we will host"); a
+  role of several words counts in any case. A plural reads as the role.
 - **One line saying the agent's own read is not available yet.** That needs a typed check call from the
   service, asked of it on 2026-10-31. This read is the village's own and calls nobody.
 
-A second check replaces the first, and new words on the proposal mark the card as changed until it is
-checked again. A decided proposal keeps the card it was checked with and offers no button. The check is
+Only an open proposal is checked: a parked or a decided one is refused. A second check replaces the
+first, and new words on the proposal mark the card as changed until it is checked again. A decided proposal keeps the card it was checked with and offers no button. The check is
 stored with its proposal (`live_session_checks`) and holds no person, and the proposal's words only as a
 hash, so a member's export has nothing of it; it goes when the proposal is removed, when its author is erased, and when the session is
 discarded.

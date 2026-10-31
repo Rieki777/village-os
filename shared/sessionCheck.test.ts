@@ -43,6 +43,19 @@ describe("a season priority the words name", () => {
   it("names nothing for an empty priority", () => {
     expect(goalNamed("anything at all", "  ")).toBe(false);
   });
+
+  it("reads text the way it is typed in other scripts and forms", () => {
+    // No spaces between words: matched as written.
+    expect(goalNamed("我们要修好水系统", "水系统")).toBe(true);
+    expect(goalNamed("我们要修好路", "水系统")).toBe(false);
+    // An accent typed as a separate mark is the same letter.
+    expect(goalNamed("Open the café by spring", "Open the café")).toBe(true);
+    // Fullwidth punctuation and an emoji are not part of a word.
+    expect(goalNamed("修水，建房", "建房")).toBe(true);
+    expect(goalNamed("Fix the water system💧 now", "Fix the water system")).toBe(true);
+    // A dotted capital lowercases with a mark that is dropped.
+    expect(goalNamed("ISTANBUL first, then İSTANBUL", "istanbul")).toBe(true);
+  });
 });
 
 describe("the roles the words name", () => {
@@ -57,8 +70,20 @@ describe("the roles the words name", () => {
   });
 
   it("never matches a role inside another word, and skips a name too short to mean one role", () => {
-    expect(seatsNamed("The treasurers meet", SEATS, null)).toEqual([]);
+    expect(seatsNamed("The Treasury meets", SEATS, null)).toEqual([]);
     expect(seatsNamed("Op the shop up", SEATS, null)).toEqual([]);
+  });
+
+  it("reads a plural as the role, \"the Treasurers\" naming the Treasurer", () => {
+    expect(seatsNamed("The Treasurers meet", SEATS, null).map((s) => s.id)).toEqual(["s-tre"]);
+  });
+
+  it("counts a one-word role only where the words write it with a capital, so an everyday word names nobody", () => {
+    const seats = [{ id: "s-host", name: "Host" }, { id: "s-lead", name: "Lead" }, { id: "s-cook", name: "Head Cook" }];
+    expect(seatsNamed("We will host the dinner and lead the walk", seats, null)).toEqual([]);
+    expect(seatsNamed("The Host welcomes them and the Lead walks ahead", seats, null).map((s) => s.id)).toEqual(["s-host", "s-lead"]);
+    // A role of several words is its name whatever the case.
+    expect(seatsNamed("ask the head cook", seats, null).map((s) => s.id)).toEqual(["s-cook"]);
   });
 
   it("puts the role the proposal sits with first, named or not, once", () => {
