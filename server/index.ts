@@ -1,5 +1,5 @@
 import { anonymizeMember, backfillFinishedErasures, erasureBackfillJob } from "./lib/erasure";
-import { resolveExit } from "./lib/exitResolve";
+import { FORMER_MEMBER_HOLD, resolveExit } from "./lib/exitResolve";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
 import { joiningOf, pickNextAction } from "./lib/nextAction";
@@ -14244,7 +14244,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const target = await members.byId(req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
-    const states = await exitOpenState(getPool(), target.id, roleIdsFor(target.id));
+    const states = await exitOpenState(getPool(), target.id, roleIdsFor(target.id), { formerMember: FORMER_MEMBER_HOLD });
     res.json({
       states,
       blocking: blockingStates(states),

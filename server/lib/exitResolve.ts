@@ -88,6 +88,7 @@ import { endedInWords, resolveEndingLine, resolveEndingsIn, type FormerMemberSte
 import { unpaidCashOf } from "./cashOwed";
 import { withdrawUnseatedOf } from "../repos/seatApplications";
 import { markExitResolved, whileExitHeld, type HeldExit } from "../repos/exitNotes";
+import type { FormerMemberHold } from "./exit";
 
 /** One balance that keeps an account alive, in HUMAN units. */
 export interface HeldValue {
@@ -145,6 +146,19 @@ export async function heldValueOf(pool: Pool, userId: string): Promise<HeldValue
   }
   return held.sort((a, b) => a.token.localeCompare(b.token));
 }
+
+/**
+ * The exit path's answer to "does resolving this departure keep the account?",
+ * handed to `exitOpenState` and `subscriptionsState` (server/lib/exit.ts) by
+ * the routes that show the sentence. It lives here, beside `resolveExit`'s
+ * rule, because exit.ts is imported by the economy and may not import this
+ * file (shared/seatSettings.boundary.test.ts). The reason phrase opens the
+ * sentence the member and the admin read.
+ */
+export const FORMER_MEMBER_HOLD: FormerMemberHold = {
+  keptAsFormerMember: async (pool, userId) => (await heldValueOf(pool, userId)).length > 0,
+  reason: "Holding tokens",
+};
 
 /** The marker the resolution line is written under, matched by `SETTLE_LINE` in exit.ts. */
 export const FORMER_MEMBER_MARK = "kept as a former member: ";

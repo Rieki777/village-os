@@ -377,7 +377,12 @@ export async function forgetOwnExitNotes(pool: Pool, userId: string): Promise<nu
  * The per-member open-state enumeration. roleIds are passed in (the caller
  * owns role storage); everything else reads its domain's table directly.
  */
-export async function exitOpenState(pool: Pool, userId: string, roleIds: string[]): Promise<ExitDomainState[]> {
+export async function exitOpenState(
+  pool: Pool,
+  userId: string,
+  roleIds: string[],
+  opts: { formerMember?: FormerMemberHold } = {},
+): Promise<ExitDomainState[]> {
   const states: ExitDomainState[] = [];
 
   const [[loans]] = await pool.query<any[]>(
@@ -478,7 +483,7 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     blocking: false,
   });
 
-  states.push(await subscriptionsState(pool, userId, "exit"));
+  states.push(await subscriptionsState(pool, userId, "exit", opts.formerMember));
   // Last, so the domains other lanes add land above it.
   states.push(await cashState(pool, userId));
 
@@ -499,6 +504,24 @@ export async function cashState(pool: Pool, userId: string): Promise<ExitDomainS
   const n = await unpaidCashOf(pool, userId);
   if (!n) return { domain: "cash", count: 0, description: "no cash owed", blocking: false };
   return { domain: "cash", count: n, description: `${cashStillOwedWords(n)}. ${CASH_ON_DEPARTURE}. ${CASH_ON_DELETION}`, blocking: false };
+}
+
+/**
+ * How the exit path learns that resolving a departure keeps the account as a
+ * former member, and why. SUPPLIED BY THE CALLER, from outside the
+ * value-moving set (round 5): the answer lives in `resolveExit`'s rule
+ * (server/lib/exitResolve.ts), and exitResolve imports the erasure and the
+ * role-application repo, which reach the seat settings model. This file is
+ * imported by the economy, so it may not import exitResolve, not even
+ * lazily (shared/seatSettings.boundary.test.ts follows dynamic imports).
+ * The routes that show the sentence pass `FORMER_MEMBER_HOLD` from
+ * exitResolve.ts, which owns the rule and the reason phrase together.
+ */
+export interface FormerMemberHold {
+  /** True when resolving this member's departure keeps them as a former member. */
+  keptAsFormerMember: (pool: Pool, userId: string) => Promise<boolean>;
+  /** What keeps them, opening the sentence: "Holding tokens". */
+  reason: string;
 }
 
 const EVERY: Record<"month" | "year", string> = { month: "every month", year: "every year" };
@@ -530,20 +553,33 @@ const EVERY: Record<"month" | "year", string> = { month: "every month", year: "e
  * the admin resolving them. Whether the former-member path should cancel
  * them itself is a decision for Rye.
  */
-export async function subscriptionsState(pool: Pool, userId: string, path: "delete" | "exit"): Promise<ExitDomainState> {
+export async function subscriptionsState(
+  pool: Pool,
+  userId: string,
+  path: "delete" | "exit",
+  formerMember?: FormerMemberHold,
+): Promise<ExitDomainState> {
   const subs = await liveSubscriptionsOf(pool, userId);
   if (!subs.length) return { domain: "subscriptions", count: 0, description: "no recurring payments", blocking: false };
   const named = subs.map((s) => `${s.productName || "A product no longer listed"}${s.interval ? ` (${EVERY[s.interval]})` : ""}`);
   const renewing = `${subs.length} recurring payment(s) still renewing through Stripe: ${named.join(", ")}. `;
-  // Imported when asked: exitResolve imports the erasure, which imports this file.
-  if (path === "exit" && (await (await import("./exitResolve")).heldValueOf(pool, userId)).length) {
+  // An exit-path caller that passed no hold only reads the blocking list, and
+  // this file cannot tell which way the departure goes: it promises nothing.
+  if (path === "exit" && !formerMember) {
+    return {
+      domain: "subscriptions",
+      count: subs.length,
+      description: `${renewing}Whether they are cancelled depends on how the departure is resolved`,
+      blocking: false,
+    };
+  }
+  if (path === "exit" && formerMember && (await formerMember.keptAsFormerMember(pool, userId))) {
     return {
       domain: "subscriptions",
       count: subs.length,
       description:
-        renewing +
-        "Holding tokens when the departure is resolved keeps the account as a former member, and these keep renewing " +
-        "until an admin cancels them in Stripe",
+        `${renewing}${formerMember.reason} when the departure is resolved keeps the account as a former member, ` +
+        "and these keep renewing until an admin cancels them in Stripe",
       blocking: false,
     };
   }
