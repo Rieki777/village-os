@@ -49,6 +49,7 @@ import { TermArc, SeasonRing } from "./TermMarkers";
 import RelationLines, { RelationArrowDef } from "./RelationLines";
 import SeatRing from "./SeatRing";
 import FormingBand from "./FormingBand";
+import CircleGlyph from "@/components/geneKeys/CircleGlyph";
 import type { Filters, PowerData, PowerSeat, Selection } from "./types";
 import { anyFilterOn, seatPassesFilters } from "./types";
 
@@ -759,6 +760,22 @@ export default function PowerMap({
                 </text>
               )}
 
+              {/* THE CIRCLE'S SIX LINES (Gene Keys lane, 2026-10-30): which lines its
+                  holders show and where the gaps are, once you step in. It draws nothing
+                  while the module is off or no holder shows lines. */}
+              {glyphs && pxPerWorld > 0 && (
+                <CircleGlyph
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={pos.r}
+                  px={1 / pxPerWorld}
+                  holderIds={data.roles
+                    .filter((r) => r.circleId === pos.id)
+                    .flatMap((r) => r.holders)
+                    .filter((h) => !!h.userId && !(h as { lapsed?: boolean }).lapsed)
+                    .map((h) => String(h.userId))}
+                />
+              )}
               {showIcon && (
                 <Icon x={pos.x - iconSize / 2} y={iconY} width={iconSize} height={iconSize} color={tone} strokeWidth={2} aria-hidden="true" pointerEvents="none" />
               )}

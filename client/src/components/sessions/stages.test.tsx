@@ -202,11 +202,13 @@ describe("a consent round", () => {
 });
 
 describe("the agenda", () => {
+  // The arrows show once the order is set (0290): while the room votes, the vote orders the agenda.
+  const SET = { ...defaultSessionState(), orderSet: true };
   const two = () => [item({ id: 5, title: "Roof", position: 1 }), item({ id: 6, title: "Paths", position: 2, aim: "explore" })];
 
   it("moving an item down sends the neighbour's position, and fixes the neighbour when the server only set the number", async () => {
     nextRoom = makeView({ items: [item({ id: 5, position: 2 }), item({ id: 6, title: "Paths", position: 2 })] });
-    render(<AgendaList view={makeView({ items: two(), me: FACILITATOR })} actions={doors()} />);
+    render(<AgendaList view={makeView({ items: two(), me: FACILITATOR, state: SET })} actions={doors()} />);
     fireEvent.click(screen.getAllByRole("button", { name: ROOM_COPY.moveDown })[0]!);
     await waitFor(() => expect(log).toHaveLength(2));
     expect(log[0]).toEqual({ door: "patchItem", args: [5, { position: 2 }] });
@@ -215,7 +217,7 @@ describe("the agenda", () => {
 
   it("a server that swapped the two needs one write", async () => {
     nextRoom = makeView({ items: [item({ id: 5, position: 2 }), item({ id: 6, title: "Paths", position: 1 })] });
-    render(<AgendaList view={makeView({ items: two(), me: FACILITATOR })} actions={doors()} />);
+    render(<AgendaList view={makeView({ items: two(), me: FACILITATOR, state: SET })} actions={doors()} />);
     fireEvent.click(screen.getAllByRole("button", { name: ROOM_COPY.moveDown })[0]!);
     await waitFor(() => expect(log).toHaveLength(1));
     await new Promise((r) => setTimeout(r, 0));
