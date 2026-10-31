@@ -256,6 +256,16 @@ export function priceRoleFromMonthly(
     return { ...base, splitBy: "person", split: null, cashMinor: null, payTokens: null, lines };
   }
 
+  // THE FLOORS ARE WHOLE TOKENS: at least the floor's share of the value,
+  // rounded UP, in Credits and in Earned Equity. Cash is rounded DOWN to whole
+  // dollars and never takes what those minimums need, so rounding can never
+  // carry a payout under a floor.
+  const { fc, fe } = floorsOf(model);
+  const units = valueMinor / 100;
+  let minCredits = Math.ceil((units * fc) / 100 - 1e-9);
+  let minEquity = Math.ceil((units * fe) / 100 - 1e-9);
+  const roomMinor = Math.max(0, Math.floor(units - minCredits - minEquity)) * 100;
+
   // Cash first: an amount already set on the role (kept, up to the floors' cap),
   // or the split's share of the value.
   const fixed = finite(opts.cashMinorPerMoon) && opts.cashMinorPerMoon > 0 ? Math.round(opts.cashMinorPerMoon) : null;
@@ -264,18 +274,18 @@ export function priceRoleFromMonthly(
   let cashWorking: string;
   let held: boolean;
   if (fixed !== null) {
-    const capMinor = Math.floor((valueMinor * cashCapPct(model)) / 100 / 100) * 100;
+    const capMinor = Math.min(Math.floor((valueMinor * cashCapPct(model)) / 100 / 100) * 100, roomMinor);
     cashMinor = Math.min(fixed, capMinor);
     split = holdSplit(model, { ...opts.split, cashPct: valueMinor > 0 ? (cashMinor / valueMinor) * 100 : 0 });
     cashWorking =
       cashMinor === fixed
         ? "already set on the role, kept as it is"
-        : `set at ${usd(fixed)}, held to ${cashCapPct(model)}% of ${usd(valueMinor)} by the floors`;
+        : `set at ${usd(fixed)}, held to ${usd(cashMinor)} by the floors`;
     held = cashMinor !== fixed || !sameSplit({ creditsPct: opts.split?.creditsPct, equityPct: opts.split?.equityPct }, split);
   } else {
     split = holdSplit(model, opts.split);
-    cashMinor = Math.round((valueMinor * split.cashPct) / 100 / 100) * 100;
-    cashWorking = `${split.cashPct}% of ${usd(valueMinor)}, to whole dollars`;
+    cashMinor = Math.min(Math.floor((valueMinor * split.cashPct) / 100 / 100) * 100, roomMinor);
+    cashWorking = `${split.cashPct}% of ${usd(valueMinor)}, rounded down to whole dollars`;
     held = !sameSplit(opts.split ?? {}, split);
   }
   const fromModel = !opts.split && fixed === null;
@@ -295,14 +305,21 @@ export function priceRoleFromMonthly(
   lines.push({ key: "cash", label: "Cash", working: cashWorking, result: usd(cashMinor) });
 
   // The tokens take what cash leaves, so the three always add up to the value.
+  // Below about $2 there are too few whole tokens for both floors, and they
+  // share what there is in the floors' ratio.
   const tokenUnits = Math.max(0, Math.round((valueMinor - cashMinor) / 100));
-  const credits = clamp(Math.round(((valueMinor / 100) * split.creditsPct) / 100), 0, tokenUnits);
+  if (minCredits + minEquity > tokenUnits) {
+    minCredits = Math.round((tokenUnits * fc) / (fc + fe || 1));
+    minEquity = tokenUnits - minCredits;
+  }
+  const asked = Math.round((units * split.creditsPct) / 100);
+  const credits = clamp(asked, minCredits, tokenUnits - minEquity);
   const equity = tokenUnits - credits;
   lines.push({
     key: `token:${model.tokens.credits}`,
     label: model.tokens.credits,
     token: model.tokens.credits,
-    working: `${split.creditsPct}% of ${usd(valueMinor)}`,
+    working: `${split.creditsPct}% of ${usd(valueMinor)}${credits === asked ? "" : `, lifted to the floor of ${fc}% rounded up`}`,
     result: String(credits),
   });
   lines.push({

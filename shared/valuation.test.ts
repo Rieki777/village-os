@@ -114,7 +114,7 @@ describe("a stipend role at $1,200 a month", () => {
     expect(line(r, "model")).toMatchObject({ working: "platform default (no village version yet)", result: "v0" });
     expect(line(r, "source")).toMatchObject({ working: "Stipend, Active", result: "$1,200.00 a month" });
     expect(line(r, "split")).toMatchObject({ working: "Credits 50%, Earned Equity 50%, cash 0% (the model's default)", result: "100%" });
-    expect(line(r, "cash")).toMatchObject({ working: "0% of $1,164.13, to whole dollars", result: "$0.00" });
+    expect(line(r, "cash")).toMatchObject({ working: "0% of $1,164.13, rounded down to whole dollars", result: "$0.00" });
     expect(line(r, "token:credits")).toMatchObject({ token: "credits", working: "50% of $1,164.13", result: "582" });
     expect(line(r, "token:earned-equity")).toMatchObject({
       token: "earned-equity",
@@ -144,7 +144,7 @@ describe("cash comes from the budget, and the tokens take what it leaves", () =>
     expect(r?.cashMinor).toBe(34900);
     expect(amountOf(r, "credits")).toBe(407);
     expect(amountOf(r, "earned-equity")).toBe(408);
-    expect(line(r, "cash")?.working).toBe("30% of $1,164.13, to whole dollars");
+    expect(line(r, "cash")?.working).toBe("30% of $1,164.13, rounded down to whole dollars");
     expect(r?.voice.amount).toBe(1164);
   });
 
@@ -156,14 +156,48 @@ describe("cash comes from the budget, and the tokens take what it leaves", () =>
     expect(line(r, "split")?.working).not.toContain("held to the floors");
   });
 
-  it("holds cash already set above the cap to 80%, so the floors still pay", () => {
+  it("holds cash already set above the cap, so the floors still pay in whole tokens", () => {
     const r = priceRoleFromMonthly(PLATFORM_DEFAULT_MODEL, pay(), { cashMinorPerMoon: 200000 });
-    expect(r?.cashMinor).toBe(93100);
+    // 10% of $1,164.13 is 116.41, so each floor is 117 whole tokens and cash takes at most $930.
+    expect(r?.cashMinor).toBe(93000);
     expect(r?.split).toEqual({ creditsPct: 10, equityPct: 10, cashPct: 80 });
-    expect(line(r, "cash")?.working).toBe("set at $2,000.00, held to 80% of $1,164.13 by the floors");
+    expect(line(r, "cash")?.working).toBe("set at $2,000.00, held to $930.00 by the floors");
     expect(line(r, "split")?.working).toContain("held to the floors: at least 10% Credits and 10% Earned Equity");
-    expect(amountOf(r, "credits")).toBe(116);
+    expect(amountOf(r, "credits")).toBe(117);
     expect(amountOf(r, "earned-equity")).toBe(117);
+    expect(line(r, "token:credits")?.working).toBe("10% of $1,164.13, lifted to the floor of 10% rounded up");
+  });
+
+  it("never lets rounding carry a payout under a floor, at any value or split", () => {
+    // The economy simulation found 71% of payouts at the 80% cash maximum a fraction under a floor
+    // when cash rounded to the nearest dollar. Cash now rounds down and the floors round up.
+    for (const monthlyUsd of [2.5, 7.77, 27.21, 37.5, 99.99, 400, 1200, 3333.33, THOUSAND_A_MOON]) {
+      for (const split of [{ cashPct: 80 }, { cashPct: 79 }, { cashPct: 50 }, { creditsPct: 95, equityPct: 5, cashPct: 0 }, { creditsPct: 0, equityPct: 100, cashPct: 0 }]) {
+        const r = priceRoleFromMonthly(PLATFORM_DEFAULT_MODEL, pay({ monthlyUsd }), { split });
+        const units = (r?.valueMinorPerMoon ?? 0) / 100;
+        const credits = amountOf(r, "credits") ?? 0;
+        const equity = amountOf(r, "earned-equity") ?? 0;
+        expect(credits).toBeGreaterThanOrEqual(units * 0.1);
+        expect(equity).toBeGreaterThanOrEqual(units * 0.1);
+        expect((r?.cashMinor ?? 0) / 100 + credits + equity).toBe(Math.round(units));
+      }
+    }
+  });
+
+  it("never pays more than the value at the smallest amounts, where whole tokens round hardest", () => {
+    // $0.01, $0.50, $1.00, $1.50 and $2.00 a moon, at the 80% cash maximum and at none.
+    for (const monthlyUsd of [0.01, 0.52, 1.03, 1.55, 2.06]) {
+      for (const split of [{ cashPct: 80 }, { cashPct: 0 }]) {
+        const r = priceRoleFromMonthly(PLATFORM_DEFAULT_MODEL, pay({ monthlyUsd }), { split });
+        const units = (r?.valueMinorPerMoon ?? 0) / 100;
+        const cash = (r?.cashMinor ?? 0) / 100;
+        const credits = amountOf(r, "credits") ?? 0;
+        const equity = amountOf(r, "earned-equity") ?? 0;
+        for (const part of [cash, credits, equity]) expect(part).toBeGreaterThanOrEqual(0);
+        expect(cash + credits + equity).toBe(Math.round(units));
+        expect(cash + credits + equity).toBeLessThanOrEqual(Math.ceil(units));
+      }
+    }
   });
 
   it.each([0, 10, 30, 50, 80, 100])("cash, Credits and Earned Equity add up to the value at a %s percent cash share", (pct) => {
