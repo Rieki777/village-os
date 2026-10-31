@@ -2,10 +2,11 @@
 /**
  * A circle's sessions, on its card (`/circles/:id`).
  *
- * What each case holds: a signed-out visitor sees nothing and nothing is
- * asked; with Live Sessions off, or for a member who does not keep the
- * circle (a former role holder among them), the card stands as it is, with no
- * heading, no loading line and no error; a summary that fails says nothing
+ * What each case holds: when the card says Live Sessions is not open to the
+ * reader (a signed-out visitor, a village with it off) nothing is asked and
+ * nothing drawn; when the summary is refused after all, or for a member who
+ * does not keep the circle (a former role holder among them), the card stands
+ * as it is, with no heading, no loading line and no error; a summary that fails says nothing
  * either; somebody who keeps the circle reads its decision log and this
  * season's pulse, for this circle only, with no circle chooser; a circle that
  * has never met says so in both; and a decision from a session the reader
@@ -77,7 +78,7 @@ beforeEach(() => {
   };
 });
 
-const draw = (signedIn = true) => render(<CircleSessions circleId="garden" circleName="Garden Circle" signedIn={signedIn} />);
+const draw = (sessionsOn = true) => render(<CircleSessions circleId="garden" circleName="Garden Circle" sessionsOn={sessionsOn} />);
 
 /** The summary has answered and every request it led to has been sent. */
 async function settled() {
@@ -86,14 +87,14 @@ async function settled() {
 }
 
 describe("a circle's sessions on its card", () => {
-  it("shows a signed-out visitor nothing, and asks nothing", async () => {
+  it("asks nothing and draws nothing when Live Sessions is not open to the reader: a visitor, or a village with it off", async () => {
     const { container } = draw(false);
     await new Promise((r) => setTimeout(r, 20));
     expect(container).toBeEmptyDOMElement();
     expect(calls).toEqual([]);
   });
 
-  it("leaves the card as it is when Live Sessions is off", async () => {
+  it("leaves the card as it is when the summary is refused after all", async () => {
     answers[SUMMARY] = () => json({ error: "This part of the village is not open." }, 404);
     const { container } = draw();
     await settled();

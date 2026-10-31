@@ -19,7 +19,7 @@ import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
 
 type View =
   | { kind: "loading" }
-  | { kind: "ok"; card: CircleCard; mayPropose: boolean; signedIn: boolean }
+  | { kind: "ok"; card: CircleCard; mayPropose: boolean; sessionsOn: boolean }
   | { kind: "missing" }
   | { kind: "failed" };
 
@@ -39,7 +39,7 @@ export default function CircleCardPage() {
         if (!alive) return;
         setView(
           out?.card
-            ? { kind: "ok", card: out.card as CircleCard, mayPropose: out.viewer?.mayPropose === true, signedIn: out.viewer?.signedIn === true }
+            ? { kind: "ok", card: out.card as CircleCard, mayPropose: out.viewer?.mayPropose === true, sessionsOn: out.viewer?.sessionsOn === true }
             : { kind: "failed" },
         );
       })
@@ -60,7 +60,7 @@ export default function CircleCardPage() {
           {view.kind === "ok" ? (
             <>
               <CircleCardView card={view.card} circleId={id} mayPropose={view.mayPropose} reload={load} />
-              <CircleSessions circleId={id} circleName={view.card.header.name} signedIn={view.signedIn} />
+              <CircleSessions circleId={id} circleName={view.card.header.name} sessionsOn={view.sessionsOn} />
             </>
           ) : null}
           {view.kind === "missing" ? <p className="text-foreground">{W.notFound}</p> : null}

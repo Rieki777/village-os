@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
  * `/circles/:id` mounts the circle's sessions below its card, handed the
- * circle, its name, and whether the reader is signed in, as the card's own
- * answer says. The card and the sessions are their own tests'; this one holds
+ * circle, its name, and whether Live Sessions is open to the reader, as the
+ * card's own answer says. The card and the sessions are their own tests'; this one holds
  * the wiring between them.
  */
 import type { ReactNode } from "react";
@@ -28,10 +28,10 @@ vi.mock("@/components/sessions/CircleSessions", () => ({
 
 import CircleCardPage from "./CircleCardPage";
 
-const answer = (signedIn: boolean) => ({
+const answer = (signedIn: boolean, sessionsOn: boolean) => ({
   circleId: "qa-garden",
   card: { header: { name: "Garden Circle" }, sections: [], pending: [], pendingWords: [], proposals: [] },
-  viewer: { signedIn, mayPropose: false },
+  viewer: { signedIn, mayPropose: false, sessionsOn },
 });
 
 beforeEach(() => {
@@ -39,19 +39,26 @@ beforeEach(() => {
 });
 
 describe("the circle card page", () => {
-  it("mounts the circle's sessions below the card for a signed-in reader", async () => {
-    state.body = answer(true);
+  it("mounts the circle's sessions below the card, open to a member", async () => {
+    state.body = answer(true, true);
     render(<CircleCardPage />);
     expect(await screen.findByTestId("sessions")).toBeInTheDocument();
     const card = screen.getByTestId("card");
     expect(card.compareDocumentPosition(screen.getByTestId("sessions")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(state.mounted.at(-1)).toEqual({ circleId: "qa-garden", circleName: "Garden Circle", signedIn: true });
+    expect(state.mounted.at(-1)).toEqual({ circleId: "qa-garden", circleName: "Garden Circle", sessionsOn: true });
   });
 
-  it("tells the sessions a visitor is signed out, so they ask nothing", async () => {
-    state.body = answer(false);
+  it("tells the sessions when Live Sessions is not open to the reader, so they ask nothing", async () => {
+    state.body = answer(false, false);
     render(<CircleCardPage />);
     await screen.findByTestId("sessions");
-    expect(state.mounted.at(-1)).toEqual({ circleId: "qa-garden", circleName: "Garden Circle", signedIn: false });
+    expect(state.mounted.at(-1)).toEqual({ circleId: "qa-garden", circleName: "Garden Circle", sessionsOn: false });
+  });
+
+  it("reads a signed-in member in a village with Live Sessions off as not open", async () => {
+    state.body = answer(true, false);
+    render(<CircleCardPage />);
+    await screen.findByTestId("sessions");
+    expect(state.mounted.at(-1)).toMatchObject({ sessionsOn: false });
   });
 });

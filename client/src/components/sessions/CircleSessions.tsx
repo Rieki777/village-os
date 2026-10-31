@@ -15,10 +15,12 @@
  *
  * WHO SEES IT: the circle's members by standing, and admins, the audience the
  * decision log and the pulse are kept for (`mayKeepRhythm`), read off the
- * summary's `canKeep`. A signed-out visitor is asked nothing. With Live
- * Sessions off, for anyone who does not keep the circle, or when the summary
- * does not answer, this draws nothing at all: no heading, no loading line and
- * no error, so the card stands as it is.
+ * summary's `canKeep`. Nothing is asked unless the card says Live Sessions is
+ * open to this reader (`viewer.sessionsOn`, server/routes/circleCard.ts), so a
+ * visitor, or a village with the module off, sends no request at all. For
+ * anyone who does not keep the circle, or when the summary does not answer,
+ * this draws nothing: no heading, no loading line and no error, so the card
+ * stands as it is.
  */
 import { useEffect, useState } from "react";
 import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
@@ -39,18 +41,18 @@ async function readKeeps(circleId: string): Promise<boolean> {
   }
 }
 
-export default function CircleSessions({ circleId, circleName, signedIn }: { circleId: string; circleName: string; signedIn: boolean }) {
+export default function CircleSessions({ circleId, circleName, sessionsOn }: { circleId: string; circleName: string; sessionsOn: boolean }) {
   const [keeps, setKeeps] = useState(false);
 
   useEffect(() => {
     setKeeps(false);
-    if (!signedIn || !circleId) return;
+    if (!sessionsOn || !circleId) return;
     let live = true;
     void readKeeps(circleId).then((yes) => live && setKeeps(yes));
     return () => {
       live = false;
     };
-  }, [circleId, signedIn]);
+  }, [circleId, sessionsOn]);
 
   if (!keeps) return null;
   const circles = [{ id: circleId, name: circleName }];
