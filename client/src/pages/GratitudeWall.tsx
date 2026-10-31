@@ -47,6 +47,7 @@ import HeartsRow from "@/components/gratitude/HeartsRow";
 import WallEntryCard from "@/components/gratitude/WallEntryCard";
 import YourStanding from "@/components/gratitude/YourStanding";
 import MoonsPast from "@/components/gratitude/MoonsPast";
+import SuggestionChips from "@/components/gratitude/SuggestionChips";
 import type { WallEntry } from "@shared/gratitudeVoices";
 
 interface SentEntry {
@@ -78,6 +79,8 @@ export default function GratitudeWall() {
   const [form, setForm] = useState({ to: "", amount: 10, message: "" });
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  // Bumped after a send so the chips re-read and the person just thanked leaves.
+  const [sentCount, setSentCount] = useState(0);
 
   /* The one thing on this form the village decides. See the textarea below. */
   const [requireMessage, setRequireMessage] = useState<boolean | null>(null);
@@ -168,6 +171,7 @@ export default function GratitudeWall() {
         // threshold rather than on the first send, so this can drop the banner
         // one send early. It is a cache hint and the next read corrects it.
         forgetExamplesCache("gratitude");
+        setSentCount((n) => n + 1);
         load();
       }
     } catch {
@@ -177,6 +181,16 @@ export default function GratitudeWall() {
   };
 
   const budget = me?.gratitude.budget;
+
+  /*
+   * The gratitude nudge links to `#send`. The form renders only once the
+   * member is known, after the browser has already looked for the anchor and
+   * found nothing, so the scroll is done here when the form arrives.
+   */
+  useEffect(() => {
+    if (!user || typeof window === "undefined" || window.location.hash !== "#send") return;
+    document.getElementById("send")?.scrollIntoView({ block: "start" });
+  }, [user]);
 
   return (
     <Layout>
@@ -223,7 +237,7 @@ export default function GratitudeWall() {
           {user && <YourStanding currency={currency} />}
 
           {user ? (
-            <form onSubmit={send} className="mb-10 rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <form id="send" onSubmit={send} className="mb-10 scroll-mt-20 rounded-2xl border border-border bg-card p-6 shadow-sm">
               {/*
                 `flex-wrap` and a gap, because at 390px these two run into each
                 other. `justify-between` pushes them to the edges only while
@@ -251,6 +265,9 @@ export default function GratitudeWall() {
               {budget && budget.total > 0 && peopleThanked !== null && (
                 <HeartsRow people={peopleThanked} fullSends={budget.fullSends} cap={budget.cap} />
               )}
+
+              {/* One tap fills the field below; the Send button still sends. */}
+              <SuggestionChips selected={form.to} onPick={(to) => setForm({ ...form, to })} refreshKey={sentCount} />
 
               <div className="mb-3 grid gap-3 md:grid-cols-[1fr_110px]">
                 <input
