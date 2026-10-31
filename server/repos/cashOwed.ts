@@ -177,3 +177,12 @@ export async function seatsOnCashRoles(pool: Pool): Promise<RowDataPacket[]> {
   );
   return rows;
 }
+
+/** How many of one member's rows are still unpaid: owed, or claimed and waiting. */
+export async function unpaidCashCountFor(pool: Pool, userId: string): Promise<number> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS `n` FROM `cash_owed` WHERE `user_id` = ? AND `state` IN ('owed', 'claimed')",
+    [userId],
+  );
+  return Number(rows[0]?.n ?? 0);
+}

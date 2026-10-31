@@ -10,7 +10,7 @@
  * test pool does not, so a JavaScript Date on one side of the comparison and
  * the database's clock on the other would disagree by the host's offset.
  */
-import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
 const VILLAGE = "local";
 
@@ -43,12 +43,20 @@ const toRow = (r: RowDataPacket): InviteRow => ({
   secondsLeft: Number(r.seconds_left ?? 0),
 });
 
-/** One new link. The expiry is set by the database's clock. */
-export async function createInvite(
-  pool: Pool,
+/**
+ * One new link. The expiry is set by the database's clock.
+ *
+ * ON THE CALLER'S CONNECTION, and never a pool: `makeInvite`
+ * (server/routes/invites.ts) runs it inside the transaction that holds the
+ * inviter's row and has just asked whether the session still holds it
+ * (`whileSessionHolds`, server/lib/sessionHold.ts). On a pool it would run on
+ * another connection, outside that lock, and the check would cover nothing.
+ */
+export async function createInviteOn(
+  conn: PoolConnection,
   input: { id: string; tokenHash: string; inviterUserId: string; days: number },
 ): Promise<void> {
-  await pool.query( // module-review-ok: one table, one row, no cache above it
+  await conn.query( // module-review-ok: one table, one row, no cache above it
     "INSERT INTO member_invites (id, village_id, token_hash, inviter_user_id, expires_at) " +
       "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP + INTERVAL ? DAY)",
     [input.id, VILLAGE, input.tokenHash, input.inviterUserId, Math.max(1, Math.trunc(input.days))],
@@ -74,8 +82,17 @@ export async function invitesBy(pool: Pool, inviterUserId: string, limit = 50): 
   return rows.map(toRow);
 }
 
-/** How many of one person's links could still be used. */
-export async function openInviteCount(pool: Pool, inviterUserId: string): Promise<number> {
+/**
+ * How many of one person's links could still be used.
+ *
+ * Takes a connection too: `makeInvite` (server/routes/invites.ts) asks it
+ * inside the transaction that holds the inviter's row (`whileSessionHolds`),
+ * so two makes at the same moment read the count one after the other and
+ * the cap holds. A plain read after the row lock is the first consistent
+ * read of that transaction, so it sees every link committed before the lock
+ * was granted.
+ */
+export async function openInviteCount(pool: Pool | PoolConnection, inviterUserId: string): Promise<number> {
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: one table, no cache above it
     "SELECT COUNT(*) AS n FROM member_invites WHERE village_id = ? AND inviter_user_id = ? " +
       "AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP",

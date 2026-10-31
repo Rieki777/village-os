@@ -286,7 +286,8 @@ describe.skipIf(!configured)("every new erasure step, stopped part way and resum
     ["rz2", "event-places-after-tombstone", (s) => withParam("DELETE FROM event_waitlist WHERE user_id", (ps) => ps[0] === s.leaver.id)],
     ["rz3", "event-places-after-tombstone", (s) => withParam("INTO token_ledger (id", (ps) => ps.some((v) => typeof v === "string" && v.endsWith(":refund") && v.includes(s.leaver.id)))],
     ["rz4", "housing-contacts-after-tombstone", (s) => withParam("DELETE FROM comms_contacts", (ps) => Array.isArray(ps[1]) && (ps[1] as unknown[]).includes(s.workContact))],
-    ["rz5", "housing-reservations-after-tombstone", () => has("UPDATE health_events")],
+    // The housing audit line by its own WHERE and kind: the seat journal's rewrite in "org-seatings" and the pulse step before it both UPDATE health_events too.
+    ["rz5", "housing-reservations-after-tombstone", () => has("WHERE kind = 'housing_reservation'")],
     ["rz6", "vouches-after-tombstone", () => has("UPDATE member_vouches SET note = NULL")],
     ["rz7", "conversations-after-tombstone", () => has("SET role = 'owner'")],
     ["rz8", "delegations-after-tombstone", () => has("UPDATE delegations SET revoked_at")],
@@ -294,6 +295,8 @@ describe.skipIf(!configured)("every new erasure step, stopped part way and resum
     ["rz10", "investor-fact-words-after-tombstone", () => has("UPDATE investor_path_facts SET detail = NULL")],
     ["rz11", "stay-notes-after-tombstone", () => has("UPDATE stays SET notes = NULL")],
     ["rz12", "purchase-emails-after-tombstone", () => has("UPDATE product_purchases SET payer_email = NULL")],
+    // The read of their subscriptions, before Stripe is asked; the Stripe side is server/lib/erasure.subscriptions.test.ts.
+    ["rzsub", "product-subscriptions-after-tombstone", () => has("pp.stripe_subscription_id IS NOT NULL")],
   ];
 
   it.each(cases)("%s: stopped inside %s, resumed, and finished the same as an unbroken sweep", async (prefix, step, match) => {

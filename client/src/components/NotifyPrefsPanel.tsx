@@ -11,6 +11,9 @@ import { authToken, clearAuthToken } from "@/lib/gameApi";
 import { actionError } from "@/lib/actionOutcome";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import LeavingEnds, { leftEndedWords, useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
+import { CashOwedNotice, VotesCastNotice, useUnpaidCash } from "@/components/LeavingKeeps";
+import { CASH_GIVE_UP_FIELD } from "@shared/cashOwed";
+import LeavingNotices, { useLeavingNotices } from "@/components/LeavingNotices";
 import EmailFromVillage from "@/components/EmailFromVillage";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { TASK_COPY, TASK_EMAIL_PREFS, isTaskEmailPref } from "@shared/sessionTasks";
@@ -113,6 +116,11 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
   const identity = useIdentityConfirm("delete-account");
   // The aligned terms leaving ends (seat settings PR8): named before the member confirms, and again after.
   const endingTerms = useTermsLeavingEnds(confirming);
+  // Cash the village still owes (round 4, R4-4): named before they confirm, and given up only with the tick.
+  const cashOwed = useUnpaidCash(confirming);
+  const [giveUpCash, setGiveUpCash] = useState(false);
+  // What deleting cancels (round 3, finding 5): their recurring payments, named before they confirm.
+  const leavingNotices = useLeavingNotices(confirming);
   /** Task emails belong to Live Sessions, so the choice is offered only where the village runs it. */
   const sessionsOn = useModuleOn("sessions");
   const deletePanel = useRef<HTMLDivElement | null>(null);
@@ -199,7 +207,7 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
     fetch("/api/profile/delete-account", {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify(identityBody(identity, password)),
+      body: JSON.stringify({ ...identityBody(identity, password), [CASH_GIVE_UP_FIELD]: giveUpCash }),
     })
       .then(async (r) => {
         const d = await r.json();
@@ -449,6 +457,9 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
               </div>
             )}
             <LeavingEnds titles={endingTerms} />
+            <CashOwedNotice count={cashOwed} door="deletion" givenUp={giveUpCash} onGiveUp={setGiveUpCash} />
+            <VotesCastNotice />
+            <LeavingNotices notices={leavingNotices} />
             <div className="flex flex-wrap items-center gap-2">
               <IdentityConfirmField
                 state={identity}
@@ -458,11 +469,11 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
                 placeholder="Confirm your password"
                 inputClassName="text-sm border border-destructive/70 rounded-lg px-3 py-1.5"
               />
-              <button onClick={deleteAccount} disabled={!identityReady(identity, password)}
+              <button onClick={deleteAccount} disabled={!identityReady(identity, password) || (!!cashOwed && !giveUpCash)}
                 className="text-sm bg-destructive text-destructive-foreground rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">
                 Delete forever
               </button>
-              <button onClick={() => { setConfirming(false); setPassword(""); setError(""); }}
+              <button onClick={() => { setConfirming(false); setPassword(""); setError(""); setGiveUpCash(false); }}
                 className="text-sm text-muted-foreground">
                 Cancel
               </button>

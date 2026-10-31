@@ -10,7 +10,7 @@
  * Each function hands back what the driver handed back. Mapping, rights and
  * refusals stay in the lib, the split server/repos/liveSessions.ts makes.
  */
-import type { RowDataPacket } from "mysql2/promise";
+import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import type { Queryable } from "./liveSessions";
 
 const rowsOf = async (q: Queryable, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> => {
@@ -42,9 +42,14 @@ export async function keyRow(q: Queryable, no: number): Promise<RowDataPacket[]>
   return rowsOf(q, "SELECT `created_at`, `last_used_at` FROM `live_session_feed_keys` WHERE `member_no` = ? LIMIT 1", [no]);
 }
 
-/** A new key for a member, taking the place of the old. */
-export async function putKey(q: Queryable, no: number, keyHash: string, now: Date): Promise<void> {
-  await q.query(
+/**
+ * A new key for a member, taking the place of the old. ON THE CALLER'S
+ * CONNECTION, and never a pool: `makeAddress` (server/lib/sessionCalendar.ts)
+ * runs it under the member's row lock, while the session still holds it
+ * (`whileSessionHolds`, server/lib/sessionHold.ts).
+ */
+export async function putKey(conn: PoolConnection, no: number, keyHash: string, now: Date): Promise<void> {
+  await conn.query(
     "INSERT INTO `live_session_feed_keys` (`member_no`, `key_hash`, `created_at`, `last_used_at`) VALUES (?, ?, ?, NULL) " +
       "ON DUPLICATE KEY UPDATE `key_hash` = VALUES(`key_hash`), `created_at` = VALUES(`created_at`), `last_used_at` = NULL",
     [no, keyHash, now],

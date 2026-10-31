@@ -410,6 +410,27 @@ describe.skipIf(!DB_CONFIGURED)("the happy path: a new member signs in with Goog
     const body = await (await exchange(cookie)).json();
     expect(body.user.email).toBe("newcomer@example.com");
   });
+
+  /*
+   * A departed member's old handle is `departed-` and the last eight of their
+   * id, and the erasure frees it. A newcomer whose Google name slugs to that
+   * shape would have taken it, and every old link to the departed member's
+   * page would have reached them (round 3 leftover).
+   */
+  it("gives a newcomer whose name starts with Departed a handle that does not start with departed-", async () => {
+    const { state, nonce } = await beginSignIn();
+    nextResponse = {
+      status: 200,
+      claims: claimsFor({ nonce, sub: "google-sub-departed-fern", email: "fern@example.com", email_verified: true, name: "Departed Fern" }),
+    };
+    const { cookie } = await callback(state);
+    const ex = await exchange(cookie);
+    expect(ex.status).toBe(200);
+    const body = await ex.json();
+    expect(body.user.email, "the account was made").toBe("fern@example.com");
+    expect(String(body.user.handle)).not.toMatch(/^departed-/);
+    expect(String(body.user.handle), "and the handle still comes from their name").toMatch(/^fern/);
+  });
 });
 
 describe.skipIf(!DB_CONFIGURED)("the link path", () => {

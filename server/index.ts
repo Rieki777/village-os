@@ -1,5 +1,5 @@
-import { anonymizeMember } from "./lib/erasure";
-import { resolveExit } from "./lib/exitResolve";
+import { anonymizeMember, backfillFinishedErasures, erasureBackfillJob } from "./lib/erasure";
+import { FORMER_MEMBER_HOLD, resolveExit } from "./lib/exitResolve";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
@@ -411,7 +411,7 @@ import {
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
-import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
+import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
@@ -428,15 +428,7 @@ import {
   staysOpenState,
 } from "./lib/stays";
 import { createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
-import {
-  allExits,
-  blockingStates,
-  createExit,
-  exitById,
-  exitOpenState,
-  openExitFor,
-  sweepBalances,
-} from "./lib/exit";
+import { allExits, blockingStates, cancelExit, createExit, exitById, exitOpenState, openExitFor, sweepBalances } from "./lib/exit";
 import {
   DEFAULT_EXIT_POLICY,
   EXIT_POLICY_TERMS,
@@ -538,7 +530,7 @@ import { distributionsForMember, gratitudeCyclesRepo, gratitudeDistributionsRepo
 import { grantsForMember, portraitsForMember } from "./repos/characterPortraits";
 import { charactersForMember } from "./repos/playerCharacters";
 import { claimsRepo as claimsRepoFactory, questClosed, questsRepo as questsRepoFactory} from "./repos/quests";
-import { asBudget, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
+import { asBudget, DEPARTED_RECIPIENT, departedRecipient, mintRecipientRefusal, sendGratitude, type GratitudeBudget, type GratitudeDeps } from "./lib/gratitude";
 import { recentEvents, recordEvent } from "./lib/events";
 import { checkToolLink } from "./lib/toolcheck";
 import { canSeeTool } from "../shared/toolsVisibility";
@@ -806,7 +798,7 @@ import {
   type PatternKind,
 } from "./lib/seasonPatterns";
 import { applyAcceptReward } from "./lib/proposalAward";
-import { statedProposalCash } from "./lib/cashOwed"; // 0285: a proposal's cash, owed when it is accepted
+import { cashNotGivenUp, statedProposalCash } from "./lib/cashOwed"; // 0285: a proposal's cash, owed when it is accepted; R4-4: deleting gives unpaid cash up
 import { GRATITUDE_ONLY_SENT } from "../shared/workValue";
 import { buildRetrospective, proposeNextPattern } from "./lib/seasonRetrospective";
 import {
@@ -814,12 +806,12 @@ import {
   ceilMinor,
   createCheckout,
   handleStripeEvent,
-  isSuspended,
-  recordFiatCharge,
+  isSuspended, buyerHasLeft, BUYER_HAS_LEFT,
+  recordFiatCharge, refusedChargeAdvice,
   registerPaymentHandlers,
   stripeConfigured,
   webhookSecretConfigured,
-} from "./lib/payments";
+} from "./lib/payments"; import { settleLeaversSubscription } from "./lib/owedCancels"; // a leaver's subscription, cancelled on a refused charge
 import {
   LIFECYCLE_RANK, MODULES, MODULES_BY_ID, modulesOwning, priceLine, supportRoute, vendorModules,
   type ModuleLifecycle,
@@ -1819,7 +1811,7 @@ const isJourney = isAdmin;
  * unique per deployment, member-editable within the same rules.
  */
 function slugifyHandle(name: string): string {
-  return (
+  return livingHandle( // a name never gives a living member the departed's prefix (server/lib/profile.ts)
     String(name ?? "")
       .toLowerCase()
       .normalize("NFKD")
@@ -4579,7 +4571,7 @@ async function runRetentionSweep(): Promise<string> {
  *  - quest_claims.user_name → same (rows KEPT, amounts intact);
  *  - token_ledger descriptions that carried their first name → generic
  *    (keyed by structured refs, never string matching);
- *  - submissions they authored: PII keys inside data scrubbed, row kept;
+ *  - submissions they sent: their words and name inside data scrubbed, row kept;
  *  - their notifications deleted; notifications they acted in de-attributed
  *    AND text-scrubbed (the title and body restate the person independently
  *    of the actor id — see the statement itself);
@@ -4587,7 +4579,7 @@ async function runRetentionSweep(): Promise<string> {
  *  - org seatings end and lose the name and note they carried (the OTHER
  *    plane called "role", §3.15 — the appointments line above is a different
  *    table and reaches none of this);
- *  - PUBLIC pulse lines naming them are deleted; ADMIN audit rows are kept
+ *  - PUBLIC pulse lines they wrote are deleted, others lose their name; ADMIN audit rows kept
  *    (id-only, retained as the legal record — Law 8968 permits retention
  *    for accountability obligations).
  *
@@ -5876,10 +5868,10 @@ async function startServer() {
      * the goods, and put a human on it.
      */
     const isRenewal = firstTimeForThisPeriod && Number(row.periods_paid) >= 1;
-    let refusal: string | null = null;
+    let refusal: string | null = row.user_id && buyerHasLeft(await members.byId(String(row.user_id))) ? BUYER_HAS_LEFT : null;
     if (isRenewal) {
-      if (!row.active) refusal = "the product is no longer active";
-      else if (row.token_slug) refusal = purchaseProblem(String(row.token_slug));
+      if (!refusal && !row.active) refusal = "the product is no longer active";
+      else if (!refusal && row.token_slug) refusal = purchaseProblem(String(row.token_slug));
       if (!refusal && row.user_id && await isSuspended(pool, String(row.user_id))) {
         refusal = "the buyer's purchasing is suspended";
       }
@@ -5926,12 +5918,11 @@ async function startServer() {
       amountMinor: Number(row.amount_minor), paymentIntentId: chargeRef,
     });
     if (refusal) {
-      // Banked, not delivered. Loud, and settled below so Stripe stops
-      // retrying a decision rather than a failure.
-      await notifyAdmins(
-        "payment",
-        `Renewal charged but NOT delivered: ${row.product_name} (${purchaseId}, ${periodKey}), ${refusal}. ` +
-          `Cancel the subscription in Stripe and refund this period.`,
+      // Banked, not delivered, settled below so Stripe stops retrying a decision. A leaver's subscription is cancelled on every such charge (server/lib/owedCancels.ts).
+      const held = await settleLeaversSubscription(pool, { userId: row.user_id ? String(row.user_id) : null, subscriptionId: subId ?? row.stripe_subscription_id, refusal });
+      if (firstTimeForThisPeriod) await notifyAdmins("payment",
+        `${isRenewal ? "Renewal" : "Purchase"} charged but NOT delivered: ${row.product_name} (${purchaseId}, ${periodKey}), ${refusal}. ` +
+          refusedChargeAdvice(held, refusal),
         `product-renewrefused:${purchaseId}:${periodKey}`,
       );
     } else if (row.token_slug && row.token_amount && row.user_id) {
@@ -5968,7 +5959,7 @@ async function startServer() {
         [periodKey, purchaseId, periodKey],
       );
     }
-    if (row.user_id) {
+    if (row.user_id && refusal !== BUYER_HAS_LEFT) {
       await notify({
         userId: String(row.user_id), type: "payment",
         title: `Receipt #${row.receipt_no}: ${row.product_name}`,
@@ -6815,7 +6806,7 @@ async function startServer() {
       if (!user) return;
       const scopes = cleanScopes(req.body?.scopes, { intentsAllowed: AGENT_INTENT_WRITE });
       if (!scopes.ok) return res.status(400).json({ error: scopes.error });
-      const minted = await mintToken(getPool(), user.id, { name: String(req.body?.name ?? ""), scopes: scopes.scopes, ttlDays: req.body?.ttlDays });
+      const minted = await mintToken(getPool(), user.id, { name: String(req.body?.name ?? ""), scopes: scopes.scopes, ttlDays: req.body?.ttlDays }, Number(user.tokenVersion ?? 0)); // a session ended since its check answers 401
       if (!minted.ok) return res.status(minted.status).json({ error: minted.error });
       // The value, once. It is not in the row, not in the audit line, and this
       // is the only response that ever carries it.
@@ -6842,7 +6833,7 @@ async function startServer() {
     app.put("/api/agent/inbox", async (req, res) => {
       const user = await me(req, res);
       if (!user) return;
-      const out = await setInbox(getPool(), user.id, req.body?.url);
+      const out = await setInbox(getPool(), user.id, req.body?.url, process.env, Number(user.tokenVersion ?? 0)); // a session ended since its check answers 401
       if (!out.ok) return res.status(out.status).json({ error: out.error });
       // The secret, once.
       res.json({ inbox: out.inbox, secret: out.secret, signatureHeader: SIGNATURE_HEADER });
@@ -6884,8 +6875,8 @@ async function startServer() {
         key: String(req.body?.key ?? ""),
         baseUrl: req.body?.baseUrl,
         model: req.body?.model,
-      });
-      if (!out.ok) return res.status(400).json({ error: out.error });
+      }, process.env, Number(user.tokenVersion ?? 0));
+      if (!out.ok) return res.status(out.status ?? 400).json({ error: out.error }); // 401 when the session ended since its check
       void recordEvent(getPool(), {
         kind: "agent_key", text: `set their own assistant key (${out.view.provider})`,
         actorUserId: user.id, actorKind: "agent", entityType: "member_key", entityRef: user.id, audience: "admin",
@@ -8127,7 +8118,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if ((lost.refusal = setPasswordLinkRefusal(claim, u.tokenVersion))) return;
       u.passwordHash = hash;
       u.tokenVersion = (u.tokenVersion ?? 0) + 1;
-    }));
+    }), { notify }); // notify: the member hears that a delegation they gave was ended (endVoiceGiven)
     if (lost.refusal) return res.status(401).json({ error: lost.refusal });
     if (!fresh) return res.status(404).json({ error: "Account not found" });
     const authTokenStr = encodeToken(AUTH_TOKEN_SECRET, fresh.id, fresh.email, fresh.tokenVersion ?? 0);
@@ -8191,13 +8182,13 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.json({ success: true, emailed });
   });
 
-  /** Revoke every session (S1's tokenVersion lever) and all the member's agent holds: tokens, private calendar feed, inbox, own model key. */
+  /** Revoke every session (S1's tokenVersion lever) and what a session left standing: agent tokens, private calendar feed, inbox, own model key, open invitation links, circle calendar address, the delegation the member gave. */
   app.post("/api/admin/users/:id/revoke-sessions", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const target = await members.byId(req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
     await members.update(target.id, (u: any) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; }); // sessions end first, whatever happens next
-    const ended = await endAgentReach(getPool(), target.id); // a failure answers 500 by name, and pressing again finishes it
+    const ended = await endAgentReach(getPool(), target.id, { notify }); // a failure answers 500 by name, and pressing again finishes it
     res.json({ success: true, agentTokensRevoked: ended.agentTokens, agentReachEnded: ended });
   });
 
@@ -9967,7 +9958,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     }
     if (toUserId === user.id) return res.status(400).json({ error: "That's you" });
     const recipient = await members.byId(String(toUserId));
-    if (!recipient) return res.status(404).json({ error: "Member not found" });
+    if (!recipient || departedRecipient(recipient)) return res.status(404).json({ error: recipient ? DEPARTED_RECIPIENT : "Member not found" }); // nothing reaches a tombstone, round 4 finding 7: server/lib/departed.ts
     // Example identities carry empty prefs, so contactable is not false, and
     // their ids are public on every forum thread payload. Without this the
     // relay writes a contact_requests row that outlives the identities and
@@ -11105,16 +11096,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (await overLimit(`feed-token:${user.id}`, 10, 24 * 60 * 60 * 1000)) {
       return res.status(429).json({ error: "You have made enough addresses today. Try again tomorrow." });
     }
-    const raw = await mintFeedToken(getPool(), user.id);
-    await recordEvent(getPool(), {
-      kind: "calendar_feed_minted",
-      text: "made a private calendar feed address",
-      actorUserId: user.id,
-      entityType: "calendar",
-      entityRef: "feed",
-      audience: "admin",
-    });
-    res.json({ success: true, url: `${feedOrigin(req)}/api/events/calendar.ics?token=${raw}` });
+    const minted = await mintFeedToken(getPool(), user.id, Number(user.tokenVersion ?? 0)); // writes the audit line; a session ended since its check answers 401
+    if (!minted.ok) return res.status(minted.status).json({ error: minted.error, message: "Sign in first" });
+    res.json({ success: true, url: `${feedOrigin(req)}/api/events/calendar.ics?token=${minted.raw}` });
   });
 
   app.delete("/api/events/feed/token", async (req, res) => {
@@ -14257,7 +14241,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const target = await members.byId(req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
-    const states = await exitOpenState(getPool(), target.id, roleIdsFor(target.id));
+    const states = await exitOpenState(getPool(), target.id, roleIdsFor(target.id), { formerMember: FORMER_MEMBER_HOLD });
     res.json({
       states,
       blocking: blockingStates(states),
@@ -14384,22 +14368,18 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
     }
     const out = await resolveExit(getPool(), { exitId: exit.id, target, actorId: adminActor(req)?.id ?? null, agreementRef: req.body?.agreementRef, deps: erasureDeps });
-    // Seats vacate at resolve, whichever way it went; the stewards hear which ones.
-    for (const roleId of roleIds) {
+    // Seats vacate at resolve, whichever way it went, and the stewards hear which; a resolve a cancel stopped vacates none (409).
+    for (const roleId of out.stopped ? [] : roleIds) {
       await notifyAdmins("exit_opened", `An opening in ${roleId} (departure resolved)`, `exit:${exit.id}:vacancy:${roleId}`);
     }
-    res.json({ success: true, outcome: out.outcome, held: out.held, owed: out.owed, vacatedRoles: roleIds });
+    res.status(out.stopped ? 409 : 200).json(out.stopped ? { error: out.stopped.message, ...out.stopped } : { success: true, outcome: out.outcome, held: out.held, owed: out.owed, vacatedRoles: roleIds });
   });
 
-  /** A person who stays: the exit closes without a tombstone. */
+  /** A person who stays: the exit closes without a tombstone, and so does a deletion it began (cancelExit). */
   app.post("/api/admin/exits/:id/cancel", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [r] = await getPool().query<any>(
-      "UPDATE exits SET status = 'cancelled', resolved_at = NOW() WHERE id = ? AND status IN ('open','settling')",
-      [req.params.id],
-    );
-    if (!(r as any).affectedRows) return res.status(404).json({ error: "No open exit with that id" });
-    res.json({ success: true });
+    const out = await cancelExit(getPool(), String(req.params.id), { memberById: (id) => members.byId(id), actorId: adminActor(req)?.id ?? null });
+    res.status(out.status).json(out.body);
   });
 
   /**
@@ -15234,7 +15214,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       ? await members.byEmail(typedEmail)
       : (String(to ?? "").trim() ? await members.byId(String(to).trim()) : null);
     if (!typedEmail && !String(to ?? "").trim()) return res.status(400).json({ error: "Who is it for?" });
-    if (!recipient) return res.status(404).json({ error: "No member here has that address" });
+    if (!recipient || departedRecipient(recipient)) return res.status(404).json({ error: recipient ? DEPARTED_RECIPIENT : "No member here has that address" }); // nothing moves to a tombstone: server/lib/gratitude.ts
     if (recipient.id === user.id) {
       return res.status(400).json({ error: "That is your own account. Sending to yourself moves nothing" });
     }
@@ -16587,7 +16567,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(400).json({ error: "A reason is required. Every hand-mint must explain itself" });
     }
     const target = await members.byId(String(toUserId));
-    if (!target) return res.status(404).json({ error: "Member not found" });
+    const refused = mintRecipientRefusal(target); if (!target || refused) return res.status(refused?.status ?? 404).json(refused?.body ?? { error: "Member not found" }); // nothing is minted to a tombstone or a standing example: server/lib/gratitude.ts
 
     /*
      * 0106: NOBODY GRANTS THEMSELVES POWER ALONE.
@@ -16800,7 +16780,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // A grant queued before Gratitude stopped being mintable is refused at the second door too.
     if (request.tokenSlug === HEARTS) return res.status(400).json({ error: GRATITUDE_ONLY_SENT });
     const target = await members.byId(request.toUserId);
-    if (!target) return res.status(404).json({ error: "Member not found" });
+    const refused = mintRecipientRefusal(target); if (!target || refused) return res.status(refused?.status ?? 404).json(refused?.body ?? { error: "Member not found" }); // a member who left after the asking is refused here: server/lib/gratitude.ts
     // The rule that has no exception, re-read at the second door: the person
     // this pays cannot be the person who asked for it, whoever signs.
     if (target.id === request.requestedBy) {
@@ -17178,7 +17158,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   // A member's own account record: read, update, and the contribution journal.
   // Registered at exactly the point those three routes used to sit.
-  registerProfileRoutes(app, { authedUser, members, publicUser });
+  registerProfileRoutes(app, { authedUser, members, publicUser, getPool });
 
   // Where the member stands on each path they walk. Beside the profile routes
   // because it answers only to the account behind the token, and derived from
@@ -19260,7 +19240,7 @@ ${inner}
     }
     const { toId, amount, note, tag, structureKey, quiet, clientNonce } = req.body ?? {};
     const recipient = toId ? await members.byId(String(toId)) : null;
-    if (!recipient) return res.status(404).json({ error: "No member found" });
+    if (!recipient || departedRecipient(recipient)) return res.status(404).json({ error: recipient ? DEPARTED_RECIPIENT : "No member found" }); // nothing moves to a tombstone: server/lib/gratitude.ts
     if (isExampleUser(recipient)) {
       return res.status(409).json({
         error: "That is a standing example, not a member. Appreciation flows to real people.",
@@ -22172,7 +22152,7 @@ ${inner}
         return out;
       }
       const member = await members.byId(asked.userId);
-      if (!member) {
+      if (!holderStands(member)) { // an erased member is a tombstone row: seating one puts "A departed member" in the role, counted as a holder
         out.held = `The person this vote named (${asked.userId}) left the village while the vote was running, so nobody was seated in ${role.name ?? asked.roleId}.`;
         await notifyAdmins("governance", `A carried seating could not land: ${b.title}`, `bal:${b.id}:seat-held`);
         return out;
@@ -22253,8 +22233,8 @@ ${inner}
       }
       await addActivity("governance", `${firstName(member.name)} sits in ${who}, by a vote of the whole village.`, {
         actorUserId: actorId,
-        entityType: "role",
-        entityRef: role.id,
+        entityType: "user", // its subject, so an erasure finds it (server/repos/pulseLines.ts); the audit row below names the role
+        entityRef: member.id,
       });
       void recordEvent(getPool(), {
         kind: "audit",
@@ -22347,8 +22327,8 @@ ${inner}
       });
       await addActivity("governance", `${member ? firstName(member.name) : "A member"} no longer sits in ${who}, by a vote of the whole village.`, {
         actorUserId: actorId,
-        entityType: "role",
-        entityRef: asked.roleId,
+        entityType: "user", // its subject, so an erasure finds it (server/repos/pulseLines.ts); the audit row below names the role
+        entityRef: asked.userId,
       });
       void recordEvent(getPool(), {
         kind: "audit",
@@ -25564,7 +25544,7 @@ ${inner}
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerSaberraRoutes(app, { guardCapability, getPool, authedUser });
-  registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
+  registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps, authedUser });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
   // ── Season patterns (0050) ───────────────────────────────────────────────
@@ -25785,7 +25765,7 @@ ${inner}
       return res.status(400).json({ error: "userId and action (add|remove) are required" });
     }
     const member = await members.byId(userId);
-    if (!member) return res.status(404).json({ error: "Member not found" });
+    if (!member || (action === "add" && !holderStands(member))) return res.status(404).json({ error: "Member not found" }); // a tombstone is nobody to appoint, and a stray holding of one can still be removed
 
     // A role can require a minimum stage: appointments respect the ladder too.
     if (action === "add" && role.minStage) {
@@ -25831,7 +25811,7 @@ ${inner}
       return holders.filter((h) => !gone.includes(h));
     });
     if (appointedHolderId) {
-      await addActivity("role", `${firstName(member.name)} joined the ${role.name}`, { actorUserId: appointer, entityType: "role", entityRef: role.id });
+      await addActivity("role", `${firstName(member.name)} joined the ${role.name}`, { actorUserId: appointer, entityType: "user", entityRef: member.id }); // its subject, for the erasure (server/repos/pulseLines.ts)
       await notify({
         userId: member.id,
         type: "role_appointed",
@@ -25885,6 +25865,8 @@ ${inner}
   app.post("/api/profile/delete-account", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
+    // R4-4: cash the village still owes is given up only when the member says so, asked before the confirmation is spent.
+    const cashKept = await cashNotGivenUp(getPool(), user.id, req.body); if (cashKept) return res.status(409).json(cashKept);
     const confirmed = await confirmIdentity(req, res, user, "delete-account");
     if (!confirmed.ok) return res.status(403).json(confirmed.body);
     const stranding = await departureStrandingRefusal(user, true);
@@ -25892,9 +25874,7 @@ ${inner}
     // S52: same lock as the admin path — settle blocking state first. The
     // 409 names each domain so the member knows exactly what remains.
     const blocking = blockingStates(await exitOpenState(getPool(), user.id, roleIdsFor(user.id)));
-    if (blocking.length) {
-      return res.status(409).json({ error: "Open state must settle through its own domain first", blocking });
-    }
+    if (blocking.length) return res.status(409).json({ error: "Open state must settle through its own domain first", blocking });
     const external = await anonymizeMember(getPool(), user, user.id, erasureDeps);
     // Lane C: a member is never told "deleted" about a store that did not
     // answer. The sentence says what happened here, and names the shortfall
@@ -26423,7 +26403,6 @@ ${inner}
     if (res.headersSent) return next(err);
     respondToTerminalError(err, res);
   });
-
   const port = parseInt(String(process.env.PORT || 3000), 10);
   const staticExists = fs.existsSync(staticPath);
   const indexExists = fs.existsSync(path.join(staticPath, "index.html"));
@@ -26432,6 +26411,7 @@ ${inner}
   console.log(`[startup] staticPath exists=${staticExists}`);
   console.log(`[startup] index.html exists=${indexExists}`);
   console.log(`[startup] PORT=${port}`);
+  await runOnce(erasureBackfillJob(), async () => { await backfillFinishedErasures(getPool(), erasureDeps); }); // after the sinks its steps fire are wired: server/lib/erasure.ts
   // Arm the scheduler tick only now that every boot stage has succeeded and
   // every registerJob call above has run. See the note at the old call site.
   startScheduler(getPool());

@@ -49,7 +49,7 @@ import { chargeForPlace, heldSeatValue, refundAllPlaces, refundPlace } from "./e
 // Village Comms: the one door to the email system. Every call fires after the
 // change it reports is written, and never throws (server/lib/commsSink.ts).
 import { commsSink } from "./commsSink";
-import { meetMeWindowIdsOf } from "../repos/meetMeWindows";
+import { forgetWindowMail, meetMeWindowIdsOf } from "../repos/meetMeWindows";
 import { gatheringTriggers } from "../../shared/comms/contracts";
 
 const newId = () => `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -404,11 +404,18 @@ async function removeGatheringRows(pool: Pool, id: string, reason: string): Prom
  * it are deleted with it. Keyed on the member and every statement a DELETE,
  * so a second run finds nothing, and a run that stopped half way leaves the
  * window's own row for the next one to find.
+ *
+ * FIRST, WHAT THE WINDOW LEFT IN ITS GUESTS' MAIL (round 2, finding 13): each
+ * guest's journey kept the title and the place it told them, and their
+ * confirmation kept the title, the place, the note and the calendar file.
+ * `forgetWindowMail` takes those words out and sends nothing, before the
+ * window's row goes, because that row is how a resume finds the window again.
  */
 export async function forgetMeetMeWindowsOf(pool: Pool, userId: string): Promise<number> {
   if (!userId) return 0;
   let removed = 0;
   for (const id of await meetMeWindowIdsOf(pool, userId)) {
+    await forgetWindowMail(pool, id);
     if (await removeGatheringRows(pool, id, "The meet-me window closed when its host left the village")) removed += 1;
   }
   return removed;
