@@ -142,7 +142,12 @@ export default function CashOwedPanel() {
 
       {keepsBooks && (
         <section aria-labelledby="cash-books" className="space-y-3">
-          <h4 id="cash-books" className="font-semibold text-card-foreground">What the village owes</h4>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 id="cash-books" className="font-semibold text-card-foreground">What the village owes</h4>
+            <a href="/cash-payouts" className="inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2">
+              Record a bank transfer
+            </a>
+          </div>
           {queue!.unpaid.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing is waiting to be paid.</p>
           ) : (

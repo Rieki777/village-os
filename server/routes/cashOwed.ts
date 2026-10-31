@@ -5,6 +5,8 @@
  *   POST /api/me/cash-owed/:id/claim  I am ready to be paid this
  *   GET  /api/cash-owed/queue         the treasurer's list, for whoever holds `cash.pay`
  *   POST /api/cash-owed/:id/paid      the money went out, and this is how
+ *   POST /api/cash-owed/transfers     one bank transfer paid some or all of one member's lines
+ *   GET  /api/cash-owed/export.csv    every line, paid and unpaid, for the accounts
  *
  * Rye, 2026-10-23: "The Game wouldn't pay cash, but it would say what they are
  * owed and they can claim it when they're paid out so that the treasurer has a
@@ -28,8 +30,10 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
-import { cashOwedFor, cashQueue, claimCash, markCashPaid } from "../lib/cashOwed";
-import type { CashQueueEntry } from "../../shared/cashOwed";
+import { createHash } from "node:crypto";
+import { cashCsv, cashExportRows, cashOwedFor, cashQueue, claimCash, markCashPaid, recordCashTransfer } from "../lib/cashOwed";
+import { cashTotalsByCurrency, type CashOwedEntry, type CashQueueEntry } from "../../shared/cashOwed";
+import { formatMoney } from "../../shared/money";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit"> & {
   /** Who holds `cash.pay` through a role or a badge, admins left out (`liveHoldersOf`, server/index.ts). */
@@ -70,25 +74,72 @@ export function register(app: Express, deps: Deps): void {
     res.json({ success: true });
   });
 
-  app.get("/api/cash-owed/queue", async (req, res) => {
-    if (!(await guardCapability(req, res, "cash.pay"))) return;
-    const { unpaid, paid } = await cashQueue(getPool());
-    // One read per person on the list, never one per row.
+  /** Join each owner's and payer's name, one read per person and never one per row. */
+  const nameRows = async (rows: Array<CashOwedEntry & { userId: string; paidBy: string | null }>): Promise<CashQueueEntry[]> => {
     const names = new Map<string, string>();
     const nameOf = async (id: string | null): Promise<string | null> => {
       if (!id) return null;
       if (!names.has(id)) names.set(id, String((await members.byId(id).catch(() => null))?.name ?? "A departed member"));
       return names.get(id)!;
     };
-    const named = async (rows: typeof unpaid): Promise<CashQueueEntry[]> => {
-      const out: CashQueueEntry[] = [];
-      for (const r of rows) {
-        const { paidBy, ...entry } = r;
-        out.push({ ...entry, memberName: (await nameOf(r.userId))!, paidByName: await nameOf(paidBy) });
-      }
-      return out;
-    };
-    res.json({ unpaid: await named(unpaid), paid: await named(paid) });
+    const out: CashQueueEntry[] = [];
+    for (const r of rows) {
+      const { paidBy, ...entry } = r;
+      out.push({ ...entry, memberName: (await nameOf(r.userId))!, paidByName: await nameOf(paidBy) });
+    }
+    return out;
+  };
+
+  app.get("/api/cash-owed/queue", async (req, res) => {
+    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    // The Admin "Paid" tab asks for a longer history than the profile card shows.
+    const { unpaid, paid } = await cashQueue(getPool(), req.query?.history === "1" ? 1000 : 100);
+    res.json({ unpaid: await nameRows(unpaid), paid: await nameRows(paid) });
+  });
+
+  /*
+   * RECORD A BANK TRANSFER (Rye, 2026-10-30): some or all of one member's
+   * unpaid lines become paid together, with the transfer date and reference.
+   * `recordCashTransfer` says why a line can never be paid twice. The member
+   * gets the same `cash_paid` notice a single line sends, once per transfer.
+   */
+  app.post("/api/cash-owed/transfers", async (req, res) => {
+    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    const actor = await authedUser(req);
+    if (!actor) return res.status(401).json({ error: "auth_required" });
+    const out = await recordCashTransfer(getPool(), String(actor.id), req.body);
+    if (!out.ok) return res.status(out.status).json({ error: out.error, code: out.code });
+    const ids = out.entries.map((e) => e.id).sort();
+    void recordEvent(getPool(), {
+      kind: "audit", text: `cash:transfer:${ids.length}:${ids.join(",")}`.slice(0, 1000), actorUserId: actor.id,
+      entityType: "cash_owed", entityRef: ids[0], audience: "admin",
+    });
+    const totals = cashTotalsByCurrency(out.entries).map((t) => formatMoney(t.minor, t.currency)).join(" and ");
+    const single = out.entries.length === 1 ? out.entries[0] : null;
+    await notify({
+      userId: out.userId,
+      type: "cash_paid",
+      title: single
+        ? `The village marked your cash for ${single.workTitle} as paid`
+        : `The village paid your cash for ${out.entries.length} pieces of work`,
+      body: `${totals}. ${out.note}`,
+      link: "/profile#cash-owed",
+      actorUserId: actor.id,
+      // A single line keeps the key the one-line route uses, so the two doors
+      // can never notify twice for one row. A row is paid once, so a set of
+      // ids is paid once, and its sorted list is a stable key.
+      dedupeKey: single ? `cash:${single.id}:paid` : `cash:transfer:${createHash("sha256").update(ids.join("|")).digest("hex").slice(0, 32)}`,
+    });
+    res.json({ success: true, paid: out.entries.length, entries: out.entries });
+  });
+
+  /** The accounts' export: every line, paid and unpaid, as CSV. */
+  app.get("/api/cash-owed/export.csv", async (req, res) => {
+    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    const rows = await nameRows(await cashExportRows(getPool()));
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="cash-owed-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(cashCsv(rows));
   });
 
   app.post("/api/cash-owed/:id/paid", async (req, res) => {

@@ -44,6 +44,7 @@ describe("the cash card", () => {
     await waitFor(() => expect(calls.length).toBe(1));
     expect(container.innerHTML).toBe("");
     expect(calls.some((c) => c.url === "/api/cash-owed/queue")).toBe(false);
+    expect(container.querySelector('a[href="/cash-payouts"]')).toBeNull();
   });
 
   it("shows what a member is owed and claims it on their own row", async () => {
@@ -69,6 +70,8 @@ describe("the cash card", () => {
     });
     render(<CashOwedPanel />);
     expect(await screen.findByText("What the village owes")).toBeTruthy();
+    // A finance role holding cash.pay without admin reaches the full payout list from here.
+    expect(screen.getByRole("link", { name: "Record a bank transfer" }).getAttribute("href")).toBe("/cash-payouts");
     expect(screen.getByText(/to Ora/)).toBeTruthy();
     const mark = screen.getByRole("button", { name: "Mark paid" }) as HTMLButtonElement;
     expect(mark.disabled, "no note, no payment").toBe(true);
