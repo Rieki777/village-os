@@ -5595,9 +5595,7 @@ function ExitsAdminTab({ password }: { password: string }) {
   const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
   if (loading && !data) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  const openExit = state?.exit;
-  // E4: a former member already left, so the desk names them so and offers no second exit.
-  const formerIds = new Set((data?.exits ?? []).filter((e: any) => e.formerMember).map((e: any) => e.userId));
+  const openExit = state?.exit, formerIds = new Set((data?.exits ?? []).filter((e: any) => e.formerMember).map((e: any) => e.userId)); // E4: a former member is named so, and offered no second exit
 
   return (
     <div className="space-y-8">
@@ -5653,11 +5651,7 @@ function ExitsAdminTab({ password }: { password: string }) {
               }}
                   />
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-              {!openExit && state.formerMember ? (
-                <span data-former-member="" className="text-sm text-gray-600 self-center">
-                  They already left the village and are a former member, so there is no departure to open. Admitting them again is the only way back.
-                </span>
-              ) : !openExit ? (
+              {!openExit && state.formerMember ? (<span data-former-member="" className="text-sm text-gray-600 self-center">They already left the village and are a former member, so there is no departure to open. Admitting them again is the only way back.</span>) : !openExit ? (
                 <>
                   <button onClick={async () => { const d = await call("/admin/exits", { userId: selectedUser, kind: "voluntary" }); if (d) { toast.success("Exit opened"); load(); loadState(selectedUser); } }}
                     className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium">Open exit</button>
