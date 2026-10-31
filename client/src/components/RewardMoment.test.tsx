@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * THE REWARD MOMENT ON SCREEN (0289), against the payloads the routes send.
+ * THE REWARD MOMENT ON SCREEN (0294), against the payloads the routes send.
  *
  *   1. Nothing landed: nothing renders, and nothing is marked seen.
  *   2. Something landed: one dialog names every line, announces it in a live

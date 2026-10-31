@@ -1,5 +1,5 @@
 /**
- * `reward_moment_seen` (0289), and the reads a reward moment makes of what
+ * `reward_moment_seen` (0294), and the reads a reward moment makes of what
  * landed for a member: their work credits on the ledger, their cash marked
  * paid, and the titles of the work behind each.
  *

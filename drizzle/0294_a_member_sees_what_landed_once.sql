@@ -1,4 +1,4 @@
--- 0289: a member is shown what landed for them, once, on whichever device they open.
+-- 0294: a member is shown what landed for them, once, on whichever device they open.
 --
 -- WHAT THIS IS FOR.
 -- Rye, 2026-10-30, earnings idea 1: when a member next opens the app after

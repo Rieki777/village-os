@@ -227,7 +227,7 @@ Two intensities, and the split is a budget rather than a volume knob.
 - a ballot carrying
 - a need delivered on a crowdpool
 - a power crossing over to the village
-- pay for work landing: tokens, Voice or a cash payment (0289)
+- pay for work landing: tokens, Voice or a cash payment (0294)
 
 Everything else gets a `whisper`: a gratitude sent, a claim made, a form
 accepted, a row saved.

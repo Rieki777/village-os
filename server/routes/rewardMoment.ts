@@ -1,5 +1,5 @@
 /**
- * The reward moment over HTTP (0289).
+ * The reward moment over HTTP (0294).
  *
  *   GET  /api/me/reward-moment       what landed for me that I have not been shown
  *   POST /api/me/reward-moment/seen  I have been shown these; never show them again

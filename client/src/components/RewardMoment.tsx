@@ -1,5 +1,5 @@
 /**
- * A REWARD MOMENT EACH TIME SOMETHING LANDS (0289).
+ * A REWARD MOMENT EACH TIME SOMETHING LANDS (0294).
  *
  * Rye, 2026-10-30, earnings idea 1. When a member opens the app after tokens,
  * Voice or a cash payment arrived for them, this names what came in and what

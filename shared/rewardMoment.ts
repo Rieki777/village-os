@@ -1,5 +1,5 @@
 /**
- * WHAT LANDED FOR A MEMBER SINCE THEY LAST LOOKED (0289), as both ends read it.
+ * WHAT LANDED FOR A MEMBER SINCE THEY LAST LOOKED (0294), as both ends read it.
  *
  * Rye, 2026-10-30, earnings idea 1: a reward moment each time something
  * lands. Tokens and Voice paid for work, and cash the village marked paid,

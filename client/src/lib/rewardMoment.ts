@@ -1,5 +1,5 @@
 /**
- * The words of a reward moment (0289), kept apart from the drawing so a test
+ * The words of a reward moment (0294), kept apart from the drawing so a test
  * can read them without a DOM.
  *
  * Every line names what came in and what it was for, in the shapes Rye gave
