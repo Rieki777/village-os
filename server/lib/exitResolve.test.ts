@@ -335,6 +335,29 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
     expect(await q("SELECT `revoked_at` FROM `member_invites` WHERE `id` = ?", [inviteId]).then((r) => r[0]?.revoked_at)).not.toBeNull();
   });
 
+  it("a former member an admin admits again by a stage grant invites and vouches again (round 6)", async () => {
+    const { id, exitId } = await member({ holdsValue: true });
+    expect((await resolve(exitId, id)).outcome).toBe("former");
+    await usersRepo(pool).update(id, (u: any) => {
+      u.stageGranted = "contributor";
+    });
+    const token = mintInviteToken();
+    const inviteId = `inv-readmitted-${id}`;
+    const conn = await pool.getConnection();
+    try {
+      await createInviteOn(conn, { id: inviteId, tokenHash: hashInviteToken(token), inviterUserId: id, days: 14 });
+    } finally {
+      conn.release();
+    }
+    const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+    expect((await door.resolve(token)).ok, "a re-admitted member's new link").toBe(true);
+    const newcomer = `readmitted-newcomer-${id}`;
+    await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [newcomer, "Pip Arden", `${newcomer}@example.test`]);
+    expect(await door.claim(inviteId, newcomer)).toBe(id);
+    await door.welcome(id, newcomer);
+    expect(await q("SELECT `id` FROM `member_vouches` WHERE `voucher_user_id` = ?", [id])).toHaveLength(1);
+  });
+
   it("the control: a living member who was never admitted, with no departure, still invites and vouches", async () => {
     const id = `exit-turns-living-${(seq += 1)}`;
     await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`) VALUES (?,?,?,'x','admin')", [id, "Rowan Keep", `${id}@example.test`]);

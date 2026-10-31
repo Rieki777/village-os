@@ -35,7 +35,9 @@
  */
 import type { Pool } from "mysql2/promise";
 
+import { GAME_CONFIG } from "../../shared/gameConfig";
 import { hasResolvedExit } from "../repos/exitNotes";
+import { ADMISSION_RUNG } from "./admission";
 import { claimInvite, inviteByHash, releaseInvite, revokeInvite } from "../repos/memberInvites";
 import { livingVouchesFor, recordVouch } from "../repos/vouches";
 import { INVITATION_NEEDED, INVITE_REFUSALS, hashInviteToken, inviteStanding } from "./invites";
@@ -59,6 +61,7 @@ interface InviterFacts {
   name?: unknown;
   email?: unknown;
   membershipGranted?: unknown;
+  stageGranted?: unknown;
 }
 
 /** A maker whose link may still open the door: a member row that is not a tombstone. */
@@ -66,10 +69,21 @@ function makerStands(maker: InviterFacts | null | undefined): maker is InviterFa
   return !!maker && !isTombstone({ email: String(maker.email ?? "") });
 }
 
-/** `makerStands`, and not a member who left and was kept as a former member. */
+/**
+ * `makerStands`, and not a member who left and was kept as a former member.
+ * That resolve clears both admission records, so either one set again means the
+ * village let them back in: vouches, a steward or a Love Letter write
+ * membershipGranted, and an admin's stage grant at the admission rung or above
+ * writes stageGranted. On a ladder with no admission rung any stage grant counts.
+ */
 async function makerStill(pool: Pool, makerId: string, maker: InviterFacts | null | undefined): Promise<boolean> {
   if (!makerStands(maker)) return false;
-  return maker.membershipGranted === true || !(await hasResolvedExit(pool, makerId));
+  if (maker.membershipGranted === true) return true;
+  const stages = GAME_CONFIG.stages;
+  const door = stages.findIndex((st) => st.id === ADMISSION_RUNG);
+  const granted = String(maker.stageGranted ?? "");
+  if (granted && (door < 0 || stages.findIndex((st) => st.id === granted) >= door)) return true;
+  return !(await hasResolvedExit(pool, makerId));
 }
 
 export interface InviteDoor {
