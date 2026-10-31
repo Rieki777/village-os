@@ -306,6 +306,55 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
     expect(String((await exitById(pool, exitId))!.resolution ?? "")).toMatch(/resolve began ending: invitations/);
   });
 
+  it("a link taken while the resolve ran, then given back, opens nothing in a former member's name (round 6)", async () => {
+    const { id, exitId } = await member({ holdsValue: true });
+    const token = mintInviteToken();
+    const inviteId = `inv-inflight-${id}`;
+    const conn = await pool.getConnection();
+    try {
+      await createInviteOn(conn, { id: inviteId, tokenHash: hashInviteToken(token), inviterUserId: id, days: 14 });
+    } finally {
+      conn.release();
+    }
+    const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+    const first = `inflight-a-${id}`;
+    const second = `inflight-b-${id}`;
+    for (const u of [first, second]) {
+      await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [u, "Pip Arden", `${u}@example.test`]);
+    }
+    // A sign-up takes the link, so the bulk withdraw cannot see it, and is still hashing when the resolve runs.
+    expect(await door.claim(inviteId, first)).toBe(id);
+    expect((await resolve(exitId, id)).outcome).toBe("former");
+    // Its welcome lands after membership ended: no vouch from someone who left.
+    await door.welcome(id, first);
+    // Its account write fails and the link is given back, open again by the row alone.
+    await door.release(inviteId, first);
+    expect(await door.resolve(token)).toEqual({ ok: false, error: INVITE_REFUSALS.revoked });
+    expect(await door.claim(inviteId, second), "the given-back link of a member who left was taken").toBeNull();
+    expect(await q("SELECT `id` FROM `member_vouches` WHERE `voucher_user_id` = ?", [id]), "an arrival vouch from someone who left").toEqual([]);
+    expect(await q("SELECT `revoked_at` FROM `member_invites` WHERE `id` = ?", [inviteId]).then((r) => r[0]?.revoked_at)).not.toBeNull();
+  });
+
+  it("the control: a living member who was never admitted, with no departure, still invites and vouches", async () => {
+    const id = `exit-turns-living-${(seq += 1)}`;
+    await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`) VALUES (?,?,?,'x','admin')", [id, "Rowan Keep", `${id}@example.test`]);
+    const token = mintInviteToken();
+    const inviteId = `inv-living-${id}`;
+    const conn = await pool.getConnection();
+    try {
+      await createInviteOn(conn, { id: inviteId, tokenHash: hashInviteToken(token), inviterUserId: id, days: 14 });
+    } finally {
+      conn.release();
+    }
+    const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+    expect((await door.resolve(token)).ok).toBe(true);
+    const newcomer = `living-newcomer-${id}`;
+    await q("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x')", [newcomer, "Pip Arden", `${newcomer}@example.test`]);
+    expect(await door.claim(inviteId, newcomer)).toBe(id);
+    await door.welcome(id, newcomer);
+    expect(await q("SELECT `id` FROM `member_vouches` WHERE `voucher_user_id` = ?", [id])).toHaveLength(1);
+  });
+
   // ── 2. What a stopped former-member resolve already ended ───────────────
 
   it("a cancel after a former-member resolve that stopped part way names every role it had already ended", async () => {

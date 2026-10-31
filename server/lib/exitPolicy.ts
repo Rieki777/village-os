@@ -80,7 +80,8 @@ export interface ExitPolicy {
  * to rewrite in its own words before claiming them.
  *
  * THE VOLUNTARY TERMS SAY WHAT THE RULING OF 2026-10-23 MADE TRUE. Members keep
- * their tokens, and a leaver still holding any stays on as a former member
+ * their tokens, and a leaver still holding any, or owed cash by the village,
+ * stays on as a former member
  * (`resolveExit`, server/lib/exitResolve.ts); only an account with nothing of
  * value left becomes a tombstone. The wording these replaced is kept in
  * `RETIRED_DEFAULT_TERMS` below, because a village's stored document can still
@@ -97,7 +98,7 @@ export const DEFAULT_EXIT_POLICY: ExitPolicy = {
       "Complete or hand off any active stay; resolve open purchases",
       "Hand off roles and open work",
       "Balances are settled and recorded",
-      "Anyone still holding tokens stays on as a former member, with their account and balances",
+      "Anyone still holding tokens, or owed cash by the village, stays on as a former member, with their account and balances",
       "An account with nothing of value left becomes a tombstone; contributions stay part of the village record",
     ],
   },
@@ -181,6 +182,14 @@ export const RETIRED_DEFAULT_TERMS: {
       "Hand off roles and open work",
       "Balances are settled and recorded",
       "The account becomes a tombstone; contributions stay part of the village record",
+    ],
+    [
+      "Return borrowed items and settle library loans",
+      "Complete or hand off any active stay; resolve open purchases",
+      "Hand off roles and open work",
+      "Balances are settled and recorded",
+      "Anyone still holding tokens stays on as a former member, with their account and balances",
+      "An account with nothing of value left becomes a tombstone; contributions stay part of the village record",
     ],
   ],
 };

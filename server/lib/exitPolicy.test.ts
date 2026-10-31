@@ -108,6 +108,12 @@ describe("the acknowledgement cannot be ticked over the platform's words", () =>
     ]);
   });
 
+  it("the steps from before cash owed kept a leaver on are still the platform's (round 6)", () => {
+    const old = { ...own(), voluntary: { ...own().voluntary, unwindSteps: [...RETIRED_DEFAULT_TERMS.unwindSteps[1]] } };
+    expect(platformDefaultTerms(normalizeExitPolicy(old))).toEqual(["The steps of a voluntary departure"]);
+    expect(DEFAULT_EXIT_POLICY.voluntary.unwindSteps.join(" ")).toContain("owed cash by the village");
+  });
+
   it("today's voluntary terms say a holder stays on as a former member, and the old tombstone promise is retired", () => {
     expect(DEFAULT_EXIT_POLICY.voluntary.valuationMethod).toContain("former member");
     expect(DEFAULT_EXIT_POLICY.voluntary.unwindSteps.join(" ")).toContain("former member");
