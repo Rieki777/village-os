@@ -32,6 +32,7 @@
  * Money in the terms is a record: the drawer prints "Recorded here. Paid
  * outside the platform." beside every money row.
  */
+import WorkPayBlock from "@/components/WorkPayBlock";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, Send, Undo2 } from "lucide-react";
@@ -60,7 +61,8 @@ import { civilDayWords } from "@shared/seasonPlans";
 import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
 import AlignButton from "@/components/alignment/AlignButton";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
-import { call as alignCall } from "@/components/alignment/alignmentsApi";
+import { call as alignCall } from "@/components/alignment/alignmentsApi";
+
 import { ApplicantGeneKeys } from "@/components/geneKeys/ProfileGeneKeys";
 import CircleConsent from "@/components/roleProposal/CircleConsent";
 import { CONSENT_WORDS } from "@shared/roleProposalConsent";
@@ -176,7 +178,17 @@ function SeatCards({ app }: { app: ServedApplication }) {
                   input={fromOrgSeat(row, org?.circles, org?.people, org?.village)}
                   ctx={{ now: new Date(), season: seasonForSheet(season), classNames: null }}
                   faces="stacked"
-                  settings={single ? drawer : undefined}
+                  settings={
+                    // What the seat pays sits above the terms asked for (Rye, 2026-10-30).
+                    row.pay ? (
+                      <div className="space-y-2">
+                        <WorkPayBlock pay={row.pay} variant="full" />
+                        {single ? drawer : null}
+                      </div>
+                    ) : single ? (
+                      drawer
+                    ) : undefined
+                  }
                 />
               ) : (
                 <div className="sheet-night rounded-xl bg-card p-4 text-foreground">
