@@ -782,7 +782,7 @@ export default function PowerMap({
 
               <CircleLabel
                 circleId={pos.id}
-                x={pos.x}
+                x={pos.x + placed.dx}
                 labelTop={labelTop}
                 label={label}
                 show={showLabel(pos.id)}

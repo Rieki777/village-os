@@ -407,6 +407,36 @@ export function breathAt(b: { pattern: BreathKey; rounds: number; startedAt: num
   return { state: "done" };
 }
 
+// ── The sit ──────────────────────────────────────────────────────────────────
+
+/**
+ * A meditation drop in: a quiet the whole room keeps for a few minutes, read
+ * against the room's clock like the breath, so every screen ends together and
+ * every bowl rings at the same moment.
+ */
+export const SIT_MINUTES = [1, 3, 5, 10] as const;
+
+/**
+ * How long the light keeps moving after the bowl rings: one slow climb from
+ * the root to the crown and one slow fall back.
+ */
+export const SIT_SETTLE_SECS = 8;
+
+export type SitMoment =
+  | { state: "idle" }
+  | { state: "sitting"; progress: number; secondsLeft: number; elapsed: number }
+  | { state: "done"; sinceEnd: number };
+
+/** Where a shared sit is at `now`. */
+export function sitAt(s: { minutes: number; startedAt: number | null }, now: number): SitMoment {
+  if (s.startedAt == null) return { state: "idle" };
+  const total = s.minutes * 60;
+  const t = (now - s.startedAt) / 1000;
+  if (t < 0) return { state: "idle" };
+  if (t >= total) return { state: "done", sinceEnd: t - total };
+  return { state: "sitting", progress: t / total, secondsLeft: Math.ceil(total - t), elapsed: t };
+}
+
 // ── The room's state, which the facilitator moves ────────────────────────────
 
 export interface SessionState {
@@ -420,6 +450,8 @@ export interface SessionState {
   /** Grace minutes the room consented to add to the active item. */
   itemExtraMin: number;
   breath: { pattern: BreathKey; rounds: number; startedAt: number | null };
+  /** A meditation drop in the whole room sits together. */
+  sit: { minutes: number; startedAt: number | null };
   /** A speaking round: the order people speak in and who is speaking now. */
   round: { label: string | null; order: number[]; at: number };
   /**
@@ -439,6 +471,7 @@ export function defaultSessionState(): SessionState {
     itemStartedAt: null,
     itemExtraMin: 0,
     breath: { pattern: "settle", rounds: 6, startedAt: null },
+    sit: { minutes: 3, startedAt: null },
     round: { label: null, order: [], at: 0 },
     orderSet: false,
   };
@@ -457,6 +490,7 @@ export function normalizeSessionState(raw: unknown): SessionState {
     src = raw as Record<string, any>;
   }
   const breathIn = src.breath && typeof src.breath === "object" ? src.breath : {};
+  const sitIn = src.sit && typeof src.sit === "object" ? src.sit : {};
   const roundIn = src.round && typeof src.round === "object" ? src.round : {};
   const order = Array.isArray(roundIn.order)
     ? (roundIn.order as unknown[]).filter((x): x is number => intOrNull(x, 1, 2 ** 31) != null).slice(0, SESSION_LIMITS.maxPeople)
@@ -472,6 +506,10 @@ export function normalizeSessionState(raw: unknown): SessionState {
       pattern: (BREATH_KEYS as string[]).includes(breathIn.pattern) ? breathIn.pattern : base.breath.pattern,
       rounds: (BREATH_ROUNDS as readonly number[]).includes(breathIn.rounds) ? breathIn.rounds : base.breath.rounds,
       startedAt: intOrNull(breathIn.startedAt, 0, 2 ** 53),
+    },
+    sit: {
+      minutes: (SIT_MINUTES as readonly number[]).includes(sitIn.minutes) ? sitIn.minutes : base.sit.minutes,
+      startedAt: intOrNull(sitIn.startedAt, 0, 2 ** 53),
     },
     round: {
       label: typeof roundIn.label === "string" ? cleanLine(roundIn.label, 60) : null,
@@ -491,6 +529,7 @@ export type SessionAction =
   | { type: "go"; stage: SessionStage }
   | { type: "start" }
   | { type: "breath"; pattern?: BreathKey; rounds?: number; run: boolean }
+  | { type: "sit"; minutes?: number; run: boolean }
   | { type: "item"; itemId: number | null }
   | { type: "extend"; minutes: number }
   | { type: "round"; label: string | null; order: number[] }
@@ -517,6 +556,12 @@ export function parseSessionAction(raw: unknown): SessionAction | null {
         out.rounds = a.rounds;
       }
       return out;
+    }
+    case "sit": {
+      if (typeof a.run !== "boolean") return null;
+      if (a.minutes === undefined) return { type: "sit", run: a.run };
+      if (!(SIT_MINUTES as readonly number[]).includes(a.minutes)) return null;
+      return { type: "sit", minutes: a.minutes, run: a.run };
     }
     case "item":
       return a.itemId === null || intOrNull(a.itemId, 1, 2 ** 31) != null ? { type: "item", itemId: a.itemId } : null;
@@ -556,6 +601,8 @@ export function applySessionAction(state: SessionState, action: SessionAction, n
           startedAt: action.run ? now : null,
         },
       };
+    case "sit":
+      return { ...state, sit: { minutes: action.minutes ?? state.sit.minutes, startedAt: action.run ? now : null } };
     case "item":
       if (action.itemId === state.activeItemId) return state;
       return { ...state, activeItemId: action.itemId, itemStartedAt: action.itemId == null ? null : now, itemExtraMin: 0 };
@@ -1402,6 +1449,28 @@ export const ROOM_COPY = {
     `${secondsLeft === 1 ? "1 second" : `${secondsLeft} seconds`} · Round ${round} of ${of}`,
   breathCounts: (secs: readonly number[]) => secs.join(" · "),
   breathStartedSay: (rounds: number) => `The shared breath has started, ${rounds} rounds.`,
+
+  sitTitle: "Sit together",
+  sitIdle: "A few minutes of quiet for the whole room. A singing bowl rings on every screen when it ends.",
+  sitMinutes: "Minutes",
+  sitStart: "Start the sit",
+  sitStop: "End the sit early",
+  sitAgain: "Sit again",
+  sitMinutesWord: (n: number) => (n === 1 ? "1 minute" : `${n} minutes`),
+  sitLeft: (secondsLeft: number) => {
+    const m = Math.floor(secondsLeft / 60);
+    const s = secondsLeft % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  },
+  sitLeftHint: "left in the quiet",
+  sitSitting: "Rest your eyes. The bowl will call you back.",
+  sitDone: "The bowl has rung. Come back slowly.",
+  sitStartedSay: (minutes: number) => `The sit has started, ${minutes === 1 ? "1 minute" : `${minutes} minutes`}.`,
+  sitEndedSay: "The sit has ended.",
+  bellOn: "Bell on this screen",
+  bellOff: "Turn the bell on",
+  bellHint: "Browsers stay silent until you tap once. Tap here so the bowl can ring for you.",
+  bellMuted: "Sound is muted on this device, so the bowl will not ring.",
 
   giveNumber: "Give my number",
   changeNumber: "Change my number",
