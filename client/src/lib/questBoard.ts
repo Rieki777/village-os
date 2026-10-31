@@ -279,6 +279,8 @@ export function gateFix(
       return `Sign the ${commitment} to get there.`;
     case "quests":
       return `Complete ${rule.min} ${rule.min === 1 ? "Quest" : "Quests"} to get there.`;
+    case "role":
+      return "Take on a role on the org chart to get there.";
     case "granted":
       return "The village grants this stage.";
     default:
