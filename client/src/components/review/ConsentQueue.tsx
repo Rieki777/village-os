@@ -128,7 +128,7 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
         if (res) await onChanged();
         return;
       }
-      toast.success(approve ? "Consented. The quest pays what it says." : "Declined. The quest is open again.");
+      toast.success(approve ? "Consented. The work is confirmed." : "Declined. The quest is open again.");
       await onChanged();
     } finally {
       setBusy(null);
