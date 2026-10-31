@@ -272,9 +272,9 @@ export async function sharesInWindow(q: Queryable, kinds: readonly string[], fro
   if (!kinds.length) return [];
   return rowsOf(
     q,
-    "SELECT sh.`kind`, sh.`text`, sh.`serves_goal`, sh.`session_id`, sh.`created_at`, s.`title` AS `session_title` " +
+    "SELECT sh.`kind`, sh.`text`, sh.`serves_goal`, sh.`session_id`, sh.`created_at`, s.`created_at` AS `session_at`, s.`title` AS `session_title` " +
       "FROM `live_session_shares` sh JOIN `live_sessions` s ON s.`id` = sh.`session_id` " +
-      "WHERE sh.`kind` IN (?) AND s.`created_at` >= ? AND s.`created_at` < ? ORDER BY sh.`created_at`, sh.`id`",
+      "WHERE sh.`kind` IN (?) AND s.`created_at` >= ? AND s.`created_at` < ? ORDER BY s.`created_at`, sh.`id`",
     [kinds, from, to],
   );
 }
@@ -283,7 +283,7 @@ export async function sharesInWindow(q: Queryable, kinds: readonly string[], fro
 export async function itemWinsInWindow(q: Queryable, from: Date, to: Date): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
-    "SELECT e.`created_at` FROM `live_session_entries` e JOIN `live_sessions` s ON s.`id` = e.`session_id` " +
+    "SELECT s.`created_at` AS `session_at` FROM `live_session_entries` e JOIN `live_sessions` s ON s.`id` = e.`session_id` " +
       "WHERE e.`kind` = 'win' AND s.`created_at` >= ? AND s.`created_at` < ?",
     [from, to],
   );

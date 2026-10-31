@@ -651,7 +651,7 @@ export async function seasonView(
   const shareRows = await repo.sharesInWindow(pool, ["win", "tension", "not_working"], from, to);
   const wins: SeasonWin[] = shareRows
     .filter((r) => r.kind === "win")
-    .map((r) => ({ text: String(r.text ?? ""), servesGoal: r.serves_goal == null || r.serves_goal === "" ? null : String(r.serves_goal), sessionTitle: String(r.session_title ?? ""), at: toIso(r.created_at) }));
+    .map((r) => ({ text: String(r.text ?? ""), servesGoal: r.serves_goal == null || r.serves_goal === "" ? null : String(r.serves_goal), sessionTitle: String(r.session_title ?? ""), at: toIso(r.session_at) }));
   const goalTexts = new Set(season.goals.map((g) => g.text));
   const strip = ({ servesGoal: _drop, ...p }: SeasonPriorityItem & { servesGoal: string | null }): SeasonPriorityItem => p;
   const goals = season.goals.map((g) => ({
@@ -661,7 +661,8 @@ export async function seasonView(
     wins: wins.filter((w) => w.servesGoal === g.text),
   }));
 
-  // Wins over time, a row per week that had any, oldest first.
+  // Wins over time, a row per week that had any, oldest first. Everything is dated by the
+  // meeting it came up in, so a week means the meetings held in it.
   const weeks = new Map<string, SeasonWeek>();
   const week = (iso: string): SeasonWeek => {
     const k = weekOf(iso);
@@ -670,7 +671,7 @@ export async function seasonView(
     return w;
   };
   for (const w of wins) week(w.at).wins.push(w);
-  for (const r of await repo.itemWinsInWindow(pool, from, to)) week(toIso(r.created_at)).itemWins++;
+  for (const r of await repo.itemWinsInWindow(pool, from, to)) week(toIso(r.session_at)).itemWins++;
   for (const p of priorities) {
     const w = week(p.at);
     w.prioritiesSet++;
@@ -679,7 +680,7 @@ export async function seasonView(
 
   // Tensions from Heart share: what was named a tension, or as not working, around a talking stick.
   const groups = groupTensions(
-    shareRows.filter((r) => r.kind !== "win").map((r) => ({ text: String(r.text ?? ""), sessionId: Number(r.session_id), at: toIso(r.created_at) })),
+    shareRows.filter((r) => r.kind !== "win").map((r) => ({ text: String(r.text ?? ""), sessionId: Number(r.session_id), at: toIso(r.session_at) })),
   );
   const wereIn = viewer.admin || viewer.no == null
     ? null
