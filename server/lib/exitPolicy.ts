@@ -85,19 +85,28 @@ export interface ExitPolicy {
  * value left becomes a tombstone. The wording these replaced is kept in
  * `RETIRED_DEFAULT_TERMS` below, because a village's stored document can still
  * hold it word for word.
+ *
+ * AND WHAT THE ANSWERS OF 2026-10-30 ADDED. Rye approved every exit suggestion
+ * put to him that day, and two of them belong in the words a leaver reads
+ * before they go. Voice a former member keeps wanes under the same rule as
+ * everyone's (the suggestion he approved: "keep it, the same rule as for
+ * everyone. The platform's default exit policy text should say so"), and
+ * cash the village still owes keeps the account exactly as tokens do
+ * (`resolveExit`). The wording of 2026-10-23
+ * joined `RETIRED_DEFAULT_TERMS` the same day.
  */
 export const DEFAULT_EXIT_POLICY: ExitPolicy = {
   placeholder: true,
   voluntary: {
     noticePeriodDays: 30,
     valuationMethod:
-      "To be decided by the community: how contributed value is honored when someone leaves. Until then, a member who leaves keeps their tokens and their account, and stays on as a former member. Recognition stays on the village's books. The exit records what they still hold.",
+      "To be decided by the community: how contributed value is honored when someone leaves. Until then, a member who leaves keeps their tokens and their account, and stays on as a former member. Recognition stays on the village's books. Voice a former member keeps wanes under the same rule as everyone's. The exit records what they still hold.",
     unwindSteps: [
       "Return borrowed items and settle library loans",
       "Complete or hand off any active stay; resolve open purchases",
       "Hand off roles and open work",
       "Balances are settled and recorded",
-      "Anyone still holding tokens stays on as a former member, with their account and balances",
+      "Anyone still holding tokens, or still owed cash, stays on as a former member, with their account and balances",
       "An account with nothing of value left becomes a tombstone; contributions stay part of the village record",
     ],
   },
@@ -173,6 +182,8 @@ export const RETIRED_DEFAULT_TERMS: {
 } = {
   valuationMethod: [
     "To be decided by the community: how contributed value is honored when someone leaves. Until then, settled balances are held in exit settlement and recorded on the exit.",
+    // 2026-10-23 to 2026-10-30: said nothing of Voice waning for a former member.
+    "To be decided by the community: how contributed value is honored when someone leaves. Until then, a member who leaves keeps their tokens and their account, and stays on as a former member. Recognition stays on the village's books. The exit records what they still hold.",
   ],
   unwindSteps: [
     [
@@ -181,6 +192,15 @@ export const RETIRED_DEFAULT_TERMS: {
       "Hand off roles and open work",
       "Balances are settled and recorded",
       "The account becomes a tombstone; contributions stay part of the village record",
+    ],
+    // 2026-10-23 to 2026-10-30: said nothing of the cash still owed keeping the account.
+    [
+      "Return borrowed items and settle library loans",
+      "Complete or hand off any active stay; resolve open purchases",
+      "Hand off roles and open work",
+      "Balances are settled and recorded",
+      "Anyone still holding tokens stays on as a former member, with their account and balances",
+      "An account with nothing of value left becomes a tombstone; contributions stay part of the village record",
     ],
   ],
 };

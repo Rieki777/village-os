@@ -10,6 +10,7 @@ import { authToken } from "@/lib/gameApi";
 import { DoorOpen, HeartHandshake, ShieldQuestion } from "lucide-react";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import LeavingEnds, { useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
+import { useFocusTarget } from "@/lib/useFocusTarget";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -35,6 +36,8 @@ export default function ExitPolicy() {
 
   const policy = data?.policy;
   const shownError = error || identity.returnError;
+  // The departure card renders once the member is known, so look again then.
+  useFocusTarget([!!user, !!data]);
 
   const requestExit = () => {
     setError(""); setMsg("");
@@ -164,12 +167,14 @@ export default function ExitPolicy() {
           </div>
 
           {user && (
-            <div className="bg-card border border-border rounded-xl p-5">
+            // The delete screen's "Leave the village instead" lands here (`?focus=begin-departure`).
+            <div id="begin-departure" className="bg-card border border-border rounded-xl p-5 scroll-mt-24">
               <p className="font-semibold text-foreground text-sm mb-2">Begin your own departure</p>
               <p className="text-xs text-muted-foreground mb-3">
                 This opens the process above. It does not close your account.
-                If you still hold tokens when it ends, you stay on as a former
-                member and keep your account and balances. Otherwise your identity is removed at the end and your contributions stay part of the village's record.
+                If you still hold tokens, or the village still owes you cash,
+                when it ends, you stay on as a former member and keep your
+                account and balances. Otherwise your identity is removed at the end and your contributions stay part of the village's record.
               </p>
               <LeavingEnds titles={endingTerms} />
               <div className="space-y-2">

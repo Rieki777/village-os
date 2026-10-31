@@ -27,10 +27,16 @@
  * count `livingVouchesFor`, so a sweep that stopped between the tombstone and
  * the vouches step, or an erasure that finished before that step existed,
  * still lets nobody in on a departed member's word.
+ *
+ * NOR DOES A FORMER MEMBER'S, read in the same place and never swept: somebody
+ * who left and kept their account (server/lib/exitResolve.ts) keeps every
+ * vouch row they wrote, and the count leaves out the ones for somebody still
+ * waiting for as long as they stay away (`livingVouchesFor`).
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
 import type { Vouch } from "../lib/vouches";
+import { isFormerMember } from "../lib/formerMember";
 
 const VILLAGE = "local";
 
@@ -56,20 +62,44 @@ export async function vouchesFor(pool: Pool, userId: string): Promise<Array<Vouc
 
 /**
  * The vouches this member has received from somebody still here: every one
- * whose voucher is not a tombstone, oldest first. What the admission count
- * reads (see the header). A voucher with no member row at all still counts,
- * as it always has; only the tombstone address, the one mark a member who
- * asked to be forgotten carries, takes a vouch out of the count.
+ * whose voucher is not a tombstone and not a FORMER MEMBER, oldest first. What
+ * the admission count reads (see the header). A voucher with no member row at
+ * all still counts, as it always has.
+ *
+ * A FORMER MEMBER'S VOUCH STOPS COUNTING HERE (Rye, 2026-10-30): a vouch is a
+ * member's ongoing promise, and somebody who left the village is no longer
+ * here to keep it. The row is never deleted, so the vouch that already
+ * admitted somebody stands as the record of it, and a former member admitted
+ * again finds their word counting again. Who counts as a former member is
+ * `isFormerMember` (server/lib/formerMember.ts), handed the voucher's own
+ * record and whether they have a resolved exit, so this read and every other
+ * reader of that question answer it the same way.
  */
 export async function livingVouchesFor(pool: Pool, userId: string): Promise<Array<Vouch & { id: string; note: string | null }>> {
-  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: member_vouches read beside the voucher's users row, the tombstone test oauthAccounts.ts makes
-    "SELECT v.id, v.voucher_user_id, v.vouched_user_id, v.kind, v.note, v.created_at FROM member_vouches v " +
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: member_vouches read beside the voucher's users row and exits, the tombstone and former-member tests
+    "SELECT v.id, v.voucher_user_id, v.vouched_user_id, v.kind, v.note, v.created_at, " +
+      "u.email AS voucher_email, u.membership_granted AS voucher_membership_granted, u.stage_granted AS voucher_stage_granted, " +
+      "EXISTS (SELECT 1 FROM exits e WHERE e.user_id = v.voucher_user_id AND e.status = 'resolved') AS voucher_left " +
+      "FROM member_vouches v " +
       "LEFT JOIN users u ON u.id = v.voucher_user_id " +
       "WHERE v.village_id = ? AND v.vouched_user_id = ? AND (u.email IS NULL OR LOWER(u.email) NOT LIKE '%@anonymized.invalid') " +
       "ORDER BY v.created_at, v.id",
     [VILLAGE, userId],
   );
-  return rows.map(toRow);
+  return rows
+    .filter(
+      (r) =>
+        r.voucher_email == null ||
+        !isFormerMember(
+          {
+            email: r.voucher_email,
+            membershipGranted: Number(r.voucher_membership_granted ?? 0) === 1,
+            stageGranted: r.voucher_stage_granted ?? null,
+          },
+          Number(r.voucher_left) === 1,
+        ),
+    )
+    .map(toRow);
 }
 
 /** Every vouch this member has GIVEN, for the reputation mechanic to come. */

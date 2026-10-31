@@ -361,5 +361,26 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     expect((await stateFor(u, "balances")).count).toBe(0);
     expect((await stateFor(u, "debts")).description).toBe("no negative balances");
     expect(blockingStates(await exitOpenState(pool, u, [])).map((s) => s.domain)).not.toContain("debts");
+    expect((await stateFor(u, "cash")).description).toBe("no cash owed");
+    expect((await stateFor(u, "cash")).count).toBe(0);
+  });
+
+  it("shows the cash the village still owes, which never blocks and which keeps the account (Rye, 2026-10-30)", async () => {
+    const u = await member("exit-state-cash");
+    const owed = (id: string, amountMinor: number, state: string) =>
+      pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO cash_owed (id, occurrence_key, user_id, work_kind, work_ref, work_title, amount_minor, currency, state) VALUES (?,?,?,?,?,?,?,?,?)",
+        [id, `exit-test:${id}`, u, "role", "r-1", "Water keeper", amountMinor, "USD", state],
+      );
+    await owed("exit-cash-1", 1200, "owed");
+    await owed("exit-cash-2", 300, "claimed");
+    await owed("exit-cash-3", 5000, "paid");
+
+    const cash = await stateFor(u, "cash");
+    expect(cash.count, "two unpaid rows; the paid one is history").toBe(2);
+    expect(cash.blocking).toBe(false);
+    expect(cash.description).toContain("is owed 15.00 USD in cash the village has not paid yet");
+    expect(cash.description).toContain("they stay on as a former member");
+    expect(blockingStates(await exitOpenState(pool, u, [])).map((s) => s.domain)).not.toContain("cash");
   });
 });

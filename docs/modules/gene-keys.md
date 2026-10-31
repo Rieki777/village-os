@@ -111,6 +111,10 @@ Every surface wears the profile's night world (`sheet-night`) and renders nothin
 - **The reveal** (`GeneKeysReveal.tsx`): the six lines draw in and the member's two light up; reduced motion draws
   the finished state.
 - **The Trail and Start Here** offer "Find your lines" only where nothing else is waiting: a member may skip.
+- **"Roles that fit your lines"** (`RolesForYourLines.tsx`) on the saved step of `/profile/gene-keys`: the roles
+  the member already holds that their lines fit, in one sentence, "Builder (Rick)", then the open roles best fit
+  first, each with its "Why you". A role fits when its circle has nobody else showing one of the member's lines,
+  and a little more when it suits one of their characters.
 - **"Why you"** on every role in "Roles that fit this character": the character, and a line the role's circle
   has nobody showing.
 - **Love and Prosperity** fold under the Activation tiles on every lines card.
