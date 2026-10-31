@@ -20,7 +20,7 @@
  * them by giving them again (the server keeps one per person). The line under
  * the button says so once they have.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ARRIVAL_MAX,
   ARRIVAL_MIN,
@@ -35,6 +35,7 @@ import {
 } from "@shared/sessions";
 import Figure from "@/components/sheet/Figure";
 import GrowingText from "./GrowingText";
+import FilledInNote from "./FilledInNote";
 import PersonDisc from "./PersonDisc";
 import {
   BTN_PRIMARY,
@@ -55,9 +56,19 @@ import {
 const NUMBERS = Array.from({ length: ARRIVAL_MAX - ARRIVAL_MIN + 1 }, (_, i) => ARRIVAL_MIN + i);
 
 export default function StageArrival({ view, actions }: StageProps) {
-  const me = view.people.find((p) => p.userId === view.me.userId) ?? null;
+  // The facilitator filling in for somebody (0288) gives that person's number here.
+  const forNo = view.me.facilitates ? (actions.fillingFor ?? null) : null;
+  const whom = forNo ?? view.me.userId;
+  const me = view.people.find((p) => p.userId === whom) ?? null;
   const [score, setScore] = useState<number | null>(me?.arrival ?? null);
   const [wish, setWish] = useState(me?.wish ?? "");
+  // A different person chosen: the form starts from what they gave, if anything.
+  useEffect(() => {
+    setScore(me?.arrival ?? null);
+    setWish(me?.wish ?? "");
+    setSaved(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [whom]);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [roundBusy, setRoundBusy] = useState(false);
@@ -245,6 +256,7 @@ export default function StageArrival({ view, actions }: StageProps) {
                         <p className="font-semibold text-foreground">{p.name}</p>
                       )}
                       {joined && <p className="mt-2 text-sm text-muted-foreground">{p.wish ?? (p.arrival == null ? ROOM_COPY.notYet : "")}</p>}
+                      {joined && <FilledInNote filled={p.arrivalFilledIn} actions={actions} />}
                     </div>
                   </li>
                 );
