@@ -162,6 +162,24 @@ Every route mounts behind `requireModule("messaging")`.
 - `DELETE /api/messages/:id/messages/:messageId` — author only, leaves a tombstone.
 - `POST /api/messages/:id/messages/:messageId/report` — the report path every thread inherits.
 - `GET /api/admin/messages/reports`, `PUT /api/admin/messages/reports/:id` — the moderation queue.
+- `GET /api/messages/unread` — `{ unreadTotal }`, one COUNT, for the avatar menu's badge. Registered before `/:id`.
+- `GET /api/messages/work/:kind/:id` — `{ available, conversationId, people }` for a quest or a task (`kind` is `quest` or `task`), about the viewer's own place only. `POST` opens it, or answers the same 404 to anyone not in it.
+
+## Shared work chats
+
+A quest or a task with two or more people on it has one conversation (`server/lib/sharedWork.ts`):
+kind `group`, `context_type` `quest` or `task`, `context_id` the quest id or the task's entry id, and
+`direct_key` `w:<kind>:<id>`, so the unique index allows one per piece of work. Who is on it comes
+from the record: a quest's claims that were not declined; a task's holder and everyone holding the role
+it is assigned to. Nobody else, an admin included.
+
+**Lazy, reconciled on read.** Nothing hooks the many writers of claims and seatings. The chat is
+brought in line with the record whenever anybody touches it: the Chat button, every route that runs
+`requireConversation` (so a member taken off the work gets the 404 on their next request), and the
+inbox, which first reconciles the viewer's own work. It is created the first time the work has two
+people and somebody looks. Membership is the record's, so add, remove, hand on, rename and leave are
+refused on these threads; mute is not. The inbox lists them under "Shared work". A crew's thread (kind
+`crew`, `context_type` `quest`) is a separate thing and stays where it was.
 
 ## Authorization
 
