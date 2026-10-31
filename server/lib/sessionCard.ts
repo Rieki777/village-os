@@ -39,7 +39,7 @@ import { instanceIdentity } from "./identity";
 import { voiceLint } from "../../shared/comms/voiceLint";
 import { PRESENT_WINDOW_MS } from "../../shared/sessions";
 import {
-  CARD_LIMITS, parseSky, plainReading, readRoom,
+  CARD_LIMITS, parseSky, plainReading, readRoom, skyLines,
   type CardLine, type CardPerson, type CardReading, type CardSky, type CardSuggestion, type CardSystem, type CardView, type CardsAnswer, type RoomFacts,
 } from "../../shared/sessionCard";
 
@@ -125,6 +125,7 @@ function factsForMaia(f: RoomFacts, draft: CardReading): { data: unknown; keyOf:
     keyOf,
     data: {
       sky: f.sky,
+      skyInWords: skyLines(f),
       mood: f.mood,
       openCenters: f.openCenters,
       types: f.types,

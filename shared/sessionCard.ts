@@ -344,6 +344,14 @@ export interface CardReading {
   source: "plain" | "maia";
 }
 
+/** The sky of the day in a line for each system, for Maia's facts. The card's panels show the same. */
+export function skyLines(f: RoomFacts): Record<"human-design" | "western", string> {
+  return {
+    "human-design": `Today's Sun is in gate ${f.sky.sun.gate}, line ${f.sky.sun.line}, with the Earth in gate ${f.sky.earth.gate}, and the Moon passes through gate ${f.sky.moon.gate}.`,
+    western: westernLine(f),
+  };
+}
+
 /** What the sky says about the Western side of the day, in a line or two. */
 function westernLine(f: RoomFacts): string {
   const s = f.sky;
@@ -429,18 +437,21 @@ export function suggestionsFor(f: RoomFacts): CardSuggestion[] {
   return out;
 }
 
-/** The whole card in plain words, from the facts alone. Always available; Maia's weaving falls back to it. */
+/**
+ * The whole card in plain words, from the facts alone. Always available; Maia's
+ * weaving falls back to it.
+ *
+ * EACH THING SAID ONCE, as the room asks of its own stages. The card's two sky
+ * panels already list the gates, the signs, the phase and what is retrograde,
+ * so the plain reading does not repeat them: it says what the panels cannot,
+ * who is here and how the day leans. Maia is handed the sky facts all the same
+ * (`skyLines` among them), to weave from.
+ */
 export function plainReading(f: RoomFacts): CardReading {
-  const collective: CardLine[] = [
-    {
-      system: "human-design",
-      text: `Today's Sun is in gate ${f.sky.sun.gate}, line ${f.sky.sun.line}, with the Earth in gate ${f.sky.earth.gate}, and the Moon passes through gate ${f.sky.moon.gate}.`,
-    },
-    { system: "western", text: westernLine(f) },
-  ];
+  const collective: CardLine[] = [];
   const room = roomLine(f);
   if (room) collective.push({ system: "human-design", text: room });
-  collective.push({ system: "both", text: moodLine(f.mood) });
+  collective.push({ system: "western", text: moodLine(f.mood) });
   const lines: Record<string, string> = {};
   for (const p of f.people) lines[p.userId] = personLine(p, f);
   return { collective, lines, suggestions: suggestionsFor(f), welcomed: f.welcomed.map((w) => w.name), source: "plain" };

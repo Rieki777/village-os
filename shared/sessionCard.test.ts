@@ -12,7 +12,7 @@ import { chartAt, moonVoidUntil, skyAt, zonedToUtc } from "./geneKeysSky";
 import * as Astronomy from "astronomy-engine";
 import { voiceLint } from "./comms/voiceLint";
 import {
-  SIGNS, callNames, moodOf, moonPhaseName, parseSky, plainReading, readRoom, suggestionsFor, type CardPerson, type CardSky,
+  SIGNS, callNames, moodOf, moonPhaseName, parseSky, plainReading, readRoom, skyLines, suggestionsFor, type CardPerson, type CardSky,
 } from "./sessionCard";
 
 const WREN = chartAt(zonedToUtc(1990, 6, 15, 14, 30, "America/New_York"));
@@ -115,9 +115,15 @@ describe("the plain reading", () => {
     expect(card.welcomed).toEqual(["Sam"]);
     expect(Object.keys(card.lines).sort()).toEqual(["m-kai", "m-wren"]);
     expect(card.lines["m-sam"]).toBeUndefined();
-    expect(card.collective.map((c) => c.system)).toEqual(expect.arrayContaining(["human-design", "western"]));
-    expect(all).toMatch(new RegExp(`gate ${AUG.gates.Sun.gate}, line ${AUG.gates.Sun.line}`));
-    expect(all).toMatch(/Mercury.*retrograde/);
+    expect(card.collective.map((c) => c.system)).toEqual(["human-design", "western"]);
+  });
+
+  it("says the sky once: the panels carry the gates and signs, the reading does not repeat them", () => {
+    const all = card.collective.map((c) => c.text).join(" ");
+    expect(all).not.toMatch(new RegExp(`gate ${AUG.gates.Sun.gate}, line ${AUG.gates.Sun.line}`));
+    const words = skyLines(facts);
+    expect(words["human-design"]).toMatch(new RegExp(`gate ${AUG.gates.Sun.gate}, line ${AUG.gates.Sun.line}`));
+    expect(words.western).toMatch(/Mercury.*retrograde/);
   });
 
   it("offers sleeping on a proposal to a room with an emotional authority, and holding a tension when the Moon is void", () => {
@@ -128,7 +134,7 @@ describe("the plain reading", () => {
   });
 
   it("speaks in the house voice: no dash between clauses, none of the gate's filler words", () => {
-    const words = [...card.collective.map((c) => c.text), ...Object.values(card.lines), ...card.suggestions.map((s) => s.words)];
+    const words = [...card.collective.map((c) => c.text), ...Object.values(card.lines), ...card.suggestions.map((s) => s.words), ...Object.values(skyLines(facts))];
     for (const w of words) expect(voiceLint(w, "body"), w).toEqual([]);
   });
 
