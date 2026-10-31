@@ -47,8 +47,22 @@ export function useBrochureSwitches(password: string): BrochureSwitches {
     };
   }, [password]);
 
+  /*
+   * The switch moves the moment it is pressed and the server's answer then
+   * settles it, so a slow save never reads as a click that did nothing. A
+   * refusal puts it back where it was and says why beside it.
+   */
   const send = useCallback(
     async (at: string, body: { enabled?: boolean; pages?: Record<string, boolean> }) => {
+      const before = state;
+      if (before) {
+        const hidden = new Set(before.hidden);
+        for (const [p, show] of Object.entries(body.pages ?? {})) {
+          if (show) hidden.delete(p);
+          else hidden.add(p);
+        }
+        setState({ enabled: body.enabled ?? before.enabled, hidden: [...hidden] });
+      }
       setBusy(true);
       setError(null);
       try {
@@ -61,11 +75,12 @@ export function useBrochureSwitches(password: string): BrochureSwitches {
         if (!res.ok) throw new Error(refusal(d, "That did not save."));
         setState({ enabled: Boolean(d.enabled), hidden: Array.isArray(d.hidden) ? d.hidden : [] });
       } catch (e) {
+        if (before) setState(before);
         setError({ at, text: e instanceof Error ? e.message : "That did not save." });
       }
       setBusy(false);
     },
-    [password],
+    [password, state],
   );
 
   return {
