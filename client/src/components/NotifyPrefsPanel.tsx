@@ -321,6 +321,26 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
         </span>
       </label>
 
+      {/* The gratitude nudge (server/lib/gratitudeNudge.ts). Off means no bell
+          row and no email: it is the one notice that only invites. */}
+      <label className="flex items-start gap-2 text-sm text-card-foreground mb-4">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4 shrink-0"
+          checked={prefs.gratitudeNudge !== "off"}
+          disabled={saving}
+          aria-label="Remind me before the cycle closes"
+          aria-describedby="gratitude-nudge-hint"
+          onChange={(e) => save({ gratitudeNudge: e.target.checked ? "on" : "off" })}
+        />
+        <span>
+          Remind me before the cycle closes
+          <span id="gratitude-nudge-hint" className="block text-xs text-muted-foreground">
+            One note a few days before, if you still have some left to send, with the people you worked with a tap away.
+          </span>
+        </span>
+      </label>
+
       {notifyNote && <p role="alert" className="text-xs text-destructive mb-4">{notifyNote}</p>}
 
       {/* Village Comms: gathering reminders, path emails and letters, with a
