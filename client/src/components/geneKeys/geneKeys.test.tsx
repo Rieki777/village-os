@@ -121,7 +121,8 @@ describe("roughly when", () => {
 });
 
 describe("the reveal", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("ends with the profile as the heading's neighbour, the names as the heading, and the two lines marked", () => {
     // Reduced motion draws the finished state at once, which is the state this pins.
@@ -288,17 +289,31 @@ describe("Maia speaks your type", () => {
     expect(maiaTypeLine({ type: "Manifestor", authority: "Splenic" })).toMatch(/heads up first/);
   });
 
-  it("speaks only with Maia's yes, and never once the member asked her to talk plainly", () => {
+  it("speaks only with the guide's yes, and never once the member asked it to talk plainly", () => {
     setMyGeneKeys(own(KAI, { maia: false }));
     const { container, rerender } = inRouter(<MaiaTypeLine />);
     expect(container.innerHTML).toBe("");
     setMyGeneKeys(own(KAI, { maia: true }));
     rerender(<Router hook={memoryLocation({ path: "/" }).hook}><MaiaTypeLine /></Router>);
-    expect(screen.getByText("From Maia:")).toBeTruthy();
+    // No village has named its guide here, so the line says who it is without borrowing a name.
+    expect(screen.getByText("From the village guide:")).toBeTruthy();
     setMyGeneKeys(own(KAI, { maia: true, maiaPlain: true }));
     rerender(<Router hook={memoryLocation({ path: "/" }).hook}><MaiaTypeLine /></Router>);
-    expect(screen.queryByText("From Maia:")).toBeNull();
+    expect(screen.queryByText("From the village guide:")).toBeNull();
     setMyGeneKeys(null);
+  });
+
+  it("says the village's own name for its guide once the village has given one", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ assistantName: "Sol" }), { status: 200 }));
+    try {
+      setMyGeneKeys(own(KAI, { maia: true }));
+      inRouter(<MaiaTypeLine />);
+      expect(await screen.findByText("From Sol:")).toBeTruthy();
+      expect(screen.queryByText(/Maia/)).toBeNull();
+    } finally {
+      fetchSpy.mockRestore();
+      setMyGeneKeys(null);
+    }
   });
 });
 

@@ -34,7 +34,9 @@
 import type { Pool } from "mysql2/promise";
 import { MODULES_BY_ID, httpsAddress, saberraPollSchedule } from "../../shared/modules";
 import type { SyncRun, SyncRunsAnswer, SyncTrigger } from "../../shared/saberraSyncLog";
-import { landProposal } from "./externalProposals";
+import { identityKeyFor, landProposal } from "./externalProposals";
+import { recordEvent } from "./events";
+import { withdrawGone } from "../repos/externalProposals";
 import { instanceIdentity } from "./identity";
 import { effectiveLifecycle, moduleConfig } from "./modules";
 import { listOrgRoles } from "./orgChart";
@@ -55,7 +57,7 @@ import {
 } from "./saberraPolling";
 import { proposeStructure, type VendorRecord } from "./saberraProposals";
 import type { SaberraRecordKind } from "./saberraRecords";
-import { splitStreams } from "./saberraStreams";
+import { proposalKindFor, splitStreams } from "./saberraStreams";
 import { schedulerEnabled } from "./scheduler";
 import { secretStatus, secretValue, villageSecretsConfigured, villageSecretsKeyProblem } from "./secrets";
 import { villageTimezone } from "./villageReaders";
@@ -210,11 +212,16 @@ type SyncAnswer = Record<string, unknown> & {
   refused: { kind: string; ok: boolean; reason?: string }[];
   superseded: number;
   rebatched: number;
+  /** Waiting suggestions withdrawn because the service stopped sending their record. */
+  gone: number;
   facts: number;
   held: unknown[];
   addressesSeen: unknown[];
   circles: ReturnType<typeof proposeStructure>["circles"] | null;
 };
+
+/** Where a one-apiece suggestion points back to, and so what makes two of them about the same record. */
+const sourceRefOf = (rec: VendorRecord): string => (rec.url ?? rec.id).slice(0, 400);
 
 /** Store the facts and land the suggestions one read produced. */
 async function landRead(pool: Pool, fetched: Fetched, sessionId: string): Promise<SyncAnswer> {
@@ -276,7 +283,7 @@ async function landRead(pool: Pool, fetched: Fetched, sessionId: string): Promis
   const note = (r: Awaited<ReturnType<typeof landProposal>>) => {
     if (!r.ok) return;
     superseded += r.superseded;
-    if (r.rebatched) rebatched += 1;
+    if (r.rebatched || r.reopened) rebatched += 1;
   };
 
   // The circles go in WITH the roles: a role names its circle by page id,
@@ -316,7 +323,7 @@ async function landRead(pool: Pool, fetched: Fetched, sessionId: string): Promis
         batchId,
         kind: group.kind,
         payload: { ...(fact?.fields ?? {}), vendorRecordId: rec.id },
-        sourceRef: (rec.url ?? rec.id).slice(0, 400),
+        sourceRef: sourceRefOf(rec),
         trustTier: "extracted_unreviewed",
         rebatchWaiting: true,
       });
@@ -325,7 +332,44 @@ async function landRead(pool: Pool, fetched: Fetched, sessionId: string): Promis
     }
   }
 
+  /*
+   * A RECORD THE SERVICE STOPPED SENDING LEAVES THE QUEUE. Superseding and
+   * rebatching both need the record to come back, so one the service archived
+   * out of its answer, or deleted, used to wait for good: on 2026-10-31
+   * thirteen circles had waited three weeks after the answer dropped them.
+   *
+   * Only a kind read WHOLE can say a record is missing. One that failed, or was
+   * cut short at the page ceiling, says nothing about what it did not reach,
+   * and an empty answer is too thin to withdraw on. The structure batch is left
+   * to its own identity: a changed structure already supersedes the waiting one.
+   * A record that comes back later returns to the queue (`reopenSuperseded`).
+   */
+  const present = new Set<string>();
+  const goneKinds: string[] = [];
+  for (const { kind } of plan.ask) {
+    if (failures.some((f) => f.kind === kind) || truncated.includes(kind)) continue;
+    const proposalKind = proposalKindFor(kind);
+    if (!proposalKind || proposalKind === "org.proposed") continue;
+    const read = records.filter((r) => r.kind === kind);
+    if (!read.length) continue;
+    goneKinds.push(proposalKind);
+    for (const rec of read) present.add(identityKeyFor({ moduleId: MODULE_ID, kind: proposalKind, sourceRef: sourceRefOf(rec) }));
+  }
+  const gone = await withdrawGone(pool, { villageId, moduleId: MODULE_ID, kinds: goneKinds, present });
+  for (const id of gone) {
+    void recordEvent(pool, {
+      kind: "external_proposal",
+      text: `proposal withdrawn: the service no longer sends its record (batch ${batchId})`,
+      actorKind: "agent",
+      originModuleId: MODULE_ID,
+      entityType: "external_proposal",
+      entityRef: id,
+      audience: "admin",
+    });
+  }
+
   return {
+    gone: gone.length,
     landed: landed.filter((l) => l.ok).length,
     refused: landed.filter((l) => !l.ok),
     batchId,
@@ -375,6 +419,7 @@ function describeLanding(run: SyncRun, answer: SyncAnswer): SyncRun {
   run.refused = answer.refused.length;
   run.superseded = answer.superseded;
   run.rebatched = answer.rebatched;
+  run.gone = answer.gone;
   run.held = answer.held.length;
   run.addresses = answer.addressesSeen.length;
   run.circles = answer.circles

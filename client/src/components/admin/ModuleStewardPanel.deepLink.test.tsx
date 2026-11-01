@@ -19,7 +19,7 @@
  * promises are the same; the address is `/modules/<id>#setting-<key>` now.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -108,7 +108,9 @@ describe("a module's page, arriving from a setup link", () => {
     at("");
     stubFetch();
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -159,7 +161,7 @@ describe("a module's page, arriving from a setup link", () => {
 
 describe("the switch, after launch", () => {
   beforeEach(() => stubFetch());
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("lets an admin who is not the holder narrow, and keeps the wider rungs dead", () => {
     panel({ lifecycle: "members", served: "members" }, { mode: "steward", launched: true, canSwitch: false, canPause: true });

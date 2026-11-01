@@ -128,3 +128,107 @@ describe("Cash to pay out", () => {
     expect(screen.queryByRole("button", { name: "Record a bank transfer" })).toBeNull();
   });
 });
+
+/*
+ * E7 (2026-10-31): on /cash-payouts a member without the key read the raw
+ * code "auth_required", and the page had no h1. A refusal now reads as a
+ * sentence with a way forward, and a machine code is never printed.
+ */
+describe("Cash to pay out, refused or signed out", () => {
+  const WHO = "Paying cash out is the work of Treasurer (Tara). Write to them if you are waiting on a payment.";
+  const openTransfer = async (name: string) => {
+    const card = (await screen.findByRole("heading", { name })).closest("li")!;
+    fireEvent.click(within(card).getByRole("button", { name: "Record a bank transfer" }));
+    fireEvent.change(within(card).getByLabelText("Bank reference or note"), { target: { value: "BAC 1" } });
+    fireEvent.click(within(card).getByRole("button", { name: "Review the transfer" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Yes, record it" }));
+    return card;
+  };
+
+  it("asks somebody signed out to sign in, with a way back here, and never shows the code", async () => {
+    routes({ "GET /api/cash-owed/queue?history=1": { status: 401, body: { error: "auth_required" } } });
+    render(<CashPayoutsTab password="tok" asPage />);
+    expect(await screen.findByText("Sign in to read the cash the village owes.")).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Sign in" });
+    expect(link.getAttribute("href")).toBe(`/login?next=${encodeURIComponent("/")}`);
+    expect(screen.getByRole("heading", { level: 1, name: "Cash to pay out" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("auth_required");
+  });
+
+  it("asks for sign-in without a request when there is no session at all", async () => {
+    const calls = routes({});
+    render(<CashPayoutsTab password="" asPage />);
+    expect(await screen.findByRole("link", { name: "Sign in" })).toBeTruthy();
+    expect(calls).toEqual([]);
+  });
+
+  it("tells a member without the key who pays cash out, and how to reach them", async () => {
+    routes({ "GET /api/cash-owed/queue?history=1": { status: 403, body: { error: "cash_pay_required", message: WHO } } });
+    render(<CashPayoutsTab password="tok" asPage />);
+    expect((await screen.findByRole("alert")).textContent).toBe(WHO);
+    expect(screen.getByRole("link", { name: "Write a message" }).getAttribute("href")).toBe("/messages?new=1");
+    expect(screen.getByRole("heading", { level: 1, name: "Cash to pay out" })).toBeTruthy();
+    expect(screen.queryByText("Record a bank transfer")).toBeNull();
+  });
+
+  it("never prints a bare code when a refusal carries no sentence", async () => {
+    routes({ "GET /api/cash-owed/queue?history=1": { status: 403, body: { error: "auth_required" } } });
+    render(<CashPayoutsTab password="tok" />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).not.toContain("auth_required");
+    expect(alert.textContent).toContain("treasurer's key");
+  });
+
+  it("keeps the h2 inside the admin panel, where the panel owns the h1", async () => {
+    routes({ "GET /api/cash-owed/queue?history=1": { status: 200, body: QUEUE } });
+    render(<CashPayoutsTab password="tok" />);
+    expect(await screen.findByRole("heading", { level: 2, name: "Cash to pay out" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+  });
+
+  it("gives the page its h1 when the list loads", async () => {
+    routes({ "GET /api/cash-owed/queue?history=1": { status: 200, body: QUEUE } });
+    render(<CashPayoutsTab password="tok" asPage />);
+    expect(await screen.findByRole("heading", { level: 1, name: "Cash to pay out" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Ora" })).toBeTruthy();
+  });
+
+  it("keeps the transfer form and asks for sign-in when the session runs out mid-page", async () => {
+    routes({
+      "GET /api/cash-owed/queue?history=1": { status: 200, body: QUEUE },
+      "POST /api/cash-owed/transfers": { status: 401, body: { error: "auth_required" } },
+    });
+    render(<CashPayoutsTab password="tok" asPage />);
+    const ora = await openTransfer("Ora");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Your sign-in has run out");
+    expect(within(alert).getByRole("link", { name: "Sign in again" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("auth_required");
+    expect((within(ora).getByLabelText("Bank reference or note") as HTMLInputElement).value, "what they typed is kept").toBe("BAC 1");
+  });
+
+  it("closes the list when the key is taken away while the page is open", async () => {
+    routes({
+      "GET /api/cash-owed/queue?history=1": { status: 200, body: QUEUE },
+      "POST /api/cash-owed/transfers": { status: 403, body: { error: "cash_pay_required", message: WHO } },
+    });
+    render(<CashPayoutsTab password="tok" asPage />);
+    await openTransfer("Ben");
+    expect((await screen.findByRole("alert")).textContent).toBe(WHO);
+    expect(screen.queryByRole("heading", { name: "Ora" }), "no list left to act on").toBeNull();
+    expect(screen.queryByText("Record a bank transfer")).toBeNull();
+  });
+
+  it("says the export needs a fresh sign-in, never the code", async () => {
+    routes({
+      "GET /api/cash-owed/queue?history=1": { status: 200, body: QUEUE },
+      "GET /api/cash-owed/export.csv": { status: 401, body: { error: "auth_required" } },
+    });
+    render(<CashPayoutsTab password="tok" />);
+    await screen.findByRole("heading", { name: "Ora" });
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Your sign-in has run out");
+    expect(alert.textContent).not.toContain("auth_required");
+  });
+});

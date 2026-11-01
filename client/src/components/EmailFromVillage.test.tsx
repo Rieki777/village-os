@@ -5,7 +5,7 @@
  * answer: a refusal leaves it where the village holds it and says why.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/gameApi", () => ({ authToken: () => "member-token" }));
@@ -52,7 +52,8 @@ describe("Email from the village", () => {
       }),
     );
   });
-  afterEach(() => vi.unstubAllGlobals());
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("offers reminders, path emails and letters, and saves a switch through the member's own account", async () => {
     render(<EmailFromVillage />);

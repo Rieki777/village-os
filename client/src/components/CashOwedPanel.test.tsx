@@ -97,3 +97,45 @@ describe("the cash card", () => {
     });
   });
 });
+
+/*
+ * E7's twin (2026-10-31): the payout page printed the gate's raw code, and so
+ * did this card's buttons, which showed `error` as it came. A 401 or 403 is
+ * now read as a sentence: the session that ran out, or who pays cash out.
+ */
+describe("the cash card, refused", () => {
+  const WHO = "Paying cash out is the work of Treasurer (Tara). Write to them if you are waiting on a payment.";
+  function answer(map: Record<string, { status: number; body: unknown }>) {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const hit = map[`${init?.method ?? "GET"} ${url}`] ?? { status: 404, body: { error: "no route" } };
+      return { ok: hit.status < 300, status: hit.status, json: async () => hit.body };
+    }));
+  }
+
+  it("asks for a fresh sign-in when a claim meets a session that ran out, never the code", async () => {
+    answer({
+      "GET /api/me/cash-owed": { status: 200, body: { entries: [owed], mayPay: false } },
+      "POST /api/me/cash-owed/cash-1/claim": { status: 401, body: { error: "auth_required" } },
+    });
+    render(<CashOwedPanel />);
+    fireEvent.click(await screen.findByRole("button", { name: "Claim" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Your sign-in has run out");
+    expect(alert.textContent).not.toContain("auth_required");
+  });
+
+  it("tells a treasurer whose key was taken away who pays cash out now, never the code", async () => {
+    answer({
+      "GET /api/me/cash-owed": { status: 200, body: { entries: [], mayPay: true } },
+      "GET /api/cash-owed/queue": {
+        status: 200,
+        body: { unpaid: [{ ...owed, state: "claimed", claimedAt: "2026-10-21T00:00:00.000Z", userId: "u-ora", memberName: "Ora", paidByName: null }], paid: [] },
+      },
+      "POST /api/cash-owed/cash-1/paid": { status: 403, body: { error: "cash_pay_required", message: WHO } },
+    });
+    render(<CashOwedPanel />);
+    fireEvent.change(await screen.findByLabelText("How it was paid"), { target: { value: "Bank transfer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Mark paid" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(WHO);
+  });
+});

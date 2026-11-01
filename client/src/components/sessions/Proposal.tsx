@@ -15,6 +15,13 @@
  * no remove, and a lock line that says why, so nobody hunts for a control
  * that is missing on purpose.
  *
+ * A CHECK BEFORE DECIDING (0297, shared/sessionCheck.ts). The facilitator or
+ * the person who proposed it asks for the village's own read of an open
+ * proposal: its purpose beside it, the season priorities the words name, and
+ * the roles they name with whether each holder is here. Everybody in the room
+ * sees the same card, and a decided proposal keeps the card it was checked
+ * with. Absent where the village does not offer checks.
+ *
  * The blossom opens once, for the people who were watching when the proposal
  * was decided. A proposal that was already decided when the page opened is
  * history, and a page that celebrates its own load celebrates nothing
@@ -23,7 +30,9 @@
 import { useState } from "react";
 import FilledInNote from "./FilledInNote";
 import { Lock, X } from "lucide-react";
-import { ROOM_COPY, SESSION_LIMITS, SESSION_REFUSALS, cleanText, type SessionEntry } from "@shared/sessions";
+import { ROOM_COPY, SESSION_LIMITS, SESSION_REFUSALS, cleanText, type SessionEntry, type SessionView } from "@shared/sessions";
+import { CHECK_COPY, type EntryCheck } from "@shared/sessionCheck";
+import ClampedNote from "./ClampedNote";
 import Celebration from "@/components/natural/Celebration";
 import { useArrival, useMomentWindow } from "@/components/natural/moments";
 import ConsentRound, { WaitingLine } from "./ConsentRound";
@@ -32,6 +41,7 @@ import EditableText from "./EditableText";
 import {
   BTN_ICON,
   BTN_PRIMARY,
+  BTN_QUIET,
   CARD,
   CHIP,
   ENTRY_GLYPH,
@@ -46,6 +56,7 @@ import {
   entryRightsFor,
   leads,
   nameOf,
+  nightWhen,
   seesAnswers,
   type StageProps,
 } from "./roomUi";
@@ -72,6 +83,97 @@ export function DecideButton({ view, actions, entry, className = "" }: Omit<Stag
     >
       {ROOM_COPY.decide}
     </button>
+  );
+}
+
+/** One proposal's check, as the whole room reads it. */
+function CheckCard({ check, agent, purpose, now, decided }: { check: EntryCheck; agent: string; purpose: string | null; now: number; decided: boolean }) {
+  const { read } = check;
+  return (
+    <section className="mt-2 rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground" aria-label={CHECK_COPY.title} data-check="">
+      <h4 className={H3}>{CHECK_COPY.title}</h4>
+      <p className={`${HINT} mt-1`}>{CHECK_COPY.lead}</p>
+      {check.changed && <p className="mt-2 font-semibold text-notice">{decided ? CHECK_COPY.changedDecided : CHECK_COPY.changed}</p>}
+      <dl className="mt-3 space-y-3">
+        <div>
+          <dt className="font-semibold">{CHECK_COPY.purposeTitle}</dt>
+          <dd className="mt-0.5">{purpose ? <ClampedNote text={purpose} /> : CHECK_COPY.noPurpose}</dd>
+          {check.purposeChanged && (
+            <dd className={`${HINT} mt-0.5`}>{read.hasPurpose ? CHECK_COPY.purposeRewritten : CHECK_COPY.purposeWritten}</dd>
+          )}
+        </div>
+        <div>
+          <dt className="font-semibold">{CHECK_COPY.prioritiesTitle(read.season)}</dt>
+          {read.priorities.length ? (
+            <dd>
+              <ul className="mt-0.5 space-y-1">
+                {read.priorities.map((p, i) => (
+                  <li key={`${i}:${p.text}`} data-named={p.named ? "" : undefined}>
+                    {p.text}
+                    {p.named && <span className={`${CHIP} ml-2`}>{CHECK_COPY.named}</span>}
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          ) : (
+            <dd className={`${HINT} mt-0.5`}>{CHECK_COPY.noSeason}</dd>
+          )}
+        </div>
+        <div>
+          <dt className="font-semibold">{CHECK_COPY.rolesTitle}</dt>
+          {read.roles.length ? (
+            <dd>
+              <ul className="mt-0.5 space-y-1">
+                {read.roles.map((r, i) => (
+                  <li key={`${i}:${r.seatId}`}>
+                    {r.name}: {CHECK_COPY.holder[r.holder]}
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          ) : (
+            <dd className={`${HINT} mt-0.5`}>{CHECK_COPY.noRoles}</dd>
+          )}
+        </div>
+      </dl>
+      <p className={`${HINT} mt-3`}>{CHECK_COPY.agentLine(agent)}</p>
+      <span className={ENTRY_META}>{CHECK_COPY.checkedAt(nightWhen(Date.parse(check.at), now))}</span>
+    </section>
+  );
+}
+
+/** The facilitator or the proposer may check an open proposal while the room is open; the server checks both again. */
+export function mayCheck(view: Pick<SessionView, "status" | "me" | "check">, entry: Pick<SessionEntry, "status" | "authorUserId">): boolean {
+  if (!view.check || view.status !== "open" || !view.me.joined || entry.status !== "open") return false;
+  return view.me.facilitates || view.me.admin || entry.authorUserId === view.me.userId;
+}
+
+/** The button, and the card once a check exists. Nothing at all where the village offers no checks. */
+function ProposalCheck({ view, actions, entry, now }: Omit<StageProps, "now"> & { entry: SessionEntry; now?: number }) {
+  const [busy, setBusy] = useState(false);
+  const offer = view.check;
+  if (!offer) return null;
+  const done = offer.byEntry[String(entry.id)];
+  const may = mayCheck(view, entry) && !!actions.checkEntry;
+  if (!done && !may) return null;
+  const run = async () => {
+    if (busy || !actions.checkEntry) return;
+    setBusy(true);
+    try {
+      await actions.checkEntry(entry.id);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mb-3">
+      {may && (
+        <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void run()}>
+          {busy ? CHECK_COPY.checking : done ? CHECK_COPY.again : CHECK_COPY.button(offer.agent)}
+        </button>
+      )}
+      {done && <CheckCard check={done} agent={offer.agent} purpose={offer.purpose} now={now ?? Date.now()} decided={entry.status === "done"} />}
+    </div>
   );
 }
 
@@ -150,13 +252,19 @@ export default function Proposal({ view, actions, entry, now }: Omit<StageProps,
         )}
       </div>
       {decided ? (
-        <p className={`${LOCK_LINE} mt-3`}>
-          <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-          {ROOM_COPY.decidedLock}
-        </p>
+        <>
+          <p className={`${LOCK_LINE} mt-3`}>
+            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+            {ROOM_COPY.decidedLock}
+          </p>
+          <div className="mt-3 empty:hidden">
+            <ProposalCheck view={view} actions={actions} entry={entry} now={now} />
+          </div>
+        </>
       ) : (
         <div className="mt-4">
           <RegenLens entryId={entry.id} />
+          <ProposalCheck view={view} actions={actions} entry={entry} now={now} />
           <ConsentRound
             view={view}
             actions={actions}

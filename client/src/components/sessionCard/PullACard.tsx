@@ -33,6 +33,8 @@ import MoonGlyph from "@/components/calendar/MoonGlyph";
 import { CardRefusal, pullCard, readCards, shareMyLine } from "@/lib/sessionCardApi";
 import { BTN_QUIET, BTN_SECONDARY, EYEBROW, H3, HINT, SOFT } from "@/components/sessions/roomUi";
 import type { RoomActions } from "@/components/sessions/useSessionRoom";
+import { useGuideName } from "@/hooks/useGuideName";
+import { fillGuideName } from "@shared/guideName";
 
 /** How often an open card reads the room's cards, so a card pulled on another phone arrives. */
 export const CARD_POLL_MS = 5000;
@@ -54,12 +56,13 @@ export const CARD_WORDS = {
   parked: "Parked for next time.",
   earlier: "Earlier card",
   newer: "Newer card",
-  maia: "Woven by Maia from today's sky and the lines of the people here.",
+  // {name} is the village's own guide (shared/guideName.ts), filled where the card is drawn.
+  maia: "Woven by {name} from today's sky and the lines of the people here.",
   plain: "Read from today's sky and the lines of the people here.",
   notRead: {
     "no-lines": "Find your Gene Keys lines and the next card will read you too.",
     hidden: "Your lines are hidden, so the card welcomes you by name and reads nothing of yours.",
-    "no-maia": "Let Maia use your lines and the next card will read you too.",
+    "no-maia": "Let {name} use your lines and the next card will read you too.",
     "left-out": "You asked to be left out of cards, so the card welcomes you by name.",
   },
 } as const;
@@ -164,6 +167,7 @@ function CardFace({
   onShare(shared: boolean): void;
   busy: boolean;
 }) {
+  const guide = useGuideName().name;
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-4">
@@ -210,7 +214,7 @@ function CardFace({
           </>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
-            {answer.notRead ? CARD_WORDS.notRead[answer.notRead] : CARD_WORDS.notRead["no-lines"]}{" "}
+            {fillGuideName(answer.notRead ? CARD_WORDS.notRead[answer.notRead] : CARD_WORDS.notRead["no-lines"], guide)}{" "}
             {answer.notRead && answer.notRead !== "left-out" ? (
               <Link href="/profile/gene-keys" className="text-notice underline underline-offset-2">
                 Your Gene Keys
@@ -247,7 +251,7 @@ function CardFace({
         </section>
       ) : null}
 
-      <p className={HINT}>{card.source === "maia" ? CARD_WORDS.maia : CARD_WORDS.plain}</p>
+      <p className={HINT}>{card.source === "maia" ? fillGuideName(CARD_WORDS.maia, guide) : CARD_WORDS.plain}</p>
     </div>
   );
 }

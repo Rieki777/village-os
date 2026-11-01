@@ -15,7 +15,7 @@
  * Any read but the queue and the accept is refused, so this file stays about the card.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
@@ -89,7 +89,9 @@ const renderReview = () =>
   );
 
 describe("a quest idea on /review says where it came from, and what the person answered", () => {
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     // The editor keeps the pay options for the page; each case reads its own.
     forgetPayOptions();
@@ -156,6 +158,7 @@ describe("a quest idea on /review says where it came from, and what the person a
 
 describe("the refusal count says what was kept", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
