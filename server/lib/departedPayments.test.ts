@@ -26,6 +26,7 @@ import { approveIntake, ensureLibraryToken, recordIntake } from "./library";
 import { loadVariables } from "./variables";
 import { recordOwed, settleOwedPosting } from "../repos/questOwedPostings";
 import { DEPARTED_RECIPIENT } from "./departed";
+import { leftTheVillage } from "./formerMember";
 
 const configured = testDbConfigured();
 
@@ -176,5 +177,34 @@ describe.skipIf(!configured)("nothing pays, or is owed to, a member who has left
     if (!big2.ok) throw new Error(big2.error);
     expect(await approveIntake(pool, big2.itemId, "steward-two")).toEqual({ ok: true, award: 225 });
     expect(await legsTo(living)).toBe(2);
+  });
+
+  /*
+   * Rye, 2026-10-31, item 5: "erased members figures should outlive them if
+   * they're not paid out - still a debt owed". Item 9: an approved donation
+   * from a departed donor paid nothing.
+   */
+  it("a former member who donated before leaving is awarded as normal, and keeps the credits", async () => {
+    const left = await member("dp-donor-left");
+    const big = await recordIntake(pool, { name: "Kiln", appraisal: 300, donorUserId: left, recordedBy: "steward-one" });
+    if (!big.ok) throw new Error(big.error);
+    expect(big.pendingSecondSignoff, "the control: it waits for a second steward").toBe(true);
+    // They leave and the exit resolves with the account kept: a former member, no tombstone.
+    await pool.query("INSERT INTO `exits` (`id`, `user_id`, `status`, `opened_by`) VALUES (?,?,'resolved',?)", ["dp-exit-left", left, left]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(await leftTheVillage(pool, { id: left, email: `${left}@example.test` }), "the control: they are a former member").toBe(true);
+
+    expect(await approveIntake(pool, big.itemId, "steward-two")).toEqual({ ok: true, award: 225 });
+    expect(await legsTo(left), "the award reached the account they kept").toBe(1);
+  });
+
+  it("an erased donor's award is paid to nobody, and the unpaid figure stays on the item's history", async () => {
+    const gone = await member("dp-donor-erased");
+    const big = await recordIntake(pool, { name: "Lathe", appraisal: 300, donorUserId: gone, recordedBy: "steward-one" });
+    if (!big.ok) throw new Error(big.error);
+    await erase(gone);
+    expect(await approveIntake(pool, big.itemId, "steward-two")).toEqual({ ok: true, award: 0 });
+    expect(await legsTo(gone), "no credit reached the tombstone").toBe(0);
+    const [rows] = await pool.query<any[]>("SELECT `detail` FROM `library_item_events` WHERE `item_id` = ? AND `kind` = 'intake_approved'", [big.itemId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(rows.map((r) => String(r.detail))).toEqual(["second sign-off; award 0; 225 credits unpaid, the donor's account was erased"]);
   });
 });

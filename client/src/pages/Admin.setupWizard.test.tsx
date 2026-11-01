@@ -35,7 +35,7 @@
  * nothing.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -109,7 +109,9 @@ const stubFetch = () => {
 
 describe("SetupWizard keeps focus while a founder types", () => {
   beforeEach(stubFetch);
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });

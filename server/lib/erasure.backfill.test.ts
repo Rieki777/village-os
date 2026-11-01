@@ -111,8 +111,10 @@ const GIVEN_TO_IT = [
   "role-holdings-after-tombstone",
   "gene-keys-after-tombstone",
   "quest-crews-after-tombstone",
+  "quest-claims-after-tombstone",
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
+  "reward-moments-after-tombstone",
   "companions-after-tombstone",
   "product-subscriptions-after-tombstone",
 ];
@@ -662,6 +664,9 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     });
     await placePhotosRepo.insertReport(pool, { id: "bf-r5-pr", villageId: "local", photoId: "bf-r5-photo", reporterId: gone.id, kind: "subject", reason: "This is me, Wren Halloway, please take it down" });
     await placePhotosRepo.insertReport(pool, { id: "bf-r5-pr-ann", villageId: "local", photoId: "bf-r5-photo", reporterId: ann.id, kind: "concern", reason: "Ann's own words" });
+    // An open claim the old record left in their name, and a consented one that is history.
+    await q("INSERT INTO quest_claims (id, quest_id, quest_title, user_id, user_name, status, claimed_at) VALUES (?,?,?,?,?,'claimed',NOW())", ["bf-r5-claim", "q-bf-r5", "Mend the oven", gone.id, ANON]);
+    await q("INSERT INTO quest_claims (id, quest_id, quest_title, user_id, user_name, status, claimed_at) VALUES (?,?,?,?,?,'consented',NOW())", ["bf-r5-claim-done", "q-bf-r5", "Mend the oven", gone.id, ANON]);
     await tombstone(gone.id, { handle: null });
     await finishedRecord(gone.id, FINISHED_ON_2026_10_20);
     const ballotDoc = async () => String((await q("SELECT doc_markdown FROM ballots WHERE id = ?", [r.ballot.id]))[0].doc_markdown);
@@ -671,7 +676,7 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     expect((await backfillFinishedErasures(pool, deps(), () => undefined)).stopped).toBe(0);
 
     const done = (await erasureRecord(pool, gone.id))!.stepsDone;
-    for (const step of ["proposal-ballot-words-after-tombstone", "quest-crews-after-tombstone", "photo-report-reasons-after-tombstone"]) {
+    for (const step of ["proposal-ballot-words-after-tombstone", "quest-crews-after-tombstone", "quest-claims-after-tombstone", "photo-report-reasons-after-tombstone"]) {
       expect(done, `the old record is given ${step}`).toContain(step);
     }
     expect(await ballotDoc()).toContain("Proposed by a departed member on 2026-10-01; ");
@@ -679,6 +684,7 @@ describe.skipIf(!configured)("a finished erasure, given the steps it predates", 
     expect(await q("SELECT 1 FROM quest_crew_members WHERE user_id = ?", [gone.id])).toHaveLength(0);
     expect((await crews.byId(crew.id))!.status, "a crew with living members stays").not.toBe("disbanded");
     expect((await crews.byId("bf-r5-alone"))!.status, "a crew they were alone in disbands").toBe("disbanded");
+    expect((await q("SELECT id, status FROM quest_claims WHERE user_id = ? ORDER BY id", [gone.id])).map((r: any) => `${r.id}:${r.status}`), "the open claim is released, the consented one stays").toEqual(["bf-r5-claim-done:consented"]);
     const reports = new Map((await q("SELECT id, reason, status FROM place_photo_reports")).map((x: any) => [x.id, x]));
     expect(reports.get("bf-r5-pr")).toMatchObject({ reason: null, status: "open" });
     expect(reports.get("bf-r5-pr-ann")!.reason).toBe("Ann's own words");

@@ -203,22 +203,34 @@ describe("decisions recorded", () => {
     expect(
       count("decisions-recorded", {
         live_session_entries: [
-          { session_id: 1, kind: "decision", created_at: "2026-10-05T16:00:00Z" },
-          { session_id: 1, kind: "decision", created_at: "2026-10-06T16:00:00Z" },
-          { session_id: 1, kind: "action", created_at: "2026-10-06T16:00:00Z" },
-          { session_id: 1, kind: "decision", created_at: "2026-09-06T16:00:00Z" },
+          { session_id: 1, kind: "decision", status: "done", created_at: "2026-10-05T16:00:00Z" },
+          { session_id: 1, kind: "decision", status: "done", created_at: "2026-10-06T16:00:00Z" },
+          { session_id: 1, kind: "action", status: "done", created_at: "2026-10-06T16:00:00Z" },
+          { session_id: 1, kind: "decision", status: "done", created_at: "2026-09-06T16:00:00Z" },
         ],
       }),
     ).toMatchObject({ n: 2 });
+  });
+
+  it("counts only what the room consented to: a proposal still open and one set aside are not decisions", () => {
+    expect(
+      count("decisions-recorded", {
+        live_session_entries: [
+          { session_id: 1, kind: "decision", status: "done", created_at: "2026-10-05T16:00:00Z" },
+          { session_id: 1, kind: "decision", status: "open", created_at: "2026-10-05T17:00:00Z" },
+          { session_id: 1, kind: "decision", status: "parked", created_at: "2026-10-06T16:00:00Z" },
+        ],
+      }),
+    ).toMatchObject({ n: 1 });
   });
 });
 
 describe("readSign", () => {
   const entries: SignRows = {
     live_session_entries: [
-      { session_id: 1, kind: "decision", created_at: "2026-10-05T16:00:00Z" },
-      { session_id: 1, kind: "decision", created_at: "2026-10-06T16:00:00Z" },
-      { session_id: 1, kind: "decision", created_at: "2026-09-06T16:00:00Z" },
+      { session_id: 1, kind: "decision", status: "done", created_at: "2026-10-05T16:00:00Z" },
+      { session_id: 1, kind: "decision", status: "done", created_at: "2026-10-06T16:00:00Z" },
+      { session_id: 1, kind: "decision", status: "done", created_at: "2026-09-06T16:00:00Z" },
     ],
   };
 

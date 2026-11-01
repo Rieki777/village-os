@@ -68,6 +68,7 @@ const RULE_WORDS: RuleWords = {
    * them and says the fact they share.
    */
   tokens: () => "Opens once the village has paid you for something you brought it.",
+  role: () => "Opens while you hold a role on the org chart.",
   granted: () => "The village grants this one. No amount of climbing reaches it.",
 };
 
