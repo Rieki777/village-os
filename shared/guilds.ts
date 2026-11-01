@@ -392,8 +392,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "session-secret",
-      strength: "present",
-      proves: "A secret is set. Signing members in with it is what proves it works.",
+      strength: "alive",
+      proves: "A session signed with the secret verifies, through the same code that signs members in.",
     },
     nursery: { how: "Its own value in a staging environment." },
     compost: ["Delete AUTH_TOKEN_SECRET from Railway. Every member is signed out."],
@@ -545,8 +545,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "village-secrets-key",
-      strength: "present",
-      proves: "A key of the right shape is set. Saving and reading back one key is what proves it seals.",
+      strength: "alive",
+      proves: "A test value seals and opens with the key, and every key saved under Integrations opens with it.",
     },
     nursery: { how: "A different key in staging. Never copy production's." },
     compost: ["Delete VILLAGE_SECRETS_KEY from Railway only when the village itself is composted."],
@@ -1046,8 +1046,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "assistant-key",
-      strength: "present",
-      proves: "A key is set. One answer from the guide is what proves it works.",
+      strength: "alive",
+      proves: "The guide answered on this key. Asking it one question is the proof.",
     },
     nursery: null,
     compost: [
@@ -1087,8 +1087,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "stripe-keys",
-      strength: "present",
-      proves: "A key is set. A test checkout is what proves it works.",
+      strength: "alive",
+      proves: "Stripe answered a checkout made with this key, in live mode. Starting one checkout and closing it before paying is the proof.",
     },
     nursery: { how: "A Stripe test-mode key and a test checkout before the live key is planted." },
     compost: [
@@ -1133,8 +1133,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "stripe-webhook",
-      strength: "present",
-      proves: "A signing secret is set. A test event from Stripe arriving signed is what proves it.",
+      strength: "alive",
+      proves: "A signed event from Stripe arrived and verified with this secret. The first card payment is the proof, or one paid test checkout in test mode.",
     },
     nursery: { how: "A test-mode endpoint, then a test event sent from Stripe's dashboard." },
     compost: [

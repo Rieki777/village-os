@@ -12026,15 +12026,6 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       "brand-token-names": () => recognitionNameCheck(tokenDef(HEARTS)?.name, GAME_CONFIG.currency.name),
       // Green means alive (2026-10-13): the post office's own test email reported delivered (comms item 13), never the key's presence alone.
       "resend-key": () => resendKeyLaunchCheck(getPool(), allSecretStatuses().find((x) => x.key === "resend_api_key")!),
-      "stripe-keys": () => (stripeConfigured()
-        ? { state: "ok" as const, detail: "Stripe secret key is set" }
-        : { state: "missing" as const, detail: "No Stripe key: card checkout answers 503; the manual payment path still works" }),
-      "stripe-webhook": () => (webhookSecretConfigured()
-        ? { state: "ok" as const, detail: "Webhook signing secret is set" }
-        : { state: "missing" as const, detail: "Cards would charge but credits would never arrive. The settle callback has no signature to verify" }),
-      "assistant-key": () => (getEmailConfig().assistant_api_key || process.env.ANTHROPIC_API_KEY || borrowingPlatformKey()
-        ? { state: "ok" as const, detail: "The AI guide is awake" }
-        : { state: "missing" as const, detail: "No Anthropic key. Every form still works, without the guide" }),
       // S76: borrowing is fine while a village is being built and wrong at
       // handoff. The key itself is never named here, only whose it is.
       // Three states, decided in server/lib/assistant.ts beside resolveKey: a
@@ -12083,14 +12074,6 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         }
         return { state: "ok" as const, detail: `${def.name} is spendable: ${surfaces.map((f) => f.detail).join(", ")}` };
       },
-      // Both of these were already machine-observable and simply never asked.
-      "session-secret": () =>
-        process.env.AUTH_TOKEN_SECRET
-          ? { state: "ok" as const, detail: "Sessions survive restarts and extra replicas" }
-          : {
-              state: "missing" as const,
-              detail: "Signing with a random per-process key. Every restart logs everyone out",
-            },
       "exit-policy-terms": () => {
         const p: any = readExitPolicy();
         return p && !p.placeholder

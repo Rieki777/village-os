@@ -25,6 +25,8 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { numberVar } from "./variables";
 import { recordEvent } from "./events";
 import { secretConfigured, secretValue } from "./secrets";
+import { PLATFORM_CALLS, notePlatformCall } from "./integrations";
+import { LIVE_EVENT, SIGNED_REFUSAL, TEST_EVENT, UNSIGNED_REFUSAL } from "../repos/stripeDeliveries";
 import { reportError } from "./errors";
 import { isTombstone } from "./oauthAccounts";
 import type { RefusedSubscription } from "./owedCancels";
@@ -101,13 +103,27 @@ export async function createCheckout(input: CheckoutInput): Promise<{ url: strin
   }
   if (input.customerEmail) params.set("customer_email", input.customerEmail);
 
-  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
-  });
+  // Every answer is recorded (server/lib/integrations.ts PLATFORM_CALLS): it is
+  // the evidence the launch journey's `stripe-keys` row reads, never the key's presence.
+  let res: Response;
+  try {
+    res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+  } catch (err: any) {
+    await notePlatformCall(PLATFORM_CALLS.stripeCheckout, { ok: false, status: "network", detail: String(err?.message ?? err) });
+    throw err;
+  }
   const data: any = await res.json();
-  if (!res.ok) throw new Error(`Stripe checkout failed: ${data?.error?.message ?? res.status}`);
+  if (!res.ok) {
+    // Stripe's code, never its message: a message can quote what was sent,
+    // a member's email among it, and that record holds no member content.
+    await notePlatformCall(PLATFORM_CALLS.stripeCheckout, { ok: false, status: String(res.status), detail: String(data?.error?.code ?? data?.error?.type ?? "") });
+    throw new Error(`Stripe checkout failed: ${data?.error?.message ?? res.status}`);
+  }
+  await notePlatformCall(PLATFORM_CALLS.stripeCheckout, { ok: true });
   return { url: String(data.url), sessionId: String(data.id) };
 }
 
@@ -315,7 +331,9 @@ export async function handleStripeEvent(
     return { status: 400, body: { error: "webhook signing secret is not configured" } };
   }
   if (!verifyStripeSignature(rawBody, sigHeader, secret)) {
-    await logPayment(pool, { type: "signature", outcome: "sig_fail" });
+    // Which refusal it was: server/repos/stripeDeliveries.ts reads a signed one
+    // back for the launch journey, and an unsigned call is never Stripe.
+    await logPayment(pool, { type: "signature", outcome: "sig_fail", detail: sigHeader ? SIGNED_REFUSAL : UNSIGNED_REFUSAL });
     await alertAdmins("Stripe webhook signature verification FAILED", `payments-sigfail:${new Date().toISOString().slice(0, 13)}`);
     return { status: 400, body: { error: "signature verification failed" } };
   }
@@ -335,7 +353,10 @@ export async function handleStripeEvent(
 
   // Event-level dedupe: the unique stripe_event_id makes a replay a no-op.
   if (eventId) {
-    const fresh = await logPayment(pool, { stripeEventId: eventId, module: moduleId || null, orderId: orderId || null, type, outcome: "ok", latencyMs: Date.now() - started });
+    // The claim row says which mode Stripe sent the event in, so a test event
+    // can never prove the live endpoint's secret (server/repos/stripeDeliveries.ts).
+    const mode = event?.livemode === true ? LIVE_EVENT : event?.livemode === false ? TEST_EVENT : undefined;
+    const fresh = await logPayment(pool, { stripeEventId: eventId, module: moduleId || null, orderId: orderId || null, type, outcome: "ok", latencyMs: Date.now() - started, detail: mode });
     // A claim is not a completion. If the previous attempt finished, this is
     // a genuine replay and we stop. If it did not — the process died between
     // claiming and finishing, so nothing deleted the claim and no alarm

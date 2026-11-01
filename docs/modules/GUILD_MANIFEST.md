@@ -90,8 +90,11 @@ never health, and neither is a person saying so. Pick the strongest check you ca
 - `probe`: a named check. Say exactly what it calls and what answer counts as alive, and set
   `builtAt` to the code that runs it once it exists.
 - `launch-check`: a resolver in `server/lib/launch.ts`, named by a `checkKey` from
-  `shared/launchRequirements.ts`. Most of these only check presence today. A `manual:` key means a
-  person confirms it.
+  `shared/launchRequirements.ts`. A `manual:` key means a person confirms it. The platform's own key
+  rows read evidence (`server/lib/launchProofs.ts`, since 2026-11-01): Stripe answering a checkout,
+  a signed webhook event verifying, the guide answering, a session verifying, a sealed value
+  opening. A new launch check reads what the platform records when the thing really happens, and
+  never a value being set.
 - `driver-health`: your module's `health` driver method. That interface does not exist yet, so intake
   reports it as not yet callable.
 
