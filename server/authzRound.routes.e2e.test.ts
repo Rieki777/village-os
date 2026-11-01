@@ -226,13 +226,17 @@ describe.skipIf(!DB_CONFIGURED)("the public amendment history", () => {
     expect(handoff.text).not.toContain(SECRET);
   });
 
-  it("the founder-held dial cannot be proposed at all, which is the first lock", async () => {
+  it("a founder-held dial may be proposed (Rye, 2026-09-25), and its withheld value still reaches no stranger", async () => {
     const made = await call("POST", "/api/game/mechanics/proposals", {
-      title: "Move the RPC", rationale: "Should be refused.",
+      title: "Move the RPC", rationale: "Anyone may propose any dial; the value stays private.",
       changes: [{ key: "tokens.base_rpc_url", to: "https://base-mainnet.g.alchemy.com/v2/AuthzRoundKeyTwo0123456789" }],
     });
-    expect(made.status, made.text).toBe(400);
-    expect(made.text).toContain("founder-held");
+    expect(made.status, made.text).toBe(200);
+    const list = await call("GET", "/api/game/mechanics/proposals", undefined, "");
+    expect(list.status).toBe(200);
+    expect(list.text).not.toContain("AuthzRoundKeyTwo");
+    const doc = await call("GET", `/api/game/mechanics/proposals/${String(made.json?.id)}/document`, undefined, "");
+    expect(doc.text).not.toContain("AuthzRoundKeyTwo");
   });
 
   it("an ordinary change still reads in full", async () => {

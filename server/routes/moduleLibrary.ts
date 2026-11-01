@@ -88,6 +88,9 @@ import {
 import type { ValidateChangeSetOptions } from "../lib/mechanics";
 import { effectiveLifecycle, moduleConfig, moduleDemotions, setModuleLifecycle, storedLifecycle } from "../lib/modules";
 import { launchBallotCarried } from "../lib/launch";
+import { founderPowerStands } from "../lib/gameStart";
+// Re-exported so server/index.ts takes them on its route-module import line (the ratchet exempts that line).
+export { founderAdoptable, founderHeldVoteProblem } from "../lib/founderDials";
 import { recordEvent } from "../lib/events";
 import { getPool } from "../db/pool";
 import { register as registerSetupGame } from "./setupGame";
@@ -102,6 +105,7 @@ import { moduleNeeds } from "../../shared/moduleNeeds";
 export const moduleChangeReaders: ValidateChangeSetOptions = {
   moduleLifecycleOf: (id) => effectiveLifecycle(id),
   openModuleProposal: async (id) => (await liveModuleProposal(getPool(), id))?.id ?? null,
+  foundersHold: () => founderPowerStands(getPool()),
 };
 
 type Deps = Pick<AppDeps, "isAdmin" | "authedUser" | "firstName" | "projectName"> & {
