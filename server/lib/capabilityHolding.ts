@@ -176,8 +176,11 @@ export async function villageHandoverState(pool: Pool): Promise<VillageHandoverS
    *   absent from the table  the SCAFFOLDING holds it, which is where every
    *                          village starts and what `returnCapabilityToScaffolding`
    *                          puts it back to. Not handed over.
-   *   held by the stewards   where all 19 sit the moment a launch carries.
-   *                          Not handed over; this is what the arc starts from.
+   *   held by the stewards   where a power sits once it crosses to the
+   *                          village: at the launch if the stewards selected
+   *                          it, or later by their own act
+   *                          (server/routes/stewardHandover.ts).
+   *                          Not handed on to another role yet.
    *   held by another role   moved out of the founding seat to a role the
    *                          village put somebody in. THIS is the handover.
    *

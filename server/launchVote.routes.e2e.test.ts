@@ -658,17 +658,10 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => 
     const [roles] = await pool.query<any[]>("SELECT capabilities FROM roles WHERE id = 'steward'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const caps = typeof roles[0]?.capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0]?.capabilities;
     expect([...caps].sort(), "the role carries every one of them").toEqual([...HANDOVER_SET].sort());
-    const [holdings] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "SELECT capability, holder_role_id, moved_by_ballot_id FROM capability_holding ORDER BY capability",
-    );
-    expect(
-      holdings.map((h: any) => String(h.capability)),
-      "and every one of them is the village's, from this vote",
-    ).toEqual([...HANDOVER_SET].sort());
-    for (const h of holdings) {
-      expect(String(h.holder_role_id)).toBe("steward");
-      expect(String(h.moved_by_ballot_id)).toBe(carried.id);
-    }
+    // Rye, 2026-11-01: the launch hands the village only what the stewards
+    // selected, and this village selected nothing.
+    const [holdings] = await pool.query<any[]>("SELECT capability FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(holdings, "and not one of them is the village's yet").toEqual([]);
 
     // And the founder was told, on the same spine every other seating uses.
     const [rung] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table

@@ -238,5 +238,7 @@ function stewardSection(input: LaunchProposalDocInput): string[] {
     "",
     "Whoever accepts is seated when this vote carries. If nobody accepts, the role starts empty and the village votes somebody into it whenever it likes.",
     "",
+    "Starting the Game hands the village only the powers the stewards selected for it, which may be none. The stewards hand over the rest when they judge the village ready, and handing one back takes a village vote.",
+    "",
   ];
 }
