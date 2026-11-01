@@ -589,6 +589,11 @@ export interface QuestClaim {
    * that difference is what the reward moment names.
    */
   credited?: number;
+  /**
+   * The reward moment names this consent's pay (server/lib/rewardMoment.ts,
+   * `claimsAnnouncedHere`), so the quest page does not celebrate it again.
+   */
+  announcedByRewardMoment?: boolean;
 }
 
 export async function fetchGameMe(): Promise<GameMe | null> {
