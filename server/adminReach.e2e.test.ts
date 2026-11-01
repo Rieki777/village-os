@@ -626,4 +626,33 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     expect(JSON.stringify(history.json)).not.toContain("Ines Mora");
     expect(JSON.stringify(history.json)).not.toContain("kitchen lead");
   });
+
+  /*
+   * THE GUIDE SHIPS UNNAMED, and blank stays blank. "Maia" is one village's
+   * guide, kept in that village's own document (Rye, 2026-10-22), so the
+   * platform default is "" and every page reads "the village guide" until a
+   * founder names it. The trap this pins is the empty-string sentinel: a
+   * normaliser that reads "" as "missing" and hands the old default back.
+   */
+  it("the guide's name: a new village's is blank, a typed one reaches the page, and clearing it stays clear", async () => {
+    const fresh = await asStranger("/api/work-with-us-config");
+    expect(fresh.status).toBe(200);
+    expect(fresh.json.assistantName, "a new village's guide has no name").toBe("");
+    expect(fresh.json.assistantGreeting).toContain("{name}");
+
+    // The admin tab sends the whole document back, so do the same with the name left blank.
+    // Less the old recognition field, which the route hands to the variables registry.
+    const { acceptGratitude: _moved, ...doc } = fresh.json;
+    const keptBlank = await call("PUT", "/api/admin/work-with-us-config", { ...doc, assistantName: "" });
+    expect(keptBlank.status, JSON.stringify(keptBlank.json)).toBe(200);
+    expect((await asStranger("/api/work-with-us-config")).json.assistantName).toBe("");
+
+    await call("PUT", "/api/admin/work-with-us-config", { ...doc, assistantName: "Juniper" });
+    expect((await asStranger("/api/work-with-us-config")).json.assistantName).toBe("Juniper");
+
+    await call("PUT", "/api/admin/work-with-us-config", { ...doc, assistantName: "" });
+    const cleared = await asStranger("/api/work-with-us-config");
+    expect(cleared.json.assistantName, "a cleared name stays cleared").toBe("");
+    expect(JSON.stringify(cleared.json)).not.toContain("Maia");
+  });
 });

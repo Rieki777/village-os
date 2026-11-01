@@ -20,7 +20,7 @@
  * behind it have their own server tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import type { ModuleLifecycle } from "@shared/modules";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -68,7 +68,9 @@ const renderTab = (lifecycles: Record<string, ModuleLifecycle> | null) =>
 
 describe("TokensTab", () => {
   beforeEach(stubFetch);
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -244,7 +246,7 @@ describe("this screen speaks whole tokens", () => {
       return { ok: true, json: async () => [] };
     }));
   });
-  afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
   it("renders a grant in whole tokens, not in ledger units", async () => {
     render(<TokensTab password="secret" lifecycles={{} as Record<string, ModuleLifecycle>} />);

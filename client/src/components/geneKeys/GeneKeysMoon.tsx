@@ -12,6 +12,7 @@ import type { JournalEntry } from "@shared/journal";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { listEntries } from "@/lib/journalApi";
 import { newClientId, saveEntry } from "@/lib/journalOutbox";
+import { useGuideName } from "@/hooks/useGuideName";
 import { useMyGeneKeys } from "./useMyGeneKeys";
 import {
   FREQUENCIES, FREQUENCY_PROMPT, contemplationEntry, ladderFrom, moonLabel, moonNow, promptFor, type Frequency, type Rung,
@@ -61,6 +62,8 @@ export function MoonLadder({ rungs }: { rungs: readonly Rung[] }) {
 export default function GeneKeysMoon({ owner, bare = false, className = "" }: { owner: string | null | undefined; bare?: boolean; className?: string }) {
   const journalOn = useModuleOn("journal");
   const { on, mine } = useMyGeneKeys();
+  // The village's own name for its guide (shared/guideName.ts), never a borrowed one.
+  const guide = useGuideName();
   const [entries, setEntries] = useState<JournalEntry[] | null>(null);
   const [text, setText] = useState("");
   const [frequency, setFrequency] = useState<Frequency | null>(null);
@@ -104,7 +107,7 @@ export default function GeneKeysMoon({ owner, bare = false, className = "" }: { 
 
   return (
     <section aria-labelledby="gk-moon-h" className={`${bare ? "border-t border-border pt-4" : NIGHT_CARD} ${className}`}>
-      <p className={EYEBROW}>From Maia · this moon</p>
+      <p className={EYEBROW}>From {guide.name} · this moon</p>
       <h2 id="gk-moon-h" className={`font-display text-card-foreground ${bare ? "text-xl" : "text-2xl"}`}>
         {done ? "This moon's contemplation is written" : "A contemplation for this moon"}
       </h2>

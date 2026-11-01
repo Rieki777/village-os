@@ -177,7 +177,18 @@ function Decision({
   );
 }
 
-export default function CircleDecisions({ circles, keepCircleIds, myCircleIds }: { circles: { id: string; name: string }[]; keepCircleIds: string[]; myCircleIds: string[] }) {
+export default function CircleDecisions({
+  circles,
+  keepCircleIds,
+  myCircleIds,
+  lede,
+}: {
+  circles: { id: string; name: string }[];
+  keepCircleIds: string[];
+  myCircleIds: string[];
+  /** The words under the heading, for a page that shows one circle (its card); /sessions keeps its own. */
+  lede?: string;
+}) {
   // The viewer's own circles first, then any other they may keep (an admin keeps every circle).
   const keepable = circles
     .filter((c) => keepCircleIds.includes(c.id))
@@ -234,7 +245,7 @@ export default function CircleDecisions({ circles, keepCircleIds, myCircleIds }:
       <h2 id="sessions-decisions-heading" className="font-display text-2xl text-foreground">
         {DECISION_COPY.sectionTitle}
       </h2>
-      <p className={`${HINT} mt-1 max-w-2xl`}>{DECISION_COPY.lede}</p>
+      <p className={`${HINT} mt-1 max-w-2xl`}>{lede ?? DECISION_COPY.lede}</p>
       <div className={`mt-4 ${PANEL}`}>
         {keepable.length > 1 && (
           <div className="mb-4 max-w-sm">

@@ -2,15 +2,16 @@
  * `/circles/:id`: one circle's card, the circle's home page.
  *
  * Reads `GET /api/org/circles/:id/card` (server/routes/circleCard.ts) and
- * draws it with `CircleCardView`. The Live Sessions lane mounts its circle
- * sections (Coming up, the decision log and the season pulse) on this page,
- * below the card, by one line: `<CircleSessions circleId={id} />` from
- * client/src/components/sessions/CircleSessions.tsx, once that file exists.
+ * draws it with `CircleCardView`. Below the card, for the circle's members
+ * and admins, sit Live Sessions' own sections for this circle, its decision
+ * log and this season's pulse (client/src/components/sessions/CircleSessions.tsx).
+ * Coming up is the card's own "How we meet".
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import Layout from "@/components/Layout";
 import CircleCardView from "@/components/circleCard/CircleCardView";
+import CircleSessions from "@/components/sessions/CircleSessions";
 import { LINK } from "@/components/playerCard/cardParts";
 import { gameFetch } from "@/lib/gameApi";
 import type { CircleCard } from "@shared/circleCard";
@@ -18,7 +19,7 @@ import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
 
 type View =
   | { kind: "loading" }
-  | { kind: "ok"; card: CircleCard; mayPropose: boolean }
+  | { kind: "ok"; card: CircleCard; mayPropose: boolean; sessionsOn: boolean }
   | { kind: "missing" }
   | { kind: "failed" };
 
@@ -38,7 +39,7 @@ export default function CircleCardPage() {
         if (!alive) return;
         setView(
           out?.card
-            ? { kind: "ok", card: out.card as CircleCard, mayPropose: out.viewer?.mayPropose === true }
+            ? { kind: "ok", card: out.card as CircleCard, mayPropose: out.viewer?.mayPropose === true, sessionsOn: out.viewer?.sessionsOn === true }
             : { kind: "failed" },
         );
       })
@@ -57,7 +58,10 @@ export default function CircleCardPage() {
             {W.backToCircles}
           </Link>
           {view.kind === "ok" ? (
-            <CircleCardView card={view.card} circleId={id} mayPropose={view.mayPropose} reload={load} />
+            <>
+              <CircleCardView card={view.card} circleId={id} mayPropose={view.mayPropose} reload={load} />
+              <CircleSessions circleId={id} circleName={view.card.header.name} sessionsOn={view.sessionsOn} />
+            </>
           ) : null}
           {view.kind === "missing" ? <p className="text-foreground">{W.notFound}</p> : null}
           {view.kind === "failed" ? (

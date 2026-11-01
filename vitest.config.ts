@@ -171,5 +171,18 @@ export default defineConfig({
     hookTimeout: 240_000,
     // One server process per file, no parallel port fights.
     fileParallelism: false,
+    /**
+     * After-hooks run in the order they were registered. Under vitest's
+     * default "stack" they run in REVERSE, so setup.ts's `afterEach(cleanup)`
+     * (registered before the test file is imported) ran LAST: a file's own
+     * `vi.unstubAllGlobals()` put Node's real fetch back while the tree was
+     * still mounted, and a fetch fired on unmount failed on a relative URL
+     * after every test had passed (#637). "list" unmounts first.
+     *
+     * It reaches a file's TOP-LEVEL after-hooks only. A describe's own
+     * afterEach runs before its parent's in either mode, so a hook in a
+     * describe that unstubs a fetch calls `cleanup()` itself first.
+     */
+    sequence: { hooks: "list" },
   },
 });

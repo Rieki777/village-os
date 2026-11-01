@@ -1,4 +1,6 @@
-import { LogOut, Trash2 } from "lucide-react";
+import { CheckCircle2, Circle, LogOut, MinusCircle, Search, Trash2 } from "lucide-react";
+import type { PathLadder } from "@shared/pathLadders";
+import { formatTokenAmount } from "@/lib/tokenAmount";
 import { StageFloorPicker } from "./StageFloorPicker";
 import { useGameConfig } from "@/lib/gameApi";
 
@@ -30,6 +32,21 @@ export type LadderStage = {
 };
 
 export type PathOption = { id: string; label: string };
+
+/** One token a member holds, in MINOR units with the scale that formats it. */
+export type Holding = { slug: string; name: string; balance: number; decimals: number };
+
+/**
+ * What `GET /api/admin/players/detail` adds to one member, read separately from
+ * the roster because nine other admin surfaces share that payload and none of
+ * them needs ladders or balances.
+ */
+export type PlayerDetail = {
+  ladders: PathLadder[];
+  holdings: Holding[];
+  /** The last time an admin changed their stage, and who, off the audit trail. */
+  stageSet: { at: string; by: string | null } | null;
+};
 
 export type Player = {
   id: string;
@@ -82,6 +99,9 @@ export function ladderLabel(stages: LadderStage[], title?: string): string {
 
 const isGranted = (s: LadderStage) => s.rule?.type === "granted";
 
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
 /** How the person reached the stage they stand on, in one sentence. */
 export function howReached(stages: LadderStage[], p: Pick<Player, "stageGranted" | "stageComputed">): string {
   const at = stages.findIndex((s) => s.id === p.stageComputed);
@@ -103,6 +123,142 @@ function LadderDots({ stages, at, floor }: { stages: LadderStage[]; at: number; 
           className={`h-2 w-2 rounded-full ${i <= at ? "bg-teal-deep" : "bg-gray-200"} ${i === floor ? "ring-2 ring-amber-400 ring-offset-1" : ""}`}
         />
       ))}
+    </div>
+  );
+}
+
+const RUNG_ICON = { lit: CheckCircle2, fell: MinusCircle, ahead: Circle } as const;
+const RUNG_WORDS = { lit: "holds now", fell: "reached, and it has since ended", ahead: "not yet" } as const;
+
+/**
+ * Where they stand on each path they chose, one row per path. Rungs are named
+ * and marked, never counted: `PathLadder` has no denominator and the profile's
+ * own ladder refuses a bar or a fraction for the same reason.
+ */
+function PathRows({ chosen, paths, ladders }: { chosen: string[]; paths: PathOption[]; ladders: PathLadder[] | undefined }) {
+  if (chosen.length === 0) return <p className="text-xs text-gray-500">No path chosen yet.</p>;
+  return (
+    <ul className="space-y-2">
+      {chosen.map((id) => {
+        const label = paths.find((x) => x.id === id)?.label ?? id;
+        const ladder = ladders?.find((l) => l.pathId === id);
+        const now = ladder && ladder.position > 0 ? ladder.rungs[ladder.position - 1]!.name : null;
+        return (
+          <li key={id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="min-w-[9rem] text-sm font-medium text-gray-900">{label}</span>
+            {ladders === undefined ? (
+              <span className="text-xs text-gray-400">Loading...</span>
+            ) : !ladder ? (
+              <span className="text-xs text-gray-500">This path has no steps tracked yet.</span>
+            ) : (
+              <>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${now ? "bg-teal-deep/10 text-teal-deep" : "bg-gray-100 text-gray-600"}`}>
+                  {now ?? "Not started"}
+                </span>
+                <ol className="flex flex-wrap items-center gap-1.5" aria-label={`${label} steps`}>
+                  {ladder.rungs.map((r) => {
+                    const state = r.lit ? "lit" : r.fell ? "fell" : "ahead";
+                    const Icon = RUNG_ICON[state];
+                    return (
+                      <li
+                        key={r.id}
+                        title={r.note ? `${r.meaning} ${r.note}` : r.meaning}
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${state === "lit" ? "border-teal-deep/30 text-teal-deep" : state === "fell" ? "border-amber-300 text-amber-800" : "border-gray-200 text-gray-500"}`}
+                      >
+                        <Icon className="h-3 w-3" aria-hidden="true" />
+                        {r.name}
+                        <span className="sr-only">, {RUNG_WORDS[state]}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Every token they hold, formatted at its own scale. */
+function Holdings({ holdings }: { holdings: Holding[] | undefined }) {
+  if (holdings === undefined) return <p className="text-xs text-gray-400">Loading...</p>;
+  if (holdings.length === 0) return <p className="text-xs text-gray-500">Holds no tokens yet</p>;
+  return (
+    <ul aria-label="Tokens they hold" className="flex flex-wrap gap-1.5">
+      {holdings.map((h) => (
+        <li key={h.slug} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+          <span className="font-semibold text-gray-900">{formatTokenAmount(h.balance, h.decimals)}</span> {h.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ── Search and filters ──────────────────────────────────────────────────────
+
+export type PlayerFilter = { text: string; access: Access | ""; stage: string; path: string };
+
+export const NO_FILTER: PlayerFilter = { text: "", access: "", stage: "", path: "" };
+
+/** "none" as a path filter means "has chosen no path". */
+export function filterPlayers(players: Player[], f: PlayerFilter): Player[] {
+  const q = f.text.trim().toLowerCase();
+  return players.filter(
+    (p) =>
+      (!q || [p.name, p.handle ?? "", p.email].some((s) => s.toLowerCase().includes(q))) &&
+      (!f.access || accessOf(p.role) === f.access) &&
+      (!f.stage || p.stageComputed === f.stage) &&
+      (!f.path || (f.path === "none" ? p.paths.length === 0 : p.paths.includes(f.path))),
+  );
+}
+
+export function PlayersFilters({
+  value,
+  onChange,
+  stages,
+  paths,
+  shown,
+  total,
+}: {
+  value: PlayerFilter;
+  onChange: (f: PlayerFilter) => void;
+  stages: LadderStage[];
+  paths: PathOption[];
+  shown: number;
+  total: number;
+}) {
+  const field = "rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm";
+  const set = (k: keyof PlayerFilter) => (e: { target: { value: string } }) => onChange({ ...value, [k]: e.target.value });
+  return (
+    <div role="search" className="mb-3 flex flex-wrap items-center gap-2">
+      <label className="relative min-w-[12rem] flex-1">
+        <span className="sr-only">Search players</span>
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+        <input type="search" value={value.text} onChange={set("text")} placeholder="Name, handle or email" className={`${field} w-full pl-8`} />
+      </label>
+      <select aria-label="Filter by access" value={value.access} onChange={set("access")} className={field}>
+        <option value="">Any access</option>
+        {ACCESS_ORDER.map((a) => <option key={a} value={a}>{ACCESS[a].label}</option>)}
+      </select>
+      <select aria-label="Filter by stage" value={value.stage} onChange={set("stage")} className={field}>
+        <option value="">Any stage</option>
+        {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
+      <select aria-label="Filter by path" value={value.path} onChange={set("path")} className={field}>
+        <option value="">Any path</option>
+        {paths.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+        <option value="none">No path chosen</option>
+      </select>
+      <span className="text-xs text-gray-500" aria-live="polite">
+        {shown === total ? `${total} players` : `${shown} of ${total} players`}
+      </span>
+      {shown !== total && (
+        <button type="button" onClick={() => onChange(NO_FILTER)} className="text-xs underline">
+          Clear
+        </button>
+      )}
     </div>
   );
 }
@@ -176,6 +332,7 @@ export function PlayersKey({
 
 export function PlayerCard({
   player: p,
+  detail,
   stages,
   paths,
   canSetAccess,
@@ -188,6 +345,8 @@ export function PlayerCard({
   onDelete,
 }: {
   player: Player;
+  /** Undefined while it loads. */
+  detail?: PlayerDetail;
   stages: LadderStage[];
   paths: PathOption[];
   canSetAccess: boolean;
@@ -203,7 +362,6 @@ export function PlayerCard({
   const ladderTitle = useGameConfig()?.ladder?.title;
   const at = stages.findIndex((s) => s.id === p.stageComputed);
   const floor = p.stageGranted ? stages.findIndex((s) => s.id === p.stageGranted) : -1;
-  const walking = p.paths.map((id) => paths.find((x) => x.id === id)?.label ?? id);
   const initial = (p.name || p.email).trim().charAt(0).toUpperCase();
 
   return (
@@ -225,14 +383,13 @@ export function PlayerCard({
             {p.handle && <span className="font-normal text-gray-500"> @{p.handle}</span>}
           </div>
           <div className="truncate text-xs text-gray-500">
-            {p.email} · joined {new Date(p.joinedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+            {p.email} · joined {shortDate(p.joinedAt)}
           </div>
         </div>
-        <div className="shrink-0 text-right">
-          <div className="text-lg font-semibold leading-none text-gray-900">{p.balance}</div>
-          <div className="text-xs text-gray-500">earned</div>
-        </div>
       </header>
+      <div className="px-5 pt-2 sm:pl-[5.25rem]">
+        <Holdings holdings={detail?.holdings} />
+      </div>
 
       <div className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <section aria-label="Access" className="rounded-xl bg-gray-50 px-4 py-3">
@@ -278,9 +435,16 @@ export function PlayerCard({
             {at >= 0 && <LadderDots stages={stages} at={at} floor={floor} />}
           </div>
           <p className="mt-2 text-xs text-gray-600">{howReached(stages, p)}</p>
-          <p className="mt-1 text-xs text-gray-500">
-            {walking.length > 0 ? <>Paths they chose: {walking.join(", ")}</> : "No path chosen yet."}
-          </p>
+          {detail?.stageSet && (
+            <p className="mt-1 text-xs text-gray-500">
+              Stage last set{detail.stageSet.by ? ` by ${detail.stageSet.by}` : ""} on {shortDate(detail.stageSet.at)}.
+            </p>
+          )}
+        </section>
+
+        <section aria-label="Paths they walk" className="rounded-xl bg-gray-50 px-4 py-3 sm:col-span-2">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Paths they walk</h4>
+          <PathRows chosen={p.paths} paths={paths} ladders={detail?.ladders} />
         </section>
       </div>
 

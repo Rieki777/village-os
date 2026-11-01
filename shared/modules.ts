@@ -1228,7 +1228,7 @@ export const MODULES: ModuleDef[] = [
     setup: "none",
     name: "Gene Keys",
     description:
-      "Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and Maia can shape suggestions to how a member works best when they say yes.",
+      "Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and the village guide can shape suggestions to how a member works best when they say yes.",
     requires: [],
     recommends: [],
     capabilities: [],
@@ -1236,6 +1236,28 @@ export const MODULES: ModuleDef[] = [
     apiPrefixes: ["/api/gene-keys"],
     // No openStateCheck: it holds nothing anybody is owed. Off hides every
     // surface; saved results stay in their table and return when it is on.
+  },
+  {
+    id: "session-card",
+    guild: [],
+    tier: "included",
+    // A card names the people present and holds a line of words for each one
+    // read, drawn from their saved Gene Keys result. Cards are deleted when
+    // their session closes (drizzle/0296).
+    dataClass: "member-pii",
+    group: "connect",
+    setup: "none",
+    name: "Session Card",
+    description:
+      "An optional card anyone in a live session can pull at the start, as often as they like. It reads today's sky in both Human Design and Western astrology, weaves in the Gene Keys of the people present who said yes, names each person, and offers the room a few ways to hold the session. Each person's own line stays private until they share it, and the cards are deleted when the session closes.",
+    // The card lives in a session's room and reads the lines Gene Keys saved.
+    requires: ["sessions", "gene-keys"],
+    recommends: [],
+    capabilities: [],
+    variableKeys: [],
+    apiPrefixes: ["/api/session-card"],
+    // No openStateCheck: it holds nothing anybody is owed, and nothing past
+    // the session it was pulled in.
   },
   {
     id: "sessions",

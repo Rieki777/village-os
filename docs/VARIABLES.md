@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 191 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 194 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 209 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 212 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-236 dials in 35 categories. 140 carry a minimum and a maximum. By type: 104 integer, 19 decimal, 18 percentage, 27 boolean, 30 choice, 37 text, 1 longtext.
+239 dials in 36 categories. 141 carry a minimum and a maximum. By type: 105 integer, 19 decimal, 18 percentage, 27 boolean, 31 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -44,7 +44,7 @@ Each dial also says WHEN a change lands. 209 of them as soon as it is saved, and
 | Gratitude | 11 | 11 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
-| Progression | 30 | 30 | 0 |
+| Progression | 31 | 31 | 0 |
 | Quests | 2 | 2 | 0 |
 | Governance | 44 | 40 | 4 |
 | Tokens | 4 | 1 | 3 |
@@ -59,6 +59,7 @@ Each dial also says WHEN a change lands. 209 of them as soon as it is saved, and
 | The village's people | 2 | 1 | 1 |
 | Events | 3 | 3 | 0 |
 | Forum | 1 | 1 | 0 |
+| Companions | 2 | 2 | 0 |
 | Messages | 2 | 2 | 0 |
 | Feed | 3 | 3 | 0 |
 | Stays | 10 | 10 | 0 |
@@ -150,6 +151,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Stage that unlocks: member.vouch | `progression.unlock.member.vouch` | Progression | choice | `contributor` | the whole village |
 | Stage that unlocks: map.photograph | `progression.unlock.map.photograph` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: session.template | `progression.unlock.session.template` | Progression | choice | `member` | the whole village |
+| Stage that unlocks: companion.use | `progression.unlock.companion.use` | Progression | choice | `member` | the whole village |
 | Require submitted work before consent | `quest.require_submission_before_consent` | Quests | boolean | `true` | the whole village |
 | Founder may self-consent below this many members | `quest.self_consent_until_members` | Quests | integer | `6` | the whole village |
 | How sensing is weighted | `governance.voice_weighting` | Governance | choice | `equal` | the whole village |
@@ -254,6 +256,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Show gatherings this far ahead | `events.upcoming_days` | Events | integer | `90` | the whole village |
 | Keep finished gatherings listed for | `events.past_visible_days` | Events | integer | `30` | the whole village |
 | Soft reports that auto-hide a post | `forum.report_hide_threshold` | Forum | integer | `3` | the whole village |
+| Questions one companion may ask a day | `companions.max_questions_per_day` | Companions | integer | `3` | the whole village |
+| Roles that have a companion | `companions.role_ids` | Companions | text | `all` | the whole village |
 | Messages one member may send per minute | `messaging.sends_per_minute` | Messages | integer | `20` | the whole village |
 | Largest group conversation | `messaging.max_members` | Messages | integer | `50` | the whole village |
 | Which forum category the feed shows | `feed.category_slug` | Feed | text | `village-life` | the whole village |
@@ -904,7 +908,7 @@ What it may be set to:
 
 ## Progression
 
-30 dials. 30 for the whole village.
+31 dials. 31 for the whole village.
 
 ### How often every role reopens
 
@@ -1564,6 +1568,36 @@ Which rung of the ladder grants "session.template" by progression alone. Roles a
 | Fact | Value |
 | --- | --- |
 | Key | `progression.unlock.session.template` |
+| Type | choice, one of a fixed list |
+| Default | `member` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `visitor` Visitor.
+- `guest` Guest.
+- `immersant` Immersant.
+- `participant` Participant.
+- `member` Member.
+- `contributor` Contributor.
+- `quest-seeker` Quest Seeker.
+- `initiate` Initiate.
+- `co-creator` Co-Creator.
+- `role-holder` Role Holder.
+- `guide` Guide.
+- `sage` Sage.
+- `none` Never by stage (role or badge only).
+
+### Stage that unlocks: companion.use
+
+Which rung of the ladder grants "companion.use" by progression alone. Roles and badges can still grant it at any stage; "never by stage" makes it role/badge-only. This is the constitution's parameter table, so move rungs deliberately.
+
+| Fact | Value |
+| --- | --- |
+| Key | `progression.unlock.companion.use` |
 | Type | choice, one of a fixed list |
 | Default | `member` |
 | Range | one of the choices below |
@@ -3178,6 +3212,39 @@ When this many DIFFERENT members soft-report the same thread or reply, it hides 
 | Default | `3` |
 | Range | 2 to 10 |
 | Counted in | reports |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+## Companions
+
+2 dials. 2 for the whole village.
+
+### Questions one companion may ask a day
+
+The most questions each companion brings a member in one village day. Drafts are never held back by this, because a draft that wants to move money should always be seen. A member may lower it for any of their companions. More than 3 is not offered: that ceiling waits on a founder's ruling. A question over the limit waits for the next morning.
+
+| Fact | Value |
+| --- | --- |
+| Key | `companions.max_questions_per_day` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 0 to 3 |
+| Counted in | questions |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Roles that have a companion
+
+Which roles give their holders a companion that speaks for the role. Write all for every role, leave it empty for none, or paste role ids from the org chart separated by commas. The personal companion is always there for every member, whatever this says.
+
+| Fact | Value |
+| --- | --- |
+| Key | `companions.role_ids` |
+| Type | text, free text, one line |
+| Default | `all` |
+| Range | no bounds are set |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |

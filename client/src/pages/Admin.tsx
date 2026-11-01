@@ -23,8 +23,7 @@ import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
-import { BulkStageGrant } from "@/components/admin/StageFloorPicker";
-import { PlayerCard, PlayersKey, type LadderStage, type PathOption, type Player } from "@/components/admin/PlayerCard";
+import PlayersTab from "@/components/admin/PlayersTab";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
@@ -192,7 +191,7 @@ function ForumModerationTab({ password }: { password: string }) {
           read on every request since it shipped, with no editor anywhere. */}
       <ForumCategoriesEditor password={password} />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(["open", "resolved", "dismissed"] as const).map((s) => (
           <button
             key={s}
@@ -362,7 +361,7 @@ function MessageReportsTab({ password }: { password: string }) {
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(["open", "resolved", "dismissed"] as const).map((s) => (
           <button
             key={s}
@@ -658,7 +657,7 @@ function AdminNav({
                   onTouchMove={open ? undefined : moveHold}
                   onTouchEnd={open ? undefined : endHold}
                   onTouchCancel={open ? undefined : endHold}
-                  title={label}
+                  title={label} data-admin-tab={key}
                   aria-label={label}
                   aria-current={active ? "page" : undefined}
                   className={`w-full flex items-center text-sm font-medium transition-colors ${
@@ -2095,7 +2094,7 @@ function FaqAdminTab({ password }: { password: string }) {
         <p className="text-sm text-gray-500">Manage the Common Questions section shown on each journey page.</p>
       </div>
 
-      <div className="flex items-center gap-2 mb-6 border-b border-gray-200">
+      <div className="flex flex-wrap items-center gap-x-2 mb-6 border-b border-gray-200">
         {FAQ_PATHWAYS.map((p) => (
           <button
             key={p.id}
@@ -2733,141 +2732,6 @@ function QuestClaimsTab() {
  * were where you edit them. Everything here is live to members immediately;
  * there is no deploy in the loop.
  */
-// ── Game Admin: Players + stage grants ───────────────────────────────────────
-
-function PlayersTab({ password }: { password: string }) {
-  const { user: me } = useAuth();
-  const iAmFounder = me?.role === "founder";
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [stages, setStages] = useState<LadderStage[]>([]);
-  const [paths, setPaths] = useState<PathOption[]>([]);
-  /*
-   * R90: THE FOUNDER ROLE ENDS WHEN THE VILLAGE STARTS ITS GAME, so who may
-   * work the control below changes at that moment and this tab has to know it.
-   * Before launch only a founder may change a role. After launch any
-   * administrator may, and no new founder can be made.
-   *
-   * Read from the server rather than inferred from the roster, because a
-   * client that guesses at a permission is a client that eventually disagrees
-   * with the gate. `/api/game/mechanics` answers strangers and already carries
-   * the fact, so this costs no new route and no token.
-   */
-  const [gameStarted, setGameStarted] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [picked, setPicked] = useState<string[]>([]);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [pRes, cRes, mRes] = await Promise.all([
-        fetch(`${API_BASE}/admin/players`, { headers: authHeaders(password) }),
-        fetch(`${API_BASE}/game/config`),
-        fetch(`${API_BASE}/game/mechanics`),
-      ]);
-      const p = await pRes.json();
-      const c = await cRes.json();
-      const m = await mRes.json();
-      setPlayers(Array.isArray(p) ? p : []);
-      setStages(c?.stages ?? []);
-      setPaths(c?.paths ?? []);
-      setGameStarted(m?.gameStart?.started === true);
-    } catch { setPlayers([]); }
-    setLoading(false);
-  }, [password]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const grant = async (id: string, stageId: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/players/${id}/stage`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ stageId: stageId || null }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("Stage updated");
-      load();
-    } catch { toast.error("Update failed"); }
-  };
-
-  const remove = async (id: string, email: string) => {
-    if (!confirm(`Delete player ${email}? This removes their account. Historical quest claims and gratitude entries are kept.`)) return;
-    try {
-      const res = await fetch(`${API_BASE}/admin/players/${id}`, {
-        method: "DELETE",
-        headers: authHeaders(password),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("Player deleted");
-      load();
-    } catch { toast.error("Delete failed"); }
-  };
-
-  const setRole = async (id: string, role: string, name: string) => {
-    if (role === "founder" && !confirm(`Make ${name} a FOUNDER? Founders manage admins and can only be demoted by another founder.`)) return;
-    try {
-      const res = await fetch(`${API_BASE}/admin/users/${id}/role`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ role }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(refusal(data, "failed"));
-      toast.success(`${name} now has ${role} access`);
-      load();
-    } catch (e: any) { toast.error(e?.message || "Role change failed"); }
-  };
-
-  const revokeSessions = async (id: string, name: string) => {
-    if (!confirm(`Sign ${name} out everywhere? They keep their account and password. Every active session ends, and so do their agent tokens, agent inbox, own model key and private calendar address.`)) return;
-    try {
-      const res = await fetch(`${API_BASE}/admin/users/${id}/revoke-sessions`, {
-        method: "POST",
-        headers: authHeaders(password),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("Sessions revoked");
-    } catch { toast.error("Revoke failed"); }
-  };
-
-  return (
-    <div>
-      <div className="mb-4">
-        <h2 className="text-xl font-bold text-gray-900">Players</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Everyone with an account: what they may do on this site, and where they stand in village life.
-        </p>
-      </div>
-      {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : players.length === 0 ? (
-        <p className="text-sm text-gray-400">No players yet.</p>
-      ) : (
-        <>
-          <PlayersKey players={players} stages={stages} gameStarted={gameStarted} />
-          <div className="space-y-3">
-            {picked.length > 0 && <BulkStageGrant stages={stages} ids={picked} password={password} onDone={() => { setPicked([]); load(); }} />}
-            {players.map((p) => (
-              <PlayerCard
-                key={p.id}
-                player={p}
-                stages={stages}
-                paths={paths}
-                canSetAccess={gameStarted || iAmFounder}
-                gameStarted={gameStarted}
-                picked={picked.includes(p.id)}
-                onPick={(on) => setPicked((s) => (on ? [...s, p.id] : s.filter((x) => x !== p.id)))}
-                onAccess={(role) => setRole(p.id, role, p.name)}
-                onStage={(id) => grant(p.id, id ?? "")}
-                onSignOut={() => revokeSessions(p.id, p.name)}
-                onDelete={() => remove(p.id, p.email)}
-              />
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 // ── Modules: retired into the library (Rye, 2026-10-09) ─────────────────────
 //
 // The Module Library tab lived here. It is one page with the public library
@@ -8112,7 +7976,7 @@ export default function Admin() {
             table inside sets the floor and the page scrolls sideways. The
             padding steps down on small screens, where 32px a side was a
             tenth of the width. */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-4xl">
+        <main className="admin-fit flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-4xl">
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}

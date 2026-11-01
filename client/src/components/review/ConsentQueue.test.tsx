@@ -9,7 +9,7 @@
  * comes back in the server's words.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
@@ -81,7 +81,9 @@ describe("the consent section: a yes, and what it releases", () => {
     forgetDisplayRates();
     answer(200, {});
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
