@@ -88,6 +88,16 @@ describe("a village whose map is off", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
+  it("cannot be walked around by case or a trailing slash, which Express matches all the same", async () => {
+    // Express routes case-insensitively and with a non-strict trailing slash
+    // by default, so these reach the same handlers, and so the same gate.
+    for (const p of ["/GROUNDS/INDEX.HTML", "/grounds/index.html/", "/Grounds/Manifest.json"]) {
+      const res = await get(p);
+      expect(res.status, p).toBe(404);
+      expect(await res.json(), p).toEqual({ error: "module_disabled", module: "map" });
+    }
+  });
+
   it("treats an explicit off row the same as no row", async () => {
     await mapIs("off");
     expect((await get("/grounds/index.html")).status).toBe(404);

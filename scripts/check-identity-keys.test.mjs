@@ -268,6 +268,20 @@ check("REFUSES a pending entry whose key has gone clean", () => {
   assert.deepStrictEqual(r.stale, [key]);
 });
 
+check("REFUSES any village's clock as the season timezone, and refuses emptying it (R059)", () => {
+  // A clock is a place, and no word-matching guard can see one: this is the
+  // slot that shipped "America/Costa_Rica" to every fork.
+  for (const zone of ["America/Costa_Rica", "Europe/Lisbon", "Pacific/Auckland"]) {
+    const r = auditIdentity(cleanValues({ "season.timezone": zone }), SAMPLE_PENDING, SAMPLE_CEILING);
+    assert.deepStrictEqual(r.unexpected, ["season.timezone"], zone);
+  }
+  const utc = auditIdentity(cleanValues({ "season.timezone": "UTC" }), SAMPLE_PENDING, SAMPLE_CEILING);
+  assert.deepStrictEqual(utc.unexpected, []);
+  // Empty is not neutral here: the normaliser would fall back silently, so the
+  // default must SAY UTC rather than leave a hole.
+  assert.ok(auditIdentity(cleanValues({ "season.timezone": "" })).emptied.includes("season.timezone"));
+});
+
 check("REFUSES emptying the tagline now that it carries a neutral default", () => {
   // The graduation is what makes this reachable. While tagline sat in
   // KNOWN_PENDING an empty value read as "the founder has taken it into their
