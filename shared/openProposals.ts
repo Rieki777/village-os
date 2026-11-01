@@ -46,7 +46,8 @@ export interface OpenProposalInput {
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; field: string; error: string };
 
-const text = (v: unknown, max: number): string => String(typeof v === "string" ? v : "").replace(/\s+$/g, "").replace(/^\s+/g, "").slice(0, max + 1);
+/** Trimmed, and cut one past the cap so "too long" can still be told from "at the cap". `trim()`, never a regex: an anchored `\s+$` runs slow on a long run of spaces. */
+const text = (v: unknown, max: number): string => String(typeof v === "string" ? v : "").trim().slice(0, max + 1);
 
 /** What a stored body reads as, whatever was stored. Never throws. */
 export function openBodyOf(raw: unknown): OpenProposalBody {
