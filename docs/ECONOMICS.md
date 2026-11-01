@@ -2732,6 +2732,10 @@ names, which defaults to `credits`. `server/lib/spending.ts` exists because that
 token had nowhere to go: the loop ended at "you received a number". It answers two
 questions and posts nothing at all. The callers post.
 
+The Paths & Stages editor (`server/routes/villagePaths.ts`, registered in `server/index.ts`) reads
+`gratitude.pool_token` only to say that token's name in a village's own path and stage words. It
+reads a name and moves nothing (2026-11-01).
+
 <!-- generated:sinks start -->
 A token may carry a price when it is platform-governed, active, not an example, and of kind `credit` (`isPriceableToken`, `server/lib/spending.ts`). Today that is:
 
