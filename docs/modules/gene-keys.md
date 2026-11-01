@@ -51,7 +51,16 @@ Rulings it follows (Rye, 2026-10-22):
 - **The badge is earned only by SHOWN lines** (metric `gene_keys_shown`), so a public badge never says a member
   did Gene Keys they keep hidden.
 - **The moon contemplation is a private Journal entry.** It lives, exports and is erased with the Journal.
-- **Erasure** deletes the row in the `gene-keys-after-tombstone` step. **Export** includes the stored row.
+- **A member's own Western signs (0303) are theirs alone.** Rye asked for "gene keys + human design and
+  astrology" (2026-11-01). The page reads the Sun and Moon signs in the browser from the same date and town
+  (`natalSigns` in `shared/geneKeysSky.ts`, `signsFor` in `client/src/components/geneKeys/natal.ts`) and sends only
+  the numbers, 0 Aries to 11 Pisces. Each is sent only when the whole span the birth could fall in agrees on it:
+  without a birth time the Moon can change sign that day, and then it is stored as not known, never guessed. A new
+  reading replaces them, and one sent without signs clears them. They are member-pii (Module Library Contract
+  clause 13): shown on the member's own controls only, never on a door that shows lines to anybody else
+  (`shownGeneKeysFor` and `shownGeneKeysByHandle` do not select them), in the export, and gone with the row.
+- **Erasure** deletes the row in the `gene-keys-after-tombstone` step, signs included. **Export** includes the
+  stored row, signs included.
 
 ## The calculator, and how it was proven
 
@@ -142,3 +151,7 @@ Every surface wears the profile's night world (`sheet-night`) and renders nothin
 - "Sleep on it" as a consent answer belongs to Live Sessions, whose files another lane holds; it was offered to
   that lane.
 - The city list is GeoNames `cities15000` (CC BY 4.0, credited on the form).
+- The rising sign. `rising_sign` (0303) is in the table, and stays NULL: the rising sign needs the birth town's
+  latitude and longitude, and the town list carries only a name, a country and a clock. Adding them means
+  regenerating the list from GeoNames, which is a download for Rye to agree to. It would also be read only from an
+  exact birth time.

@@ -7,7 +7,7 @@
  * NO BIRTH DATA IS EVER SENT FROM HERE. A save carries a chart (26 activations)
  * read from the sky in this browser by shared/geneKeysSky.ts.
  */
-import type { Chart, ComplementsAnswer, GeneKeysSource, GeneKeysView, GeneKeysVisibility, OwnGeneKeysView } from "@shared/geneKeys";
+import type { Chart, ComplementsAnswer, GeneKeysSource, GeneKeysView, GeneKeysVisibility, NatalSigns, OwnGeneKeysView } from "@shared/geneKeys";
 import { gameFetch } from "./gameApi";
 
 /** A refusal the member can act on, in the server's own sentence. */
@@ -38,6 +38,8 @@ export async function saveMyGeneKeys(save: {
   maia: boolean;
   /** The card's own yes, sent only when the page asked for it (reached from a card's invitation). */
   cards?: boolean;
+  /** Their own Western signs, read on this device; only the numbers are sent. */
+  signs?: NatalSigns;
 }): Promise<{ mine: OwnGeneKeysView; badgeEarned: string | null }> {
   const got = await call<{ geneKeys: OwnGeneKeysView; badgeEarned?: string | null }>("/api/gene-keys/me", { method: "PUT", body: JSON.stringify(save) });
   return { mine: got.geneKeys, badgeEarned: got.badgeEarned ?? null };
