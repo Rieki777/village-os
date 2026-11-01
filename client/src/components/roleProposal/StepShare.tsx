@@ -179,6 +179,8 @@ export function FeedbackList({ comments }: { comments: readonly CommentOut[] | n
 function SubmitPanel({ proposal, beforeSubmit, onSubmitted }: { proposal: ProposalOut; beforeSubmit: () => Promise<boolean>; onSubmitted: (p: ProposalOut | null) => void }) {
   const [asking, setAsking] = useState(false);
   const [words, setWords] = useState<string | null>(null);
+  // Who adopts it in this village, as the server read it from who holds the power (E8).
+  const [who, setWho] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
   const blocked = proposal.submitBlocked ?? null;
@@ -199,6 +201,7 @@ function SubmitPanel({ proposal, beforeSubmit, onSubmitted }: { proposal: Propos
       return;
     }
     setWords(w.data.body);
+    setWho(typeof w.data.whoApproves === "string" && w.data.whoApproves.trim() ? w.data.whoApproves : null);
     setAsking(true);
   };
 
@@ -236,7 +239,7 @@ function SubmitPanel({ proposal, beforeSubmit, onSubmitted }: { proposal: Propos
         </div>
       ) : (
         <div className="grid gap-3 rounded-lg border border-teal-deep bg-teal-deep/5 p-3" data-submit-confirm="">
-          <p className="font-medium text-stone-900">{RP_WORDS.whoApproves}</p>
+          <p className="font-medium text-stone-900">{who ?? RP_WORDS.whoApproves}</p>
           {words && (
             <div className="grid gap-1">
               <p className="text-sm text-stone-700">{RP_WORDS.youAlign}</p>

@@ -23,9 +23,18 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+/**
+ * How many happenings show before "Show more". The feed itself reaches as far
+ * back as Village Pulse length says (Admin, Variables, `village.pulse_max_entries`):
+ * the server sends that many, and this used to cut every answer at eight, so
+ * the setting changed nothing a visitor could see (audit item 28).
+ */
+const FIRST_SCREEN = 8;
+
 export default function VillagePulse() {
   const [events, setEvents] = useState<PulseEvent[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [all, setAll] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -50,7 +59,7 @@ export default function VillagePulse() {
           </h2>
         </div>
         <ul className="space-y-2">
-          {events.slice(0, 8).map((e) => {
+          {(all ? events : events.slice(0, FIRST_SCREEN)).map((e) => {
             const Icon = TYPE_ICON[e.type] ?? Sparkles;
             return (
               <li
@@ -73,6 +82,17 @@ export default function VillagePulse() {
             );
           })}
         </ul>
+        {!all && events.length > FIRST_SCREEN && (
+          <div className="text-center mt-4">
+            <button
+              type="button"
+              onClick={() => setAll(true)}
+              className="text-sm font-medium text-teal-deep underline underline-offset-2 hover:no-underline"
+            >
+              Show more
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

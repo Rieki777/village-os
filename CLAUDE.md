@@ -183,9 +183,11 @@ RAN and WHICH step in each, never one number: the billing outage produced runs t
 seconds having started nothing, an npm outage failed one dependency step on a run where everything
 else passed, and this paragraph carried "a healthy `verify` is 45 steps" while the job had 57.
 Every job above must appear and succeed. **WHICH EVENTS, since 2026-11-01 (Rye: "Yes, free fix"):
-a BATCH needs them on the push run AND the pull_request run, and that is the gate between a tree
-and production. A COMPONENT needs only its pull_request run**, because `on.push.branches` is now
-`["main", "wt/batch*", "wt/*-integration*"]` and a lane branch gets no push run at all. The
+a BATCH and a COMPONENT each need only their pull_request run, every job green at the frozen
+head**, because `on.push.branches` is `["main", "wt/*-integration*"]` and neither a lane branch nor
+a batch branch gets a push run. A batch is built on current main, so its push run tested the
+same tree as its pull_request run (measured on four batches, `ci.yml` has the detail); open the
+batch's PR as you push it, because until then it has no run at all. The
 pull_request run is the better of the two for a component anyway: it tests the branch ALREADY
 MERGED with main. Two consequences. A CONFLICTING pull request gets no pull_request run, so a
 conflicted lane branch has NO run at all and its lane must merge main before anybody can verify
@@ -274,6 +276,11 @@ the app from a single `<script type="module">`. A browser old enough to want the
 run the app. `dropLegacyWoffFallback` in `vite.config.ts` strips the fallback from the `src:`
 list before vite resolves the url, which is what stops the file being emitted. Member-uploaded
 display faces are a different path and still accept `.woff` (`server/index.ts` sniffs `wOFF`).
+The woff2 bytes themselves are unhinted copies committed in `client/src/fonts`: every glyph,
+code point and layout feature of the @fontsource file, without the TrueType hinting, which took
+another 84 KB off the ceiling. `useUnhintedFonts` in `vite.config.ts` points the @fontsource CSS
+at them. A cut added to `client/src/main.tsx` needs `python scripts/unhint-fonts.py` (then
+`--check`), or `client/src/lib/unhintedFonts.test.ts` fails.
 
 The build marker is composed WHOLE in `scripts/build-server.mjs`, from the commit date and the
 git SHA, and injected as `__BUILD_MARKER__`; `server/index.ts` only reads that define and falls
@@ -386,6 +393,16 @@ and the village is on the new schema whether or not the new code works. So a bad
 not a failed deploy, it is a village that cannot start, and the only lever anybody has is to
 put the previous image back.
 
+**The previous release is still serving while your migration runs, on the same database.** A
+DDL statement needs its table to itself for a moment, and while it waits for that, every later
+query on the table queues behind it, from both servers. This was suspected for batch 74 taking
+Amora down on 2026-11-01; Railway's deploy logs then showed that outage was a different failure
+(0298's `SHA1()`, rejected by production's database), but the hazard is real and nothing guarded
+it. So the runner caps each statement's lock wait (`MIGRATION_LOCK_WAIT_SECONDS` in
+`server/db/migrate.ts`), retries a timed-out statement a bounded number of times in the same
+boot, and then fails the boot naming the file, the statement and the lock; the next boot resumes
+at that statement. A lock timeout in a deploy log means retry the deploy, never edit the SQL.
+
 **Expand, never contract.** A migration may ADD. It may not take away. Rolling one release
 back over an already-migrated database has to work, so the previous release must still be able
 to read and write whatever the migration produced.
@@ -422,6 +439,17 @@ check with `--village`.
   (`splitStatements`, `server/db/migrate.ts`). A `--` comment ending in `;` once cut a
   statement in half (migration 0015). Comment lines are now stripped first, but keep `--`
   comments on their own lines and never end one with `;`.
+- **A migration may only call a SQL function that has already run on production.** CI applies
+  migrations to a `mysql:8` service container, which accepts far more than the production engine
+  does, so a green `check-migration-compat` run says nothing about portability. 0298 computed a
+  digest with `SHA1()`, passed every gate in this repository, and the deploy failed after 15.5
+  minutes on `FUNCTION railway.SHA1 does not exist (statement 7 of 8)` — six of eight statements
+  applied and no bootable version. `node scripts/check-migration-sql.mjs` now holds an
+  ALLOW-LIST of the 52 names a migration has actually run on production and fails closed on a new
+  one; a deny-list could not have caught SHA1, because nobody had written SHA1 down. If you need
+  a function nobody has run there, compute it in TypeScript at boot instead —
+  `server/lib/seasonGoalIds.ts` is the worked example, and it is idempotent by its own `WHERE`
+  rather than by the `runOnce` ledger.
 - **A shipped migration file is never edited.** A part-applied file resumes at its
   recorded statement offset (`_migrations_partial`) instead of replaying DDL, so editing
   one that has run anywhere resumes at the wrong place. Worse, `_migrations_applied` keys on

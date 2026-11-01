@@ -126,7 +126,13 @@ describe("the once dialogs take turns", () => {
     const seen = watchDialogs();
     render(both());
     await screen.findByText("Just landed");
-    // The instant it opens, while the celebration is still drawing.
+    // The instant it can hear a key, while the celebration is still drawing.
+    // On screen is not yet listening: the moment arrives from a fetch, outside
+    // act(), so the DOM can commit before React runs the effect that attaches
+    // the Escape listener, and a loaded runner widens that gap. The same effect
+    // focuses Close, so focus is the signal that Escape will be heard. Batch 75
+    // (2026-11-01) flaked here on both events with Escape sent into that gap.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" })));
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByText("Just landed")).toBeNull();
     await waitFor(() => expect(seasonOffer()).not.toBeNull(), SLOW);

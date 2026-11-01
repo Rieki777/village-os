@@ -100,6 +100,7 @@ import { endedSeasons } from "../../shared/applicationGroups";
 import { isLapsed, rowToAssignment, rowToRole, type LapseContext, type OrgAssignment, type OrgRole } from "./orgChart";
 import { coveredSeatIds, type Relation, type RelationType } from "./orgRelations";
 import { projectSeat, type SeatTier } from "./seatProjection";
+import { firstNameOf } from "./peopleLock";
 import { readCardRows, readCharacters, readProposalRows, readSignTables, type SignTable } from "../repos/playerCard";
 import { portraitsVisibleTo } from "../repos/characterPortraits";
 import { avatarFor } from "./characters";
@@ -205,6 +206,13 @@ export interface CardProposal {
   settings: unknown;
   /** `seat_applications.term_ends_at`. */
   termEndsAt: string | null;
+  /**
+   * The season the proposal is for (E9): the card's eyebrow, its span and its
+   * moon cycle are drawn in it, never in the running season. Null is a
+   * proposal with no season to be for, which draws none. Left out, the card
+   * keeps the running season, as it did before.
+   */
+  season?: CardSeason | null;
   /**
    * A role proposal's draft (role proposals PR A): the words it proposes,
    * drawn over the posted ones by field name, so a field a later release adds
@@ -590,11 +598,18 @@ export async function buildPlayerCards(
     const input: PlayerCardInput = {
       now: ctx.now,
       timeZone: ctx.timeZone,
-      owner: { userId: owner.userId, displayName: String(user.name ?? ""), avatar: avatars.get(owner.userId) ?? null },
+      // A signed-out reader reads the owner by first name and never by their
+      // internal id (R097's public tier); the route has already refused them
+      // the card outright while the village keeps its people for members.
+      owner: ctx.viewerUserId
+        ? { userId: owner.userId, displayName: String(user.name ?? ""), avatar: avatars.get(owner.userId) ?? null }
+        : { userId: "", displayName: firstNameOf(user.name), avatar: avatars.get(owner.userId) ?? null },
       viewerUserId: ctx.viewerUserId,
       viewerMember: ctx.viewerMember === true,
       villageName: ctx.villageName,
       season: ctx.season,
+      // A proposal card is drawn in the season it is for (E9); "My applications" still reads the running one.
+      proposalSeason: proposal ? proposal.season : undefined,
       nextSeasonId: ctx.nextSeasonId,
       archetypeNames: ctx.archetypeNames,
       roles: rolesVisible ? roleIns : undefined,

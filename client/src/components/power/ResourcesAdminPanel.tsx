@@ -507,13 +507,13 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
         {data.rules.length > 0 && (
           <div className="space-y-1.5">
             {data.rules.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
                 <span className="text-foreground/90">
                   <span className="font-semibold">{scopeName(r)}</span>: up to {money(r.amountMinor, r.unit)},{" "}
                   {approvalLabel(r.approval).toLowerCase()}, paid from {paidFromLabel(r.paidFrom).toLowerCase()}
                   {r.visibility === "holders" ? ", holders only" : ""}
                 </span>
-                <span className="flex gap-2 shrink-0">
+                <span className="flex gap-2 shrink-0 max-w-full">
                   <button
                     type="button"
                     className="text-xs text-teal-deep font-medium"
@@ -634,7 +634,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
         {data.sources.length > 0 && (
           <div className="space-y-1.5">
             {data.sources.map((s) => (
-              <div key={s.id} className="flex items-center justify-between gap-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
+              <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
                 <span className="text-foreground/90">
                   <span className="font-semibold">{s.name}</span>
                   {": "}
@@ -642,7 +642,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
                   {s.sharePct !== null ? `, about ${s.sharePct}% of the whole` : ""}
                   {s.amountMinorPerYear !== null && s.unit ? `, about ${money(s.amountMinorPerYear, s.unit)} a year` : ""}
                 </span>
-                <button type="button" className="text-xs text-red-600 font-medium shrink-0" onClick={() => act(`/api/admin/resources/sources/${s.id}`, "DELETE")}>
+                <button type="button" className="text-xs text-red-600 font-medium shrink-0 max-w-full" onClick={() => act(`/api/admin/resources/sources/${s.id}`, "DELETE")}>
                   Remove
                 </button>
               </div>
@@ -691,7 +691,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
           <div className="space-y-1.5">
             {data.budgets.map((b) => (
               <div key={b.id} className="space-y-2 text-sm bg-muted/40 rounded-lg px-3 py-2">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-foreground/90">
                     {b.mode === "treasury" ? (
                       <>
@@ -709,7 +709,7 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
                       </>
                     )}
                   </span>
-                  <button type="button" className="text-xs text-red-600 font-medium shrink-0" onClick={() => act(`/api/admin/resources/budgets/${b.id}`, "DELETE")}>
+                  <button type="button" className="text-xs text-red-600 font-medium shrink-0 max-w-full" onClick={() => act(`/api/admin/resources/budgets/${b.id}`, "DELETE")}>
                     Remove
                   </button>
                 </div>

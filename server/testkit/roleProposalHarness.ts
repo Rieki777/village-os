@@ -57,10 +57,31 @@ export const P = "/api/governance/role-proposals";
 /** The permission role the adopting holder sits in, named the way the decision record names it. */
 export const POWER_ROLE = { id: "role-founder", name: "Founder" };
 
+/** The season today falls in, the latest that has begun and not ended, as `seasonState().current` reads it. */
+export function runningSeason(seasons: readonly any[]): any | null {
+  const today = iso(Date.now());
+  const running = [...seasons]
+    .filter((s) => s?.startsOn && s.startsOn <= today && (!s.endsOn || today < s.endsOn))
+    .sort((a, b) => String(a.startsOn).localeCompare(String(b.startsOn)));
+  return running.length ? running[running.length - 1] : null;
+}
+
 export function harness() {
   const state = {
     viewer: null as { id: string; stage: string } | null,
+    /**
+     * Who holds `org.seat` live, through POWER_ROLE. The gate reads them the
+     * way the server's does: the power is in their role's capabilities.
+     */
     holders: [HOLDER] as string[],
+    /** Accounts whose user role is `admin`: the gate's admin short-circuit, on a key the panel still holds. */
+    admins: [] as string[],
+    /** Accounts whose user role is `founder`: an admin to the gate, and named so in a decision. */
+    founders: [] as string[],
+    /** The powers this village has taken on (`capability_holding`). */
+    villageHeld: [] as string[],
+    /** The roles carrying `org.seat` (`rolesCarrying`). Empty is a fresh fork where no role carries it yet. */
+    powerRoles: [POWER_ROLE] as Array<{ id: string; name: string }>,
     seasons: SEASONS as any[],
     governance: "public" as "public" | "members",
     sessionsOn: true,
@@ -76,17 +97,22 @@ export function harness() {
   let server: http.Server;
   let base = "";
 
+  const viewerId = () => state.viewer?.id ?? "";
+  const accountRole = () => (state.founders.includes(viewerId()) ? "founder" : state.admins.includes(viewerId()) ? "admin" : "member");
   const ctxOf = () =>
     ({
       stageIndex: LADDER.indexOf(state.viewer?.stage ?? "visitor"),
       stageIndexOf: (id: string) => LADDER.indexOf(id),
-      roleCapabilities: [],
-      villageHeld: [],
-      isAdmin: false,
+      roleCapabilities: state.holders.includes(viewerId()) ? ["org.seat"] : [],
+      villageHeld: [...state.villageHeld],
+      isAdmin: accountRole() !== "member",
+      isFounder: accountRole() === "founder",
     }) as unknown as CapabilityCtx;
   // Identity freshly confirmed, so terms carrying money do not ask the re-confirm.
   const authedUser = async () =>
-    state.viewer ? { ...(PEOPLE[state.viewer.id] ?? { id: state.viewer.id, name: "Someone" }), tokenVersion: 0, prefs: { identityConfirmedAt: { at: Date.now(), v: 0 } } } : null;
+    state.viewer
+      ? { ...(PEOPLE[state.viewer.id] ?? { id: state.viewer.id, name: "Someone" }), role: accountRole(), tokenVersion: 0, prefs: { identityConfirmedAt: { at: Date.now(), v: 0 } } }
+      : null;
   const guardCapability = async (_req: any, res: any, cap: any, refusal?: { status: number; body: Record<string, unknown> }) => {
     if (state.viewer && hasCapability(cap, ctxOf())) return true;
     res.status(refusal?.status ?? 401).json(refusal?.body ?? { error: "auth_required" });
@@ -130,7 +156,7 @@ export function harness() {
       members,
       firstName,
       liveHoldersOf: async () => [...state.holders],
-      rolesCarrying: () => [POWER_ROLE],
+      rolesCarrying: () => [...state.powerRoles],
       loadRoleHolders: () => state.holders.map((userId) => ({ roleId: POWER_ROLE.id, userId })),
       roleBallotSetup: async () => ({
         method: "majority",
@@ -156,7 +182,8 @@ export function harness() {
       notify,
       members,
       isPresent: () => true,
-      seasonState: () => ({ seasons: state.seasons, timezone: "UTC" }),
+      // The running season the way server/index.ts reads it: the one today falls in.
+      seasonState: () => ({ seasons: state.seasons, current: runningSeason(state.seasons), timezone: "UTC" }),
       lapse: () => ({ currentSeasonId: "s-now", cadence: "season_turn" }),
       mapLifecycle: () => "public",
       boolVar: () => false,

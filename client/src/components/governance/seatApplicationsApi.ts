@@ -42,6 +42,8 @@ export interface ServedApplication {
    * adopted. Null for an ordinary application; absent from an older server.
    */
   proposal?: { id: string; changesRoles: boolean; consent: ConsentOut | null; decided: string | null } | null;
+  /** Who adopts it in this village, in words, while it waits (E8); null once decided, absent from the list. */
+  whoAdopts?: string | null;
   you?: {
     isCandidate: boolean;
     mayAdopt: boolean;

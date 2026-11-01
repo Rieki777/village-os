@@ -57,16 +57,19 @@ import { cleanLine, cleanText } from "./sessions";
  *   PATCH  /api/session-templates/rooms/:sessionId/priorities/:pid   { outcome } | { text } | { remove: true } -> TemplateRoomView
  *   POST   /api/session-templates/rooms/:sessionId/shares      { kind, text, speakerNo? } -> TemplateRoomView
  *   POST   /api/session-templates/rooms/:sessionId/shares/:shareId/bring   { circleId? } -> TemplateRoomView
- *   PATCH  /api/session-templates/rooms/:sessionId/shares/:shareId   { servesGoal } -> TemplateRoomView
- *   GET    /api/session-templates/season?season=<id>        SeasonView (0292)
+ *   PATCH  /api/session-templates/rooms/:sessionId/shares/:shareId   { servesGoalId } -> TemplateRoomView
+ *   PATCH  /api/session-templates/rooms/:sessionId/entries/:entryId  { servesGoalId } -> { entryLinks } (0298, a win on an agenda item)
+ *   GET    /api/session-templates/season?season=<id>        { view: SeasonView } (0292)
+ *   POST   /api/session-templates/season/tensions/:shareId  { sameAsId } | { standsAlone } -> { view } (0298)
  *
  * SERVING THE SEASON (0292, Rye 2026-10-30). A priority and a win may name the
  * season priority it serves: `servesGoal`, one of the season's own goals
  * (the `goals` list on the season, app_config "season"), COPIED AS WRITTEN,
  * the same way a member's season plan names the goal it serves
- * (shared/seasonPlans.ts). The season's goals carry no id, so the text is the
- * reference, and a goal renamed later leaves the old links reading as the
- * words they were.
+ * (shared/seasonPlans.ts). Since 0298 every goal carries an id
+ * (server/lib/seasonGoals.ts) and a link names it by id, keeping its words as
+ * they were when linked: a reworded goal keeps its links, and a removed goal
+ * leaves them saying what they served.
  */
 export const TEMPLATES_API = "/api/session-templates";
 export const templateApi = (id: number) => `${TEMPLATES_API}/${id}`;
@@ -466,7 +469,9 @@ export interface PriorityRow {
   text: string;
   position: number;
   outcome: PriorityOutcome | null;
-  /** The season priority it serves, as written, or null. */
+  /** The id of the season priority it serves, or null (0298). */
+  servesGoalId: string | null;
+  /** That season priority's words: as the season says them now, or as linked when it is gone. */
   servesGoal: string | null;
 }
 
@@ -500,7 +505,9 @@ export interface ShareRow {
   speaker: string | null;
   /** The agenda item it became, when it was brought to a later session. */
   broughtAs: number | null;
-  /** The season priority it serves, as written, or null. */
+  /** The id of the season priority it serves, or null (0298). */
+  servesGoalId: string | null;
+  /** That season priority's words: as the season says them now, or as linked when it is gone. */
   servesGoal: string | null;
   at: string;
 }
@@ -536,18 +543,49 @@ export interface TemplateRoomView {
 
 // ── The season (0292) ───────────────────────────────────────────────────────
 
+/** A season priority as a link names it: its id (0298) and its words. */
+export interface SeasonGoalRef {
+  id: string;
+  text: string;
+}
+
 export interface SeasonRef {
   id: string;
   name: string;
-  goals: string[];
+  goals: SeasonGoalRef[];
 }
 
-/** A season priority a link names: one of the season's goals as written, or null. Anything else is refused. */
-export function cleanServesGoal(raw: unknown, goals: readonly string[]): { ok: true; value: string | null } | { ok: false } {
+/**
+ * The season priority a link names, from a request body: `servesGoalId`, one
+ * of the running season's goal ids, or, from a client before 0298,
+ * `servesGoal`, the goal's words, which find the first goal saying them. Null
+ * or empty names none. Anything the season does not hold is refused.
+ */
+export function cleanServesGoal(
+  body: { servesGoalId?: unknown; servesGoal?: unknown },
+  goals: readonly SeasonGoalRef[],
+): { ok: true; value: SeasonGoalRef | null } | { ok: false } {
+  if ("servesGoalId" in body && body.servesGoalId !== undefined) {
+    const raw = body.servesGoalId;
+    if (raw == null || raw === "") return { ok: true, value: null };
+    const hit = typeof raw === "string" ? goals.find((g) => g.id === raw) : undefined;
+    return hit ? { ok: true, value: hit } : { ok: false };
+  }
+  const raw = body.servesGoal;
   if (raw == null || raw === "") return { ok: true, value: null };
   if (typeof raw !== "string") return { ok: false };
-  const t = raw.trim();
-  return goals.includes(t) ? { ok: true, value: t } : { ok: false };
+  const hit = goals.find((g) => g.text === raw.trim());
+  return hit ? { ok: true, value: hit } : { ok: false };
+}
+
+/**
+ * Which season goal a stored link serves now: by its id, or, for a link with
+ * no id, by its words. Null when the season no longer holds it.
+ */
+export function resolveGoal(goals: readonly SeasonGoalRef[], id: string | null, words: string | null): SeasonGoalRef | null {
+  if (id) return goals.find((g) => g.id === id) ?? null;
+  if (words) return goals.find((g) => g.text === words) ?? null;
+  return null;
 }
 
 /** The Monday a date falls in, as YYYY-MM-DD in UTC: the week a win or a priority belongs to. */
@@ -561,15 +599,31 @@ export function weekOf(iso: string): string {
 const STOP = new Set(
   "a an and are as at be but by for from has have in is it its of on or our so that the their them there they this to was we were what when who will with you your not no do does dont nobody".split(" "),
 );
-/** The words of a tension that carry its meaning, for telling when one comes back. */
+
+/**
+ * A word's stem, so "waters", "watering" and "watered" are one word, and
+ * "seedlings" and "seedling" another (0298). Light on purpose: plural `s`,
+ * then `ing` or `ed`, then a doubled last letter ("slipping" to "slip"). It
+ * never stems a short word, so "news" and "bed" stay themselves.
+ */
+export function stem(word: string): string {
+  let w = word;
+  if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+  if (w.length > 5 && w.endsWith("ing")) w = w.slice(0, -3);
+  else if (w.length > 4 && w.endsWith("ed")) w = w.slice(0, -2);
+  else return w;
+  return w.length > 3 && w[w.length - 1] === w[w.length - 2] && !"aeiou".includes(w[w.length - 1]) ? w.slice(0, -1) : w;
+}
+
+/** The words of a tension that carry its meaning, stemmed, for telling when one comes back. */
 export function tensionWords(text: string): Set<string> {
   return new Set(
     text
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, " ")
       .split(/\s+/)
-      .map((w) => (w.length > 4 ? w.replace(/s$/, "") : w))
-      .filter((w) => w.length > 2 && !STOP.has(w)),
+      .filter((w) => w.length > 2 && !STOP.has(w))
+      .map(stem),
   );
 }
 
@@ -584,9 +638,24 @@ export function sameTension(a: Set<string>, b: Set<string>): boolean {
 }
 
 export interface TensionIn {
+  /** The share it was captured as. Absent in a pure grouping with no people's say. */
+  shareId?: number;
   text: string;
   sessionId: number;
   at: string;
+  /** Somebody who was there said it is the same tension as this other share (0298). */
+  sameAsId?: number | null;
+  /** Somebody who was there said it stands alone: the word guess never groups it (0298). */
+  standsAlone?: boolean;
+}
+
+export interface TensionMember {
+  shareId: number;
+  text: string;
+  sessionId: number;
+  at: string;
+  /** Somebody said this one stands alone. */
+  standsAlone: boolean;
 }
 
 export interface TensionGroup {
@@ -597,27 +666,59 @@ export interface TensionGroup {
   firstAt: string;
   lastAt: string;
   sessionIds: number[];
+  /** Every wording in the group, oldest first, for people who were there to join or part. Null when hidden. */
+  members: TensionMember[] | null;
 }
 
 /**
- * Tensions grouped by the one they are. A group that came up in two or more
- * sessions is a RECURRING tension. Groups come back in the order they last
- * came up, latest first, never by size: the view shows what keeps coming
- * back, it does not rank it.
+ * Tensions grouped by the one they are. Two tensions are one when somebody who
+ * was there said so (`sameAsId`), or when their stemmed meaning words say so
+ * (`sameTension`), unless either was said to stand alone. A group that came up
+ * in two or more sessions is a RECURRING tension. Groups come back in the
+ * order they last came up, latest first, never by size: the view shows what
+ * keeps coming back, it does not rank it.
  */
 export function groupTensions(list: readonly TensionIn[]): TensionGroup[] {
-  const groups: { seed: Set<string>; items: TensionIn[] }[] = [];
-  for (const t of [...list].sort((a, b) => a.at.localeCompare(b.at))) {
-    const words = tensionWords(t.text);
-    const home = groups.find((g) => sameTension(g.seed, words));
-    if (home) home.items.push(t);
-    else groups.push({ seed: words, items: [t] });
+  const items = [...list].sort((a, b) => a.at.localeCompare(b.at) || (a.shareId ?? 0) - (b.shareId ?? 0));
+  const parent = items.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const join = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[Math.max(ra, rb)] = Math.min(ra, rb);
+  };
+  const words = items.map((t) => tensionWords(t.text));
+  const byShare = new Map<number, number>();
+  items.forEach((t, i) => t.shareId != null && byShare.set(t.shareId, i));
+  items.forEach((t, i) => {
+    const other = t.sameAsId != null ? byShare.get(t.sameAsId) : undefined;
+    if (other != null) join(i, other);
+  });
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].standsAlone) continue;
+    for (let j = i + 1; j < items.length; j++) {
+      if (!items[j].standsAlone && sameTension(words[i], words[j])) join(i, j);
+    }
   }
-  return groups
+  const groups = new Map<number, TensionIn[]>();
+  items.forEach((t, i) => {
+    const r = find(i);
+    const g = groups.get(r);
+    if (g) g.push(t);
+    else groups.set(r, [t]);
+  });
+  return Array.from(groups.values())
     .map((g) => {
-      const ids = Array.from(new Set(g.items.map((i) => i.sessionId)));
-      const last = g.items[g.items.length - 1];
-      return { text: last.text, sessions: ids.length, firstAt: g.items[0].at, lastAt: last.at, sessionIds: ids };
+      const ids = Array.from(new Set(g.map((i) => i.sessionId)));
+      const last = g[g.length - 1];
+      return {
+        text: last.text,
+        sessions: ids.length,
+        firstAt: g[0].at,
+        lastAt: last.at,
+        sessionIds: ids,
+        members: g.map((t) => ({ shareId: t.shareId ?? 0, text: t.text, sessionId: t.sessionId, at: t.at, standsAlone: !!t.standsAlone })),
+      };
     })
     .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
@@ -628,16 +729,22 @@ export interface SeasonPriorityItem {
   sessionId: number;
   sessionTitle: string;
   at: string;
+  /** For an unlinked one: the words of a season priority it served that the season no longer holds. */
+  servedGoal?: string | null;
 }
 
 export interface SeasonWin {
   text: string;
+  /** The season priority it serves as the season says it now, or the words it was linked with when that goal is gone. */
   servesGoal: string | null;
+  /** Shared in a meeting's Wins and celebrations, or on an agenda item's page (0298). */
+  source: "meeting" | "item";
   sessionTitle: string;
   at: string;
 }
 
 export interface SeasonGoalView {
+  id: string;
   text: string;
   /** The season's own mark on the goal (set by whoever keeps the season). */
   done: boolean;
@@ -648,9 +755,8 @@ export interface SeasonGoalView {
 export interface SeasonWeek {
   /** The Monday the week starts on, YYYY-MM-DD. */
   weekOf: string;
+  /** Every win that week, from a meeting's wins section and from agenda items alike. */
   wins: SeasonWin[];
-  /** Wins shared on the room's item pages that week (they name no season priority). */
-  itemWins: number;
   prioritiesSet: number;
   prioritiesDone: number;
 }
@@ -696,7 +802,14 @@ export const SEASON_COPY = {
   weeksHeading: "Wins over time",
   weekOf: (day: string) => `Week of ${day}`,
   weekWins: (n: number) => `${n} ${n === 1 ? "win" : "wins"}`,
-  weekItemWins: (n: number) => `${n} more on item pages`,
+  fromItem: "On an agenda item",
+  servedGone: (goal: string) => `Served "${goal}", no longer one of the season's priorities`,
+  sameAs: "Same tension as",
+  sameAsPick: "Choose one",
+  standsAlone: "Not the same",
+  backTogether: "Group it again",
+  standsAloneNote: "Kept apart",
+  regroupFailed: "That did not save. Try again in a moment.",
   weekPriorities: (set: number, done: number) => `${set} priorities set, ${done} done`,
   noWeeks: "No wins or priorities yet this season.",
   tensionsHeading: "Tensions that keep coming up",
@@ -706,6 +819,7 @@ export const SEASON_COPY = {
   noTensions: "No tension has come up in a Heart share this season.",
   serves: "Serves",
   servesNone: "No season priority",
+  goneGoal: "A season priority no longer on the list",
   loadFailed: "The season did not load. Try again in a moment.",
   noSeason: "No season is set up yet.",
 } as const;
@@ -747,6 +861,10 @@ export const TEMPLATE_REFUSALS = {
   shareNotFound: "That share is not here any more.",
   broughtAlready: "That share is on a later session's list already.",
   goalUnknown: "Choose one of this season's priorities, or none.",
+  onlyWins: "Only a win names the season priority it serves.",
+  entryNotFound: "That entry is not here any more.",
+  tensionNotFound: "That tension is not here any more.",
+  tensionNotYours: "Only the people who were in that Heart share say how its tensions group.",
   seasonUnknown: "That season is not one the village keeps.",
 } as const;
 

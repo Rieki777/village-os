@@ -41,6 +41,8 @@ import { ArrowRight, Compass } from "lucide-react";
 import type { MembershipSigning } from "@shared/membershipSigning";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch, type GameMe, type ProgressionCapability, type PublicGameConfig } from "@/lib/gameApi";
+import { pageVarsFrom } from "@shared/pageContent/vars";
+import { articleFor } from "@shared/villageWord";
 import { useModule } from "@/modules/ModuleProvider";
 import { useMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
 
@@ -241,7 +243,9 @@ export default function StartHereCard({ ownerId, me, signing, config, catalogue 
       ];
       primary = null;
     } else {
-      step = "Become a member";
+      // The village's own word for a member (Admin, Make This Yours).
+      const member = pageVarsFrom(config).member;
+      step = `Become ${articleFor(member)} ${member}`;
       if (signing?.answer === "left") {
         lines.push("The village left your last request where it is for now. You are welcome to ask again.");
       }
