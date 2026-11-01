@@ -90,6 +90,7 @@ import { effectiveLifecycle, moduleConfig, moduleDemotions, setModuleLifecycle, 
 import { launchBallotCarried } from "../lib/launch";
 import { recordEvent } from "../lib/events";
 import { getPool } from "../db/pool";
+import { register as registerSetupGame } from "./setupGame";
 import { liveModuleProposal, moduleLifecycleRows, moduleVoteWrites } from "../repos/moduleHistory";
 import { moduleNeeds } from "../../shared/moduleNeeds";
 
@@ -120,6 +121,10 @@ const visibleToMembers = (lc: string | null | undefined) =>
 
 export function register(app: Express, deps: Deps): void {
   const { isAdmin, authedUser, firstName } = deps;
+
+  // The setup game's map reads the same registry this page does, so it rides
+  // this module's registration and server/index.ts does not grow.
+  registerSetupGame(app, { isAdmin, projectName: deps.projectName });
 
   /** Who is asking, in the three facts every route here reads. */
   const whoIs = async (req: Request) => {
