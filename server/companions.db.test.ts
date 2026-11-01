@@ -148,7 +148,7 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     const statuses: string[] = [];
     for (const [c, n] of [[personal, 3], [role, 3], [quest, 1]] as const) {
       for (let i = 0; i < n; i++) {
-        const r = await question(c, `${c.id} question ${i}?`);
+        const r = await question(c, `${c.scope} question ${i}?`); // never the id: a random id can hold seven digits in a row, which reads as a phone number
         statuses.push(r.ok ? r.item.status : r.error);
       }
     }
