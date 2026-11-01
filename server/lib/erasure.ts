@@ -188,6 +188,7 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
+import { forgetRewardMomentsOf } from "../repos/rewardMoment";
 import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
 import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
@@ -1608,6 +1609,23 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * Reward moment markers (0294): the baseline row says when the member
+       * first opened the app, and each seen row which of their payments they
+       * were shown. Personal data about them, deleted whole. A debt is kept
+       * through an erasure (`cash_owed`, Rye, 2026-10-31); a marker of what
+       * somebody saw is not one.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: a moment
+       * shown in the last seconds before it is still caught. Keyed on the
+       * member, so a resume or a second run finds nothing.
+       */
+      name: "reward-moments-after-tombstone",
+      run: async () => {
+        await forgetRewardMomentsOf(pool, target.id);
+      },
+    },
+    {
       // A chat or a draft can still land between the first pass and the
       // tombstone, so it runs again last, after every other
       // after-tombstone step. DELETEs keyed on the member, so this matches nothing when
@@ -2121,6 +2139,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "quest-claims-after-tombstone",
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
+  "reward-moments-after-tombstone",
   "companions-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
