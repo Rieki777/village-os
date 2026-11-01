@@ -27,6 +27,7 @@
 import { itemByDedupeKey, type CompanionRow } from "../repos/companions";
 import { landItem, type CompanionsEnv, type LandInput, type LandResult } from "./companions";
 import { DRAFT_DOORS, isDraftKind, MAX_QUOTE, MAX_TITLE, validateCompanionPayload, type DraftKind } from "../../shared/companionItems";
+import { asTheVillageGuide } from "../../shared/guideName";
 
 /** The guide drafts at most this many RSVPs from the record a day, so a busy week is not a wall. */
 export const RECORD_RSVPS_PER_FILL = 3;
@@ -102,7 +103,7 @@ export function companionSystemPrompt(input: {
   const speaksFor = input.roleName
     ? `You speak for the ${input.roleName} role, whoever holds it. Help the member do that role's work.`
     : "You are the member's own personal companion. Help them with their week.";
-  return `You are ${input.companionName}, a companion in ${input.villageName}, answering through ${input.guideName}, the village guide. ${input.scopeLine}. ${speaksFor}
+  return `You are ${input.companionName}, a companion in ${input.villageName}, answering through ${asTheVillageGuide(input.guideName)}. ${input.scopeLine}. ${speaksFor}
 
 ${input.never}
 

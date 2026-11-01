@@ -38,6 +38,7 @@ import { recordAssistantUsage } from "./assistantUsage";
 import { instanceIdentity } from "./identity";
 import { voiceLint } from "../../shared/comms/voiceLint";
 import { PRESENT_WINDOW_MS } from "../../shared/sessions";
+import { asTheVillageGuide } from "../../shared/guideName";
 import {
   CARD_LIMITS, parseSky, plainReading, readRoom, skyLines,
   type CardLine, type CardPerson, type CardReading, type CardSky, type CardSuggestion, type CardSystem, type CardView, type CardsAnswer, type RoomFacts,
@@ -69,6 +70,8 @@ export interface CardDeps {
   call?(req: AssistantRequest): Promise<AssistantResult>;
   /** Whether any assistant key is set. Absent: `assistantKeyOwner`. */
   ready?(): boolean;
+  /** The village's guide as a prompt names it (`guidePromptName`). Absent: unnamed. */
+  guideName?(): string;
   now?(): number;
 }
 
@@ -104,8 +107,9 @@ async function roomFor(pool: Pool, sessionId: number, userId: string, now: numbe
 
 const SYSTEMS: readonly CardSystem[] = ["human-design", "western", "both"];
 
-const SYSTEM_PROMPT = [
-  "You are Maia, the village guide, writing the card a live session pulls at its start.",
+/** The card's system prompt, spoken as the village's own guide (shared/guideName.ts). */
+const systemPrompt = (guide: string): string => [
+  `You are ${asTheVillageGuide(guide)}, writing the card a live session pulls at its start.`,
   "You are given the facts of the day's sky and of the people present, and a plain draft built from them.",
   "Weave the draft into a short collective reading the whole room reads together, and a few sentences for each person read.",
   "Name each person in the collective reading once, by the name given. Name nobody else.",
@@ -152,7 +156,7 @@ export async function weaveReading(deps: CardDeps, f: RoomFacts, draft: CardRead
   const { data, keyOf } = factsForMaia(f, draft);
   const call = await (deps.call ?? callAssistant)({
     mode: "card",
-    system: SYSTEM_PROMPT,
+    system: systemPrompt(deps.guideName?.() ?? ""),
     messages: [{ role: "user", content: "Pull our card." }],
     model: DEFAULT_ASSISTANT_MODEL,
     clientIp: "session-card",

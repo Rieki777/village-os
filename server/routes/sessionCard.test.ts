@@ -151,6 +151,25 @@ describe("Maia's weaving", () => {
     expect(await weaveReading(woven("not json"), facts, draft, "m-wren")).toBeNull();
   });
 
+  it("speaks as the village's own guide, and never as another village's (readiness R087)", async () => {
+    const systems: string[] = [];
+    const asking = (guideName?: () => string): CardDeps => ({
+      ...woven(good),
+      guideName,
+      call: async (req) => {
+        systems.push(String(req.system));
+        return woven(good).call!(req);
+      },
+    });
+    await weaveReading(asking(() => "Sol"), facts, draft, "m-wren");
+    await weaveReading(asking(() => "the village guide"), facts, draft, "m-wren");
+    await weaveReading(asking(), facts, draft, "m-wren");
+    expect(systems[0]).toMatch(/^You are Sol, the village guide, writing the card/);
+    expect(systems[1]).toMatch(/^You are the village guide, writing the card/);
+    expect(systems[2], "no name passed reads as unnamed").toMatch(/^You are the village guide, writing the card/);
+    expect(systems.join(" ")).not.toMatch(/Maia/);
+  });
+
   it("is not asked at all without a key, or when nobody present was read", async () => {
     let asked = false;
     const d: CardDeps = { getPool: () => pool, nameOf: async () => null, ready: () => false, call: async () => { asked = true; throw new Error("no"); } };
