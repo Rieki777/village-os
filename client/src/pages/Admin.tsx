@@ -32,7 +32,8 @@ import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
 import { useAuth } from "@/contexts/AuthContext";
-import { useGameConfig } from "@/lib/gameApi";
+import { refreshGameConfig, useGameConfig } from "@/lib/gameApi";
+import { currencySymbol, figureWithCurrency } from "@shared/money";
 import { holdCancelled, swipeIntent } from "@/lib/gestures";
 import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
@@ -7124,7 +7125,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setBrand(data.brand);
+      setBrand(data.brand); void refreshGameConfig();
       setSavedCurrency(String(data.brand?.project?.fiatCurrency ?? ""));
       toast.success("Saved");
     } catch { toast.error("Save failed"); }
@@ -7420,14 +7421,13 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 function SettingsTab({ password }: { password: string }) {
   const [settings, setSettings] = useState<any>(null);
   const [saving, setSaving] = useState(false);
-
+  const fiatCurrency = useGameConfig()?.project?.fiatCurrency ?? "";
   useEffect(() => {
     fetch(`${API_BASE}/admin/settings`, { headers: authHeaders(password) })
       .then((r) => r.json())
       .then(setSettings)
       .catch(() => toast.error("Failed to load settings"));
   }, [password]);
-
   const save = async () => {
     setSaving(true);
     try {
@@ -7473,7 +7473,7 @@ function SettingsTab({ password }: { password: string }) {
     { key: "plannedHomes", label: "Planned homes", valueHint: "how many", noteHint: "", where: "Master plan" },
     { key: "guestRooms", label: "Guest rooms", valueHint: "how many", noteHint: "", where: "Master plan" },
   ];
-  const preview = dues.amount ? `${dues.currency || "$"}${dues.amount} / ${dues.period || "month"}` : "Not shown until you set an amount";
+  const preview = dues.amount ? `${figureWithCurrency(String(dues.amount), dues.currency, fiatCurrency)} / ${dues.period || "month"}` : "Not shown until you set an amount";
 
   return (
     <div>
@@ -7508,7 +7508,7 @@ function SettingsTab({ password }: { password: string }) {
             <label className="text-xs font-medium text-gray-500 block mb-1">Currency</label>
             <input
               type="text"
-              value={dues.currency ?? "$"}
+              value={dues.currency ?? ""} placeholder={currencySymbol(fiatCurrency) || "Symbol"}
               onChange={(e) => setDues({ currency: e.target.value })}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
             />

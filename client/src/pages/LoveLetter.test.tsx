@@ -29,7 +29,7 @@ vi.mock("@/hooks/useVillageContent", () => ({ useVillageContent: () => ({ conten
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => (signedIn ? "a-token" : null),
   gameFetch: (path: string, init?: RequestInit) => fetch(path, init),
-  useGameConfig: () => ({ project: { name: "Fernhollow", commitmentName: "Love Letter" }, currency: { name: "Seeds" } }),
+  useGameConfig: () => ({ project: { name: "Fernhollow", commitmentName: "Love Letter", memberName: "Elderling" }, currency: { name: "Seeds" } }),
   useVillageLinks: () => ({ contactEmail: "" }),
 }));
 vi.mock("@/contexts/AuthContext", () => ({
@@ -110,6 +110,10 @@ describe("a member aligns from their account", () => {
     expect(await screen.findByText(FIRST.parts.opening)).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Align with the Love Letter" })).toBeTruthy();
     expect(screen.getByText("Aligning as Tamsin Reedwarbler, from your account. No typed name.")).toBeTruthy();
+    // The village's own word for a member (Admin, Make This Yours), with its article.
+    expect(
+      screen.getByText("Read the letter above, add a few words about yourself, and align from your account to join Fernhollow as an Elderling."),
+    ).toBeTruthy();
     expect(screen.queryByLabelText(/Full Name/)).toBeNull();
     expect(screen.queryByLabelText(/Email Address/)).toBeNull();
     expect(screen.queryByText("Sign Your Membership")).toBeNull();
@@ -119,7 +123,7 @@ describe("a member aligns from their account", () => {
     for (const c of FIRST.parts.commitments) expect(screen.getByText(c)).toBeTruthy();
 
     const user = await fillIn();
-    await user.click(screen.getByRole("button", { name: "Align and join the Fernhollow Family" }));
+    await user.click(screen.getByRole("button", { name: "Align and join Fernhollow" }));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0].type).toBe("membership-508");
     expect(posts[0].data).toMatchObject({ letterVersion: FIRST.version, name: "Tamsin Reedwarbler", email: "tam@examples.invalid" });
@@ -134,11 +138,11 @@ describe("a member aligns from their account", () => {
     render(<LoveLetter />);
     await screen.findByText(FIRST.parts.opening);
     const user = await fillIn();
-    await user.click(screen.getByRole("button", { name: "Align and join the Fernhollow Family" }));
+    await user.click(screen.getByRole("button", { name: "Align and join Fernhollow" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The letter changed while you were reading it. Read it again, then align.");
     expect(await screen.findByText(NEWER.parts.opening)).toBeTruthy();
     expect(screen.queryByText(FIRST.parts.opening)).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Align and join the Fernhollow Family" }));
+    await user.click(screen.getByRole("button", { name: "Align and join Fernhollow" }));
     await waitFor(() => expect(posts).toHaveLength(2));
     expect(posts[1].data.letterVersion).toBe(NEWER.version);
   });
@@ -146,7 +150,7 @@ describe("a member aligns from their account", () => {
   it("the form's own words align; only the letter's own sentence says sign", async () => {
     render(<LoveLetter />);
     await screen.findByText(FIRST.parts.opening);
-    const form = screen.getByRole("button", { name: "Align and join the Fernhollow Family" }).closest("form")!;
+    const form = screen.getByRole("button", { name: "Align and join Fernhollow" }).closest("form")!;
     const words = (form.textContent ?? "").replace(/\s+/g, " ");
     expect(words).not.toMatch(/\bsign/i);
   });
@@ -206,7 +210,7 @@ describe("the thank-you says what happens next", () => {
     render(<LoveLetter />);
     await screen.findByText(FIRST.parts.opening);
     const user = await fillIn();
-    await user.click(screen.getByRole("button", { name: "Align and join the Fernhollow Family" }));
+    await user.click(screen.getByRole("button", { name: "Align and join Fernhollow" }));
     await screen.findByRole("heading", { name: "What happens next" });
   }
 
