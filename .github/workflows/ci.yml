@@ -13,13 +13,39 @@ name: ci
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main", "wt/batch*", "wt/*-integration*"]
   pull_request:
 
-# A branch push with an open PR fires this workflow TWICE: once for the push
-# (the branch as it stands) and once for the pull_request (the branch already
-# merged with main). Both are worth having and they test different trees, so
-# neither trigger is removed. What IS waste is a superseded run: push twice in
+# WHICH BRANCHES GET A PUSH RUN, and why most do not (Rye, 2026-11-01:
+# "Yes, free fix").
+#
+# A branch push with an open PR used to fire this workflow TWICE, once for the
+# push (the branch as it stands) and once for the pull_request (the branch
+# already merged with main). On the free plan that is 20 concurrent jobs against
+# a fleet of lanes: at 04:35Z on 2026-11-01 about 50 runs were queued behind 5
+# running, with each run taking 16 to 60 minutes. Half of that queue was testing
+# a tree nobody lands.
+#
+# So `push` is now limited to the refs where BOTH events are worth paying for:
+# `main`, the integrator batch branches (`wt/batch*`), and integration branches
+# (`wt/*-integration*`). A lane PR branch gets the pull_request run alone, which
+# is the more informative of the two anyway because it tests the branch ALREADY
+# MERGED with main, which is nearer to what lands.
+#
+# WHAT THIS MOVED, for whoever reads the merge gate next. A COMPONENT is ready
+# when its pull_request run is green at its frozen SHA. A BATCH still needs both
+# events green, and that is the gate standing between a tree and production,
+# unchanged. Two consequences worth knowing:
+#
+#   - A CONFLICTING pull request gets no pull_request run, so a conflicted lane
+#     branch now has NO run at all rather than a push run. Its lane has to merge
+#     main before anybody can verify it, even though the generated-doc conflict
+#     every batch landing causes is the integrator's to resolve, never a lane's.
+#   - A lane can no longer read a dist-budget number off its own branch alone.
+#     The pull_request number includes what has landed since it branched, which
+#     is the number that matters at landing anyway.
+#
+# What IS waste is a superseded run: push twice in
 # a minute and the first job keeps a runner for its full length while its
 # result can no longer matter. The group keys on the event name as well as the
 # ref so a push run never cancels the merge-with-main run that is the more
@@ -196,6 +222,31 @@ jobs:
         # exits 1 and says so rather than printing the same line as "found
         # nothing".
         run: node scripts/check-migration-numbers.mjs
+
+      - name: Migration SQL calls only functions production has run
+        # WHY THIS IS A SEPARATE STEP FROM THE TWO BELOW, and what it cost to
+        # learn. On 2026-11-01 batch 74 merged with 0298, which computed a
+        # derived id in SQL with SHA1(). Every gate in this workflow was green,
+        # the compat gate included, because that gate applies migrations to the
+        # mysql:8 service container above and mysql:8 has SHA1 built in. The
+        # production engine does not. The deploy failed after 15.5 minutes with
+        #
+        #     FAIL: 0298_a_season_goal_keeps_its_name.sql
+        #       -> FUNCTION railway.SHA1 does not exist (statement 7 of 8)
+        #
+        # and left the instance with six of eight statements applied and no
+        # version of the app that would boot. So RUNNING a migration on CI's
+        # database proves it runs on CI's database, and nothing more. This step
+        # is the text rule that closes the gap: an ALLOW-LIST of every function
+        # name a migration already applied on production carries, which fails
+        # closed on a new one. A deny-list could not have caught SHA1, because
+        # nobody had written SHA1 down.
+        #
+        # Reads drizzle/ only. No node_modules, no database, well under a
+        # second. Its own self-test runs in the self-tests step below and
+        # includes the control: 0298's original statement 7 goes red with SHA1
+        # named and the Railway log line quoted.
+        run: node scripts/check-migration-sql.mjs
 
       - name: Migration compatibility (expand, never contract)
         # The gate above asks whether a migration can be TOLD APART from
