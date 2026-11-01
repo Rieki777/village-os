@@ -32,6 +32,7 @@ import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { CAPABILITY_LABELS } from "../shared/capabilities";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -462,5 +463,75 @@ describe.skipIf(!DB_CONFIGURED)("the approved design's portrait and hero", () =>
     expect(r.header.moon.words).toMatch(/^(January|February|March|April|May|June|July|August|September|October|November|December) Moon/);
     expect(r.header.tagline).toBe("One role");
     expect(r.tiles.items.value[0].icon).toBe("sprout");
+  });
+});
+
+/*
+ * A10 (2026-10-31): the role card names what the role holds, or what it suits.
+ * Run against the built server, so the affinity map, the module switches and
+ * capability_holding are the real ones, read on every request.
+ */
+describe.skipIf(!DB_CONFIGURED)("A10: a role's powers on its card", () => {
+  const powersOf = async () => (await card(readerToken)).json.card.roles[0].powers;
+  const setClasses = (keys: string[]) =>
+    pool.query("UPDATE org_roles SET archetypes = ? WHERE id = ?", [JSON.stringify(keys), ROLE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  const label = (k: string) => (CAPABILITY_LABELS as Record<string, string>)[k];
+
+  it("control: a role with no classes and nothing handed over says No powers held", async () => {
+    await setClasses([]);
+    const powers = await powersOf();
+    expect(powers.items).toEqual({ kind: "empty", words: "No powers held" });
+    expect(powers.note).toBeNull();
+  });
+
+  it("leaves out a power the village's own setup denies: one whose module is off here", async () => {
+    // The storyteller suits photos and announcements too, and both modules are off on this village.
+    await setClasses(["storytelling"]);
+    expect((await powersOf()).items).toEqual({ kind: "shown", value: [label("story.tell")] });
+  });
+
+  it("names what the role's classes suit, as information, when nothing is handed over", async () => {
+    await setClasses(["building"]);
+    const powers = await powersOf();
+    expect(powers.heading).toBe("Suited to");
+    expect(powers.items).toEqual({ kind: "shown", value: [label("org.seatAgent"), label("dial.set")] });
+    expect(powers.note).toBe("The village has not handed these over.");
+  });
+
+  it("shows a power suited through two classes once, and follows a map edit on the next request", async () => {
+    await setClasses(["building", "storytelling"]);
+    const before = await powersOf();
+    expect(before.items.value).toEqual([label("org.seatAgent"), label("dial.set"), label("story.tell")]);
+    // The map changes while the card is open: dial.set now suits the storyteller too.
+    const put = await call("PUT", "/api/admin/power-affinity/dial.set", { body: { classes: ["building", "storytelling"] } });
+    expect(put.status, JSON.stringify(put.json)).toBe(200);
+    const after = await powersOf();
+    expect(after.items.value.filter((v: string) => v === label("dial.set"))).toHaveLength(1);
+    // And back to the platform's suggestion, so the cases below read the default map.
+    expect((await call("PUT", "/api/admin/power-affinity/dial.set", { body: { classes: null } })).status).toBe(200);
+  });
+
+  it("never lists as suited a power the village has handed to another role", async () => {
+    await setClasses(["building"]);
+    await pool.query("INSERT INTO capability_holding (capability, holder_role_id) VALUES ('org.seatAgent', 'another-role')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    try {
+      expect((await powersOf()).items).toEqual({ kind: "shown", value: [label("dial.set")] });
+    } finally {
+      await pool.query("DELETE FROM capability_holding WHERE capability = 'org.seatAgent'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    }
+  });
+
+  it("marks a power handed to this role as handed, and then lists nothing as suited", async () => {
+    await setClasses(["building"]);
+    await pool.query("INSERT INTO capability_holding (capability, holder_role_id) VALUES ('org.seatAgent', ?)", [ROLE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    try {
+      const powers = await powersOf();
+      expect(powers.heading).toBe("Powers handed to this role");
+      expect(powers.items).toEqual({ kind: "shown", value: [label("org.seatAgent")] });
+      expect(powers.note).toBeNull();
+    } finally {
+      await pool.query("DELETE FROM capability_holding WHERE capability = 'org.seatAgent'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await setClasses([]);
+    }
   });
 });
