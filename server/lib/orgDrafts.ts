@@ -40,6 +40,7 @@ import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesF
 import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
 import { readHeldSeatIds, readRolesForPreview } from "../repos/orgDrafts";
+import { roleHoldersNow } from "../repos/pathLadders";
 import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
@@ -422,7 +423,7 @@ export async function measureVisionMetrics(
     allMembers(): Promise<any[]>;
     consentedCounts(): Promise<Map<string, number>>;
     isExampleUser(u: any): boolean;
-    computeStage(u: any, consented: number, trainingDone: readonly string[], paidByVillage: boolean): string;
+    computeStage(u: any, consented: number, trainingDone: readonly string[], paidByVillage: boolean, holdsRole: boolean): string;
     trainingCompletions(userIds: readonly string[]): Promise<Map<string, string[]>>;
     /** Which of these members the village has ever paid, in one query. */
     paidByVillage(userIds: readonly string[]): Promise<Set<string>>;
@@ -466,13 +467,15 @@ export async function measureVisionMetrics(
     // to publish a reorganisation, so undercounting it holds the village short
     // of a threshold it has already crossed.
     const paid = await deps.paidByVillage(real.map((u: any) => String(u.id)));
+    // And the fifth, Role Holder from a live org-chart role, in one query.
+    const holders = await roleHoldersNow(pool, deps.lapseContext());
     for (const m of asked) {
       if (!m.startsWith("members_at_stage:")) continue;
       const floor = stageIndex(m.slice("members_at_stage:".length));
       if (floor < 0) continue;
       measured.set(
         m,
-        real.filter((u) => stageIndex(deps.computeStage(u, Number(consented.get(u.id) ?? 0), trained.get(String(u.id)) ?? [], paid.has(String(u.id)))) >= floor)
+        real.filter((u) => stageIndex(deps.computeStage(u, Number(consented.get(u.id) ?? 0), trained.get(String(u.id)) ?? [], paid.has(String(u.id)), holders.has(String(u.id)))) >= floor)
           .length,
       );
     }

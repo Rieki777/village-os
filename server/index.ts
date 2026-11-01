@@ -123,6 +123,7 @@ import { seatFoundersAtLaunch } from "./lib/launchSeating";
 import { launchProposalDoc, launchSlateProblem } from "./lib/launchProposal";
 import { insertSlate } from "./repos/stewardSlate";
 import { freezeSeatTerm } from "./repos/ballotSeatTerms";
+import { roleHoldersNow } from "./repos/pathLadders";
 import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
@@ -3836,24 +3837,24 @@ const trainingDoneHere = (done: readonly string[]): boolean =>
   trainingIsComplete(gatingModuleIds(trainingRepo.all()), done);
 
 /** Each rung's own rule, from one member's counts. The door above Member and every grant are `climbLadder`'s (lib/admission.ts). */
-const rungRule = (user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean) => (stage: LadderStage): boolean => {
+const rungRule = (user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean, holdsRole: boolean) => (stage: LadderStage): boolean => {
   switch (stage.rule.type) {
     case "default": case "account": return true; // having a user record implies an account
     case "training-complete": return trainingDoneHere(trainingDone);
     case "membership": return hasMembership(user);
     case "quests": return consentedQuests >= Math.max(1, numberVar(`progression.quests_for.${stage.id}`)); // the registry's, so speed is tunable
     case "tokens": return paidByVillage; // ever paid BY THE VILLAGE; see hasBeenPaidByVillage
-    default: return false;
+    case "role": return holdsRole; default: return false; // role: holds an org-chart role right now, see roleHoldersNow
   }
 };
 
-function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean): string {
-  return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage));
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean, holdsRole: boolean): string {
+  return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage, holdsRole));
 }
 
 /** The one-member form: fetch the consented count, then compute. */
 async function stageOf(user: any): Promise<string> {
-  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
+  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()), (await roleHoldersNow(getPool(), lapseContext())).has(String(user.id)));
 }
 
 /**
@@ -8779,7 +8780,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const trained = await completionsForMany(getPool(), (all as any[]).map((u) => String(u.id)));
     // Third read of the same shape, and for the same reason as the two above.
     const paid = await paidByVillageMany(getPool(), (all as any[]).map((u) => String(u.id)), contributionTokens());
-    const memberIdx = stageIndex("member");
+    const memberIdx = stageIndex("member"), holders = await roleHoldersNow(getPool(), lapseContext());
     const eligible = new Set<string>();
     for (const u of all as any[]) {
       // Standing-example identities carry member stages, so they would pass
@@ -8787,7 +8788,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if (u.isExample) continue;
       const count = consented.get(u.id) ?? 0;
       const done = trained.get(String(u.id)) ?? [];
-      if (count >= 1 || stageIndex(computeStage(u, count, done, paid.has(String(u.id)))) >= memberIdx) eligible.add(u.id);
+      if (count >= 1 || stageIndex(computeStage(u, count, done, paid.has(String(u.id)), holders.has(String(u.id)))) >= memberIdx) eligible.add(u.id);
     }
     return eligible;
   }
@@ -17164,7 +17165,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // Where the member stands on each path they walk. Beside the profile routes
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
-  registerPathLadderRoutes(app, { authedUser, getPool, lapseContext });
+  registerPathLadderRoutes(app, { authedUser, getPool, lapseContext, isAdmin, members });
   registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
@@ -19107,7 +19108,6 @@ ${inner}
     consentActor, addActivity, dormantBadgeIds,
   });
 
-
   // My game state
   app.get("/api/game/me", async (req, res) => {
     const user = await authedUser(req);
@@ -19122,7 +19122,7 @@ ${inner}
     // single query stageOf was already paying.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const trained = await completionsFor(getPool(), user.id);
-    const stageId = computeStage(user, consentedQuests, trained, await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
+    const stageId = computeStage(user, consentedQuests, trained, await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()), (await roleHoldersNow(getPool(), lapseContext())).has(String(user.id)));
     const claims = await claimsRepo.forUser(user.id);
     const ctx = await capabilityCtx(user);
     // What each consented quest actually paid. `amount` is what the witness
@@ -19842,7 +19842,7 @@ ${inner}
     // Same substitution as /api/game/me, same single query: the count the
     // ladder measures is kept instead of collapsed into a stage id.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
+    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()), (await roleHoldersNow(getPool(), lapseContext())).has(String(user.id)));
     const ctx = await capabilityCtx(user);
     const inbox: any[] = submissionsRepo.all(); // once, for both answers below: `all()` copies every row.
     res.json({
@@ -25836,7 +25836,7 @@ ${inner}
   // point its own routes used to sit. Express matches in registration order.
   registerPulseRoutes(app, { getPool });
   registerPlayersRoutes(app, {
-    isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent,
+    isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext,
     trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
     paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
   });
