@@ -93,6 +93,8 @@ import { register as registerRecoveryRoutes } from "./routes/authRecovery";
 import { register as registerVerifyEmailRoutes } from "./routes/verifyEmail";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
+import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
+import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
@@ -1309,6 +1311,7 @@ const rolesRepo = dbCollection<RoleDef>(getPool(), {
     // so an omitted flag comes back as DEFAULT 0 and retirement can never find
     // them again.
     { js: "isExample", db: "is_example", kind: "bool" },
+    { js: "grantsAdmin", db: "grants_admin", kind: "bool" }, // 0307, sheet 19: holding this group opens the admin panel
     // The twin of the `circles.created_at` bug, one table over. That one was
     // found, fixed and commented, and this one sat here through the whole
     // round: every admin ROLE edit was resetting EVERY role's birth date to
@@ -1799,7 +1802,7 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!user || (user.role !== "admin" && user.role !== "founder")) return false;
+  if (!user || (user.role !== "admin" && user.role !== "founder" && !adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length)) return false; // sheet 19: or a live admin group, server/lib/groupAdmin.ts
   (req as any).adminUser = user;
   return true;
 }
@@ -2892,6 +2895,7 @@ type RoleDef = {
   capabilities?: string[];
   minStage?: string | null;
   order?: number;
+  grantsAdmin?: boolean;
 };
 type RoleHolderRow = { id: string; roleId: string; userId: string; grantedBy?: string; grantedAt: string; termEndsAt?: string | null; seasonId?: string | null; termFollowsSeason?: boolean };
 
@@ -3747,6 +3751,7 @@ function publicUser(u: any) {
     contributions: u.contributions ?? [],
     quests: u.quests ?? [],
     recognitionBalance: u.recognitionBalance ?? 0,
+    adminAccess: adminReaches(u.role) || adminGroupsOf(String(u.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0,
     bio: u.bio ?? "",
     avatar: u.avatar ?? null,
     joinedAt: u.joinedAt ?? new Date().toISOString(),
@@ -4030,7 +4035,7 @@ function adminReaches(role: unknown): boolean {
  * does not exist.
  */
 async function accountsWithAdminReach(): Promise<any[]> {
-  return (await members.all()).filter((u: any) => adminReaches(u?.role) && !isExampleUser(u));
+  return accountsWithReach(await members.all(), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed, isExampleUser); // sheet 19: a live admin group is a way in too
 }
 
 /**
@@ -17170,6 +17175,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
   registerPathLadderRoutes(app, { authedUser, getPool, lapseContext, isAdmin, members });
+  registerGroupAdminRoutes(app, { isAdmin, getPool, members, rolesRepo, loadRoleHolders });
   registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
@@ -24926,6 +24932,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
             // roles are real rows on a public read, and nothing downstream
             // could tell them from the village's own without the flag.
             isExample: !!(r as any).isExample,
+            grantsAdmin: !!r.grantsAdmin,
             // 0018 put these on the row and this payload never carried them,
             // so the admin role-to-circle picker read undefined and every
             // role rendered as unassigned however many times it was set.
@@ -25752,6 +25759,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(400).json({ error: "userId and action (add|remove) are required" });
     }
     const member = await members.byId(userId);
+    if (action === "remove" && role.grantsAdmin && !accountsWithReach(await members.all(), loadRoles() as any, loadRoleHolders().filter((h) => !(h.roleId === role.id && h.userId === userId)), new Date(), holdingHasLapsed, isExampleUser).length) return res.status(409).json({ error: LAST_ADMIN_REFUSAL }); // sheet 19
     if (!member || (action === "add" && !holderStands(member))) return res.status(404).json({ error: "Member not found" }); // a tombstone is nobody to appoint, and a stray holding of one can still be removed
 
     // A role can require a minimum stage: appointments respect the ladder too.
@@ -25818,6 +25826,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerPulseRoutes(app, { getPool });
   registerPlayersRoutes(app, {
     isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext,
+    adminGroupsFor: (id: string) => adminGroupsOf(id, loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).map((g) => g.name),
     trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
     paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
   });

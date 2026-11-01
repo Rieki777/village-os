@@ -591,6 +591,12 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(appointment.status).toBe(409);
     expect(appointment.json.minStage).toBe("participant");
 
+    // Sheet 19 (0307): Founders Circle ships with admin access ON, so its holders can open the admin
+    // panel. This suite uses the group as a carrier of capabilities and tests the account-role plane (S2 after R90 demotes peer and expects the panel to close), so it
+    // pins the default and then switches it off. The group's admin access itself is pinned in
+    // server/authzRound.routes.e2e.test.ts.
+    expect((await api("GET", "/api/roles")).json.find((r: any) => r.id === "founders-circle")?.grantsAdmin).toBe(true);
+    expect((await api("PUT", "/api/admin/roles/founders-circle/admin-access", { on: false }, founderToken)).status).toBe(200);
     // Founders Circle carries no stage floor, so that appointment lands, and
     // capabilities show up on /api/game/me.
     const founders = await api(
