@@ -9,7 +9,7 @@
  *
  * ── WHY A SCRIPT POLICY MATTERS HERE MORE THAN MOST PLACES ──────────────────
  *
- * The session is a Bearer token in localStorage (`amora-auth-token`), with no
+ * The session is a Bearer token in localStorage (`village-auth-token`), with no
  * cookie behind it. Any script that runs on this origin can read it, so any
  * injection anywhere in the app is a full account takeover, and a founder's
  * account holds the treasury. `script-src` below is the line that makes an

@@ -764,14 +764,12 @@
   }
   
   /* Platform button style, styled off the neutral --color-teal-deep tone
-     token above (or a village's own brand colour once one is set). Class
-     name kept as-is for now: 12 call sites across
-     client/src/pages/{Investor,Steward,Resident,Prosperity}Journey.tsx
-     (tokens lane's files, not this lane's to edit) reference `btn-amora` by
-     name. Renaming here without updating those call sites would silently
-     drop the button styling on every shopfront journey page. Flagged for a
-     coordinated rename; not done in this pass. */
-  .btn-amora {
+     token above (or a village's own brand colour once one is set). Named
+     `btn-village` since readiness R066; it carried the first village's name.
+     The call sites are client/src/pages/{Investor,Steward,Resident,
+     Prosperity}Journey.tsx, renamed in the same commit, and
+     client/src/lib/brandGroundContrast.test.ts measures it. */
+  .btn-village {
     @apply px-6 py-3 rounded-full font-medium uppercase tracking-wider text-sm;
     background-color: var(--color-teal-deep);
     color: white;
@@ -780,22 +778,22 @@
 
   /* Hover to the derived hover partner, never to --color-teal: that is the
      soft tone, and white on it measured 1.67 to 3.00:1 for every seed. */
-  .btn-amora:hover {
+  .btn-village:hover {
     background-color: var(--color-teal-deep-dark);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(38, 38, 38, 0.25);
   }
 
-  /* Secondary button, off the neutral --color-amber tone token. Same
-     btn-amora-secondary naming caveat as above. */
-  .btn-amora-secondary {
+  /* Secondary button, off the neutral --color-amber tone token. Renamed
+     with the one above. */
+  .btn-village-secondary {
     @apply px-6 py-3 rounded-full font-medium uppercase tracking-wider text-sm;
     background-color: var(--color-amber);
     color: var(--color-teal-deep);
     transition: all 0.3s ease;
   }
   
-  .btn-amora-secondary:hover {
+  .btn-village-secondary:hover {
     background-color: oklch(0.72 0 0);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(212, 212, 212, 0.35);

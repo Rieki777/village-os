@@ -7745,7 +7745,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const csv = csvLines.join('\n');
     const today = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="amora-submissions-${today}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="submissions-${today}.csv"`);
     res.send(csv);
   });
 
