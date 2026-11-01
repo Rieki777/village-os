@@ -21,6 +21,7 @@ import { altOr, useBrandImages, useGameConfig } from "@/lib/gameApi";
 import { useVillageLocation, useVillageName } from "@/hooks/useVillageName";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTokenName } from "@/hooks/useTokenNames";
+import { useClaimOpen } from "@/lib/claimLink";
 
 /** The wall is named after the village's own recognition token, as the footer names it. */
 const doors = (tokenName: string) => [
@@ -50,6 +51,7 @@ export default function VillageWelcome() {
   const brand = useBrandImages();
   const tagline = String(useGameConfig()?.project?.tagline ?? "").trim();
   const { user } = useAuth();
+  const claimOpen = useClaimOpen();
   const tokenName = useTokenName("Recognition");
 
   return (
@@ -105,6 +107,16 @@ export default function VillageWelcome() {
                   </Link>
                 </>
               )}
+              {/* Only while nobody holds the founder role: a founder who has just
+                  deployed lands here and needs the one door in (lib/claimLink.ts). */}
+              {claimOpen ? (
+                <Link
+                  href="/claim"
+                  className="min-h-[44px] px-6 py-3 border border-white text-white rounded-lg font-semibold hover:bg-white/10"
+                >
+                  Founders: claim this village
+                </Link>
+              ) : null}
             </div>
           </div>
         </div>
