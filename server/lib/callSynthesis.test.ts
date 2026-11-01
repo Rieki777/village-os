@@ -136,6 +136,28 @@ describe("synthesisUserContent: truncation sheds whole segments, measured as sen
     expectSealed(content, ["call.transcript"]);
   });
 
+  it("never cuts a character in half either: a clip that lands inside a surrogate pair backs off one", () => {
+    const smile = String.fromCodePoint(0x1f600); // two UTF-16 code units
+    const lone = (s: string) => {
+      for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        if (c >= 0xd800 && c <= 0xdbff && !(s.charCodeAt(i + 1) >= 0xdc00 && s.charCodeAt(i + 1) <= 0xdfff)) return true;
+        if (c >= 0xdc00 && c <= 0xdfff && !(s.charCodeAt(i - 1) >= 0xd800 && s.charCodeAt(i - 1) <= 0xdbff)) return true;
+      }
+      return false;
+    };
+    const content = synthesisUserContent({
+      title: "t".repeat(499) + smile,
+      chapterMarks: [{ startMs: 0 }],
+      segments: [seg(0, "a".repeat(399) + smile), seg(1000, "b".repeat(398) + smile + "c")],
+    });
+    const data = JSON.parse(dataOf(content));
+    expect(lone(data.title), "a half character in the title").toBe(false);
+    expect(data.title).toBe("t".repeat(499));
+    expect(data.segments.map((s: any) => lone(s.text)), "a half character in a segment").toEqual([false, false]);
+    expect(data.segments.map((s: any) => s.text)).toEqual(["a".repeat(399), "b".repeat(398) + smile]);
+  });
+
   it("sends no more chapter marks than segments, so a long day's marks cannot crowd out its speech", () => {
     // Mark k always starts at segment k or later, so a mark past the 400th
     // points at speech that is never sent.

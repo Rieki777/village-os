@@ -47,6 +47,10 @@ describe("companionSystemPrompt: every name is fenced", () => {
     const personal = companionSystemPrompt({ guideName: "Maia", villageName: "Riverbend", companionName: "Pip", roleName: null, never: NEVER });
     expect(personal).toContain("You are the member's own personal companion. Help them with their week.");
     expect(personal).not.toContain("whoever holds it");
+    // A role with no name on the roster reads as personal, as it did before.
+    const unnamed = companionSystemPrompt({ guideName: "Maia", villageName: "Riverbend", companionName: "Pip", roleName: "", never: NEVER });
+    expect(unnamed).toContain("You are the member's own personal companion.");
+    expect(JSON.parse(fences(unnamed)[0].payload).role).toBeNull();
     for (const p of [role, personal]) {
       expect(p).toContain(NEVER);
       expect(p).toContain("- You never act. When the member wants something done, draft it, and they say yes in their profile.");

@@ -124,6 +124,17 @@ const TITLE_CHARS = 500;
 const TRANSCRIPT_FENCE = "call.transcript";
 const CANDIDATES_FENCE = "call.role_candidates";
 
+/**
+ * The first `n` UTF-16 units of `s`, one fewer when the cut would split a
+ * surrogate pair. A plain `.slice` there leaves half a character, which JSON
+ * keeps as a lone `\ud83d` and the model reads as noise.
+ */
+function clip(s: string, n: number): string {
+  if (s.length <= n) return s;
+  const last = s.charCodeAt(n - 1);
+  return s.slice(0, last >= 0xd800 && last <= 0xdbff ? n - 1 : n);
+}
+
 /** The prefix of `items` whose JSON array body (items and commas, no brackets) fits in `room` escaped characters. */
 function prefixThatFits<T>(items: readonly T[], room: number): { kept: T[]; used: number } {
   const kept: T[] = [];
@@ -155,13 +166,13 @@ function prefixThatFits<T>(items: readonly T[], room: number): { kept: T[]; used
  * summed here are exactly the size of the payload the fence writes.
  */
 export function synthesisUserContent(input: SynthesisTranscriptInput): string {
-  const title = String(input.title ?? "").slice(0, TITLE_CHARS);
+  const title = clip(String(input.title ?? ""), TITLE_CHARS);
   // Mark k starts at segment k or later, so a mark past the last segment that
   // can be sent points at speech that never is.
   const marks = input.chapterMarks.slice(0, SYNTHESIS_MAX_SEGMENTS).map((m) => ({ startMs: m.startMs }));
   const segments = input.segments
     .slice(0, SYNTHESIS_MAX_SEGMENTS)
-    .map((s) => ({ startMs: s.startMs, text: String(s.text ?? "").slice(0, SYNTHESIS_SEGMENT_CHARS) }));
+    .map((s) => ({ startMs: s.startMs, text: clip(String(s.text ?? ""), SYNTHESIS_SEGMENT_CHARS) }));
 
   const fenceText = fenceForPrompt(TRANSCRIPT_FENCE, null).length - "null".length;
   let room = SYNTHESIS_USER_TURN_MAX_CHARS - fenceText - promptJson({ title, chapterMarks: [], segments: [] }).length;

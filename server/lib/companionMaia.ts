@@ -112,12 +112,13 @@ export function companionSystemPrompt(input: {
   roleName: string | null;
   never: string;
 }): string {
-  const role = input.roleName !== null;
+  // Truthiness, as it always was: a role with no name on the roster reads as personal.
+  const role = Boolean(input.roleName);
   const identity = {
     companion: input.companionName,
     village: input.villageName,
     guide: input.guideName,
-    role: input.roleName,
+    role: role ? input.roleName : null,
   };
   const speaksFor = role
     ? "You speak for the role named there, whoever holds it. Help the member do that role's work."
