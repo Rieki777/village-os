@@ -183,7 +183,7 @@ if (offences.length > 0) {
   console.error("");
   console.error("  CI applies migrations to a mysql:8 service container, which accepts far more than the");
   console.error("  production engine does, so a green compat run says nothing about this. 0298 passed every");
-  console.error("  gate in the repository and took Amora down for 15.5 minutes.");
+  console.error("  gate in the repository and took a live village down for 15.5 minutes.");
   console.error("  Either compute the value in TypeScript and run it at boot (server/lib/seasonGoalIds.ts is");
   console.error("  the worked example), or add the name to PORTABLE in this script with the evidence that");
   console.error("  production has already run it.");

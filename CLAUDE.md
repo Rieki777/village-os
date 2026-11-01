@@ -432,6 +432,17 @@ check with `--village`.
   (`splitStatements`, `server/db/migrate.ts`). A `--` comment ending in `;` once cut a
   statement in half (migration 0015). Comment lines are now stripped first, but keep `--`
   comments on their own lines and never end one with `;`.
+- **A migration may only call a SQL function that has already run on production.** CI applies
+  migrations to a `mysql:8` service container, which accepts far more than the production engine
+  does, so a green `check-migration-compat` run says nothing about portability. 0298 computed a
+  digest with `SHA1()`, passed every gate in this repository, and the deploy failed after 15.5
+  minutes on `FUNCTION railway.SHA1 does not exist (statement 7 of 8)` — six of eight statements
+  applied and no bootable version. `node scripts/check-migration-sql.mjs` now holds an
+  ALLOW-LIST of the 52 names a migration has actually run on production and fails closed on a new
+  one; a deny-list could not have caught SHA1, because nobody had written SHA1 down. If you need
+  a function nobody has run there, compute it in TypeScript at boot instead —
+  `server/lib/seasonGoalIds.ts` is the worked example, and it is idempotent by its own `WHERE`
+  rather than by the `runOnce` ledger.
 - **A shipped migration file is never edited.** A part-applied file resumes at its
   recorded statement offset (`_migrations_partial`) instead of replaying DDL, so editing
   one that has run anywhere resumes at the wrong place. Worse, `_migrations_applied` keys on
