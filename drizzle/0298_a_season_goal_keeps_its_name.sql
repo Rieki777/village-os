@@ -42,6 +42,36 @@ ALTER TABLE `live_session_entries` ADD COLUMN `serves_goal_id` varchar(40) NULL;
 
 ALTER TABLE `live_session_entries` ADD COLUMN `serves_goal` varchar(200) NULL;
 
-UPDATE `live_session_priorities` SET `serves_goal_id` = CONCAT('g', LEFT(LOWER(SHA1(TRIM(`serves_goal`))), 11)) WHERE `serves_goal_id` IS NULL AND `serves_goal` IS NOT NULL AND `serves_goal` <> '';
-
-UPDATE `live_session_shares` SET `serves_goal_id` = CONCAT('g', LEFT(LOWER(SHA1(TRIM(`serves_goal`))), 11)) WHERE `serves_goal_id` IS NULL AND `serves_goal` IS NOT NULL AND `serves_goal` <> '';
+-- THE BACKFILL IS NOT HERE ANY MORE, AND THAT IS WHAT THIS FILE IS ABOUT.
+--
+-- Statements 7 and 8 of this file used to compute the derived id in SQL:
+--
+--     CONCAT('g', LEFT(LOWER(SHA1(TRIM(`serves_goal`))), 11))
+--
+-- On 2026-11-01 that took Amora down. The deploy carrying this file failed
+-- after 15.5 minutes and the Railway log says why, exactly:
+--
+--     FAIL: 0298_a_season_goal_keeps_its_name.sql
+--       -> FUNCTION railway.SHA1 does not exist (statement 7 of 8)
+--
+-- CI runs migrations against mysql:8, which has SHA1 built in, so every gate
+-- in the repository was green on a file the production database refuses. SHA1
+-- is the ONLY function name in all 214 migrations that had never run on
+-- production before this one; the other 52 are portable by proof, having each
+-- already executed there. scripts/check-migration-sql.mjs now holds that list
+-- and refuses a new name, so the next unportable function is a red CI run
+-- rather than a failed deploy.
+--
+-- SO THE SIX STATEMENTS ABOVE ARE BYTE IDENTICAL TO WHAT RAN, and the backfill
+-- moved to TypeScript: `backfillSeasonGoalIds` (server/lib/seasonGoalIds.ts),
+-- run once at boot, computing the same id through `goalIdFor` and idempotent,
+-- so it is safe on an instance that never saw the old statements at all.
+--
+-- WHY SHRINKING THIS FILE IS SAFE RATHER THAN A SECOND MIGRATION. Production
+-- holds this filename in `_migrations_partial` with `statements_done` = 6 and
+-- NOT in `_migrations_applied`. server/db/migrate.ts resumes at
+-- `Math.min(progress, parts.length)`, which is now min(6, 6) = 6: the loop
+-- body never runs, nothing is replayed, the file is recorded applied and its
+-- partial row is deleted. An instance that never ran it gets six ALTERs. The
+-- checksum tamper guard compares APPLIED rows only, and this file is not one.
+-- server/db/migrateShrink.test.ts proves both paths on a real database.

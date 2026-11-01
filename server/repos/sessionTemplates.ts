@@ -279,6 +279,44 @@ export async function writeShareServes(q: Queryable, id: number, goal: { id: str
 }
 
 /**
+ * THE TABLES 0298's BACKFILL NAMES, and the only two it ever named. A season
+ * goal on `live_session_entries` is new in 0298, so no row there can carry
+ * words without an id; these two could, from every release before it.
+ */
+export const GOAL_LINK_TABLES = ["live_session_priorities", "live_session_shares"] as const;
+
+/**
+ * THE LINKS THAT NAME A GOAL BY ITS WORDS AND HAVE NO ID YET (0298).
+ *
+ * The WHERE is the one statements 7 and 8 of the migration carried, so this
+ * reads exactly the rows that backfill would have written. Distinct words,
+ * not rows: the id is a function of the words alone, so one UPDATE settles
+ * every row that shares them.
+ */
+export async function goalWordsWithoutIds(q: Queryable, table: string): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT DISTINCT \`serves_goal\` FROM \`${table}\` ` +
+      "WHERE `serves_goal_id` IS NULL AND `serves_goal` IS NOT NULL AND `serves_goal` <> ''",
+  );
+}
+
+/**
+ * Give every link with these exact words the id they derive. The WHERE keeps
+ * the same conditions, so a row that gained an id since the SELECT (a member
+ * saving the season, a second boot) is left alone: that is what makes the
+ * backfill safe to run again.
+ */
+export async function writeGoalIdForWords(q: Queryable, table: string, words: string, goalId: string): Promise<number> {
+  const [r] = await q.query(
+    `UPDATE \`${table}\` SET \`serves_goal_id\` = ? ` +
+      "WHERE `serves_goal_id` IS NULL AND `serves_goal` = ? AND `serves_goal` <> ''",
+    [goalId, words],
+  );
+  return Number((r as { affectedRows?: number }).affectedRows ?? 0);
+}
+
+/**
  * A goal reworded on the season: every link to it keeps its words in step, so
  * a link to a goal later removed says what the goal was last called (0298).
  * Bounded by the goal's id; a link already saying the words moves nothing.

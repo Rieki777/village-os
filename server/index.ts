@@ -1,4 +1,5 @@
 import { anonymizeMember, backfillFinishedErasures, erasureBackfillJob } from "./lib/erasure";
+import { backfillSeasonGoalIds, SEASON_GOAL_ID_BACKFILL } from "./lib/seasonGoalIds";
 import { FORMER_MEMBER_HOLD, resolveExit } from "./lib/exitResolve";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
@@ -26430,6 +26431,16 @@ ${inner}
   startScheduler(getPool());
   server.listen(port, "0.0.0.0", () => {
     console.log(`[startup] Server listening on 0.0.0.0:${port}`);
+  });
+  // 0298's backfill, AFTER the port is bound and never before it. The deploy
+  // that carried 0298's SQL version never answered its healthcheck, so the one
+  // thing this must not do is stand between boot and listen: a link without an
+  // id reads exactly as it did before 0298, which is to say it is simply not
+  // linked yet. runOnce logs and continues on failure, and the backfill's own
+  // WHERE makes a repeat harmless, so neither half can wedge a boot.
+  void runOnce(SEASON_GOAL_ID_BACKFILL, async () => {
+    const { words, rows } = await backfillSeasonGoalIds(getPool());
+    console.log(`[startup] season goal ids: ${rows} link(s) across ${words} goal text(s)`);
   });
   /*
    * A DEPLOY IS NOT A CRASH, and until now this process could not tell the
