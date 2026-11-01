@@ -1,6 +1,6 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { useVillageLinks } from "@/lib/gameApi";
 import { useHypha } from "@/modules/ModuleProvider";
 import { usePageContent } from "@/hooks/usePageContent";
@@ -94,29 +94,29 @@ export default function HowWeCreate() {
     <Layout>
       <section className="py-24 bg-background">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-16"
           >
-            <motion.div
+            <m.div
               className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6"
               animate={{ scale: [1, 1.1, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
               <Sparkles className="w-8 h-8 text-primary" />
-            </motion.div>
+            </m.div>
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4 break-words">
               {hero.fields.headline}
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               <Emphasized text={hero.fields.intro} />
             </p>
-          </motion.div>
+          </m.div>
 
           {/* Core Principles */}
           {!principles.hidden && principles.lists.items.length > 0 && (
-            <motion.div
+            <m.div
               className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-20"
               variants={containerVariants}
               initial="hidden"
@@ -126,7 +126,7 @@ export default function HowWeCreate() {
               {principles.lists.items.map((principle, i) => {
                 const Icon = PRINCIPLE_ICONS[i % PRINCIPLE_ICONS.length];
                 return (
-                  <motion.div
+                  <m.div
                     key={`${i}-${principle.title}`}
                     variants={itemVariants}
                     whileHover={{ scale: 1.02, y: -4 }}
@@ -141,22 +141,22 @@ export default function HowWeCreate() {
                     <p className="text-muted-foreground leading-relaxed">
                       <Emphasized text={principle.description} />
                     </p>
-                  </motion.div>
+                  </m.div>
                 );
               })}
-            </motion.div>
+            </m.div>
           )}
 
           {/* Our tokens: named, with a link to the rules the village set. */}
           {!tokens.hidden && (
-            <motion.div
+            <m.div
               className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-3xl p-8 md:p-12 mb-20"
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
             >
               <div className={`text-center${tokenCards.length ? " mb-12" : ""}`}>
-                <motion.div
+                <m.div
                   animate={{
                     scale: [1, 1.2, 1],
                     rotate: [0, 5, -5, 0],
@@ -164,7 +164,7 @@ export default function HowWeCreate() {
                   transition={{ duration: 2, repeat: Infinity }}
                 >
                   <Heart className="w-12 h-12 text-primary mx-auto mb-4" />
-                </motion.div>
+                </m.div>
                 <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
                   {tokens.fields.heading}
                 </h2>
@@ -185,7 +185,7 @@ export default function HowWeCreate() {
               {tokenCards.length > 0 && (
                 <div className={`grid gap-6 mx-auto ${TOKEN_GRID[Math.min(tokenCards.length, 3)]}`}>
                   {tokenCards.map((item, index) => (
-                    <motion.div
+                    <m.div
                       key={`${index}-${item.title}`}
                       initial={{ opacity: 0, y: 20 }}
                       whileInView={{ opacity: 1, y: 0 }}
@@ -194,29 +194,29 @@ export default function HowWeCreate() {
                       whileHover={{ y: -8, scale: 1.02 }}
                       className="bg-card p-6 rounded-xl text-center shadow-sm hover:shadow-md transition-all min-w-0"
                     >
-                      <motion.div
+                      <m.div
                         className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4"
                         whileHover={{ rotate: 360 }}
                         transition={{ duration: 0.5 }}
                       >
                         <span className="text-2xl">{TOKEN_CARD_ICONS[index % TOKEN_CARD_ICONS.length]}</span>
-                      </motion.div>
+                      </m.div>
                       <h3 className="font-display text-lg font-semibold text-foreground mb-2 break-words">
                         {item.title}
                       </h3>
                       <p className="text-sm text-muted-foreground">
                         <Emphasized text={item.body} />
                       </p>
-                    </motion.div>
+                    </m.div>
                   ))}
                 </div>
               )}
-            </motion.div>
+            </m.div>
           )}
 
           {/* Governance Structure */}
           {!governance.hidden && (
-            <motion.div
+            <m.div
               className="bg-sage/5 rounded-3xl p-8 md:p-12 mb-20 border border-sage/20"
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
@@ -235,7 +235,7 @@ export default function HowWeCreate() {
               {governance.lists.phases.length > 0 && (
                 <div className="grid md:grid-cols-2 gap-6 mb-8">
                   {governance.lists.phases.map((phase, i) => (
-                    <motion.div
+                    <m.div
                       key={`${i}-${phase.title}`}
                       initial={{ opacity: 0, x: i % 2 ? 20 : -20 }}
                       whileInView={{ opacity: 1, x: 0 }}
@@ -250,13 +250,13 @@ export default function HowWeCreate() {
                           </li>
                         ))}
                       </ul>
-                    </motion.div>
+                    </m.div>
                   ))}
                 </div>
               )}
 
               {governance.fields.buttonLabel && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
@@ -268,15 +268,15 @@ export default function HowWeCreate() {
                       <ArrowRight className="w-4 h-4" />
                     </a>
                   </Link>
-                </motion.div>
+                </m.div>
               )}
-            </motion.div>
+            </m.div>
           )}
 
           {/* Flexible Governance with Hypha */}
           {showHypha && (
             <div className="max-w-4xl mx-auto mb-20">
-              <motion.div
+              <m.div
                 className="text-center mb-12"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -289,10 +289,10 @@ export default function HowWeCreate() {
                 <p className="text-muted-foreground max-w-2xl mx-auto">
                   <Emphasized text={hyphaSection.fields.intro} />
                 </p>
-              </motion.div>
+              </m.div>
 
               {hyphaSection.lists.methods.length > 0 && (
-                <motion.div
+                <m.div
                   className="grid sm:grid-cols-2 gap-6"
                   variants={containerVariants}
                   initial="hidden"
@@ -302,7 +302,7 @@ export default function HowWeCreate() {
                   {hyphaSection.lists.methods.map((option, i) => {
                     const Icon = METHOD_ICONS[i % METHOD_ICONS.length];
                     return (
-                      <motion.div
+                      <m.div
                         key={`${i}-${option.name}`}
                         variants={itemVariants}
                         whileHover={{ scale: 1.02 }}
@@ -322,13 +322,13 @@ export default function HowWeCreate() {
                             {option.best && <p className="text-xs text-sage font-medium">Best for: {option.best}</p>}
                           </div>
                         </div>
-                      </motion.div>
+                      </m.div>
                     );
                   })}
-                </motion.div>
+                </m.div>
               )}
 
-              <motion.div
+              <m.div
                 className="mt-8 p-6 bg-sage/5 rounded-xl border border-sage/20"
                 initial={{ opacity: 0 }}
                 whileInView={{ opacity: 1 }}
@@ -342,7 +342,7 @@ export default function HowWeCreate() {
                 <p className="text-muted-foreground text-sm leading-relaxed">
                   <Emphasized text={hyphaSection.fields.boxBody} />
                 </p>
-              </motion.div>
+              </m.div>
             </div>
           )}
           {!hyphaSection.hidden && <HyphaAdminNote />}
@@ -350,30 +350,30 @@ export default function HowWeCreate() {
           {/* Seasonal Rhythm */}
           {!seasons.hidden && (
             <div className="max-w-3xl mx-auto mb-20">
-              <motion.div
+              <m.div
                 className="text-center mb-8"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
               >
-                <motion.div
+                <m.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
                 >
                   <Repeat className="w-12 h-12 text-teal-light mx-auto mb-4" />
-                </motion.div>
+                </m.div>
                 <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
                   {seasons.fields.heading}
                 </h2>
                 <p className="text-muted-foreground max-w-xl mx-auto">
                   <Emphasized text={seasons.fields.intro} />
                 </p>
-              </motion.div>
+              </m.div>
               <div className="grid sm:grid-cols-2 gap-6">
                 {seasons.lists.seasons.map((item, index) => {
                   const look = SEASON_LOOKS[index % SEASON_LOOKS.length];
                   return (
-                    <motion.div
+                    <m.div
                       key={`${index}-${item.name}`}
                       initial={{ opacity: 0, y: 20 }}
                       whileInView={{ opacity: 1, y: 0 }}
@@ -392,12 +392,12 @@ export default function HowWeCreate() {
                       <p className="text-sm text-muted-foreground">
                         <Emphasized text={item.description} />
                       </p>
-                    </motion.div>
+                    </m.div>
                   );
                 })}
               </div>
               {seasons.fields.note && (
-                <motion.div
+                <m.div
                   className="mt-8 p-5 bg-white/60 rounded-xl text-center border border-border/40"
                   initial={{ opacity: 0 }}
                   whileInView={{ opacity: 1 }}
@@ -407,14 +407,14 @@ export default function HowWeCreate() {
                   <p className="text-sm text-muted-foreground">
                     <Emphasized text={seasons.fields.note} />
                   </p>
-                </motion.div>
+                </m.div>
               )}
             </div>
           )}
 
           {/* CTA */}
           {!cta.hidden && (
-            <motion.div
+            <m.div
               className="max-w-3xl mx-auto text-center bg-cream-dark p-8 rounded-2xl"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -446,7 +446,7 @@ export default function HowWeCreate() {
                   </a>
                 )}
               </div>
-            </motion.div>
+            </m.div>
           )}
         </div>
       </section>

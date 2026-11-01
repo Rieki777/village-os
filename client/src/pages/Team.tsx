@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Users, ArrowRight, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 import { Image } from "@/components/Image";
@@ -136,7 +136,7 @@ export default function Team() {
     <Layout>
       <section className="py-24 bg-background">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-16"
@@ -155,11 +155,11 @@ export default function Team() {
             <p className={`text-xl text-muted-foreground max-w-2xl mx-auto break-words${page ? "" : " invisible"}`}>
               <Emphasized text={page?.header.fields.intro || "\u00a0"} />
             </p>
-          </motion.div>
+          </m.div>
 
           {/* Leadership */}
           <div className="mb-20">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -172,7 +172,7 @@ export default function Team() {
                 The full circle of roles, filled and open, lives on the{" "}
                 <Link href="/roles" className="text-sage font-medium hover:underline">Roles &amp; Circles page</Link>.
               </p>
-            </motion.div>
+            </m.div>
 
             {/* Members-only people: say so, with the counts that stay public.
                 Without this the grid below simply renders short and a visitor
@@ -194,7 +194,7 @@ export default function Team() {
 
             <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
               {(team ?? []).map((member, index) => (
-                <motion.div
+                <m.div
                   key={member.name}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -231,14 +231,14 @@ export default function Team() {
                       </p>
                     )}
                   </div>
-                </motion.div>
+                </m.div>
               ))}
             </div>
 
             {/* Said only while a role really is open: counted from /api/org,
                 whose seat counts every reader gets. */}
             {page && seatCounts.open > 0 && (
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -252,13 +252,13 @@ export default function Team() {
               <Link href="/roles" className="inline-flex items-center gap-2 text-sage font-semibold hover:underline">
                 {page.leadership.fields.openLink} <ArrowRight className="w-4 h-4" />
               </Link>
-            </motion.div>
+            </m.div>
             )}
           </div>
 
           {/* Advisory Council: a village with none hides it in Admin, Pages, Team. */}
           {page && !page.advisory.hidden && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
@@ -275,7 +275,7 @@ export default function Team() {
             {page.advisory.lists.items.length > 0 && (
             <div className="grid md:grid-cols-2 gap-4 max-w-4xl mx-auto mb-8">
               {page.advisory.lists.items.map((item, index) => (
-                <motion.div
+                <m.div
                   key={`${index}-${item.text}`}
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
@@ -285,7 +285,7 @@ export default function Team() {
                 >
                   <span className="text-amber font-bold text-lg flex-shrink-0">✦</span>
                   <p className="text-muted-foreground min-w-0 break-words">{item.text}</p>
-                </motion.div>
+                </m.div>
               ))}
             </div>
             )}
@@ -294,12 +294,12 @@ export default function Team() {
               <Emphasized text={page.advisory.fields.terms} />
             </p>
             )}
-          </motion.div>
+          </m.div>
           )}
 
           {/* Board: a village with none hides it in Admin, Pages, Team. */}
           {page && !page.board.hidden && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
@@ -327,12 +327,12 @@ export default function Team() {
               </div>
               )}
             </div>
-          </motion.div>
+          </m.div>
           )}
 
           {/* CTA */}
           {page && !page.cta.hidden && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -363,7 +363,7 @@ export default function Team() {
                 </a>
               )}
             </div>
-          </motion.div>
+          </m.div>
           )}
         </div>
       </section>

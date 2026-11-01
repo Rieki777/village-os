@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { Heart, CheckCircle2, ArrowRight, Users, Home, TrendingUp, Sparkles, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
@@ -333,18 +333,18 @@ export default function LoveLetter() {
       <Layout>
         <section className="py-24 bg-background">
           <div className="container max-w-2xl mx-auto">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className="text-center"
             >
-              <motion.div
+              <m.div
                 className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-8"
                 animate={{ scale: [1, 1.1, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
                 <Heart className="w-12 h-12 text-primary" fill="currentColor" />
-              </motion.div>
+              </m.div>
               <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-6">
                 Thank you{firstName ? `, ${firstName}` : ""}.
               </h1>
@@ -391,7 +391,7 @@ export default function LoveLetter() {
                 Return Home
                 <ArrowRight className="w-5 h-5" />
               </a>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       </Layout>
@@ -404,7 +404,7 @@ export default function LoveLetter() {
         <div className="container max-w-3xl mx-auto">
 
           {/* Header */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-12"
@@ -419,10 +419,10 @@ export default function LoveLetter() {
               {hero?.lede}
               {user ? ` ${LETTER_WORDS.readReflect}` : " Read. Reflect. Sign."}
             </p>
-          </motion.div>
+          </m.div>
 
           {/* The Letter */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
@@ -462,11 +462,11 @@ export default function LoveLetter() {
               {parts.closing}<br />
               <span className="font-display text-xl not-italic">{parts.signature}</span>
             </p>
-          </motion.div>
+          </m.div>
 
           {/* Membership Form. Drawn once this page's words have arrived. */}
           {page && words && contribution && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
@@ -660,7 +660,7 @@ export default function LoveLetter() {
               {/* Error */}
               <AnimatePresence>
                 {error && (
-                  <motion.p
+                  <m.p
                     role="alert"
                     initial={{ opacity: 0, y: -8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -668,7 +668,7 @@ export default function LoveLetter() {
                     className="text-sm text-destructive bg-destructive/10 px-4 py-3 rounded-xl"
                   >
                     {error}
-                  </motion.p>
+                  </m.p>
                 )}
               </AnimatePresence>
 
@@ -680,7 +680,7 @@ export default function LoveLetter() {
               >
                 {submitting ? (
                   <>
-                    <motion.div
+                    <m.div
                       animate={{ rotate: 360 }}
                       transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                       className="w-5 h-5 flex-shrink-0 border-2 border-white/30 border-t-white rounded-full"
@@ -703,7 +703,7 @@ export default function LoveLetter() {
 
               <p className="text-xs text-center text-muted-foreground">{footerNote}</p>
             </form>
-          </motion.div>
+          </m.div>
           )}
         </div>
       </section>

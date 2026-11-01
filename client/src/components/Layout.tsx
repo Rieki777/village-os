@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { TreePine, Menu, X, User, LogOut, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -303,7 +303,7 @@ export default function Layout({ children }: LayoutProps) {
                   </button>
                   <AnimatePresence>
                     {accountOpen && (
-                      <motion.div
+                      <m.div
                         id="account-menu"
                         initial={{ opacity: 0, y: -6 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -335,7 +335,7 @@ export default function Layout({ children }: LayoutProps) {
                           <LogOut className="w-4 h-4" />
                           Sign out everywhere
                         </button>
-                      </motion.div>
+                      </m.div>
                     )}
                   </AnimatePresence>
                 </div>
@@ -380,7 +380,7 @@ export default function Layout({ children }: LayoutProps) {
         {/* Mobile Menu */}
         <AnimatePresence>
           {mobileMenuOpen && (
-            <motion.div
+            <m.div
               id="mobile-menu"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -413,7 +413,7 @@ export default function Layout({ children }: LayoutProps) {
                       </button>
                       <AnimatePresence>
                         {openMobileGroup === entry.label && (
-                          <motion.div
+                          <m.div
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
@@ -430,7 +430,7 @@ export default function Layout({ children }: LayoutProps) {
                                 {lifecycleOf(item.module) === "preview" ? " (preview)" : ""}
                               </Link>
                             ))}
-                          </motion.div>
+                          </m.div>
                         )}
                       </AnimatePresence>
                     </div>
@@ -495,7 +495,7 @@ export default function Layout({ children }: LayoutProps) {
                   </a>
                 )}
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </nav>
@@ -896,7 +896,7 @@ function NavDropdown({
       </button>
       <AnimatePresence>
         {open && (
-          <motion.div
+          <m.div
             id={menuId}
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -929,7 +929,7 @@ function NavDropdown({
                 </span>
               </Link>
             ))}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

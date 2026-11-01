@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { altOr, statedFacts, useBrandImages, useVillageLinks, useVillageSettings } from "@/lib/gameApi";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { 
   Map, 
   ArrowRight, 
@@ -159,7 +159,7 @@ export default function MasterPlan() {
               aria-hidden="true"
               className="absolute -inset-x-5 -inset-y-6 sm:-inset-x-8 sm:-inset-y-10 rounded-3xl bg-teal-band"
             />
-            <motion.div
+            <m.div
               className="relative"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -171,7 +171,7 @@ export default function MasterPlan() {
               <p className={`text-xl text-white leading-relaxed break-words${page ? "" : " invisible"}`}>
                 <Emphasized text={page?.hero.fields.subline || "\u00a0"} />
               </p>
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>
@@ -187,7 +187,7 @@ export default function MasterPlan() {
               column at 320px wide and pushed the whole page sideways. */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8">
             {stats.map((stat, index) => (
-              <motion.div
+              <m.div
                 key={stat.key}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -200,7 +200,7 @@ export default function MasterPlan() {
                   {stat.value}
                 </div>
                 <div className="text-sm text-white break-words">{stat.label}</div>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
@@ -225,7 +225,7 @@ export default function MasterPlan() {
             {vision.lists.zones.map((zone, index) => {
               const Icon = ZONE_ICONS[index % ZONE_ICONS.length];
               return (
-              <motion.div
+              <m.div
                 key={`${index}-${zone.title}`}
                 initial={{ opacity: 0, x: index % 2 === 0 ? -20 : 20 }}
                 whileInView={{ opacity: 1, x: 0 }}
@@ -255,7 +255,7 @@ export default function MasterPlan() {
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </m.div>
               );
             })}
           </div>
@@ -330,7 +330,7 @@ export default function MasterPlan() {
           <div className="max-w-3xl mx-auto">
             <div className="space-y-4">
               {phases.lists.phases.map((item, index) => (
-                <motion.div
+                <m.div
                   key={`${index}-${item.phase}`}
                   initial={{ opacity: 0, y: 10 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -347,7 +347,7 @@ export default function MasterPlan() {
                     {item.status}
                   </span>
                   )}
-                </motion.div>
+                </m.div>
               ))}
             </div>
           </div>

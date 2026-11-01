@@ -10,7 +10,7 @@ import { useJourneyContent, useJourneyProgress } from "@/hooks/useJourneyContent
 import { buttonAction, percent, stepPoints, type TargetContext } from "@/lib/journeyPage";
 import { INVESTOR_FIGURE_IDS, INVESTOR_JOURNEY, JOURNEY_LEGACY_STEP_IDS } from "@shared/pageContent/journeys";
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import {
   TrendingUp,
   ArrowRight,
@@ -219,7 +219,7 @@ export default function InvestorJourney() {
               a broken image too. No picture is the honest state, and the gradient
               below carries the section on its own. */}
           {brand.investorHero ? (
-            <motion.img
+            <m.img
               src={brand.investorHero}
               alt={altOr(brand.investorHeroAlt, "The land and the buildings on it")}
               className="w-full h-full object-cover"
@@ -242,27 +242,27 @@ export default function InvestorJourney() {
               aria-hidden="true"
               className="absolute -inset-x-5 -inset-y-6 sm:-inset-x-8 sm:-inset-y-10 rounded-3xl bg-background"
             />
-            <motion.div
+            <m.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               className="relative flex items-center gap-3 mb-6"
             >
-              <motion.div
+              <m.div
                 className="w-12 h-12 shrink-0 rounded-xl bg-gold flex items-center justify-center"
                 animate={{ rotate: [0, 5, -5, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
                 <TrendingUp className="w-6 h-6 text-white" />
-              </motion.div>
+              </m.div>
               {/* amber-ink, index.css's amber for text on light grounds: gold is 4.07:1 on the band. */}
               <span className={`text-amber-ink font-medium tracking-wide uppercase text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
-            </motion.div>
+            </m.div>
 
             {/* 36px under 360px wide: at 48px "Regeneration" is one unbreakable word
                 that inked to x=336 at 320px, past the 304px column and the section's
                 overflow-hidden edge, so its end was cut off. From 360px up, unchanged.
                 break-words is for a village's own longer word at the field's limit. */}
-            <motion.h1
+            <m.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
@@ -273,18 +273,18 @@ export default function InvestorJourney() {
                 phrase={hero?.highlight ?? ""}
                 render={(phrase) => <span className="text-teal-deep italic">{phrase}</span>}
               />
-            </motion.h1>
+            </m.h1>
 
-            <motion.p
+            <m.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
               className={`relative text-xl text-muted-foreground leading-relaxed mb-8 break-words${waiting}`}
             >
               <Emphasized text={hero?.intro ?? ""} />
-            </motion.p>
+            </m.p>
 
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
@@ -310,7 +310,7 @@ export default function InvestorJourney() {
                   {heroSecondary.label}
                 </JourneyLink>
               )}
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>
@@ -319,7 +319,7 @@ export default function InvestorJourney() {
       {figures && !figures.hidden && (
       <section className="py-20 bg-background border-t border-b border-muted">
         <div className="container">
-          <motion.div
+          <m.div
             className="text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -340,12 +340,12 @@ export default function InvestorJourney() {
                 {figures.fields.disclaimer}
               </p>
             ) : null}
-          </motion.div>
+          </m.div>
 
           {loaded && financialMetrics.length ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {financialMetrics.map((metric, index) => (
-              <motion.div
+              <m.div
                 key={metric.key}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -371,7 +371,7 @@ export default function InvestorJourney() {
                 <p className="text-sm text-muted-foreground leading-relaxed break-words">
                   {metric.detail}
                 </p>
-              </motion.div>
+              </m.div>
             ))}
           </div>
           ) : null}
@@ -385,7 +385,7 @@ export default function InvestorJourney() {
       {personas && !personas.hidden && (
       <section className="py-20 bg-cream">
         <div className="container">
-          <motion.div
+          <m.div
             className="text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -397,13 +397,13 @@ export default function InvestorJourney() {
             <p className="text-muted-foreground max-w-2xl mx-auto">
               <Emphasized text={personas.fields.intro} />
             </p>
-          </motion.div>
+          </m.div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {personas.lists.items.map((persona, index) => {
               const look = PERSONA_LOOKS[index % PERSONA_LOOKS.length];
               return (
-              <motion.div
+              <m.div
                 key={`${index}-${persona.title}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -421,7 +421,7 @@ export default function InvestorJourney() {
                 <p className="text-white leading-relaxed break-words">
                   {persona.subtitle}
                 </p>
-              </motion.div>
+              </m.div>
               );
             })}
           </div>
@@ -436,7 +436,7 @@ export default function InvestorJourney() {
       <section className="py-20 bg-background">
         <div className="container">
           <div className="max-w-3xl mx-auto">
-            <motion.div
+            <m.div
               className="text-center mb-8"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -451,7 +451,7 @@ export default function InvestorJourney() {
 
               {/* Progress Bar */}
               <div className="relative h-3 bg-muted rounded-full overflow-hidden mb-2">
-                <motion.div
+                <m.div
                   className="absolute inset-y-0 left-0 bg-gradient-to-r from-coral to-gold rounded-full"
                   initial={{ width: 0 }}
                   animate={{ width: `${progress.progress}%` }}
@@ -461,7 +461,7 @@ export default function InvestorJourney() {
               <p className="text-sm text-muted-foreground">
                 {progress.doneCount} of {progress.total} steps completed
               </p>
-            </motion.div>
+            </m.div>
 
             <div className="space-y-4">
               {steps.map((step, index) => {
@@ -471,7 +471,7 @@ export default function InvestorJourney() {
                 const action = buttonAction(step.actionLabel, step.actionTarget, targets);
 
                 return (
-                  <motion.div
+                  <m.div
                     key={`${index}-${step.title}`}
                     initial={{ opacity: 0, x: -20 }}
                     whileInView={{ opacity: 1, x: 0 }}
@@ -503,7 +503,7 @@ export default function InvestorJourney() {
                           }}
                           className="flex-shrink-0 mt-1"
                         >
-                          <motion.div
+                          <m.div
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
                           >
@@ -512,7 +512,7 @@ export default function InvestorJourney() {
                             ) : (
                               <Circle className="w-6 h-6 text-muted-foreground hover:text-teal-deep transition-colors" />
                             )}
-                          </motion.div>
+                          </m.div>
                         </button>
 
                         {/* Icon */}
@@ -535,13 +535,13 @@ export default function InvestorJourney() {
                             }`}>
                               {step.title}
                             </h3>
-                            <motion.div
+                            <m.div
                               className="shrink-0"
                               animate={{ rotate: isExpanded ? 180 : 0 }}
                               transition={{ duration: 0.2 }}
                             >
                               <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                            </motion.div>
+                            </m.div>
                           </div>
                           <p className="text-muted-foreground mt-1 break-words">
                             {step.description}
@@ -553,7 +553,7 @@ export default function InvestorJourney() {
                     {/* Expanded Details */}
                     <AnimatePresence>
                       {isExpanded && (
-                        <motion.div
+                        <m.div
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: "auto", opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
@@ -565,7 +565,7 @@ export default function InvestorJourney() {
                               <h4 className="font-medium text-foreground mb-3">What you'll accomplish:</h4>
                               <ul className="space-y-2">
                                 {stepPoints(step).map((detail, i) => (
-                                  <motion.li
+                                  <m.li
                                     key={i}
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
@@ -574,7 +574,7 @@ export default function InvestorJourney() {
                                   >
                                     <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-teal-deep" />
                                     <span className="min-w-0 break-words">{detail}</span>
-                                  </motion.li>
+                                  </m.li>
                                 ))}
                               </ul>
                             </div>
@@ -589,10 +589,10 @@ export default function InvestorJourney() {
                               </JourneyLink>
                             )}
                           </div>
-                        </motion.div>
+                        </m.div>
                       )}
                     </AnimatePresence>
-                  </motion.div>
+                  </m.div>
                 );
               })}
             </div>
@@ -605,7 +605,7 @@ export default function InvestorJourney() {
       {phases && !phases.hidden && (
       <section className="py-20 bg-teal-deep text-white">
         <div className="container">
-          <motion.div
+          <m.div
             className="text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -617,14 +617,14 @@ export default function InvestorJourney() {
             <p className="text-white max-w-2xl mx-auto">
               <Emphasized text={phases.fields.intro} />
             </p>
-          </motion.div>
+          </m.div>
 
           <div className="max-w-3xl mx-auto">
             <div className="space-y-4">
               {phases.lists.items.map((phase, index) => {
                 const filled = percent(phase.progress);
                 return (
-                <motion.div
+                <m.div
                   key={`${index}-${phase.name}`}
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
@@ -661,7 +661,7 @@ export default function InvestorJourney() {
                     aria-valuemax={100}
                     aria-valuenow={filled}
                   >
-                    <motion.div
+                    <m.div
                       className="h-full bg-gradient-to-r from-gold to-coral rounded-full"
                       initial={{ width: 0 }}
                       whileInView={{ width: `${filled}%` }}
@@ -669,7 +669,7 @@ export default function InvestorJourney() {
                       transition={{ duration: 1, delay: index * 0.2 }}
                     />
                   </div>
-                </motion.div>
+                </m.div>
                 );
               })}
             </div>
@@ -684,18 +684,18 @@ export default function InvestorJourney() {
       {closing && !closing.hidden && (
       <section className="py-20 bg-gradient-to-br from-gold/10 to-coral/10">
         <div className="container">
-          <motion.div
+          <m.div
             className="max-w-2xl mx-auto text-center"
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
           >
-            <motion.div
+            <m.div
               animate={{ y: [0, -10, 0] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
               <Sparkles className="w-12 h-12 text-teal-deep mx-auto mb-6" />
-            </motion.div>
+            </m.div>
             <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
               {closing.fields.heading}
             </h2>
@@ -720,7 +720,7 @@ export default function InvestorJourney() {
                 </JourneyLink>
               )}
             </div>
-          </motion.div>
+          </m.div>
         </div>
       </section>
       )}
@@ -728,14 +728,14 @@ export default function InvestorJourney() {
       {/* Success Message */}
       <AnimatePresence>
         {formSuccess && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             className="fixed top-4 right-4 bg-sage text-white px-6 py-3 rounded-full shadow-lg z-50"
           >
             {formSuccess}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 

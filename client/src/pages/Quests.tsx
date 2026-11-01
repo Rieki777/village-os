@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   ArrowRight,
   Calendar,
@@ -200,7 +200,7 @@ export default function Quests() {
       {/* Hero */}
       <section className="py-10 md:py-24 bg-gradient-to-b from-teal/10 to-background">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-6"
@@ -225,7 +225,7 @@ export default function Quests() {
               Real work, on real land, beside people becoming your people.
             </p>
 
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
@@ -437,7 +437,7 @@ export default function Quests() {
                   </div>
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {shown.map((quest, index) => (
-                      <motion.div
+                      <m.div
                         key={quest.id}
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
@@ -452,7 +452,7 @@ export default function Quests() {
                           stages={stages}
                           priority={ring === RING_ORDER[0] && index === 0}
                         />
-                      </motion.div>
+                      </m.div>
                     ))}
                   </div>
                   {hidden > 0 && (

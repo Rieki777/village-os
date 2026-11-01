@@ -3,7 +3,7 @@ import Layout from "@/components/Layout";
 import { useVillageLinks } from "@/lib/gameApi";
 import { homeChoices, type PublicHome } from "@/lib/housingForm";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { useVillageContent } from "@/hooks/useVillageContent";
 import { useVillageName } from "@/hooks/useVillageName";
 import { usePageContent } from "@/hooks/usePageContent";
@@ -178,7 +178,7 @@ export default function Housing() {
       <section className="py-24 bg-teal-band text-white">
         <div className="container">
           <div className="max-w-3xl">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
@@ -199,7 +199,7 @@ export default function Housing() {
               <p className={`text-xl text-white leading-relaxed break-words${hero ? "" : " invisible"}`}>
                 <Emphasized text={hero?.lede ?? "\u00a0"} />
               </p>
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>
@@ -213,7 +213,7 @@ export default function Housing() {
             {features.lists.items.map((feature, index) => {
               const Icon = featureIcon(feature.icon);
               return (
-              <motion.div
+              <m.div
                 key={`${index}-${feature.title}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -230,7 +230,7 @@ export default function Housing() {
                 <p className="text-sm text-muted-foreground break-words">
                   {feature.body}
                 </p>
-              </motion.div>
+              </m.div>
               );
             })}
           </div>
@@ -267,7 +267,7 @@ export default function Housing() {
 
             <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
               {choices.homes.map((home, index) => (
-                <motion.div
+                <m.div
                   key={home.homeType}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -318,7 +318,7 @@ export default function Housing() {
                       <ArrowRight className="w-4 h-4" />
                     </span>
                   </Link>
-                </motion.div>
+                </m.div>
               ))}
             </div>
           </div>

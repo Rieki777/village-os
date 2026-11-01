@@ -117,6 +117,23 @@ describe("the homepage headline", () => {
     expect(screen.getByRole("heading", { level: 1, hidden: true })).toHaveClass("invisible");
   });
 
+  it("paints the hero without waiting on the animation engine", async () => {
+    // The engine loads lazily (LazyMotion in App.tsx), so anything framer
+    // renders with `initial={{ opacity: 0 }}` stays invisible until that
+    // chunk arrives. The hero is the first thing a visitor reads: its
+    // entrance is CSS, which needs no script at all.
+    storedHome = { hero: { headline: "A valley that remembers", subline: "Come and see" } };
+    renderHome();
+
+    const h1 = await headline();
+    const subline = screen.getByText("Come and see").closest("p") as HTMLElement;
+    const actions = hero().querySelector('a[href="#choose-path"]')?.parentElement as HTMLElement;
+    for (const el of [h1, subline, actions]) {
+      expect(el.style.opacity, el.tagName).toBe("");
+      expect(el.className, el.tagName).toContain("hero-rise");
+    }
+  });
+
   it("carries no badge unless the village writes one", async () => {
     renderHome();
     await headline();

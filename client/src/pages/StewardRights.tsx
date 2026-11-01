@@ -1,6 +1,6 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { usePageContent } from "@/hooks/usePageContent";
 import { Emphasized } from "@/components/PageText";
 import { RIGHTS_STEWARD_PAGE } from "@shared/pageContent/rights";
@@ -62,7 +62,7 @@ export default function StewardRights() {
           <div className="absolute bottom-10 right-10 w-48 h-48 rounded-full bg-amber blur-3xl" />
         </div>
         <div className="container relative z-10 max-w-3xl">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex items-center gap-3 mb-6"
@@ -73,23 +73,23 @@ export default function StewardRights() {
             <span className={`min-w-0 break-words text-cream/80 text-sm font-medium uppercase tracking-wide${waiting}`}>
               {hero?.eyebrow || " "}
             </span>
-          </motion.div>
-          <motion.h1
+          </m.div>
+          <m.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
             className={`font-display text-4xl md:text-5xl font-semibold text-cream mb-4 break-words${waiting}`}
           >
             {hero?.headline || " "}
-          </motion.h1>
-          <motion.p
+          </m.h1>
+          <m.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
             className={`text-cream text-lg leading-relaxed break-words${waiting}`}
           >
             <Emphasized text={hero?.intro || " "} />
-          </motion.p>
+          </m.p>
         </div>
       </section>
 
@@ -97,7 +97,7 @@ export default function StewardRights() {
       {ownership && !ownership.hidden && (
       <section className="py-16 bg-cream">
         <div className="container max-w-3xl">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -110,7 +110,7 @@ export default function StewardRights() {
             <p className="text-muted-foreground leading-relaxed max-w-xl mx-auto">
               <Emphasized text={ownership.fields.body} />
             </p>
-          </motion.div>
+          </m.div>
         </div>
       </section>
       )}
@@ -134,7 +134,7 @@ export default function StewardRights() {
             {rights.lists.items.map((right, i) => {
               const Icon = RIGHT_ICONS[i % RIGHT_ICONS.length];
               return (
-                <motion.div
+                <m.div
                   key={`${i}-${right.title}`}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -153,7 +153,7 @@ export default function StewardRights() {
                       </p>
                     </div>
                   </div>
-                </motion.div>
+                </m.div>
               );
             })}
           </div>
@@ -180,7 +180,7 @@ export default function StewardRights() {
             {responsibilities.lists.items.map((item, i) => {
               const Icon = RESPONSIBILITY_ICONS[i % RESPONSIBILITY_ICONS.length];
               return (
-                <motion.div
+                <m.div
                   key={`${i}-${item.title}`}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -199,7 +199,7 @@ export default function StewardRights() {
                       </p>
                     </div>
                   </div>
-                </motion.div>
+                </m.div>
               );
             })}
           </div>
@@ -226,7 +226,7 @@ export default function StewardRights() {
             {progression.lists.stages.map((stage, i, all) => {
               const look = STAGE_LOOKS[i % STAGE_LOOKS.length];
               return (
-                <motion.div
+                <m.div
                   key={`${i}-${stage.level}`}
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
@@ -252,7 +252,7 @@ export default function StewardRights() {
                       i < all.length - 1 && <CheckCircle2 className="w-5 h-5 text-teal ml-auto opacity-40 flex-shrink-0" />
                     )}
                   </div>
-                </motion.div>
+                </m.div>
               );
             })}
           </div>

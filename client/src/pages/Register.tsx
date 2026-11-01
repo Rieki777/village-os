@@ -2,7 +2,7 @@ import Layout from "@/components/Layout";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { fetchSignInMethods } from "@/components/auth/signInMethods";
 import { useAuth } from "@/contexts/AuthContext";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Heart, ArrowRight, Mail, Lock, User, CheckCircle2, Circle, CalendarDays } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
@@ -220,7 +220,7 @@ export default function Register() {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-teal-deep/5 to-amber/5 py-16">
         <div className="container max-w-2xl">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <div className="text-center mb-12">
               <div className="flex justify-center mb-4">
                 <div className="w-16 h-16 rounded-full bg-teal-deep/10 flex items-center justify-center">
@@ -273,14 +273,14 @@ export default function Register() {
                 to a press.
               */}
               {error && (
-                <motion.div
+                <m.div
                   role="alert"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
                 >
                   {error}
-                </motion.div>
+                </m.div>
               )}
 
               <div className="space-y-6">
@@ -372,7 +372,7 @@ export default function Register() {
                 </label>
                 <div className="grid gap-3">
                   {PATHS.map((path) => (
-                    <motion.button
+                    <m.button
                       key={path.id}
                       type="button"
                       whileHover={{ scale: 1.02 }}
@@ -394,12 +394,12 @@ export default function Register() {
                           <p className="text-sm text-gray-600">{path.description}</p>
                         </div>
                       </div>
-                    </motion.button>
+                    </m.button>
                   ))}
                 </div>
               </div>
 
-              <motion.button
+              <m.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 disabled={loading}
@@ -408,7 +408,7 @@ export default function Register() {
               >
                 {loading ? "Creating your account…" : "Create account"}
                 {!loading && <ArrowRight className="w-5 h-5" />}
-              </motion.button>
+              </m.button>
 
               {/*
                 Joining with Google, beside the form and never in place of it.
@@ -443,16 +443,16 @@ export default function Register() {
 
             <div className="mt-8 text-center">
               <p className="text-gray-600 mb-4">Already have an account?</p>
-              <motion.a
+              <m.a
                 whileHover={{ scale: 1.05 }}
                 href="/login"
                 className="inline-flex items-center gap-2 px-6 py-3 border-2 border-amber-ink text-amber-ink font-semibold rounded-lg hover:bg-amber-ink/5 transition-colors"
               >
                 Sign in
                 <ArrowRight className="w-5 h-5" />
-              </motion.a>
+              </m.a>
             </div>
-          </motion.div>
+          </m.div>
         </div>
       </div>
     </Layout>

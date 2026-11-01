@@ -11,7 +11,7 @@ import { JOURNEY_LEGACY_STEP_IDS, PROSPERITY_JOURNEY } from "@shared/pageContent
 import { useGuideName } from "@/hooks/useGuideName";
 import { guideNameAtSentenceStart } from "@shared/guideName";
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
   ArrowRight,
@@ -96,7 +96,7 @@ export default function ProsperityJourney() {
               a broken image too. No picture is the honest state, and the gradient
               below carries the section on its own. */}
           {brand.prosperityHero ? (
-            <motion.img
+            <m.img
               src={brand.prosperityHero}
               alt={altOr(brand.prosperityHeroAlt, "People at work on a village business")}
               className="w-full h-full object-cover"
@@ -120,27 +120,27 @@ export default function ProsperityJourney() {
               aria-hidden="true"
               className="absolute -inset-x-5 -inset-y-6 sm:-inset-x-8 sm:-inset-y-10 rounded-3xl bg-background"
             />
-            <motion.div
+            <m.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               className="relative flex items-center gap-3 mb-6"
             >
-              <motion.div
+              <m.div
                 className="w-12 h-12 shrink-0 rounded-xl bg-gold flex items-center justify-center"
                 animate={{ rotate: [0, 5, -5, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
                 <Sparkles className="w-6 h-6 text-white" />
-              </motion.div>
+              </m.div>
               {/* amber-ink, index.css's amber for text on light grounds: gold is 4.07:1 on the band. */}
               <span className={`text-amber-ink font-medium tracking-wide uppercase text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
-            </motion.div>
+            </m.div>
 
             {/* 36px under 360px wide: at 48px "Regenerative" is one unbreakable word
                 that inked to x=333 at 320px, past the 304px column and the section's
                 overflow-hidden edge, so its end was cut off. From 360px up, unchanged.
                 break-words is for a village's own longer word at the field's limit. */}
-            <motion.h1
+            <m.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
@@ -151,18 +151,18 @@ export default function ProsperityJourney() {
                 phrase={hero?.highlight ?? ""}
                 render={(phrase) => <span className="text-gold italic">{phrase}</span>}
               />
-            </motion.h1>
+            </m.h1>
 
-            <motion.p
+            <m.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
               className={`relative text-xl text-muted-foreground leading-relaxed mb-8 break-words${waiting}`}
             >
               <Emphasized text={hero?.intro ?? ""} />
-            </motion.p>
+            </m.p>
 
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
@@ -182,7 +182,7 @@ export default function ProsperityJourney() {
                   {heroSecondary.label}
                 </JourneyLink>
               )}
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>
@@ -192,18 +192,18 @@ export default function ProsperityJourney() {
       <section className="py-16 bg-gold/5">
         <div className="container">
           <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               className="text-center min-w-0"
             >
-              <motion.div
+              <m.div
                 animate={{ y: [0, -8, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
                 <Heart className="w-12 h-12 text-gold mx-auto mb-4" />
-              </motion.div>
+              </m.div>
               <h2 className="font-display text-xl font-semibold text-foreground mb-3 break-words">
                 {page.economy.fields.firstHeading}
               </h2>
@@ -212,28 +212,28 @@ export default function ProsperityJourney() {
                     what a token does; token row 27). */}
                 <Emphasized text={page.economy.fields.firstBody} />
               </p>
-            </motion.div>
+            </m.div>
 
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.1 }}
               className="text-center min-w-0"
             >
-              <motion.div
+              <m.div
                 animate={{ y: [0, -8, 0] }}
                 transition={{ duration: 2, repeat: Infinity, delay: 0.2 }}
               >
                 <Users className="w-12 h-12 text-gold mx-auto mb-4" />
-              </motion.div>
+              </m.div>
               <h2 className="font-display text-xl font-semibold text-foreground mb-3 break-words">
                 {page.economy.fields.secondHeading}
               </h2>
               <p className="text-muted-foreground text-sm break-words">
                 <Emphasized text={page.economy.fields.secondBody} />
               </p>
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>
@@ -243,7 +243,7 @@ export default function ProsperityJourney() {
       {page && steps && (
       <section className="py-20 bg-background">
         <div className="container">
-          <motion.div
+          <m.div
             className="text-center mb-8"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -260,7 +260,7 @@ export default function ProsperityJourney() {
             {/* Progress Bar */}
             <div className="max-w-md mx-auto">
               <div className="relative h-3 bg-muted rounded-full overflow-hidden mb-2">
-                <motion.div
+                <m.div
                   className="absolute inset-y-0 left-0 bg-gradient-to-r from-gold to-coral rounded-full"
                   initial={{ width: 0 }}
                   animate={{ width: `${progress.progress}%` }}
@@ -271,7 +271,7 @@ export default function ProsperityJourney() {
                 {progress.doneCount} of {progress.total} steps completed
               </p>
             </div>
-          </motion.div>
+          </m.div>
 
           <div className="max-w-3xl mx-auto">
             <div className="space-y-3">
@@ -282,7 +282,7 @@ export default function ProsperityJourney() {
                 const action = buttonAction(step.actionLabel, step.actionTarget, targets);
 
                 return (
-                  <motion.div
+                  <m.div
                     key={`${index}-${step.title}`}
                     initial={{ opacity: 0, x: -20 }}
                     whileInView={{ opacity: 1, x: 0 }}
@@ -317,13 +317,13 @@ export default function ProsperityJourney() {
                           }}
                           className="flex-shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-gold"
                         >
-                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+                          <m.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
                             {isCompleted ? (
                               <CheckCircle2 className="w-6 h-6 text-gold" />
                             ) : (
                               <Circle className="w-6 h-6 text-muted-foreground hover:text-gold transition-colors" />
                             )}
-                          </motion.div>
+                          </m.div>
                         </button>
 
                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -349,9 +349,9 @@ export default function ProsperityJourney() {
                                 {step.title}
                               </h3>
                             </div>
-                            <motion.div className="shrink-0" animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                            <m.div className="shrink-0" animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
                               <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                            </motion.div>
+                            </m.div>
                           </div>
                           <p className="text-sm text-muted-foreground mt-1 break-words">
                             {step.description}
@@ -362,7 +362,7 @@ export default function ProsperityJourney() {
 
                     <AnimatePresence>
                       {isExpanded && (
-                        <motion.div
+                        <m.div
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: "auto", opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
@@ -373,7 +373,7 @@ export default function ProsperityJourney() {
                             <div className="bg-muted/50 rounded-lg p-4 mb-4">
                               <ul className="grid grid-cols-2 gap-2">
                                 {stepPoints(step).map((detail, i) => (
-                                  <motion.li
+                                  <m.li
                                     key={i}
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
@@ -382,7 +382,7 @@ export default function ProsperityJourney() {
                                   >
                                     <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-gold" />
                                     <span className="min-w-0 break-words">{detail}</span>
-                                  </motion.li>
+                                  </m.li>
                                 ))}
                               </ul>
                             </div>
@@ -396,10 +396,10 @@ export default function ProsperityJourney() {
                               </JourneyLink>
                             )}
                           </div>
-                        </motion.div>
+                        </m.div>
                       )}
                     </AnimatePresence>
-                  </motion.div>
+                  </m.div>
                 );
               })}
             </div>
@@ -413,7 +413,7 @@ export default function ProsperityJourney() {
       {page && !page.tiers.hidden && (
       <section id="ari-tiers" className="py-20 bg-cream">
         <div className="container">
-          <motion.div
+          <m.div
             className="text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -425,11 +425,11 @@ export default function ProsperityJourney() {
             <p className="text-muted-foreground max-w-2xl mx-auto">
               <Emphasized text={page.tiers.fields.intro} />
             </p>
-          </motion.div>
+          </m.div>
 
           <div className="grid md:grid-cols-4 gap-6 max-w-6xl mx-auto">
             {page.tiers.lists.items.map((tier, index) => (
-              <motion.div
+              <m.div
                 key={`${index}-${tier.tier}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -458,7 +458,7 @@ export default function ProsperityJourney() {
                     ))}
                   </ul>
                 </div>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
@@ -472,7 +472,7 @@ export default function ProsperityJourney() {
       {page && !page.packet.hidden && packetCta && (
       <section className="py-20 bg-gold/5">
         <div className="container">
-          <motion.div
+          <m.div
             className="max-w-2xl mx-auto text-center"
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
@@ -488,7 +488,7 @@ export default function ProsperityJourney() {
               <Download className="w-5 h-5" />
               {packetCta.label}
             </JourneyLink>
-          </motion.div>
+          </m.div>
         </div>
       </section>
       )}
@@ -497,18 +497,18 @@ export default function ProsperityJourney() {
       {page && !page.closing.hidden && (closingPrimary || closingSecondary) && (
       <section className="py-20 bg-background">
         <div className="container">
-          <motion.div
+          <m.div
             className="max-w-2xl mx-auto text-center"
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
           >
-            <motion.div
+            <m.div
               animate={{ y: [0, -10, 0] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
               <Zap className="w-12 h-12 text-gold mx-auto mb-6" />
-            </motion.div>
+            </m.div>
             <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
               {page.closing.fields.heading}
             </h2>
@@ -532,7 +532,7 @@ export default function ProsperityJourney() {
                 </JourneyLink>
               )}
             </div>
-          </motion.div>
+          </m.div>
         </div>
       </section>
       )}

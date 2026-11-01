@@ -40,7 +40,7 @@ import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule, useModuleOn } from "@/modules/ModuleProvider";
 import { authToken, fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
@@ -306,9 +306,9 @@ export default function Profile() {
     return (
       <Layout>
         <div className="sheet-night flex min-h-screen items-center justify-center bg-background">
-          <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity }}>
+          <m.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity }}>
             <Heart className="h-12 w-12 text-teal-deep" />
-          </motion.div>
+          </m.div>
         </div>
       </Layout>
     );
@@ -382,7 +382,7 @@ export default function Profile() {
         <NightMotes />
         <div className="relative mx-auto max-w-[1300px] px-4 sm:px-10">
           <ProfileTabs tab={tab} onTab={setTab} />
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
+          <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
             {/* WHO YOU ARE PLAYING, FIRST. The ladder position comes from the
                 page's own reads (`prog.stageIndex`, `config.stages`), never a
                 second fetch inside the hero. */}
@@ -623,7 +623,7 @@ export default function Profile() {
               </div>
               {/* ABOUT YOU IS A DAY-ONE ACT. The bio Save is the whole point:
                   the editor used to discard every word on close, silently. */}
-              <motion.section
+              <m.section
                 id="about"
                 aria-labelledby="bio-h"
                 initial={{ opacity: 0, y: 20 }}
@@ -695,7 +695,7 @@ export default function Profile() {
                     {user.bio || "No bio yet. Add one to help other villagers know you."}
                   </p>
                 )}
-              </motion.section>
+              </m.section>
 
               {/* The anchor the surfaced banner and "Walk another path" point at. */}
               <div id="sheet-paths" className="scroll-mt-28">
@@ -739,7 +739,7 @@ export default function Profile() {
               })}
 
               {/* Contributions */}
-              <motion.section
+              <m.section
                 aria-labelledby="contrib-h"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -765,7 +765,7 @@ export default function Profile() {
                   <ul className="space-y-4">
                     <AnimatePresence>
                       {recentContributions.map((contrib, idx) => (
-                        <motion.li
+                        <m.li
                           key={contrib.id}
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
@@ -787,12 +787,12 @@ export default function Profile() {
                             </p>
                             <p className="text-xs text-muted-foreground">{new Date(contrib.date).toLocaleDateString()}</p>
                           </div>
-                        </motion.li>
+                        </m.li>
                       ))}
                     </AnimatePresence>
                   </ul>
                 )}
-              </motion.section>
+              </m.section>
 
               {/* Standing, gratitude and this moon, from /api/me/profile. */}
               <ProfileSheet />
@@ -850,7 +850,7 @@ export default function Profile() {
             </div>
 
             {/* Quick links, inside the SPA router. */}
-            <motion.nav
+            <m.nav
               aria-labelledby="links-h"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -875,8 +875,8 @@ export default function Profile() {
                     </li>
                   ))}
               </ul>
-            </motion.nav>
-          </motion.div>
+            </m.nav>
+          </m.div>
         </div>
         <MoonDock />
       </div>
