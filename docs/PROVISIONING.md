@@ -322,8 +322,9 @@ nothing this walkthrough has had you type into Railway, carries your
 village's name or look.
 
 Then open the Launch Plan (`/journey-to-launch`). It lists what is still
-missing before launch, including your currency and your timezone, which both
-ship blank on purpose.
+missing before launch, including your currency, which ships blank on purpose,
+and your timezone, which starts on UTC and has to be chosen or confirmed
+before the launch vote.
 
 ### What the wizard reaches, and the first village's own pages
 

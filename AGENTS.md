@@ -105,7 +105,8 @@ Follow `START_HERE.md`. In outline:
    working for everybody except `BREAK_GLASS_ADMIN_EMAIL`.
 6. **Make it theirs.** Admin, Make This Yours. Then the Launch Plan
    (`/journey-to-launch`), which lists what is still missing, including the
-   currency and the timezone, both of which ship blank on purpose.
+   currency, which ships blank on purpose, and the timezone, which starts on
+   UTC and must be chosen or confirmed before the launch vote.
 7. **Email.** Without `RESEND_API_KEY` and an `EMAIL_FROM` on a domain they
    verified in Resend, nothing is emailed, including password resets. Resend
    answers "success" for an unverified domain and delivers nothing, so do not

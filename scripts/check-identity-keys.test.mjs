@@ -375,12 +375,12 @@ check("the shipped list is EMPTY, and the ceiling is zero", () => {
    * Amora held its own currency in the live Admin screen.
    *
    * IT FAILING IS NOT AUTOMATICALLY A BUG. A future key can legitimately need
-   * pending status, and `season.timezone` is the known candidate: it still
-   * ships "America/Costa_Rica" and nothing watches it, because `auditIdentity`
-   * walks a FIXED list and so catches a rename but never an addition. Whoever
-   * adds that entry updates this test and says why in the same commit, which
-   * is exactly the deliberate edit the ceiling comment asks for. What this
-   * refuses is the list growing quietly.
+   * pending status. `season.timezone` was the known candidate and went
+   * straight into IDENTITY_KEYS and NEUTRAL on 2026-10-31, holding "UTC",
+   * because the live village held its own zone first. Whoever adds a pending
+   * entry updates this test and says why in the same commit, which is exactly
+   * the deliberate edit the ceiling comment asks for. What this refuses is the
+   * list growing quietly.
    */
   assert.deepStrictEqual(KNOWN_PENDING, []);
   assert.strictEqual(PENDING_CEILING, 0);
@@ -458,6 +458,12 @@ ${Object.entries(p).map(([k, v]) => `    ${k}: ${JSON.stringify(v)},`).join("\n"
   images: {
 ${images}
   },
+  season: {
+    cadence: "solstice-equinox",
+    // Added 2026-10-31 with the key (readiness R059): UTC is the NEUTRAL value.
+    timezone: "UTC",
+    seasons: [],
+  },
 };
 `;
 }
@@ -533,7 +539,7 @@ check("FIXTURE TREE: an empty pending list still prints its denominator", () => 
   // nothing.
   const { code, out } = runGate("clean-empty-print", configSource());
   assert.strictEqual(code, 0, out);
-  assert.match(out, /30 checked/);
+  assert.match(out, new RegExp(`${IDENTITY_KEYS.length} checked`)); // the guard's own list, so a key added there needs no edit here
   assert.match(out, /0 known-pending \(ceiling 0\)/);
 });
 

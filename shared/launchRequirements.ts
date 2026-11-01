@@ -128,7 +128,7 @@ export function recognitionNameCheck(
  * HAS THIS VILLAGE SAID WHERE IT IS?
  *
  * Two facts the platform ships a default for and no screen ever asks about.
- * The season timezone is `America/Costa_Rica` and the currency is whatever
+ * The season timezone is `UTC` and the currency is whatever
  * `GAME_CONFIG` carries, and both are inherited in silence by every fork: the
  * season list derives dated seasons from the day it is asked, so the season
  * item below it goes green without anybody opening the tab, and the currency
@@ -142,8 +142,11 @@ export function recognitionNameCheck(
  * which is why the season document carries `timezoneAnswer` and this reads
  * that instead.
  *
- * RECOMMENDED, NEVER BLOCKING. A warning warns; a village that wants to launch
- * on the defaults may. What it may not do is never be asked.
+ * The CURRENCY row is recommended: a village that wants to launch on the
+ * platform's currency may. The TIMEZONE row is blocking since readiness R059
+ * (2026-10-31): UTC is nobody's home, and a village that launched on it would
+ * turn its seasons, terms and weekly brief at somebody else's midnight. Saying
+ * "UTC is right" with the confirm button is an answer like any other.
  */
 export function timezoneAnswerCheck(
   answered: boolean,
@@ -435,8 +438,8 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     id: "village-timezone",
     group: "brand",
     title: "Say which timezone the village keeps",
-    why: "A day here starts at midnight somewhere, and the platform ships Costa Rica's. Season turns, role terms, the claims window, every time on the calendar and the weekly brief all read it, so a village that never says lives on somebody else's clock.",
-    severity: "recommended",
+    why: "A day here starts at midnight somewhere, and until you say where, the platform keeps UTC. Season turns, role terms, the claims window, every time on the calendar and the weekly brief all read it, so a village that never says lives on a clock nobody there keeps. Choose yours, or confirm UTC if it is right.",
+    severity: "blocking",
     checkKey: "village:timezone",
     fixAt: "/admin?tab=season&setting=season.timezone",
     fixLabel: "Open Seasons",

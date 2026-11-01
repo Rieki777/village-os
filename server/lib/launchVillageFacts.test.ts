@@ -44,6 +44,16 @@ describe("villageFactFor", () => {
     expect((await villageFactFor(pool, "timezone")).state).toBe("missing");
   });
 
+  it("reads a village that stored no season document as running on UTC, unanswered (R059)", async () => {
+    // The platform's zone is UTC now, and a fresh village is told so in the
+    // detail it acts on rather than being told it keeps another village's clock.
+    const { pool } = poolWith({});
+    const answer = await villageFactFor(pool, "timezone");
+    expect(answer.state).toBe("missing");
+    expect(answer.detail).toContain("UTC");
+    expect(answer.detail).not.toContain("Costa_Rica");
+  });
+
   it("counts the zone as answered once somebody has confirmed it", async () => {
     const { pool } = poolWith({
       season: { timezone: "America/Costa_Rica", seasons: [], timezoneAnswer: { at: "2026-09-24T00:00:00.000Z", by: "founder-1" } },
