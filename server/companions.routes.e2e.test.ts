@@ -285,7 +285,7 @@ describe.skipIf(!DB_CONFIGURED)("companions over HTTP", () => {
   });
 
   it("refuses every kind with no door, by its own sentence, and the draft stays as it was", async () => {
-    for (const kind of ["cash_payment", "purchase", "ask"] as const) {
+    for (const kind of ["cash_payment", "ask"] as const) {
       const id = await item(personal, ana.id, kind, { amountMinor: 100 });
       const r = await yes(id);
       expect(r.status, kind).toBe(409);

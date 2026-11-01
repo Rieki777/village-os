@@ -14,7 +14,7 @@
  *
  * ── A KIND WITH NO DOOR IS REFUSED, WITH A SENTENCE ──────────────────────
  *
- * `cash_payment`, `purchase` and `ask` name doors this village does not have
+ * `cash_payment` and `ask` name doors this village does not have
  * yet. A companion that drafts one is told why, the draft is never stored, and
  * a stored one is refused again at the yes. No money path is invented here:
  * a kind earns a door when the door exists, and not before.
@@ -149,12 +149,17 @@ export const DRAFT_DOORS: Record<DraftKind, DraftDoor> = {
     refusal: "Marking a cash line paid has no door in this village yet, so a companion cannot draft it.",
     editable: [],
   },
+  /*
+   * A purchase is paid back from a circle's budget (Rye, 2026-10-31: no new
+   * purchase feature). The member's yes hands a budget spend that pays them
+   * to whoever speaks for the circle, and THAT person's yes records it, so
+   * the treasury's rule that a spend never pays the person asking holds.
+   */
   purchase: {
-    way: "none",
-    onYes: "",
-    yesLabel: "",
-    refusal: "This village has no way to buy something from here yet, so a companion cannot draft a purchase.",
-    editable: [],
+    way: "door",
+    onYes: "it goes to the person who speaks for the circle, as a spend from the circle's budget that pays you back. Their yes records it.",
+    yesLabel: "Yes, ask to be paid back",
+    editable: ["amountMinor", "note"],
   },
   ask: {
     way: "none",
@@ -206,10 +211,12 @@ export function refusalFor(kind: DraftKind): string | null {
 
 const RECIPIENT_KEYS = ["toUserId", "toRoleId"];
 
-const ALLOWED_KEYS: Record<Exclude<DraftKind, "cash_payment" | "purchase" | "ask">, readonly string[]> = {
+const ALLOWED_KEYS: Record<Exclude<DraftKind, "cash_payment" | "ask">, readonly string[]> = {
   rsvp: ["eventId", "status", "occurrenceKey", "memberDraftId"],
   token_payment: ["tokenType", "amountMinor", "note", ...RECIPIENT_KEYS],
   budget_spend: ["budgetId", "amountMinor", "note", ...RECIPIENT_KEYS],
+  // `toOutside`: the vendor, the one field a contact may sit in (the outside service's rule).
+  purchase: ["budgetId", "amountMinor", "note", "toOutside"],
   gratitude_note: ["amount", "message", ...RECIPIENT_KEYS],
   message: ["conversationId", "body", ...RECIPIENT_KEYS],
   quest: ["title", "description", "firstStep"],
@@ -266,8 +273,9 @@ function oneRecipient(p: Record<string, unknown>): string | null {
  *
  * Refuses: a kind with no door (its refusal sentence), an unknown field, a
  * fraction anywhere an amount goes, and an email address or a phone number in
- * any field. No draft here carries an outside address: Rye has not ruled on
- * where one may live (the contract, section 7, question 4).
+ * any prose field. A vendor's address may sit in one declared field only, a
+ * purchase's `toOutside` (Rye, 2026-10-31: "don't refuse them"; the outside
+ * service's rule), and nowhere else.
  */
 export function validateCompanionPayload(kind: unknown, payload: unknown): string | null {
   if (!isDraftKind(kind)) return `This village does not know the draft kind ${JSON.stringify(String(kind ?? "")).slice(0, 40)}.`;
@@ -294,6 +302,9 @@ export function validateCompanionPayload(kind: unknown, payload: unknown): strin
       return id(p.tokenType, "tokenType") ?? wholePositive(p.amountMinor, "amountMinor") ?? optionalText(p.note, "note", 180) ?? oneRecipient(p);
     case "budget_spend":
       return id(p.budgetId, "budgetId") ?? wholePositive(p.amountMinor, "amountMinor") ?? optionalText(p.note, "note", 180) ?? oneRecipient(p);
+    case "purchase":
+      // No recipient field: a purchase always pays back the member it belongs to.
+      return id(p.budgetId, "budgetId") ?? wholePositive(p.amountMinor, "amountMinor") ?? optionalText(p.note, "note", 180) ?? optionalText(p.toOutside, "toOutside", 300);
     case "gratitude_note":
       return wholePositive(p.amount, "amount") ?? text(p.message, "message", 1, 280) ?? oneRecipient(p);
     case "message": {
