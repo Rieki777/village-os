@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { GAME_CONFIG, withCommitmentName } from "../../shared/gameConfig";
 import { SIGNING_TYPE } from "../../shared/membershipSigning";
-import { joiningOf, pickNextAction, type NextActionFacts } from "./nextAction";
+import { FOUNDER_SETUP_STEP, founderStepFor, joiningOf, pickNextAction, type NextActionFacts } from "./nextAction";
 
 const RULES = GAME_CONFIG.nextActions;
 
@@ -112,5 +112,18 @@ describe("Find your lines (gene-keys), only where the catch-all would stand", ()
     expect(pickNextAction(RULES, settled({ claims: [], ...missing })).id).toBe("first-quest");
     expect(pickNextAction(RULES, settled({ claims: [{ status: "claimed" }], ...missing })).id).toBe("finish-quest");
     expect(pickNextAction(RULES, settled({ budget: { remaining: 40, total: 100 }, ...missing })).id).toBe("send-gratitude");
+  });
+});
+
+describe("a founder's next step before launch", () => {
+  it("sends a founder or an admin to the setup game while founder power stands", () => {
+    expect(founderStepFor("founder", true)).toEqual(FOUNDER_SETUP_STEP);
+    expect(founderStepFor("admin", true)?.href).toBe("/setup-game");
+  });
+
+  it("gives everyone the member rules once the village has started, and members always", () => {
+    expect(founderStepFor("founder", false)).toBeNull();
+    expect(founderStepFor("member", true)).toBeNull();
+    expect(founderStepFor(undefined, true)).toBeNull();
   });
 });

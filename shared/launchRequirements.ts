@@ -26,6 +26,9 @@
  */
 import { MODULES } from "./modules";
 
+/** The provisioning runbook, for the steps no screen in a village can take. */
+export const FORK_RUNBOOK_URL = "https://github.com/Rieki777/village-os/blob/main/docs/FORK_RUNBOOK.md"; // brand-ok: the upstream platform repository's own address, never a village's brand
+
 export type LaunchGroup =
   | "identity" // who runs this village: admins, handles, the shared-password exit
   | "brand" // name, tagline, copy — the overlay that de-Amoras a fork
@@ -538,8 +541,10 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
       "safe, so no forged login is possible; it just quietly makes sessions unreliable.",
     severity: "blocking",
     checkKey: "session-secret",
-    fixAt: "/admin?tab=integrations",
-    fixLabel: "Set it in the environment",
+    // An environment variable, so no screen in the village can set it. The
+    // Integrations tab this used to open cannot, and said nothing of the kind.
+    fixAt: `${FORK_RUNBOOK_URL}#environment-variables`,
+    fixLabel: "How to set it on your host",
     runbookAnchor: "env",
   },
   {
@@ -552,7 +557,8 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
       "money. Someone leaving needs to know how their contribution is honoured BEFORE they need to know.",
     severity: "blocking",
     checkKey: "exit-policy-terms",
-    fixAt: "/admin?tab=settings",
+    // The terms are edited on Departures. Settings holds dues and land figures.
+    fixAt: "/admin?tab=exits-admin",
     fixLabel: "Write the terms",
     runbookAnchor: "exit-policy",
   },
@@ -563,8 +569,10 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     why: "A backup nobody has restored is a hope, not a backup. Do the drill before there is anything you cannot afford to lose.",
     severity: "blocking",
     checkKey: "manual:backups-drilled",
-    fixAt: "/admin?tab=settings",
-    fixLabel: "Open Data & backups",
+    // A drill done on the host, so the runbook's steps are the door. There is
+    // no "Data & backups" screen for the old label to have meant.
+    fixAt: `${FORK_RUNBOOK_URL}#backups-s12--mysql-is-the-only-authority-now`,
+    fixLabel: "The backup and restore steps",
     runbookAnchor: "backups",
   },
 ];

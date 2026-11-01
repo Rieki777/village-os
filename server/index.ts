@@ -3,7 +3,7 @@ import { FORMER_MEMBER_HOLD, resolveExit } from "./lib/exitResolve";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
-import { joiningOf, pickNextAction } from "./lib/nextAction";
+import { founderStepFor, joiningOf, pickNextAction } from "./lib/nextAction";
 import { ideaReceipt } from "./lib/questIdeaReceipt";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
@@ -179,6 +179,7 @@ import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
 import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { claimsAnnouncedHere } from "./lib/rewardMoment";
+import { feedOrigin as feedOriginOf, feedUidHost } from "./lib/feedOrigin";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders, founderAdoptable, founderHeldVoteProblem } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
@@ -4616,7 +4617,7 @@ async function nextActionFor(user: any): Promise<{ id: string; label: string; hr
  * another, which is how the two ladder serializers already diverged once.
  */
 async function servedNextAction(user: any): Promise<{ id: string; label: string; href: string }> {
-  const rule = await nextActionFor(user);
+  const rule = founderStepFor(user?.role, await founderPowerStands(getPool())) ?? (await nextActionFor(user));
   return { ...rule, label: withCommitmentName(rule.label, mergedConfig().project.commitmentName) };
 }
 
@@ -11028,12 +11029,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
    * is stored, and it is never written to a log line or a response. Rate
    * limited per address so a guessed token costs its guesser the hour.
    */
-  const feedOrigin = (req: any): string => {
-    const configured = String(mergedConfig().project.siteUrl ?? "").replace(/\/$/, "");
-    if (configured) return configured;
-    const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https").split(",")[0].trim();
-    return `${proto}://${req.get("host")}`;
-  };
+  // The app's own address, never the outside website's: server/lib/feedOrigin.ts.
+  const feedWhere = () => ({ frontendUrl: process.env.FRONTEND_URL, siteUrl: mergedConfig().project.siteUrl });
+  const feedOrigin = (req: any): string => feedOriginOf(feedWhere(), req);
 
   app.get("/api/events/calendar.ics", async (req, res) => {
     if (await overLimit(`ics:${clientIp(req)}`, 60, 60 * 60 * 1000)) {
@@ -11074,7 +11072,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       hemisphere: settings.hemisphere,
       names,
       moonOneCycle: await moonOneCycle(getPool()),
-      host: (() => { try { return new URL(origin).host; } catch { return "village"; } })(),
+      host: feedUidHost(feedWhere(), origin),
       siteUrl: origin,
       from, to, now,
     });
@@ -12220,7 +12218,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // zero that reads like an empty village.
       tooFew = `The roll could not be read: ${String(e?.message ?? e).slice(0, 160)}`;
     }
-    return {
+    return { governanceOn: LIFECYCLE_RANK[effectiveLifecycle("governance")] >= LIFECYCLE_RANK.members,
       onTheRoll,
       tooFew,
       unityPct: threshold?.minUnityPct ?? null,
@@ -13383,7 +13381,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const system = `You are ${assistantName}, helping an admin of ${villageName} build their village's game by talking it through. You propose structure; a human accepts it. You never create anything yourself.
 
 WHAT THIS VILLAGE HAS SAID ABOUT ITSELF (its own words, highest authority after live state):
-${brainIndex}
+${fenceForPrompt("brief.index", { index: brainIndex })}
 ${grounding.length ? fenceForPrompt("brief.sections", grounding.map((b) => ({
   section: b.section,
   status: b.status,
@@ -13391,7 +13389,7 @@ ${grounding.length ? fenceForPrompt("brief.sections", grounding.map((b) => ({
 }))) : "Nothing written yet. Ask about their work, their people, and their red lines before proposing anything."}
 
 WHAT EXISTS RIGHT NOW (the game, not the plan):
-${JSON.stringify({ members, roles: roles.map((r: any) => r.name), circles: circles.map((c: any) => c.name) })}
+${fenceForPrompt("village.structure", { members, roles: roles.map((r: any) => r.name), circles: circles.map((c: any) => c.name) })}
 
 ${shelf.length ? `REFERENCE, counsel only:\n${shelf.map((s) => `=== ${sectionCitation(s)} ===\n${s.body}`).join("\n\n")}\n` : ""}
 Rules:
