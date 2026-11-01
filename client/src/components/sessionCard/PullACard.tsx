@@ -30,12 +30,13 @@ import type { SessionView } from "@shared/sessions";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import MoonGlyph from "@/components/calendar/MoonGlyph";
-import { CardRefusal, pullCard, readCards, shareMyLine } from "@/lib/sessionCardApi";
+import { CardRefusal, pullCard, shareMyLine } from "@/lib/sessionCardApi";
 import { BTN_QUIET, BTN_SECONDARY, EYEBROW, H3, HINT, SOFT } from "@/components/sessions/roomUi";
 import type { RoomActions } from "@/components/sessions/useSessionRoom";
+import { CARD_POLL_MS, publishCards, useSharedCards } from "./sharedCards";
 
 /** How often an open card reads the room's cards, so a card pulled on another phone arrives. */
-export const CARD_POLL_MS = 5000;
+export { CARD_POLL_MS };
 
 export const CARD_WORDS = {
   title: "Pull a card",
@@ -271,20 +272,11 @@ export default function PullACard({ view, actions, className = "" }: { view: Ses
     newest.current = top;
   }, []);
 
+  // The room's one card poll, shared with the invitation that follows a member through every stage.
+  const polled = useSharedCards(view.id, live);
   useEffect(() => {
-    if (!live) return;
-    let stop = false;
-    const read = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      readCards(view.id).then((a) => !stop && take(a), () => {});
-    };
-    read();
-    const timer = setInterval(read, CARD_POLL_MS);
-    return () => {
-      stop = true;
-      clearInterval(timer);
-    };
-  }, [live, view.id, take]);
+    if (polled) take(polled);
+  }, [polled, take]);
 
   if (!live) return null;
 
@@ -292,7 +284,9 @@ export default function PullACard({ view, actions, className = "" }: { view: Ses
     setBusy(true);
     setProblem(null);
     try {
-      take(await fn());
+      const a = await fn();
+      take(a);
+      publishCards(view.id, a);
     } catch (e) {
       setProblem(e instanceof CardRefusal ? e.message : "That did not work. Try again.");
     } finally {

@@ -20,7 +20,7 @@
  * The page wears the profile's night world, like the seal and the card.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { GENE_KEYS_SITE, viewOf, type Chart, type GeneKeysView } from "@shared/geneKeys";
 import { resultsAcross, type TimeWindow } from "@shared/geneKeysSky";
 import Layout from "@/components/Layout";
@@ -29,6 +29,7 @@ import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import { saveMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
+import { internalPath } from "@/lib/internalPath";
 import { GeneKeysLines } from "@/components/geneKeys/GeneKeysLines";
 import GeneKeysReveal from "@/components/geneKeys/GeneKeysReveal";
 import RolesForYourLines from "@/components/geneKeys/RolesForYourLines";
@@ -92,6 +93,10 @@ export default function GeneKeysPage() {
   const [windows, setWindows] = useState<TimeWindow[]>([]);
   const [mine, setMine] = useState<number | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
+  // Where to go after (`?next=`, an internal path only): the session card's invitation sends a member here
+  // from a live room and brings them back to it.
+  const next = internalPath(new URLSearchParams(useSearch()).get("next"));
+  const backWords = next?.startsWith("/sessions/") ? "Back to the session" : "Back where you were";
   const [visibility, setVisibility] = useState<"show" | "hide">("show");
   const [maia, setMaia] = useState(false);
 
@@ -300,8 +305,8 @@ export default function GeneKeysPage() {
                 <button type="button" className={BTN_GOLD} disabled={working} onClick={read}>
                   {working ? "Reading the sky" : "Show my lines"}
                 </button>
-                <Link href="/profile" className={BTN_PLAIN}>
-                  Back to your profile
+                <Link href={next ?? "/profile"} className={BTN_PLAIN}>
+                  {next ? backWords : "Back to your profile"}
                 </Link>
               </div>
               <p className="text-xs text-muted-foreground">Places from GeoNames.org</p>
@@ -441,7 +446,12 @@ export default function GeneKeysPage() {
               ) : null}
               <RolesForYourLines me={user.id} lines={picked.view.lines} />
               <div className="flex flex-wrap gap-2">
-                <Link href="/profile#gene-keys" className={BTN_GOLD}>
+                {next ? (
+                  <Link href={next} className={BTN_GOLD}>
+                    {backWords}
+                  </Link>
+                ) : null}
+                <Link href="/profile#gene-keys" className={next ? BTN_PLAIN : BTN_GOLD}>
                   See them on your profile
                 </Link>
               </div>

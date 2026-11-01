@@ -55,6 +55,29 @@ was not read why, and how to be read next time, without telling anyone else.
 "Present" is the room's own presence window (`PRESENT_WINDOW_MS`): somebody who joined and has gone quiet is not
 on a new card. The puller is always present.
 
+### The invitation to be read
+
+Rye asked for it on 2026-11-01: "have the opt in pop-up on members screen when the admin pulls a card so everyone can
+easily participate in the card reading if they want", with a way to find their lines from it, as a quick
+onboarding. Anyone may pull (his ruling of 2026-10-30), so any pull opens it.
+
+- Once a card is in the room, a member the card does not read sees a pop-up in whatever stage the room is at
+  (`client/src/components/sessionCard/CardInvite.tsx`, mounted beside the stages). It reads the room's one card
+  poll (`sharedCards.ts`), so it adds no request. Nobody read, signed out, outside the room, or in a room with the
+  module off ever sees it.
+- It names, in plain words, each thing being read still needs that is off for this member (lines shown, Maia
+  allowed to use them, their own yes to cards), above one button that turns on exactly those, through the
+  member's own `PATCH /api/gene-keys/me`. Nothing is implied: a thing not listed is not changed.
+- A yes reads them from the NEXT card. The card on the table was read from the room as it was pulled and is not
+  rewritten, even when they say yes while Maia is still weaving it.
+- "Not today", or closing it any way, means not again in that session (kept on the device). A later session may
+  ask once more.
+- Somebody with no lines yet is sent to find them (`/profile/gene-keys?next=/sessions/:id`) and brought back to the
+  room after. That page reads Gene Keys and, from the same birth, the Human Design type, strategy and authority. It
+  reads no Western natal chart (no Sun, Moon or rising sign of their own; the card's Western astrology is today's
+  sky), so the invitation promises Gene Keys and Human Design only. Saving there still leaves Maia and cards off,
+  so back in the room the pop-up asks for those, named, once more.
+
 ## What a card says
 
 Built from facts by `readRoom` and `plainReading`, in Amora's own words. No Gene Keys text of Richard Rudd's is
