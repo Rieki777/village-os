@@ -366,6 +366,30 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms setup, every item through the fou
     expect(refused.status).toBe(400);
   });
 
+  it("trades the setup key for one that can only send, and the game reads which key it asked about", async () => {
+    // The key the setup used may run the whole account.
+    const full = await call("POST", "/api/admin/comms/settings/key-rights", { body: {} });
+    expect(full.status, JSON.stringify(full.json)).toBe(200);
+    expect(full.json.settings).toMatchObject({ keyRights: "full" });
+    // A send-only key planted through the same secrets route reads as not yet asked.
+    const SEND_ONLY = "re_fake_sending_only_9z8y";
+    fake!.sendOnly(SEND_ONLY);
+    expect((await call("PUT", "/api/admin/integrations/resend_api_key", { body: { value: SEND_ONLY } })).status).toBe(200);
+    const fresh = (await checklist()).body;
+    expect(fresh.settings.keyRightsFor).not.toContain(SEND_ONLY.slice(-4));
+    // Asking Resend about it: refused everything but sending, so it may only send.
+    const sending = await call("POST", "/api/admin/comms/settings/key-rights", { body: {} });
+    expect(sending.status, JSON.stringify(sending.json)).toBe(200);
+    expect(sending.json.settings.keyRights).toBe("sending");
+    expect(sending.json.settings.keyRightsFor).toContain(SEND_ONLY.slice(-4));
+    expect(JSON.stringify(sending.json)).not.toContain(SEND_ONLY);
+    // Nothing the setup already did is lost with the narrower key.
+    const c = await checklist();
+    expect(c.done.domain && c.done["delivery-reports"] && c.done["api-key"]).toBe(true);
+    // And a stranger may not ask.
+    expect((await call("POST", "/api/admin/comms/settings/key-rights", { body: {}, token: null })).status).toBe(403);
+  });
+
   it("sums it all up on the Overview", async () => {
     const r = await call("GET", "/api/admin/comms/overview");
     expect(r.status, JSON.stringify(r.json)).toBe(200);

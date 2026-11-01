@@ -91,6 +91,7 @@ export const saveSender = (name: string, address: string) =>
 export const savePostalAddress = (postalAddress: string) =>
   commsCall<SettingsPayload>("/admin/comms/settings", me(), { method: "PUT", body: { postalAddress } });
 export const sendTestLetter = () => commsCall<SettingsPayload>("/admin/comms/settings/test", me(), { method: "POST" });
+export const checkKeyRights = () => commsCall<SettingsPayload>("/admin/comms/settings/key-rights", me(), { method: "POST" });
 export const switchModule = (id: string, lifecycle: "members") =>
   commsCall<{ lifecycle?: string }>(`/admin/modules/${encodeURIComponent(id)}/lifecycle`, me(), { method: "PUT", body: { lifecycle } });
 
