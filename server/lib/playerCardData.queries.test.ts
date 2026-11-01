@@ -178,7 +178,7 @@ describe("the player card's query count", () => {
     expect(once(/FROM `live_session_task_events` WHERE `entry_id` IN/)).toBe(1);
     expect(once(/card_words_json IS NOT NULL/)).toBe(1);
     expect(once(/FROM player_moon_load/)).toBe(1);
-    expect(once(/WHERE e.kind = 'decision' AND e.created_at >= \?/)).toBe(1);
+    expect(once(/WHERE e.kind = 'decision' AND e.status = 'done' AND e.created_at >= \?/)).toBe(1);
     // And the rows reached the card.
     const card = a.get("u-owner")!.card;
     expect(card.accomplished.moons.kind).not.toBe("unread");

@@ -229,7 +229,7 @@ export function signSheetRows(key: string | null | undefined, rows: SignRows, w:
     }
     case "decisions-recorded":
       for (const e of rows.live_session_entries!) {
-        if (e.kind !== "decision" || !inWindow(e.created_at, w)) continue;
+        if (e.kind !== "decision" || e.status !== "done" || !inWindow(e.created_at, w)) continue;
         out.push({ at: iso(e.created_at), words: SHEET_WORDS.decision, personId: null });
       }
       break;
