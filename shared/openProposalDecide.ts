@@ -121,6 +121,8 @@ export const DECIDE_WORDS = {
   declineYes: "Yes, decline it",
   declineNo: "Keep it",
   ownProposal: "This proposal came from your own address, so it is decided by another holder of the power that seats people.",
+  /** A former member's address (coordinator, 2026-10-31, after Rye's ruling that former members never invite). */
+  formerMember: "This address belongs to somebody who left the village. Welcoming a former member back is its own act, so this proposal is not adopted here. You can still decline it.",
   /** The door after a handover, and with nobody in the chair. Plain, and no path invented. */
   door: {
     "village-holds-it": "The village holds the power that seats people now, so nobody adopts this proposal on their own. It waits here until the village settles how it adopts one from outside.",
@@ -232,5 +234,7 @@ export function declinedLetter(i: { firstName: string | null; village: string; r
 export const OPEN_NOTICE_WORDS = {
   waitingTitle: (roles: readonly string[]) => `A role proposal from outside the village waits on you: ${andList(roles) || "a role"}`,
   waitingBody: "Open it to adopt it for the village or decline it. It waits under Tasks on your profile too.",
+  /** To the admins, when nobody holds the power that seats people live, or the village holds it. No vote is opened. */
+  nobodyToDecideTitle: (roles: readonly string[]) => `A role proposal from outside the village is waiting, and nobody in a role can adopt it now: ${andList(roles) || "a role"}`,
   arrivalFailedTitle: (roles: readonly string[]) => `An adopted proposal's roles could not be set up: ${andList(roles) || "a role"}`,
 } as const;

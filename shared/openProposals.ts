@@ -26,7 +26,11 @@ export const OPEN_WHY_MAX = 1200;
 export const OPEN_AIM_MAX = 300;
 /** How long a confirmation link works, and how long an unconfirmed proposal is kept. */
 export const OPEN_CONFIRM_HOURS = 48;
-/** How long a declined or withdrawn proposal keeps its name and address. */
+/**
+ * How long a declined or withdrawn proposal keeps its name and address, and an
+ * adopted one whose invitation nobody used (open proposals part B), counted
+ * from the decision.
+ */
 export const OPEN_ANONYMISE_DAYS = 90;
 
 export const OPEN_PROPOSAL_STATUSES = ["unconfirmed", "confirmed", "adopted", "declined", "withdrawn"] as const;
@@ -134,7 +138,7 @@ export const OPEN_WORDS = {
   emailLabel: "Your email",
   emailNote: "We'll only write to you about this proposal.",
   /** The retention, in one plain line on the form (sheet 19i). */
-  keptFor: `If you don't confirm within ${OPEN_CONFIRM_HOURS} hours, we delete what you sent. If the village says no, we remove your name and email ${OPEN_ANONYMISE_DAYS} days later.`,
+  keptFor: `If you don't confirm within ${OPEN_CONFIRM_HOURS} hours, we delete what you sent. If the village says no, or says yes and you never make your account, we remove your name and email ${OPEN_ANONYMISE_DAYS} days later.`,
   send: "Send my proposal",
   sent: (email: string) => `Check ${email}. We sent a link to confirm it's you. Your proposal reaches the village once you open it.`,
   confirmed: "Confirmed. Your proposal is with the village now, and you'll hear back by email.",

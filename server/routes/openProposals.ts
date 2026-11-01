@@ -31,7 +31,8 @@
  * no CAPTCHA (sheet 19i).
  *
  * The tidy job also takes the name and address off a declined or withdrawn
- * proposal 90 days after it was decided.
+ * proposal 90 days after it was decided, and off an adopted one whose
+ * invitation nobody used in those 90 days (part B, coordinator 2026-10-31).
  *
  * Confirmed proposals wait on the admin's list here.
  *
@@ -48,6 +49,7 @@
  */
 import crypto from "node:crypto";
 import type { Express } from "express";
+import type { Pool } from "mysql2/promise";
 
 import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
 import { emailKeyOf } from "../../shared/comms/address";
@@ -68,7 +70,8 @@ import { singlePublicAddress } from "../lib/publicAddress";
 import { registerJob } from "../lib/scheduler";
 import { arrivalFor, confirmAndAsk, tellTheCircle } from "../lib/openProposalDecide";
 import { whenInvitedArrives } from "../lib/inviteDoor";
-import { OPEN_INVITE_PREFIX } from "../../shared/openProposalDecide";
+import { OPEN_INVITE_PREFIX, openInviteId } from "../../shared/openProposalDecide";
+import { inviteById } from "../repos/memberInvites";
 import { dbDocument } from "../repos/store-db";
 import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposalDecide";
 import * as store from "../repos/openProposals";
@@ -300,9 +303,21 @@ export function register(app: Express, deps: Deps): void {
   whenInvitedArrives(OPEN_INVITE_PREFIX, arrivalFor(decide));
 }
 
-/** Delete what was never confirmed after 48 hours; take the name and address off what was declined or withdrawn after 90 days. */
-export async function tidyOpenProposals(pool: Parameters<typeof store.deleteUnconfirmedBefore>[0], at: Date): Promise<string> {
+/**
+ * Delete what was never confirmed after 48 hours; take the name and address
+ * off what was declined or withdrawn after 90 days, and off what was adopted 90
+ * days ago when nobody arrived through its invitation. An adoption onto an
+ * account already here made no invitation: that person is a member, and keeps
+ * theirs.
+ */
+export async function tidyOpenProposals(pool: Pool, at: Date): Promise<string> {
   const deleted = await store.deleteUnconfirmedBefore(pool, new Date(at.getTime() - OPEN_CONFIRM_HOURS * 60 * 60_000));
-  const anonymised = await store.anonymiseDecidedBefore(pool, new Date(at.getTime() - OPEN_ANONYMISE_DAYS * 24 * 60 * 60_000), at);
+  const cutoff = new Date(at.getTime() - OPEN_ANONYMISE_DAYS * 24 * 60 * 60_000);
+  let anonymised = await store.anonymiseDecidedBefore(pool, cutoff, at);
+  for (const p of await store.adoptedDecidedBefore(pool, cutoff)) {
+    const invite = await inviteById(pool, openInviteId(p.id));
+    if (!invite || invite.usedByUserId) continue;
+    if (await store.anonymiseOpenProposal(pool, p.id, at)) anonymised += 1;
+  }
   return `${deleted} unconfirmed deleted, ${anonymised} anonymised`;
 }

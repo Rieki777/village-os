@@ -28,7 +28,9 @@
  * `whoMayPutHandToVillage`, the member door's own: a live holder of a role
  * carrying it adopts or declines, at any time or once the circle has consented
  * ("Record the adoption"); an admin with no such role does not; nobody acts on
- * a proposal from their own address. Once the village holds `org.seat`, or
+ * a proposal from their own address. A proposal from a former member's address
+ * is never adopted here (Rye, 2026-10-31: former members never invite), and
+ * may still be declined. Once the village holds `org.seat`, or
  * nobody holds it live, nobody decides at the door: the page says so plainly,
  * and no other path is invented here (an open question for the pull request).
  *
@@ -73,7 +75,7 @@ import { civilDayWords } from "../../shared/seasonPlans";
 import type { SeatCalendar } from "../../shared/seatTerms";
 import type { AppDeps } from "../lib/appDeps";
 import { hashInviteToken, INVITE_DAYS, invitePath, mintInviteToken } from "../lib/invites";
-import { accountFor, decideRule, placeOnRoles, type DecideDeps } from "../lib/openProposalDecide";
+import { accountFor, decideRule, isFormerMemberAccount, placeOnRoles, type DecideDeps } from "../lib/openProposalDecide";
 import type { LapseContext } from "../lib/orgChart";
 import { answerAsk, askRolesFor, consentView, decisionFor, type AskStanding } from "../lib/roleProposals";
 import { whileSessionHolds } from "../lib/sessionHold";
@@ -242,6 +244,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       const inv = await inviteById(pool, openInviteId(p.id));
       invitation = { state: !inv ? "closed" : inv.usedByUserId ? "used" : inv.revokedAt || inv.expired ? "closed" : "open" };
     }
+    // A former member's address, told only to those who decide it (coordinator, 2026-10-31).
+    const former = open && may.ok && !!may.own && (await isFormerMemberAccount(work, may.own));
     const season = seasonOf(p);
     res.set("Cache-Control", "no-store").json({
       proposal: {
@@ -264,8 +268,9 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         you: {
           holdsThePower,
           own: !!may.own && may.own === viewerId,
-          mayAdopt: open && may.ok,
+          mayAdopt: open && may.ok && !former,
           mayDecline: open && may.ok,
+          formerMember: former,
           mayReissue: !!invitation && invitation.state !== "used",
         },
       },
@@ -317,6 +322,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
 
     // An address with an account here: the place is made now, and no invitation is needed.
     if (may.own) {
+      // Somebody who left the village: welcoming them back is its own act. Nothing is granted, seated or sent.
+      if (await isFormerMemberAccount(work, may.own)) return res.status(409).json({ error: "former_member", message: DECIDE_WORDS.formerMember });
       if (!(await store.decideOpenProposal(pool, p.id, "adopted", decision, at))) return res.status(409).json({ error: DECIDE_WORDS.raced });
       let placed: Awaited<ReturnType<typeof placeOnRoles>>;
       try {

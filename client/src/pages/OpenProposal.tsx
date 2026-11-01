@@ -58,7 +58,7 @@ export interface ServedOpenProposal {
   consent: ConsentOut;
   door: { because: DoorReason; words: string };
   invitation: { state: "open" | "used" | "closed" } | null;
-  you: { holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReissue: boolean };
+  you: { holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReissue: boolean; formerMember?: boolean };
 }
 
 type Answer<T> = { ok: true; data: T } | { ok: false; status: number; error: string };
@@ -255,15 +255,17 @@ export default function OpenProposal() {
                 <h2 id="op-decide" className="text-lg font-bold text-stone-900">
                   {DECIDE_WORDS.deciderHeading}
                 </h2>
-                {p.you.mayAdopt ? (
+                {p.you.mayAdopt || p.you.mayDecline ? (
                   <>
-                    <p className="mt-1 text-stone-700">{record ? CONSENT_WORDS.recordLine : DECIDE_WORDS.deciderLine}</p>
+                    <p className="mt-1 text-stone-700">{p.you.formerMember ? DECIDE_WORDS.formerMember : record ? CONSENT_WORDS.recordLine : DECIDE_WORDS.deciderLine}</p>
                     {!declining ? (
                       <div className="mt-4 flex flex-wrap gap-2">
-                        <button type="button" disabled={busy} onClick={() => void act(`${base(p.id)}/adopt`)} className={PRIMARY}>
-                          <Check className="h-4 w-4" aria-hidden="true" />
-                          {record ?? DECIDE_WORDS.adopt}
-                        </button>
+                        {p.you.mayAdopt && (
+                          <button type="button" disabled={busy} onClick={() => void act(`${base(p.id)}/adopt`)} className={PRIMARY}>
+                            <Check className="h-4 w-4" aria-hidden="true" />
+                            {record ?? DECIDE_WORDS.adopt}
+                          </button>
+                        )}
                         {p.you.mayDecline && (
                           <button type="button" disabled={busy} onClick={() => setDeclining(true)} className={SECONDARY}>
                             <X className="h-4 w-4" aria-hidden="true" />

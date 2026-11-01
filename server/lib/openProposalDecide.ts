@@ -45,7 +45,7 @@
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
 import { civilDateKey } from "../../shared/lunar";
-import { greetingName, OPEN_NOTICE_WORDS, openProposalHref, proposalOfInvite } from "../../shared/openProposalDecide";
+import { greetingName, OPEN_NOTICE_WORDS, openInviteId, openProposalHref, proposalOfInvite } from "../../shared/openProposalDecide";
 import { whoMayPutHandToVillage, type HandOpenerRule } from "../../shared/powerHands";
 import { CONSENT_WORDS, consentClosesAt } from "../../shared/roleProposalConsent";
 import { ADOPTING_POWER, parseApplicationInput } from "../../shared/seatApplications";
@@ -56,6 +56,7 @@ import type { AppDeps } from "./appDeps";
 import { settleText } from "./alignmentSubjects";
 import { villageHeldCapabilities } from "./capabilityHolding";
 import { isExampleUser } from "./examples";
+import { leftTheVillage } from "./formerMember";
 import type { InvitedArrival } from "./inviteDoor";
 import type { NotifyInput } from "./notify";
 import { isTombstone } from "./oauthAccounts";
@@ -64,6 +65,7 @@ import { adoptApplication, settleDepsOf, tellOutcome } from "./seatApplicationCl
 import { prepareApplication, writeApplicationOn } from "./seatApplicationWrite";
 import { grantStage } from "./stageGrant";
 import { inTransaction } from "../repos/liveSessions";
+import { inviteById, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
 import { asksFor, holdersInCircles, insertAsks } from "../repos/roleProposals";
 import { inApplicationTransaction, seatsForUpdate, seatsWithCircles } from "../repos/seatApplications";
@@ -162,10 +164,11 @@ export async function confirmAndAsk(
 /**
  * Each asked holder hears once, by the roles' names, in the bell and under
  * Tasks; each live holder of the power that seats people who was not asked
- * hears it waits on them. The proposer's own account hears nothing. Keys are
+ * hears it waits on them. The proposer's own account hears nothing. When
+ * nobody can adopt it at the door, the admins hear it once instead. Keys are
  * per proposal and person, so a retry writes nothing twice.
  */
-export async function tellTheCircle(deps: Pick<DecideDeps, "getPool" | "notify" | "liveHoldersOf" | "calendar">, c: Confirmed): Promise<void> {
+export async function tellTheCircle(deps: Pick<DecideDeps, "getPool" | "notify" | "notifyAdmins" | "liveHoldersOf" | "calendar">, c: Confirmed): Promise<void> {
   const pool = deps.getPool();
   const names = await roleNames(pool, c.proposal);
   const link = openProposalHref(c.proposal.id);
@@ -182,9 +185,14 @@ export async function tellTheCircle(deps: Pick<DecideDeps, "getPool" | "notify" 
     });
   }
   const rule = await decideRule(deps);
-  const deciders = rule.who === "live-holders" ? rule.holders : [];
+  // Nobody can adopt it at the door: nobody holds the power live, the village holds it, or its only holder is the proposer.
+  const deciders = (rule.who === "live-holders" ? rule.holders : []).filter((h) => h !== c.own);
+  if (deciders.length === 0) {
+    // The admins hear it, once, so it does not wait unseen. No vote is opened (Rye's sheet, 24d).
+    await deps.notifyAdmins("governance", OPEN_NOTICE_WORDS.nobodyToDecideTitle(names), `op:${c.proposal.id}:waiting:admins`, link);
+  }
   for (const userId of deciders) {
-    if (userId === c.own || c.asked.some((a) => a.userId === userId)) continue;
+    if (c.asked.some((a) => a.userId === userId)) continue;
     await deps.notify({
       userId,
       type: "open_role_proposal_waiting",
@@ -272,30 +280,60 @@ export async function placeOnRoles(
  * it, and the authority is the one the adoption recorded. A place that cannot
  * be made never costs the person their account: the admins are told, once,
  * with the proposal's page.
+ *
+ * EVERY ADOPTED PROPOSAL FOR THAT ADDRESS IS PLACED (coordinator, 2026-10-31),
+ * not only the one whose link was used: once the address has an account, no
+ * other invitation for it can ever make one. Each other proposal whose link
+ * nobody used has that link withdrawn first, and only a withdrawal that this
+ * arrival made places it, so a second arrival places nothing twice. A proposal
+ * adopted onto an account already here made no invitation and was placed then.
  */
 export function arrivalFor(deps: DecideDeps): InvitedArrival {
   return async ({ inviteId, inviterUserId, userId }) => {
     const id = proposalOfInvite(inviteId);
     if (!id) return;
-    const proposal = await store.readOpenProposal(deps.getPool(), id);
+    const pool = deps.getPool();
+    const proposal = await store.readOpenProposal(pool, id);
     if (!proposal || proposal.status !== "adopted") return;
-    let failed = false;
-    try {
-      const out = await placeOnRoles(deps, {
-        account: userId,
-        proposal,
-        adopterId: inviterUserId,
-        authority: proposal.decision.authority ?? `${ADOPTING_POWER}@badge`,
-      });
-      failed = !out.ok && out.code === "cannot";
-    } catch (err) {
-      failed = true;
-      console.warn(`[open-proposals] the place for ${userId} was not made: ${String((err as Error)?.message ?? err)}`);
+    const places: Array<{ proposal: store.StoredOpenProposal; adopterId: string }> = [{ proposal, adopterId: inviterUserId }];
+    if (proposal.email) {
+      for (const other of await store.adoptedForAddress(pool, emailKeyOf(proposal.email))) {
+        if (other.id === proposal.id) continue;
+        const link = await inviteById(pool, openInviteId(other.id));
+        if (!link || link.usedByUserId) continue;
+        if (!(await revokeInvite(pool, link.id, link.inviterUserId))) continue;
+        places.push({ proposal: other, adopterId: link.inviterUserId });
+      }
     }
-    if (failed) {
-      await deps.notifyAdmins("governance", OPEN_NOTICE_WORDS.arrivalFailedTitle(await roleNames(deps.getPool(), proposal)), `op:${id}:arrival-failed`, openProposalHref(id));
+    for (const place of places) {
+      let failed = false;
+      try {
+        const out = await placeOnRoles(deps, {
+          account: userId,
+          proposal: place.proposal,
+          adopterId: place.adopterId,
+          authority: place.proposal.decision.authority ?? `${ADOPTING_POWER}@badge`,
+        });
+        failed = !out.ok && out.code === "cannot";
+      } catch (err) {
+        failed = true;
+        console.warn(`[open-proposals] the place for ${userId} was not made: ${String((err as Error)?.message ?? err)}`);
+      }
+      if (failed) {
+        const pid = place.proposal.id;
+        await deps.notifyAdmins("governance", OPEN_NOTICE_WORDS.arrivalFailedTitle(await roleNames(pool, place.proposal)), `op:${pid}:arrival-failed`, openProposalHref(pid));
+      }
     }
   };
+}
+
+/**
+ * Whether an account left the village and was not admitted again (Rye,
+ * 2026-10-31: former members never invite). Adopting their proposal would
+ * re-admit them; that is its own act, so adoption refuses it.
+ */
+export async function isFormerMemberAccount(deps: Pick<DecideDeps, "getPool" | "members">, accountId: string): Promise<boolean> {
+  return leftTheVillage(deps.getPool(), (await deps.members.byId(accountId)) as any);
 }
 
 // ── Waiting on you ──────────────────────────────────────────────────────────

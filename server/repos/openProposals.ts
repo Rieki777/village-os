@@ -168,6 +168,33 @@ export async function listOpenProposals(db: Db, statuses: readonly OpenProposalS
   return rows.map(rowOf);
 }
 
+/** Every adopted proposal from one address (its folded key), oldest decision first. */
+export async function adoptedForAddress(db: Db, emailKey: string): Promise<StoredOpenProposal[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM open_role_proposals WHERE status = 'adopted' AND email_key = ? ORDER BY decided_at, id`,
+    [emailKey],
+  );
+  return rows.map(rowOf);
+}
+
+/** Every adopted proposal decided before `before` that still carries a name or an address. */
+export async function adoptedDecidedBefore(db: Db, before: Date): Promise<StoredOpenProposal[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM open_role_proposals WHERE status = 'adopted' AND decided_at < ? AND anonymised_at IS NULL ORDER BY decided_at, id`,
+    [before],
+  );
+  return rows.map(rowOf);
+}
+
+/** Take the name and address off one proposal, once. True when this call did. */
+export async function anonymiseOpenProposal(db: Db, id: string, now: Date): Promise<boolean> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE open_role_proposals SET name = NULL, email = NULL, email_key = NULL, anonymised_at = ? WHERE id = ? AND anonymised_at IS NULL",
+    [now, id],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
+}
+
 /** Delete one proposal nobody could confirm, because its confirmation never went. Only while it is unconfirmed. */
 export async function deleteOpenProposal(db: Db, id: string): Promise<void> {
   await db.query("DELETE FROM open_role_proposals WHERE id = ? AND status = 'unconfirmed'", [id]);
