@@ -592,7 +592,7 @@ describe("whose map, and whose guide (customizability, 2026-10-31)", () => {
     expect(text(b, "#villageName")).toBe("The living map");
     expect(text(b, "#guideTitle")).toBe("The village guide");
     expect((b.window.document.getElementById("maiaText") as HTMLInputElement).placeholder).toMatch(/^Ask the village guide\./);
-    expect(text(b, "#vitals") ?? "").not.toMatch(/Amora/);
+    expect(text(b, "#vitals") ?? "").not.toMatch(/Amora/); // brand-ok: asserts the founding village's name is absent
     expect(text(b, "#maia") ?? "").not.toMatch(/Maia/);
   });
 
