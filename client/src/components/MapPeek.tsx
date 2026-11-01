@@ -44,7 +44,8 @@ export default function MapPeek() {
      * API.
      */
     const conn = (navigator as any).connection;
-    const frugal = Boolean(conn?.saveData) || /(^|-)(2g|slow-2g)$/.test(String(conn?.effectiveType ?? ""));
+    // effectiveType is "slow-2g", "2g", "3g" or "4g"; the first three all skip.
+    const frugal = Boolean(conn?.saveData) || /^(slow-2g|2g|3g)$/.test(String(conn?.effectiveType ?? ""));
     if (frugal) return;
     // A moving map is decoration, and decoration yields to this preference.
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
