@@ -1627,9 +1627,13 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       // A chat or a draft can still land between the first pass and the
-      // tombstone, so it runs again last, after every other
-      // after-tombstone step. DELETEs keyed on the member, so this matches nothing when
-      // nothing was written in between.
+      // tombstone, so it runs again, as the last step that deletes the
+      // member's own data. Two steps follow it on purpose and touch none:
+      // "audit", which writes the sweep's own line, and
+      // "product-subscriptions-after-tombstone", which asks Stripe and so
+      // waits for the local sweep to finish (its comment says why). A new
+      // member-data step goes above this one. DELETEs keyed on the member,
+      // so this matches nothing when nothing was written in between.
       name: "companions-after-tombstone",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
