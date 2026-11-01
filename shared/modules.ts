@@ -1336,7 +1336,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "hypha",
-    guild: ["basescan-api-key"],
+    guild: ["basescan-api-key", "base-rpc-url"],
     tier: "included",
     // The module's own tables hold contract addresses, what those contracts
     // call themselves, village-level supply and treasury figures, and a log of
