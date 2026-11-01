@@ -18749,6 +18749,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       scene: live?.scene ?? null,
       sceneVersion: live?.version ?? 0,
       housing: { entries: housingEntries, configured: housingEntries.length > 0 },
+      // Whose map this is and who its guide is, in the village's own words. The
+      // guide's name goes raw: blank is an unnamed guide, which the map calls
+      // "the village guide" itself, never another village's name.
+      village: { name: String(mergedConfig().project.name ?? ""), guide: String(getWorkWithUs().assistantName ?? "").trim() },
       lang,
     });
   });
