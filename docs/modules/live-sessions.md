@@ -852,6 +852,21 @@ keep changing what it looks like and how its meeting flows.
   reach the people who were in a Heart share it came up in, and admins; everybody else reads that
   it came up, and how often. The window is the season's own dates in the village's zone, and a
   session belongs to the season it was opened in.
+- **A season goal keeps its name** (0298). Every goal on a season carries an id (`server/lib/seasonGoals.ts`):
+  one written before ids existed is given the id its words derive, and the migration gives every
+  link made by words the same id, so the two agree before anybody saves the season again. Once
+  saved, the season editor sends each goal back whole, so a reworded goal keeps its id and every
+  priority and win linked to it. A link also keeps the words it was made with: when a goal is
+  removed, the season view lists what served it under "named no season priority", saying which
+  priority it served. Two goals with the same words get two ids.
+- **A win on an agenda item serves the season too** (0298): under each win on an item page, anybody
+  in the open room names the season priority it serves, and the season view lists it with the
+  meeting's own wins.
+- **People say how tensions group** (0298). The word guess now stems ("waters", "watering" and
+  "watered" are one word) and still needs two shared meaning words, so two tensions that share only
+  "kitchen" never group. Where the guess is wrong, the people who were in that Heart share say so
+  on the season view: "Same tension as" joins two (anybody who was in both), and "Not the same"
+  keeps one apart from the guess. Nobody else can regroup what they never heard.
 - **Who writes in the room.** Moving the stick and setting or marking priorities is the
   facilitator, the secretary or a joined admin, while the room is open. Capturing a share and
   bringing one to a later session is anybody in the room.
