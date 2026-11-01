@@ -16,6 +16,12 @@
  * every read and write here asks `guardCapability`, and this panel renders the
  * refusal it gets back. Nothing in this file decides permission.
  *
+ * A REFUSAL IS A SENTENCE, NEVER A CODE (E7, 2026-10-31). /cash-payouts showed
+ * a member the raw "auth_required". Now a 401 is a session that is missing or
+ * ran out, and asks for a sign-in that comes back here. A 403 is the key, and
+ * shows the server's sentence naming who pays cash out, with a way to write
+ * to them. Neither ever prints `error`, which is the machine's word.
+ *
  * Light-only, like the rest of this folder.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -56,9 +62,31 @@ function groupByMember(rows: CashQueueEntry[]): Group[] {
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export default function CashPayoutsTab({ password }: { password: string }) {
+const SIGN_IN_WORDS = "Sign in to read the cash the village owes.";
+/** What did not happen, once the sign-in ran out mid-page. */
+const sessionEndedWords = (what: string) => `Your sign-in has run out, so ${what}.`;
+const NO_KEY_WORDS = "Paying cash out needs the treasurer's key, and this account does not hold it.";
+
+/** Back to this very page after signing in, inside the admin panel or out of it. */
+const signInHref = () => `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+
+/** A 403 from the key: its sentence when it carries one, never its code. */
+const keyWords = (body: { message?: unknown } | null | undefined) => {
+  const text = typeof body?.message === "string" ? body.message.trim() : "";
+  return text || NO_KEY_WORDS;
+};
+
+type Refused = { kind: "signed-out" } | { kind: "no-key"; text: string } | { kind: "failed"; text: string };
+
+export default function CashPayoutsTab({ password, asPage = false }: {
+  password: string;
+  /** On its own page the title is the page's h1; inside the admin panel, which owns the h1, it is an h2. */
+  asPage?: boolean;
+}) {
+  const Heading = asPage ? "h1" : "h2";
   const [data, setData] = useState<{ unpaid: CashQueueEntry[]; paid: CashQueueEntry[] } | null>(null);
-  const [refused, setRefused] = useState("");
+  const [refused, setRefused] = useState<Refused | null>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
   const [view, setView] = useState<View>("unpaid");
   const [claimFilter, setClaimFilter] = useState<ClaimFilter>("all");
   const [currency, setCurrency] = useState("all");
@@ -71,19 +99,30 @@ export default function CashPayoutsTab({ password }: { password: string }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  /** The list closes and the refusal takes its place. */
+  const shut = (why: Refused) => {
+    setData(null);
+    setRefused(why);
+  };
+
   const load = useCallback(async () => {
+    if (!password) {
+      shut({ kind: "signed-out" });
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/cash-owed/queue?history=1`, { headers: authHeaders(password) });
       const body = await res.json().catch(() => ({}));
+      if (res.status === 401) return shut({ kind: "signed-out" });
+      if (res.status === 403) return shut({ kind: "no-key", text: keyWords(body) });
       if (!res.ok) {
-        setData(null);
-        setRefused(refusal(body, "Only a holder of the treasurer's key can read the cash the village owes."));
+        shut({ kind: "failed", text: refusal(body, "Only a holder of the treasurer's key can read the cash the village owes.") });
         return;
       }
-      setRefused("");
+      setRefused(null);
       setData({ unpaid: body.unpaid ?? [], paid: body.paid ?? [] });
     } catch {
-      setRefused("The list did not load. Try again in a moment.");
+      setRefused({ kind: "failed", text: "The list did not load. Try again in a moment." });
     }
   }, [password]);
   useEffect(() => { void load(); }, [load]);
@@ -106,7 +145,25 @@ export default function CashPayoutsTab({ password }: { password: string }) {
     setReference("");
     setConfirming(false);
     setError("");
+    setSessionEnded(false);
     setNotice("");
+  };
+  /**
+   * A write the session or the key refused. A session that ran out keeps the
+   * form as it was typed and asks for a sign-in; a key taken away while the
+   * page was open closes the list, because nothing on it can be done now.
+   */
+  const refusedWrite = (status: number, body: unknown, what: string): boolean => {
+    if (status === 401) {
+      setError(sessionEndedWords(what));
+      setSessionEnded(true);
+      return true;
+    }
+    if (status === 403) {
+      shut({ kind: "no-key", text: keyWords(body as { message?: unknown }) });
+      return true;
+    }
+    return false;
   };
   const cancelTransfer = () => {
     setPayingFor(null);
@@ -125,6 +182,7 @@ export default function CashPayoutsTab({ password }: { password: string }) {
     if (busy) return;
     setBusy(true);
     setError("");
+    setSessionEnded(false);
     try {
       const res = await fetch(`${API_BASE}/cash-owed/transfers`, {
         method: "POST",
@@ -133,8 +191,9 @@ export default function CashPayoutsTab({ password }: { password: string }) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(refusal(body, "The transfer was not recorded."));
         setConfirming(false);
+        if (refusedWrite(res.status, body, "the transfer was not recorded")) return;
+        setError(refusal(body, "The transfer was not recorded."));
         if (res.status === 409) await load();
         return;
       }
@@ -150,10 +209,13 @@ export default function CashPayoutsTab({ password }: { password: string }) {
 
   const exportCsv = async () => {
     setError("");
+    setSessionEnded(false);
     try {
       const res = await fetch(`${API_BASE}/cash-owed/export.csv`, { headers: authHeaders(password) });
       if (!res.ok) {
-        setError(refusal(await res.json().catch(() => ({})), "The export did not download."));
+        const body = await res.json().catch(() => ({}));
+        if (refusedWrite(res.status, body, "the export did not download")) return;
+        setError(refusal(body, "The export did not download."));
         return;
       }
       const url = URL.createObjectURL(await res.blob());
@@ -168,10 +230,21 @@ export default function CashPayoutsTab({ password }: { password: string }) {
   };
 
   if (refused) {
+    const link = "inline-flex min-h-[44px] items-center font-medium text-teal-deep underline";
     return (
       <div className="rounded-xl border border-border bg-white p-6">
-        <h2 className="text-xl font-semibold text-foreground">Cash to pay out</h2>
-        <p role="alert" className="mt-2 text-sm text-muted-foreground">{refused}</p>
+        <Heading className="text-xl font-semibold text-foreground">Cash to pay out</Heading>
+        {refused.kind === "signed-out" ? (
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">{SIGN_IN_WORDS}</p>
+            <a href={signInHref()} className={`${link} text-sm`}>Sign in</a>
+          </>
+        ) : (
+          <>
+            <p role="alert" className="mt-2 text-sm text-muted-foreground">{refused.text}</p>
+            {refused.kind === "no-key" && <a href="/messages?new=1" className={`${link} text-sm`}>Write a message</a>}
+          </>
+        )}
       </div>
     );
   }
@@ -183,10 +256,10 @@ export default function CashPayoutsTab({ password }: { password: string }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-semibold text-foreground">
+          <Heading className="flex items-center gap-2 text-xl font-semibold text-foreground">
             <HandCoins className="h-5 w-5" aria-hidden="true" />
             Cash to pay out
-          </h2>
+          </Heading>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             What the village owes each member in cash, for their roles, quests and accepted proposals. The village pays
             by bank transfer itself. Record each transfer here and its lines become paid.
@@ -258,7 +331,12 @@ export default function CashPayoutsTab({ password }: { password: string }) {
       </div>
 
       {notice && <p className="text-sm text-foreground">{notice}</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+          {sessionEnded && <> <a href={signInHref()} className="font-medium underline">Sign in again</a></>}
+        </p>
+      )}
 
       {groups.length === 0 ? (
         <p className="text-sm text-muted-foreground">
