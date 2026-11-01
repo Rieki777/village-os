@@ -35,6 +35,18 @@ describe("the How We Govern spec", () => {
     expect(rest.filter((s) => !s.hideable).map((s) => s.id)).toEqual([]);
   });
 
+  it("starts every village with words true of any village", () => {
+    const every = GOVERNANCE_PAGE.sections.flatMap((s) => [
+      ...s.fields.map((f) => f.default),
+      ...(s.lists ?? []).flatMap((l) => l.default.flatMap((row) => Object.values(row))),
+    ]);
+    const text = every.join(" ");
+    for (const claim of [/sociocra/i, /nonviolent communication/i, /consent/i, /consensus/i, /mediation/i, /General Coordinating/, /Development Circle/, /Game Guide/, /Value in, value out/i]) {
+      expect(text, String(claim)).not.toMatch(claim);
+    }
+    expect(GOVERNANCE_PAGE.sections.find((s) => s.id === "circles")!.lists![0].default).toEqual([]);
+  });
+
   it("asks for the veto window by its word, never as typed days", () => {
     const stewards = GOVERNANCE_PAGE.sections.find((s) => s.id === "stewards")!;
     const said = stewards.fields.map((f) => f.default).join(" ");

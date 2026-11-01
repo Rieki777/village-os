@@ -152,6 +152,10 @@ above the size of a gathering, not to the size of one person's usage.
 
 - `server/seeds/content-seed.json`, `quests-seed.json` — page copy + quest
   library (self-heals via `seedIfMissingOrEmpty`).
+- `server/seeds/page-governance-before-neutral.json` — How We Govern as it read before its
+  defaults went neutral (2026-11-01). Read once at boot by the `keep-governance-words-2026-11-01`
+  runOnce (`server/lib/governanceWordsKept.ts`), only for a village that already holds its own
+  `page-*` words; a new village never sees it.
 - `server/seeds/examples-seed.json` — STANDING EXAMPLES: platform-authored
   worked content revealed when a module is first enabled, so a founder meets a
   working module instead of "No items yet." Inert (every mutation refused) and
