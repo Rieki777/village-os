@@ -466,11 +466,17 @@ and the Love Letter Covenant (`client/src/components/admin/contentSections.ts`).
 The pair reads as one thing at a glance. Both misreadings are actionable, and
 each one costs somebody an afternoon.
 
-- **Seeded starter quests** come from `server/seeds/quests-seed.json` and land
-  as ordinary rows in a fresh village. No example flag anywhere on them. They
-  are fully editable and fully deletable and they are meant to be rewritten in
-  the village's own words. Rewriting them is the best drafting work available to
-  you in this whole document.
+- **Starter quests** come from the `quests` section of
+  `server/seeds/examples-seed.json` and arrive on a fresh village's board as
+  standing examples: labelled, and nobody can claim one. In Admin, Quests, each
+  one has Keep, which publishes it as a real quest with whatever the founder
+  changed and the value they set, and the others stay until they decide. Clear
+  removes the rest. The Journey to Launch row "Review the starter quests" stays
+  open until none is waiting. Rewriting a starter in the village's own words
+  before keeping it is the best drafting work available to you in this whole
+  document. (A village seeded before 2026-10-31 got fourteen ordinary rows from
+  `server/seeds/quests-seed.json` instead, which are fully editable and
+  deletable like any quest.)
 - **Standing examples** come from `server/seeds/examples-seed.json` and appear
   when a module is first switched on, so a founder meets a working module rather
   than "No items yet." Every row carries `is_example` on the row itself, so the
@@ -484,7 +490,7 @@ each one costs somebody an afternoon.
 A founder who reports "I tried to edit the example and it would not let me" has
 met the refusal working correctly, and the answer is to publish their own item.
 A founder who leaves the starter quests alone in case they are locked has the
-other misreading, and those are theirs to rewrite today.
+other misreading: Keep is the door, and the words are theirs to rewrite first.
 
 Drafting here is the single best use of your time. Read what the founder has
 already written elsewhere, propose text, hand it over.

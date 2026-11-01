@@ -186,7 +186,7 @@ describe("the starter set", () => {
     // The first board named a retreat center, food forests, a night watch at
     // the gate and a score only one village keeps. A starter may suggest work;
     // it may not tell a village what it already has.
-    const specific = /\b(retreat|food forest|night watch|gate|ARI|amora|costa rica|immersant|resident)\b/i;
+    const specific = /\b(retreat|food forest|night watch|gate|ARI|amora|costa rica|immersant|resident)\b/i; // brand-ok: asserts the starters carry no village name
     for (const s of starters) {
       for (const line of prose(s)) expect(line, s.id).not.toMatch(specific);
     }
