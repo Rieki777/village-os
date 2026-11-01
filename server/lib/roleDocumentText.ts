@@ -17,8 +17,10 @@
  * the rule the uploads door keeps (`sniffKind`, server/lib/uploads.ts):
  *
  *   PDF   `%PDF`. Read with unpdf (a serverless build of Mozilla's PDF.js,
- *         MIT, no dependencies of its own), imported only when a PDF arrives,
- *         so boot pays nothing. Lines are kept where the PDF ends them.
+ *         MIT, no dependencies of its own), on a worker thread of its own that
+ *         imports it only when a PDF arrives, so boot pays nothing and a
+ *         crafted file cannot hold the server. Lines are kept where the PDF
+ *         ends them.
  *   DOCX  a zip holding `word/document.xml`. Read here with node:zlib and no
  *         library: one entry out of the zip, inflated with a cap on its size,
  *         then paragraphs and their text. A Word heading comes out as a `#`
@@ -34,7 +36,8 @@
  *   ROLE_DOCUMENT_TEXT_MAX    60,000 characters of text, refused past it
  *   DOCX_XML_MAX_BYTES        20 MB of inflated document.xml, so a zip bomb stops early
  *   PDF_MAX_PAGES             40 pages, refused past it before any page is read
- *   PDF_PARSE_TIMEOUT_MS      10 seconds for the whole PDF read, then it is abandoned
+ *   PDF_PARSE_TIMEOUT_MS      10 seconds for the whole PDF read, then its worker is ended
+ *   PDF_WORKER_HEAP_MB        256 MB of heap for the worker reading one PDF
  *   GOOGLE_DOC_TIMEOUT_MS     10 seconds for the whole fetch, redirects included
  *   GOOGLE_DOC_MAX_BYTES      1 MB of exported text
  *
@@ -48,6 +51,8 @@
  * googleusercontent.com host. A sign-in page, an HTML answer or a 401, 403 or
  * 404 means the document is not shared as "anyone with the link", and says so.
  */
+import { createRequire } from "node:module";
+import { Worker } from "node:worker_threads";
 import zlib from "node:zlib";
 import { sniffKind } from "./uploads";
 
@@ -55,10 +60,10 @@ export const ROLE_DOCUMENT_MAX_BYTES = 5 * 1024 * 1024;
 export const ROLE_DOCUMENT_TEXT_MAX = 60_000;
 export const DOCX_XML_MAX_BYTES = 20 * 1024 * 1024;
 /**
- * A PDF is read on the request path, so a crafted one could hold the server.
- * The page cap bounds the work before it starts, and the timeout abandons a
- * read that runs long. The read still shares the event loop while it runs;
- * moving it into a worker thread is the follow-up that closes that.
+ * A PDF is read on a worker thread of its own (`readPdf`), so a crafted one
+ * cannot hold the server. The page cap bounds the work before it starts, the
+ * timeout ends a read that runs long, and the worker's heap cap ends one that
+ * swells.
  */
 export const PDF_MAX_PAGES = 40;
 export const PDF_PARSE_TIMEOUT_MS = 10_000;
@@ -231,65 +236,138 @@ function readDocx(bytes: Buffer): Extracted {
 
 // ── PDF ─────────────────────────────────────────────────────────────────────
 
-interface PdfTextItem {
-  str?: string;
-  hasEOL?: boolean;
-}
+/**
+ * A PDF IS READ ON A THREAD OF ITS OWN (the follow-up #606 named, 2026-10-31).
+ *
+ * PDF.js runs in a worker thread, one per read, so a crafted file that makes
+ * it spin burns that thread and never the one every other request is served
+ * on. #606's timeout could only abandon a read that YIELDED: a timer cannot
+ * fire on a thread that never does, so until this a spinning parse held the
+ * whole server for as long as it spun. Now the timer runs on the server's
+ * thread, untouched, and at `PDF_PARSE_TIMEOUT_MS` the worker is ENDED, not
+ * left spinning on a core.
+ *
+ *   memory   the worker's heap is capped (`PDF_WORKER_HEAP_MB`), so a
+ *            compression bomb that inflates past it ends the worker, never
+ *            the server; that reads as a broken PDF
+ *   death    a worker that exits, throws or runs out of memory answers a
+ *            broken PDF, once; the first answer wins and the rest are ignored
+ *   words    the page cap and the text cap are applied inside the worker, as
+ *            they were on the request thread
+ *
+ * The worker's code is the string below, evaluated, so the server bundle
+ * needs no second entry point and nothing outside it to ship: it imports
+ * unpdf from the path the server itself resolves (`unpdfPath`). `parser`
+ * replaces that path, which is how a suite puts a PDF.js that misbehaves
+ * inside the worker.
+ */
+export const PDF_WORKER_HEAP_MB = 256;
 
-/** A PDF's words, abandoned past the timeout. Exported for its tests; members reach it through extractRoleDocumentText. */
-export async function readPdf(bytes: Buffer, timeoutMs = PDF_PARSE_TIMEOUT_MS): Promise<Extracted> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let abandoned = false;
-  const late = new Promise<Extracted>((resolve) => {
-    timer = setTimeout(() => {
-      abandoned = true;
-      resolve(fail(422, DOCUMENT_WORDS.slowPdf));
-    }, timeoutMs);
-  });
+/** Runs inside the worker: read the words, post one answer. Plain JavaScript, evaluated. */
+const PDF_WORKER_SOURCE = `
+const { parentPort, workerData } = require("node:worker_threads");
+const { pathToFileURL } = require("node:url");
+const send = (m) => parentPort.postMessage(m);
+(async () => {
+  let mod;
   try {
-    return await Promise.race([readPdfPages(bytes, () => abandoned), late]);
-  } finally {
-    if (timer) clearTimeout(timer);
+    mod = await import(pathToFileURL(workerData.parser).href);
+  } catch {
+    return send({ kind: "broken" });
   }
-}
-
-async function readPdfPages(bytes: Buffer, abandoned: () => boolean): Promise<Extracted> {
-  // Only when a PDF arrives: PDF.js is large, and boot should not pay for it.
-  const { getDocumentProxy } = await import("unpdf");
-  let pdf: Awaited<ReturnType<typeof getDocumentProxy>>;
+  const getDocumentProxy = mod.getDocumentProxy || (mod.default && mod.default.getDocumentProxy);
+  if (typeof getDocumentProxy !== "function") return send({ kind: "broken" });
+  let pdf;
   try {
-    // No font faces and no logging: text only, and a stranger's broken PDF says nothing in the server's log.
-    // (This PDF.js has no eval path left to switch off.)
-    pdf = await getDocumentProxy(new Uint8Array(bytes), { verbosity: 0, useSystemFonts: false, disableFontFace: true });
-  } catch (e: any) {
-    return fail(422, /password/i.test(String(e?.name ?? "") + String(e?.message ?? "")) ? DOCUMENT_WORDS.lockedPdf : DOCUMENT_WORDS.brokenPdf);
+    pdf = await getDocumentProxy(new Uint8Array(workerData.bytes), { verbosity: 0, useSystemFonts: false, disableFontFace: true });
+  } catch (e) {
+    return send({ kind: /password/i.test(String(e && e.name) + String(e && e.message)) ? "locked" : "broken" });
   }
   try {
-    // Refused before any page is read: the page count bounds the work.
-    if (pdf.numPages > PDF_MAX_PAGES) return fail(413, DOCUMENT_WORDS.longPdf);
-    const pages: string[] = [];
+    if (pdf.numPages > workerData.maxPages) return send({ kind: "long" });
+    const pages = [];
     let total = 0;
     for (let n = 1; n <= pdf.numPages; n += 1) {
-      // Past the timeout the answer has already gone back; stop spending on it.
-      if (abandoned()) return fail(422, DOCUMENT_WORDS.slowPdf);
       const page = await pdf.getPage(n);
       const content = await page.getTextContent();
       let text = "";
-      for (const item of content.items as PdfTextItem[]) {
+      for (const item of content.items) {
         if (typeof item.str === "string") text += item.str;
-        if (item.hasEOL) text += "\n";
+        if (item.hasEOL) text += "\\n";
       }
       pages.push(text);
       total += text.length;
-      // Past the cap the answer is already "too long", so the rest is never read.
-      if (total > ROLE_DOCUMENT_TEXT_MAX * 2) break;
+      if (total > workerData.textCap) break;
     }
-    return finish("pdf", pages.join("\n\n"));
+    send({ kind: "text", text: pages.join("\\n\\n") });
+  } catch {
+    send({ kind: "broken" });
+  }
+})();
+`;
+
+let resolvedUnpdf: string | null = null;
+
+/** Where unpdf lives, resolved from this module, as the worker cannot resolve a bare name the way the server does. */
+function unpdfPath(): string {
+  if (!resolvedUnpdf) resolvedUnpdf = createRequire(import.meta.url).resolve("unpdf");
+  return resolvedUnpdf;
+}
+
+let running = 0;
+
+/** How many PDF workers are alive right now. For the tests that prove an abandoned one is ended. */
+export function pdfWorkersRunning(): number {
+  return running;
+}
+
+type WorkerAnswer = { kind: "text"; text: string } | { kind: "long" | "locked" | "broken" };
+
+function answerOf(m: WorkerAnswer | null | undefined): Extracted {
+  if (m && m.kind === "text" && typeof m.text === "string") return finish("pdf", m.text);
+  if (m && m.kind === "long") return fail(413, DOCUMENT_WORDS.longPdf);
+  if (m && m.kind === "locked") return fail(422, DOCUMENT_WORDS.lockedPdf);
+  return fail(422, DOCUMENT_WORDS.brokenPdf);
+}
+
+/** A PDF's words, read on a worker thread and abandoned past the timeout. Exported for its tests; members reach it through extractRoleDocumentText. */
+export async function readPdf(bytes: Buffer, timeoutMs = PDF_PARSE_TIMEOUT_MS, opts: { parser?: string } = {}): Promise<Extracted> {
+  let parser: string;
+  try {
+    parser = opts.parser ?? unpdfPath();
   } catch {
     return fail(422, DOCUMENT_WORDS.brokenPdf);
-  } finally {
-    await Promise.resolve(pdf.loadingTask?.destroy()).catch(() => undefined);
   }
+  let worker: Worker;
+  try {
+    worker = new Worker(PDF_WORKER_SOURCE, {
+      eval: true,
+      workerData: { bytes, parser, maxPages: PDF_MAX_PAGES, textCap: ROLE_DOCUMENT_TEXT_MAX * 2 },
+      resourceLimits: { maxOldGenerationSizeMb: PDF_WORKER_HEAP_MB, maxYoungGenerationSizeMb: 32, stackSizeMb: 4 },
+    });
+  } catch {
+    return fail(422, DOCUMENT_WORDS.brokenPdf);
+  }
+  running += 1;
+  worker.once("exit", () => {
+    running -= 1;
+  });
+  return new Promise<Extracted>((resolve) => {
+    let done = false;
+    const answer = (r: Extracted) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(r);
+      // Ended whatever it was doing: an answer that came back needs nothing more, and one that did not is spinning.
+      void worker.terminate().catch(() => undefined);
+    };
+    const timer = setTimeout(() => answer(fail(422, DOCUMENT_WORDS.slowPdf)), timeoutMs);
+    worker.once("message", (m: WorkerAnswer) => answer(answerOf(m)));
+    // Out of memory, a throw, or an exit before an answer: a broken PDF, said once.
+    worker.once("error", () => answer(fail(422, DOCUMENT_WORDS.brokenPdf)));
+    worker.once("exit", () => answer(fail(422, DOCUMENT_WORDS.brokenPdf)));
+  });
 }
 
 // ── The door ────────────────────────────────────────────────────────────────

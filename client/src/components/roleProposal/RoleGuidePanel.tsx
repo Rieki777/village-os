@@ -185,7 +185,7 @@ export default function RoleGuidePanel({
       {question && (
         <div className="grid gap-2" data-guide-question>
           <p className="text-sm font-medium text-stone-900">
-            {answerName ?? name}: {question}
+            {ROLE_GUIDE_WORDS.asks(answerName ?? name)} {question}
           </p>
           <label className="grid gap-1 text-sm text-stone-700">
             {ROLE_GUIDE_WORDS.answer}

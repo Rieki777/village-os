@@ -83,6 +83,29 @@ export default function GameRolesTab({ password }: { password: string }) {
     return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) };
   };
 
+  /*
+   * Sheet 19: a group can carry admin access. Turning it on hands everyone in
+   * the group the panel, so it asks first. The server refuses a founder-only
+   * flip before launch and the flip that would leave nobody able to get in,
+   * and both refusals are sentences shown as they come.
+   */
+  const setAdminAccess = async (roleId: string, name: string, on: boolean) => {
+    if (on && !confirm(`Everyone in ${name} will be able to open the admin panel while they hold it. It gives no power the group does not already carry.`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/roles/${encodeURIComponent(roleId)}/admin-access`, {
+        method: "PUT",
+        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        body: JSON.stringify({ on }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(refusal(data, "failed"));
+      toast.success(on ? `${name} can open the admin panel` : `${name} no longer opens the admin panel`);
+      load();
+    } catch (e: any) {
+      toast.error(e?.message || "That did not save");
+    }
+  };
+
   const change = async (roleId: string, userId: string, action: "add" | "remove", termEndsOn = ""): Promise<boolean> => {
     try {
       const sent = await send(roleId, userId, action, termEndsOn);
@@ -206,6 +229,19 @@ export default function GameRolesTab({ password }: { password: string }) {
                   ))}
                 </div>
               </div>
+
+              <label className="mt-2 flex items-start gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={!!r.grantsAdmin}
+                  disabled={!!r.isExample}
+                  onChange={(e) => setAdminAccess(r.id, r.name, e.target.checked)}
+                  className="mt-1 h-4 w-4"
+                />
+                <span>
+                  <span className="font-medium">Admin access.</span> Whoever holds this group can open the admin panel while they hold it.
+                </span>
+              </label>
 
               <div className="flex flex-wrap items-center gap-2 mt-3">
                 {(r.holders ?? []).length === 0 && (

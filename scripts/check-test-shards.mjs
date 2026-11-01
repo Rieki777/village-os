@@ -33,6 +33,7 @@
  *
  * Usage (CI, after downloading every shard's report into one directory):
  *   node scripts/check-test-shards.mjs --shards 4 --dir test-results
+ * Report names are shard-<i>-of-<N>-attempt-<run_attempt>.json; see latestAttempts.
  * Self-test: node scripts/check-test-shards.test.mjs
  */
 import { spawnSync } from "node:child_process";
@@ -48,10 +49,36 @@ export function toRel(name, root = ROOT) {
   return path.relative(root, abs).split(path.sep).join("/");
 }
 
-/** `shard-3-of-4.json` to { index: 3, count: 4 }, anything else to null. */
+/**
+ * `shard-3-of-4-attempt-2.json` to { index: 3, count: 4, attempt: 2 }, anything
+ * else to null. A name with no attempt is attempt 1, so a local run's report
+ * still reads.
+ */
 export function parseShardName(file) {
-  const m = /^shard-(\d+)-of-(\d+)\.json$/.exec(file);
-  return m ? { index: Number(m[1]), count: Number(m[2]) } : null;
+  const m = /^shard-(\d+)-of-(\d+)(?:-attempt-(\d+))?\.json$/.exec(file);
+  return m ? { index: Number(m[1]), count: Number(m[2]), attempt: Number(m[3] ?? 1) } : null;
+}
+
+/**
+ * One report per shard: the one from the newest run attempt.
+ *
+ * WHY. `gh run rerun --failed` re-runs only the red shard, and the run then
+ * holds an artifact from EACH attempt. On batch 75 (2026-11-01) both were named
+ * `test-results-shard-4`, and download-artifact took attempt 1's, so the
+ * re-run's green never reached this check and only a full re-run cleared it.
+ * The toolkit keeps the highest artifact ID per name, and there the older
+ * artifact had the higher ID (13077656607 against 13077014486), so an ID is not
+ * a clock. The workflow now writes the attempt into the artifact name and the
+ * report name, and this picks by that number. A newest attempt that failed is
+ * still the one judged, so a re-run can turn a flake green and never hide a red.
+ */
+export function latestAttempts(shards) {
+  const best = new Map();
+  for (const s of shards) {
+    const held = best.get(s.index);
+    if (!held || s.attempt > held.attempt) best.set(s.index, s);
+  }
+  return [...best.values()];
 }
 
 /**
@@ -174,17 +201,21 @@ function main() {
     }
   }
 
-  const v = judge({ expected: listed.files, shards, want });
+  const kept = latestAttempts(shards);
+  const superseded = shards.filter((s) => !kept.includes(s));
+  const v = judge({ expected: listed.files, shards: kept, want });
   v.problems.push(...unreadable.map((u) => `unreadable report ${u}`));
 
   const lines = [];
-  lines.push(`Test shards: ${shards.length} report(s) of ${want} declared`);
+  lines.push(`Test shards: ${kept.length} report(s) of ${want} declared`);
   for (const s of v.perShard) {
+    const attempt = kept.find((k) => k.index === s.index)?.attempt ?? 1;
     lines.push(
-      `  shard ${s.index}/${want}  ${String(s.files).padStart(4)} files  ${String(s.tests).padStart(6)} tests` +
+      `  shard ${s.index}/${want}  attempt ${attempt}  ${String(s.files).padStart(4)} files  ${String(s.tests).padStart(6)} tests` +
         `  ${String(s.skippedTests).padStart(3)} skipped or todo  ${s.seconds}s of test time`,
     );
   }
+  for (const s of superseded) lines.push(`  (attempt ${s.attempt} of shard ${s.index} superseded by a re-run, not read)`);
   lines.push(`  files vitest resolves for the whole suite  ${v.expected}`);
   lines.push(`  distinct files that ran across the shards  ${v.ran}`);
   lines.push(`  missing ${v.missing.length}, ran twice ${v.twice.length}, unexpected ${v.extra.length}`);

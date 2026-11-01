@@ -39,7 +39,7 @@ vi.mock("@/modules/ModuleProvider", () => ({
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "usr-ana", name: "Ana" } }),
 }));
-vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: () => "Gratitude" }));
+vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: () => "Gratitude", useTokensWord: () => "Village Tokens" }));
 
 const STAGES = [
   { id: "member", name: "Member", description: "" },

@@ -30,6 +30,7 @@ import { circleWordLabel, CIRCLE_WORD_KEYS, type CircleWordKey, type CircleWords
 import type { Slot } from "./playerCard";
 import { formatDay, type Read } from "./roleSheet";
 import type { SignReading } from "./roleSigns";
+import { openProposalHref } from "./openProposals";
 import { proposeTermsHref } from "./seatTermsOffer";
 import type { WorkPay } from "./workValue";
 
@@ -120,6 +121,14 @@ export interface CircleCardIn {
   timeZone: string;
   /** Show the CCOS term beside each heading (`org.ccos_terms`). */
   frameworkTerms: boolean;
+  /**
+   * The reader may read terms (`terms.read`), so an open role's Apply link
+   * opens the member door. False for a visitor or a guest: theirs opens
+   * "propose a role" with that role picked (shared/openProposals.ts), the door
+   * somebody with no membership can walk through, where the member door would
+   * only refuse them (joining blockers, 2026-10-31). Left out, the member door.
+   */
+  readerMayApply?: boolean;
   /** The words an open org draft would change: "Proposed, waiting for consent" beside each. */
   pending?: Read<CircleWordKey[]>;
   /** The open drafts that would change the circle's words, with the words they propose. */
@@ -268,7 +277,7 @@ function stateWords(r: CircleRoleIn): { words: string; filled: boolean } {
   }
 }
 
-function roleRow(r: CircleRoleIn): RoleRowOut {
+function roleRow(r: CircleRoleIn, asMember: boolean): RoleRowOut {
   const name = clean(r.name) ?? r.id;
   const { words, filled } = stateWords(r);
   const handles = (r.holderHandles ?? []).filter((h): h is string => typeof h === "string" && h.trim() !== "");
@@ -285,19 +294,19 @@ function roleRow(r: CircleRoleIn): RoleRowOut {
     stateWords: words,
     filled,
     holderCards,
-    applyHref: mayApply ? proposeTermsHref(r.id) : null,
+    applyHref: mayApply ? (asMember ? proposeTermsHref(r.id) : openProposalHref(r.id)) : null,
     applyLabel: W.apply,
     ...(r.pay ? { pay: r.pay } : {}),
   };
 }
 
-function rolesSection(roles: Read<CircleRoleIn[]>, terms: boolean): CircleSection {
+function rolesSection(roles: Read<CircleRoleIn[]>, terms: boolean, asMember: boolean): CircleSection {
   const b = base("roles", terms);
   if (roles === undefined) return { ...b, kind: "roles", slot: UNREAD, note: null };
   if (!roles.length) return { ...b, kind: "roles", slot: empty(W.noRoles), note: null };
   // Below the member tier no handle is read, so a filled role carries no link: say why once.
   const handlesUnread = roles.some((r) => r.holderHandles === undefined && r.holderCount > 0);
-  return { ...b, kind: "roles", slot: shown(roles.map(roleRow)), note: handlesUnread ? W.holdersPrivate : null };
+  return { ...b, kind: "roles", slot: shown(roles.map((r) => roleRow(r, asMember))), note: handlesUnread ? W.holdersPrivate : null };
 }
 
 function adoptionSection(adoptions: Read<AdoptionIn[]>, timeZone: string, terms: boolean): CircleSection {
@@ -437,7 +446,7 @@ export function buildCircleCard(input: CircleCardIn): CircleCard {
       list("domains"),
       list("authorities"),
       list("responsibilities"),
-      rolesSection(roles, terms),
+      rolesSection(roles, terms, input.readerMayApply !== false),
       ...liveSections(input, terms),
       list("stewardship"),
       list("checks"),

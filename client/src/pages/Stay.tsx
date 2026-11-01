@@ -17,17 +17,21 @@ import { Image } from "@/components/Image";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import { ExampleRefusal, readRefusal } from "@/components/ExampleRefusal";
 import { formatHumanAmount, formatTokenAmount } from "@/lib/tokenAmount";
+import { useTokenNameFor, useTokenNameMap } from "@/hooks/useTokenNameFor";
+import { formatMoney } from "@shared/money";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
   return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 };
 
-const usd = (minor: number) => `$${(minor / 100).toFixed(2)}`;
-
 export default function Stay() {
   const modules = useModules();
   const staysModule = useModule("stays");
+  // The village's own word for its stay token (R084), from the registry, above
+  // the early return so the hook count never changes when the catalogue loads.
+  const stayRegistryName = useTokenNameFor("stay-credit");
+  const registryNames = useTokenNameMap();
   const { user } = useAuth();
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
@@ -52,7 +56,7 @@ export default function Stay() {
   useEffect(() => {
     if (staysModule) load();
     const q = new URLSearchParams(window.location.search).get("purchase");
-    if (q === "success") setNotice("Payment received. Your credits arrive as soon as Stripe confirms (usually seconds).");
+    if (q === "success") setNotice("Payment received. Your tokens arrive as soon as Stripe confirms (usually seconds).");
     if (q === "cancelled") setNotice("Checkout cancelled. Nothing was charged.");
   }, [staysModule?.id]);
 
@@ -114,7 +118,9 @@ export default function Stay() {
    * units, which is what an unregistered token honestly means.
    */
   const priceTokens: Record<string, { name?: string; decimals?: number }> = data?.priceTokens ?? {};
-  const tokenName = (slug: string): string => priceTokens[slug]?.name ?? slug;
+  // The registry's name next (R084): a stay activated in a token no room
+  // prices any more is still named as the village names it, never by slug.
+  const tokenName = (slug: string): string => priceTokens[slug]?.name ?? registryNames[slug] ?? slug;
   const tokenScale = (slug: string): number => Number(priceTokens[slug]?.decimals ?? 0) || 0;
   /**
    * Stay credits' own scale. It is the SAME token as `mine.balanceDecimals` on
@@ -122,6 +128,13 @@ export default function Stay() {
    * reading a nightly rate gets the number a member gets.
    */
   const stayScale = tokenScale("stay-credit");
+  /**
+   * What this village calls its stay token, in every sentence that used to say
+   * "stay credit(s)" or "credit(s)" whatever the registry said (readiness
+   * R084). `priceTokens` always carries it; the registry name from the config
+   * covers the moment before this page's own read lands.
+   */
+  const stayName = priceTokens["stay-credit"]?.name || stayRegistryName;
   /**
    * 0092: every nightly rate a room posts that is neither stay credits nor
    * money, with the village's own name for each token.
@@ -150,8 +163,8 @@ export default function Stay() {
         <div className="container text-center">
           <h1 className="font-display text-4xl font-bold text-foreground mb-3">Stay With Us</h1>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            One stay credit hosts one night. Buy credits, or earn them through
-            work-exchange Quests. The village runs on contribution either way.
+            Each room shows what a night costs. Request a stay, and the
+            stewards reply.
           </p>
           <ExamplesBanner moduleId="stays" noun="room" />
         </div>
@@ -171,7 +184,7 @@ export default function Stay() {
                       2026-09-04 scale ruling they carry two decimals and this
                       number MUST be divided. Through the shared formatter for
                       the reason in client/src/lib/tokenAmount.ts. */}
-                  Your balance: <span className="font-bold">{formatTokenAmount(Number(data.mine.balance ?? 0), Number(data.mine.balanceDecimals ?? 0))}</span> stay credit(s)
+                  Your balance: <span className="font-bold">{formatTokenAmount(Number(data.mine.balance ?? 0), Number(data.mine.balanceDecimals ?? 0))}</span> {stayName}
                   {data.mine.balance < 0 && <span className="text-red-600">, please settle up with the stewards</span>}
                 </p>
               </div>
@@ -188,7 +201,7 @@ export default function Stay() {
                           room still posts, so a stay activated in a token no
                           room prices any more read 850 for 8.5. The fallback
                           is for a payload without the field. */}
-                      Your stay is active at <b>{formatTokenAmount(Number(s.rateSnapshotCredits ?? 0), Number(s.rateSnapshotDecimals ?? tokenScale(s.rateSnapshotToken ?? "stay-credit")))}</b> credit(s)/night
+                      Your stay is active at <b>{formatTokenAmount(Number(s.rateSnapshotCredits ?? 0), Number(s.rateSnapshotDecimals ?? tokenScale(s.rateSnapshotToken ?? "stay-credit")))}</b> {tokenName(s.rateSnapshotToken ?? "stay-credit")} a night
                       {s.nightsRemaining != null && <>, about <b>{Math.max(0, s.nightsRemaining)}</b> night(s) covered</>}.
                     </>
                   )}
@@ -232,15 +245,15 @@ export default function Stay() {
                             arrives MINOR and is divided, so the two a member
                             compares land on one scale. Dividing the rate as
                             well printed a ten-credit night as 0.1. */}
-                        {credit ? <><b>{formatHumanAmount(credit, stayScale)}</b> credit(s)/night</> : <span className="text-muted-foreground">rate coming soon</span>}
-                        {money ? <span className="text-muted-foreground"> · {usd(money)}/night</span> : null}
+                        {credit ? <><b>{formatHumanAmount(credit, stayScale)}</b> {stayName} a night</> : <span className="text-muted-foreground">rate coming soon</span>}
+                        {money ? <span className="text-muted-foreground"> · {formatMoney(money, "USD")} a night</span> : null}
                         {/* 0092: a room can also post a nightly rate in the
                             village's own credits, which is where the cycle
                             pool's value finally buys something. Either
                             accepted, never a rate between them: the stewards
                             activate the stay in one of the two. */}
                         {villagePrices(a).map((v) => (
-                          <span key={v.slug} className="text-muted-foreground"> · {v.amount} {v.name}/night</span>
+                          <span key={v.slug} className="text-muted-foreground"> · {v.amount} {v.name} a night</span>
                         ))}
                         {tiered && audience === "member" && (
                           <span className="ml-1 text-[10px] bg-teal-deep/10 text-teal-deep px-1.5 py-0.5 rounded-full">member rate</span>
@@ -249,8 +262,8 @@ export default function Stay() {
                       {tiered && (
                         <p className="text-xs text-muted-foreground">
                           {audience === "member"
-                            ? <>Visitors pay {formatHumanAmount(guestCredit, stayScale)} credit(s)/night.</>
-                            : <>Members pay {formatHumanAmount(memberCredit, stayScale)} credit(s)/night.</>}
+                            ? <>Visitors pay {formatHumanAmount(guestCredit, stayScale)} {stayName} a night.</>
+                            : <>Members pay {formatHumanAmount(memberCredit, stayScale)} {stayName} a night.</>}
                         </p>
                       )}
                       {user ? (
@@ -282,10 +295,10 @@ export default function Stay() {
                                     used to fail after the click instead of
                                     before it. */}
                                 <input type="number" min={1} max={data?.maxPurchaseNights ?? 60} value={buyNights}
-                                  aria-label="Nights of credits to buy"
+                                  aria-label={`Nights of ${stayName} to buy`}
                                   onChange={(e) => setBuyNights(Math.min(data?.maxPurchaseNights ?? 60, Math.max(1, Number(e.target.value) || 1)))}
                                   className="w-14 text-sm border border-border rounded-lg px-2 py-2" title="Nights" />
-                                <button onClick={() => checkout(a.id)} title={`Buy ${buyNights} night(s) of credits`}
+                                <button onClick={() => checkout(a.id)} title={`Buy ${buyNights} night(s) of ${stayName}`}
                                   className="inline-flex items-center gap-1.5 text-sm border border-teal-deep text-teal-deep rounded-lg px-3 py-2 font-medium hover:bg-teal-deep/5">
                                   <CreditCard className="w-3.5 h-3.5" /> Buy
                                 </button>
@@ -294,7 +307,7 @@ export default function Stay() {
                           </div>
                         )
                       ) : (
-                        <p className="text-xs text-muted-foreground">Sign in to request a stay or buy credits.</p>
+                        <p className="text-xs text-muted-foreground">Sign in to request a stay or buy {stayName}.</p>
                       )}
                       {refusedRoom && refusedRoom.id === a.id && (
                         <ExampleRefusal message={refusedRoom.message} className="mt-2" />
@@ -325,7 +338,7 @@ export default function Stay() {
                         <WorkPayBlock pay={q.pay} />
                       </span>
                     ) : (
-                      q.stayCreditReward > 0 && <>: {formatHumanAmount(q.stayCreditReward, stayScale)} stay credit(s) on consent</>
+                      q.stayCreditReward > 0 && <>: {formatHumanAmount(q.stayCreditReward, stayScale)} {stayName} on consent</>
                     )}
                   </Link>
                 ))}

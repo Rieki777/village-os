@@ -14,7 +14,8 @@
       "org.decide"
     ],
     "minStage": null,
-    "order": 1
+    "order": 1,
+    "grantsAdmin": true
   },
   {
     "id": "steward-circle",
@@ -29,7 +30,8 @@
       "member.superVouch"
     ],
     "minStage": "member",
-    "order": 2
+    "order": 2,
+    "grantsAdmin": true
   },
   {
     "id": "treasury",

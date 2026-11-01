@@ -112,11 +112,10 @@ describe("every field in the Work With Us spec reaches the page", () => {
     fireEvent.click(screen.getByRole("button", { name: /Barter/ }));
     send();
     expect(await screen.findByRole("heading", { level: 1, name: "Your proposal is with us" })).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Thank you for offering your gifts to Willowbrook. A reply can take up to a month, and there's room to talk it through and revise.",
-      ),
-    ).toBeTruthy();
+    const thanks = WORK_WITH_US_PAGE.sections.find((s) => s.id === "thanks")!.fields.find((f) => f.key === "body")!.default;
+    expect(screen.getByText(thanks.replace("{village}", "Willowbrook"))).toBeTruthy();
+    // A reply time is a promise only a village can make, so the starter makes none.
+    expect(thanks).not.toMatch(/month|week|day|hour/i);
   });
 });
 

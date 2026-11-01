@@ -621,7 +621,16 @@ export const GAME_CONFIG: GameConfig = {
 
   season: {
     cadence: "solstice-equinox",
-    timezone: "America/Costa_Rica",
+    /*
+     * UTC, which is nobody's home (readiness R059, 2026-10-31). This was
+     * "America/Costa_Rica", the first village's clock, inherited by every fork
+     * until a founder answered. The live village holds its own zone in its
+     * season document, so moving this default moved nothing there; a village
+     * that never answered moves to UTC, and the Launch Plan's village-timezone
+     * row (shared/launchRequirements.ts) is blocking until somebody does.
+     * scripts/check-identity-keys.mjs holds this slot to "UTC".
+     */
+    timezone: "UTC",
     /*
      * EMPTY, AND DERIVED INSTEAD. See `defaultSeasonsFor` in
      * `server/lib/seasonCalendar.ts`.

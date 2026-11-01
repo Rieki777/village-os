@@ -1,4 +1,5 @@
 import { anonymizeMember, backfillFinishedErasures, erasureBackfillJob } from "./lib/erasure";
+import { backfillSeasonGoalIds, SEASON_GOAL_ID_BACKFILL } from "./lib/seasonGoalIds";
 import { FORMER_MEMBER_HOLD, resolveExit } from "./lib/exitResolve";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
@@ -55,9 +56,12 @@ import {
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 import { GPS_CHANGE } from "../shared/governingPurpose";
 import { pageContentProblem } from "../shared/pageContent";
+import { contentVersion } from "../shared/pageContent/resolve";
 import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
 import { pageVarsFrom } from "../shared/pageContent/vars";
 import { workWithUsAckEmail } from "./lib/workWithUsAck";
+import { investorPacketEmail } from "./lib/investorPacketMail";
+import { emailAccent } from "./lib/emailAccent";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
   NOT_YET_WIRED,
@@ -72,6 +76,7 @@ import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, 
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerBrochurePagesRoutes } from "./routes/brochurePages";
+import { register as registerPeopleLock, ballotCardForViewer, ballotForViewer, firstNameOf, hiddenFromStranger } from "./routes/peopleLock";
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -82,10 +87,14 @@ import { register as registerTrainingRoutes } from "./routes/training";
 import { register as registerGoogleAuthRoutes } from "./routes/authGoogle";
 import { register as registerSignUpRoutes } from "./routes/register";
 import { register as registerInviteRoutes } from "./routes/invites";
+import { register as registerJoinAnswerRoutes } from "./routes/joinAnswers";
 import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
+import { register as registerVerifyEmailRoutes } from "./routes/verifyEmail";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
+import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
+import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
@@ -135,6 +144,7 @@ import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/r
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { keepFirstPlanIfUsed } from "./lib/commandCentrePlanDefault";
+import { keepGovernanceWords } from "./lib/governanceWordsKept";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
@@ -150,6 +160,7 @@ import { register as registerPlayerCardRoutes } from "./routes/playerCard";
 import { register as registerCircleCardRoutes } from "./routes/circleCard";
 import { register as registerApplicationCardRoutes, orgRoleExtras } from "./routes/applicationCard";
 import { register as registerRoleProposalRoutes } from "./routes/roleProposals";
+import { register as registerOpenProposalRoutes } from "./routes/openProposals";
 import { register as registerRoleGuideRoutes } from "./routes/roleGuide";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
@@ -174,6 +185,7 @@ import { register as registerSessionCalendarRoutes } from "./routes/sessionCalen
 import { register as registerSessionDecisionRoutes } from "./routes/sessionDecisions";
 import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
+import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
@@ -181,7 +193,7 @@ import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { claimsAnnouncedHere } from "./lib/rewardMoment";
 import { feedOrigin as feedOriginOf, feedUidHost } from "./lib/feedOrigin";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
-import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
+import { register as registerModuleLibraryRoutes, moduleChangeReaders, plantingDoor } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
@@ -189,6 +201,7 @@ import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerCompanionRoutes } from "./routes/companions";
+import { register as registerMemberAskRoutes } from "./routes/memberAsks";
 import { register as registerStockAvatarRoutes, STOCK_AVATAR_DIR } from "./routes/stockAvatars";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
@@ -418,6 +431,8 @@ import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } fro
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
+import { loadInventory } from "./repos/profileInventory";
+import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
@@ -433,7 +448,7 @@ import {
   staysForUser,
   staysOpenState,
 } from "./lib/stays";
-import { createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
+import { baseRpcUrl, createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
 import { allExits, blockingStates, cancelExit, createExit, exitById, exitOpenState, openExitFor, sweepBalances } from "./lib/exit";
 import {
   DEFAULT_EXIT_POLICY,
@@ -639,6 +654,7 @@ import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { grantCashPayToTreasury, seedStarterRoles } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
+import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
@@ -657,7 +673,7 @@ import {
 } from "./lib/agentProfile";
 // ── END LANE L6 IMPORTS ─────────────────────────────────────────────────────
 import {
-  allSecretStatuses, ROOT_SLOT_CARDS,
+  allSecretStatuses, BASE_RPC_CARD, ROOT_SLOT_CARDS,
   loadSecrets,
   NO_VILLAGE_SECRETS_KEY_SENTENCE,
   putSecret,
@@ -745,6 +761,7 @@ import {
   seedExamples,
   wireExampleCaches,
 } from "./lib/examples";
+import { LEGACY_QUESTS_SEED, backfillQuestStories, repairRowCopy, repairSeededQuestCopy, sameWords } from "./lib/legacyQuestSeed";
 import {
   backfillOrgChart,
   listOrgAssignments,
@@ -788,6 +805,7 @@ import {
 } from "./lib/resources";
 import { CAPITALS } from "../shared/capitals";
 import { defaultDisplayCurrency } from "../shared/money";
+import { overlayOrNone } from "../shared/brandCleared";
 import {
   addMember as addPatternMember,
   applyRoll,
@@ -899,67 +917,10 @@ const SEEDS_DIR = path.resolve(__dirname, "..", "server", "seeds");
 const CONTENT_SEED_FILE = path.join(SEEDS_DIR, "content-seed.json");
 // users.json retired in S6 — members live in MySQL (server/repos/users.ts).
 // quests.json / quest-claims.json retired in S10 (MySQL: server/repos/quests.ts).
-const QUESTS_SEED_FILE = path.join(SEEDS_DIR, "quests-seed.json");
+// FROZEN: read only by the two repair passes, never a seed. See server/lib/legacyQuestSeed.ts.
+const QUESTS_SEED_FILE = path.join(SEEDS_DIR, LEGACY_QUESTS_SEED);
 // OG_WIDTH and OG_HEIGHT moved to server/routes/quests.ts with the renderer
 // that draws the card, and are imported back above for the meta tags.
-
-/**
- * 0068 gave quests a story layer (subtitle, story, first step, steps,
- * deliverable, tips) and the seed file now carries it for the founding board.
- * Seeds land only on a genuinely empty table, so a village already running
- * would never see the new copy without this one-shot. It walks the CURRENT
- * seed file and fills each matching row's story fields ONLY where the live
- * value is empty: an admin who already wrote their own subtitle or story
- * keeps every word. Same precedent as the voice-sweep passes above.
- */
-async function backfillQuestStories(jobId: string) {
-  // Fail loud on a missing or unreadable seed. Returning quietly let runOnce
-  // record the job as applied while nothing had been filled: the story layer
-  // would never reach live rows, the job would never run again, and the boot
-  // log would still read as success. A throw leaves the id unrecorded, so the
-  // next boot tries again.
-  if (!fs.existsSync(QUESTS_SEED_FILE)) {
-    throw new Error(`quest seed file missing at ${QUESTS_SEED_FILE}`);
-  }
-  const seed = JSON.parse(fs.readFileSync(QUESTS_SEED_FILE, "utf-8"));
-  if (!Array.isArray(seed)) throw new Error("quest seed file is not an array");
-
-  const PROSE_FIELDS = ["subtitle", "story", "firstStep", "deliverable", "imageUrl"] as const;
-  const LIST_FIELDS = ["steps", "tips"] as const;
-  const seedHasProse = (v: unknown) => typeof v === "string" && v.trim() !== "";
-  const seedHasList = (v: unknown) => Array.isArray(v) && v.length > 0;
-  const liveProseEmpty = (v: unknown) => String(v ?? "").trim() === "";
-  const liveListEmpty = (v: unknown) => !(Array.isArray(v) && v.length > 0);
-
-  let filled = 0;
-  for (const s of seed) {
-    if (!s?.id) continue;
-    const live: any = await questsRepo.byId(String(s.id));
-    if (!live) continue;
-    // Nothing to fill is not a write. The first version opened a transaction
-    // and ran a full column UPDATE for every seeded quest either way.
-    const wanted =
-      PROSE_FIELDS.some((f) => seedHasProse(s[f]) && liveProseEmpty(live[f])) ||
-      LIST_FIELDS.some((f) => seedHasList(s[f]) && liveListEmpty(live[f]));
-    if (!wanted) continue;
-    await questsRepo.update(live.id, (q: any) => {
-      for (const f of PROSE_FIELDS) {
-        if (seedHasProse(s[f]) && liveProseEmpty(q[f])) q[f] = s[f];
-      }
-      for (const f of LIST_FIELDS) {
-        if (seedHasList(s[f]) && liveListEmpty(q[f])) q[f] = s[f].map((x: any) => String(x));
-      }
-    });
-    filled += 1;
-  }
-  // Both outcomes get a line, so "filled nothing" and "never ran" stop looking
-  // identical in the log.
-  console.log(
-    filled
-      ? `[MIGRATION] ${jobId} filled ${filled} quest(s) from the seed`
-      : `[MIGRATION] ${jobId} found nothing to fill`,
-  );
-}
 // gratitude-log.json retired in S8 — the domain lives in MySQL (server/repos/gratitude.ts).
 // activity.json + admin-audit.json retired in S11 (health_events, server/lib/events.ts).
 const ROLES_SEED_FILE = path.join(SEEDS_DIR, "roles-seed.json");
@@ -1082,8 +1043,8 @@ const DEFAULT_WORK_WITH_US = {
     "Hi, I'm {name}. I help people shape their offering to the village. There's no wrong way to start. What are you dreaming of bringing?",
   reciprocityOptions: [
     { value: "Financial - Cash", title: "Financial: Cash", desc: "A direct payment for your work, materials, or service: upfront, on milestones, or on completion." },
-    { value: "Tokens", title: "Tokens", desc: "Value held within the community ecosystem, credit you can use at the café and across the village." },
-    { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share. For example, 10% of revenue in exchange for rent or water infrastructure." },
+    { value: "Tokens", title: "Tokens", desc: "You earn contribution tokens." },
+    { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share. For example, part of your revenue in exchange for space on the land." },
     { value: "Memorandum of Understanding", title: "Memorandum of Understanding", desc: "A clear, living exchange of contribution. For example, you grow vegetables, share some harvest, and add to the beauty of the land." },
   ],
 };
@@ -1095,7 +1056,7 @@ const DEFAULT_SETTINGS = {
   villageDues: {
     amount: "", // e.g. "250" — blank means "to be confirmed" and no figure is shown on the site
     period: "month",
-    currency: "$",
+    currency: "", // blank: the page writes the village's own fiatCurrency, or no symbol (figureWithCurrency, shared/money.ts)
     note: "", // blank: the resident page then says its own dues words (token row 25, 2026-10-22)
   },
   /*
@@ -1296,6 +1257,7 @@ const rolesRepo = dbCollection<RoleDef>(getPool(), {
     // so an omitted flag comes back as DEFAULT 0 and retirement can never find
     // them again.
     { js: "isExample", db: "is_example", kind: "bool" },
+    { js: "grantsAdmin", db: "grants_admin", kind: "bool" }, // 0307, sheet 19: holding this group opens the admin panel
     // The twin of the `circles.created_at` bug, one table over. That one was
     // found, fixed and commented, and this one sat here through the whole
     // round: every admin ROLE edit was resetting EVERY role's birth date to
@@ -1346,7 +1308,7 @@ const faqsRepo = dbDocument(getPool(), "faqs", DEFAULT_FAQS as any);
  */
 const journeyRepo = dbDocument(getPool(), "journey-state", { checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] } as any);
 const emailConfigRepo = dbDocument(getPool(), "email-config", DEFAULT_EMAIL_CONFIG as any);
-const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")), mode: () => commsMode({ getPool, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) }), permissionFor: (emailKey, kind, contactId) => createPermissionFor({ getPool, members, suppressions: suppressionsPortFor(getPool) })(emailKey, kind, contactId) });
+const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, brandColour: () => brandColour(getBrand().theme), getPool, origin: deploymentOrigin, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")), mode: () => commsMode({ getPool, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) }), permissionFor: (emailKey, kind, contactId) => createPermissionFor({ getPool, members, suppressions: suppressionsPortFor(getPool) })(emailKey, kind, contactId) });
 commsSink.register(createCommsDispatcher({ getPool, postOffice: commsPostOffice, members }));
 registerGatheringJourneyParts({ registerFactsProvider, registerVarsBuilder }, { getPool, postOffice: commsPostOffice });
 const settingsRepo = dbDocument(getPool(), "settings", DEFAULT_SETTINGS as any);
@@ -1786,7 +1748,7 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!user || (user.role !== "admin" && user.role !== "founder")) return false;
+  if (!user || (user.role !== "admin" && user.role !== "founder" && !adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length)) return false; // sheet 19: or a live admin group, server/lib/groupAdmin.ts
   (req as any).adminUser = user;
   return true;
 }
@@ -1911,6 +1873,8 @@ async function ensureDataFiles() {
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
   await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
+  // How We Govern's defaults went neutral: a village that already holds its page words keeps this page's too.
+  await runOnce("keep-governance-words-2026-11-01", () => keepGovernanceWords(contentRepo).then(() => undefined));
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
@@ -1985,46 +1949,10 @@ async function applyOrgRolesBackfill(): Promise<void> {
 }
 
 /**
- * The voice sweep (2026-08-01) rewrote the house writing rules through every
- * shipped string, seed files included. Seeds only land on a deployment's FIRST
- * boot, so a village already running kept the pre-sweep text in its database
- * where a code change cannot reach it: em-dashes in circle purposes and
- * milestone notes, en-dashes in quest ranges like "50-100" and "3-6 hrs".
- *
- * This repairs those rows from the current defaults, and ONLY where the stored
- * text is still word-for-word the seeded text. The comparison strips case and
- * every non-alphanumeric character, so it matches exactly the footprint the
- * sweep left (punctuation) and nothing else: the moment a human has changed a
- * word, the normalised forms differ and the row is left alone. Idempotent, and
- * silent when there is nothing to repair.
+ * The voice sweep (2026-08-01) repairs seeded rows ONLY where the stored text is the same
+ * words as the default with different punctuation. `sameWords` and `repairRowCopy` live in
+ * server/lib/legacyQuestSeed.ts, with the quest half of the pass.
  */
-function sameWords(a: string, b: string): boolean {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  return norm(a) === norm(b);
-}
-
-/**
- * The string fields of `row` that are the same words as the default and differ
- * only in punctuation. Empty when the row is already correct or has been
- * genuinely edited.
- */
-function copyRepairsFor(row: any, def: any): Array<[string, string]> {
-  const patches: Array<[string, string]> = [];
-  for (const [key, want] of Object.entries(def)) {
-    if (typeof want !== "string") continue;
-    const have = row?.[key];
-    if (typeof have !== "string" || have === want) continue;
-    if (sameWords(have, want)) patches.push([key, want]);
-  }
-  return patches;
-}
-
-/** Apply the repairs in place. Returns true if anything changed. */
-function repairRowCopy(row: any, def: any): boolean {
-  const patches = copyRepairsFor(row, def);
-  for (const [key, want] of patches) row[key] = want;
-  return patches.length > 0;
-}
 
 /**
  * The tail of the sweep: platform-authored copy where the rewrite changed
@@ -2286,20 +2214,7 @@ async function applyVoiceSweepToSeededRows(): Promise<void> {
   } catch { /* copy repair is best-effort; never block boot */ }
 
   try {
-    if (fs.existsSync(QUESTS_SEED_FILE)) {
-      const defaults = byId(JSON.parse(fs.readFileSync(QUESTS_SEED_FILE, "utf-8")));
-      for (const row of (await questsRepo.all()) as any[]) {
-        const def = defaults.get(String(row?.id));
-        if (!def) continue;
-        const patches = copyRepairsFor(row, def);
-        if (!patches.length) continue;
-        // questsRepo.update takes a MUTATOR, not a row.
-        await questsRepo.update(row.id, (q: any) => {
-          for (const [key, want] of patches) q[key] = want;
-        });
-        repaired++;
-      }
-    }
+    repaired += await repairSeededQuestCopy(questsRepo, QUESTS_SEED_FILE);
   } catch { /* same */ }
 
   try {
@@ -2382,9 +2297,9 @@ async function freezeEmailMatchedMemberships(): Promise<void> {
  * would have to toggle a module off and on again to ever see them.
  *
  * Runs AFTER ensureDataFiles() on purpose. Examples fill an empty table, and
- * seeding them first would make the real starter seeds (circles, roles,
- * quests) skip their own empty-checks — the village would get examples
- * INSTEAD of the content it shipped with, rather than as well as nothing.
+ * seeding them first would make the real starter seeds (circles, roles) skip
+ * their own empty-checks. Quests have no real starter seed: a fresh board's
+ * starters ARE these examples, kept or cleared by a founder.
  */
 async function seedExamplesAtBoot(): Promise<void> {
   try {
@@ -2750,7 +2665,7 @@ function mergedConfig() {
   return {
     project: {
       name: pick(brand.project.name, p.name),
-      tagline: pick(brand.project.tagline, p.tagline),
+      tagline: overlayOrNone(brand.project, "tagline", p.tagline), // a village may clear it on purpose (R088): shared/brandCleared.ts
       memberName: pick(brand.project.memberName, p.memberName),
       catalystName: pick((brand.project as any).catalystName, p.catalystName), // three LABELS, gating nothing
       roleName: pick((brand.project as any).roleName, p.roleName), seatName: pick((brand.project as any).seatName, p.seatName), // why role and seat stay two words: shared/gameConfig.ts
@@ -2773,7 +2688,7 @@ function mergedConfig() {
       // controls hide themselves rather than post a stranger's investment
       // enquiry to an address this village does not own.
       contactEmail: pick((brand.project as any).contactEmail, p.contactEmail),
-      footerBlurb: pick((brand.project as any).footerBlurb, p.footerBlurb),
+      footerBlurb: overlayOrNone(brand.project, "footerBlurb", p.footerBlurb),
     },
     // THE TOKEN REGISTRY IS THE SINGLE SOURCE OF TRUTH FOR A TOKEN'S NAME
     // (Rye, 2026-08-14). Renaming Gratitude in the Mint has to change every
@@ -2877,6 +2792,7 @@ type RoleDef = {
   capabilities?: string[];
   minStage?: string | null;
   order?: number;
+  grantsAdmin?: boolean;
 };
 type RoleHolderRow = { id: string; roleId: string; userId: string; grantedBy?: string; grantedAt: string; termEndsAt?: string | null; seasonId?: string | null; termFollowsSeason?: boolean };
 
@@ -3732,6 +3648,7 @@ function publicUser(u: any) {
     contributions: u.contributions ?? [],
     quests: u.quests ?? [],
     recognitionBalance: u.recognitionBalance ?? 0,
+    adminAccess: adminReaches(u.role) || adminGroupsOf(String(u.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0,
     bio: u.bio ?? "",
     avatar: u.avatar ?? null,
     joinedAt: u.joinedAt ?? new Date().toISOString(),
@@ -3967,6 +3884,7 @@ const notifyDeps: NotifyDeps = {
   isPresent: presenceTest(AUTH_TOKEN_SECRET),
   origin: deploymentOrigin,
   projectName: () => mergedConfig().project.name,
+  brandColour: () => brandColour(getBrand().theme),
 };
 
 /** Producer shorthand: fire-and-forget by contract (insertNotification never throws). */
@@ -4014,7 +3932,7 @@ function adminReaches(role: unknown): boolean {
  * does not exist.
  */
 async function accountsWithAdminReach(): Promise<any[]> {
-  return (await members.all()).filter((u: any) => adminReaches(u?.role) && !isExampleUser(u));
+  return accountsWithReach(await members.all(), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed, isExampleUser); // sheet 19: a live admin group is a way in too
 }
 
 /**
@@ -6186,26 +6104,7 @@ async function startServer() {
     },
   });
 
-  // S10: the quest library seeds into MySQL on an EMPTY table only — the seed
-  // file stays the fork-onboarding source, and a village that deleted quests
-  // on purpose never has them resurrected (INSERT IGNORE + the empty check).
-  {
-    const existing = await questsRepo.all();
-    if (existing.length === 0 && fs.existsSync(QUESTS_SEED_FILE)) {
-      try {
-        const seed = JSON.parse(fs.readFileSync(QUESTS_SEED_FILE, "utf-8"));
-        if (Array.isArray(seed)) {
-          for (const q of seed) {
-            if (q?.id && q?.title) await questsRepo.add({ tags: [], order: 0, status: "open", gratitude: "", ...q });
-          }
-          console.log(`[seed] quests table was empty, seeded ${seed.length} quest(s)`);
-        }
-      } catch (e) {
-        console.error("[seed] quests seed failed (continuing)", e);
-      }
-    }
-  }
-
+  // No live starter quests: a fresh board gets labelled starters from seedExamplesAtBoot (A8 / 19g).
   await ensureDataFiles();
   await seedExamplesAtBoot();
   // The 2026-08-02 seed revision: real timestamps, a stocked example market,
@@ -6227,12 +6126,12 @@ async function startServer() {
   // Projects category, the shelf item shown mid-loan, and the steward badge
   // lent for a season. A separate key because runOnce is permanent per id:
   // editing the body above would never re-run anywhere it already ran.
-  await runOnce("quest-story-2026-08-10", () => backfillQuestStories("quest-story-2026-08-10"));
+  await runOnce("quest-story-2026-08-10", () => backfillQuestStories(questsRepo, QUESTS_SEED_FILE, "quest-story-2026-08-10").then(() => undefined));
   // Poster paths joined the seed after the first job had already recorded
   // itself as applied, and runOnce never repeats an id. The fill is idempotent
   // (empty fields only), so a second id replays it and picks up image_url on
   // villages that already ran the first one.
-  await runOnce("quest-posters-2026-08-10", () => backfillQuestStories("quest-posters-2026-08-10"));
+  await runOnce("quest-posters-2026-08-10", () => backfillQuestStories(questsRepo, QUESTS_SEED_FILE, "quest-posters-2026-08-10").then(() => undefined));
 
   await runOnce("examples-refresh-2026-08-03", async () => {
     const seed = loadExampleSeed(SEEDS_DIR);
@@ -6485,6 +6384,7 @@ async function startServer() {
   app.use(["/api/map/draft", "/api/map/publish", "/api/agent/v1/map/draft"], express.json({ limit: SCENE_BODY_LIMIT }));
 
   app.use(express.json({ limit: "1mb" }));
+  registerPeopleLock(app, { authedUser, getPool, boolVar });
 
   // ── LANE L6 ZONE START: your agent ──────────────────────────────────────────
   //
@@ -7545,7 +7445,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // Acknowledge the submitter of a Work With Us proposal: one typed address, never a list (lib/publicAddress.ts)
       const ackTo = type === "work-with-us" ? singlePublicAddress((data as any)?.email) : null;
       // Its words are the village's own (Admin, Pages, Work With Us): lib/workWithUsAck.ts.
-      if (ackTo) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName)) });
+      if (ackTo) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName), brandColour(getBrand().theme)) });
     })();
 
     res.json({ success: true, id: entry.id, ...ideaReceipt(proposal, !!entry.userId) }); // whether a quest idea reached /review: lib/questIdeaReceipt.ts
@@ -7744,7 +7644,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const csv = csvLines.join('\n');
     const today = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="amora-submissions-${today}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="submissions-${today}.csv"`);
     res.send(csv);
   });
 
@@ -7826,6 +7726,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const pageProblem = pageContentProblem(req.params.section, req.body);
     if (pageProblem) return res.status(400).json({ error: pageProblem });
     const content = contentRepo.get();
+    // A save names the words it was opened on; when they moved since, it never writes over them.
+    const was = req.get("x-content-was");
+    if (was && was !== contentVersion(content[req.params.section])) return res.status(409).json({ error: "These words changed since this page was opened. Reload it to see them, then make your change again." });
     content[req.params.section] = req.body;
     await contentRepo.put(content);
     res.json({ success: true });
@@ -7951,7 +7854,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       return "The email provider refused the message, so nothing was sent. Open the claim link below yourself, and check the server log for the provider's own reason.";
     };
     if (user) {
-      await members.update(user.id, (u: any) => { u.role = "founder"; });
+      // R104: a password nobody proved here may be a stranger's, planted at this address first. raiseToFounder ends it (and its sessions and agent reach) in the write that raises the role, and the claim link below then goes to the address.
+      user = (await raiseToFounder(members, user, (id, change) => withAgentReachEnded(getPool(), id, change, { notify }).then((r) => r.changed))) ?? user;
       // Expired-link recovery: an account created by bootstrap that never set a
       // password cannot log in and cannot ask for a reset. Re-running bootstrap
       // (break-glass path) re-sends a fresh claim link for exactly that case.
@@ -8046,26 +7950,24 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       kind: "audit", text, actorUserId: userId, entityType: "user", entityRef: userId, audience: "admin",
     });
   };
+  const letters = { authSecret: AUTH_TOKEN_SECRET, sendEmail: sendResendEmail, escapeHtml, origin: notifyDeps.origin, projectName: () => mergedConfig().project.name }; // every auth letter's five
   registerRecoveryRoutes(app, {
-    authSecret: AUTH_TOKEN_SECRET,
+    ...letters,
     members,
     overLimit,
     clientIp,
     resetPerIpHourly: () => numberVar("abuse.password_reset_per_ip_hourly"),
-    sendEmail: sendResendEmail,
-    escapeHtml,
-    origin: notifyDeps.origin,
-    projectName: () => mergedConfig().project.name,
     recordAudit: recordAuthAudit,
   });
   const joined = (u: { id: string; name: string; handle: string }) => memberJoined(u, { addActivity, firstName, greeterRoleId: () => stringVar("arrival.greeter_role"), seats: loadRoleHolders, everyone: () => members.all(), notify });
   const inviteDoor = makeInviteDoor({ getPool, members }); // one invitation for both sign-up doors
   registerSignUpRoutes(app, {
-    overLimit, clientIp, members, hashPassword, publicUser, joined, invites: inviteDoor,
+    overLimit, clientIp, members, hashPassword, publicUser, joined, invites: inviteDoor, sendVerification: (m) => sendVerifyLetter(letters, m),
     makeHandle: (name) => uniqueHandle(slugifyHandle(name)),
     encodeToken: (userId, email) => encodeToken(AUTH_TOKEN_SECRET, userId, email),
   });
   registerInviteRoutes(app, { authedUser, getPool, members, guardCapability, mayAct, overLimit, clientIp, invites: inviteDoor });
+  registerJoinAnswerRoutes(app, { authedUser, getPool, members, guardCapability, submissionsRepo, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, notify }); // Accept emails the invitation, Decline a kind no (sheet A5)
   registerGoogleAuthRoutes(app, {
     authSecret: AUTH_TOKEN_SECRET,
     availability: googleSignInAvailability,
@@ -8079,7 +7981,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
     authedUser,
     invites: inviteDoor,
+    endReachAround: (id, change) => withAgentReachEnded(getPool(), id, change, { notify }).then((r) => r.changed), // R104: ending an unproved password ends what its sessions planted
+    onPasswordEnded: (m) => void sendPasswordEndedLetter(letters, m),
   });
+  registerVerifyEmailRoutes(app, { ...letters, members, authedUser, verifyPassword, overLimit, clientIp, recordAudit: recordAuthAudit });
 
   /**
    * Sign out. tokenVersion is the only revocation lever there is (no session
@@ -8121,6 +8026,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if ((lost.refusal = setPasswordLinkRefusal(claim, u.tokenVersion))) return;
       u.passwordHash = hash;
       u.tokenVersion = (u.tokenVersion ?? 0) + 1;
+      proveAddress(u, u.email); // R104: the link reached this mailbox, and the only password now is its reader's
     }), { notify }); // notify: the member hears that a delegation they gave was ended (endVoiceGiven)
     if (lost.refusal) return res.status(401).json({ error: lost.refusal });
     if (!fresh) return res.status(404).json({ error: "Account not found" });
@@ -8375,7 +8281,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     });
   });
 
-  registerModuleLibraryRoutes(app, { isAdmin, authedUser, firstName, projectName: () => mergedConfig().project.name, buildMarker: BUILD_MARKER, liveHoldersOf, sharedPasswordPosture: async () => (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET)).length === 0, seedExamplesOnEnable: async (id: string) => { try { const seed = loadExampleSeed(SEEDS_DIR); if (seed) await seedExamples(getPool(), id, seed, { baseCycle: currentCycle().cycleNumber }); } catch (e) { console.error(`[examples] seeding "${id}" on enable failed (continuing)`, e); } } });
+  registerModuleLibraryRoutes(app, { isAdmin, authedUser, firstName, projectName: () => mergedConfig().project.name, buildMarker: BUILD_MARKER, liveHoldersOf, sharedPasswordPosture: async () => (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET)).length === 0, seedExamplesOnEnable: async (id: string) => { try { const seed = loadExampleSeed(SEEDS_DIR); if (seed) await seedExamples(getPool(), id, seed, { baseCycle: currentCycle().cycleNumber }); } catch (e) { console.error(`[examples] seeding "${id}" on enable failed (continuing)`, e); } } , notify, plantingAdmins: async () => (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET)).map((u: any) => ({ id: String(u.id), name: String(u.name ?? u.handle ?? "An admin") })), plantingObjectors: async () => [...(await liveHoldersOf(STEWARD_VETO)), ...(await members.all()).filter((u: any) => u.role === "founder" && isPresentMember(u, AUTH_TOKEN_SECRET)).map((u: any) => String(u.id))] });
 
   /*
    * Lane METER: the builders' pool, said out loud.
@@ -8857,7 +8763,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         heartedByMe: heartedIds.has(String(t.id)),
         isExample: Number(t.is_example ?? 0) === 1,
         tags: tagsByThread.get(String(t.id)) ?? [],
-        author: { id: t.author_id, name: firstName(t.author_name ?? "Member"), handle: t.author_handle },
+        author: { id: viewer ? t.author_id : null, name: firstName(t.author_name ?? "Member"), handle: t.author_handle },
         at: new Date(t.created_at).toISOString(),
       };
     });
@@ -9051,7 +8957,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           title: r.title ?? String(r.body).slice(0, 80),
           preview: String(r.body).slice(0, 160),
           imageUrl: r.image_url, heartCount: Number(r.heart_count), replyCount: Number(r.reply_count),
-          author: { id: r.author_id, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
+          author: { id: user ? r.author_id : null, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
           pinned: !!r.pinned_at, locked: !!r.locked_at, hidden: !!r.hidden_at,
           isExample: Number(r.is_example ?? 0) === 1,
           eventStartsAt,
@@ -9208,8 +9114,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const [tagRows] = await getPool().query<any[]>("SELECT tag FROM forum_thread_tags WHERE thread_id = ?", [req.params.id]);
     const [authorRow] = await getPool().query<any[]>("SELECT name, handle FROM users WHERE id = ?", [thread.authorId]);
     res.json({
-      ...thread,
-      author: { id: thread.authorId, name: firstName(authorRow[0]?.name ?? "Member"), handle: authorRow[0]?.handle ?? null },
+      ...thread, ...(user ? {} : { authorId: null }), // R097: no internal id to a stranger
+      author: { id: user ? thread.authorId : null, name: firstName(authorRow[0]?.name ?? "Member"), handle: authorRow[0]?.handle ?? null },
       tags: tagRows.map((t) => t.tag),
       replies: replyRows
         .filter((r) => !r.hidden_at || mod)
@@ -9218,7 +9124,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           parentReplyId: r.parent_reply_id,
           body: r.hidden_at ? "[hidden by moderation]" : r.body,
           hidden: !!r.hidden_at,
-          author: { id: r.author_id, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
+          author: { id: user ? r.author_id : null, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
           createdAt: new Date(r.created_at).toISOString(),
           editedAt: r.edited_at ? new Date(r.edited_at).toISOString() : null,
         })),
@@ -10010,7 +9916,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const relayed = await sendResendEmail({
       to: [recipient.email], origin: "map.contact_relay",
       subject: `[${mergedConfig().project.name}] ${firstName(user.name)} wants to connect${role ? ` about ${role.name}` : ""}`,
-      html: `<p><strong>${escapeHtml(firstName(user.name))}</strong> reached out through the village map${role ? ` about your role as <strong>${escapeHtml(role.name)}</strong>` : ""}:</p><blockquote style="border-left:3px solid #2D5A5A;padding-left:10px;color:#4b5563">${escapeHtml(String(message)).replace(/\n/g, "<br>")}</blockquote><p style="color:#6b7280;font-size:13px">Reply to this email to answer them directly.</p>`,
+      html: `<p><strong>${escapeHtml(firstName(user.name))}</strong> reached out through the village map${role ? ` about your role as <strong>${escapeHtml(role.name)}</strong>` : ""}:</p><blockquote style="border-left:3px solid ${emailAccent(brandColour(getBrand().theme))};padding-left:10px;color:#4b5563">${escapeHtml(String(message)).replace(/\n/g, "<br>")}</blockquote><p style="color:#6b7280;font-size:13px">Reply to this email to answer them directly.</p>`,
       replyTo: user.email,
     }).catch(() => ({ sent: false }));
     await setContactEmailStatus(getPool(), inserted.id, relayed.sent ? "sent" : "failed");
@@ -12024,15 +11930,6 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       "brand-token-names": () => recognitionNameCheck(tokenDef(HEARTS)?.name, GAME_CONFIG.currency.name),
       // Green means alive (2026-10-13): the post office's own test email reported delivered (comms item 13), never the key's presence alone.
       "resend-key": () => resendKeyLaunchCheck(getPool(), allSecretStatuses().find((x) => x.key === "resend_api_key")!),
-      "stripe-keys": () => (stripeConfigured()
-        ? { state: "ok" as const, detail: "Stripe secret key is set" }
-        : { state: "missing" as const, detail: "No Stripe key: card checkout answers 503; the manual payment path still works" }),
-      "stripe-webhook": () => (webhookSecretConfigured()
-        ? { state: "ok" as const, detail: "Webhook signing secret is set" }
-        : { state: "missing" as const, detail: "Cards would charge but credits would never arrive. The settle callback has no signature to verify" }),
-      "assistant-key": () => (getEmailConfig().assistant_api_key || process.env.ANTHROPIC_API_KEY || borrowingPlatformKey()
-        ? { state: "ok" as const, detail: "The AI guide is awake" }
-        : { state: "missing" as const, detail: "No Anthropic key. Every form still works, without the guide" }),
       // S76: borrowing is fine while a village is being built and wrong at
       // handoff. The key itself is never named here, only whose it is.
       // Three states, decided in server/lib/assistant.ts beside resolveKey: a
@@ -12081,14 +11978,6 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         }
         return { state: "ok" as const, detail: `${def.name} is spendable: ${surfaces.map((f) => f.detail).join(", ")}` };
       },
-      // Both of these were already machine-observable and simply never asked.
-      "session-secret": () =>
-        process.env.AUTH_TOKEN_SECRET
-          ? { state: "ok" as const, detail: "Sessions survive restarts and extra replicas" }
-          : {
-              state: "missing" as const,
-              detail: "Signing with a random per-process key. Every restart logs everyone out",
-            },
       "exit-policy-terms": () => {
         const p: any = readExitPolicy();
         return p && !p.placeholder
@@ -17157,6 +17046,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
   registerPathLadderRoutes(app, { authedUser, getPool, lapseContext, isAdmin, members });
+  registerGroupAdminRoutes(app, { isAdmin, getPool, members, rolesRepo, loadRoleHolders });
   registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
@@ -17264,7 +17154,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     { key: "assistant_api_key", title: "Anthropic, the AI guide", unlocks: "The AI guide: proposal intake, the launch journey, and call synthesis. Blank means every form still works, with no guide on them.", getAt: "console.anthropic.com", placeholder: "sk-ant-…" },
     { key: "riverside_webhook_secret", title: "Riverside recording deliveries", unlocks: "Call automation's inbound deliveries. It fails closed: with no secret set, every payload is discarded with an inert 200 and nobody is told why.", getAt: "Riverside → webhook settings → send this same value as the x-riverside-secret header", placeholder: "a long random string you choose" },
     { key: "governance_hub_secret", title: "Governance hub deliveries", unlocks: "How a Hypha vote's executed outcome comes home. Fails closed the same way. Until it is set, outcomes are reported by the proposer and applied by an admin.", getAt: "Issued when your fork is registered with the hub", placeholder: "the value the hub issued you" },
-    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, ...ROOT_SLOT_CARDS,
+    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, BASE_RPC_CARD, ...ROOT_SLOT_CARDS,
   ];
 
   interface IntegrationCard {
@@ -17393,6 +17283,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(503).json({ error: NO_VILLAGE_SECRETS_KEY_SENTENCE, message: villageSecretsRefusal() });
     }
     // value: "" clears the admin-typed key (env fallback, if any, resumes).
+    const asked = await plantingDoor(key, value, actor); if (asked) return res.status(202).json(asked); // after launch a keystone waits for a co-sign (server/routes/plantingRequests.ts)
     await putSecret(getPool(), key, value, actor);
     void recordEvent(getPool(), {
       kind: "audit", text: `integrations:${key}:${value.trim() ? "set" : "cleared"}`,
@@ -17426,7 +17317,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 - whatYouWantToDo (required): the quest itself, in plain terms, and the value it brings
 - resourcesBringing (required): what they bring: skills, time, tools, materials, funding, relationships
 - resourcesNeeded (required): what they need from the village: land access, materials, budget, people, space
-- compensation (required): what they'd want in return. It is completely fine for this to be "nothing, it's a gift" or "Gratitude only". Never push them toward asking for money
+- compensation (required): what they'd want in return. It is completely fine for this to be "nothing, it's a gift". Never push them toward asking for money
 - timelineMilestones (required): rough phases or dates, and any milestone-based payments they'd propose`,
     },
   };
@@ -18197,51 +18088,19 @@ Send an empty drafts array when you are still listening. A role payload is {name
        * of the break had nothing to show it on.
        */
       const absolute = (link: string) => (/^https?:\/\//i.test(link) ? link : `${origin}${link}`);
-      const links = packet
-        .map((d) => {
-          const href = absolute(String(d.url ?? ""));
-          const label = String(d.title ?? "Document");
-          const onSite = d.pageLink
-            ? ` &middot; <a href="${escapeHtml(absolute(String(d.pageLink)))}" style="color:#6b7280;font-size:13px">view on site</a>`
-            : "";
-          return `<li style="margin:8px 0"><a href="${escapeHtml(href)}" style="color:#2D5A5A;font-weight:600">${escapeHtml(label)}</a>${onSite}</li>`;
-        })
-        .join("");
-      const shell = (heading: string, inner: string) => `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">
-<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
-  <div style="background:#2D5A5A;color:#fff;padding:24px"><div style="font-size:22px;font-weight:700">${escapeHtml(heading)}</div></div>
-  <div style="padding:24px">
-    <p>Hi ${escapeHtml(name)},</p>
-${inner}
-    <p style="color:#6b7280;font-size:13px;margin-top:24px">The ${escapeHtml(notifyDeps.projectName())} Team</p>
-  </div>
-</div></body></html>`;
-
       /*
-       * A "HERE IS YOUR PACKET" EMAIL WITH NO PACKET IN IT IS A CLAIM.
-       *
-       * The old copy always announced "Your Amora Investor Packet" and, when
-       * the list came out empty, filled the bullet with "No documents
-       * available yet". That is a heading promising a thing the body then
-       * takes back, and it is the same defect as a decision that CARRIED
-       * reading "Did not carry" because a fallback invented the answer.
-       *
-       * So there are two different emails, and which one is sent comes from
-       * what actually happened. Nobody is told a packet is attached unless
-       * documents really went with it.
+       * A "HERE IS YOUR PACKET" EMAIL WITH NO PACKET IN IT IS A CLAIM, so the
+       * packet and the empty-packet thank-you are two emails, chosen by what
+       * went. Both are the village's Words since 2026-10-23
+       * (server/lib/investorPacketMail.ts), in its own look, and neither
+       * promises a reply by any time.
        */
-      const html = packet.length
-        ? shell(`Your ${notifyDeps.projectName()} Investor Packet`, `    <p>Thank you for your interest in investing in ${escapeHtml(notifyDeps.projectName())}. Below are the documents in our current investor packet:</p>
-    <ul style="padding-left:18px">${links}</ul>
-    <p style="margin-top:20px">A team member will be in touch within 48 hours to answer your questions.</p>`)
-        : shell(`Thank you for your interest in ${notifyDeps.projectName()}`, `    <p>Thank you for your interest in investing in ${escapeHtml(notifyDeps.projectName())}. We have your request and a member of our team will be in touch within 48 hours to talk it through with you.</p>`);
-      await sendResendEmail({
-        to: [email], origin: "investor.packet",
-        subject: packet.length
-          ? `Your ${notifyDeps.projectName()} Investor Packet`
-          : `Thank you for your interest in ${notifyDeps.projectName()}`,
-        html,
-      });
+      const documents = packet.map((d) => ({ title: String(d.title ?? "Document"), href: absolute(String(d.url ?? "")), pageHref: d.pageLink ? absolute(String(d.pageLink)) : null }));
+      try {
+        await sendResendEmail({ to: [email], origin: "investor.packet", ...(await investorPacketEmail(getPool, origin, { name: String(name), documents })) });
+      } catch (err) {
+        console.error("[investor] the packet email could not be rendered, so it was not sent", err);
+      }
       // Also notify the investor team. The admins are told what the requester
       // was actually sent, so an empty packet reaches a person who can act on
       // it rather than sitting silently in a table.
@@ -18281,7 +18140,7 @@ ${inner}
      * bounds the leak. The message is separate, because a person is only told
      * to go and look in their inbox when something can actually arrive there.
      */
-    const followUp = "Thank you. We have your request and a member of our team will be in touch within 48 hours.";
+    const followUp = "Thank you. We have your request, and someone from our team will be in touch.";
     res.json({
       success: true,
       documentsSent: packet.length,
@@ -18315,6 +18174,7 @@ ${inner}
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
   registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: String(getWorkWithUs().assistantName || "Maia"), timeZone: getSeasonConfig().timezone }) });
+  registerMemberAskRoutes(app, { authedUser, getPool, members, notify, overLimit, firstName });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, seasonState, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
@@ -18639,13 +18499,13 @@ ${inner}
     // The VALUE token — the one the cycle pool distributes across recognition.
     // Named in the token registry (Admin → Tokens), so a fork that renames its
     // token there changes every public mention at once. Distinct from the
-    // recognition currency above on purpose: recognition is the signal with no
-    // financial value; this is the tracked value it steers each cycle.
+    // recognition currency above on purpose. `names` is every registry token's
+    // name by slug, so a page names stay or library credits as renamed (R084).
     const valueSlug = String(stringVar("gratitude.pool_token"));
     const valueDef = tokenDef(valueSlug);
     res.json({
       project: m.project,
-      currency: { ...m.currency, value: { slug: valueSlug, name: valueDef?.name ?? valueSlug } },
+      currency: { ...m.currency, value: { slug: valueSlug, name: valueDef?.name ?? valueSlug }, names: Object.fromEntries(allTokens().map((t) => [t.slug, t.name])) },
       images: m.images,
       paths: GAME_CONFIG.paths,
       stages: servedLadder(mergedConfig().project.commitmentName),
@@ -18759,6 +18619,10 @@ ${inner}
       scene: live?.scene ?? null,
       sceneVersion: live?.version ?? 0,
       housing: { entries: housingEntries, configured: housingEntries.length > 0 },
+      // Whose map this is and who its guide is, in the village's own words. The
+      // guide's name goes raw: blank is an unnamed guide, which the map calls
+      // "the village guide" itself, never another village's name.
+      village: { name: String(mergedConfig().project.name ?? ""), guide: String(getWorkWithUs().assistantName ?? "").trim() },
       lang,
     });
   });
@@ -18769,7 +18633,7 @@ ${inner}
   registerHousingRoutes(app, {
     authedUser, guardCapability, mayStillSee, getPool, overLimit, clientIp,
     escapeHtml, recipientsForType, sendResendEmail,
-    deploymentOrigin: notifyDeps.origin, projectName: notifyDeps.projectName,
+    deploymentOrigin: notifyDeps.origin, projectName: notifyDeps.projectName, brandColour: () => brandColour(getBrand().theme),
   });
 
   /**
@@ -19422,6 +19286,7 @@ ${inner}
       standing: await loadStanding(getPool(), user.id),
       gratitude: await loadGratitude(getPool(), villageId(), user.id, startsAt),
       party: await partyFor(getPool(), villageId(), user.id, user.id),
+      inventory: await loadInventory(getPool(), user.id),
       allowance: await gratitudeAllowance(user),
       voice: await claimReadiness(getPool(), user.id),
     });
@@ -19476,6 +19341,7 @@ ${inner}
     res.json({ claims: await claimHistory(getPool(), user.id) });
   });
   registerWalletRoutes(app, { authedUser, getPool, gratitudeAllowance });
+  registerProfilePrivacyRoutes(app, { authedUser, getPool });
   registerTokenJobRoutes(app, { isAdmin, getPool });
 
   /**
@@ -19490,23 +19356,24 @@ ${inner}
    * your own home is private by you is absurd.
    */
   app.get("/api/profiles/:handle", async (req, res) => {
-    const targetId = await userIdForHandle(getPool(), req.params.handle);
+    const viewer = await authedUser(req);
+    const targetId = hiddenFromStranger(viewer, boolVar("org.public_people")) ? null : await userIdForHandle(getPool(), req.params.handle); // R097: the lock
     if (!targetId) return res.status(404).json({ error: "Not found" });
     const loaded = await loadProfile(getPool(), villageId(), targetId);
     if (!loaded) return res.status(404).json({ error: "Not found" });
 
-    const viewer = await authedUser(req);
     const { startsAt } = cycleWindow();
     const full = {
       ...loaded.view,
       standing: await loadStanding(getPool(), targetId),
       gratitude: await loadGratitude(getPool(), villageId(), targetId, startsAt),
+      inventory: await loadInventory(getPool(), targetId),
     };
     if (viewer?.id === targetId) {
       return res.json({ ...full, party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null) });
     }
     res.json({
-      ...publicView(full, loaded.privacy),
+      ...publicView(full, loaded.privacy, viewer ? full.name : firstNameOf(full.name)), // a stranger reads a first name (R097)
       party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null),
     });
   });
@@ -19557,7 +19424,7 @@ ${inner}
   });
 
   // The hero and the wall, both in server/routes/gratitudeVoices.ts.
-  registerGratitudeVoiceRoutes(app, { getPool, gratitudeLog: () => gratitudeRepo.all() });
+  registerGratitudeVoiceRoutes(app, { getPool, authedUser, gratitudeLog: () => gratitudeRepo.all() });
   registerGratitudeNudgeRoutes(app, { getPool, authedUser, members, notify, notifyDeps, remainingFor: async (u) => (await gratitudeBudget(u)).remaining });
 
   // Gratitude: my journal (received + sent, with amounts)
@@ -20072,7 +19939,7 @@ ${inner}
     listenerPosture({
       hubUrl: stringVar("governance.hub_url"),
       hubSecretConfigured: secretConfigured("governance_hub_secret"),
-      rpcUrl: stringVar("tokens.base_rpc_url"),
+      rpcUrl: baseRpcUrl(),
     });
 
   /**
@@ -20178,7 +20045,7 @@ ${inner}
     }
     try {
       const found = await discoverCandidates({
-        baseRpcUrl: stringVar("tokens.base_rpc_url").trim(),
+        baseRpcUrl: baseRpcUrl(),
         founderAddress,
         nameHint: String(req.body?.nameHint ?? ""),
       });
@@ -20466,9 +20333,9 @@ ${inner}
        * CHANGING is village news. Those are different audiences and this line
        * only ever needed the second.
        *
-       * Nothing is lost from the record: recordMechanicsChange above keeps the
-       * before and after for the audit trail, behind auth, which is where a
-       * value belongs. Redacting by pattern was the other option and it is the
+       * The record keeps before and after (recordMechanicsChange above; a key in
+       * either is removed on write, lib/credentialRedaction.ts, and the public
+       * feed withholds the rest). Redacting by pattern was the other option and it is the
        * weaker one, because it needs a list of what looks secret and a URL with
        * a key in the path defeats most such lists.
        */
@@ -22874,8 +22741,8 @@ ${inner}
       tallies,
       unity: unityPctOf(tallies),
       quorum: quorumPctOf(tallies, b.totalWeight),
-      // Votes and weights are member-visible on purpose (the Hypha voter-list
-      // posture). This village does not run secret ballots, and the page says so.
+      // Votes and weights are member-visible on purpose (the Hypha voter-list posture, ruling 22
+      // staged); a stranger reads `ballotForViewer`'s counts only (R098, server/lib/peopleLock.ts).
       votes: await Promise.all(
         votes.map(async (v) => ({ name: await nameOf(v.userId), choice: v.choice, weight: v.weight, castAt: v.castAt })),
       ),
@@ -23270,7 +23137,7 @@ ${inner}
     const subjectRef = String(req.query.subjectRef ?? "").trim();
     if (subjectType && subjectRef) {
       const list = await ballotsFor(getPool(), subjectType, subjectRef);
-      return res.json(await Promise.all(list.map((b) => serveBallotCard(b, viewer?.id))));
+      return res.json(await Promise.all(list.map(async (b) => ballotCardForViewer(viewer, await serveBallotCard(b, viewer?.id)))));
     }
     const limit = Math.max(1, Math.min(200, Math.trunc(Number(req.query.limit)) || 100));
     const offset = Math.max(0, Math.trunc(Number(req.query.offset)) || 0);
@@ -23278,7 +23145,7 @@ ${inner}
       "SELECT * FROM ballots ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
       [limit, offset],
     );
-    res.json(await Promise.all(rows.map((r) => serveBallotCard(rowToBallot(r), viewer?.id))));
+    res.json(await Promise.all(rows.map(async (r) => ballotCardForViewer(viewer, await serveBallotCard(rowToBallot(r), viewer?.id)))));
   });
 
   /**
@@ -23313,7 +23180,7 @@ ${inner}
       amendedKeysFor(getPool(), b.id),
       ballotsFor(getPool(), b.subjectType, b.subjectRef),
     ]);
-    res.json({
+    res.json(ballotForViewer(viewer, {
       ...payload,
       appliedKeys,
       priorAttempts: chain
@@ -23326,7 +23193,7 @@ ${inner}
           opensAt: p.opensAt,
           closedAt: p.closedAt,
         })),
-    });
+    }));
   });
 
   /**
@@ -24725,6 +24592,7 @@ ${inner}
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
+  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState }); // a role proposal from somebody with no account (0305)
   registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
@@ -24936,6 +24804,7 @@ ${inner}
             // roles are real rows on a public read, and nothing downstream
             // could tell them from the village's own without the flag.
             isExample: !!(r as any).isExample,
+            grantsAdmin: !!r.grantsAdmin,
             // 0018 put these on the row and this payload never carried them,
             // so the admin role-to-circle picker read undefined and every
             // role rendered as unassigned however many times it was set.
@@ -25762,6 +25631,7 @@ ${inner}
       return res.status(400).json({ error: "userId and action (add|remove) are required" });
     }
     const member = await members.byId(userId);
+    if (action === "remove" && role.grantsAdmin && !accountsWithReach(await members.all(), loadRoles() as any, loadRoleHolders().filter((h) => !(h.roleId === role.id && h.userId === userId)), new Date(), holdingHasLapsed, isExampleUser).length) return res.status(409).json({ error: LAST_ADMIN_REFUSAL }); // sheet 19
     if (!member || (action === "add" && !holderStands(member))) return res.status(404).json({ error: "Member not found" }); // a tombstone is nobody to appoint, and a stray holding of one can still be removed
 
     // A role can require a minimum stage: appointments respect the ladder too.
@@ -25828,6 +25698,7 @@ ${inner}
   registerPulseRoutes(app, { getPool });
   registerPlayersRoutes(app, {
     isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext,
+    adminGroupsFor: (id: string) => adminGroupsOf(id, loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).map((g) => g.name),
     trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
     paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
   });
@@ -26022,88 +25893,7 @@ ${inner}
    * stale-index white screen the comment further down exists to prevent.
    */
   app.use(compression());
-  /*
-   * The Living Map artifact, served from its SOURCE.
-   *
-   * `docs/prototypes/grounds-v0.html` is ~4 MB of self-contained page. It used
-   * to be copied into `client/public/grounds/` at build time, which put it in
-   * `dist/public` and took the total from 3.7 MB to 7.8 MB against the CI
-   * bundle budget's 6 MB ceiling. That gate exists to catch exactly this
-   * ("something large landed in client/public"), and the honest fix is to stop
-   * shipping a second copy rather than to raise the number.
-   *
-   * So there is one copy on disk and the server hands it out. `..` from
-   * `__dirname` is the repo root in both shapes: `server/` in dev, `dist/` in
-   * production. Nothing else moves, and `/grounds/index.html` is the same URL
-   * the shell has always asked for.
-   *
-   * Registered ahead of the SPA catch-all. A missing artifact 404s here rather
-   * than falling through and returning the app's own HTML, which an iframe
-   * would render as the site inside itself.
-   */
-  const groundsFile = path.resolve(__dirname, "..", "docs", "prototypes", "grounds-v0.html");
-
-  /**
-   * Identify the artifact by content, so it can be cached forever.
-   *
-   * Four megabytes revalidated on every navigation is four megabytes of
-   * nothing, and the map is the surface members open most. Hashed URLs let it
-   * be `immutable`, the same bargain `/assets` already takes.
-   *
-   * The hash is memoised on (size, mtime) rather than recomputed per request:
-   * reading 4 MB to answer a probe would trade one waste for another. It is
-   * also computed LAZILY, so boot does not pay for a file most deployments
-   * never serve, and a mid-flight artifact swap is picked up by the mtime
-   * check rather than needing a restart.
-   */
-  let groundsTag: { key: string; hash: string } | null = null;
-  const groundsInfo = (): { bytes: number; hash: string } | null => {
-    if (!fs.existsSync(groundsFile)) return null;
-    const st = fs.statSync(groundsFile);
-    const key = `${st.size}:${st.mtimeMs}`;
-    if (groundsTag?.key !== key) {
-      const digest = crypto.createHash("sha256").update(fs.readFileSync(groundsFile)).digest("hex");
-      groundsTag = { key, hash: digest.slice(0, 12) };
-    }
-    return { bytes: st.size, hash: groundsTag.hash };
-  };
-
-  /*
-   * The immutable URL. `grounds-<hash>.html` changes name whenever the bytes
-   * change, so a year-long cache can never serve a stale map.
-   */
-  app.get("/grounds/grounds-:hash.html", (req, res) => {
-    const info = groundsInfo();
-    if (!info) return res.status(404).json({ error: "map_artifact_absent" });
-    // A stale hash means a client is asking for a version we no longer have.
-    // Redirect rather than 404: the shell re-reads the manifest and recovers.
-    if (req.params.hash !== info.hash) return res.redirect(302, `/grounds/grounds-${info.hash}.html`);
-    res.type("html");
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    res.sendFile(groundsFile);
-  });
-
-  /*
-   * The stable URL stays, for anything holding the old address and for a
-   * hand-typed check. It revalidates instead of caching hard, because this
-   * name does not change when the bytes do. sendFile's ETag makes that a 304.
-   */
-  app.get("/grounds/index.html", (_req, res) => {
-    if (!fs.existsSync(groundsFile)) return res.status(404).json({ error: "map_artifact_absent" });
-    res.type("html");
-    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-    res.sendFile(groundsFile);
-  });
-
-  /*
-   * The presence probe. `/map` cannot tell a served artifact from the SPA
-   * fallback by status code alone, so it reads a few bytes of JSON instead.
-   * Computed rather than written to disk, so it can never claim an artifact
-   * that is no longer there.
-   *
-   * `present` and `bytes` are the original contract and are unchanged. `url`
-   * is additive: a shell that ignores it still works off /grounds/index.html.
-   */
+  registerGroundsRoutes(app, { groundsFile: path.resolve(__dirname, "..", "docs", "prototypes", "grounds-v0.html") });
   /**
    * The PWA manifest, built from the brand overlay.
    *
@@ -26196,6 +25986,7 @@ ${inner}
       "Disallow: /tokens",
       "Disallow: /set-password",
       "Disallow: /forgot-password",
+      "Disallow: /verify-email",
       // Five megabytes of self-contained page, and an app rather than a
       // document: nothing in it is worth indexing and a crawler re-fetching it
       // costs real bandwidth on the deployment's bill.
@@ -26218,15 +26009,6 @@ ${inner}
       .type("application/xml")
       .set("Cache-Control", "public, max-age=3600")
       .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
-  });
-
-  app.get("/grounds/manifest.json", (_req, res) => {
-    const info = groundsInfo();
-    if (!info) return res.status(404).json({ present: false });
-    // The manifest itself must never be cached, or it would pin the shell to
-    // a hashed URL that has since moved.
-    res.setHeader("Cache-Control", "no-store");
-    res.json({ present: true, bytes: info.bytes, url: `/grounds/grounds-${info.hash}.html` });
   });
 
   /*
@@ -26414,6 +26196,16 @@ ${inner}
   startScheduler(getPool());
   server.listen(port, "0.0.0.0", () => {
     console.log(`[startup] Server listening on 0.0.0.0:${port}`);
+  });
+  // 0298's backfill, AFTER the port is bound and never before it. The deploy
+  // that carried 0298's SQL version never answered its healthcheck, so the one
+  // thing this must not do is stand between boot and listen: a link without an
+  // id reads exactly as it did before 0298, which is to say it is simply not
+  // linked yet. runOnce logs and continues on failure, and the backfill's own
+  // WHERE makes a repeat harmless, so neither half can wedge a boot.
+  void runOnce(SEASON_GOAL_ID_BACKFILL, async () => {
+    const { words, rows } = await backfillSeasonGoalIds(getPool());
+    console.log(`[startup] season goal ids: ${rows} link(s) across ${words} goal text(s)`);
   });
   /*
    * A DEPLOY IS NOT A CRASH, and until now this process could not tell the

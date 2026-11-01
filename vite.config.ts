@@ -9,6 +9,7 @@ import {
   routePreloadScript,
   routePreloadTable,
 } from "./client/src/lib/routePreload";
+import { pointAtUnhintedFonts } from "./client/src/lib/unhintedFonts";
 
 /**
  * Serve the Living Map artifact in DEV, from the same source the server uses.
@@ -91,6 +92,28 @@ function dropLegacyWoffFallback(): Plugin {
       if (!file.endsWith(".css") || !file.includes("/@fontsource")) return null;
       const next = code.replace(FALLBACK, "");
       return next === code ? null : { code: next, map: null };
+    },
+  };
+}
+
+/**
+ * Serve the unhinted copies of the packaged faces (client/src/fonts) in place
+ * of @fontsource's own files: the same glyphs, code points and layout
+ * features, without the TrueType hinting. 888 KB of the dist budget became
+ * 808 KB. client/src/lib/unhintedFonts.ts has the rule and
+ * `scripts/unhint-fonts.py --check` the proof that nothing else differs.
+ */
+function useUnhintedFonts(): Plugin {
+  const dir = path.resolve(import.meta.dirname, "client", "src", "fonts");
+  const available = new Set(fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".woff2")) : []);
+  return {
+    name: "use-unhinted-fonts",
+    enforce: "pre",
+    transform(code, id) {
+      const file = id.split("?")[0].replace(/\\/g, "/");
+      if (!file.endsWith(".css") || !file.includes("/@fontsource")) return null;
+      const next = pointAtUnhintedFonts(code, available, "@/fonts");
+      return next === null ? null : { code: next, map: null };
     },
   };
 }
@@ -248,7 +271,7 @@ function smallGroupOf(id: string, info: ModuleInfoOf, eager: Set<string>): Small
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), routeChunkPreload()],
+  plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

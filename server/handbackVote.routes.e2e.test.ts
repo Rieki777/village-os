@@ -267,6 +267,13 @@ beforeAll(async () => {
     capabilities: [...(circle?.capabilities ?? []), POWER], grantedEscalations: [POWER],
   });
   expect(armed.status, armed.text).toBe(200);
+  // Sheet 19 (0307): Steward Circle ships with admin access ON, so its holders can open the admin
+  // panel. This suite uses the group as a carrier of capabilities and tests that a member, however seated, cannot reach an admin route, so it
+  // pins the default and then switches it off. The group's admin access itself is pinned in
+  // server/authzRound.routes.e2e.test.ts.
+  expect(circle?.grantsAdmin).toBe(true);
+  const off = await call("PUT", "/api/admin/roles/steward-circle/admin-access", { on: false });
+  expect(off.status, off.text).toBe(200);
   for (const p of [people.kira, people.ada]) {
     const seated = await call("POST", "/api/admin/roles/steward-circle/holders", { userId: p.id, action: "add" });
     expect(seated.status, seated.text).toBe(200);

@@ -37,7 +37,9 @@ vi.mock("@/components/QuestCard", () => ({
 
 const ctl = vi.hoisted(() => ({ quest: {} as Record<string, unknown> }));
 
-vi.mock("@/lib/gameApi", () => ({
+vi.mock("@/lib/gameApi", async (importOriginal) => ({
+  // The pure word helpers (villageWord, articleFor) stay real.
+  ...(await importOriginal<typeof import("@/lib/gameApi")>()),
   fetchGameMe: async () => null,
   gameFetch: async () => ({ ok: true, status: 200, json: async () => ({ quest: ctl.quest, related: [] }) }),
   useGameConfig: () => ({ stages: [{ id: "member", name: "Member", description: "" }] }),
@@ -98,7 +100,8 @@ describe("a quest's page says what the quest pays", () => {
     await waitFor(() => expect(screen.getByText(/^Worth/).textContent).toContain("about $55.00"));
     expect(screen.getByText(/^Worth/).textContent).toContain("25,000");
     expect(screen.getAllByText("40 Village Credits").length).toBeGreaterThan(0);
-    expect(screen.getByText("When the circle confirms your work, the quest pays what it says here.")).toBeTruthy();
+    // The value block says it; no sentence restates that the work is paid (Rye, 2026-10-23).
+    expect(document.body.textContent).not.toContain("the quest pays what it says here");
     // No Gratitude reward anywhere on the page.
     expect(document.body.textContent).not.toContain("50-100");
   });
@@ -133,6 +136,37 @@ describe("a quest's page says what the quest pays", () => {
     serve(null);
     render(<QuestDetail />);
     await waitFor(() => expect(screen.getAllByText("A morning with wire and gloves.").length).toBeGreaterThan(0));
-    expect(screen.queryByText("When the circle confirms your work, the quest pays what it says here.")).toBeNull();
+    expect(document.body.textContent).not.toContain("the quest pays what it says here");
+  });
+});
+
+describe("a quest's page shows both of the admin's boxes", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    forgetDisplayRates();
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("leads with what it asks for and puts why it matters under its heading", async () => {
+    ctl.quest = { ...BASE, story: "The fence keeps the goats out of the orchard." };
+    serve(null);
+    render(<QuestDetail />);
+    const lead = await screen.findByText("A morning with wire and gloves.");
+    expect(lead.hasAttribute("data-quest-lead")).toBe(true);
+    expect(screen.getByText("Why this quest matters")).toBeTruthy();
+    const story = screen.getByText("The fence keeps the goats out of the orchard.");
+    // The lead comes first in the reading column.
+    expect(lead.compareDocumentPosition(story) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows the same words once when both boxes hold them, and no empty heading", async () => {
+    ctl.quest = { ...BASE, story: "A morning with wire and gloves." };
+    serve(null);
+    render(<QuestDetail />);
+    await screen.findByText("A morning with wire and gloves.");
+    expect(screen.getAllByText("A morning with wire and gloves.")).toHaveLength(1);
+    expect(screen.queryByText("Why this quest matters")).toBeNull();
   });
 });

@@ -94,7 +94,7 @@ import {
   type WordFieldsContext,
 } from "../../shared/roleProposals";
 import { APPLICATION_ID, applicationHref } from "../../shared/seatApplications";
-import { CONSENT_WORDS, consentClosesAt, NUDGE_WORDS, PROPOSE_ENTRY_HREF } from "../../shared/roleProposalConsent";
+import { CONSENT_WORDS, consentClosesAt, NUDGE_WORDS, PROPOSE_ENTRY_HREF, whoApprovesWords } from "../../shared/roleProposalConsent";
 import { parseSeatSettings, type SeatSettings } from "../../shared/seatSettings";
 import { carriesMoney, intentSentence } from "../../shared/alignments";
 import type { AppDeps } from "../lib/appDeps";
@@ -120,7 +120,7 @@ import * as store from "../repos/roleProposals";
 import { readApplications } from "../repos/seatApplications";
 import { insertPlanVersion, latestCardWords, planToStore, planVersions, plansOfMember } from "../repos/seasonPlans";
 import { cardContext, cardSeatTier, type CardDeps } from "./playerCard";
-import { roleApplicationDoor } from "./seatApplications";
+import { roleAdoptersReader, roleApplicationDoor } from "./seatApplications";
 import { registerRoleCardRoutes } from "./roleCardImport";
 
 type Deps = CardDeps &
@@ -313,16 +313,28 @@ export function register(app: Express, deps: Deps): void {
     };
   }
 
-  /** The card the proposal would make, through the batched builder, at one reader's tier. */
+  /**
+   * The card the proposal would make, through the batched builder, at one reader's tier.
+   *
+   * DRAWN IN THE SEASON IT IS FOR (E9, found end to end on main e1c5eb6): a
+   * proposal for the second season was headed with the first season's name
+   * and dates, under a page header naming the second, because the card took
+   * the RUNNING season. The season is read by id when the card is drawn, so a
+   * season renamed since reads by its new name; a draft with no target takes
+   * next season the way `targetFor` would, without writing it; and a proposal
+   * with no season to be for draws none, never the running one.
+   */
   async function cardOf(req: any, viewer: any, p: store.StoredProposal, k: Known, level: CardLevel) {
     const pool = getPool();
     const viewerId = viewer ? String(viewer.id) : null;
     const seat = await cardSeatTier(deps, req, viewer, { terms: level !== "stranger", isSelf: level === "self" });
     const body = p.body;
+    const target = seasonById(p.targetSeasonId) ?? (p.status === "draft" ? nextSeason() : null);
     const proposal: CardProposal = {
       applicationId: p.id,
       seatIds: [...body.roles.map((r) => r.roleId), ...body.newRoles.map((r) => r.id)],
       settings: body.settings,
+      season: target ? { id: target.id, name: target.name || null, startsOn: target.startsOn, endsOn: target.endsOn } : null,
       termEndsAt: null,
       draft: {
         words: Object.fromEntries(body.roles.map((r) => [r.roleId, r.words as Record<string, unknown>])),
@@ -652,7 +664,10 @@ export function register(app: Express, deps: Deps): void {
     if (!p) return;
     const names = namesOf(p.body, await known(getPool()));
     const words = seatTermsWords(names, p.body.settings);
-    res.json({ title: words.title, body: words.body, money: carriesMoney(p.body.settings), intent: intentSentence(names) });
+    // Who approves it in THIS village, read from who holds the power, the member themselves never named (E8).
+    const adopters = roleAdoptersReader();
+    const whoApproves = adopters ? whoApprovesWords({ ...(await adopters(user, String(user.id))), changesRoles: changesRoles(p.body) }) : null;
+    res.json({ title: words.title, body: words.body, money: carriesMoney(p.body.settings), intent: intentSentence(names), whoApproves });
   });
 
   // ── The card as text, and bringing a description in (server/routes/roleCardImport.ts) ──

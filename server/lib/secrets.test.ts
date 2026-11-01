@@ -124,6 +124,8 @@ describe("naming what is wrong with the key", () => {
 
   it("the launch check reads ok only for a usable key, and its detail names the shape", () => {
     expect(villageSecretsLaunchCheck(withA).state).toBe("ok");
+    // Green means it sealed: a test value made the round trip with this key.
+    expect(villageSecretsLaunchCheck(withA).detail).toContain("a test value made the round trip");
     expect(villageSecretsLaunchCheck(withNone)).toMatchObject({ state: "missing" });
     expect(villageSecretsLaunchCheck(withNone).detail).toContain("is not set");
     expect(villageSecretsLaunchCheck(quoted).detail).toContain("quotes around it");
@@ -289,6 +291,33 @@ describe.skipIf(!configured)("the store against a real schema", () => {
     // The correct key still opens it, so the row was never damaged.
     await loadSecrets(pool, withA);
     expect(secretValue("basescan_api_key", withA)).toBe("bs_key_wxyz");
+  });
+
+  it("the launch check opens every saved key, so a changed key reads red and never green", async () => {
+    await loadSecrets(pool, withA);
+    await putSecret(pool, "stripe_secret_key", LIVE_KEY, "founder", withA);
+    const ok = villageSecretsLaunchCheck(withA);
+    expect(ok.state).toBe("ok");
+    expect(ok.detail).toContain("the 1 key saved under Integrations opens with it");
+
+    // The same store under a key that changed: the shape is fine, the keys are lost.
+    const changed = villageSecretsLaunchCheck(withB);
+    expect(changed.state).toBe("missing");
+    expect(changed.detail).toContain("1 key saved under Integrations cannot be opened");
+    expect(changed.detail).not.toContain(LIVE_KEY.slice(-8));
+  });
+
+  it("the launch check keeps a key planted while a saved value is still in the clear", async () => {
+    await seedPlaintext("stripe_webhook_secret", "whsec_legacy_wxyz");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await loadSecrets(pool, withNone);
+    warn.mockRestore();
+    const clear = villageSecretsLaunchCheck(withA);
+    expect(clear.state).toBe("partial");
+    expect(clear.detail).toContain("still stored in the clear");
+    // The boot with the key seals it, and the row reads done.
+    await loadSecrets(pool, withA);
+    expect(villageSecretsLaunchCheck(withA).state).toBe("ok");
   });
 
   it("reads a master root only from the store, never from the environment", async () => {

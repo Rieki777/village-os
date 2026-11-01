@@ -73,7 +73,7 @@ function read(raw: string): Parsed {
     .split(/[,\n]/)
     .map((p) => p.trim())
     .filter((p) => p !== "");
-  const shape = "Write each season as a name, a colon and the day it starts, separated by commas, such as Dry: 12-01, Green: 05-01.";
+  const shape = "Write each season as a name, a colon and the day it starts, separated by commas, such as Planting: 03-01, Harvest: 09-01.";
   if (parts.length > VILLAGE_SEASONS_MAX) return { ok: false, problem: `At most ${VILLAGE_SEASONS_MAX} seasons.` };
   const seasons: VillageSeason[] = [];
   const days = new Set<number>();

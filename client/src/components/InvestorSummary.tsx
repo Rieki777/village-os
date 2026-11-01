@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Users,
   Info,
+  Wallet,
 } from "lucide-react";
 
 interface SummaryDetail {
@@ -27,7 +28,10 @@ interface InvestorSummaryData {
   cta_url: string;
 }
 
+// `wallet` says "an amount" in no currency, the way the Visit page's cost line
+// does; the starter summary uses it. `dollar` stays for a village that chose it.
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  wallet: Wallet,
   dollar: DollarSign,
   shield: Shield,
   "trending-up": TrendingUp,

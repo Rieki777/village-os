@@ -25,8 +25,20 @@ import { render, screen } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ComponentType, ReactNode } from "react";
 import { RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE } from "@shared/pageContent/rights";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
 import { pageSectionKey, type PageSpec } from "@shared/pageContent/types";
+
+/*
+ * A village that saved nothing reads the spec's defaults, neutral starter
+ * text since 2026-10-23. These read them from the spec rather than typing
+ * them again, so a later wording change moves no test.
+ */
+const sectionOf = (spec: PageSpec, id: string) => spec.sections.find((s) => s.id === id)!;
+const fieldDefault = (spec: PageSpec, id: string, key: string) => sectionOf(spec, id).fields.find((f) => f.key === key)!.default;
+const listDefault = (spec: PageSpec, id: string, key: string) => sectionOf(spec, id).lists!.find((l) => l.key === key)!.default;
+const filled = (text: string, more: Record<string, string> = {}) => fillVars(text, { village: "Willowbrook", ...more });
+/** The resident card that carries Legal's transfer note. */
+const transferCard = () => listDefault(RIGHTS_RESIDENT_PAGE, "rights", "items").find((row) => row.description.includes("{transfer}"))!;
 
 let stored: Record<string, unknown>;
 let legal: Record<string, unknown> | null;
@@ -158,39 +170,38 @@ describe.each(PAGES)("$name, every field in its spec reaches the page", ({ spec,
 });
 
 describe("ResidentRights words", () => {
-  it("fills {village} in the defaults and carries the approved token rows", async () => {
+  it("fills {village} in the starter words and states none of the founding village's own facts", async () => {
     show(ResidentRights);
     await loaded();
 
     const text = pageText();
-    expect(text).toContain("Living at Willowbrook means you are not a tenant.");
-    // Row 15.
-    expect(screen.getByText("A Share in What We Build")).toBeInTheDocument();
-    expect(text).toContain("make life here net-positive for every resident.");
+    expect(text).toContain(filled(fieldDefault(RIGHTS_RESIDENT_PAGE, "hero", "intro")));
+    expect(text).not.toContain("{village}");
+    // The token rows of 2026-10-22 stay true: no token offsets anything.
     expect(text).not.toContain("Dues Offset");
-    // Row 16.
-    expect(text).toContain("creating a net-positive financial life for all residents. Exact monthly amounts");
-    // Row 17.
-    expect(text).toContain("Where your business participation or your role in community operations covers your dues");
-    expect(text).toContain("Year thresholds are approximate");
+    // The founding village's land model, businesses and year thresholds (2026-10-23).
+    expect(text).not.toMatch(/retreat cent|cafe|wellness center|artisan market|net-positive/i);
+    expect(text).not.toMatch(/Year \d|Sage eligibility|Circle Representative|Children's Play Day/);
+    // The Good Neighbor page can rename its criteria and this page cannot follow, so it names the page.
+    expect(text).not.toMatch(/Good Neighbor Criteria/);
   });
 
   it("puts nothing where the transfer note goes when Legal has none", async () => {
     show(ResidentRights);
     await loaded();
 
-    expect(pageText()).toContain("transferable to your children, and protected by community ownership");
+    expect(pageText()).toContain(filled(transferCard().description, { transfer: "" }));
     expect(pageText()).not.toContain("{transfer}");
   });
 
-  it("splices Legal's transfer note into the Land Share card, as it always did", async () => {
+  it("splices Legal's transfer note into the card that carries it, as it always did", async () => {
     legal = { landShareTransferNote: "with no transfer tax under local law" };
     show(ResidentRights);
     await loaded();
 
-    expect(pageText()).toContain(
-      "transferable to your children with no transfer tax under local law, and protected by community ownership",
-    );
+    const spliced = filled(transferCard().description, { transfer: " with no transfer tax under local law" });
+    expect(spliced).toContain(" with no transfer tax under local law");
+    expect(pageText()).toContain(spliced);
   });
 
   it("follows {transfer} into the card a village rewrote", async () => {
@@ -206,29 +217,36 @@ describe("ResidentRights words", () => {
   });
 
   it("drops the footnote and the finances card when the village blanks or hides them", async () => {
+    save(RIGHTS_RESIDENT_PAGE, { progression: { footnote: "Stages are agreed each year." } });
+    const first = show(ResidentRights);
+    await loaded();
+    expect(screen.getByText("Stages are agreed each year.")).toBeInTheDocument();
+    expect(screen.getByText(fieldDefault(RIGHTS_RESIDENT_PAGE, "finances", "heading"))).toBeInTheDocument();
+    first.unmount();
+
     save(RIGHTS_RESIDENT_PAGE, { progression: { footnote: "" }, finances: { hidden: true } });
     show(ResidentRights);
     await loaded();
 
-    expect(screen.queryByText(/Year thresholds are approximate/)).toBeNull();
-    expect(screen.queryByText("The Vision for Your Finances Here")).toBeNull();
-    expect(screen.getByText("Rights Grow With Your Roots")).toBeInTheDocument();
+    expect(screen.queryByText("Stages are agreed each year.")).toBeNull();
+    expect(screen.queryByText(fieldDefault(RIGHTS_RESIDENT_PAGE, "finances", "heading"))).toBeNull();
+    expect(screen.getByText(fieldDefault(RIGHTS_RESIDENT_PAGE, "progression", "heading"))).toBeInTheDocument();
   });
 });
 
 describe("StewardRights words", () => {
-  it("carries the approved token rows", async () => {
+  it("has no pay card, because the quest and role cards say what work pays (Rye, 2026-10-23)", async () => {
     show(StewardRights);
     await loaded();
 
-    // Row 18.
-    expect(
-      screen.getByText("Every role you hold and every quest you complete shows what it is worth on its own card."),
-    ).toBeInTheDocument();
-    // Rows 19 and 20.
-    expect(screen.getByText("Full governance voice, seasonal role eligibility")).toBeInTheDocument();
-    expect(screen.getByText("Mentorship responsibilities, voice in cross-circle decisions")).toBeInTheDocument();
-    expect(pageText()).toContain("you have access to Willowbrook's wellness offerings");
+    expect(screen.queryByText("Get Paid for Your Contribution")).toBeNull();
+    expect(pageText()).not.toMatch(/get paid|shows what it is worth on its own card/i);
+    // Its stages promise no token and no more of one (rows 19 and 20 of 2026-10-22).
+    for (const stage of listDefault(RIGHTS_STEWARD_PAGE, "progression", "stages")) {
+      expect(screen.getByText(filled(stage.description))).toBeInTheDocument();
+    }
+    // The founding village's own retreat and council are its own words now.
+    expect(pageText()).not.toMatch(/wellness offerings|Leadership Council|Nonviolent Communication|Right of Passage/);
   });
 
   it("has no footnote and no stage tags until the village writes them", async () => {
