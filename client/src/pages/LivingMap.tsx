@@ -80,7 +80,9 @@ type Presence = "checking" | "present" | "absent";
  */
 async function probeGrounds(): Promise<{ presence: Presence; url: string }> {
   try {
-    const res = await fetch(GROUNDS_MANIFEST, { headers: { Accept: "application/json" } });
+    // With the session: the probe sits behind the map module's gate
+    // (server/routes/grounds.ts), so a members-only map answers a member.
+    const res = await gameFetch(GROUNDS_MANIFEST, { headers: { Accept: "application/json" } });
     if (!res.ok) return { presence: "absent", url: GROUNDS };
     const body = await res.json();
     if (body?.present !== true) return { presence: "absent", url: GROUNDS };

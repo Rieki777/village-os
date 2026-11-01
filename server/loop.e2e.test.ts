@@ -4322,19 +4322,21 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * A fresh village has answered neither, and the detail is the sentence a
      * founder acts on rather than a scolding.
      */
+    // The currency warns; the timezone blocks the launch vote since readiness
+    // R059, because the platform keeps UTC and that is nobody's home.
+    const severity: Record<string, string> = { "village-timezone": "blocking", "village-currency": "recommended" };
     for (const id of ["village-timezone", "village-currency"]) {
       const item = launch.json.items.find((i: any) => i.id === id);
       expect(item, `no launch item "${id}"`).toBeTruthy();
       expect(item.detail).not.toContain("No check wired");
       expect(item.state).toBe("missing");
-      // A warning warns. Neither of these may stop a village launching.
-      expect(item.severity).toBe("recommended");
+      expect(item.severity, id).toBe(severity[id]);
       // The address names the control, not the screen it lives on.
       expect(item.fixAt).toContain("setting=");
     }
     // The timezone item names the zone the village is actually running on, so
     // a founder reads what they are inheriting rather than an abstraction.
-    expect(launch.json.items.find((i: any) => i.id === "village-timezone").detail).toMatch(/[A-Za-z]+\/[A-Za-z_]+/);
+    expect(launch.json.items.find((i: any) => i.id === "village-timezone").detail).toContain("Days here run on UTC");
 
     // ANSWERING THE CURRENCY IS STORING ONE, and a village may answer with the
     // platform's own code: the point is that somebody said it.

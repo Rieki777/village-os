@@ -295,7 +295,7 @@ export default function InvestorJourney() {
                   it reaches the right village, and the request passes through
                   the accreditation step the journey already had. */}
               {heroPrimary && (
-                <JourneyLink action={heroPrimary.action} onForm={openForm} className="btn-amora flex items-center gap-2">
+                <JourneyLink action={heroPrimary.action} onForm={openForm} className="btn-village flex items-center gap-2">
                   <FileText className="w-5 h-5" />
                   {heroPrimary.label}
                 </JourneyLink>
@@ -705,7 +705,7 @@ export default function InvestorJourney() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               {closingPrimary && (
-                <JourneyLink action={closingPrimary.action} onForm={openForm} className="btn-amora flex items-center gap-2">
+                <JourneyLink action={closingPrimary.action} onForm={openForm} className="btn-village flex items-center gap-2">
                   {closingPrimary.label}
                   <ArrowRight className="w-5 h-5" />
                 </JourneyLink>

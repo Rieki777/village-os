@@ -108,16 +108,29 @@ describe("the village's own facts", () => {
     }
   });
 
-  it("carries both as recommended, never blocking, and links to the control", () => {
-    const ids = ["village-timezone", "village-currency"];
-    for (const id of ids) {
+  it("carries the currency as recommended and the timezone as blocking, both linking to the control", () => {
+    const severity: Record<string, string> = {
+      // A village may launch on the platform's currency.
+      "village-currency": "recommended",
+      // Readiness R059: the platform keeps UTC, which is nobody's home, so a
+      // village answers (confirming UTC counts) before its launch vote.
+      "village-timezone": "blocking",
+    };
+    for (const [id, want] of Object.entries(severity)) {
       const req = LAUNCH_REQUIREMENTS.find((r) => r.id === id);
       expect(req, `no launch requirement "${id}"`).toBeTruthy();
-      // A warning warns. A village that means to launch on the defaults may.
-      expect(req!.severity).toBe("recommended");
+      expect(req!.severity, id).toBe(want);
       // The address names the control, not just the screen it sits on.
       expect(req!.fixAt).toContain("setting=");
     }
+  });
+
+  it("tells a founder why the timezone matters, and names no village's clock", () => {
+    const req = LAUNCH_REQUIREMENTS.find((r) => r.id === "village-timezone")!;
+    expect(req.why).toContain("UTC");
+    expect(req.why).toMatch(/Season turns, role terms/);
+    expect(req.why).toMatch(/confirm UTC/i);
+    expect(req.why).not.toMatch(/Costa Rica|America\//);
   });
 });
 

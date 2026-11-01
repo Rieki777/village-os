@@ -92,8 +92,9 @@ Sign in and open **Admin, Make This Yours**: the name, the line under it,
 where you are, your pictures, your colours. Modules are switched on in
 **Admin, Module Library**. Then open the
 **Launch Plan** (`/journey-to-launch`). It lists what is still missing,
-including two things that ship blank on purpose: the currency your prices are
-in, and the timezone your days start in.
+including the currency your prices are in, which ships blank on purpose, and
+the timezone your days start in, which starts on UTC until you choose yours or
+confirm it. The timezone has to be answered before your launch vote.
 
 A new village starts with a plain welcome page and none of the first
 village's own story pages. Neutral starting text for your legal and membership

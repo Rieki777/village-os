@@ -73,6 +73,7 @@ import { IDENTITY_WIZARD_FIELDS, SETUP_CONTENT_EDITORS, SETUP_STEPS, contentEdit
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
+import BrandTextField from "@/components/admin/BrandTextField";
 import HandoverTab from "@/components/admin/HandoverTab";
 import AdminGate from "@/components/admin/AdminGate";
 import FailuresTab from "@/components/admin/FailuresTab";
@@ -6440,7 +6441,7 @@ function CyclesTab({ password }: { password: string }) {
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
                     Split across everyone acknowledged that lunation, in proportion to what
-                    they received. Set by gratitude.pool_per_cycle, on its module card
+                    they received. Set by {"gratitude.pool_per_cycle"}, on its module card
                     under Modules.
                   </p>
                   {pending.pool.problem && (
@@ -7154,19 +7155,18 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   };
 
   /* `project` only. The two `currency` calls came out with the dead boxes, and
-     narrowing the type is what stops a third one going back in by hand. */
+     narrowing the type is what stops a third one going back in by hand. The box
+     itself, and the "Show nothing here" choice on the Tagline and the Footer
+     introduction (R088), are client/src/components/admin/BrandTextField.tsx. */
   const brandField = (group: "project", key: string, label: string, defaultVal: string) => (
-    <div key={key}>
-      <label className="text-xs font-medium text-gray-500 block mb-1">{label}</label>
-      <input
-        type="text"
-        value={brand[group][key] ?? ""}
-        onChange={(e) => setField(group, key, e.target.value)}
-        placeholder={defaultVal}
-        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
-      />
-      <p className="text-[11px] text-gray-400 mt-0.5">Platform default: {defaultVal}</p>
-    </div>
+    <BrandTextField
+      key={key}
+      fieldKey={key}
+      label={label}
+      defaultVal={defaultVal}
+      project={brand[group]}
+      onProject={(next) => setBrand((b: any) => ({ ...b, [group]: next }))}
+    />
   );
 
 
@@ -7281,7 +7281,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <button onClick={() => saveBrand("identity", { project: brand.project })} disabled={savingSection === "identity"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
           {savingSection === "identity" ? "Saving..." : "Save identity"}
         </button>
-        <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, gratitude, season banner, pulse). Page marketing copy is edited under Content below.</p>
+        <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, recognition, season banner, pulse). Page marketing copy is edited under Content below.</p>
       </SetupSection>
 
       {/* 0219: the sentence every later change is judged against, and the one
