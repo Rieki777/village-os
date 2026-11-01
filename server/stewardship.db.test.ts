@@ -41,6 +41,7 @@ import { HANDOVER_SET } from "../shared/capabilities";
 import { loadVariables, setVariable } from "./lib/variables";
 import { carriedUnseatingsOf } from "./repos/stewardshipBallots";
 import { beingVotedOut } from "./lib/stewardship";
+import { writeLaunchSelection } from "./lib/launchHandover";
 import {
   actFor,
   expiringHoldings,
@@ -224,7 +225,7 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(Number(count[0].n)).toBe(0);
   });
 
-  it("seats the catalysts who stood, creates the role, and grants ALL NINETEEN powers", async () => {
+  it("seats the catalysts who stood, creates the role, grants ALL NINETEEN powers, and with nothing selected hands NONE to the village", async () => {
     const r = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     expect(r.ok).toBe(true);
     expect(r.roleCreated).toBe(true);
@@ -233,12 +234,6 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     // named a subset, all nineteen entrustable powers. NOT `toContain`: a
     // seat carrying eighteen would pass that and would be the defect.
     expect([...r.capabilitiesGranted].sort()).toEqual([...HANDOVER_SET].sort());
-    // And every one of them crosses in the same breath. Without these rows an
-    // administrator passes each gate as an ordinary admin, with nothing
-    // anywhere saying they reached past the village.
-    expect(r.holdingMoved).toBe(true);
-    expect([...r.capabilitiesMoved].sort()).toEqual([...HANDOVER_SET].sort());
-    expect(r.holdingHeld).toBeNull();
     expect(r.seated.sort()).toEqual(["cat-1", "cat-2"]);
     expect(r.alreadySeated).toEqual([]);
     expect(r.slate, "the proposal named both of them").toEqual(["cat-1", "cat-2"]);
@@ -253,17 +248,13 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     const caps = typeof roles[0].capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0].capabilities;
     expect([...caps].sort(), "the role really carries them, read off the row").toEqual([...HANDOVER_SET].sort());
 
-    const [holdings]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "SELECT capability, holder_role_id, moved_by_ballot_id FROM capability_holding",
-    );
-    expect(
-      holdings.map((h: any) => String(h.capability)).sort(),
-      "all nineteen entrusted, read off the table the gate reads",
-    ).toEqual([...HANDOVER_SET].sort());
-    for (const h of holdings) {
-      expect(String(h.holder_role_id)).toBe(STEWARD_ROLE_ID);
-      expect(String(h.moved_by_ballot_id), "the Birthing moved it, not an administrator").toBe(LAUNCH_BALLOT);
-    }
+    // Rye, 2026-11-01: "At launch the stewards select WHAT powers are being
+    // passed over." Nothing was selected here, so nothing crosses, and nothing
+    // failed to. Read off the table the gate reads.
+    expect(r.holdingMoved, "nothing selected, so nothing failed to cross").toBe(true);
+    expect(r.capabilitiesMoved).toEqual([]);
+    const [holdings]: any = await pool.query("SELECT capability FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(holdings, "the launch handed not one power to the village").toEqual([]);
   });
 
   it("does not seat an ordinary member who voted and did not stand", async () => {
@@ -308,21 +299,16 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(await capabilitiesOf("mem-1")).toEqual([]);
   });
 
-  it("seats nobody twice and moves nothing twice: a retried close is one row per catalyst", async () => {
-    const [before]: any = await pool.query("SELECT COUNT(*) AS n, MAX(moved_at) AS last FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  it("seats nobody twice and moves nothing at all: a retried close is one row per catalyst", async () => {
     const again = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
     expect(again.seated, "nothing to do, and that is different from a failure").toEqual([]);
     expect(again.alreadySeated.sort()).toEqual(["cat-1", "cat-2"]);
     expect(again.roleCreated).toBe(false);
     expect(again.capabilityGranted).toBe(false);
     expect(again.capabilitiesGranted, "the role already carried all nineteen").toEqual([]);
-    // The crossing RUNS again and is a no-op on every key, which is what
-    // `ON DUPLICATE KEY UPDATE` buys. The table is the measurement, not the
-    // report: nineteen rows before and nineteen after.
-    expect(again.holdingMoved, "and the powers are still the village's").toBe(true);
+    // A retried close hands nothing to the village either. The table is the measurement.
     const [after]: any = await pool.query("SELECT COUNT(*) AS n FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    expect(Number(after[0].n), "one row per power, not two").toBe(Number(before[0].n));
-    expect(Number(after[0].n)).toBe(HANDOVER_SET.length);
+    expect(Number(after[0].n), "the stewards still hold every power").toBe(0);
 
     const [count]: any = await pool.query(
       "SELECT COUNT(*) AS n FROM role_holders WHERE role_id = ?",
@@ -330,6 +316,29 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     );
     expect(Number(count[0].n)).toBe(2);
     expect(await termHistoryFor(pool, STEWARD_ROLE_ID, "cat-1")).toHaveLength(1);
+  });
+
+  it("hands the village EXACTLY the powers the stewards selected, and not one more", async () => {
+    // Selected out of order and with a stray: the launch reads the selection
+    // through `onlyHandoverPowers`, so only real powers cross, once each.
+    await writeLaunchSelection(pool, ["story.tell", "org.seat", "message.send", "org.seat"], "cat-1");
+    const r = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
+    expect(r.ok).toBe(true);
+    expect([...r.capabilitiesMoved].sort()).toEqual(["org.seat", "story.tell"]);
+    expect(r.holdingMoved).toBe(true);
+    const [holdings]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT capability, holder_role_id, moved_by_ballot_id FROM capability_holding ORDER BY capability",
+    );
+    expect(holdings.map((h: any) => [String(h.capability), String(h.holder_role_id), String(h.moved_by_ballot_id)])).toEqual([
+      ["org.seat", STEWARD_ROLE_ID, LAUNCH_BALLOT],
+      ["story.tell", STEWARD_ROLE_ID, LAUNCH_BALLOT],
+    ]);
+    // An empty selection, written down, is a selection of nothing: the next close moves nothing new.
+    await writeLaunchSelection(pool, [], "cat-1");
+    const none = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
+    expect(none.capabilitiesMoved).toEqual([]);
+    const [after]: any = await pool.query("SELECT COUNT(*) AS n FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(Number(after[0].n)).toBe(2);
   });
 
   it("reads the seat as held, by two people, any one of whom can stop a decision", async () => {
