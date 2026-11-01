@@ -41,10 +41,13 @@ const PEOPLE: Record<string, { id: string; name: string; role: string }> = {
   "u-founder": { id: "u-founder", name: "Ana Quill", role: "founder" },
   "u-admin": { id: "u-admin", name: "Rook Salt", role: "admin" },
   "u-member": { id: "u-member", name: "Ivo Lantern", role: "member" },
+  "u-steward-2": { id: "u-steward-2", name: "Iris Fen", role: "member" },
+  "u-founder-2": { id: "u-founder-2", name: "Oak Reed", role: "founder" },
 };
 /** Who sits where, as the gate's own counter reads it: one steward, seated for a term that has not lapsed. */
 const ROLES = [{ id: STEWARD_ROLE_ID, capabilities: [...HANDOVER_SET] }];
-const SEATS = [{ roleId: STEWARD_ROLE_ID, userId: "u-steward", termEndsAt: new Date(Date.now() + 90 * 86400000) }];
+const TERM = new Date(Date.now() + 90 * 86400000);
+let SEATS = [{ roleId: STEWARD_ROLE_ID, userId: "u-steward", termEndsAt: TERM }];
 
 describe.skipIf(!configured)("the one hand-over control, on a real schema", () => {
   let db: TestDb;
@@ -109,7 +112,7 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
   beforeEach(async () => {
     viewer = null;
     await q("DELETE FROM capability_holding");
-    await q("DELETE FROM app_config WHERE config_key = 'launch-handover'");
+    await q("DELETE FROM app_config WHERE config_key IN ('launch-handover', 'handover-pending')");
   });
 
   it("the fixture's steward is the one live holder of the veto, counted the way the gate counts a seat", () => {
@@ -162,6 +165,25 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
         await q("DELETE FROM ballots WHERE id = 'bal-launch'");
       }
       expect((await call("GET")).json.frozen, "and it thaws when that vote is gone").toBe(false);
+    });
+
+    it("with two founders, holds the first founder's selection until the second signs the same list", async () => {
+      for (const [id, name] of [["u-founder", "Ana Quill"], ["u-founder-2", "Oak Reed"]]) {
+        await q("INSERT INTO users (id, name, email, password_hash, role) VALUES (?,?,?,?,'founder')", [id, name, `${id}@example.invalid`, "x"]);
+      }
+      try {
+        viewer = "u-founder";
+        const first = await handOver({ capabilities: ["story.tell"], confirm: true });
+        expect(first.status, JSON.stringify(first.json)).toBe(202);
+        expect((await readLaunchSelection(pool)).capabilities, "one signature selects nothing").toEqual([]);
+        expect((await handOver({ capabilities: ["story.tell"], confirm: true })).status, "nor does the same founder twice").toBe(409);
+        viewer = "u-founder-2";
+        const second = await handOver({ capabilities: ["story.tell"], confirm: true });
+        expect(second.status, JSON.stringify(second.json)).toBe(200);
+        expect((await readLaunchSelection(pool)).capabilities).toEqual(["story.tell"]);
+      } finally {
+        await q("DELETE FROM users WHERE id IN ('u-founder', 'u-founder-2')");
+      }
     });
 
     it("an administrator who is not a founder, and a member, cannot set the selection", async () => {
@@ -229,6 +251,64 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
       expect(await adminDoorRefusal(pool, "u-steward", seated)).toBeNull();
       // With nobody in the steward seat the panel stays the scaffolding's, as an empty seat leaves it at launch.
       expect(await adminDoorRefusal(pool, "u-admin", async () => [])).toBeNull();
+    });
+
+    describe("two signatures when two stewards can sign (Rye, 2026-11-01)", () => {
+      beforeAll(() => {
+        SEATS = [...SEATS, { roleId: STEWARD_ROLE_ID, userId: "u-steward-2", termEndsAt: TERM }];
+      });
+      afterAll(() => {
+        SEATS = SEATS.filter((s) => s.userId !== "u-steward-2");
+      });
+
+      it("holds a lone steward's hand-over, refuses the same steward twice, and the second steward completes it", async () => {
+        viewer = "u-steward";
+        const first = await handOver({ capabilities: ["org.seat"], confirm: true });
+        expect(first.status, JSON.stringify(first.json)).toBe(202);
+        expect(first.json).toEqual({ stage: "now", pending: true, capabilities: ["org.seat"] });
+        expect(await holdings(), "one signature moves nothing").toEqual([]);
+        expect((await call("GET")).json.pending).toEqual({ capabilities: ["org.seat"], mine: true });
+
+        const again = await handOver({ capabilities: ["org.seat"], confirm: true });
+        expect(again.status).toBe(409);
+        expect(again.json.error).toBe(HAND_OVER_WORDS.signedAlready);
+        expect(await holdings(), "the same person twice is still one signature").toEqual([]);
+
+        viewer = "u-steward-2";
+        expect((await call("GET")).json.pending).toEqual({ capabilities: ["org.seat"], mine: false });
+        const second = await handOver({ capabilities: ["org.seat"], confirm: true });
+        expect(second.status, JSON.stringify(second.json)).toBe(200);
+        expect(second.json.moved).toEqual(["org.seat"]);
+        expect(await holdings()).toEqual([
+          { capability: "org.seat", holder_role_id: STEWARD_ROLE_ID, moved_by_user_id: "u-steward-2", moved_by_ballot_id: null },
+        ]);
+        expect((await call("GET")).json.pending, "signed and done").toBeNull();
+      });
+
+      it("takes a different list from the second steward as a new request, and moves nothing", async () => {
+        viewer = "u-steward";
+        expect((await handOver({ capabilities: ["org.seat"], confirm: true })).status).toBe(202);
+        viewer = "u-steward-2";
+        const other = await handOver({ capabilities: ["story.tell"], confirm: true });
+        expect(other.status).toBe(202);
+        expect(await holdings()).toEqual([]);
+        viewer = "u-steward";
+        expect((await call("GET")).json.pending, "now the first steward is asked").toEqual({ capabilities: ["story.tell"], mine: false });
+      });
+    });
+
+    it("asks a second confirm for a mature-only power, and never blocks it", async () => {
+      viewer = "u-steward";
+      const asked = await handOver({ capabilities: ["steward.veto", "story.tell"], confirm: true });
+      expect(asked.status).toBe(400);
+      expect(asked.json.matureOnly).toEqual(["steward.veto"]);
+      expect(await holdings(), "nothing moves on the first confirm alone").toEqual([]);
+      const r = await handOver({ capabilities: ["steward.veto", "story.tell"], confirm: true, confirmMature: true });
+      expect(r.status, JSON.stringify(r.json)).toBe(200);
+      expect(r.json.moved).toEqual(["steward.veto", "story.tell"]);
+      expect((await call("GET")).json.powers.filter((p: any) => p.matureOnly).map((p: any) => p.capability).sort()).toEqual(
+        ["cash.pay", "dial.set", "exchange.manage", "module.switch", "steward.veto"],
+      );
     });
 
     it("moves nothing without the confirm, with nothing named, or with a power the stewards do not hold", async () => {
