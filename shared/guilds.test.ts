@@ -243,7 +243,8 @@ describe("the rulings of 2026-10-13", () => {
   it("Q4: the governance crossings are platform seeds, and only hypha keeps Basescan", () => {
     const crossings = PLATFORM_GUILDS.find((g) => g.id === "crossings")!.seeds;
     expect(crossings).toEqual(["governance-hub-secret", "hypha-voice-webhook-secret"]);
-    expect(MODULES.find((m) => m.id === "hypha")!.guild).toEqual(["basescan-api-key"]);
+    // And the Base RPC endpoint since it became a sealed slot: the bridge reads through it.
+    expect(MODULES.find((m) => m.id === "hypha")!.guild).toEqual(["basescan-api-key", "base-rpc-url"]);
   });
 
   it("names only real settings in a condition, and skips a conditional seed whose setting is empty", () => {
