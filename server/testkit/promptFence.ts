@@ -46,7 +46,8 @@ export function fences(prompt: string): Fence[] {
     const open = prompt.indexOf("<village-data", at);
     if (open < 0) return out;
     const close = prompt.indexOf(CLOSE, open);
-    expect(close, "a fence that never closes").toBeGreaterThan(open);
+    // Position-free, so the message is the same whatever text surrounds the tag.
+    expect(close < 0 ? "an opening tag with no closing tag after it" : "closed", "a fence that never closes").toBe("closed");
     const lines = prompt.slice(open, close).split("\n");
     // The preamble sentences each start with a capital; no JSON value does.
     let i = 1;
