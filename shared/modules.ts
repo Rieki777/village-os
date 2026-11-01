@@ -1541,7 +1541,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "hypha",
-    guild: ["basescan-api-key"],
+    guild: ["basescan-api-key", "base-rpc-url"],
     setupNeeds: [
       {
         id: "dho-address",

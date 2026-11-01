@@ -135,7 +135,7 @@ function ListEditor({
       <div className="space-y-3">
         {editable.map((row, i) => (
           <div key={row.id ?? i} className="rounded-lg bg-muted/30 p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-semibold text-foreground">
                 {list.itemLabel} {i + 1}
                 {row[list.titleKey] ? `: ${row[list.titleKey]}` : ""}
@@ -215,13 +215,13 @@ function SectionEditor({
   const idBase = `page-${spec.id}-${section.id}`;
   return (
     <section className="bg-card border border-gray-200 rounded-xl p-4 space-y-4" aria-labelledby={`${idBase}-h`}>
-      <header className="flex items-start justify-between gap-3">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 id={`${idBase}-h`} className="text-sm font-bold text-foreground">{section.label}</h3>
           <p className="text-[11px] text-muted-foreground">{section.shows}</p>
         </div>
         {section.hideable && (
-          <label className="shrink-0 inline-flex items-center gap-2 text-xs text-foreground">
+          <label className="shrink-0 max-w-full inline-flex items-center gap-2 text-xs text-foreground">
             <input type="checkbox" checked={!resolved.hidden} onChange={(e) => write("hidden", e.target.checked ? undefined : true)} />
             Show this section
           </label>

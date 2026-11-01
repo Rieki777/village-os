@@ -15,8 +15,9 @@
 import { describe, expect, it } from "vitest";
 import { register } from "./register";
 
-function signUp() {
+function signUp(mailed: { sent: boolean; reason?: string } = { sent: true }) {
   const added: any[] = [];
+  const letters: any[] = [];
   let handler: ((req: any, res: any) => Promise<unknown>) | null = null;
   const app = { post: (_path: string, h: any) => void (handler = h) } as any;
   register(app, {
@@ -28,6 +29,7 @@ function signUp() {
     joined: async () => undefined,
     encodeToken: () => "token",
     publicUser: (m: any) => ({ id: m.id }),
+    sendVerification: async (m: any) => (letters.push({ id: m.id, email: m.email }), mailed),
     invites: {
       required: () => false,
       resolve: async () => ({ ok: false, error: "none" }) as any,
@@ -38,6 +40,7 @@ function signUp() {
   });
   return {
     added,
+    letters,
     async post(email: string) {
       const out: { status: number; body: any } = { status: 200, body: null };
       const res: any = {
@@ -66,5 +69,28 @@ describe("sign-up and the address closed accounts are written at", () => {
     const res = await door.post("wren@example.test");
     expect(res.status).toBe(200);
     expect(door.added.map((m) => m.email)).toEqual(["wren@example.test"]);
+  });
+});
+
+describe("sign-up and the address nobody has proved yet (R104)", () => {
+  it("makes the account unproved and mails the address a link to prove it", async () => {
+    const door = signUp();
+    const res = await door.post("wren@example.test");
+    expect(res.status).toBe(200);
+    const [made] = door.added;
+    expect(made.emailVerifiedAt, "an address was taken as proved because somebody typed it").toBeNull();
+    expect(door.letters, "the address was never asked to prove itself").toEqual([{ id: made.id, email: "wren@example.test" }]);
+    // The proof goes to the mailbox only. Handing it back to whoever typed
+    // the address would let them prove an address they do not own.
+    expect(JSON.stringify(res.body)).not.toMatch(/verify-email/);
+  });
+
+  it("still makes the account on a village with no email set up, which simply stays unproved", async () => {
+    const door = signUp({ sent: false, reason: "no_api_key" });
+    const res = await door.post("wren@example.test");
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(door.added).toHaveLength(1);
+    expect(door.added[0].emailVerifiedAt).toBeNull();
   });
 });

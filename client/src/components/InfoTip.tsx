@@ -149,7 +149,7 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
   const w = typeof window !== "undefined" ? Math.min(PLAQUE_MAX_W, window.innerWidth - 16) : PLAQUE_MAX_W;
 
   return (
-    <span className={`relative inline-block ${className}`}>
+    <span className={`relative inline-block max-w-full ${className}`}>
       <button
         type="button"
         ref={triggerRef}
@@ -186,7 +186,7 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
             // reflow every one of them; an invisible inset pseudo-element
             // takes the hit area to 28 by 28 and moves no layout anywhere.
             ? "relative inline-flex items-center justify-center align-middle w-4 h-4 ml-1 rounded-full border border-current/40 text-[10px] leading-none opacity-70 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 cursor-help select-none before:absolute before:-inset-1.5 before:content-['']"
-            : `underline decoration-dotted decoration-1 underline-offset-4 cursor-help rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 ${triggerClassName}`
+            : `underline decoration-dotted decoration-1 underline-offset-4 cursor-help rounded-sm max-w-full text-left [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 ${triggerClassName}`
         }
       >
         {bare ? <span aria-hidden="true">?</span> : children}
