@@ -182,7 +182,17 @@ Two things that stop this producing a false green, both paid for on 2026-09-04. 
 RAN and WHICH step in each, never one number: the billing outage produced runs that died in 2 to 3
 seconds having started nothing, an npm outage failed one dependency step on a run where everything
 else passed, and this paragraph carried "a healthy `verify` is 45 steps" while the job had 57.
-Every job above must appear and succeed, on the push run AND the pull_request run. And a cancelled
+Every job above must appear and succeed. **WHICH EVENTS, since 2026-11-01 (Rye: "Yes, free fix"):
+a BATCH needs them on the push run AND the pull_request run, and that is the gate between a tree
+and production. A COMPONENT needs only its pull_request run**, because `on.push.branches` is now
+`["main", "wt/batch*", "wt/*-integration*"]` and a lane branch gets no push run at all. The
+pull_request run is the better of the two for a component anyway: it tests the branch ALREADY
+MERGED with main. Two consequences. A CONFLICTING pull request gets no pull_request run, so a
+conflicted lane branch has NO run at all and its lane must merge main before anybody can verify
+it, even though the generated-doc conflict that every batch landing causes stays the integrator's
+to resolve. And counting "every job that is listed succeeded" is NOT a green: jobs appear
+progressively, so an incomplete run reads as 5 of 5 while the sixth has not been created. Assert a
+FLOOR on the job count. And a cancelled
 run is not a red, since `ci.yml` cancels superseded
 runs per ref. Full detail, with the traps, in the fleet ledger's section 27d (private, see the
 reading order above).
@@ -203,14 +213,20 @@ past them. Every merge moves both totals, so a number written here is wrong by t
 **Run the script and read your own tree.** A number in a doc is a claim about a moment; the script
 is a measurement of now.
 
-**Read the number off the PUSH run, never the pull_request run, and know why they differ.** A
+**A lane reads the number off its PULL_REQUEST run, because since 2026-11-01 it has no push run.** A
 `pull_request` run builds your branch ALREADY MERGED with main, so it carries whatever other
 lanes have landed since you branched and reads higher than your branch alone. On `f8c7b14` the
 two runs of the same commit reported **5432 KB** (push, the branch) and **5460 KB** (pull_request,
 the branch plus main), a 28 KB gap that is entirely other people's work. The push run agreed with
 this machine to the kilobyte and emitted the same content hash for the CSS, so a local
 measurement IS the CI measurement for the tree you built. What it cannot see is what has landed
-on main while you worked. Rebase before you trust a number near the ceiling.
+on main while you worked.
+
+So the gap that used to be a warning is now the point: **a lane's only CI number already includes
+what landed since it branched**, which is the number that decides at landing. Only `main`, the
+batch branches and integration branches still get a push run, so only they can read a figure for
+their own tree alone. Rebase before you trust a number near the ceiling, and read all THREE
+budgets: the boot number is labelled **First-page JS**, not "Boot".
 
 **The total is measured in 4 KB BLOCKS, and that changes what a fix looks like.** CI sizes the
 tree with `du -sk`, and `du` counts allocated blocks: on the runner's ext4 filesystem every file
