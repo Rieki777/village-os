@@ -229,7 +229,7 @@ export async function weaveReading(deps: CardDeps, f: RoomFacts, draft: CardRead
   for (const c of got.collective.slice(0, 6)) {
     const system = (c as { system?: unknown })?.system;
     const raw = undash(String((c as { text?: unknown })?.text ?? ""));
-    for (const m of raw.matchAll(KEY)) keysSeen.add(`p${m[1]}`);
+    for (const m of Array.from(raw.matchAll(KEY))) keysSeen.add(`p${m[1]}`);
     const text = unkey(raw, names);
     if (!SYSTEMS.includes(system as CardSystem) || !text || text.length > CARD_LIMITS.paragraph) return null;
     collective.push({ system: system as CardSystem, text });
@@ -296,7 +296,7 @@ async function cardsAnswer(deps: CardDeps, pool: Pool, sessionId: number, userId
   // Everyone a card READ must still say yes to being read, today, by the same
   // rule a pull uses. A card that read somebody who has since withdrawn is
   // taken back for everyone, and deleted.
-  const read = [...new Set(lines.filter((l) => l.line != null).map((l) => l.userId))];
+  const read = Array.from(new Set(lines.filter((l) => l.line != null).map((l) => l.userId)));
   const still = new Set((await cardReadableGeneKeys(pool, read)).map((r) => r.userId));
   const withdrawn = read.filter((id) => !still.has(id));
   if (withdrawn.length) {
