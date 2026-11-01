@@ -107,7 +107,7 @@ export async function createCheckout(input: CheckoutInput): Promise<{ url: strin
   // the evidence the launch journey's `stripe-keys` row reads, never the key's presence.
   let res: Response;
   try {
-    res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    res = await fetch("https://api.stripe.com/v1/checkout/sessions", { // module-review-ok: the fixed Stripe API host, never an address anybody typed in; this call was here before, re-indented to record its outcome
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded" },
       body: params.toString(),

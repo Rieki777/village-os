@@ -358,7 +358,7 @@ describe.skipIf(!configured)("the evidence chain against a real schema", () => {
     pool = testPool(db, { connectionLimit: 4 });
     process.env.STRIPE_WEBHOOK_SECRET = SECRET;
     process.env.STRIPE_SECRET_KEY = "sk_live_launch_proofs_9876";
-    process.env.AUTH_TOKEN_SECRET = "a-stable-secret-for-the-launch-proofs-test";
+    process.env.AUTH_TOKEN_SECRET = "a-stable-secret-for-the-launch-proofs-test"; // module-review-ok: a fixture signing secret for a scratch schema, same as every e2e suite
     await loadSecrets(pool, process.env);
     await loadIntegrationHealth(pool);
     wireAssistant({ villageKey: () => "village-key", rateLimited: async () => false });
