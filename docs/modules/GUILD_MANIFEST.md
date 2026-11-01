@@ -89,7 +89,8 @@ it is enforced at the one door every key is saved through, `PUT /api/admin/integ
 
 The phase is `cosignPhase` in `server/lib/plantingRequests.ts`: the launch ballot carrying, Rye's
 "before they go live". It is not `plantingPhase` (game start), which reads as live for a village
-migration 0112 marked started; that choice is with the coordinator, and flipping it is one line.
+migration 0112 marked started. The coordinator confirmed the launch ballot on 2026-10-31 and rejected
+game start for those 0112 villages, which are not live until their launch vote carries.
 
 ## Green means alive
 

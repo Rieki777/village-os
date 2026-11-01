@@ -43,8 +43,9 @@ import { launchBallotCarried } from "./launch";
  * live" and the module switch's meaning of launch. It is NOT `plantingPhase`
  * (game start), which reads as live for a village migration 0112 marked
  * started and for every village the test harness provisions: that would hold
- * a pre-launch village's keys for a co-sign. Put to the coordinator on
- * 2026-10-31; flipping to `plantingPhase` is this one line.
+ * a pre-launch village's keys for a co-sign. The coordinator confirmed the
+ * launch ballot on 2026-10-31, and rejected game start for exactly those 0112
+ * villages: Amora's launch vote is pending on purpose, so it is not live.
  */
 export async function cosignPhase(pool: Pool): Promise<PlantingPhase> {
   return (await launchBallotCarried(pool)) ? "after-launch" : "before-launch";
