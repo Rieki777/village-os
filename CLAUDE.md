@@ -276,6 +276,11 @@ the app from a single `<script type="module">`. A browser old enough to want the
 run the app. `dropLegacyWoffFallback` in `vite.config.ts` strips the fallback from the `src:`
 list before vite resolves the url, which is what stops the file being emitted. Member-uploaded
 display faces are a different path and still accept `.woff` (`server/index.ts` sniffs `wOFF`).
+The woff2 bytes themselves are unhinted copies committed in `client/src/fonts`: every glyph,
+code point and layout feature of the @fontsource file, without the TrueType hinting, which took
+another 84 KB off the ceiling. `useUnhintedFonts` in `vite.config.ts` points the @fontsource CSS
+at them. A cut added to `client/src/main.tsx` needs `python scripts/unhint-fonts.py` (then
+`--check`), or `client/src/lib/unhintedFonts.test.ts` fails.
 
 The build marker is composed WHOLE in `scripts/build-server.mjs`, from the commit date and the
 git SHA, and injected as `__BUILD_MARKER__`; `server/index.ts` only reads that define and falls
