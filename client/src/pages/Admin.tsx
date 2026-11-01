@@ -68,7 +68,7 @@ import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
 import { StepListEditor, stalePolicyTerms } from "@/components/admin/exitPolicyEditing";
 import { CONNECTIONS_GROUP_TITLE, MODULES_GROUP_TITLE, navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
-import { IDENTITY_WIZARD_FIELDS, SETUP_CONTENT_EDITORS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
+import { IDENTITY_WIZARD_FIELDS, SETUP_CONTENT_EDITORS, SETUP_STEPS, contentEditorHint, measureSetup, setupIsComplete, useWizardFacts } from "@/components/admin/setupProgress";
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
@@ -7235,8 +7235,8 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [brand, setBrand] = useState<any>(null);
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
-  // The currency as last stored, so the picker can say when a choice is not saved yet.
-  const [savedCurrency, setSavedCurrency] = useState("");
+  const [savedCurrency, setSavedCurrency] = useState(""); // As last stored, so the picker can say when a choice is not saved yet.
+  const wizard = useWizardFacts();
   const needsSetup = useNeedsSetupObservation(password);
   const load = useCallback(async () => {
     try {
@@ -7474,7 +7474,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             <div key={c.tab} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-4 py-2.5">
               <div className="min-w-0">
                 <div className="text-sm font-medium text-gray-900">{c.label}</div>
-                <div className="text-xs text-gray-500 truncate">{c.hint}</div>
+                <div className="text-xs text-gray-500 truncate">{contentEditorHint(c, wizard.brochureOn)}</div>
               </div>
               <button onClick={() => onOpenTab(c.tab)} className="shrink-0 px-3 py-1.5 text-xs font-medium text-teal-deep border border-gray-200 rounded-lg hover:bg-gray-50">
                 Open →
@@ -7506,10 +7506,10 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           repaints as you save, so you see every change where it lands.
         </p>
         <Link
-          href="/map"
+          href={wizard.mapOn ? "/map" : "/modules/map"}
           className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-deep"
         >
-          Open the map
+          {wizard.mapOn ? "Open the map" : "Switch the map on first"}
         </Link>
       </SetupSection>
 

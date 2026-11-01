@@ -229,3 +229,44 @@ describe("what the member's run does", () => {
     expect(screen.queryByRole("alert"), "an empty result is not an error").toBeNull();
   });
 });
+
+describe("the launch vote's gates, said on the card before anybody asks", () => {
+  const founder = { id: "u1", role: "founder", name: "A founder" };
+  const ready = (vote: Record<string, unknown>) => ({
+    items: [],
+    blockingOpen: 0,
+    recommendedOpen: 0,
+    readyToLaunch: true,
+    launchedAt: null,
+    vote: { onTheRoll: 3, tooFew: null, unityPct: 100, quorumPct: 100, minElectorate: 3, why: "Every member is asked.", openBallot: null, past: [], ...vote },
+  });
+  const candidates = { "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } } };
+
+  it("names the governance module and links to it while it is off, and keeps the ask closed", async () => {
+    auth.current = { user: founder, loading: false };
+    answer({ "/api/admin/launch": { status: 200, body: ready({ governanceOn: false }) }, ...candidates });
+    draw();
+    const link = await screen.findByRole("link", { name: /turn it on for members first/i });
+    expect(link.getAttribute("href")).toBe("/modules/governance");
+    expect((screen.getByRole("button", { name: "Ask the village" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("puts a refusal on the page, never in a browser alert", async () => {
+    auth.current = { user: founder, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: ready({ governanceOn: true }) },
+      ...candidates,
+      "/api/admin/launch/propose": { status: 409, body: { error: "The village is already voting on this." } },
+    });
+    const alert = vi.fn();
+    vi.stubGlobal("alert", alert);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    draw();
+    const ask = await screen.findByRole("button", { name: "Ask the village" });
+    await waitFor(() => expect((ask as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(ask);
+    await waitFor(() => expect(screen.getByText("The village is already voting on this.")).toBeTruthy());
+    expect(screen.getByText("The village is already voting on this.").getAttribute("role")).toBe("alert");
+    expect(alert).not.toHaveBeenCalled();
+  });
+});
