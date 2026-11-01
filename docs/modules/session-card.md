@@ -17,10 +17,10 @@ hold the session today. A lens for being present, never a forecast.**
 
 ## Status
 
-Ships OFF, like every non-core module, and is HELD off: it reached main before the human security review Module
-Library Contract clause 13 requires. Until that review closes and Rye signs off, `scripts/enable-all-modules.mjs`
-reports it as held and never turns it on. After that it requires Live Sessions and Gene Keys, and an admin turns
-it on to `members`. Nothing to set up.
+Ships OFF, like every non-core module. It reached main before the human security review Module Library Contract
+clause 13 requires; that review returned ACCEPT WITH FIXES, the fixes are in this release, and Rye signed it off on
+2026-10-31 ("yes and ship it on"). It requires Live Sessions and Gene Keys, and an admin turns it on to `members`.
+Nothing to set up.
 
 Rulings it follows (Rye, 2026-10-30, "go with your recommendations except ANYONE can pull a card and we can do it
 multiple times"):
