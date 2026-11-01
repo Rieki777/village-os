@@ -180,6 +180,28 @@ export interface PeopleLockDeps {
 /** How long one read of the roster serves. A new member is hidden within this. */
 export const ROSTER_TTL_MS = 5_000;
 
+/**
+ * Paths the lock never reads the roster for, matched exactly.
+ *
+ * The middleware is an `app.use` with no path, registered before `/health`,
+ * `/api/platform/info` and every static asset. With the lock on, a roster read
+ * that failed (a cold pool, a database blip) answered the liveness probe 503,
+ * and Railway replaces a container whose probe fails: a privacy rule could
+ * take a healthy village down. None of these carries a member. `/health` and
+ * the platform handshake name the village and its build. A built asset is a
+ * file, sent by express.static rather than res.send, so the lock never scrubbed
+ * it anyway. Reading the roster for them protected nobody and risked
+ * everything.
+ */
+const NEVER_LOCKED = new Set(["/health", "/api/platform/info"]);
+/** Vite's hashed build output: code, styles and fonts, never a person. */
+const NEVER_LOCKED_UNDER = "/assets/";
+
+export function lockExempt(path: string): boolean {
+  if (NEVER_LOCKED.has(path)) return true;
+  return path.startsWith(NEVER_LOCKED_UNDER) && !path.includes("..");
+}
+
 export function peopleLockMiddleware(deps: PeopleLockDeps) {
   const now = deps.now ?? (() => Date.now());
   let cached: { at: number; roster: CompiledRoster } | null = null;
@@ -190,6 +212,7 @@ export function peopleLockMiddleware(deps: PeopleLockDeps) {
   };
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
+    if (lockExempt(req.path)) return next();
     if (deps.boolVar("org.public_people")) return next();
     try {
       if (await deps.authedUser(req)) return next();

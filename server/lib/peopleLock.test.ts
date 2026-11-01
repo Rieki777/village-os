@@ -137,19 +137,20 @@ describe("peopleLockMiddleware", () => {
           : [people.filter((p) => !p.id).map((p) => ({ display_name: p.name }))],
     }) as any;
 
-  async function run(opts: { method?: string; signedIn?: boolean; locked?: boolean; body: unknown; poolFails?: boolean }): Promise<Sent & { status?: number }> {
+  async function run(opts: { method?: string; path?: string; signedIn?: boolean; locked?: boolean; body: unknown; poolFails?: boolean }): Promise<Sent & { status?: number; passed?: boolean }> {
     const mw = peopleLockMiddleware({
       authedUser: async () => (opts.signedIn ? { id: "u" } : null),
       getPool: () => (opts.poolFails ? ({ query: async () => { throw new Error("down"); } } as any) : fakePool(ROSTER)),
       boolVar: (k) => (k === "org.public_people" ? !opts.locked : false),
     });
-    const sent: Sent & { status?: number } = { body: undefined };
+    const sent: Sent & { status?: number; passed?: boolean } = { body: undefined };
     const res: any = {
       send(b: unknown) { sent.body = b; return res; },
       status(n: number) { sent.status = n; return res; },
       json(b: unknown) { sent.body = b; return res; },
     };
-    await mw({ method: opts.method ?? "GET" } as any, res, () => {});
+    const path = opts.path ?? "/api/org";
+    await mw({ method: opts.method ?? "GET", path, url: path } as any, res, () => { sent.passed = true; });
     res.send(opts.body);
     return sent;
   }
@@ -169,5 +170,27 @@ describe("peopleLockMiddleware", () => {
   it("fails closed when it cannot read whom to hide", async () => {
     const sent = await run({ locked: true, poolFails: true, body: "unused" });
     expect(sent.status).toBe(503);
+  });
+
+  // 2026-11-01. The middleware is an `app.use` with no path, registered before
+  // `/health`, `/api/platform/info` and every static asset. With the lock on, a
+  // roster read that failed (a cold pool, a database blip) answered the
+  // liveness probe 503, and Railway replaces a container whose probe fails, so a
+  // privacy rule could take a healthy village down. These paths carry no member
+  // and are never scrubbed (static files are not sent through res.send), so
+  // they must not depend on the roster at all.
+  it("lets the liveness probe, the platform handshake and the built assets through when the roster cannot be read", async () => {
+    for (const path of ["/health", "/api/platform/info", "/assets/index-3f9a.js", "/assets/fonts/inter.woff2"]) {
+      const sent = await run({ locked: true, poolFails: true, path, body: "ok" });
+      expect(sent.status, `${path} must not fail closed`).toBeUndefined();
+      expect(sent.passed, `${path} must reach its route`).toBe(true);
+    }
+  });
+
+  it("still fails closed on a page that is not a probe, and is not fooled by a lookalike path", async () => {
+    for (const path of ["/", "/api/org", "/healthz", "/health/../api/org", "/api/platform/info/extra", "/assetsx/a.js", "/api/assets/x"]) {
+      const sent = await run({ locked: true, poolFails: true, path, body: "unused" });
+      expect(sent.status, `${path} must still fail closed`).toBe(503);
+    }
   });
 });
