@@ -14,6 +14,15 @@
 # security control, it is an outage. Until a second name is here, the review is
 # a commitment and CODEOWNERS is what makes the request automatic.
 #
+# This bites harder than it reads. Every pull request in this repository is
+# opened by @Rieki777, because the building sessions work through that account
+# (measured 2026-10-31: 30 of the last 30). So "Require review from Code Owners",
+# or any required approval count, would block EVERY pull request touching these
+# paths, not just the owner's own. The second name has to be a different GitHub
+# identity: a second human maintainer, or a separate machine account that the
+# sessions open pull requests from, so that @Rieki777's approval is a second
+# pair of eyes.
+#
 # TO ADD A SECOND MAINTAINER:
 #   1. Give them write access to the repository.
 #   2. Uncomment the second name on each line below and replace the placeholder.
@@ -23,6 +32,14 @@
 
 # The registry itself: what a module is allowed to declare.
 /shared/modules.ts            @Rieki777    # @second-maintainer
+
+# Guild membership decides which modules a listing may claim kinship with.
+# module-intake.yml already gates on it; this routes the review to match.
+/shared/guilds.ts             @Rieki777    # @second-maintainer
+
+# Switches every module on at once. A change here can open a module a village
+# never chose. module-intake.yml already gates on it.
+/scripts/enable-all-modules.mjs  @Rieki777    # @second-maintainer
 
 # The one capability gate. A change here changes what every member may do.
 /shared/capabilities.ts       @Rieki777    # @second-maintainer
@@ -57,3 +74,49 @@
 /.github/review-agent/                     @Rieki777    # @second-maintainer
 /.github/PULL_REQUEST_TEMPLATE/            @Rieki777    # @second-maintainer
 /.github/CODEOWNERS                        @Rieki777    # @second-maintainer
+
+# ---------------------------------------------------------------------------
+# Beyond the module library: the paths the 2026-10-24 readiness audit found
+# security-critical for every village. Same rule: a review request now, a
+# required review only once a second identity exists.
+
+# The release and its scans. release.yml publishes the image every village
+# pulls; codeql.yml and selfhost-smoke.yml are the checks that release trusts.
+/.github/workflows/release.yml             @Rieki777    # @second-maintainer
+/.github/workflows/codeql.yml              @Rieki777    # @second-maintainer
+/.github/workflows/selfhost-smoke.yml      @Rieki777    # @second-maintainer
+
+# The image and the starter kit a founder runs as-is.
+/Dockerfile                                @Rieki777    # @second-maintainer
+/docker-compose.yml                        @Rieki777    # @second-maintainer
+
+# The key that seals every integration secret at rest.
+/server/lib/sealedBox.ts                   @Rieki777    # @second-maintainer
+
+# Who an account is, and who becomes founder (audit finding R104).
+/server/lib/oauthAccounts.ts               @Rieki777    # @second-maintainer
+/server/routes/authGoogle.ts               @Rieki777    # @second-maintainer
+/server/routes/register.ts                 @Rieki777    # @second-maintainer
+/server/lib/founderGrant.ts                @Rieki777    # @second-maintainer
+
+# Erasure cannot be undone. A wrong step here deletes a living member.
+/server/lib/erasure.ts                     @Rieki777    # @second-maintainer
+
+# The money invariants: sum to zero, buy-only, no raw ledger writes.
+/server/lib/ledger.ts                      @Rieki777    # @second-maintainer
+/server/lib/exchange.ts                    @Rieki777    # @second-maintainer
+/server/lib/payments.ts                    @Rieki777    # @second-maintainer
+
+# Runs every migration at boot on every village, fail-loud.
+/server/db/migrate.ts                      @Rieki777    # @second-maintainer
+
+# The fence that keeps member-written text as data inside an AI prompt.
+/server/lib/villageReaders.ts              @Rieki777    # @second-maintainer
+
+# Ratchet ceilings. Raising one by hand passes every gate (issue #600), so a
+# raise must at least be seen.
+/scripts/*baseline*.json                   @Rieki777    # @second-maintainer
+
+# The gate that keeps private files and infrastructure names out of this
+# public tree.
+/scripts/check-public-tree.mjs             @Rieki777    # @second-maintainer

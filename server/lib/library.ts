@@ -286,7 +286,13 @@ export async function approveIntake(pool: Pool, itemId: string, approverId: stri
   // A donor who left while the item waited is awarded nothing, and the item
   // still joins the library: the object is on the shelf, and refusing the
   // signature would strand it with no way to clear it (round 4, finding 3).
-  const award = item.donorUserId && (await departedById(pool, item.donorUserId)) ? 0 : Math.floor((item.creditValue * pct) / 100);
+  // "Left" here is an ERASED account only: a former member kept their account
+  // and is awarded as normal. The erased donor's figure is not dropped (Rye,
+  // 2026-10-31: "still a debt owed"): the item's history records what the
+  // award would have been, for a steward settling it by hand.
+  const earned = Math.floor((item.creditValue * pct) / 100);
+  const erasedDonor = !!item.donorUserId && (await departedById(pool, item.donorUserId));
+  const award = erasedDonor ? 0 : earned;
   const cap = numberVar("library.intake_member_cycle_cap");
   if (item.donorUserId && cap > 0 && award > 0) {
     const already = await intakeMintedThisCycle(pool, item.donorUserId);
@@ -295,7 +301,8 @@ export async function approveIntake(pool: Pool, itemId: string, approverId: stri
     }
   }
   await pool.query("UPDATE library_items SET status = 'available' WHERE id = ?", [itemId]);
-  await itemEvent(pool, itemId, "intake_approved", `second sign-off; award ${award}`, approverId);
+  const unpaid = erasedDonor && earned > 0 ? `; ${earned} credits unpaid, the donor's account was erased` : "";
+  await itemEvent(pool, itemId, "intake_approved", `second sign-off; award ${award}${unpaid}`, approverId);
   if (item.donorUserId && award > 0) {
     const r = await postTransfer(pool, {
       from: LIBRARY_MINT,

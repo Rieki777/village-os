@@ -211,6 +211,7 @@ import { recordSubscriptionCancels } from "../repos/subscriptionCancels";
 import { cancelSubscription, stripeConfigured } from "./payments";
 import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
 import { leaveEveryCrewOf } from "../repos/questCrewErasure";
+import { releaseOpenClaimsOf } from "../repos/questClaimErasure";
 import { forgetReportReasonsOf } from "../repos/placePhotos";
 import { heldByAnotherAccount, usersRepo } from "../repos/users";
 import { forgetPulseLinesNaming } from "../repos/pulseLines";
@@ -1561,6 +1562,24 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * Their open quest claims (Rye, 2026-10-31, item 9). Nobody can work
+       * one now: the tombstone cannot sign in and consent refuses to pay it.
+       * Kept, each counted as somebody working the quest, sat in the
+       * steward's queue, and held the quest against its delete. A `claimed`
+       * one goes, the way a member puts a quest back; a `submitted` one is
+       * declined, so the work handed in stays on the record. Consented and
+       * declined claims are history and stay (server/repos/questClaimErasure.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the claim
+       * doors write for anybody signed in until the sessions die.
+       */
+      name: "quest-claims-after-tombstone",
+      run: async () => {
+        await releaseOpenClaimsOf(pool, target.id);
+      },
+    },
+    {
+      /*
        * Place-photo reports (0093): the words they typed go, the reports stay.
        * The curators' queue serves them to every holder of `map.curatePhotos`,
        * a role or badge power, and a subject request often names the person.
@@ -2099,6 +2118,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "sessions-after-tombstone",
   "gene-keys-after-tombstone",
   "quest-crews-after-tombstone",
+  "quest-claims-after-tombstone",
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
   "companions-after-tombstone",

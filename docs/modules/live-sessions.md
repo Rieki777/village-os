@@ -249,6 +249,7 @@ its own, both described under "Circle meetings on a calendar".
 | `live_session_advice_requests` | One per request for advice: the circle asked, who asked, what they mean to decide and why, the decide-by date, and once settled whether it was decided or withdrawn and what was decided. |
 | `live_session_advice_asks` | One per person asked on a request, with their advice once they give it. |
 | `live_session_item_votes` | One per person per agenda item they voted on (0290): up (1) or down (-1), and when. Taking a vote back deletes its row. |
+| `live_session_checks` | One per checked proposal (0297): a hash of the words as checked, when, and the read (the season's priorities each marked when the words name them, the roles the words name with where each holder was, and when the purpose was written). No person: a holder is `here`, `away` or `open`. It goes with its proposal, its author's erasure and the session. |
 | `live_session_on_behalf` | One per thing the facilitator filled in or changed for somebody (0288): who wrote it, whose it is, what (an arrival, an item, an entry) and whether it was added or changed, what it replaced (emptied at the close), when the person was told, and whether it was undone or made theirs since. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
@@ -514,6 +515,35 @@ bell's link lands on its request once, reading the lists again when the request 
 | `PUT /api/sessions/advice/requests/:id/advice` `{ advice }` | the people asked, while it is open | 60 an hour |
 | `POST /api/sessions/advice/requests/:id/decide` `{ decision }` | whoever asked, while it is open | 60 an hour |
 | `POST /api/sessions/advice/requests/:id/withdraw` | whoever asked, while it is open | 60 an hour |
+
+## Before deciding: a check on a proposal
+
+The facilitator or the person who proposed it can check an open proposal in the room (0297, Rye
+2026-10-30 and 2026-10-31: "Check Sera"). The button carries the name the outside governance service's
+agent answers under (the `saberra` module's `agentName`, Sera by default), and it is offered while that
+module is open to members. Everybody in the room sees the same card under the proposal:
+
+- **The village's purpose**, the Governing Purpose Statement, beside the proposal. Whether the proposal
+  serves it is the room's to say, so nothing scores it. The card says when the purpose was rewritten
+  after the check.
+- **This season's priorities**, every one of them, each marked "Named" when the proposal's words name it:
+  the priority word for word, or every meaningful word of it when it has two or more.
+- **The roles the words name**, the role the proposal sits with first, and for each whether its holder
+  was here when the check ran, was not here, or whether nobody held it. Never who. A role of one word
+  counts only where the proposal writes it with a capital ("the Host welcomes", never "we will host"); a
+  role of several words counts in any case. A plural reads as the role.
+- **One line saying the agent's own read is not available yet.** That needs a typed check call from the
+  service, asked of it on 2026-10-31. This read is the village's own and calls nobody.
+
+Only an open proposal is checked: a parked or a decided one is refused. A second check replaces the
+first, and new words on the proposal mark the card as changed until it is checked again. A decided proposal keeps the card it was checked with and offers no button. The check is
+stored with its proposal (`live_session_checks`) and holds no person, and the proposal's words only as a
+hash, so a member's export has nothing of it; it goes when the proposal is removed, when its author is erased, and when the session is
+discarded.
+
+| Door | Who | Limit |
+|---|---|---|
+| `POST /api/sessions/:id/entries/:entryId/check` | the facilitator, an admin in the room, or the proposer, while the proposal and the room are open | 120 an hour |
 
 ## Before the call: the agenda library
 
