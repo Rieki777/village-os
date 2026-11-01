@@ -1,6 +1,6 @@
 # Modules
 
-Everything a village can run: 29 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
+Everything a village can run: 30 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
 
 This is the registry, read out loud. It describes the platform a fork inherits, and it says nothing about any one village: which modules are actually on is a village's own decision, held in its `module_settings` table.
 
@@ -41,7 +41,7 @@ The four core modules sit outside that. They are always public and the lifecycle
 | `connected` | the vendor bills the village directly and answers for the service; the platform answers for the connector. The credential is a secrets-store entry the village holds and can see as source and last4. That visibility IS the tier: the village has its own account and can revoke it unaided. |
 | `managed` | the platform bills and takes the first call; the vendor sits behind a private escalation the village never sees. The credential is platform-held, env-only, and never returned to a village even masked, because it is not the village's to see. This is the PLATFORM_ASSISTANT_KEY posture generalised, and it is settled policy under hub ADR-49. |
 
-Today the registry holds 28 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
+Today the registry holds 29 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
 
 ### The data a module holds
 
@@ -51,13 +51,13 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | --- | --- |
 | `none` | none |
 | `village-content` | six: `resources`, `health`, `network`, `crowdpool`, `hypha`, `saberra` |
-| `member-pii` | 23: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `gene-keys`, `sessions`, `governance`, `comms` |
+| `member-pii` | 24: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `gene-keys`, `session-card`, `sessions`, `governance`, `comms` |
 
 ### What standing one up looks like
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `gene-keys`, `sessions`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `gene-keys`, `session-card`, `sessions`, `governance` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
 | `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha`, `comms`, `saberra` |
 
@@ -69,7 +69,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Recognise | `recognise` | See people: gratitude, the path from guest to co-creator, badges. | 3 |
 | Host and earn | `host-and-earn` | Value moving with care: stays, the shelves, the exchange, payments. | 5 |
 | Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 8 |
-| Connect | `connect` | People finding people: profiles, messages, the feed, other villages. | 8 |
+| Connect | `connect` | People finding people: profiles, messages, the feed, other villages. | 9 |
 
 ## The whole library at a glance
 
@@ -99,13 +99,14 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Introductions | `introductions` | Connect | no | included | member-pii | none | none yet |
 | Journal | `journal` | Know and decide | no | included | member-pii | none | [journal.md](modules/journal.md) |
 | Gene Keys | `gene-keys` | Connect | no | included | member-pii | none | [gene-keys.md](modules/gene-keys.md) |
+| Session Card | `session-card` | Connect | no | included | member-pii | none | [session-card.md](modules/session-card.md) |
 | Live Sessions | `sessions` | Coordinate | no | included | member-pii | none | [live-sessions.md](modules/live-sessions.md) |
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
 | Village Comms | `comms` | Connect | no | included | member-pii | required | [comms.md](modules/comms.md) |
 | Organisational Memory | `saberra` | Know and decide | no | connected | village-content | required | [organisational-memory.md](modules/organisational-memory.md) |
 
-That is 29 modules, four of them core. 23 carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
+That is 30 modules, four of them core. 24 carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
 
 ## The four core modules
 
@@ -279,6 +280,7 @@ A circle holds a working call together in real time: drop in with a shared breat
 | API prefixes | `/api/sessions`, `/api/session-templates` |
 | What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [live-sessions.md](modules/live-sessions.md) |
+| Switching it off is blocked by | `session-card`, which requires it while non-off |
 
 ## Recognise
 
@@ -699,7 +701,7 @@ Members say in plain words what they seek, confirm offers the village already kn
 
 ### Gene Keys
 
-Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and Maia can shape suggestions to how a member works best when they say yes.
+Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and the village guide can shape suggestions to how a member works best when they say yes.
 
 | Fact | Value |
 | --- | --- |
@@ -716,6 +718,27 @@ Each member can find their Gene Keys lines and Human Design type from their birt
 | API prefixes | `/api/gene-keys` |
 | What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [gene-keys.md](modules/gene-keys.md) |
+| Switching it off is blocked by | `session-card`, which requires it while non-off |
+
+### Session Card
+
+An optional card anyone in a live session can pull at the start, as often as they like. It reads today's sky in both Human Design and Western astrology, weaves in the Gene Keys of the people present who said yes, names each person, and offers the room a few ways to hold the session. Each person's own line stays private until they share it, and the cards are deleted when the session closes.
+
+| Fact | Value |
+| --- | --- |
+| Id | `session-card` |
+| Shelf | Connect (`connect`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `member-pii` |
+| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Requires | `sessions`, `gene-keys` |
+| Recommends | nothing |
+| Capabilities it adds | none |
+| Variable keys it owns | none |
+| API prefixes | `/api/session-card` |
+| What a village plants | nothing beyond the platform's own layers |
+| Contract doc | [session-card.md](modules/session-card.md) |
 
 ### Village Comms
 
@@ -746,8 +769,9 @@ A hard dependency blocks both directions: a module cannot be enabled while somet
 | `resources` | `map` |
 | `feed` | `forum` |
 | `introductions` | `messaging` |
+| `session-card` | `sessions`, `gene-keys` |
 
-Read the other way: `map` cannot be switched off while `resources` is on, `forum` cannot be switched off while `feed` is on, `messaging` cannot be switched off while `introductions` is on.
+Read the other way: `map` cannot be switched off while `resources` is on, `forum` cannot be switched off while `feed` is on, `messaging` cannot be switched off while `introductions` is on, `gene-keys` cannot be switched off while `session-card` is on, `sessions` cannot be switched off while `session-card` is on.
 
 | Module | Recommends |
 | --- | --- |
@@ -768,7 +792,7 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 29 modules own 111 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 30 modules own 111 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -787,7 +811,7 @@ Ten keys are claimed by more than one module, so switching one module off leaves
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 40 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Fourteen modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 41 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Fourteen modules add keys:
 
 | Module | Capabilities |
 | --- | --- |
@@ -812,7 +836,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
 
 ```json
 {
-  "moduleCount": 29,
+  "moduleCount": 30,
   "coreCount": 4,
   "lifecycle": {
     "off": 0,
@@ -1407,7 +1431,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
     {
       "id": "gene-keys",
       "name": "Gene Keys",
-      "description": "Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and Maia can shape suggestions to how a member works best when they say yes.",
+      "description": "Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and the village guide can shape suggestions to how a member works best when they say yes.",
       "core": false,
       "tier": "included",
       "dataClass": "member-pii",
@@ -1421,6 +1445,27 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/gene-keys"
       ],
       "contractDoc": "docs/modules/gene-keys.md"
+    },
+    {
+      "id": "session-card",
+      "name": "Session Card",
+      "description": "An optional card anyone in a live session can pull at the start, as often as they like. It reads today's sky in both Human Design and Western astrology, weaves in the Gene Keys of the people present who said yes, names each person, and offers the room a few ways to hold the session. Each person's own line stays private until they share it, and the cards are deleted when the session closes.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "member-pii",
+      "group": "connect",
+      "setup": "none",
+      "requires": [
+        "sessions",
+        "gene-keys"
+      ],
+      "recommends": [],
+      "capabilities": [],
+      "variableKeys": [],
+      "apiPrefixes": [
+        "/api/session-card"
+      ],
+      "contractDoc": "docs/modules/session-card.md"
     },
     {
       "id": "sessions",

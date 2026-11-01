@@ -28,7 +28,18 @@ async function readPulse(circleId: string): Promise<{ ok: true; pulse: Pulse } |
   }
 }
 
-export default function CirclePulse({ circles, keepCircleIds, myCircleIds }: { circles: { id: string; name: string }[]; keepCircleIds: string[]; myCircleIds: string[] }) {
+export default function CirclePulse({
+  circles,
+  keepCircleIds,
+  myCircleIds,
+  lede,
+}: {
+  circles: { id: string; name: string }[];
+  keepCircleIds: string[];
+  myCircleIds: string[];
+  /** The words under the heading, for a page that shows one circle (its card); /sessions keeps its own. */
+  lede?: string;
+}) {
   const keepable = circles
     .filter((c) => keepCircleIds.includes(c.id))
     .sort((a, b) => Number(myCircleIds.includes(b.id)) - Number(myCircleIds.includes(a.id)));
@@ -79,7 +90,7 @@ export default function CirclePulse({ circles, keepCircleIds, myCircleIds }: { c
       <h2 id="sessions-pulse-heading" className="font-display text-2xl text-foreground">
         {PULSE_COPY.sectionTitle}
       </h2>
-      <p className={`${HINT} mt-1 max-w-2xl`}>{PULSE_COPY.lede}</p>
+      <p className={`${HINT} mt-1 max-w-2xl`}>{lede ?? PULSE_COPY.lede}</p>
       <div className={`mt-4 ${PANEL}`}>
         {keepable.length > 1 && (
           <div className="mb-4 max-w-sm">

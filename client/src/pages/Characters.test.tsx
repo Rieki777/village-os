@@ -425,3 +425,45 @@ describe("Characters: the page speaks", () => {
     expect(live(container)).toContain("did not save");
   });
 });
+
+describe("Characters: the stage opens on the member's own character", () => {
+  const onStage = () =>
+    screen.getAllByRole("button").find((b) => b.getAttribute("aria-current") === "true")?.getAttribute("aria-label");
+  const weaverLeads = async (path: string, init?: RequestInit) =>
+    path === "/api/me/characters" && !init?.method
+      ? ok({ party: [{ ...party[0], isPrimary: false }, { ...party[0], id: "c2", archetypeKey: "weaver", isPrimary: true }] })
+      : happy(path, init);
+
+  it("opens on the lead character, not the first class in the cast", async () => {
+    routing(weaverLeads);
+    render(<Characters />);
+
+    // The Steward is first in the cast and in the party; the Weaver is the lead.
+    await waitFor(() => expect(onStage()).toBe("The Weaver"));
+  });
+
+  it("opens on the first class in the cast for a member with no party", async () => {
+    routing(async (path, init) => (path === "/api/me/characters" && !init?.method ? ok({ party: [] }) : happy(path, init)));
+    render(<Characters />);
+
+    await waitFor(() => expect(onStage()).toBe("The Steward"));
+  });
+
+  it("keeps a class the member put on the stage when the party read lands after", async () => {
+    let release: () => void = () => {};
+    const late = new Promise<void>((r) => {
+      release = r;
+    });
+    routing(async (path, init) => {
+      if (path === "/api/me/characters" && !init?.method) await late;
+      return weaverLeads(path, init);
+    });
+    render(<Characters />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^The Steward/ }));
+    release();
+    await waitFor(() => expect(screen.queryByText("Your party did not load")).toBeNull());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onStage()).toBe("The Steward");
+  });
+});

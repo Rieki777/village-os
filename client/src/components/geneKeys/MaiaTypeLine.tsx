@@ -10,6 +10,7 @@
  * nothing once they asked her to talk to them plainly.
  */
 import type { GeneKeysView } from "@shared/geneKeys";
+import { useGuideName } from "@/hooks/useGuideName";
 import { useMyGeneKeys } from "./useMyGeneKeys";
 
 /** The line for a member's type and authority. Emotional authority leads: waiting is the one thing to say first. */
@@ -33,12 +34,14 @@ export function maiaTypeLine(view: Pick<GeneKeysView, "type" | "authority">): st
 
 export default function MaiaTypeLine({ className = "" }: { className?: string }) {
   const { mine } = useMyGeneKeys();
+  // The village's own name for its guide (shared/guideName.ts), never a borrowed one.
+  const guide = useGuideName();
   if (!mine || !mine.maia || mine.maiaPlain) return null;
   const line = maiaTypeLine(mine);
   if (!line) return null;
   return (
     <p className={`text-sm text-muted-foreground ${className}`}>
-      <span className="font-semibold text-foreground">From Maia:</span> {line}
+      <span className="font-semibold text-foreground">From {guide.name}:</span> {line}
     </p>
   );
 }

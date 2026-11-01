@@ -142,6 +142,7 @@ const RULE_WORDS: RuleWords = {
   membership: () => "It opens when they sign the membership agreement.",
   quests: (rule) => `It opens at ${rule.min} consented quest${rule.min === 1 ? "" : "s"}.`,
   tokens: () => "It opens once the village has paid them for something they brought it.",
+  role: () => "It opens while they hold a role on the org chart.",
   granted: () => "The village grants this one. An admin grants it on the Players tab when they are ready.",
 };
 

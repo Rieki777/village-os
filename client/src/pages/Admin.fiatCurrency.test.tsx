@@ -49,7 +49,7 @@
  * code" for the rest, so it is still open.
  */
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { defaultDisplayCurrency } from "@shared/money";
 
@@ -119,7 +119,8 @@ const another = () => document.getElementById("project-fiat-currency-other") as 
 
 describe("the founder can set the village's own currency", () => {
   let ctx: ReturnType<typeof stub>;
-  afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
   const open = async (stored = "") => {
     ctx = stub(stored);

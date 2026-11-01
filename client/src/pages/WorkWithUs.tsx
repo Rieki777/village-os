@@ -4,6 +4,8 @@ import { fetchConfigCached } from "@/lib/gameApi";
 import { readStoredJson, removeStored, writeStoredJson } from "@/lib/safeStorage";
 import { useAuth } from "@/contexts/AuthContext";
 import GuideChat from "@/components/GuideChat";
+import NameYourGuide from "@/components/NameYourGuide";
+import { guideAudience, guideName } from "@shared/guideName";
 import { submitProposal } from "@/lib/proposals";
 import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { usePageContent } from "@/hooks/usePageContent";
@@ -130,7 +132,12 @@ export default function WorkWithUs() {
   const reciprocityOptions: ReciprocityOption[] = wwu
     ? Array.isArray(wwu.reciprocityOptions) ? wwu.reciprocityOptions : RECIPROCITY_FALLBACK
     : wwuFailed ? RECIPROCITY_FALLBACK : [];
-  const assistantName = wwu?.assistantName || "Maia";
+  // The village's own name for its guide, or "the village guide" (shared/guideName.ts).
+  // Ready once the document answers, so a named guide is never shown as the neutral label first.
+  const audience = guideAudience(user);
+  const guide = guideName(wwu?.assistantName, audience);
+  const assistantName = guide.name;
+  const guideReady = wwu !== null || wwuFailed;
 
   const saveDraft = (next: Proposal) => {
     setForm(next);
@@ -183,7 +190,7 @@ export default function WorkWithUs() {
       {/* Mode toggle */}
       <div className="bg-stone-50 border-b border-stone-200">
         <div className="container max-w-3xl mx-auto px-4 flex gap-2 py-3">
-          {aiAvailable && (
+          {aiAvailable && guideReady && (
             <button
               onClick={() => setMode("ai")}
               className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
@@ -206,8 +213,9 @@ export default function WorkWithUs() {
 
       <section className="bg-stone-50 py-12">
         <div className="container max-w-3xl mx-auto px-4">
+          <NameYourGuide guide={guide} audience={audience} ready={guideReady && !!aiAvailable} />
           {mode === "ai" && aiAvailable ? (
-            <GuideChat
+            !guideReady ? null : <GuideChat
               kind="work-with-us"
               projectName={projectName}
               assistantName={assistantName}

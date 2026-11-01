@@ -318,6 +318,8 @@ export const MODULE_DOCS: Readonly<Record<string, string>> = {
   // Shipped with its module (2026-10-09). The contract for the room, its six
   // stages and its privacy line; it holds no session's words.
   sessions: "live-sessions.md",
+  // Shipped with its module (2026-10-30). A contract; it holds no card.
+  "session-card": "session-card.md",
   // The four CORE modules. A village cannot switch these off, so their
   // contract docs are the ones a fork operator most needs and the last ones
   // written: the gap ratchet counted all four until 2026-09-06.
@@ -405,7 +407,7 @@ export function loadShelves(baseDir: string): Record<ShelfId, number> {
       counts.knowledge += loadOne("knowledge", knowledgeDir, f, f.replace(/\.md$/, ""));
     }
   } else {
-    console.error("[knowledge] docs/knowledge missing: Maia has no literature shelf");
+    console.error("[knowledge] docs/knowledge missing: the guide has no literature shelf");
   }
 
   const modulesDir = path.join(baseDir, "docs", "modules");
@@ -418,7 +420,7 @@ export function loadShelves(baseDir: string): Record<ShelfId, number> {
       counts.modules += loadOne("modules", modulesDir, file, moduleId);
     }
   } else {
-    console.error("[knowledge] docs/modules missing: Maia has no module contracts");
+    console.error("[knowledge] docs/modules missing: the guide has no module contracts");
   }
   return counts;
 }

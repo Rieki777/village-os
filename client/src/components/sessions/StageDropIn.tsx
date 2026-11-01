@@ -14,6 +14,7 @@ import { ROOM_COPY, SESSION_COPY } from "@shared/sessions";
 import PeopleHere from "./PeopleHere";
 import SharedBreath from "./SharedBreath";
 import SharedSit from "./SharedSit";
+import PullACard from "@/components/sessionCard/PullACard";
 import { CARD, H3 } from "./roomUi";
 import type { StageProps } from "./roomUi";
 
@@ -32,6 +33,7 @@ export default function StageDropIn({ view, actions, offset }: StageProps & { of
       <div className={CARD}>
         <SharedSit sit={view.state.sit} offset={offset} facilitates={view.me.facilitates} actions={actions} />
       </div>
+      <PullACard view={view} actions={actions} className={CARD} />
       <section className={CARD} aria-labelledby="dropin-who">
         <h3 id="dropin-who" className={`${H3} mb-3`}>
           {ROOM_COPY.whoIsHere}
