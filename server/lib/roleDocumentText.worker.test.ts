@@ -117,7 +117,8 @@ describe("a PDF read runs on a thread of its own", () => {
 
   it("a parser that never answers is abandoned at the timeout", async () => {
     const { readPdf } = await import("./roleDocumentText");
-    const silent = parser("silent", "export function getDocumentProxy() { return new Promise(() => undefined); }\n");
+    // Waiting on something that never comes, as a hung read does: the timer keeps its thread alive.
+    const silent = parser("silent", "export function getDocumentProxy() { setInterval(() => undefined, 1000); return new Promise(() => undefined); }\n");
     expect(await readPdf(makePdf(["Gate keeper"]), 300, { parser: silent })).toEqual(SLOW);
   });
 
