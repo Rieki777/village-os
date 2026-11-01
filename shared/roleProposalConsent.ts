@@ -14,13 +14,18 @@
  *
  *   (a) THE POWER. A live holder of `org.seat` who is not the candidate adopts
  *       it, at any time, as an application is adopted today (`adoptRefusal`).
+ *       Rye confirmed it on 2026-10-31 (sheet item 24a): the founder and
+ *       steward roles adopt until they give the power to the village, and
+ *       then the village decides by vote. An admin holding no such role does
+ *       not adopt.
  *   (b) THE CIRCLE. On submit, every live holder of a role in the circles the
  *       proposed roles sit in, the candidate excluded, is asked to consent or
  *       object within 2 business days. An objection needs a reason, brings
  *       the proposal to the circle's next meeting as a tension in its backlog,
- *       and blocks this path. When the window closes with no objection and at
- *       least one consent, the proposal is "Consented by the circle", and a
- *       holder of the power records it with one click.
+ *       and blocks this path. When every holder asked has consented, or the
+ *       window closes with no objection and at least one consent, the
+ *       proposal is "Consented by the circle", and a holder of the power
+ *       records it with one click.
  *
  * A circle with nobody else in it cannot consent, so only (a) applies, and the
  * payload says so in words.
@@ -34,7 +39,7 @@ import { addBusinessDays, isWithinBusinessDays } from "./businessDays";
 import { civilDateKey } from "./lunar";
 import { NEW_PROPOSAL_HREF } from "./roleProposals";
 import { looksLikePaymentDetails } from "./seatSettings";
-import { seatList } from "./seatApplications";
+import { adoptsClause, seatList, voteWords, type AdopterFacts } from "./seatApplications";
 import { civilDayWords } from "./seasonPlans";
 
 /** The circle's window, in business days on the village's clock. */
@@ -75,10 +80,19 @@ export interface AskIn {
   closesAt: Date;
 }
 
-/** THE STATE, from the asks. PURE. An objection blocks at once, whatever the window. */
+/**
+ * THE STATE, from the asks. PURE. An objection blocks at once, whatever the window.
+ *
+ * EVERY HOLDER ASKED HAS CONSENTED: consented at once (E8, found end to end
+ * on main e1c5eb6). The window is there for answers still to come, so once
+ * the last holder asked has consented it has nothing left to wait for, and
+ * one holder asked who consented no longer leaves the proposal "Waiting on
+ * the circle" for 2 business days. The power still records the adoption.
+ */
 export function consentState(asks: readonly AskIn[], now: Date): ConsentState {
   if (asks.length === 0) return "no-other-holders";
   if (asks.some((a) => a.answer === "object")) return "objected";
+  if (asks.every((a) => a.answer === "consent")) return "consented";
   const closesAt = Math.max(...asks.map((a) => a.closesAt.getTime()));
   if (now.getTime() < closesAt) return "open";
   return asks.some((a) => a.answer === "consent") ? "consented" : "lapsed";
@@ -116,6 +130,21 @@ export function powerPhrase(roleName: string | null): string {
 export function decisionWords(how: "circle" | "power", at: Date, timeZone: string, roleName: string | null): string {
   const day = shortDay(at, timeZone);
   return how === "circle" ? `Adopted on ${day} after the circle consented` : `Adopted on ${day} by ${powerPhrase(roleName)}`;
+}
+
+/**
+ * THE SUBMIT CONFIRM'S LINE: who approves it in THIS village (E8). PURE.
+ *
+ * It replaced one fixed sentence, "the founder, steward or organisation power
+ * adopts it", which on a fresh village promised a power nobody held. The
+ * facts are the ones `adoptRefusal` reads (`AdopterFacts`): the role carrying
+ * the power named as "Role (FirstName)" (Rye, 2026-10-30, signed-in views
+ * only), what has to happen first when nobody holds it, and once the village
+ * holds it, the vote, with no circle line, because nobody at the door can
+ * record a consent then (Rye, 2026-10-31, sheet item 24a).
+ */
+export function whoApprovesWords(f: AdopterFacts): string {
+  return voteWords(f) ?? `The circle consents within ${CONSENT_BUSINESS_DAYS} business days, or ${adoptsClause(f)}`;
 }
 
 /** What an objection writes into the circle's backlog: the roles and the reason, never the candidate. PURE. */

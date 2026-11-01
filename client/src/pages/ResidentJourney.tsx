@@ -1,5 +1,6 @@
 import Layout from "@/components/Layout";
-import { altOr, useBrandImages, useVillageLinks } from "@/lib/gameApi";
+import { altOr, useBrandImages, useGameConfig, useVillageLinks } from "@/lib/gameApi";
+import { figureWithCurrency } from "@shared/money";
 import WhyCostaRica from "@/components/WhyCostaRica";
 import FaqSection from "@/components/FaqSection";
 import { useVillageContent } from "@/hooks/useVillageContent";
@@ -93,6 +94,8 @@ interface LegalContent {
 
 export default function ResidentJourney() {
   const brand = useBrandImages();
+  // The village's own currency (Admin, Make This Yours), for dues typed with no symbol.
+  const fiatCurrency = useGameConfig()?.project?.fiatCurrency ?? "";
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
   const [dues, setDues] = useState<VillageDues | null>(null);
   const { content: legal } = useVillageContent<LegalContent>("legal");
@@ -488,7 +491,7 @@ export default function ResidentJourney() {
             {dues?.amount && (
               <div className="mb-6">
                 <span className="font-display text-5xl md:text-6xl font-bold text-teal-deep">
-                  {dues.currency || "$"}{dues.amount}
+                  {figureWithCurrency(dues.amount, dues.currency, fiatCurrency)}
                 </span>
                 <span className="text-xl text-muted-foreground"> / {dues.period || "month"}</span>
               </div>

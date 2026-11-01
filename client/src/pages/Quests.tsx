@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
+import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
 import { useValueConversion } from "@/lib/moneyClaims";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
@@ -538,7 +539,7 @@ export default function Quests() {
                 <Link href="/love-letter">
                   <a className="px-6 py-3 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors flex items-center gap-2">
                     <Heart className="w-5 h-5" />
-                    Sign the Love Letter
+                    Sign the {pageVarsFrom(cfg ?? {}).commitment}
                   </a>
                 </Link>
               )}

@@ -211,7 +211,10 @@ export default function MasterPlan() {
       {vision && !vision.hidden && (
       <section className="py-20 bg-background overflow-x-clip">
         <div className="container">
-          <div className="max-w-3xl mx-auto text-center mb-16">
+          {/* The gap under the paragraph belongs to the zone cards, and goes
+              with them: the zones ship empty, and a village with none gets
+              its paragraph without a hole under it. */}
+          <div className={`max-w-3xl mx-auto text-center${vision.lists.zones.length ? " mb-16" : ""}`}>
             <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4 break-words">
               {vision.fields.heading}
             </h2>
@@ -221,6 +224,7 @@ export default function MasterPlan() {
           </div>
 
           {/* Zones */}
+          {vision.lists.zones.length > 0 && (
           <div className="space-y-8 max-w-4xl mx-auto">
             {vision.lists.zones.map((zone, index) => {
               const Icon = ZONE_ICONS[index % ZONE_ICONS.length];
@@ -259,6 +263,7 @@ export default function MasterPlan() {
               );
             })}
           </div>
+          )}
         </div>
       </section>
       )}
@@ -312,8 +317,10 @@ export default function MasterPlan() {
       )}
 
       {/* Development Timeline. Words the village keeps in Admin, Pages, not
-          its milestones: see shared/pageContent/masterPlan.ts. */}
-      {phases && !phases.hidden && (
+          its milestones: see shared/pageContent/masterPlan.ts. The phases
+          ship empty, and a heading over no phases reads as a page that
+          failed to load, so the section waits for the first one. */}
+      {phases && !phases.hidden && phases.lists.phases.length > 0 && (
       <section className="py-20 bg-background">
         <div className="container">
           <div className="text-center mb-12">

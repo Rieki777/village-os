@@ -28,7 +28,9 @@
  * a token may be named and no sentence may say what it does, and approved the
  * new pay card word for word (cust-audit TOKEN_COPY_PROPOSAL row 18). The card
  * no longer explains tokens at all, so it no longer publishes the founder's
- * conversion wording either. Its own block below holds it to that.
+ * conversion wording either. Its own block below holds it to that. On
+ * 2026-10-23 the pay card itself went (Rye: the quest and role cards already
+ * say what work pays), and the block holds that too.
  * TWO OF THE FIVE NOW PUBLISH NO CONVERSION SENTENCE AT ALL (Rye, 2026-10-22:
  * "every community will design their own rules for these and other tokens so
  * don't mention what it does anywhere"). The Co-Creators Guide and How We
@@ -103,6 +105,15 @@ import ProsperityJourney from "./ProsperityJourney";
 import CoCreatorsGuide from "./CoCreatorsGuide";
 import HowWeCreate from "./HowWeCreate";
 import StewardRights from "./StewardRights";
+import { PROSPERITY_JOURNEY } from "@shared/pageContent/journeys";
+import { CO_CREATORS_GUIDE_PAGE } from "@shared/pageContent/coCreatorsGuide";
+import type { PageSpec } from "@shared/pageContent/types";
+
+/** A field's default, read from the spec: the starter words move without moving this suite. */
+const fieldDefault = (spec: PageSpec, id: string, key: string) =>
+  spec.sections.find((s) => s.id === id)!.fields.find((f) => f.key === key)!.default;
+/** A literal phrase as a pattern. */
+const phrase = (text: string) => new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
 /**
  * Node 25 ships its own `localStorage` and jsdom's is not installed over it,
@@ -147,13 +158,14 @@ const PAGES = [
     // token, and no longer carries the founder's conversion sentence.
     anchor: /Shared Enterprise/,
     publishesConversion: false,
-    names: /agrees its revenue share with the village/,
+    names: phrase(fieldDefault(PROSPERITY_JOURNEY, "economy", "firstBody")),
   },
   {
     name: "CoCreatorsGuide",
     render: () => render(<Router><CoCreatorsGuide /></Router>),
     // 2026-10-22: the section is "{token}" and the card of what work is worth stays.
-    anchor: /Get paid for your work/,
+    // The card's title since the pay ruling of 2026-10-23.
+    anchor: phrase(fieldDefault(CO_CREATORS_GUIDE_PAGE, "recognition", "cardTitle")),
     publishesConversion: false,
     names: /Gratitude/,
   },
@@ -191,13 +203,11 @@ describe("StewardRights, after the token ruling of 2026-10-22", () => {
     expect(said).not.toMatch(/Seeds|Gratitude/);
   });
 
-  it("keeps the pay card, in the words Rye approved", async () => {
+  it("has no pay card at all since the pay ruling (Rye, 2026-10-23: the quest and role cards say it)", async () => {
     renderSteward();
     await ready();
-    expect(screen.getByText("Get Paid for Your Contribution")).toBeInTheDocument();
-    expect(
-      screen.getByText("Every role you hold and every quest you complete shows what it is worth on its own card."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Get Paid for Your Contribution")).toBeNull();
+    expect(document.body.textContent ?? "").not.toMatch(/shows what it is worth on its own card/);
   });
 });
 

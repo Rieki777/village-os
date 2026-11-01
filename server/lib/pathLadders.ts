@@ -531,7 +531,7 @@ const RESERVATION_STANDING: Record<(typeof RESERVATION_STATUSES)[number], string
   withdrawn: "Withdrawn",
 };
 
-function reservationStanding(status: string): string {
+export function reservationStanding(status: string): string {
   // Keyed by the union above, so a fifth status fails the build here. The
   // fallback is for a row already in the database carrying a value the build
   // does not know: it prints itself, which is ugly and true, and never blank.

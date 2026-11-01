@@ -59,6 +59,8 @@ import { pageContentProblem } from "../shared/pageContent";
 import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
 import { pageVarsFrom } from "../shared/pageContent/vars";
 import { workWithUsAckEmail } from "./lib/workWithUsAck";
+import { investorPacketEmail } from "./lib/investorPacketMail";
+import { emailAccent } from "./lib/emailAccent";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
   NOT_YET_WIRED,
@@ -153,6 +155,7 @@ import { register as registerPlayerCardRoutes } from "./routes/playerCard";
 import { register as registerCircleCardRoutes } from "./routes/circleCard";
 import { register as registerApplicationCardRoutes, orgRoleExtras } from "./routes/applicationCard";
 import { register as registerRoleProposalRoutes } from "./routes/roleProposals";
+import { register as registerOpenProposalRoutes } from "./routes/openProposals";
 import { register as registerRoleGuideRoutes } from "./routes/roleGuide";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
@@ -422,6 +425,8 @@ import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } fro
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
+import { loadInventory } from "./repos/profileInventory";
+import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
@@ -1087,8 +1092,8 @@ const DEFAULT_WORK_WITH_US = {
     "Hi, I'm {name}. I help people shape their offering to the village. There's no wrong way to start. What are you dreaming of bringing?",
   reciprocityOptions: [
     { value: "Financial - Cash", title: "Financial: Cash", desc: "A direct payment for your work, materials, or service: upfront, on milestones, or on completion." },
-    { value: "Tokens", title: "Tokens", desc: "Value held within the community ecosystem, credit you can use at the café and across the village." },
-    { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share. For example, 10% of revenue in exchange for rent or water infrastructure." },
+    { value: "Tokens", title: "Tokens", desc: "You earn contribution tokens." },
+    { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share. For example, part of your revenue in exchange for space on the land." },
     { value: "Memorandum of Understanding", title: "Memorandum of Understanding", desc: "A clear, living exchange of contribution. For example, you grow vegetables, share some harvest, and add to the beauty of the land." },
   ],
 };
@@ -1100,7 +1105,7 @@ const DEFAULT_SETTINGS = {
   villageDues: {
     amount: "", // e.g. "250" — blank means "to be confirmed" and no figure is shown on the site
     period: "month",
-    currency: "$",
+    currency: "", // blank: the page writes the village's own fiatCurrency, or no symbol (figureWithCurrency, shared/money.ts)
     note: "", // blank: the resident page then says its own dues words (token row 25, 2026-10-22)
   },
   /*
@@ -1351,7 +1356,7 @@ const faqsRepo = dbDocument(getPool(), "faqs", DEFAULT_FAQS as any);
  */
 const journeyRepo = dbDocument(getPool(), "journey-state", { checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] } as any);
 const emailConfigRepo = dbDocument(getPool(), "email-config", DEFAULT_EMAIL_CONFIG as any);
-const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")), mode: () => commsMode({ getPool, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) }), permissionFor: (emailKey, kind, contactId) => createPermissionFor({ getPool, members, suppressions: suppressionsPortFor(getPool) })(emailKey, kind, contactId) });
+const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, brandColour: () => brandColour(getBrand().theme), getPool, origin: deploymentOrigin, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")), mode: () => commsMode({ getPool, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) }), permissionFor: (emailKey, kind, contactId) => createPermissionFor({ getPool, members, suppressions: suppressionsPortFor(getPool) })(emailKey, kind, contactId) });
 commsSink.register(createCommsDispatcher({ getPool, postOffice: commsPostOffice, members }));
 registerGatheringJourneyParts({ registerFactsProvider, registerVarsBuilder }, { getPool, postOffice: commsPostOffice });
 const settingsRepo = dbDocument(getPool(), "settings", DEFAULT_SETTINGS as any);
@@ -3972,6 +3977,7 @@ const notifyDeps: NotifyDeps = {
   isPresent: presenceTest(AUTH_TOKEN_SECRET),
   origin: deploymentOrigin,
   projectName: () => mergedConfig().project.name,
+  brandColour: () => brandColour(getBrand().theme),
 };
 
 /** Producer shorthand: fire-and-forget by contract (insertNotification never throws). */
@@ -7551,7 +7557,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // Acknowledge the submitter of a Work With Us proposal: one typed address, never a list (lib/publicAddress.ts)
       const ackTo = type === "work-with-us" ? singlePublicAddress((data as any)?.email) : null;
       // Its words are the village's own (Admin, Pages, Work With Us): lib/workWithUsAck.ts.
-      if (ackTo) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName)) });
+      if (ackTo) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName), brandColour(getBrand().theme)) });
     })();
 
     res.json({ success: true, id: entry.id, ...ideaReceipt(proposal, !!entry.userId) }); // whether a quest idea reached /review: lib/questIdeaReceipt.ts
@@ -10018,7 +10024,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const relayed = await sendResendEmail({
       to: [recipient.email], origin: "map.contact_relay",
       subject: `[${mergedConfig().project.name}] ${firstName(user.name)} wants to connect${role ? ` about ${role.name}` : ""}`,
-      html: `<p><strong>${escapeHtml(firstName(user.name))}</strong> reached out through the village map${role ? ` about your role as <strong>${escapeHtml(role.name)}</strong>` : ""}:</p><blockquote style="border-left:3px solid #2D5A5A;padding-left:10px;color:#4b5563">${escapeHtml(String(message)).replace(/\n/g, "<br>")}</blockquote><p style="color:#6b7280;font-size:13px">Reply to this email to answer them directly.</p>`,
+      html: `<p><strong>${escapeHtml(firstName(user.name))}</strong> reached out through the village map${role ? ` about your role as <strong>${escapeHtml(role.name)}</strong>` : ""}:</p><blockquote style="border-left:3px solid ${emailAccent(brandColour(getBrand().theme))};padding-left:10px;color:#4b5563">${escapeHtml(String(message)).replace(/\n/g, "<br>")}</blockquote><p style="color:#6b7280;font-size:13px">Reply to this email to answer them directly.</p>`,
       replyTo: user.email,
     }).catch(() => ({ sent: false }));
     await setContactEmailStatus(getPool(), inserted.id, relayed.sent ? "sent" : "failed");
@@ -17441,7 +17447,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 - whatYouWantToDo (required): the quest itself, in plain terms, and the value it brings
 - resourcesBringing (required): what they bring: skills, time, tools, materials, funding, relationships
 - resourcesNeeded (required): what they need from the village: land access, materials, budget, people, space
-- compensation (required): what they'd want in return. It is completely fine for this to be "nothing, it's a gift" or "Gratitude only". Never push them toward asking for money
+- compensation (required): what they'd want in return. It is completely fine for this to be "nothing, it's a gift". Never push them toward asking for money
 - timelineMilestones (required): rough phases or dates, and any milestone-based payments they'd propose`,
     },
   };
@@ -18212,51 +18218,19 @@ Send an empty drafts array when you are still listening. A role payload is {name
        * of the break had nothing to show it on.
        */
       const absolute = (link: string) => (/^https?:\/\//i.test(link) ? link : `${origin}${link}`);
-      const links = packet
-        .map((d) => {
-          const href = absolute(String(d.url ?? ""));
-          const label = String(d.title ?? "Document");
-          const onSite = d.pageLink
-            ? ` &middot; <a href="${escapeHtml(absolute(String(d.pageLink)))}" style="color:#6b7280;font-size:13px">view on site</a>`
-            : "";
-          return `<li style="margin:8px 0"><a href="${escapeHtml(href)}" style="color:#2D5A5A;font-weight:600">${escapeHtml(label)}</a>${onSite}</li>`;
-        })
-        .join("");
-      const shell = (heading: string, inner: string) => `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">
-<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
-  <div style="background:#2D5A5A;color:#fff;padding:24px"><div style="font-size:22px;font-weight:700">${escapeHtml(heading)}</div></div>
-  <div style="padding:24px">
-    <p>Hi ${escapeHtml(name)},</p>
-${inner}
-    <p style="color:#6b7280;font-size:13px;margin-top:24px">The ${escapeHtml(notifyDeps.projectName())} Team</p>
-  </div>
-</div></body></html>`;
-
       /*
-       * A "HERE IS YOUR PACKET" EMAIL WITH NO PACKET IN IT IS A CLAIM.
-       *
-       * The old copy always announced "Your Amora Investor Packet" and, when
-       * the list came out empty, filled the bullet with "No documents
-       * available yet". That is a heading promising a thing the body then
-       * takes back, and it is the same defect as a decision that CARRIED
-       * reading "Did not carry" because a fallback invented the answer.
-       *
-       * So there are two different emails, and which one is sent comes from
-       * what actually happened. Nobody is told a packet is attached unless
-       * documents really went with it.
+       * A "HERE IS YOUR PACKET" EMAIL WITH NO PACKET IN IT IS A CLAIM, so the
+       * packet and the empty-packet thank-you are two emails, chosen by what
+       * went. Both are the village's Words since 2026-10-23
+       * (server/lib/investorPacketMail.ts), in its own look, and neither
+       * promises a reply by any time.
        */
-      const html = packet.length
-        ? shell(`Your ${notifyDeps.projectName()} Investor Packet`, `    <p>Thank you for your interest in investing in ${escapeHtml(notifyDeps.projectName())}. Below are the documents in our current investor packet:</p>
-    <ul style="padding-left:18px">${links}</ul>
-    <p style="margin-top:20px">A team member will be in touch within 48 hours to answer your questions.</p>`)
-        : shell(`Thank you for your interest in ${notifyDeps.projectName()}`, `    <p>Thank you for your interest in investing in ${escapeHtml(notifyDeps.projectName())}. We have your request and a member of our team will be in touch within 48 hours to talk it through with you.</p>`);
-      await sendResendEmail({
-        to: [email], origin: "investor.packet",
-        subject: packet.length
-          ? `Your ${notifyDeps.projectName()} Investor Packet`
-          : `Thank you for your interest in ${notifyDeps.projectName()}`,
-        html,
-      });
+      const documents = packet.map((d) => ({ title: String(d.title ?? "Document"), href: absolute(String(d.url ?? "")), pageHref: d.pageLink ? absolute(String(d.pageLink)) : null }));
+      try {
+        await sendResendEmail({ to: [email], origin: "investor.packet", ...(await investorPacketEmail(getPool, origin, { name: String(name), documents })) });
+      } catch (err) {
+        console.error("[investor] the packet email could not be rendered, so it was not sent", err);
+      }
       // Also notify the investor team. The admins are told what the requester
       // was actually sent, so an empty packet reaches a person who can act on
       // it rather than sitting silently in a table.
@@ -18296,7 +18270,7 @@ ${inner}
      * bounds the leak. The message is separate, because a person is only told
      * to go and look in their inbox when something can actually arrive there.
      */
-    const followUp = "Thank you. We have your request and a member of our team will be in touch within 48 hours.";
+    const followUp = "Thank you. We have your request, and someone from our team will be in touch.";
     res.json({
       success: true,
       documentsSent: packet.length,
@@ -18785,7 +18759,7 @@ ${inner}
   registerHousingRoutes(app, {
     authedUser, guardCapability, mayStillSee, getPool, overLimit, clientIp,
     escapeHtml, recipientsForType, sendResendEmail,
-    deploymentOrigin: notifyDeps.origin, projectName: notifyDeps.projectName,
+    deploymentOrigin: notifyDeps.origin, projectName: notifyDeps.projectName, brandColour: () => brandColour(getBrand().theme),
   });
 
   /**
@@ -19438,6 +19412,7 @@ ${inner}
       standing: await loadStanding(getPool(), user.id),
       gratitude: await loadGratitude(getPool(), villageId(), user.id, startsAt),
       party: await partyFor(getPool(), villageId(), user.id, user.id),
+      inventory: await loadInventory(getPool(), user.id),
       allowance: await gratitudeAllowance(user),
       voice: await claimReadiness(getPool(), user.id),
     });
@@ -19492,6 +19467,7 @@ ${inner}
     res.json({ claims: await claimHistory(getPool(), user.id) });
   });
   registerWalletRoutes(app, { authedUser, getPool, gratitudeAllowance });
+  registerProfilePrivacyRoutes(app, { authedUser, getPool });
   registerTokenJobRoutes(app, { isAdmin, getPool });
 
   /**
@@ -19517,6 +19493,7 @@ ${inner}
       ...loaded.view,
       standing: await loadStanding(getPool(), targetId),
       gratitude: await loadGratitude(getPool(), villageId(), targetId, startsAt),
+      inventory: await loadInventory(getPool(), targetId),
     };
     if (viewer?.id === targetId) {
       return res.json({ ...full, party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null) });
@@ -24741,6 +24718,7 @@ ${inner}
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
+  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState }); // a role proposal from somebody with no account (0305)
   registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });

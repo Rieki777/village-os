@@ -1,20 +1,27 @@
 /**
  * The Master Plan page (brochure villages), as fields.
  *
- * The defaults are the words the page carried in code until 2026-10-22, moved
- * here unchanged, so switching the page onto this spec changes nothing a
- * visitor sees, with one exception: the PDF button. It was a disabled
- * "Master Plan PDF, Coming Soon" on every village, including villages with no
- * plan to publish. It is now a link the village sets, and it is not drawn
- * until there is one.
+ * The defaults are NEUTRAL STARTER TEXT (2026-10-23), true of any village.
+ * They were the first village's words until then; that village keeps its own
+ * copy in its database, and the record of it is
+ * server/seeds/amora/pages/page-master-plan.json.
+ *
+ * THE ZONES AND THE PHASES START EMPTY. Each one is a fact about one piece of
+ * land (how many home sites, how big a retreat, what is under way), so the
+ * platform states none. The page draws no zone cards and no phases section
+ * until the village writes some.
+ *
+ * The PDF button was a disabled "Master Plan PDF, Coming Soon" on every
+ * village, including villages with no plan to publish. It is a link the
+ * village sets, and it is not drawn until there is one.
  *
  * The land figures (acres, homes, guest rooms, appraisal) stay in Settings;
  * only their labels are here.
  *
- * THE PHASES ARE WORDS, NOT MILESTONES. The six phases repeat what Admin,
- * Milestones holds (and Home already shows), and their statuses never change
- * on their own. They stay an editable list with today's words for now;
- * reading them from the milestones is a separate change.
+ * THE PHASES ARE WORDS, NOT MILESTONES. A village's phases can repeat what
+ * Admin, Milestones holds (and Home already shows), and their statuses never
+ * change on their own. They stay an editable list for now; reading them from
+ * the milestones is a separate change.
  */
 import type { PageSpec } from "./types";
 
@@ -33,7 +40,7 @@ export const MASTER_PLAN_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 200,
-          default: "Our vision for a regenerative village that harmonizes human habitation with the natural beauty of the land it sits on.",
+          default: "How {village} plans to grow: where people will live, work, and gather, and how the land is cared for.",
         },
       ],
     },
@@ -43,7 +50,7 @@ export const MASTER_PLAN_PAGE: PageSpec = {
       shows: "The row of figures under the top of the page. The figures come from Settings; a figure left blank there hides its tile.",
       fields: [
         { key: "plannedHomesLabel", label: "Label under planned homes", kind: "text", max: 20, default: "Planned Homes" },
-        { key: "guestRoomsLabel", label: "Label under guest rooms", kind: "text", max: 20, default: "Retreat Keys" },
+        { key: "guestRoomsLabel", label: "Label under guest rooms", kind: "text", max: 20, default: "Guest Rooms" },
         { key: "appraisalLabel", label: "Label under the appraisal", kind: "text", max: 20, default: "Appraised Value" },
       ],
     },
@@ -60,14 +67,14 @@ export const MASTER_PLAN_PAGE: PageSpec = {
           kind: "long",
           max: 400,
           default:
-            "{village} is designed as a complete village ecosystem, a place where people live, work, learn, and thrive together. Our master plan balances development with conservation, ensuring that the land regenerates even as we build upon it.",
+            "{village} is planned as a whole village: a place to live, work, learn, and gather. The plan sets out what will be built, what will be protected, and how the parts fit together.",
         },
       ],
       lists: [
         {
           key: "zones",
           label: "Zones",
-          help: "Up to eight cards, top to bottom. Each gets the next icon in a fixed set.",
+          help: "Up to eight cards, top to bottom. Each gets the next icon in a fixed set. With none, only the paragraph shows.",
           itemLabel: "Zone",
           titleKey: "title",
           maxItems: 8,
@@ -83,33 +90,7 @@ export const MASTER_PLAN_PAGE: PageSpec = {
               default: "",
             },
           ],
-          default: [
-            {
-              title: "Village Center",
-              description: "The heart of {village} featuring the community center, café, market, and gathering spaces.",
-              tags: "Community Center, Café & Restaurant, Artisan Market, Event Spaces",
-            },
-            {
-              title: "Residential Neighborhoods",
-              description: "Clustered housing areas designed for community connection while maintaining privacy.",
-              tags: "150+ home sites, Various lot sizes, Walking paths, Community gardens",
-            },
-            {
-              title: "Retreat & Wellness",
-              description: "The retreat center and health facilities serving guests and residents.",
-              tags: "120-150 key retreat, Health Center, Spa facilities, Workshop spaces",
-            },
-            {
-              title: "Agricultural Land",
-              description: "Regenerative farms and food forests providing sustenance for the community.",
-              tags: "Organic gardens, Food forest, Medicinal herbs, Livestock areas",
-            },
-            {
-              title: "Commons & Conservation",
-              description: "Protected natural areas, trails, and shared spaces for all to enjoy.",
-              tags: "Nature preserves, Hiking trails, Water features, Wildlife corridors",
-            },
-          ],
+          default: [],
         },
       ],
     },
@@ -126,7 +107,7 @@ export const MASTER_PLAN_PAGE: PageSpec = {
           help: "Shown only when Settings has an appraisal. Leave blank for none.",
           kind: "long",
           max: 200,
-          default: "This valuation supports the financing strategy and shows the asset base underneath the village.",
+          default: "",
           optional: true,
         },
         {
@@ -144,7 +125,7 @@ export const MASTER_PLAN_PAGE: PageSpec = {
     {
       id: "phases",
       label: "Development phases",
-      shows: "The list of phases with a status pill on each.",
+      shows: "The list of phases with a status pill on each, drawn once there is at least one phase.",
       hideable: true,
       fields: [
         { key: "heading", label: "Heading", kind: "text", max: 32, default: "Development Phases" },
@@ -154,8 +135,7 @@ export const MASTER_PLAN_PAGE: PageSpec = {
           help: "Leave blank for none.",
           kind: "long",
           max: 200,
-          default:
-            "With a potential 1% regenerative development loan, multiple phases can proceed simultaneously, accelerating our timeline significantly.",
+          default: "",
           optional: true,
         },
       ],
@@ -163,7 +143,7 @@ export const MASTER_PLAN_PAGE: PageSpec = {
         {
           key: "phases",
           label: "Phases",
-          help: "Up to ten, top to bottom. A status of In Progress or Planning gets its own colour.",
+          help: "Up to ten, top to bottom. A status of In Progress or Planning gets its own colour. With none, the section is not shown.",
           itemLabel: "Phase",
           titleKey: "phase",
           maxItems: 10,
@@ -172,14 +152,7 @@ export const MASTER_PLAN_PAGE: PageSpec = {
             { key: "items", label: "What it holds", kind: "text", max: 60, default: "" },
             { key: "status", label: "Status", kind: "text", max: 16, default: "" },
           ],
-          default: [
-            { phase: "Infrastructure", items: "Roads, utilities, water systems", status: "In Progress" },
-            { phase: "Community Center", items: "Café, gathering spaces, offices", status: "Planning" },
-            { phase: "Show Homes", items: "10 homes of various styles", status: "Planning" },
-            { phase: "Retreat Center", items: "120-150 key wellness facility", status: "Planning" },
-            { phase: "Health Center", items: "Integrative health services", status: "Planning" },
-            { phase: "Residential Phase 1", items: "First 50 home sites", status: "Future" },
-          ],
+          default: [],
         },
       ],
     },
