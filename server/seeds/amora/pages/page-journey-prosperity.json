@@ -1,159 +1,159 @@
 {
+  "faq": {
+    "heading": "Common Questions"
+  },
   "hero": {
+    "intro": "Launch a business that serves the community and regenerates our ecosystem. Advance your impact through our {acronym} tiers.",
     "eyebrow": "Prosperity Creator Journey",
     "headline": "Create Regenerative Prosperity",
     "highlight": "Regenerative Prosperity",
-    "intro": "Launch a business that serves the community and regenerates our ecosystem. Advance your impact through our {acronym} tiers.",
     "primaryLabel": "Request Prosperity Packet",
     "primaryTarget": "#contact",
+    "contactSubject": "Prosperity Packet Request",
     "secondaryLabel": "Join Community Call",
-    "secondaryTarget": "#events",
-    "contactSubject": "Prosperity Packet Request"
-  },
-  "economy": {
-    "firstHeading": "Shared Enterprise",
-    "firstBody": "Every business here agrees its revenue share with the village, business by business.",
-    "secondHeading": "Co-Ownership Model",
-    "secondBody": "All {village} businesses are co-owned by the village community. You operate and manage your enterprise while the community shares in success through revenue participation."
+    "secondaryTarget": "#events"
   },
   "steps": {
-    "heading": "Your Path to Prosperity",
     "intro": "Follow these {count} steps to launch your regenerative business at {village}.",
     "items": [
       {
         "stage": "Researcher",
         "title": "Attend Community Call",
-        "description": "Learn about business opportunities at {village} and ask questions about our economic model.",
         "bullet1": "Understand our economic vision",
         "bullet2": "Learn how the village economy works",
         "bullet3": "Meet other entrepreneurs",
         "bullet4": "Ask questions live",
         "actionLabel": "Join Community Call",
+        "description": "Learn about business opportunities at {village} and ask questions about our economic model.",
         "actionTarget": "#events"
       },
       {
         "stage": "Dreamer",
         "title": "Explore the Prosperity Packet",
-        "description": "Request the full guide to launching a business at {village}.",
         "bullet1": "Business model overview",
         "bullet2": "Revenue share structure",
         "bullet3": "Integration requirements",
         "bullet4": "Success stories",
         "actionLabel": "Request Packet",
+        "description": "Request the full guide to launching a business at {village}.",
         "actionTarget": "#contact"
       },
       {
         "stage": "Applicant",
         "title": "Submit Business Proposal",
-        "description": "Present your vision and how it aligns with village needs and our regenerative mission. {guide}, our guide, can help you shape it.",
         "bullet1": "Describe your business vision",
         "bullet2": "Show village alignment",
         "bullet3": "Project community impact",
         "bullet4": "Include your timeline",
         "actionLabel": "Work With Us",
+        "description": "Present your vision and how it aligns with village needs and our regenerative mission. {guide}, our guide, can help you shape it.",
         "actionTarget": "/work-with-us"
       },
       {
         "stage": "Member",
         "title": "Sign {commitment} / Formal Membership",
-        "description": "Become an official member of the community.",
         "bullet1": "Understand our founding principles",
         "bullet2": "Commit to regenerative values",
         "bullet3": "Sign membership agreement",
         "bullet4": "Join the community",
         "actionLabel": "Read the {commitment}",
+        "description": "Become an official member of the community.",
         "actionTarget": "/love-letter"
       },
       {
         "stage": "Partner",
         "title": "Community Approval",
-        "description": "Present your business to the Business & Finance Council for community consent.",
         "bullet1": "Present to Business & Finance Council",
         "bullet2": "Answer community questions",
         "bullet3": "Address impact concerns",
         "bullet4": "Receive consent decision",
         "actionLabel": "Learn About Circles",
+        "description": "Present your business to the Business & Finance Council for community consent.",
         "actionTarget": "/circles"
       },
       {
         "stage": "Builder",
         "title": "Launch Your Business",
-        "description": "Begin serving the {village} community.",
         "bullet1": "Agree your revenue share",
         "bullet2": "Set up community dashboard",
         "bullet3": "Train your team",
         "bullet4": "Celebrate your launch",
         "actionLabel": "",
+        "description": "Begin serving the {village} community.",
         "actionTarget": ""
       },
       {
         "stage": "Prospering Creator",
         "title": "Grow Your Impact",
-        "description": "Advance through {acronym} tiers and scale your regenerative business.",
         "bullet1": "Track impact metrics",
         "bullet2": "Grow community contribution",
         "bullet3": "Mentor other creators",
         "bullet4": "Advance to next tier",
         "actionLabel": "View {acronym} Tiers",
+        "description": "Advance through {acronym} tiers and scale your regenerative business.",
         "actionTarget": "#ari-tiers"
       }
-    ]
+    ],
+    "heading": "Your Path to Prosperity"
   },
   "tiers": {
-    "acronym": "ARI",
-    "framework": "{village} Regenerative Impact",
-    "heading": "{acronym} Tiers: {framework}",
     "intro": "Measure and grow your impact through our {framework} framework. Advance through tiers based on community contribution and regenerative outcomes.",
     "items": [
       {
         "tier": "Seed",
-        "description": "Early stage, establishing presence",
         "focus": "Primary village impact",
         "metric1": "Families served",
         "metric2": "Community contributions per week",
-        "metric3": "Community meals contributed"
+        "metric3": "Community meals contributed",
+        "description": "Early stage, establishing presence"
       },
       {
         "tier": "Sprout",
-        "description": "Growing, measurable contribution",
         "focus": "Regional visibility",
         "metric1": "Local employment created",
         "metric2": "Ecosystem health contribution",
-        "metric3": "Skill-sharing events"
+        "metric3": "Skill-sharing events",
+        "description": "Growing, measurable contribution"
       },
       {
         "tier": "Grove",
-        "description": "Established, regional impact",
         "focus": "Significant contribution",
         "metric1": "Apprentices trained",
         "metric2": "Land area regenerated",
-        "metric3": "Cultural events hosted"
+        "metric3": "Cultural events hosted",
+        "description": "Established, regional impact"
       },
       {
         "tier": "Forest",
-        "description": "Full impact. Global reach.",
         "focus": "Global reach and legacy",
         "metric1": "Regenerative practices replicated",
         "metric2": "Knowledge shared globally",
-        "metric3": "Legacy created"
+        "metric3": "Legacy created",
+        "description": "Full impact. Global reach."
       }
-    ]
+    ],
+    "acronym": "ARI",
+    "heading": "{acronym} Tiers: {framework}",
+    "framework": "{village} Regenerative Impact"
   },
   "packet": {
-    "heading": "Ready to Explore Opportunities?",
     "body": "Request the Prosperity Packet to learn everything about launching a business at {village}.",
+    "heading": "Ready to Explore Opportunities?",
     "ctaLabel": "Request Prosperity Packet",
     "ctaTarget": "#contact"
   },
   "closing": {
-    "heading": "Launch Your Regenerative Business",
     "body": "Start with a community call to ask questions about the economic model, then request the Prosperity Packet and begin your journey.",
+    "heading": "Launch Your Regenerative Business",
     "primaryLabel": "Join Community Call",
     "primaryTarget": "#events",
     "secondaryLabel": "Request Packet",
     "secondaryTarget": "#contact"
   },
-  "faq": {
-    "heading": "Common Questions"
+  "economy": {
+    "firstBody": "Every business here agrees its revenue share with the village, business by business.",
+    "secondBody": "All {village} businesses are co-owned by the village community. You operate and manage your enterprise while the community shares in success through revenue participation.",
+    "firstHeading": "Shared Enterprise",
+    "secondHeading": "Co-Ownership Model"
   }
 }

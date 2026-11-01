@@ -270,6 +270,20 @@ describe("a village that kept its letter's words keeps every member's letter ver
     expect(now.body).toBe(letterBody(oldParts(src)));
   });
 
+  it("the first village's own letter, rendered from its records here, is the version it serves (read 2026-10-31)", () => {
+    // Its kept page, its covenant and its legal membership section, as the
+    // repository records them; production served lv-a14aa38acde23a57 on
+    // 2026-10-31, and this branch renders the same words to the same version.
+    const record = (f: string) => JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "server/seeds/amora", f), "utf8")); // brand-ok: the first village's own records
+    const config = { project: { name: "Amora", commitmentName: "Love Letter", memberName: "Amorian" }, currency: { name: "Gratitude" } }; // brand-ok: the first village's settings as production serves them
+    const src = letterSourceFrom(config, {
+      covenant: record("pages-covenant-seed.json"),
+      legal: record("brochure-legal-seed.json"),
+      [LETTER_PAGE_SECTION]: record("pages/page-love-letter.json"),
+    });
+    expect(currentLetter(src).version).toBe("lv-a14aa38acde23a57");
+  });
+
   it("CONTROL: the same village without its kept words reads the starter letter, under a new version", () => {
     const [, config, content, before] = CASES[1];
     const starter = currentLetter(letterSourceFrom(config, content));

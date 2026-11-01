@@ -1,80 +1,80 @@
 {
+  "cta": {
+    "body": "Join a community call to learn more about specific opportunities, the application process, and how the economics work."
+  },
   "hero": {
     "lede": "Join our thriving village economy. These opportunities align business success with community prosperity through shared revenue."
+  },
+  "revenue": {
+    "body": "All businesses at {village} share a percentage of revenue with the community. This creates alignment between business success and community prosperity. The exact percentage is negotiated based on the business type and community investment.",
+    "heading": "Revenue Sharing"
   },
   "ventures": {
     "cards": [
       {
         "id": "retreat-center",
+        "icon": "tent",
         "title": "Retreat Center",
         "status": "Planning",
-        "description": "A 120-150 key wellness retreat facility offering transformational experiences, workshops, and healing programs.",
         "details": "120-150 guest rooms\nMultiple workshop spaces\nSpa and wellness facilities\nFarm-to-table restaurant",
-        "icon": "tent"
+        "description": "A 120-150 key wellness retreat facility offering transformational experiences, workshops, and healing programs."
       },
       {
         "id": "health-wellness",
+        "icon": "health",
         "title": "Health & Wellness Center",
         "status": "Planning",
-        "description": "Integrative health services combining traditional and alternative medicine for residents and visitors.",
         "details": "Primary care services\nAlternative therapies\nMental health support\nPreventive wellness programs",
-        "icon": "health"
+        "description": "Integrative health services combining traditional and alternative medicine for residents and visitors."
       },
       {
         "id": "cafe-restaurant",
+        "icon": "cafe",
         "title": "Café & Restaurant",
         "status": "Planning",
-        "description": "Farm-to-table dining experience showcasing local and organic produce from our regenerative farms.",
         "details": "Organic menu\nCommunity gathering space\nEvent hosting\nCoffee roasting",
-        "icon": "cafe"
+        "description": "Farm-to-table dining experience showcasing local and organic produce from our regenerative farms."
       },
       {
         "id": "artisan-market",
+        "icon": "market",
         "title": "Artisan Market",
         "status": "Future",
-        "description": "A marketplace for local crafts, produce, and goods created by community members and regional artisans.",
         "details": "Local crafts and art\nFresh produce\nCommunity goods\nVisitor souvenirs",
-        "icon": "market"
+        "description": "A marketplace for local crafts, produce, and goods created by community members and regional artisans."
       },
       {
         "id": "learning-center",
+        "icon": "learning",
         "title": "Learning Center",
         "status": "Future",
-        "description": "Educational programs for children and adults, including a forest school and skill-sharing workshops.",
         "details": "Forest school\nAdult education\nSkill workshops\nResearch programs",
-        "icon": "learning"
+        "description": "Educational programs for children and adults, including a forest school and skill-sharing workshops."
       },
       {
         "id": "fitness-recreation",
+        "icon": "fitness",
         "title": "Fitness & Recreation",
         "status": "Future",
-        "description": "Fitness facilities and outdoor recreation programs for residents and retreat guests.",
         "details": "Yoga studio\nFitness equipment\nHiking programs\nWater activities",
-        "icon": "fitness"
+        "description": "Fitness facilities and outdoor recreation programs for residents and retreat guests."
       },
       {
         "id": "art-culture",
+        "icon": "art",
         "title": "Art & Culture Hub",
         "status": "Future",
-        "description": "A creative space for artists, musicians, and cultural programs that enrich community life.",
         "details": "Artist studios\nPerformance space\nGallery\nMusic programs",
-        "icon": "art"
+        "description": "A creative space for artists, musicians, and cultural programs that enrich community life."
       },
       {
         "id": "regenerative-agriculture",
+        "icon": "farm",
         "title": "Regenerative Agriculture",
         "status": "Active",
-        "description": "Farming operations that produce food for the community while regenerating the land.",
         "details": "Organic vegetables\nFruit orchards\nMedicinal herbs\nPermaculture design",
-        "icon": "farm"
+        "description": "Farming operations that produce food for the community while regenerating the land."
       }
     ]
-  },
-  "revenue": {
-    "heading": "Revenue Sharing",
-    "body": "All businesses at {village} share a percentage of revenue with the community. This creates alignment between business success and community prosperity. The exact percentage is negotiated based on the business type and community investment."
-  },
-  "cta": {
-    "body": "Join a community call to learn more about specific opportunities, the application process, and how the economics work."
   }
 }

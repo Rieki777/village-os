@@ -1,16 +1,42 @@
 {
+  "cta": {
+    "body": "Whether you're an investor, resident, steward, or prosperity creator, there's a place for you at {village}.",
+    "heading": "Join Our Community",
+    "callLabel": "Join Community Call",
+    "pathLabel": "Find Your Path"
+  },
+  "board": {
+    "intro": "5-7 expert members providing strategic oversight, fiduciary responsibility, and guidance on business, legal, and financial aspects.",
+    "columns": [
+      {
+        "first": "Legal & Regulatory",
+        "third": "Financial & Investment",
+        "fourth": "",
+        "second": "Real Estate Development",
+        "heading": "Expertise Areas"
+      },
+      {
+        "first": "Financial Oversight",
+        "third": "Investor Relations",
+        "fourth": "",
+        "second": "Development Milestones",
+        "heading": "Responsibilities"
+      },
+      {
+        "first": "Monthly Meetings",
+        "third": "Annual Retreat",
+        "fourth": "",
+        "second": "Quarterly Sessions",
+        "heading": "Meeting Schedule"
+      }
+    ],
+    "heading": "Development Board of Directors"
+  },
   "header": {
     "intro": "The people holding roles here, and the circles they hold them in."
   },
-  "leadership": {
-    "heading": "Leadership Circle",
-    "openNote": "The team is growing, and several leadership roles and steward roles are open right now.",
-    "openLink": "See the open roles"
-  },
   "advisory": {
-    "heading": "Community Advisory Council",
     "intro": "Practitioners and thought leaders shaping this village's culture, partnerships, and community integration.",
-    "terms": "Advisors receive First Right of Refusal on lot purchases, retreat discounts, and recognition as Founding Advisors.",
     "items": [
       {
         "text": "Regenerative Agriculture & Permaculture Leaders"
@@ -30,39 +56,13 @@
       {
         "text": "Cultural Liaisons from where the village sits"
       }
-    ]
+    ],
+    "terms": "Advisors receive First Right of Refusal on lot purchases, retreat discounts, and recognition as Founding Advisors.",
+    "heading": "Community Advisory Council"
   },
-  "board": {
-    "heading": "Development Board of Directors",
-    "intro": "5-7 expert members providing strategic oversight, fiduciary responsibility, and guidance on business, legal, and financial aspects.",
-    "columns": [
-      {
-        "heading": "Expertise Areas",
-        "first": "Legal & Regulatory",
-        "second": "Real Estate Development",
-        "third": "Financial & Investment",
-        "fourth": ""
-      },
-      {
-        "heading": "Responsibilities",
-        "first": "Financial Oversight",
-        "second": "Development Milestones",
-        "third": "Investor Relations",
-        "fourth": ""
-      },
-      {
-        "heading": "Meeting Schedule",
-        "first": "Monthly Meetings",
-        "second": "Quarterly Sessions",
-        "third": "Annual Retreat",
-        "fourth": ""
-      }
-    ]
-  },
-  "cta": {
-    "heading": "Join Our Community",
-    "body": "Whether you're an investor, resident, steward, or prosperity creator, there's a place for you at {village}.",
-    "pathLabel": "Find Your Path",
-    "callLabel": "Join Community Call"
+  "leadership": {
+    "heading": "Leadership Circle",
+    "openLink": "See the open roles",
+    "openNote": "The team is growing, and several leadership roles and steward roles are open right now."
   }
 }

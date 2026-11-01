@@ -1,16 +1,16 @@
 {
-  "hero": {
-    "eyebrow": "Village Steward Space",
-    "headline": "Your Rights and Responsibilities",
-    "intro": "This is a covenant between co-owners, not a legal document. Every Village Steward holds both, the rights that come from real ownership of this place, and the responsibilities that make those rights worth something."
+  "cta": {
+    "body": "The Steward journey starts with a single step, showing up to a Community Call and saying yes to what's calling you.",
+    "heading": "Ready to Begin?",
+    "primaryLabel": "Return to Steward Journey",
+    "secondaryLabel": "Explore Quests"
   },
-  "ownership": {
-    "heading": "You Are a Co-Owner of This Village",
-    "body": "Not in a passive sense. Not in a \"you paid for something\" sense. In the deepest sense, the land, the buildings, the culture, the economy, the future of this place are in your hands as much as anyone else's. Act from that space. Steward it as if you built it, because you are building it, right now."
+  "hero": {
+    "intro": "This is a covenant between co-owners, not a legal document. Every Village Steward holds both, the rights that come from real ownership of this place, and the responsibilities that make those rights worth something.",
+    "eyebrow": "Village Steward Space",
+    "headline": "Your Rights and Responsibilities"
   },
   "rights": {
-    "eyebrow": "What You Hold",
-    "heading": "Your Rights as a Steward",
     "intro": "These are not privileges granted from above. They are yours because you showed up, committed, and earned them through the journey.",
     "items": [
       {
@@ -33,11 +33,38 @@
         "title": "Retreat and Wellness Access",
         "description": "As a contributing steward, you have access to {village}'s wellness offerings at community rates. Retreat facilities, healing arts programs, and wellness services are part of what this community builds together, and you are part of what makes them possible."
       }
-    ]
+    ],
+    "eyebrow": "What You Hold",
+    "heading": "Your Rights as a Steward"
+  },
+  "ownership": {
+    "body": "Not in a passive sense. Not in a \"you paid for something\" sense. In the deepest sense, the land, the buildings, the culture, the economy, the future of this place are in your hands as much as anyone else's. Act from that space. Steward it as if you built it, because you are building it, right now.",
+    "heading": "You Are a Co-Owner of This Village"
+  },
+  "progression": {
+    "intro": "Your rights and voice grow with your commitment, in recognition that those who have poured the most into this place hold the most wisdom for its future.",
+    "stages": [
+      {
+        "level": "Co-Creator",
+        "years": "",
+        "description": "Full governance voice, seasonal role eligibility"
+      },
+      {
+        "level": "Guide",
+        "years": "",
+        "description": "Mentorship responsibilities, voice in cross-circle decisions"
+      },
+      {
+        "level": "Sage",
+        "years": "",
+        "description": "Highest governance voice, wisdom keeper, long-term strategic guidance for the village"
+      }
+    ],
+    "eyebrow": "Your Path Forward",
+    "heading": "Rights Deepen as You Grow",
+    "footnote": ""
   },
   "responsibilities": {
-    "eyebrow": "What You Carry",
-    "heading": "Your Responsibilities as a Steward",
     "intro": "Rights and responsibilities are two sides of the same belonging. One without the other isn't community, it's just a transaction.",
     "items": [
       {
@@ -64,35 +91,8 @@
         "title": "Lift Others as You Rise",
         "description": "Your path from Visitor to Co-Creator to Guide to Sage is a relay. As you advance, you carry responsibility for welcoming newcomers, mentoring Initiates, and making it easier for the next person to find their place here."
       }
-    ]
-  },
-  "progression": {
-    "eyebrow": "Your Path Forward",
-    "heading": "Rights Deepen as You Grow",
-    "intro": "Your rights and voice grow with your commitment, in recognition that those who have poured the most into this place hold the most wisdom for its future.",
-    "footnote": "",
-    "stages": [
-      {
-        "level": "Co-Creator",
-        "description": "Full governance voice, seasonal role eligibility",
-        "years": ""
-      },
-      {
-        "level": "Guide",
-        "description": "Mentorship responsibilities, voice in cross-circle decisions",
-        "years": ""
-      },
-      {
-        "level": "Sage",
-        "description": "Highest governance voice, wisdom keeper, long-term strategic guidance for the village",
-        "years": ""
-      }
-    ]
-  },
-  "cta": {
-    "heading": "Ready to Begin?",
-    "body": "The Steward journey starts with a single step, showing up to a Community Call and saying yes to what's calling you.",
-    "primaryLabel": "Return to Steward Journey",
-    "secondaryLabel": "Explore Quests"
+    ],
+    "eyebrow": "What You Carry",
+    "heading": "Your Responsibilities as a Steward"
   }
 }

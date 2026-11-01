@@ -1,89 +1,89 @@
 {
+  "cta": {
+    "body": "Whether you want to invest, live, work, or create at {village}, there's a place for you in our master plan.",
+    "heading": "Be Part of the Vision",
+    "callLabel": "Join Community Call",
+    "pathLabel": "Choose Your Path"
+  },
   "hero": {
     "subline": "Our vision for a regenerative village that harmonizes human habitation with the natural beauty of the land it sits on."
   },
   "stats": {
-    "plannedHomesLabel": "Planned Homes",
+    "appraisalLabel": "Appraised Value",
     "guestRoomsLabel": "Retreat Keys",
-    "appraisalLabel": "Appraised Value"
-  },
-  "vision": {
-    "heading": "Our Vision",
-    "body": "{village} is designed as a complete village ecosystem, a place where people live, work, learn, and thrive together. Our master plan balances development with conservation, ensuring that the land regenerates even as we build upon it.",
-    "zones": [
-      {
-        "title": "Village Center",
-        "description": "The heart of {village} featuring the community center, café, market, and gathering spaces.",
-        "tags": "Community Center, Café & Restaurant, Artisan Market, Event Spaces"
-      },
-      {
-        "title": "Residential Neighborhoods",
-        "description": "Clustered housing areas designed for community connection while maintaining privacy.",
-        "tags": "150+ home sites, Various lot sizes, Walking paths, Community gardens"
-      },
-      {
-        "title": "Retreat & Wellness",
-        "description": "The retreat center and health facilities serving guests and residents.",
-        "tags": "120-150 key retreat, Health Center, Spa facilities, Workshop spaces"
-      },
-      {
-        "title": "Agricultural Land",
-        "description": "Regenerative farms and food forests providing sustenance for the community.",
-        "tags": "Organic gardens, Food forest, Medicinal herbs, Livestock areas"
-      },
-      {
-        "title": "Commons & Conservation",
-        "description": "Protected natural areas, trails, and shared spaces for all to enjoy.",
-        "tags": "Nature preserves, Hiking trails, Water features, Wildlife corridors"
-      }
-    ]
-  },
-  "valuation": {
-    "heading": "Land Valuation",
-    "support": "This valuation supports the financing strategy and shows the asset base underneath the village.",
-    "pdfUrl": "",
-    "pdfLabel": "Master Plan PDF"
+    "plannedHomesLabel": "Planned Homes"
   },
   "phases": {
-    "heading": "Development Phases",
     "intro": "With a potential 1% regenerative development loan, multiple phases can proceed simultaneously, accelerating our timeline significantly.",
     "phases": [
       {
-        "phase": "Infrastructure",
         "items": "Roads, utilities, water systems",
+        "phase": "Infrastructure",
         "status": "In Progress"
       },
       {
-        "phase": "Community Center",
         "items": "Café, gathering spaces, offices",
+        "phase": "Community Center",
         "status": "Planning"
       },
       {
-        "phase": "Show Homes",
         "items": "10 homes of various styles",
+        "phase": "Show Homes",
         "status": "Planning"
       },
       {
-        "phase": "Retreat Center",
         "items": "120-150 key wellness facility",
+        "phase": "Retreat Center",
         "status": "Planning"
       },
       {
-        "phase": "Health Center",
         "items": "Integrative health services",
+        "phase": "Health Center",
         "status": "Planning"
       },
       {
-        "phase": "Residential Phase 1",
         "items": "First 50 home sites",
+        "phase": "Residential Phase 1",
         "status": "Future"
       }
-    ]
+    ],
+    "heading": "Development Phases"
   },
-  "cta": {
-    "heading": "Be Part of the Vision",
-    "body": "Whether you want to invest, live, work, or create at {village}, there's a place for you in our master plan.",
-    "callLabel": "Join Community Call",
-    "pathLabel": "Choose Your Path"
+  "vision": {
+    "body": "{village} is designed as a complete village ecosystem, a place where people live, work, learn, and thrive together. Our master plan balances development with conservation, ensuring that the land regenerates even as we build upon it.",
+    "zones": [
+      {
+        "tags": "Community Center, Café & Restaurant, Artisan Market, Event Spaces",
+        "title": "Village Center",
+        "description": "The heart of {village} featuring the community center, café, market, and gathering spaces."
+      },
+      {
+        "tags": "150+ home sites, Various lot sizes, Walking paths, Community gardens",
+        "title": "Residential Neighborhoods",
+        "description": "Clustered housing areas designed for community connection while maintaining privacy."
+      },
+      {
+        "tags": "120-150 key retreat, Health Center, Spa facilities, Workshop spaces",
+        "title": "Retreat & Wellness",
+        "description": "The retreat center and health facilities serving guests and residents."
+      },
+      {
+        "tags": "Organic gardens, Food forest, Medicinal herbs, Livestock areas",
+        "title": "Agricultural Land",
+        "description": "Regenerative farms and food forests providing sustenance for the community."
+      },
+      {
+        "tags": "Nature preserves, Hiking trails, Water features, Wildlife corridors",
+        "title": "Commons & Conservation",
+        "description": "Protected natural areas, trails, and shared spaces for all to enjoy."
+      }
+    ],
+    "heading": "Our Vision"
+  },
+  "valuation": {
+    "pdfUrl": "",
+    "heading": "Land Valuation",
+    "support": "This valuation supports the financing strategy and shows the asset base underneath the village.",
+    "pdfLabel": "Master Plan PDF"
   }
 }

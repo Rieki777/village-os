@@ -12,21 +12,32 @@
  * document the save route accepts, and resolving it gives back exactly the
  * record. Nothing in it falls back, so no starter word can appear on that
  * village's pages.
+ *
+ * NOT HELD: a page whose spec arrived after the adoption has no kept copy, and
+ * that village reads its defaults there. Listed by name, so a page added later
+ * is a decision somebody sees (re-read 2026-10-31: How We Govern, whose
+ * defaults are still that village's words, so it reads the same until they
+ * change).
  */
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { adoptedDocument, pageDocumentProblems, pageSectionKey, PAGE_SPECS } from "./index";
 
+/** Page sections the first village holds no copy of, because their spec arrived after it adopted the rest. */
+const NOT_HELD = ["page-governance"];
+const HELD = PAGE_SPECS.filter((spec) => !NOT_HELD.includes(pageSectionKey(spec)));
+
 const RECORD_DIR = path.resolve(import.meta.dirname, "..", "..", "server", "seeds", "amora", "pages"); // brand-ok: the first village's own record, read to prove the defaults cannot reach it
 
 describe("the first village's kept copy of its pages", () => {
-  it("covers every page section", () => {
+  it("covers every page section but the ones named as not held", () => {
     const files = fs.readdirSync(RECORD_DIR).filter((f) => f.endsWith(".json")).sort();
-    expect(files).toEqual(PAGE_SPECS.map((spec) => `${pageSectionKey(spec)}.json`).sort());
+    expect(files).toEqual(HELD.map((spec) => `${pageSectionKey(spec)}.json`).sort());
+    expect(PAGE_SPECS.filter((spec) => !HELD.includes(spec)).map(pageSectionKey)).toEqual(NOT_HELD);
   });
 
-  it.each(PAGE_SPECS.map((spec) => [pageSectionKey(spec), spec] as const))("%s resolves to its own words, with no default filling a gap", (section, spec) => {
+  it.each(HELD.map((spec) => [pageSectionKey(spec), spec] as const))("%s resolves to its own words, with no default filling a gap", (section, spec) => {
     const record = JSON.parse(fs.readFileSync(path.join(RECORD_DIR, `${section}.json`), "utf8"));
     expect(pageDocumentProblems(spec, record)).toEqual([]);
     expect(adoptedDocument(spec, record)).toEqual(record);

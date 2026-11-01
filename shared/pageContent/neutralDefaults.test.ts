@@ -23,6 +23,7 @@ import { OPPORTUNITIES_PAGE } from "./opportunities";
 import { VISIT_PAGE } from "./visit";
 import { WORK_WITH_US_PAGE } from "./workWithUs";
 import { DEFAULT_GOVERNANCE, DEFAULT_OPENING } from "../membershipLetter";
+import { resolvePage, resolvePageRaw } from "./resolve";
 import type { PageSpec } from "./types";
 
 const SPECS: PageSpec[] = [HOME_PAGE, SITE_PAGE, TEAM_PAGE, MASTER_PLAN_PAGE, LOVE_LETTER_PAGE, HOUSING_PAGE, OPPORTUNITIES_PAGE, VISIT_PAGE, WORK_WITH_US_PAGE];
@@ -94,5 +95,73 @@ describe("the starter words of the first half of the pages", () => {
       expect(text).not.toMatch(/\d|[$€£₡%]/);
       for (const word of ONE_VILLAGE) expect(text, word).not.toContain(word);
     }
+  });
+});
+
+/**
+ * A VILLAGE THAT SAVED ONLY A FEW FIELDS. Its own words win field by field and
+ * every other field is the starter's, so a sparse copy reads as its own words
+ * among the starter words, never among another village's. Each section below
+ * keeps one field of the village's own, which is the shape a founder leaves
+ * after a first pass through Admin, Pages.
+ */
+describe("a sparse saved copy among the starter words", () => {
+  const OWN = "Our own words";
+
+  it.each(SPECS.map((spec) => [spec.id, spec] as const))("%s: its one saved field per section, and the starter's everywhere else", (_id, spec) => {
+    const sparse: Record<string, Record<string, string>> = {};
+    for (const section of spec.sections) {
+      const field = section.fields.find((f) => f.kind !== "link");
+      if (field) sparse[section.id] = { [field.key]: OWN.slice(0, field.max) };
+    }
+    const page = resolvePageRaw(spec, sparse);
+    const leftOver: string[] = [];
+    for (const section of spec.sections) {
+      for (const field of section.fields) {
+        const want = sparse[section.id]?.[field.key] ?? field.default;
+        expect(page[section.id].fields[field.key], `${section.id}.${field.key}`).toBe(want);
+        if (want !== sparse[section.id]?.[field.key]) leftOver.push(page[section.id].fields[field.key]);
+      }
+      for (const list of section.lists ?? []) {
+        const rows = page[section.id].lists[list.key].map(({ id: _id, ...row }) => row);
+        expect(rows, `${section.id}.${list.key}`).toEqual(list.default.map((row) => Object.fromEntries(list.fields.map((f) => [f.key, row[f.key] ?? ""]))));
+        for (const row of rows) leftOver.push(...Object.values(row));
+      }
+    }
+    // What the village did not write is the starter's, and the starter claims nothing.
+    expect(leftOver.filter((v) => /\d|[$€£₡%]/.test(v) || ONE_VILLAGE.some((w) => v.includes(w)))).toEqual([]);
+  });
+
+  it("a council heading saved with no lines leaves no lines: the six it leaned on were another village's", () => {
+    const page = resolvePage(TEAM_PAGE, { advisory: { heading: "Elders' Circle" } }, { village: "Willowbrook" });
+    expect(page.advisory.fields.heading).toBe("Elders' Circle");
+    // Team.tsx draws the box only once it has a line (Team.test.tsx pins that).
+    expect(page.advisory.lists.items).toEqual([]);
+    expect(page.board.lists.columns).toEqual([]);
+  });
+
+  it("a letter that saved its own levels keeps them, under no suggested line and no other village's price", () => {
+    const page = resolvePage(LOVE_LETTER_PAGE, { contribution: { tiers: [{ value: "20", label: "20 a month" }] } }, { village: "Willowbrook" });
+    expect(page.contribution.lists.tiers).toEqual([{ value: "20", label: "20 a month" }]);
+    expect(page.contribution.fields.suggested).toBe("");
+    expect(page.contribution.fields.customPlaceholder).not.toMatch(/\$|\d/);
+  });
+
+  it("a venture card that saved only its title keeps the starter description and claims no progress", () => {
+    const page = resolvePage(OPPORTUNITIES_PAGE, { ventures: { cards: [{ id: "cafe-restaurant", title: "The Bakehouse" }] } }, { village: "Willowbrook" });
+    const card = page.ventures.lists.cards.find((c) => c.id === "cafe-restaurant")!;
+    expect(card.title).toBe("The Bakehouse");
+    expect(card.status).toBe("");
+    expect(card.description).not.toMatch(/\d/);
+  });
+
+  it("a homepage that saved only its headline keeps its gold word only where the headline says it", () => {
+    const vars = { village: "Willowbrook", tagline: "Roots and rivers", "in-location": "" };
+    const own = resolvePage(HOME_PAGE, { hero: { headline: "A valley that remembers" } }, vars).hero.fields;
+    // The starter gold word is the village's name: in a headline without it, nothing is gold.
+    expect(own.highlight).toBe("Willowbrook");
+    expect(own.headline.includes(own.highlight)).toBe(false);
+    const named = resolvePage(HOME_PAGE, { hero: { headline: "Welcome to Willowbrook" } }, vars).hero.fields;
+    expect(named.headline.includes(named.highlight)).toBe(true);
   });
 });

@@ -1,8 +1,4 @@
 {
-  "share": {
-    "description": "",
-    "image": ""
-  },
   "menu": {
     "pages": [
       {
@@ -91,6 +87,10 @@
         "subtitle": ""
       }
     ]
+  },
+  "share": {
+    "image": "",
+    "description": ""
   },
   "footer": {
     "signoff": "Built with Pura Vida by"

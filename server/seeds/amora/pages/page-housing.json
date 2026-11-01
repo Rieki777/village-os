@@ -1,53 +1,53 @@
 {
+  "cta": {
+    "body": "Join a community call to learn about available lots, pricing, and the process for becoming a resident."
+  },
   "hero": {
     "lede": "Find your place here. Homes sit on land the community holds together, and a Land Share Agreement is how you take one."
   },
-  "features": {
-    "items": [
-      {
-        "title": "Mountain Views",
-        "body": "Many lots offer stunning views of the surrounding mountains and valleys.",
-        "icon": "mountain"
-      },
-      {
-        "title": "Water Access",
-        "body": "Natural springs and streams throughout the property provide clean water.",
-        "icon": "water"
-      },
-      {
-        "title": "Mature Forest",
-        "body": "Existing forest provides shade, privacy, and connection to nature.",
-        "icon": "forest"
-      },
-      {
-        "title": "Solar Exposure",
-        "body": "Lots are positioned for optimal solar energy and natural lighting.",
-        "icon": "sun"
-      }
-    ]
-  },
   "tenure": {
-    "heading": "Land Share Agreements",
     "intro": "At {village}, you don't purchase land outright: you acquire a Land Share Agreement that gives you long-term access to your lot. This unique structure:",
     "points": [
       {
         "id": "renewable",
-        "title": "Renewable",
-        "body": "Your agreement can be renewed, providing long-term security for your family."
+        "body": "Your agreement can be renewed, providing long-term security for your family.",
+        "title": "Renewable"
       },
       {
         "id": "transferable",
-        "title": "Transferable",
-        "body": "Pass your land share to your children, keeping it in the family. Ask a steward about this village's specific transfer and tax terms."
+        "body": "Pass your land share to your children, keeping it in the family. Ask a steward about this village's specific transfer and tax terms.",
+        "title": "Transferable"
       },
       {
         "id": "community",
-        "title": "Community Owned",
-        "body": "The land remains in community ownership, ensuring our values are preserved."
+        "body": "The land remains in community ownership, ensuring our values are preserved.",
+        "title": "Community Owned"
+      }
+    ],
+    "heading": "Land Share Agreements"
+  },
+  "features": {
+    "items": [
+      {
+        "body": "Many lots offer stunning views of the surrounding mountains and valleys.",
+        "icon": "mountain",
+        "title": "Mountain Views"
+      },
+      {
+        "body": "Natural springs and streams throughout the property provide clean water.",
+        "icon": "water",
+        "title": "Water Access"
+      },
+      {
+        "body": "Existing forest provides shade, privacy, and connection to nature.",
+        "icon": "forest",
+        "title": "Mature Forest"
+      },
+      {
+        "body": "Lots are positioned for optimal solar energy and natural lighting.",
+        "icon": "sun",
+        "title": "Solar Exposure"
       }
     ]
-  },
-  "cta": {
-    "body": "Join a community call to learn about available lots, pricing, and the process for becoming a resident."
   }
 }
