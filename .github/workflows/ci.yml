@@ -1044,6 +1044,53 @@ jobs:
         # continue-on-error: it cannot tell the two cases apart either.
         run: node scripts/dependency-audit.mjs
 
+      - name: Gate summary
+        # ONE TABLE, so nobody reads 60 step logs to learn which gate went red.
+        # It lists every step of this job with its outcome, failures first, on
+        # the run's summary page next to the bundle sizes above and the shard
+        # report tests-ran-once writes.
+        #
+        # A gate that never ran is shown as NOT RUN, not as passed: steps stop
+        # at the first red one, so everything after a failure is skipped, and a
+        # skipped gate has proved nothing.
+        #
+        # Reporting only. `always()` so it reports a red job, and
+        # continue-on-error so a GitHub API hiccup here can never turn a green
+        # job red or a red one green; the job's verdict is the steps above.
+        # The default token is read-all on this repository, which covers the
+        # actions API.
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100"             --jq '.jobs[] | select(.name == "verify") | .steps[]
+                  | select(.name | test("^(Set up job|Initialize containers|Run actions/|Run pnpm/|Post |Stop containers|Complete job|Gate summary$)") | not)
+                  | [(.conclusion // .status), .name] | @tsv' > "$RUNNER_TEMP/gates.tsv"
+          total=$(wc -l < "$RUNNER_TEMP/gates.tsv")
+          passed=$(awk -F'\t' '$1 == "success"' "$RUNNER_TEMP/gates.tsv" | wc -l)
+          failed=$(awk -F'\t' '$1 == "failure"' "$RUNNER_TEMP/gates.tsv" | wc -l)
+          notrun=$(( total - passed - failed ))
+          {
+            if [ "$failed" -eq 0 ] && [ "$notrun" -eq 0 ]; then
+              echo "## Gates: all ${total} passed"
+            else
+              echo "## Gates: ${failed} FAILED, ${notrun} not run, ${passed} of ${total} passed"
+              echo
+              awk -F'\t' '$1 == "failure" { print "- :x: **" $2 "**" }' "$RUNNER_TEMP/gates.tsv"
+              awk -F'\t' '$1 != "failure" && $1 != "success" { print "- :white_circle: " $2 " (not run: " $1 ")" }' "$RUNNER_TEMP/gates.tsv"
+            fi
+            echo
+            echo "<details><summary>Every step of verify</summary>"
+            echo
+            echo "| | Step |"
+            echo "|---|---|"
+            awk -F'\t' '{ icon = ($1 == "success") ? ":white_check_mark:" : ($1 == "failure") ? ":x:" : ":white_circle:"; print "| " icon " | " $2 " |" }' "$RUNNER_TEMP/gates.tsv"
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "gates: ${passed} passed, ${failed} failed, ${notrun} not run, of ${total}"
+
   # THE SUITE, IN SHARDS. Split out of `verify` on 2026-10-21 by Rye's ruling
   # ("split the tests"). Measured on b878eaf, the last single-job run: Test was
   # 31m40s of a 40-minute job, 855 files, 23.1 minutes of that inside the files
