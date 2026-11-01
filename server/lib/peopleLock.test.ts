@@ -101,7 +101,7 @@ describe("a stranger's ballot (R098)", () => {
     expect(s.votes).toEqual([]);
     expect(s.silent).toEqual([]);
     expect(s.objections).toEqual([]);
-    expect(s.objectionCount).toBe(1);
+    expect(s.objectionsFiled).toBe(1);
     expect(s.docMarkdown).toBe("");
     expect(s.subjectRef).toBe("");
     expect(s.purposeAlignment).toBeNull();

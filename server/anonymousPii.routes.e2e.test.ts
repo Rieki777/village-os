@@ -473,7 +473,7 @@ describe.skipIf(!DB_CONFIGURED)("a signed-out visitor, on every GET the server r
     expect(r.json.docMarkdown).toBe("");
     // What a stranger IS owed (21.8): how many may vote, how many spoke, the tallies.
     expect(r.json.votedCount).toBe(2);
-    expect(r.json.objectionCount).toBe(1);
+    expect(r.json.objectionsFiled).toBe(1);
     expect(r.json.electorateCount).toBeGreaterThanOrEqual(5);
     expect(Number(r.json.tallies.yesW)).toBeGreaterThan(0);
     const cards = await call("GET", "/api/governance/ballots", { token: null });

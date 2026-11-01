@@ -191,7 +191,7 @@ export interface Ballot {
    */
   viewerTier?: "stranger";
   /** How many objections were filed, sent with `viewerTier: "stranger"`. */
-  objectionCount?: number;
+  objectionsFiled?: number;
 }
 
 /** An earlier ballot the village held on this same subject. */

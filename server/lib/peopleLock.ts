@@ -226,7 +226,7 @@ export function strangerBallot<T extends Record<string, any>>(b: T): T {
     votes: [],
     silent: [],
     objections: [],
-    objectionCount: Array.isArray(b.objections) ? b.objections.length : 0,
+    objectionsFiled: Array.isArray(b.objections) ? b.objections.length : 0,
     myVote: null,
     myWeight: null,
     ...(Array.isArray(b.priorAttempts)
