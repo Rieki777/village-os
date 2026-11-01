@@ -423,6 +423,8 @@ import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } fro
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
+import { loadInventory } from "./repos/profileInventory";
+import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
@@ -19439,6 +19441,7 @@ ${inner}
       standing: await loadStanding(getPool(), user.id),
       gratitude: await loadGratitude(getPool(), villageId(), user.id, startsAt),
       party: await partyFor(getPool(), villageId(), user.id, user.id),
+      inventory: await loadInventory(getPool(), user.id),
       allowance: await gratitudeAllowance(user),
       voice: await claimReadiness(getPool(), user.id),
     });
@@ -19493,6 +19496,7 @@ ${inner}
     res.json({ claims: await claimHistory(getPool(), user.id) });
   });
   registerWalletRoutes(app, { authedUser, getPool, gratitudeAllowance });
+  registerProfilePrivacyRoutes(app, { authedUser, getPool });
   registerTokenJobRoutes(app, { isAdmin, getPool });
 
   /**
@@ -19518,6 +19522,7 @@ ${inner}
       ...loaded.view,
       standing: await loadStanding(getPool(), targetId),
       gratitude: await loadGratitude(getPool(), villageId(), targetId, startsAt),
+      inventory: await loadInventory(getPool(), targetId),
     };
     if (viewer?.id === targetId) {
       return res.json({ ...full, party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null) });
