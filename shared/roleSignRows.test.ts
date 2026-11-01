@@ -55,4 +55,16 @@ describe("the rows behind a sign", () => {
     expect(signSheetRows("decisions-recorded", {}, W)).toBeNull();
     expect(signSheetRows("decisions-recorded", { live_session_entries: [] }, W)).toEqual([]);
   });
+
+  it("lists only the decisions the room consented to, the ones the count counts", () => {
+    const rows: SignRows = {
+      live_session_entries: [
+        { session_id: 1, kind: "decision", status: "done", created_at: "2026-10-12T16:00:00Z" },
+        { session_id: 1, kind: "decision", status: "open", created_at: "2026-10-13T16:00:00Z" },
+        { session_id: 1, kind: "decision", status: "parked", created_at: "2026-10-14T16:00:00Z" },
+      ],
+    };
+    expect(signSheetRows("decisions-recorded", rows, W)).toHaveLength(1);
+    expect(readSign("decisions-recorded", rows, { current: W, previous: W })).toMatchObject({ now: { n: 1 } });
+  });
 });

@@ -807,6 +807,11 @@ export default function JourneyToLaunch() {
               ? `The village voted to start its Game on ${new Date(status.launchedAt).toLocaleDateString()}. This checklist stays as the record of what that took.`
               : "Live status, not a to-do list someone forgot to update: every item below is either observed by the server right now, or confirmed by a named admin."}
           </p>
+          <p className="text-sm mb-6">
+            <a href="/setup-game" className="text-amber-on-band underline font-medium">
+              Play it as the setup game
+            </a>
+          </p>
 
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-white text-xs">Readiness</span>

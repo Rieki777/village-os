@@ -120,6 +120,31 @@ export function cashTransferNote(transferDate: string, reference: string): strin
   return `Bank transfer on ${transferDate}. Reference: ${reference}`;
 }
 
+/*
+ * WHO PAYS CASH OUT, told to a signed-in member without `cash.pay` (E7,
+ * 2026-10-31). The page printed the gate's bare code "auth_required" instead.
+ * `keepers` are the roles with somebody live in them, each label already
+ * carrying the holders' first names (`roleWithHolders`, Rye 2026-10-30: the
+ * role first, the person in parentheses). A vacant role is left out, because
+ * writing to it reaches nobody. With no keeper, the sentence points at admin,
+ * which is true whether nobody holds the key or only a badge does.
+ */
+
+/** The machine code on that refusal. The sentence rides beside it as `message`. */
+export const CASH_PAY_REQUIRED = "cash_pay_required";
+
+/** "A", "A or B", "A, B or C". */
+const orList = (items: readonly string[]): string =>
+  items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
+
+/** The sentence a member without the key reads on the payout list. */
+export function cashKeyRefusalWords(keepers: readonly string[]): string {
+  const named = keepers.map((k) => k.trim()).filter((k) => k.length > 0);
+  return named.length
+    ? `Paying cash out is the work of ${orList(named)}. Write to them if you are waiting on a payment.`
+    : "Paying cash out is the work of whoever holds the treasurer's key, or an admin. Ask an admin if you are waiting on a payment.";
+}
+
 /** The calendar years a member has any paid line in, newest first. */
 export function cashYearsPaid(entries: ReadonlyArray<CashOwedEntry>): number[] {
   const years = new Set<number>();

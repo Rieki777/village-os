@@ -12,7 +12,7 @@
  *                                    the next thing and does it in one tap
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { cleanup, act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { ROOM_COPY, SESSION_COPY, STAGE_DEFS, defaultSessionState, type SessionAction, type SessionItem, type SessionState } from "@shared/sessions";
 import { VOTE_COPY } from "@shared/sessionVotes";
 import { T0, json, makeView, record, type Call } from "./__tests__/roomFixture";
@@ -185,7 +185,8 @@ describe("the next step", () => {
 
   describe("the bar", () => {
     beforeEach(() => vi.useRealTimers());
-    afterEach(() => vi.restoreAllMocks());
+    // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+    afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
     it("does the whole move in one tap, in order, and only on the room's own stage", async () => {
       const act_ = vi.fn(async (_action: SessionAction) => ({ ok: true as const, body: {}, room: null }));

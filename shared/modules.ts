@@ -1228,7 +1228,7 @@ export const MODULES: ModuleDef[] = [
     setup: "none",
     name: "Gene Keys",
     description:
-      "Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and Maia can shape suggestions to how a member works best when they say yes.",
+      "Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and the village guide can shape suggestions to how a member works best when they say yes.",
     requires: [],
     recommends: [],
     capabilities: [],

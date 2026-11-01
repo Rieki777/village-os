@@ -3288,6 +3288,15 @@ they have left; it stays pending, and a steward can decline it. A former member
 can still be minted to. Pinned by `server/lib/gratitude.tombstone.test.ts` and
 `server/needsTombstone.routes.e2e.test.ts`.
 
+**A donation waiting on its second sign-off.** `approveIntake` in
+`server/lib/library.ts` awards a former member as normal: the account was kept,
+so the credits go to it. A donor whose account was erased while the item waited
+is awarded nothing, since no credit goes into an account nobody holds, and the
+item still joins the library. The figure is not dropped (Rye, 2026-10-31:
+"still a debt owed"): the item's `intake_approved` event records the credits
+left unpaid, for a steward settling it by hand. Pinned by
+`server/lib/departedPayments.test.ts`.
+
 ### What the village owes
 
 **Nothing is decided in code, and the code says so out loud rather than leaving

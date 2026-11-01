@@ -120,8 +120,13 @@ export const CARD_WORDS = {
   worksWith: "Works closely with",
   notMine: "Not mine to hold",
   runbook: "Runbook",
-  powers: "Powers",
-  powersShared: "Powers, shared",
+  // A10 (2026-10-31): a role holds a power only when the village has handed it
+  // over, so the heading says where the power came from.
+  powers: "Powers handed to this role",
+  powersShared: "Powers handed to this role, shared",
+  // Information only: nothing here asks anybody to hand a power over.
+  suitedTo: "Suited to",
+  suitedNote: "The village has not handed these over.",
   sharedWith: (label: string, roles: string) => `${label}, with ${roles}`,
   worksWithLine: (role: string, about: string) => `${role}: ${about}`,
   noPowers: "No powers held",
