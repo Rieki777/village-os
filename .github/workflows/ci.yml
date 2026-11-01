@@ -13,7 +13,7 @@ name: ci
 
 on:
   push:
-    branches: ["main", "wt/batch*", "wt/*-integration*"]
+    branches: ["main", "wt/*-integration*"]
   pull_request:
 
 # WHICH BRANCHES GET A PUSH RUN, and why most do not (Rye, 2026-11-01:
@@ -26,16 +26,31 @@ on:
 # running, with each run taking 16 to 60 minutes. Half of that queue was testing
 # a tree nobody lands.
 #
-# So `push` is now limited to the refs where BOTH events are worth paying for:
-# `main`, the integrator batch branches (`wt/batch*`), and integration branches
-# (`wt/*-integration*`). A lane PR branch gets the pull_request run alone, which
-# is the more informative of the two anyway because it tests the branch ALREADY
+# So `push` is now limited to `main` and integration branches
+# (`wt/*-integration*`, which may have no pull request to run on). A lane PR
+# branch, and a batch branch, gets the pull_request run alone, which is the
+# more informative of the two anyway because it tests the branch ALREADY
 # MERGED with main, which is nearer to what lands.
 #
+# BATCHES TOO, since 2026-11-01. A batch is composed on current main, so
+# main is usually already inside it, and then GitHub's merge ref has exactly
+# the batch head's tree: the push run and the pull_request run tested the
+# same bytes. Measured on batches 73, 74, neutral and 76, all four. When main
+# HAS moved, the pull_request run tests batch plus main, which is what
+# `gh pr merge --merge` lands, and the push run tests a tree that never lands.
+# The three base-reading gates (migration numbers, migration compatibility,
+# economics narrative) compare with main on both events for a PR based on
+# main. What the push run alone gave: a second roll of the dice on a flake,
+# which DOUBLED the chance a flake blocked a batch (batch 75 flaked on both),
+# and a run for a batch whose PR conflicts, which cannot land anyway. It cost
+# a full cycle, about 48 runner-minutes, per batch push. main still gets its
+# push run after every landing.
+#
 # WHAT THIS MOVED, for whoever reads the merge gate next. A COMPONENT is ready
-# when its pull_request run is green at its frozen SHA. A BATCH still needs both
-# events green, and that is the gate standing between a tree and production,
-# unchanged. Two consequences worth knowing:
+# when its pull_request run is green at its frozen SHA, and so is a BATCH: its
+# pull_request run, every job, at the frozen head, is the gate standing between
+# a tree and production. Open the batch's PR when you push it, because until
+# then it has no run at all. Two consequences worth knowing:
 #
 #   - A CONFLICTING pull request gets no pull_request run, so a conflicted lane
 #     branch now has NO run at all rather than a push run. Its lane has to merge

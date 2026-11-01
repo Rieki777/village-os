@@ -183,9 +183,11 @@ RAN and WHICH step in each, never one number: the billing outage produced runs t
 seconds having started nothing, an npm outage failed one dependency step on a run where everything
 else passed, and this paragraph carried "a healthy `verify` is 45 steps" while the job had 57.
 Every job above must appear and succeed. **WHICH EVENTS, since 2026-11-01 (Rye: "Yes, free fix"):
-a BATCH needs them on the push run AND the pull_request run, and that is the gate between a tree
-and production. A COMPONENT needs only its pull_request run**, because `on.push.branches` is now
-`["main", "wt/batch*", "wt/*-integration*"]` and a lane branch gets no push run at all. The
+a BATCH and a COMPONENT each need only their pull_request run, every job green at the frozen
+head**, because `on.push.branches` is `["main", "wt/*-integration*"]` and neither a lane branch nor
+a batch branch gets a push run. A batch is built on current main, so its push run tested the
+same tree as its pull_request run (measured on four batches, `ci.yml` has the detail); open the
+batch's PR as you push it, because until then it has no run at all. The
 pull_request run is the better of the two for a component anyway: it tests the branch ALREADY
 MERGED with main. Two consequences. A CONFLICTING pull request gets no pull_request run, so a
 conflicted lane branch has NO run at all and its lane must merge main before anybody can verify
