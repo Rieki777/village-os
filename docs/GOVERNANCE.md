@@ -11,19 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-It describes the sources at fingerprint `5078ce08b11dc47f`, which regenerating reproduces.
-||||||| 4d42c46
-It describes the sources at fingerprint `22e59fa493698af0`, which regenerating reproduces.
-=======
-It describes the sources at fingerprint `c114a702f0028d87`, which regenerating reproduces.
->>>>>>> w747
-||||||| a95471a
-It describes the sources at fingerprint `22e59fa493698af0`, which regenerating reproduces.
-=======
-It describes the sources at fingerprint `59fa5e8acf1146aa`, which regenerating reproduces.
->>>>>>> w739
+It describes the sources at fingerprint `f760227a54adc6e5`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -1067,19 +1055,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-<<<<<<< HEAD
-<<<<<<< HEAD
-  "commit": "5078ce08b11dc47f",
-||||||| 4d42c46
-  "commit": "22e59fa493698af0",
-=======
-  "commit": "c114a702f0028d87",
->>>>>>> w747
-||||||| a95471a
-  "commit": "22e59fa493698af0",
-=======
-  "commit": "59fa5e8acf1146aa",
->>>>>>> w739
+  "commit": "f760227a54adc6e5",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -2889,13 +2865,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-<<<<<<< HEAD
-Checked against the 215 migration files in `drizzle/`.
-||||||| 4d42c46
-Checked against the 211 migration files in `drizzle/`.
-=======
-Checked against the 212 migration files in `drizzle/`.
->>>>>>> w747
+Checked against the 217 migration files in `drizzle/`.
 
 ## What this file is made from
 
