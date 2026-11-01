@@ -284,7 +284,6 @@ const RENDERED_FIELDS = [
   "criticality",
   "placeDependent",
   "withheld",
-  "movedToSecret",
 ];
 
 /** What each type means, in a founder's words. Every member needs one. */
@@ -443,7 +442,6 @@ function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf, 
     criticalityExplicit: def.criticality !== undefined,
     placeDependent: def.placeDependent === true,
     withheld: def.withheld === true,
-    movedToSecret: def.movedToSecret ?? null,
   };
 }
 
@@ -631,20 +629,7 @@ function variableSection(v) {
   if (v.withheld) {
     rows.push([
       "Shown to the public",
-      v.movedToSecret
-        ? "Listed. Its value stays off the public rules page because it can carry a provider key."
-        : "Listed, and open to proposals. Its value stays off the public rules page because it can carry a provider key; admins still see it.",
-    ]);
-  }
-  /*
-   * A DIAL WHOSE VALUE MOVED INTO THE SEALED SECRETS takes no value of its own
-   * any more, so the document says where the setting went instead of letting
-   * a reader try to set it here.
-   */
-  if (v.movedToSecret) {
-    rows.push([
-      "Where it is set",
-      `Admin, Integrations, sealed, as the \`${v.movedToSecret}\` integration secret. This dial takes only its default now.`,
+      "Listed, and open to proposals. Its value stays off the public rules page because it can carry a provider key; admins still see it.",
     ]);
   }
   lines.push(table(["Fact", "Value"], rows));

@@ -81,9 +81,6 @@ const COLUMNS = [
   // since long before it existed as a column, so every write landed on the
   // in-memory record and the UPDATE below dropped it.
   "membership_granted",
-  // 0304 (R104). When the address's owner proved they read it. Null until
-  // then, and on every row that existed before the column did.
-  "email_verified_at",
 ] as const;
 
 /**
@@ -126,7 +123,6 @@ const TOMBSTONE_FIXED = [
   "membershipGranted",
   "walletAddress",
   "walletVerifiedAt",
-  "emailVerifiedAt",
 ] as const;
 
 function toIso(v: unknown): string | null {
@@ -178,8 +174,6 @@ function rowToMember(row: RowDataPacket): MemberRecord {
     isExample: Number(row.is_example ?? 0) === 1,
     /** An explicit steward grant, as opposed to an attributed signing. */
     membershipGranted: Number(row.membership_granted ?? 0) === 1,
-    /** When the owner of `email` proved they read it (server/lib/emailVerification.ts). */
-    emailVerifiedAt: toIso(row.email_verified_at),
   };
 }
 
@@ -214,7 +208,6 @@ function memberToParams(m: MemberRecord): any[] {
     toDb(m.joinedAt) ?? new Date(),
     m.isExample ? 1 : 0,
     m.membershipGranted ? 1 : 0,
-    toDb(m.emailVerifiedAt),
   ];
 }
 

@@ -294,22 +294,11 @@ describe("governance.hub_url: https-only, no loopback exemption (bridges lane)",
   it("the generic _url rule DOES exempt loopback for an ordinary infrastructure URL (control case)", () => {
     // Proves the two rules are genuinely different, not that the test
     // regex is loose: this is the same assertion shape as the refusal
-    // above, run against a key the stricter branch does not touch. This used
-    // to be `tokens.base_rpc_url`, which now takes no value at all (its value
-    // moved into the sealed secrets, see the test below), so the control is
-    // the other ordinary `_url` dial.
-    const urlDef = VARIABLES_BY_KEY["hypha.org_url"];
-    expect(urlDef).toBeTruthy();
-    expect(urlDef.movedToSecret).toBeUndefined();
-    expect(validateVariable(urlDef, "http://127.0.0.1:8545")).toBeNull();
-    expect(validateVariable(urlDef, "http://some-other-host:8545")).toMatch(/https URL/);
-  });
-
-  it("the RPC endpoint dial takes only its default now, loopback included", () => {
+    // above, run against a key the stricter branch does not touch.
     const rpcDef = VARIABLES_BY_KEY["tokens.base_rpc_url"];
-    expect(rpcDef.movedToSecret).toBe("base_rpc_url");
-    expect(validateVariable(rpcDef, "http://127.0.0.1:8545")).toMatch(/Integrations/);
-    expect(validateVariable(rpcDef, rpcDef.default)).toBeNull();
+    expect(rpcDef).toBeTruthy();
+    expect(validateVariable(rpcDef, "http://127.0.0.1:8545")).toBeNull();
+    expect(validateVariable(rpcDef, "http://some-other-host:8545")).toMatch(/https URL/);
   });
 });
 

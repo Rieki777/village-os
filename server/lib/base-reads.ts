@@ -20,8 +20,7 @@
  */
 import crypto from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { rpcErrorText } from "./credentialRedaction";
-import { secretValue } from "./secrets";
+import { stringVar } from "./variables";
 import { guardOutboundUrl } from "./toolcheck";
 
 /**
@@ -145,32 +144,12 @@ export function readInstant(nowMs: number = Date.now()): Date {
   return new Date(Math.floor(nowMs / 1000) * 1000);
 }
 
-/** The free public Base node, read when this village has configured nothing. */
-export const PUBLIC_BASE_RPC_URL = "https://mainnet.base.org";
-
 /**
- * THE ONE READ OF THE BASE RPC ENDPOINT, for every reader on the server: the
- * dialer below, the Hypha listener posture and the contract lookup.
- *
- * It is an integration secret (`base_rpc_url`, server/lib/secrets.ts), because
- * a dedicated endpoint carries its provider key in the address. The store
- * resolves admin-typed first, then BASE_RPC_URL, and during the dual-read
- * window an older release's plain `tokens.base_rpc_url` value as a legacy
- * entry; with none of those this is the public node, so a village that set
- * nothing reads Base exactly as it always did.
- */
-export function baseRpcUrl(env: NodeJS.ProcessEnv = process.env): string {
-  return secretValue("base_rpc_url", env).trim() || PUBLIC_BASE_RPC_URL;
-}
-
-/** What a failed chain call may say in a log line: credentialRedaction.ts says why. */
-export { rpcErrorText } from "./credentialRedaction";
-
-/**
- * The RPC URL is admin-typed, and nothing about storing it checks its range,
- * so without this guard an admin (or anyone who reached that route) could
- * point the village's server at `https://10.0.0.5/…` and read whatever
- * answers, which is exactly the SSRF the pinned dialer exists to close.
+ * The RPC URL is an admin-typed game variable, and its validation rule
+ * accepts any https URL with no range check at all — so without this guard
+ * an admin (or anyone who reached that route) could point the village's
+ * server at `https://10.0.0.5/…` and read whatever answers, which is exactly
+ * the SSRF the pinned dialer exists to close.
  *
  * NOT routed through guardedFetchJson: that helper is https-only, and the
  * loopback exemption is load-bearing — the acceptance test points the
@@ -178,7 +157,7 @@ export { rpcErrorText } from "./credentialRedaction";
  * `redirect: "error"` stops viem hopping off the vetted host afterwards.
  */
 async function rpcClient() {
-  const url = baseRpcUrl();
+  const url = stringVar("tokens.base_rpc_url").trim();
   if (!url) return null;
   let host = "";
   try {
@@ -278,7 +257,7 @@ export async function readTokenIdentity(contractAddress: string): Promise<TokenI
       readAt: new Date().toISOString(),
     };
   } catch (e) {
-    console.error(`[base-reads] identity read failed for ${contractAddress}: ${rpcErrorText(e, baseRpcUrl())}`);
+    console.error(`[base-reads] identity read failed for ${contractAddress}: ${(e as any)?.message ?? e}`);
     return null;
   }
 }
@@ -319,7 +298,7 @@ export async function readVillageMetric(
     }
     return { raw: raw.toString(), decimals };
   } catch (e) {
-    console.error(`[base-reads] ${input.metric} read failed for ${input.contractAddress}: ${rpcErrorText(e, baseRpcUrl())}`);
+    console.error(`[base-reads] ${input.metric} read failed for ${input.contractAddress}: ${(e as any)?.message ?? e}`);
     return null;
   }
 }
@@ -388,7 +367,7 @@ export async function readOnchainBalance(
   } catch (e) {
     // The rule, verbatim: null on RPC failure, NEVER zero. Last-known wins
     // when it exists, marked with when it was actually true.
-    console.error(`[base-reads] ${input.tokenSlug} read failed for ${input.userId}: ${rpcErrorText(e, baseRpcUrl())}`);
+    console.error(`[base-reads] ${input.tokenSlug} read failed for ${input.userId}: ${(e as any)?.message ?? e}`);
     if (cached) {
       return { raw: cached.raw, decimals: cached.decimals, formatted: formatUnits(cached.raw, cached.decimals), fetchedAt: cached.fetchedAt, stale: true };
     }

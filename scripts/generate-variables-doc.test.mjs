@@ -109,7 +109,6 @@ export interface VariableDef {
   criticality?: Criticality;
   placeDependent?: true;
   withheld?: true;
-  movedToSecret?: string;
 ${extraField}}
 
 export const VARIABLES: VariableDef[] = ${JSON.stringify(variables, null, 2)};

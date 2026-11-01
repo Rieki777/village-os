@@ -2369,7 +2369,7 @@ Displays token balances and Gratitude flows on member profiles. Turn off while t
 
 ### Base RPC endpoint
 
-Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number. Saved under Admin, Integrations, where it is sealed, because a dedicated endpoint carries its key in the address. The host variable BASE_RPC_URL works too.
+Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number.
 
 | Fact | Value |
 | --- | --- |
@@ -2380,8 +2380,7 @@ Where balances are read from. A public endpoint is fine to start; a dedicated on
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
-| Shown to the public | Listed. Its value stays off the public rules page because it can carry a provider key. |
-| Where it is set | Admin, Integrations, sealed, as the `base_rpc_url` integration secret. This dial takes only its default now. |
+| Shown to the public | Listed, and open to proposals. Its value stays off the public rules page because it can carry a provider key; admins still see it. |
 
 ## Hypha
 
@@ -3124,7 +3123,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ### Show who holds each role to visitors
 
-On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages, and a visitor reads members by first name elsewhere. Off, a visitor who is not signed in reads no member's name, handle, address or portrait on any page: the pulse, the decisions, profiles and role cards included. Signed-in members whose role or badge grants map.viewPeople still read who holds each role, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.
+On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.
 
 | Fact | Value |
 | --- | --- |

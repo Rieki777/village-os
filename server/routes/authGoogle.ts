@@ -35,13 +35,11 @@ import {
 } from "../lib/oauthGoogle";
 import {
   decideGoogleSignIn,
-  holdsUnprovenPassword,
   isUnclaimable,
   makeGoogleLink,
   readGoogleLink,
   type AccountFacts,
 } from "../lib/oauthAccounts";
-import { endUnprovenPassword, proveAddress, sameAddress } from "../lib/emailVerification";
 import { decideFounderGrant, parseFounderEmails } from "../lib/founderGrant";
 import {
   IDENTITY_CONFIRM_COOKIE_PATH,
@@ -76,16 +74,6 @@ export interface GoogleAuthDeps {
   recordAudit(text: string, userId: string): void;
   /** The invitation, as both sign-up doors ask for it: server/lib/inviteDoor.ts. */
   invites: InviteDoor;
-  /**
-   * Run `change` with this member's agent reach ended on both sides of it
-   * (`withAgentReachEnded`, server/lib/agentTokens.ts): agent tokens, feeds,
-   * inbox, model key, invitation links, delegation. Used only when a sign-in
-   * ends a password nobody proved (R104), because a tokenVersion bump ends
-   * sessions and never reaches an agent token.
-   */
-  endReachAround<T>(userId: string, change: () => Promise<T>): Promise<T>;
-  /** A sign-in just ended this member's unproved password: tell them, by letter. Must never reject. */
-  onPasswordEnded(member: any): void;
   /**
    * A brand-new member arrived through Google. The host records the join AND
    * greets whoever greets (`memberJoined` in server/lib/arrival.ts), exactly as
@@ -396,21 +384,6 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
     }
 
     const byEmail = bySub ? null : await deps.members.byEmail(identity.email);
-    // THE SAME MAILBOX, NOT ONE THE DATABASE FOLDS INTO IT. `users.email`
-    // compares case- and accent-insensitively (utf8mb4_0900_ai_ci on MySQL 8),
-    // so `wrén@` finds the row at `wren@`, which somebody else reads. Linking
-    // it would end that person's unproved password and hand their account to
-    // whoever holds the lookalike. Creating instead would hit the same unique
-    // key, so it is refused outright.
-    if (byEmail && !sameAddress(byEmail.email, identity.email)) {
-      console.warn(`[oauth] Google sign-in refused for ${identity.sub}: its address only collates equal to ${byEmail.id}'s`);
-      return failTo(res, "account_unavailable");
-    }
-
-    // Whether a sign-in has something to write to a row it signs into: a first
-    // proof of the row's own address. A row already proved, or one whose
-    // address is not the one Google verified, is signed into untouched.
-    const proves = (u: any): boolean => !!u && !u.emailVerifiedAt && sameAddress(u.email, identity.email);
 
     const decision = decideGoogleSignIn({
       bySub: bySub as AccountFacts | null,
@@ -424,50 +397,25 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
       console.warn(`[oauth] Google sign-in refused for ${identity.sub}: ${decision.reason}`);
       return failTo(res, decision.reason);
     }
-    if (decision.kind === "sign_in" && !decision.takeOver && !proves(bySub)) {
+    if (decision.kind === "sign_in") {
       member = bySub;
-    } else if (decision.kind === "sign_in" || decision.kind === "link") {
-      // ONE LOCKED WRITE hands the row to the Google holder: the link, the
-      // proof Google gave of the address, and (R104) the end of any password
-      // nobody proved, with tokenVersion moved so every session minted from it
-      // dies in the same update. A PROVED password is left exactly as it was:
-      // its owner read this mailbox, so the member keeps it, and a member who
-      // had none can still set one later. Read oauthAccounts.ts for why ending
-      // the unproved one is the mailbox's own power and nothing more.
+    } else if (decision.kind === "link") {
+      // The link is written under the row lock `update` holds, and it does NOT
+      // touch passwordHash. A member who links Google keeps the password they
+      // had, and a member who had none can still set one later.
       //
       // ASKED AGAIN UNDER THE LOCK. The decision was made from a plain read,
       // and an erasure can land between that read and this lock: the row the
       // mutator is handed is then the tombstone, and writing the link there
       // would hand the tombstone back, with its new tokenVersion, to sign a
       // handoff at. It would also refuse this Google account forever after.
-      // And a row that holds an unproved password the read did not see is
-      // refused, because the reach around this write was not ended for it. No
-      // path makes a proved row unproved, so that refusal is a lock on a door
-      // nothing opens today.
-      const linking = decision.kind === "link";
-      const takeOver = decision.takeOver;
       let gone = false;
-      let moved = false;
-      let ended = false;
-      const write = () =>
-        deps.members.update(decision.userId, (u: any) => {
-          if ((gone = isUnclaimable(u))) return;
-          if ((moved = !takeOver && holdsUnprovenPassword(u))) return;
-          ended = endUnprovenPassword(u);
-          proveAddress(u, identity.email);
-          if (linking) u.prefs = { ...(u.prefs ?? {}), googleLink: makeGoogleLink(deps.authSecret, decision.userId, identity.sub) };
-        });
-      // An agent token is not a session, so the bump alone never reaches one
-      // (withAgentReachEnded): the reach is ended on both sides of the write.
-      member = takeOver ? await deps.endReachAround(decision.userId, write) : await write();
+      member = await deps.members.update(decision.userId, (u: any) => {
+        if ((gone = isUnclaimable(u))) return;
+        u.prefs = { ...(u.prefs ?? {}), googleLink: makeGoogleLink(deps.authSecret, decision.userId, identity.sub) };
+      });
       if (!member || gone) return failTo(res, "account_unavailable");
-      if (moved) return failTo(res, "account_changed");
-      if (linking) deps.recordAudit("auth:google-linked", member.id);
-      if (ended) {
-        console.warn(`[oauth] Google sign-in ended a password nobody proved on ${member.id} (R104)`);
-        deps.recordAudit("auth:google-ended-unproven-password", member.id);
-        deps.onPasswordEnded(member);
-      }
+      deps.recordAudit("auth:google-linked", member.id);
     } else {
       // From crypto, like the email door's (server/routes/register.ts): the id is signed into a session.
       const userId = `user-${Date.now()}-${randomBytes(4).toString("hex")}`;
@@ -500,8 +448,6 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
         bio: "",
         avatar: null,
         prefs: { googleLink: makeGoogleLink(deps.authSecret, userId, identity.sub) },
-        // Google verified this address, and it is the account's own.
-        emailVerifiedAt: new Date().toISOString(),
       };
       try {
         await deps.members.add(member);
@@ -526,36 +472,25 @@ export function register(app: Express, deps: GoogleAuthDeps): void {
     // not verify (oauthGoogle.ts:301). decideFounderGrant refuses an unverified
     // address again anyway, so relaxing that check upstream cannot quietly turn
     // this into a way in.
-    //
-    // And never onto a row holding a password nobody proved (R104). The write
-    // above has already ended any such password on this path, so `account`
-    // refusing here, and the recheck under the lock, are second locks.
     const grant = decideFounderGrant({
       email: identity.email,
       emailVerified: identity.emailVerified,
       currentRole: member?.role,
       founderEmails: parseFounderEmails(process.env.FOUNDER_EMAILS),
       isExample: Boolean(member?.isExample),
-      account: member ?? {},
     });
     if (grant.grant) {
       // The same recheck as the link: this write hands back the row as it is
       // now, and a tombstone is never made a founder, nor handed on below.
       let gone = false;
-      let unproven = false;
       const elevated = await deps.members.update(member.id, (u: any) => {
         if ((gone = isUnclaimable(u))) return;
-        if ((unproven = holdsUnprovenPassword(u))) return;
         u.role = "founder";
       });
       if (gone) return failTo(res, "account_unavailable");
       if (elevated) member = elevated;
-      if (unproven) {
-        console.warn(`[oauth] founder role NOT granted to ${member.id}: it holds a password its address never proved`);
-      } else {
-        console.warn(`[oauth] founder role granted to ${member.id}: ${grant.reason}`);
-        deps.recordAudit("auth:founder-granted", member.id);
-      }
+      console.warn(`[oauth] founder role granted to ${member.id}: ${grant.reason}`);
+      deps.recordAudit("auth:founder-granted", member.id);
     }
 
     // The last word before a session is signed for: whatever the paths above

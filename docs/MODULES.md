@@ -564,7 +564,7 @@ Your DAO on Hypha, read from Base and shown here: the contracts this village act
 | Capabilities it adds | none |
 | Variable keys it owns | `tokens.base_rpc_url`, `tokens.equity_address`, `tokens.voice_address`, `governance.default_method` |
 | API prefixes | `/api/hypha`, `/api/admin/hypha` |
-| What a village plants | `basescan-api-key`, `base-rpc-url` |
+| What a village plants | `basescan-api-key` |
 | Contract doc | [hypha.md](modules/hypha.md) |
 | Display only | yes. Deep links to Base, and never a mint path |
 | Hypha links | `governance`, `proposals`, `treasury`, `members` |

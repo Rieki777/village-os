@@ -506,7 +506,7 @@ export async function writeItemStatus(q: Queryable, id: number, status: string):
 /** `due_on` as text, so no zone ever moves a date by a day. */
 const ENTRY_COLUMNS =
   "`id`, `session_id`, `item_id`, `kind`, `text`, `status`, `author_no`, `owner_no`, `owner_seat_id`, " +
-  "DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `claimed_at`, `created_at`, `serves_goal_id`";
+  "DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `claimed_at`, `created_at`";
 
 export async function entryRows(q: Queryable, sessionId: number): Promise<RowDataPacket[]> {
   return rowsOf(q, `SELECT ${ENTRY_COLUMNS} FROM \`live_session_entries\` WHERE \`session_id\` = ? ORDER BY \`id\``, [sessionId]);

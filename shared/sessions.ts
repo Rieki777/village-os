@@ -904,8 +904,6 @@ export interface SessionItem {
 }
 
 export interface SessionEntry {
-  /** A win only: the id of the season priority it serves, or null (0298, shared/sessionTemplates.ts). */
-  servesGoalId?: string | null;
   id: number;
   itemId: number | null;
   kind: EntryKind;

@@ -119,26 +119,6 @@ describe.skipIf(!configured)("usersRepo (MySQL)", () => {
     expect((await repo.byId("usr-1"))?.recognitionBalance).toBe(42);
   });
 
-  it("keeps the proof of an address (0304, R104): null until written, then the instant, and a tombstone keeps none", async () => {
-    // A row added without the field is unproved, which is what every row
-    // that existed before the column reads as.
-    await repo.add(member("usr-proof", "proof@example.test", { passwordHash: "h" }));
-    expect((await repo.byId("usr-proof"))!.emailVerifiedAt).toBeNull();
-    const at = "2026-10-31T09:30:00.000Z";
-    await repo.update("usr-proof", (m) => void (m.emailVerifiedAt = at));
-    // Read back from the database, with no zone drift.
-    expect((await repo.byId("usr-proof"))!.emailVerifiedAt).toBe(at);
-    // A write that does not mention it leaves it alone: the UPDATE names
-    // every column, so a field the mapping dropped would be nulled here.
-    await repo.update("usr-proof", (m) => void (m.bio = "still proved"));
-    expect((await repo.byId("usr-proof"))!.emailVerifiedAt).toBe(at);
-    // A row that is already a tombstone cannot be handed a proof back.
-    await repo.update("usr-proof", (m) => { m.email = "deleted-usr-proof@anonymized.invalid"; m.emailVerifiedAt = null; }, { erasure: true });
-    await repo.update("usr-proof", (m) => void (m.emailVerifiedAt = at));
-    expect((await repo.byId("usr-proof"))!.emailVerifiedAt).toBeNull();
-    await repo.remove("usr-proof");
-  });
-
   it("update() returns null for a missing member and writes nothing", async () => {
     expect(await repo.update("usr-missing", (m) => void (m.recognitionBalance = 1))).toBeNull();
     expect(await repo.count()).toBe(2);

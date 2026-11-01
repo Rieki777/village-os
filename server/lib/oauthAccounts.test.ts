@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 import {
   type AccountFacts,
   decideGoogleSignIn,
-  holdsUnprovenPassword,
   isTombstone,
   isUnclaimable,
   makeGoogleLink,
@@ -19,8 +18,6 @@ import {
 } from "./oauthAccounts";
 
 const SECRET = "a-test-signing-secret";
-/** When an address was proved. Any instant does. */
-const PROVED = "2026-10-31T09:00:00.000Z";
 
 const member = (over: Partial<AccountFacts> = {}): AccountFacts => ({
   id: "user-1",
@@ -90,8 +87,8 @@ describe("decideGoogleSignIn", () => {
   const base = { sub: "sub-123", existingLinkOnEmailMatch: null };
 
   it("signs in the account that already carries this Google subject", () => {
-    const d = decideGoogleSignIn({ ...base, bySub: member({ id: "user-9", emailVerifiedAt: PROVED }), byEmail: null });
-    expect(d).toEqual({ kind: "sign_in", userId: "user-9", takeOver: false });
+    const d = decideGoogleSignIn({ ...base, bySub: member({ id: "user-9" }), byEmail: null });
+    expect(d).toEqual({ kind: "sign_in", userId: "user-9" });
   });
 
   it("follows the SUBJECT even when the address has changed at Google", () => {
@@ -99,31 +96,22 @@ describe("decideGoogleSignIn", () => {
     // byEmail is not consulted at all once a subject matches.
     const d = decideGoogleSignIn({
       ...base,
-      bySub: member({ id: "user-9", email: "old@example.com", emailVerifiedAt: PROVED }),
+      bySub: member({ id: "user-9", email: "old@example.com" }),
       byEmail: member({ id: "user-other" }),
     });
-    expect(d).toEqual({ kind: "sign_in", userId: "user-9", takeOver: false });
+    expect(d).toEqual({ kind: "sign_in", userId: "user-9" });
   });
 
-  it("LINKS a Google address to a password account whose address was proved, and ends nothing", () => {
+  it("LINKS a verified address to an existing password account", () => {
     // The defence: whoever holds this mailbox can already take the account by
-    // asking for a password reset, so linking grants nothing new. And because
-    // the address was proved, the password was set by that same person.
-    const d = decideGoogleSignIn({ ...base, bySub: null, byEmail: member({ id: "user-1", emailVerifiedAt: PROVED }) });
-    expect(d).toEqual({ kind: "link", userId: "user-1", takeOver: false });
-  });
-
-  it("LINKS a password account whose address was NEVER proved only by taking it over (R104)", () => {
-    // Whoever typed this address at sign-up need not own it. Linking without
-    // ending their password hands the mailbox owner an account somebody else
-    // still holds the key to: the account pre-hijack.
+    // asking for a password reset, so linking grants nothing new.
     const d = decideGoogleSignIn({ ...base, bySub: null, byEmail: member({ id: "user-1" }) });
-    expect(d).toEqual({ kind: "link", userId: "user-1", takeOver: true });
+    expect(d).toEqual({ kind: "link", userId: "user-1" });
   });
 
   it("LINKS an account that has NO password, which is the locked-out founder", () => {
     const d = decideGoogleSignIn({ ...base, bySub: null, byEmail: member({ id: "founder-1", passwordHash: "" }) });
-    expect(d).toEqual({ kind: "link", userId: "founder-1", takeOver: false });
+    expect(d).toEqual({ kind: "link", userId: "founder-1" });
   });
 
   it("refuses to attach a SECOND Google account to a member already linked", () => {
@@ -143,7 +131,7 @@ describe("decideGoogleSignIn", () => {
       byEmail: member({ id: "user-1" }),
       existingLinkOnEmailMatch: "sub-123",
     });
-    expect(d).toEqual({ kind: "link", userId: "user-1", takeOver: true });
+    expect(d).toEqual({ kind: "link", userId: "user-1" });
   });
 
   it("refuses an example identity and a tombstone by either route", () => {
@@ -159,31 +147,6 @@ describe("decideGoogleSignIn", () => {
   it("creates when nothing matches", () => {
     expect(decideGoogleSignIn({ ...base, bySub: null, byEmail: null })).toEqual({ kind: "create" });
   });
-});
-
-describe("a password nobody proved belongs to the address (R104)", () => {
-  it("is a password on an account whose address was never proved", () => {
-    expect(holdsUnprovenPassword(member())).toBe(true);
-    expect(holdsUnprovenPassword(member({ emailVerifiedAt: null }))).toBe(true);
-  });
-
-  it("is not a password the address owner proved, nor an account with no password at all", () => {
-    expect(holdsUnprovenPassword(member({ emailVerifiedAt: PROVED }))).toBe(false);
-    // No password means no credential anybody else could have set.
-    expect(holdsUnprovenPassword(member({ passwordHash: "" }))).toBe(false);
-    expect(holdsUnprovenPassword(member({ passwordHash: undefined }))).toBe(false);
-  });
-
-  it("takes over an account linked BEFORE the fix that still holds one, on its next sign-in", () => {
-    // A link written by the old code may sit on a planted account. The
-    // subject match signs the Google holder in and ends the other key.
-    const d = decideGoogleSignIn({ ...base(), bySub: member({ id: "user-9" }), byEmail: null });
-    expect(d).toEqual({ kind: "sign_in", userId: "user-9", takeOver: true });
-  });
-
-  function base() {
-    return { sub: "sub-123", existingLinkOnEmailMatch: null };
-  }
 });
 
 describe("maySendSetPasswordLink is the fix for the silent forgot-password", () => {

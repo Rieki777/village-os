@@ -42,7 +42,6 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
 import { encodeToken } from "./lib/memberTokens";
-import { makeEmailVerifyToken } from "./lib/emailVerification";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -265,11 +264,6 @@ beforeAll(async () => {
   annaId = String(reg.json?.user?.id ?? "");
   annaToken = String(reg.json?.token ?? "");
   expect(annaToken, "Anna holds a session").toBeTruthy();
-  // She proves her address from the letter sign-up sends, the way an honest
-  // member does. An unproved password is ended by a Google link (R104), and
-  // Anna is this suite's member who KEEPS hers.
-  const proved = await call("POST", "/api/auth/verify-email", { body: { token: makeEmailVerifyToken(SECRET, annaId, ANNA_GOOGLE.email) }, token: annaToken });
-  expect(proved.status, `Anna proves her address: ${JSON.stringify(proved.json)}`).toBe(200);
 
   ({ token: ginaToken, id: ginaId } = await signUpWithGoogle(GINA.sub, GINA.email, GINA.name));
   ({ token: halToken, id: halId } = await signUpWithGoogle(HAL.sub, HAL.email, HAL.name));

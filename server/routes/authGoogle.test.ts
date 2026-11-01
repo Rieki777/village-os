@@ -96,8 +96,6 @@ describe("an unconfigured village registers the routes and refuses them", () => 
       clientIp: () => "1.2.3.4",
       recordAudit: () => {},
       onMemberJoined: () => {},
-      endReachAround: (_userId, change) => change(),
-      onPasswordEnded: () => {},
       invites: {
         required: () => false,
         resolve: async () => ({ ok: false, error: "" }),

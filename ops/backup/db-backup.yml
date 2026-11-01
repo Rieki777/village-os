@@ -36,15 +36,9 @@ on:
 permissions:
   contents: read
 
-# RUNNER PINNED TO ubuntu-24.04 (2026-11-01). On 2026-10-23 GitHub moved
-# ubuntu-latest to ubuntu-26.04, and its GnuPG cannot decrypt with a cv25519
-# drill key ("public key decryption failed: Bad secret key"). The first village
-# running this template kept producing encrypted backups while both restore drills
-# failed every day for nine days, so nothing proved they restore. Keep the pin until
-# a drill run on the newer image decrypts with your own drill key.
 jobs:
   backup:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Require both encryption public keys before doing anything else
@@ -138,7 +132,7 @@ jobs:
 
   restore-drill:
     needs: backup
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
       mysql:
@@ -314,7 +308,7 @@ jobs:
     # single bad backup, it means the drill above cannot be trusted when it
     # says green, so this job fails loudly rather than passing quietly.
     needs: backup
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Require the drill private key before doing anything else
@@ -335,24 +329,6 @@ jobs:
         env:
           DRILL_PRIV: ${{ secrets.BACKUP_DRILL_GPG_PRIVATE_KEY }}
         run: printf '%s' "$DRILL_PRIV" | gpg --batch --yes --import
-
-      - name: The untampered artifact must decrypt first, or this control proves nothing
-        # Added 2026-11-01. From 2026-10-23 to 10-31 this job passed every day
-        # while restore-drill failed every day: a runner whose GnuPG could not
-        # decrypt ANYTHING with the drill key refused the corrupted copy too, and
-        # "refused" was all the assertion below checked. A control that passes
-        # when the key does not work at all is not a control. So the same key
-        # must open the real artifact here, in this job, before a refusal counts.
-        run: |
-          if ! gpg --batch --yes --pinentry-mode loopback --passphrase '' \
-            --output clean.tar.gz --decrypt bundle.tar.gz.gpg; then
-            echo "NEGATIVE CONTROL CANNOT RUN: the untampered backup does not decrypt" >&2
-            echo "with the drill key either, so refusing the corrupted copy would prove" >&2
-            echo "nothing. Fix restore-drill first." >&2
-            exit 1
-          fi
-          rm -f clean.tar.gz
-          echo "The untampered artifact decrypts with the drill key. The refusal below now means something."
 
       - name: Corrupt a copy of the real artifact
         run: |
@@ -405,7 +381,7 @@ jobs:
     # Not configured is a SKIP and says so loudly in the run summary. Half
     # configured is still a FAILURE, because somebody meant to switch this on
     # and it will not work.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       configured: ${{ steps.gate.outputs.configured }}
@@ -454,7 +430,7 @@ jobs:
   uploads-backup:
     needs: uploads-configured
     if: needs.uploads-configured.outputs.configured == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Require every secret this job needs, and name the missing one
@@ -585,7 +561,7 @@ jobs:
 
   uploads-restore-drill:
     needs: uploads-backup
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Require the drill private key before doing anything else
@@ -724,7 +700,7 @@ jobs:
   alarm:
     needs: [backup, restore-drill, restore-drill-negative-control, uploads-configured, uploads-backup, uploads-restore-drill]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read

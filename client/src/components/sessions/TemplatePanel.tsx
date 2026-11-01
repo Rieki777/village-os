@@ -49,7 +49,6 @@ import {
 } from "@shared/sessionTemplates";
 import type { SessionItem } from "@shared/sessions";
 import { gameFetch } from "@/lib/gameApi";
-import { ServesChip, ServesPicker } from "./ServesPicker";
 import { BTN_FORWARD, BTN_QUIET, BTN_SECONDARY, CHIP, EYEBROW, HINT, INPUT, LABEL_CAPS, PANEL, SOFT } from "./roomUi";
 
 const day = (iso: string) => {
@@ -65,6 +64,49 @@ async function sentence(res: Response): Promise<string> {
     return TEMPLATE_COPY.saveFailed;
   }
 }
+
+/** "Serves": one of the season's priorities, or none. Draws nothing when the season names none. */
+function ServesPicker({
+  goals,
+  value,
+  onChange,
+  disabled,
+  compact = false,
+}: {
+  goals: readonly string[];
+  value: string | null;
+  onChange(goal: string | null): void;
+  disabled?: boolean;
+  compact?: boolean;
+}) {
+  if (!goals.length) return null;
+  return (
+    <label className={`flex items-center gap-2 text-sm text-foreground ${compact ? "" : "min-w-0"}`}>
+      <span className="shrink-0 text-muted-foreground">{SEASON_COPY.serves}</span>
+      <select
+        className={`${INPUT} w-auto max-w-[16rem] truncate`}
+        value={value ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value || null)}
+      >
+        <option value="">{SEASON_COPY.servesNone}</option>
+        {goals.map((g) => (
+          <option key={g} value={g}>
+            {g}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** The season priority a row serves, as a chip. */
+const ServesChip = ({ goal }: { goal: string | null }) =>
+  goal ? (
+    <span className={CHIP}>
+      {SEASON_COPY.serves}: {goal}
+    </span>
+  ) : null;
 
 export default function TemplatePanel({ sessionId, agenda }: { sessionId: number; agenda: readonly SessionItem[] }) {
   const [view, setView] = useState<TemplateRoomView | null>(null);
@@ -182,9 +224,9 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
           {goals.length ? (
             <ol className="space-y-1">
               {goals.map((g, i) => (
-                <li key={g.id} className="flex gap-2 text-foreground">
+                <li key={g} className="flex gap-2 text-foreground">
                   <span className="tabular-nums text-muted-foreground">{i + 1}.</span>
-                  <span>{g.text}</span>
+                  <span>{g}</span>
                 </li>
               ))}
             </ol>
@@ -204,7 +246,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
                 <li key={w.id} className={`${SOFT} flex flex-wrap items-center justify-between gap-2`}>
                   <span className="min-w-0 flex-1 text-foreground">{w.text}</span>
                   {joined && open && goals.length ? (
-                    <ServesPicker goals={goals} value={w.servesGoalId} disabled={busy} label={w.text} onChange={(g) => void write(`/shares/${w.id}`, "PATCH", { servesGoalId: g })} />
+                    <ServesPicker goals={goals} value={w.servesGoal} disabled={busy} onChange={(g) => void write(`/shares/${w.id}`, "PATCH", { servesGoal: g })} />
                   ) : (
                     <ServesChip goal={w.servesGoal} />
                   )}
@@ -219,7 +261,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
               className="flex flex-wrap items-center gap-2"
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (await write("/shares", "POST", { kind: "win", text: winText, servesGoalId: winServes })) {
+                if (await write("/shares", "POST", { kind: "win", text: winText, servesGoal: winServes })) {
                   setWinText("");
                   setWinServes(null);
                 }
@@ -460,7 +502,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
                     <span className="tabular-nums text-muted-foreground">{i + 1}.</span> {p.text}
                   </span>
                   {canHost && goals.length ? (
-                    <ServesPicker goals={goals} value={p.servesGoalId} disabled={busy} label={p.text} onChange={(g) => void write(`/priorities/${p.id}`, "PATCH", { servesGoalId: g })} />
+                    <ServesPicker goals={goals} value={p.servesGoal} disabled={busy} onChange={(g) => void write(`/priorities/${p.id}`, "PATCH", { servesGoal: g })} />
                   ) : (
                     <ServesChip goal={p.servesGoal} />
                   )}
@@ -480,7 +522,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
               className="flex flex-wrap gap-2"
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (await write("/priorities", "POST", { text: priorityText, servesGoalId: priorityServes })) {
+                if (await write("/priorities", "POST", { text: priorityText, servesGoal: priorityServes })) {
                   setPriorityText("");
                   setPriorityServes(null);
                 }

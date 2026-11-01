@@ -264,12 +264,6 @@ The response carries `claimUrl`, plus an `emailed` field and an `emailNote`
 saying why nothing was sent when it reads `false`.
 </details>
 
-If an account already exists at that address and holds a password nobody
-ever confirmed from the address, bootstrap removes that password and signs
-that account out everywhere before it makes it the founder, and the response
-carries a `claimUrl` to set your own. Anybody can sign up with any address,
-so a password nobody confirmed may not be yours (readiness finding R104).
-
 Either way, `ADMIN_PASSWORD` now stops working. Once your village has a
 founder it refuses everyone except the account named in
 `BREAK_GLASS_ADMIN_EMAIL`, and that account still has to give it.

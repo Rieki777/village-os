@@ -17,7 +17,6 @@
  *   /api/messages                  unread conversations, and the parties (work chats)
  *   /api/sessions                  the next meeting of a circle this member sits in
  *   /api/quests                    what a claimed quest pays when it is consented
- *   /api/asks                      what other members asked of this member
  *
  * EVERY FIELD IS NULL UNTIL ITS DOOR ANSWERS, and stays null when the door is
  * closed (a module off answers 404) or fails. The components draw nothing, or
@@ -30,7 +29,6 @@ import { onProfileRefresh } from "@/lib/profileRefresh";
 import type { CashOwedEntry } from "@shared/cashOwed";
 import type { WaitingConsent } from "@shared/waitingOnYou";
 import { WAITING_URL } from "@shared/waitingOnYou";
-import { ASKS_URL, type AsksPayload } from "@shared/memberAsks";
 import type { WorkPay } from "@shared/workValue";
 import type { FlowerBadge } from "@/components/badges/BadgeFlower";
 import type { InboxConversation } from "@/lib/messaging";
@@ -86,8 +84,6 @@ export interface DashData {
   } | null;
   session: { circle: string; title: string | null; words: string; href: string } | null;
   questPay: Record<string, WorkPay> | null;
-  /** Open asks waiting on this member, and how many of them someone is stuck on. */
-  asks: { waiting: number; blocking: number } | null;
 }
 
 const EMPTY: DashData = {
@@ -106,7 +102,6 @@ const EMPTY: DashData = {
   messages: null,
   session: null,
   questPay: null,
-  asks: null,
 };
 
 /** The body of a door that answered, or null for one that did not. Never throws. */
@@ -207,13 +202,6 @@ export function useDashData(userId: string | number | null | undefined): DashDat
             : null,
         });
       });
-      read<AsksPayload>(ASKS_URL).then((a) =>
-        put({
-          asks: a && Array.isArray(a.waitingOnYou)
-            ? { waiting: a.waitingOnYou.length, blocking: a.waitingOnYou.filter((x) => x.blocking).length }
-            : null,
-        }),
-      );
       read<Array<{ id: string; pay?: WorkPay }>>("/api/quests").then((q) =>
         put({
           questPay: Array.isArray(q)
