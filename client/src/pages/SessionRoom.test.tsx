@@ -34,6 +34,8 @@ vi.mock("@/modules/ModuleProvider", () => ({
     modules: sessionsOn ? [{ id: "sessions", lifecycle: "members" }, { id: "gratitude", lifecycle: "public" }] : [],
   }),
   useModuleOn: (id: string) => id === "gratitude",
+  // The room's card invitation reads Gene Keys through useModule; off here, as every module but sessions.
+  useModule: () => undefined,
 }));
 vi.mock("@/components/modules/ModuleGate", () => ({
   default: () => <p>Module gate</p>,
