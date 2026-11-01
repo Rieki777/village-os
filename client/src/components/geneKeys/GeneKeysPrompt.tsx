@@ -19,6 +19,8 @@ import { Link } from "wouter";
 import { Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useMyGeneKeys } from "./useMyGeneKeys";
+import { useGuideName } from "@/hooks/useGuideName";
+import { guideNameAtSentenceStart } from "@shared/guideName";
 import { BTN_GOLD, BTN_PLAIN, HINT, NIGHT_CARD } from "./ui";
 
 const SEEN_KEY = "gene-keys-prompt-seen";
@@ -37,6 +39,16 @@ function markSeenHere(): void {
   } catch {
     // A browser that refuses storage shows the popup again next time, which is harmless.
   }
+}
+
+/**
+ * Who is speaking in the popup: the village's own guide, or "The village
+ * guide" while it has no name. Asked only when the popup opens, so the page
+ * does not read the Work With Us document for every visitor.
+ */
+function GuideLabel() {
+  const guide = useGuideName();
+  return <>{guide.loaded ? guideNameAtSentenceStart(guide.name) : "\u00a0"}</>;
 }
 
 export interface GeneKeysPromptProps {
@@ -76,7 +88,7 @@ export default function GeneKeysPrompt({ picked, characterName }: GeneKeysPrompt
       {open ? (
         <Dialog open onOpenChange={setOpen}>
           <DialogContent className="sheet-night max-w-md rounded-2xl border-border bg-card p-6 text-card-foreground">
-            <p className="text-sm text-notice">Maia</p>
+            <p className="text-sm text-notice"><GuideLabel /></p>
             <DialogTitle className="font-display text-3xl font-normal text-foreground">
               {characterName ? `${characterName} is yours.` : "Your character is chosen."}
             </DialogTitle>

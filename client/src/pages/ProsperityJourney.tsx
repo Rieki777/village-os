@@ -8,7 +8,9 @@ import { JourneyLink, leavesSite } from "@/components/journey/JourneyLink";
 import { useJourneyContent, useJourneyProgress } from "@/hooks/useJourneyContent";
 import { buttonAction, stepPoints, type TargetContext } from "@/lib/journeyPage";
 import { JOURNEY_LEGACY_STEP_IDS, PROSPERITY_JOURNEY } from "@shared/pageContent/journeys";
-import { useState, useEffect } from "react";
+import { useGuideName } from "@/hooks/useGuideName";
+import { guideNameAtSentenceStart } from "@shared/guideName";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
@@ -52,10 +54,11 @@ const TIER_COLORS = [
 export default function ProsperityJourney() {
   const valueName = useValueTokenName();
   const villageName = useVillageName();
-  // LANE Q: the guide's name is per-deployment config, never a constant.
-  const [assistantName, setAssistantName] = useState("Maia");
+  // The village's own name for its guide, or "The village guide" while it has
+  // none. Raised to a capital because the step's words open a sentence with it.
+  const guide = useGuideName();
   const page = useJourneyContent(PROSPERITY_JOURNEY, (resolved) => ({
-    guide: assistantName,
+    guide: guideNameAtSentenceStart(guide.name),
     acronym: resolved.tiers.fields.acronym,
     framework: resolved.tiers.fields.framework,
   }));
@@ -74,13 +77,6 @@ export default function ProsperityJourney() {
   const closingSecondary = buttonAction(page?.closing.fields.secondaryLabel, page?.closing.fields.secondaryTarget, targets);
   const progress = useJourneyProgress("amora-prosperity-progress", steps, JOURNEY_LEGACY_STEP_IDS.prosperity);
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
-
-  useEffect(() => {
-    fetch("/api/work-with-us-config")
-      .then((r) => r.json())
-      .then((w) => { if (w?.assistantName) setAssistantName(w.assistantName); })
-      .catch(() => { /* the default stands */ });
-  }, []);
 
   // Until the saved words arrive the hero keeps its space and stays
   // invisible, so a visitor never reads the defaults and watches them change.

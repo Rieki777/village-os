@@ -134,6 +134,11 @@ const CENTER_OF: Record<number, Center> = {};
 for (const [c, gates] of Object.entries(CENTERS) as Array<[Center, readonly number[]]>) for (const g of gates) CENTER_OF[g] = c;
 const MOTORS: readonly Center[] = ["Sacral", "SolarPlexus", "Heart", "Root"];
 
+/** The centre a gate belongs to (the session card reads a room's centres from it). */
+export function centerOf(gate: number): Center | undefined {
+  return CENTER_OF[gate];
+}
+
 export const HD_TYPES = ["Generator", "Manifesting Generator", "Projector", "Manifestor", "Reflector"] as const;
 export type HdType = (typeof HD_TYPES)[number];
 export const AUTHORITIES = ["Emotional", "Sacral", "Splenic", "Ego Manifested", "Ego Projected", "Self-Projected", "Mental", "Lunar"] as const;
@@ -363,6 +368,8 @@ export interface OwnGeneKeysView extends GeneKeysView {
   complement: boolean;
   /** "Talk to me plainly": Maia never adapts her wording to the type. */
   maiaPlain: boolean;
+  /** "Leave me out of session cards" (shared/sessionCard.ts): welcomed by name, never read. */
+  cardOut: boolean;
   source: GeneKeysSource;
   /** Computed by an older calculator than this release runs: ask the member to read the sky again. */
   stale: boolean;

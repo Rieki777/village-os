@@ -20,6 +20,7 @@ import bcrypt from "bcrypt";
 import { securityHeaders } from "./lib/securityHeaders";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
+import { guidePromptName } from "../shared/guideName";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
 // the active clock now, and it had no caller left here. `sceneStopsFor` and
 // `cleanCrewName` go with main's dead-import pass for the same reason,
@@ -123,6 +124,7 @@ import { seatFoundersAtLaunch } from "./lib/launchSeating";
 import { launchProposalDoc, launchSlateProblem } from "./lib/launchProposal";
 import { insertSlate } from "./repos/stewardSlate";
 import { freezeSeatTerm } from "./repos/ballotSeatTerms";
+import { roleHoldersNow } from "./repos/pathLadders";
 import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
@@ -163,6 +165,7 @@ import { register as registerNeedsRoutes } from "./routes/needs";
 import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
 import { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing, register as registerGeneKeysRoutes } from "./routes/geneKeys";
 import { register as registerGuideChoiceRoutes } from "./routes/guideChoice";
+import { register as registerSessionCardRoutes } from "./routes/sessionCard";
 import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./routes/liveSessions";
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerSessionLibraryRoutes } from "./routes/sessionLibrary";
@@ -176,6 +179,7 @@ import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
 import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
+import { claimsAnnouncedHere } from "./lib/rewardMoment";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
@@ -184,6 +188,7 @@ import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
+import { register as registerCompanionRoutes } from "./routes/companions";
 import { register as registerStockAvatarRoutes, STOCK_AVATAR_DIR } from "./routes/stockAvatars";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
@@ -639,10 +644,7 @@ import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
   holderStands, mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
 } from "./lib/agentTokens";
-import {
-  DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, queueWeekAhead,
-  removeInbox, setInbox,
-} from "./lib/agentInbox";
+import { DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, queueWeekAhead, removeInbox, setInbox } from "./lib/agentInbox";
 import {
   MEMBER_KEY_PROVIDERS, NO_MEMBER_SECRETS_KEY_SENTENCE, memberKeyView, memberSecretsConfigured, removeMemberKey,
   resolveMemberKey, storeMemberKey,
@@ -1075,7 +1077,7 @@ const DEFAULT_BRAND = {
 const DEFAULT_WORK_WITH_US = {
   intro:
     "We grow through the people who bring their gifts to us. We welcome ideas, offerings, and ventures: a garden, a piece of infrastructure, a service, a craft, a program, or something we haven't yet imagined. Propose it here.",
-  assistantName: "Maia",
+  assistantName: "",
   assistantGreeting:
     "Hi, I'm {name}. I help people shape their offering to the village. There's no wrong way to start. What are you dreaming of bringing?",
   reciprocityOptions: [
@@ -1578,7 +1580,7 @@ async function initStores(): Promise<void> {
   {
     const shelves = loadShelves(process.cwd());
     console.log(
-      `[knowledge] ${shelves.knowledge} literature section(s) and ${shelves.modules} module-contract section(s) on Maia's shelves`,
+      `[knowledge] ${shelves.knowledge} literature section(s) and ${shelves.modules} module-contract section(s) on the guide's shelves`,
     );
   }
   // S73: the reader registry's gates. Module state and variables are read
@@ -3836,24 +3838,24 @@ const trainingDoneHere = (done: readonly string[]): boolean =>
   trainingIsComplete(gatingModuleIds(trainingRepo.all()), done);
 
 /** Each rung's own rule, from one member's counts. The door above Member and every grant are `climbLadder`'s (lib/admission.ts). */
-const rungRule = (user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean) => (stage: LadderStage): boolean => {
+const rungRule = (user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean, holdsRole: boolean) => (stage: LadderStage): boolean => {
   switch (stage.rule.type) {
     case "default": case "account": return true; // having a user record implies an account
     case "training-complete": return trainingDoneHere(trainingDone);
     case "membership": return hasMembership(user);
     case "quests": return consentedQuests >= Math.max(1, numberVar(`progression.quests_for.${stage.id}`)); // the registry's, so speed is tunable
     case "tokens": return paidByVillage; // ever paid BY THE VILLAGE; see hasBeenPaidByVillage
-    default: return false;
+    case "role": return holdsRole; default: return false; // role: holds an org-chart role right now, see roleHoldersNow
   }
 };
 
-function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean): string {
-  return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage));
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean, holdsRole: boolean): string {
+  return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage, holdsRole));
 }
 
 /** The one-member form: fetch the consented count, then compute. */
 async function stageOf(user: any): Promise<string> {
-  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
+  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()), (await roleHoldersNow(getPool(), lapseContext())).has(String(user.id)));
 }
 
 /**
@@ -7052,7 +7054,7 @@ async function startServer() {
       const memberKey = await resolveMemberKey(getPool(), user.id);
       const [note, lines] = await Promise.all([aboutMeForAssistant(getPool(), user.id), geneKeysForAssistant(getPool(), String(user.id))]);
       const wcfg = getWorkWithUs();
-      const assistantName = wcfg.assistantName || "Maia";
+      const assistantName = guidePromptName(wcfg.assistantName);
       const villageName = mergedConfig().project.name;
       const system = `You are ${assistantName}, the in-app assistant of ${villageName}, talking to one of its members about their own week: what is on, where to be, who to ask, and what they might say yes to.
 
@@ -8779,7 +8781,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const trained = await completionsForMany(getPool(), (all as any[]).map((u) => String(u.id)));
     // Third read of the same shape, and for the same reason as the two above.
     const paid = await paidByVillageMany(getPool(), (all as any[]).map((u) => String(u.id)), contributionTokens());
-    const memberIdx = stageIndex("member");
+    const memberIdx = stageIndex("member"), holders = await roleHoldersNow(getPool(), lapseContext());
     const eligible = new Set<string>();
     for (const u of all as any[]) {
       // Standing-example identities carry member stages, so they would pass
@@ -8787,7 +8789,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if (u.isExample) continue;
       const count = consented.get(u.id) ?? 0;
       const done = trained.get(String(u.id)) ?? [];
-      if (count >= 1 || stageIndex(computeStage(u, count, done, paid.has(String(u.id)))) >= memberIdx) eligible.add(u.id);
+      if (count >= 1 || stageIndex(computeStage(u, count, done, paid.has(String(u.id)), holders.has(String(u.id)))) >= memberIdx) eligible.add(u.id);
     }
     return eligible;
   }
@@ -11353,7 +11355,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     await attachWaitlistInfo(getPool(), [g], viewer.userId);
     res.json({
       event: g,
-      schemaOrg: toSchemaOrg(g, { siteUrl: mergedConfig().project.siteUrl }),
+      schemaOrg: toSchemaOrg(g),
       rsvpEnabled: boolVar("events.rsvp_enabled"),
     });
   });
@@ -12285,7 +12287,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
 
     const status = await launchStatus(getPool(), launchDeps);
     const wcfg = getWorkWithUs();
-    const assistantName = wcfg.assistantName || "Maia";
+    const assistantName = guidePromptName(wcfg.assistantName);
     const villageName = mergedConfig().project.name;
     // Live state, serialized for her — titles, why, status, and where to fix.
     // Deliberately NO secrets, NO last4s, NO member data: her whole world is
@@ -12953,7 +12955,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const ownVoice = await relevantSyntheses(getPool(), query, 3);
     const uncovered = modulesWithoutContracts(MODULES.map((m) => m.id));
     const wcfg = getWorkWithUs();
-    const assistantName = wcfg.assistantName || "Maia";
+    const assistantName = guidePromptName(wcfg.assistantName);
     const villageName = mergedConfig().project.name;
 
     const system = `You are ${assistantName}, organizing counsel for ${villageName}, a regenerative village. You are talking to one of its own admins about how to organize: governance, conflict, membership, legal structure, internal economics, and which of this platform's modules earn their place.
@@ -13369,7 +13371,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const memberCount = memberRows.length;
     const cap = roleBatchCap(memberCount);
     const wcfg = getWorkWithUs();
-    const assistantName = wcfg.assistantName || "Maia";
+    const assistantName = guidePromptName(wcfg.assistantName);
     const villageName = mergedConfig().project.name;
     // Only the sections she needs to size and justify structure ride in full.
     // LANE Q: and they ride FENCED. These bodies are the village's own written
@@ -17164,7 +17166,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // Where the member stands on each path they walk. Beside the profile routes
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
-  registerPathLadderRoutes(app, { authedUser, getPool, lapseContext });
+  registerPathLadderRoutes(app, { authedUser, getPool, lapseContext, isAdmin, members });
   registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
@@ -17459,7 +17461,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
     const guideName = mergedConfig().project.name;
     const wcfg = getWorkWithUs();
-    const assistantName = wcfg.assistantName || "Maia";
+    const assistantName = guidePromptName(wcfg.assistantName);
     const recipValues = (wcfg.reciprocityOptions ?? DEFAULT_WORK_WITH_US.reciprocityOptions)
       .map((o: any) => `"${o.value}"`).join(", ");
     const spec = PROPOSAL_KINDS[kind];
@@ -18320,8 +18322,10 @@ ${inner}
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
+  registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
-  registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
+  registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: String(getWorkWithUs().assistantName || "Maia"), timeZone: getSeasonConfig().timezone }) });
+  registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, seasonState, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
   registerSessionRhythmRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify, lapseContext });
@@ -18341,7 +18345,7 @@ ${inner}
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
-  registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay") });
+  registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
   registerOwnHoldingsRoutes(app, { authedUser, getPool });
   registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
   registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
@@ -19105,7 +19109,6 @@ ${inner}
     consentActor, addActivity, dormantBadgeIds,
   });
 
-
   // My game state
   app.get("/api/game/me", async (req, res) => {
     const user = await authedUser(req);
@@ -19120,7 +19123,7 @@ ${inner}
     // single query stageOf was already paying.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const trained = await completionsFor(getPool(), user.id);
-    const stageId = computeStage(user, consentedQuests, trained, await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
+    const stageId = computeStage(user, consentedQuests, trained, await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()), (await roleHoldersNow(getPool(), lapseContext())).has(String(user.id)));
     const claims = await claimsRepo.forUser(user.id);
     const ctx = await capabilityCtx(user);
     // What each consented quest actually paid. `amount` is what the witness
@@ -19130,6 +19133,7 @@ ${inner}
     // disagree. Absent on claims that never posted (a zero grant, or a claim
     // still open), which is the client's signal to show the plain amount.
     const questCredits = await questCreditsFor(getPool(), user.id);
+    const announcedHere = await claimsAnnouncedHere(getPool(), user.id);
     // THE MOST RECENT RUNG THIS MEMBER CROSSED, and what it opened.
     //
     // `recordStageEvent` has computed this diff since item 8 and the only way
@@ -19157,9 +19161,11 @@ ${inner}
       stageIndex: stageIndex(stageId),
       stages: servedLadder(mergedConfig().project.commitmentName),
       gratitude: { balance: user.recognitionBalance ?? 0, decimals: tokenDef(PLATFORM_TOKEN)?.decimals ?? 0, budget: await gratitudeBudget(user) }, // `balance` is the cached MINOR-unit column; `decimals` is what turns it into the number on the card
-      quests: claims.map((c: any) =>
-        questCredits.has(c.id) ? { ...c, credited: questCredits.get(c.id) } : c,
-      ),
+      // A claim whose pay the reward moment names is celebrated there, once: server/lib/rewardMoment.ts.
+      quests: claims.map((c: any) => ({
+        ...(questCredits.has(c.id) ? { ...c, credited: questCredits.get(c.id) } : c),
+        ...(announcedHere.has(c.id) ? { announcedByRewardMoment: true } : {}),
+      })),
       journeys: user.journeys ?? {},
       membership: hasMembership(user),
       trainingComplete: trainingDoneHere(trained), training: trainingProgress(trainingRepo.all(), trained), // done/required, mandatory only
@@ -19837,7 +19843,7 @@ ${inner}
     // Same substitution as /api/game/me, same single query: the count the
     // ladder measures is kept instead of collapsed into a stage id.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
+    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()), (await roleHoldersNow(getPool(), lapseContext())).has(String(user.id)));
     const ctx = await capabilityCtx(user);
     const inbox: any[] = submissionsRepo.all(); // once, for both answers below: `all()` copies every row.
     res.json({
@@ -25831,7 +25837,7 @@ ${inner}
   // point its own routes used to sit. Express matches in registration order.
   registerPulseRoutes(app, { getPool });
   registerPlayersRoutes(app, {
-    isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent,
+    isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext,
     trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
     paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
   });

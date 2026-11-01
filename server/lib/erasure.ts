@@ -168,6 +168,7 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
+import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
 import { deleteDraftsOf } from "./proposalDrafts";
@@ -186,6 +187,8 @@ import { forgetMemberInDrafts } from "./orgDrafts";
 import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/characterPortraits";
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
+import { forgetCompanionsForMember } from "../repos/companions";
+import { forgetRewardMomentsOf } from "../repos/rewardMoment";
 import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
 import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
@@ -209,6 +212,7 @@ import { recordSubscriptionCancels } from "../repos/subscriptionCancels";
 import { cancelSubscription, stripeConfigured } from "./payments";
 import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
 import { leaveEveryCrewOf } from "../repos/questCrewErasure";
+import { releaseOpenClaimsOf } from "../repos/questClaimErasure";
 import { forgetReportReasonsOf } from "../repos/placePhotos";
 import { heldByAnotherAccount, usersRepo } from "../repos/users";
 import { forgetPulseLinesNaming } from "../repos/pulseLines";
@@ -785,6 +789,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "member-agent",
       run: async () => {
         await forgetAgentForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S COMPANIONS (0295): the companions, every question and
+       * draft they brought, the member's answers, and every chat. All of it is
+       * the member's own, so all of it goes, and nothing is de-attributed. It
+       * runs again after the tombstone, as "companions-after-tombstone", for
+       * the reason "member-agent-after-tombstone" gives.
+       */
+      name: "companions",
+      run: async () => {
+        await forgetCompanionsForMember(pool, target.id);
       },
     },
     {
@@ -1546,6 +1563,24 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * Their open quest claims (Rye, 2026-10-31, item 9). Nobody can work
+       * one now: the tombstone cannot sign in and consent refuses to pay it.
+       * Kept, each counted as somebody working the quest, sat in the
+       * steward's queue, and held the quest against its delete. A `claimed`
+       * one goes, the way a member puts a quest back; a `submitted` one is
+       * declined, so the work handed in stays on the record. Consented and
+       * declined claims are history and stay (server/repos/questClaimErasure.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the claim
+       * doors write for anybody signed in until the sessions die.
+       */
+      name: "quest-claims-after-tombstone",
+      run: async () => {
+        await releaseOpenClaimsOf(pool, target.id);
+      },
+    },
+    {
+      /*
        * Place-photo reports (0093): the words they typed go, the reports stay.
        * The curators' queue serves them to every holder of `map.curatePhotos`,
        * a role or badge power, and a subject request often names the person.
@@ -1558,6 +1593,46 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "photo-report-reasons-after-tombstone",
       run: async () => {
         await forgetReportReasonsOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Session cards (0296): every card that named the member, read or only
+       * welcomed, goes whole with all its lines, since its collective words
+       * may name them. A card lives only while its session is open anyway.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives.
+       */
+      name: "session-cards-after-tombstone",
+      run: async () => {
+        await forgetMemberCards(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Reward moment markers (0294): the baseline row says when the member
+       * first opened the app, and each seen row which of their payments they
+       * were shown. Personal data about them, deleted whole. A debt is kept
+       * through an erasure (`cash_owed`, Rye, 2026-10-31); a marker of what
+       * somebody saw is not one.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: a moment
+       * shown in the last seconds before it is still caught. Keyed on the
+       * member, so a resume or a second run finds nothing.
+       */
+      name: "reward-moments-after-tombstone",
+      run: async () => {
+        await forgetRewardMomentsOf(pool, target.id);
+      },
+    },
+    {
+      // A chat or a draft can still land between the first pass and the
+      // tombstone, so it runs again last, after every other
+      // after-tombstone step. DELETEs keyed on the member, so this matches nothing when
+      // nothing was written in between.
+      name: "companions-after-tombstone",
+      run: async () => {
+        await forgetCompanionsForMember(pool, target.id);
       },
     },
     {
@@ -2061,7 +2136,11 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "sessions-after-tombstone",
   "gene-keys-after-tombstone",
   "quest-crews-after-tombstone",
+  "quest-claims-after-tombstone",
   "photo-report-reasons-after-tombstone",
+  "session-cards-after-tombstone",
+  "reward-moments-after-tombstone",
+  "companions-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 

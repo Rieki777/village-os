@@ -19,6 +19,7 @@ import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 import CircleLines, { type CircleHolder } from "@/components/geneKeys/CircleLines";
+import { coordinatingCircle } from "@shared/coordinatingCircle";
 
 /** The link from a circle's panel to its own card (`/circles/:id`). */
 const OPEN_CARD = "Open this circle's card";
@@ -41,13 +42,15 @@ interface CircleEntry {
   holders: CircleHolder[];
 }
 
-function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
+function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator }: {
   circle: CircleEntry;
   expanded: boolean;
   onToggle: () => void;
   index: number;
   /** A seat chip was pressed: open that seat's card. */
   onOpenSeat: (seatId: string) => void;
+  /** The circle the others link back to, from the village's own rows, or null. */
+  coordinator: { id: string; name: string } | null;
 }) {
   const Icon = iconFor(circle.icon);
   /*
@@ -173,7 +176,10 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
 
               <div className="pt-4 border-t border-border">
                 <p className="text-xs text-muted-foreground">
-                  <strong>How it works:</strong> Each circle has autonomy within its domain and budget, uses consent-based decision-making, and is double-linked to the General Coordinating Circle so information flows both ways.
+                  <strong>How it works:</strong>{" "}
+                  {coordinator && coordinator.id !== circle.id
+                    ? `Each circle has autonomy within its domain and budget, uses consent-based decision-making, and is double-linked to the ${coordinator.name} so information flows both ways.`
+                    : "Each circle has autonomy within its domain and budget and uses consent-based decision-making."}
                 </p>
               </div>
             </div>
@@ -311,6 +317,16 @@ export default function Circles() {
   const today = (circles ?? []).filter((c) => c.stage === "today");
   const future = (circles ?? []).filter((c) => c.stage === "future");
   const openRow = openSeat ? (raw.seats.find((r) => String(r?.id) === openSeat) ?? null) : null;
+  /*
+   * THE CIRCLE THE OTHERS LINK BACK TO IS THE VILLAGE'S OWN.
+   *
+   * This page named "the General Coordinating Circle" in three sentences,
+   * typed in, so every village read one village's top circle. It is now the
+   * village's own top circle when its circles nest under one, and no circle
+   * is named when they do not (shared/coordinatingCircle.ts).
+   */
+  const top = coordinatingCircle(raw.circles);
+  const coordinator = top ? { id: String(top.id), name: String(top.name) } : null;
 
   return (
     <Layout>
@@ -401,6 +417,7 @@ export default function Circles() {
                       onToggle={() => toggle(circle.id)}
                       index={index}
                       onOpenSeat={setOpenSeat}
+                      coordinator={coordinator}
                     />
                   ))}
                 </div>
@@ -424,6 +441,7 @@ export default function Circles() {
                       onToggle={() => toggle(circle.id)}
                       index={index}
                       onOpenSeat={setOpenSeat}
+                      coordinator={coordinator}
                     />
                   ))}
                 </div>
@@ -467,14 +485,26 @@ export default function Circles() {
             </h2>
             <div className="space-y-4 text-muted-foreground">
               <p>
-                Each circle has <strong>a domain, a budget, and the authority</strong> to make decisions within that domain. When decisions affect multiple circles, the <strong>General Coordinating Circle</strong>, the four leads and circle representatives, coordinates. The Finance & Business Circle provides budget stewardship, oversight, and alignment across all circles.
+                Each circle has <strong>a domain, a budget, and the authority</strong> to make decisions within that domain.{" "}
+                {coordinator ? (
+                  <>
+                    When decisions affect multiple circles, the <strong>{coordinator.name}</strong>, the four leads and circle representatives, coordinates.
+                  </>
+                ) : (
+                  "When decisions affect multiple circles, the circles involved decide together."
+                )}{" "}
+                The Finance & Business Circle provides budget stewardship, oversight, and alignment across all circles.
               </p>
               <p>
                 Circles use <strong>consent-based decision-making</strong>: a proposal moves forward unless someone has a reasoned objection that it would cause harm or prevent the circle from achieving its aim. This creates space for wisdom and prevents tyranny of the majority.
               </p>
-              <p>
-                Every circle is <strong>double-linked</strong> to the General Coordinating Circle by two people, so information flows both ways. Regular reporting, check-ins, and feedback keep the whole aligned and adaptable.
-              </p>
+              {coordinator ? (
+                <p>
+                  Every circle is <strong>double-linked</strong> to the {coordinator.name} by two people, so information flows both ways. Regular reporting, check-ins, and feedback keep the whole aligned and adaptable.
+                </p>
+              ) : (
+                <p>Regular reporting, check-ins, and feedback between circles keep the whole aligned and adaptable.</p>
+              )}
             </div>
           </motion.div>
 
