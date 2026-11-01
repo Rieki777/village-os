@@ -26,6 +26,8 @@ vi.mock("wouter", () => ({
       {children}
     </a>
   ),
+  // The page reads `?next=` (a session card's invitation sends members here and back).
+  useSearch: () => "",
 }));
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "rick", name: "Rick Moss" } }) }));

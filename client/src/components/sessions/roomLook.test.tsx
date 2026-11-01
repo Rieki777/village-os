@@ -39,6 +39,8 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "2" } }
 vi.mock("@/modules/ModuleProvider", () => ({
   useModules: () => ({ loaded: true, modules: [{ id: "sessions", lifecycle: "members" }] }),
   useModuleOn: () => false,
+  // The room's card invitation reads Gene Keys through useModule; off here, as every module but sessions.
+  useModule: () => undefined,
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
