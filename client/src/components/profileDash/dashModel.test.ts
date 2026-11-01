@@ -176,5 +176,13 @@ describe("todayCards", () => {
   it("leaves out a card with nothing in it", () => {
     const cards = todayCards({ consents: [], tasks: { waiting: 0, nextDue: null }, messages: { unreadTotal: 0, top: null, parties: [] }, session: null }, now);
     expect(cards).toEqual([]);
+    expect(todayCards({ consents: null, tasks: null, messages: null, session: null, asks: { waiting: 0, blocking: 0 } }, now)).toEqual([]);
+  });
+  it("leads with the asks waiting on the member, and says when someone is stuck", () => {
+    const stuck = todayCards({ consents: null, tasks: { waiting: 1, nextDue: null }, messages: null, session: null, asks: { waiting: 3, blocking: 1 } }, now);
+    expect(stuck.map((c) => c.key)).toEqual(["asks", "tasks"]);
+    expect(stuck[0]).toMatchObject({ kicker: "Someone is stuck on you", title: "3 asks waiting on you", meta: "1 blocking · Open your asks", href: "/profile#waiting" });
+    const calm = todayCards({ consents: null, tasks: null, messages: null, session: null, asks: { waiting: 1, blocking: 0 } }, now);
+    expect(calm[0]).toMatchObject({ kicker: "Asked of you", title: "One ask waiting on you", meta: "Open your asks" });
   });
 });

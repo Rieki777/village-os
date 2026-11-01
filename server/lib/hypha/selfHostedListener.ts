@@ -84,6 +84,7 @@ import { fileURLToPath } from "url";
 import { createPublicClient, http, toHex } from "viem";
 import { base } from "viem/chains";
 import { guardedFetchJson, guardOutboundUrl } from "../toolcheck";
+import { rpcErrorText } from "../credentialRedaction";
 import { extractMechanicsMarker } from "../hypha-bridge";
 
 // ── Config ────────────────────────────────────────────────────────────────
@@ -572,7 +573,8 @@ export async function runListener(cfg: ListenerConfig): Promise<void> {
     } catch (e) {
       // A poll-level failure (RPC down, etc): logged, not fatal. The next
       // interval tries again from the same unchanged checkpoint.
-      console.error(`[hypha-listener] poll failed, will retry: ${(e as Error)?.message ?? e}`);
+      // rpcErrorText: viem prints the whole endpoint, key in its path, in every request error.
+      console.error(`[hypha-listener] poll failed, will retry: ${rpcErrorText(e, cfg.rpcUrl)}`);
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
@@ -591,7 +593,7 @@ const isMain = (() => {
 
 if (isMain) {
   runListener(loadConfigFromEnv()).catch((e) => {
-    console.error(`[hypha-listener] fatal: ${(e as Error)?.message ?? e}`);
+    console.error(`[hypha-listener] fatal: ${rpcErrorText(e, process.env.HYPHA_LISTENER_RPC_URL ?? "")}`);
     process.exit(1);
   });
 }

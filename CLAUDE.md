@@ -386,6 +386,16 @@ and the village is on the new schema whether or not the new code works. So a bad
 not a failed deploy, it is a village that cannot start, and the only lever anybody has is to
 put the previous image back.
 
+**The previous release is still serving while your migration runs, on the same database.** A
+DDL statement needs its table to itself for a moment, and while it waits for that, every later
+query on the table queues behind it, from both servers. This was suspected for batch 74 taking
+Amora down on 2026-11-01; Railway's deploy logs then showed that outage was a different failure
+(0298's `SHA1()`, rejected by production's database), but the hazard is real and nothing guarded
+it. So the runner caps each statement's lock wait (`MIGRATION_LOCK_WAIT_SECONDS` in
+`server/db/migrate.ts`), retries a timed-out statement a bounded number of times in the same
+boot, and then fails the boot naming the file, the statement and the lock; the next boot resumes
+at that statement. A lock timeout in a deploy log means retry the deploy, never edit the SQL.
+
 **Expand, never contract.** A migration may ADD. It may not take away. Rolling one release
 back over an already-migrated database has to work, so the previous release must still be able
 to read and write whatever the migration produced.
@@ -422,6 +432,17 @@ check with `--village`.
   (`splitStatements`, `server/db/migrate.ts`). A `--` comment ending in `;` once cut a
   statement in half (migration 0015). Comment lines are now stripped first, but keep `--`
   comments on their own lines and never end one with `;`.
+- **A migration may only call a SQL function that has already run on production.** CI applies
+  migrations to a `mysql:8` service container, which accepts far more than the production engine
+  does, so a green `check-migration-compat` run says nothing about portability. 0298 computed a
+  digest with `SHA1()`, passed every gate in this repository, and the deploy failed after 15.5
+  minutes on `FUNCTION railway.SHA1 does not exist (statement 7 of 8)` — six of eight statements
+  applied and no bootable version. `node scripts/check-migration-sql.mjs` now holds an
+  ALLOW-LIST of the 52 names a migration has actually run on production and fails closed on a new
+  one; a deny-list could not have caught SHA1, because nobody had written SHA1 down. If you need
+  a function nobody has run there, compute it in TypeScript at boot instead —
+  `server/lib/seasonGoalIds.ts` is the worked example, and it is idempotent by its own `WHERE`
+  rather than by the `runOnce` ledger.
 - **A shipped migration file is never edited.** A part-applied file resumes at its
   recorded statement offset (`_migrations_partial`) instead of replaying DDL, so editing
   one that has run anywhere resumes at the wrong place. Worse, `_migrations_applied` keys on

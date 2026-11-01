@@ -18,6 +18,7 @@
  * as its previous value.
  */
 import { VARIABLES_BY_KEY, withheldFromPublic, type VariableDef } from "../../shared/gameVariables";
+import { isRedactedCredential } from "./credentialRedaction";
 
 /** What a proposal's change shows where a value is held back. */
 export const KEPT_PRIVATE = "(kept private)";
@@ -96,7 +97,11 @@ export function publicAmendment(
   // default for display, marked so the page can say so.
   const from = r.old_value ?? def?.default ?? null;
   const to = r.new_value ?? def?.default ?? null;
-  const held = (v: string | null) => withheldFromPublic({ withheld: def?.withheld, value: v ?? "" });
+  // A value the ledger stored with its key removed (credentialRedaction.ts) is
+  // no longer credential-shaped, so it is held back by its marker, and the
+  // feed says "kept private" where a key used to be, as it always did.
+  const held = (v: string | null) =>
+    withheldFromPublic({ withheld: def?.withheld, value: v ?? "" }) || isRedactedCredential(v);
   const withheld = !!def?.withheld || held(from) || held(to);
   return {
     id: String(r.id),
