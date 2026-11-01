@@ -215,11 +215,10 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     if (row.status === "declined") return res.json({ success: true, emailed: false, emailedTo: null, withdrawn: false, message: JOIN_ANSWER_WORDS.alreadyDeclined });
 
-    // A yes that came first: its link is withdrawn, unless it already made an account.
+    // A yes that came first: its link is withdrawn, unless it already made an account. The withdraw
+    // matches only an unused row, so a link used at any moment before it is read back as used.
     const invite = await inviteById(pool, joinInviteId(id));
-    if (invite?.usedByUserId) return res.status(409).json({ error: JOIN_ANSWER_WORDS.alreadyJoined });
     const withdrawn = invite ? await revokeInvite(pool, invite.id, invite.inviterUserId) : false;
-    // A link used between the read and the withdraw: the account stands, and so does the yes.
     if (invite && !withdrawn && (await inviteById(pool, invite.id))?.usedByUserId) return res.status(409).json({ error: JOIN_ANSWER_WORDS.alreadyJoined });
     await setStatus(id, "declined");
 
