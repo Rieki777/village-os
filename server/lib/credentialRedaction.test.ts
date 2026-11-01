@@ -38,8 +38,8 @@ const ALCHEMY = `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`;
 // the dial's declaration does.
 const QUICK_KEY = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
 const QUICKNODE = `https://fake-name.base-mainnet.quiknode.pro/${QUICK_KEY}/`;
-const TOKEN_SECRET = "Tok3nSecretValueNotReal";
-const PLACE_WITH_TOKEN = `Meet by the river https://feed.example.test/x?token=${TOKEN_SECRET}`;
+const QUERY_VALUE = "Tok3nSecretValueNotReal";
+const PLACE_WITH_TOKEN = `Meet by the river https://feed.example.test/x?token=${QUERY_VALUE}`;
 
 describe("the rule", () => {
   it("removes a key in an Alchemy path and keeps where it pointed", () => {
@@ -57,7 +57,7 @@ describe("the rule", () => {
 
   it("removes a credential-shaped value on a dial nobody declared", () => {
     const out = ledgerSafeValue("sessions.place_line", PLACE_WITH_TOKEN)!;
-    expect(out).not.toContain(TOKEN_SECRET);
+    expect(out).not.toContain(QUERY_VALUE);
     expect(ledgerSafeValue("hypha.org_url", "https://user:pa55word@rpc.example.test/")).not.toContain("pa55word");
   });
 
@@ -77,9 +77,9 @@ describe("the rule", () => {
   });
 
   it("removes a key from inside a note and keeps the sentence", () => {
-    const note = `Baseline moved between proposal (https://feed.example.test/x?token=${TOKEN_SECRET}) and apply (plain)`;
+    const note = `Baseline moved between proposal (https://feed.example.test/x?token=${QUERY_VALUE}) and apply (plain)`;
     const out = ledgerSafeNote(note)!;
-    expect(out).not.toContain(TOKEN_SECRET);
+    expect(out).not.toContain(QUERY_VALUE);
     expect(out).toContain("Baseline moved between proposal");
     expect(ledgerSafeNote("An ordinary note")).toBe("An ordinary note");
     expect(ledgerSafeNote(null)).toBeNull();
@@ -124,7 +124,7 @@ describe.skipIf(!configured)("the ledger against a real schema", () => {
 
   it("the one INSERT stores no key, and still stores an ordinary change verbatim", async () => {
     await recordMechanicsChangeRow(pool, DIAL, { value: ALCHEMY, previous: "https://mainnet.base.org" }, "user-1", "admin");
-    await recordMechanicsChangeRow(pool, "governance.sensing_days", { value: "10", previous: "7" }, "user-1", "admin");
+    await recordMechanicsChangeRow(pool, "governance.sensing_days", { value: "10", previous: "8" }, "user-1", "admin");
     const [rs] = await pool.query<any[]>("SELECT config_key, old_value, new_value FROM mechanics_changes ORDER BY config_key"); // module-review-ok: reading the scratch ledger is the evidence
     const rpc = rs.find((r) => r.config_key === DIAL);
     // The row is on the record...
@@ -133,7 +133,7 @@ describe.skipIf(!configured)("the ledger against a real schema", () => {
     expect(String(rpc.new_value)).toContain("base-mainnet.g.alchemy.com");
     // ...and the key is not.
     expect(JSON.stringify(rs)).not.toContain(ALCHEMY_KEY);
-    expect(rs.find((r) => r.config_key === "governance.sensing_days")).toMatchObject({ old_value: "7", new_value: "10" });
+    expect(rs.find((r) => r.config_key === "governance.sensing_days")).toMatchObject({ old_value: "8", new_value: "10" });
   });
 
   it("the boot scrub rewrites only the rows carrying a key, and a second pass is a no-op", async () => {
@@ -143,7 +143,7 @@ describe.skipIf(!configured)("the ledger against a real schema", () => {
     await seedRow("m4", "governance.sensing_days", "7", "10");
     await seedRow("m5", "hypha.org_url", null, "https://app.hypha.earth/our-dho");
     await seedRow("m6", DIAL, "https://mainnet.base.org", null);
-    await seedRow("m7", "governance.sensing_days", "10", "12", `Baseline moved between proposal (https://x.example.test/?api_key=${TOKEN_SECRET}) and apply (10)`);
+    await seedRow("m7", "governance.sensing_days", "10", "12", `Baseline moved between proposal (https://x.example.test/?api_key=${QUERY_VALUE}) and apply (10)`);
     const before = await rows();
     // The seed really did put the keys in, so their absence below is the scrub.
     expect(Object.values(before).join("\n")).toContain(ALCHEMY_KEY);
@@ -155,7 +155,7 @@ describe.skipIf(!configured)("the ledger against a real schema", () => {
     for (const id of ["m1", "m2", "m3", "m7"]) expect(after[id], `${id} carried a key`).not.toBe(before[id]);
     for (const id of ["m4", "m5", "m6"]) expect(after[id], `${id} carried no key and must be untouched`).toBe(before[id]);
     const all = Object.values(after).join("\n");
-    for (const secret of [ALCHEMY_KEY, QUICK_KEY, TOKEN_SECRET]) expect(all).not.toContain(secret);
+    for (const secret of [ALCHEMY_KEY, QUICK_KEY, QUERY_VALUE]) expect(all).not.toContain(secret);
     // The rows keep their shape: the date, the key, who did it.
     expect(JSON.parse(after.m1)).toMatchObject({ config_key: DIAL, actor_user_id: "user-1", old_value: null });
     expect(JSON.parse(after.m1).at).toEqual(JSON.parse(before.m1).at);
