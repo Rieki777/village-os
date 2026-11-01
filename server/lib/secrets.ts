@@ -317,17 +317,51 @@ export function villageSecretsRefusal(
 /**
  * The launch journey's reading of the key (`village-secrets-key` in
  * shared/launchRequirements.ts). Lives beside the key because it reads the
- * environment and nothing else, so server/lib/launch.ts resolves it without a
- * closure from server/index.ts.
+ * environment and this store and nothing else, so server/lib/launch.ts resolves
+ * it without a closure from server/index.ts.
+ *
+ * GREEN MEANS IT SEALS (Rye, 2026-10-13: green means a live check passed). A key
+ * of the right shape is not yet proof, so a test value is sealed and opened
+ * with it, and every key already saved here must open with it too: a key that
+ * changed after keys were saved leaves each of them reading as unset, which is
+ * the way this key actually fails. Before boot has loaded the store there is
+ * nothing saved to try, and the round trip alone answers.
  */
 export function villageSecretsLaunchCheck(env: NodeJS.ProcessEnv = process.env): {
-  state: "ok" | "missing";
+  state: "ok" | "missing" | "partial";
   detail: string;
 } {
   const problem = villageSecretsKeyProblem(env);
-  return problem
-    ? { state: "missing", detail: problem }
-    : { state: "ok", detail: `${VILLAGE_SECRETS_ENV} is set, so Integrations can lock the keys saved there` };
+  const key = villageSecretsKey(env);
+  if (problem || !key) return { state: "missing", detail: problem ?? `${VILLAGE_SECRETS_ENV} cannot be read.` };
+  const probe = "launch-check";
+  if (openWith(key, sealWith(key, probe)) !== probe) {
+    return { state: "missing", detail: `${VILLAGE_SECRETS_ENV} is set and could not seal and open a test value. This is a platform bug, report it` };
+  }
+  const doc = cache ?? {};
+  const sealed = Object.keys(doc).filter((k) => isSealed(doc[k]));
+  const locked = sealed.filter((k) => openWith(key, doc[k] as SealedSecret) === null).length;
+  const clear = Object.keys(doc).filter((k) => isLegacy(doc[k])).length;
+  const keys = (n: number) => (n === 1 ? "1 key" : `${n} keys`);
+  if (locked > 0) {
+    return {
+      state: "missing",
+      detail:
+        `${keys(locked)} saved under Integrations cannot be opened with this ${VILLAGE_SECRETS_ENV}, so ${locked === 1 ? "it reads" : "they read"} as unset. ` +
+        "It changed after they were saved: put the old value back, or save those keys again",
+    };
+  }
+  if (clear > 0) {
+    return {
+      state: "partial",
+      detail:
+        `${VILLAGE_SECRETS_ENV} seals and opens, and ${keys(clear)} saved before sealing existed ${clear === 1 ? "is" : "are"} still stored in the clear. ` +
+        `Restart once and ${clear === 1 ? "it is" : "they are"} sealed`,
+    };
+  }
+  const opened =
+    sealed.length === 0 ? "" : sealed.length === 1 ? ", and the 1 key saved under Integrations opens with it" : `, and all ${sealed.length} keys saved under Integrations open with it`;
+  return { state: "ok", detail: `${VILLAGE_SECRETS_ENV} seals and opens: a test value made the round trip${opened}` };
 }
 
 /**

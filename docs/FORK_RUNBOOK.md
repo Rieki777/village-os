@@ -31,7 +31,7 @@ what, where, what breaks without it.
 | Var | Purpose | Without it |
 |---|---|---|
 | `AUTH_TOKEN_SECRET` | Signs member tokens | **Silently degrades to per-process sessions** — logins die on every restart |
-| `ADMIN_PASSWORD` | Bootstrap-only (S1): each village sets its own value (`scripts/fork-init.mjs` generates it and never prints it) and uses it once to create its founder at `/claim`, which calls `POST /api/admin/bootstrap` (the curl form is only for somebody without a browser). **The page and the response carry `claimUrl`, and on a fresh install also `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert after bootstrap for everybody except `BREAK_GLASS_ADMIN_EMAIL` — keeping it set is fine (foundation policy, Rye 2026-07-26), and the break-glass account needs it. | No founder can be created |
+| `ADMIN_PASSWORD` | Bootstrap-only (S1): each village sets its own value (`scripts/fork-init.mjs` generates it and never prints it) and uses it once to create its founder at `/claim`, which calls `POST /api/admin/bootstrap` (the curl form is only for somebody without a browser). **The page and the response carry `claimUrl`, and on a fresh install also `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert after bootstrap for everybody except `BREAK_GLASS_ADMIN_EMAIL` — keeping it set is fine (foundation policy, 2026-07-26), and the break-glass account needs it. | No founder can be created |
 | `JOURNEY_PASSWORD` | Legacy Command Centre gate — retired at v3 S2 | — |
 | `BREAK_GLASS_ADMIN_EMAIL` | (from S1) may re-elevate exactly that account at `/claim`, after a founder exists; it still needs `ADMIN_PASSWORD`. `fork-init` defaults it to `--admin-email` | No recovery if all admins are demoted |
 | `ANTHROPIC_API_KEY` | Maia guided proposals (`/api/assistant/*`), the launch guide, the map concierge tie-break, and call synthesis (S54). **S63: settable from Admin → Integrations instead** — an admin-typed key beats this env var; reads are masked (last4 only). | Assistant hides; forms still work; call synthesis refuses with an honest 503 while ingestion, transcripts and publishing keep working |
@@ -43,11 +43,11 @@ what, where, what breaks without it.
 | `RESEND_API_KEY` | Transactional email. **S63: settable from Admin → Integrations instead** — admin-typed beats env, masked on read. Village Comms puts the same key first on the Comms Settings checklist (Admin, Comms, Settings), saved through the same secrets route. | Each email is recorded as not sent, and nothing leaves the village |
 | `RESEND_WEBHOOK_SECRET` | (Village Comms, 2026-10-02) The signing secret (`whsec_…`) of the email provider's delivery-report webhook. `POST /api/comms/webhooks/resend` checks every report against it in the Svix format and stores each one once. Held in the secrets store as `resend_webhook_secret`, so an admin-typed value beats this env var; Comms Settings creates the webhook and stores the secret with one button (Delivery reports), and takes the secret pasted by hand when the Resend key in use can only send. | Delivery reports answer 503 and the provider retries them; bounces and complaints go unrecorded, so a dead address keeps being written to |
 | `RESEND_API_BASE` | (dev/CI only, Village Comms) Points the post office at a stand-in provider instead of `https://api.resend.com`. The test suites set it to the fake in `server/testkit/fakeResend.ts`, so no test ever sends a real email. Honoured only when it is an https address or a loopback one, so a mistyped value cannot carry the village's key across a network in the clear. | The real provider is used, which is correct in production |
-| ↳ *sender domain* | **Every fork must verify its sender domain in Resend (SPF + DKIM records in the domain's DNS).** Comms Settings adds the domain through Resend's API, shows the records to copy, and checks verification; a key that can only send gets the same steps to do by hand at resend.com/domains. Resend returns 200 on unverified domains and delivers NOTHING, so email death is silent. **Amora handoff item (Rye, 2026-07-26): `amora.cr` is unverified and only its team can add the DNS records — verify it during handoff.** | Claim links & notifications never arrive |
+| ↳ *sender domain* | **Every fork must verify its sender domain in Resend (SPF + DKIM records in the domain's DNS).** Comms Settings adds the domain through Resend's API, shows the records to copy, and checks verification; a key that can only send gets the same steps to do by hand at resend.com/domains. Resend returns 200 on unverified domains and delivers NOTHING, so email death is silent. | Claim links & notifications never arrive |
 | `EMAIL_FROM` | The `From:` address every village email leaves under: `name@example.org` or `Village Name <name@example.org>`. **Settable from Admin, Comms, Settings instead** (the sender name and address; admin-typed beats this env var, a malformed value is refused at the door, and so is an address that is not on the village's sending domain). Must be on the domain verified in Resend, or the send 200s and delivers nothing. There is no fallback sender: with neither this nor an admin-typed sender, nothing is sent, the post office records each email as not configured, and the caller is told why. | Nothing is sent; each email is recorded as not configured |
 | `FRONTEND_URL` | This village's own public address, e.g. `https://village.example.org`. Two things read it: the CORS allow-origin header, and every absolute link this server writes into an outgoing email (claim links, digests, the weekly brief). **Set it during any fork's provisioning.** It used to fall back to one specific project's domain, so a fork that left it unset mailed its own members a link to somebody else's login page and nobody found out until a member clicked one. That fallback is gone. | No CORS grant is sent at all, which refuses cross-origin readers rather than trusting a stranger. Email links fall back to the address this server has actually been reached at, taken from the first inbound request's proxy headers. If nothing has reached it yet, links have no absolute address and one log line names this variable |
-| `STRIPE_SECRET_KEY` | (S32) Stripe API key (`sk_live_…`) — powers card checkout for every fiat module (stays, exchange). **S63: settable from Admin → Integrations instead — no Railway access needed.** **Amora handoff item (Rye, 2026-07-26): the Amora team creates its own Stripe account and connects it during handoff** — until then card checkout answers an honest 503 and manual payments carry stays. | Card checkout disabled (503); manual payment path still works |
-| `STRIPE_WEBHOOK_SECRET` | (S32) Signing secret (`whsec_…`) for the ONE webhook endpoint `POST /api/webhooks/stripe`. **S63: settable from Admin → Integrations, which also displays the exact URL to paste into Stripe.** Create the endpoint in the Stripe dashboard (Developers → Webhooks) pointing at `https://<your-domain>/api/webhooks/stripe`, subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `charge.refunded`, `charge.dispute.created`, then copy its signing secret here. **All five matter**: `invoice.paid` is how every recurring product renews (without it a subscription charges the member forever and delivers only the first period), and `checkout.session.async_payment_succeeded` is how delayed-notification methods — SEPA debit, ACH, Boleto — confirm days later (without it those purchases never settle at all, because `completed` arrives `unpaid` and is correctly ignored). **Amora handoff item (Rye, 2026-07-26): create the endpoint + set this secret together with `STRIPE_SECRET_KEY` — a missing secret means unsigned events are processed only in dev shapes; a wrong one rejects every settlement with `sig_fail` alerts to admins.** Test with `stripe listen --forward-to` before go-live. | Settlements unverified or rejected; orders never credit |
+| `STRIPE_SECRET_KEY` | (S32) Stripe API key (`sk_live_…`) — powers card checkout for every fiat module (stays, exchange). **S63: settable from Admin → Integrations instead — no Railway access needed.** Until a village connects its own Stripe account, card checkout answers an honest 503 and manual payments carry stays. | Card checkout disabled (503); manual payment path still works |
+| `STRIPE_WEBHOOK_SECRET` | (S32) Signing secret (`whsec_…`) for the ONE webhook endpoint `POST /api/webhooks/stripe`. **S63: settable from Admin → Integrations, which also displays the exact URL to paste into Stripe.** Create the endpoint in the Stripe dashboard (Developers → Webhooks) pointing at `https://<your-domain>/api/webhooks/stripe`, subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `charge.refunded`, `charge.dispute.created`, then copy its signing secret here. **All five matter**: `invoice.paid` is how every recurring product renews (without it a subscription charges the member forever and delivers only the first period), and `checkout.session.async_payment_succeeded` is how delayed-notification methods — SEPA debit, ACH, Boleto — confirm days later (without it those purchases never settle at all, because `completed` arrives `unpaid` and is correctly ignored). **Create the endpoint and set this secret together with `STRIPE_SECRET_KEY`: a missing secret means unsigned events are processed only in dev shapes; a wrong one rejects every settlement with `sig_fail` alerts to admins.** Test with `stripe listen --forward-to` before go-live. | Settlements unverified or rejected; orders never credit |
 | `RIVERSIDE_WEBHOOK_SECRET` | Shared secret for `POST /api/webhooks/riverside` (automation module). **Settable from Admin → Integrations instead** — admin-typed beats env, masked on read. The webhook **fails closed**: without a configured secret, or without a matching `x-riverside-secret` header on the delivery, every payload is discarded with an inert 200 (the automation admin card shows a warning while unset). Configure Riverside to send the same value as the `x-riverside-secret` header. | Riverside deliveries are silently discarded until the secret is set |
 | `GOVERNANCE_HUB_SECRET` | Shared secret for `POST /api/webhooks/mechanics-governance` — how a Hypha vote's outcome comes home. **Settable from Admin → Integrations instead** (admin-typed beats env, masked on read). The ReGen hub runs ONE Alchemy listener on Base for every fork; when a proposal carrying a `[gm:…]` marker executes on-chain, the hub POSTs the outcome here with this secret as the `x-governance-hub-secret` header. **Fails closed**: unset or mismatched = every delivery discarded with an inert 200. Until your fork is registered with the hub, outcomes are reported by the proposer and applied by an admin ("Verify & apply"). | Verified outcomes never arrive; the human verify-and-apply path still works |
 | `BASESCAN_API_KEY` | (optional) Etherscan/Basescan API key for **Admin → Game Mechanics → Hypha Bridge**: after the founder issues themselves a token on Hypha, the token's contract address on Base is discovered from the founder's account history (`hypha.founder_base_address`) and listed for the founder to confirm. **Settable from Admin → Integrations instead** (admin-typed beats env, masked on read). One free key from etherscan.io serves Base via the V2 API. | The contract lookup answers 409 with guidance; contract addresses can still be pasted by hand from basescan.org |
@@ -150,8 +150,16 @@ above the size of a gathering, not to the size of one person's usage.
 
 ## Seeds & per-deployment data
 
-- `server/seeds/content-seed.json`, `quests-seed.json` — page copy + quest
-  library (self-heals via `seedIfMissingOrEmpty`).
+- `server/seeds/content-seed.json` — page copy (self-heals via `seedIfMissingOrEmpty`).
+- Starter quests (2026-10-31): the `quests` section of `server/seeds/examples-seed.json`. A fresh
+  village opens on them as standing examples a founder keeps (Admin, Quests, Keep, which asks for a
+  value) or clears; the Journey to Launch row `starter-quests` waits on that. Edit THAT section to
+  change a fork's starters. `server/seeds/quests-seed.json` is frozen, seeds nothing, and is read
+  only by the two repair passes below; a test pins its hash.
+- `server/seeds/page-governance-before-neutral.json` — How We Govern as it read before its
+  defaults went neutral (2026-11-01). Read once at boot by the `keep-governance-words-2026-11-01`
+  runOnce (`server/lib/governanceWordsKept.ts`), only for a village that already holds its own
+  `page-*` words; a new village never sees it.
 - `server/seeds/examples-seed.json` — STANDING EXAMPLES: platform-authored
   worked content revealed when a module is first enabled, so a founder meets a
   working module instead of "No items yet." Inert (every mutation refused) and
@@ -315,7 +323,7 @@ two from the admin panel and almost never touches the first.
   drop the links, and `/` shows the neutral welcome page
   (`client/src/pages/VillageWelcome.tsx`). Migration
   `drizzle/0225_a_village_keeps_the_pages_it_already_served.sql` wrote it ON in
-  every database that already had members, so Amora keeps its pages.
+  every database that already had members, so the first village keeps its pages.
   `shared/brochure.ts` says how a fork that rewrote the pages turns them back
   on. Neutral legal and covenant templates with placeholders are in
   `server/seeds/templates/`; the first village's own wording is in
@@ -725,7 +733,7 @@ with no document the bar draws its five example numbers, each one saying
 "example", until a founder points a chip at a source. The sources and what each
 counts are `STAT_SOURCES` in `shared/mapStatChips.ts`; a source that reads a
 module (Events, Village Health) is drawn only for a viewer who can open it.
-The treasury source (Rye, 2026-10-05) reads `sys:treasury` in the one token
+The treasury source (founder ruling, 2026-10-05) reads `sys:treasury` in the one token
 `gratitude.pool_token` names, in whole tokens at that token's own `decimals`,
 and is drawn only for a member the village has admitted, or an admin: a
 visitor and a signed-in guest get no chip and no number. Nothing to provision.
@@ -777,7 +785,7 @@ call, and the shell pushes it as a single `{type:'config'}` message on
 `grounds-ready`. The walk and the village's own welcome live in a `map_walk`
 document keyed by language (`en` default; the welcome under `welcome`).
 **An absent or empty walk means the map offers no walk at all, and an absent
-welcome means the guide greets people plainly** (Rye, 2026-10-02: onboarding is
+welcome means the guide greets people plainly** (founder ruling, 2026-10-02: onboarding is
 the founders' to write). The seed's example walk is offered to nobody. Once the
 fetch has answered, the shell sends both keys, null included; it leaves them
 out only after a failed fetch, which tells the map to keep what it has. Write
@@ -796,7 +804,7 @@ served yesterday's build with no way to force a refresh.
 ### Importing a map scene
 
 ```bash
-npx tsx scripts/import-map-scene.ts <amora-scene.json> --dry
+npx tsx scripts/import-map-scene.ts <village-scene.json> --dry
 ```
 
 `--dry` needs no database and writes nothing. Without it, set `DATABASE_URL`.
@@ -1003,7 +1011,7 @@ variables and invariants are language-free by construction.
 - New game variable, no migration: `org.public_people` (default `true`,
   founder-held, category "The village's people"). On, a signed-out visitor
   reads the first names of the people holding each seat on those three pages.
-  Off is Rye's "secret society" setting: the names become members-only and the
+  Off is the founder's "secret society" setting: the names become members-only and the
   structure stays open. Deliberately outside the map module's `variableKeys`,
   because those three pages have no module gate and `/api/org` answers with the
   map module off. Three tiers on that route now: anyone (a first name and
@@ -1260,9 +1268,9 @@ the seeded roles whose descriptions already claimed the work
 | `health.record` | Steward Circle |
 | `event.manage` | Steward Circle |
 | `exchange.manage` | Treasury |
-| `cash.pay` | Treasury (Rye, 2026-10-30; also in the founding stewards' handover set) |
+| `cash.pay` | Treasury (founder ruling, 2026-10-30; also in the founding stewards' handover set) |
 | `org.declare` | Founders Circle |
-| `org.seat`, `org.decide` | Founders Circle (Rye, 2026-10-20) |
+| `org.seat`, `org.decide` | Founders Circle (founder ruling, 2026-10-20) |
 | `map.edit`, `map.publish` | the Cartographer badge (0063) |
 
 Nothing to provision. `roles-seed.json` is applied ONLY when the `roles` table
@@ -1281,7 +1289,7 @@ purpose. Nothing to provision. Look for `the Treasury role now grants cash.pay`
 in the boot log. A village with no Treasury role gets no line, and its admins
 and founding stewards still hold the power.
 
-- Seeds: `server/seeds/quests-seed.json` carries the story layer per quest (0068: `subtitle`, `story`, `firstStep`, `steps`, `deliverable`, `tips`, optional `imageUrl`). On an already-running village the `quest-story-2026-08-10` runOnce fills those fields from the seed ONLY where the live row is empty, so admin-written copy is never overwritten, and `quest-posters-2026-08-10` replays the same fill to pick up `imageUrl` on villages that ran the first one. Both throw when the seed file is missing or unreadable, so a broken deploy retries on the next boot instead of recording itself as applied. Look for `filled N quest(s)` or `found nothing to fill` in the boot log: those are different facts.
+- Seeds: the frozen `server/seeds/quests-seed.json` carries the story layer per quest (0068: `subtitle`, `story`, `firstStep`, `steps`, `deliverable`, `tips`, optional `imageUrl`). On an already-running village the `quest-story-2026-08-10` runOnce fills those fields from the seed ONLY where the live row is empty, so admin-written copy is never overwritten, and `quest-posters-2026-08-10` replays the same fill to pick up `imageUrl` on villages that ran the first one. Both throw when the seed file is missing or unreadable, so a broken deploy retries on the next boot instead of recording itself as applied. Look for `filled N quest(s)` or `found nothing to fill` in the boot log: those are different facts.
 - Quest poster art: a quest's `imageUrl` must be a path under `/api/uploads/` (the API refuses anything else, the same rule the forum's image field follows), so posters are uploaded into the `data/uploads/` volume, never committed to `client/public`. That directory is served one-year-immutable and is not content-hashed, and CI caps `dist/public` at 6 MB total and 400 KB per image. A village with no poster files needs no action: each card paints a gradient scene from its circle, and a quest whose `imageUrl` points at a missing file falls back to the same scene rather than showing a broken image.
 - Quest crews (0067, `quest_crews` + `quest_crew_members`): a small named group walking one quest, formed by any signed-in member and joined by invite link. Nothing about a crew touches value: members claim, submit and are consented to individually, so the consent gate never learns crews exist. Every crew route requires a signed-in member INCLUDING the read, because quest pages are public and who walks with whom is not for crawlers. Crews work with messaging off, and the roster is the crew. With messaging on, forming a crew also opens a conversation through `crewsRepo.attachConversation` (`kind` 'crew', `context_type` 'quest', `context_id` the quest id), joining the crew joins that thread, and leaving the crew leaves it. All three calls are best-effort and logged on failure, so a room that will not open never fails the act of forming a crew, and a village that switches messaging off later keeps its crews and loses the rooms.
 - Uploads, every door (`server/lib/uploads.ts`): every byte that reaches `data/uploads/` goes through `sanitiseForVolume` first. An image is re-encoded in its own format AT ITS OWN DIMENSIONS with no metadata, and the result is read back and asserted before it is written, so a picture cannot publish the coordinates of the land it was taken on. A PDF is scanned for an embedded geotagged photograph and REFUSED with a sentence when it holds one (a PDF is not re-encoded: that needs a new runtime dependency, and a PDF's own metadata carries author and producer, never GPS). Fonts, spreadsheets and everything else pass through untouched. No env var and no seat of configuration: this is not tunable, deliberately, because it protects a person from a consequence they cannot see. `node scripts/check-upload-strip.mjs` is a CI gate that fails when any new writer reaches the volume without coming through that module, and `multer.diskStorage` is refused outright because it writes a stranger's bytes before any handler can look at them. Two log lines are worth an alert: `[uploads] refused a proposal attachment whose metadata survived the strip` and its vault twin both mean the runtime assertion fired, which should never happen.

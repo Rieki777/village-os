@@ -18,6 +18,7 @@ import { PAGE_SPECS } from "@shared/pageContent";
 import {
   adoptedDocument,
   charCount,
+  contentVersion,
   pageDocumentProblems,
   resolvePageRaw,
 } from "@shared/pageContent/resolve";
@@ -386,7 +387,8 @@ export default function PagesEditor({ password }: { password: string }) {
     try {
       const res = await fetch(`${API_BASE}/admin/content/${pageSectionKey(spec)}`, {
         method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        // The words this editor was opened on: a save over words that moved since is refused (409).
+        headers: authHeaders(password, { "Content-Type": "application/json", "x-content-was": contentVersion(saved) }),
         body: JSON.stringify(doc),
       });
       if (!res.ok) throw new Error(refusal(await res.json().catch(() => ({})), "Save failed."));

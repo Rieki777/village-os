@@ -52,10 +52,13 @@ type Deps = Pick<
   | "recordStageEvent"
   | "getPool"
   | "lapseContext"
->;
+> & {
+  /** Sheet 19: the power groups that give this member admin access right now, by name. */
+  adminGroupsFor(userId: string): string[];
+};
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, members, claimsRepo, computeStage, trainingCompletions, paidByVillage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext } = deps;
+  const { isAdmin, members, claimsRepo, computeStage, trainingCompletions, paidByVillage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext, adminGroupsFor } = deps;
 
   // Players admin: list + stage grants
   app.get("/api/admin/players", async (req, res) => {
@@ -98,6 +101,7 @@ export function register(app: Express, deps: Deps): void {
         stageGranted: u.stageGranted ?? null,
         stageComputed: computeStage(u, consented.get(u.id) ?? 0, trained.get(String(u.id)) ?? [], paid.has(String(u.id)), holders.has(String(u.id))),
         membership: hasMembership(u),
+        adminVia: adminGroupsFor(String(u.id)),
       }))
     );
   });

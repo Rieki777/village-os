@@ -6,16 +6,25 @@
  * JSX, so every new village described a sociocracy, five named circles, a
  * practice of nonviolent communication and a Hypha space it might not have.
  *
- * The defaults are the words the page carried in code until 2026-10-23, moved
- * here unchanged, EXCEPT two facts that already had a setting:
+ * THE DEFAULTS ARE A NEUTRAL STARTER, true of any village on this platform.
+ * They say nothing a village has to have chosen: no governance method, no
+ * practice for conflict, no count of circles, no circle names (the circle
+ * cards start empty and /circles shows the real ones). They describe what the
+ * platform itself does: anyone may propose, a decision is recorded, a steward
+ * may stop a passed change within the village's window, and the settings that
+ * govern stewards are the one thing no steward may veto. A village writes its
+ * own way of deciding over them in Admin, Pages, How We Govern.
+ *
+ * The words the page carried in code until 2026-10-23 were the first
+ * village's own; that village saved them as its copy before these landed.
+ *
+ * Two facts come from settings and never from typed words:
  *   - the steward's veto window is `{veto}`, from Admin, Variables
  *     (`governance.veto_hours`). The page said "three days" whatever the
  *     village had set, and 72 hours is only the floor. `{veto}` is filled by
  *     the page itself (`vetoWindowWords` below), not by shared vars;
  *   - the Hypha section draws only while the village's Hypha DHO link is set
  *     (Admin, Variables, `hypha.org_url`) as well as switched on here.
- * "Love Letter" in the closing button is `{commitment}`, which is "Love
- * Letter" where that is the village's commitment name.
  *
  * Every section after the top can be hidden. The decision band of live votes
  * is not a field: it is the village's real ballots.
@@ -58,7 +67,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
       shows: "The coloured band at the top of the page, above the village's open votes.",
       fields: [
         { key: "eyebrow", label: "Small label above the headline", kind: "text", max: 32, default: "How We Govern" },
-        { key: "headline", label: "Headline", kind: "text", max: 48, default: "Power Belongs to the Circle, Not the Person" },
+        { key: "headline", label: "Headline", kind: "text", max: 48, default: "How {village} Decides" },
         {
           key: "intro",
           label: "Paragraph under the headline",
@@ -66,7 +75,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
           kind: "long",
           max: 280,
           default:
-            "{village} uses sociocracy, a consent-based governance system where every voice can influence decisions. While the systems are still finding their feet, members elect stewards who can veto a decision, and those same members can vote a steward out.",
+            "Here is how a proposal becomes a decision in {village}, who can stop one, and how the village changes its own rules. Every member can take part.",
         },
       ],
     },
@@ -75,7 +84,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
       label: "Principles",
       shows: "The row of cards under the open votes. Each gets the next icon in a fixed set.",
       hideable: true,
-      fields: [{ key: "heading", label: "Heading", kind: "text", max: 40, default: "The Core Principles" }],
+      fields: [{ key: "heading", label: "Heading", kind: "text", max: 40, default: "What Guides Us" }],
       lists: [
         {
           key: "items",
@@ -90,16 +99,16 @@ export const GOVERNANCE_PAGE: PageSpec = {
           ],
           default: [
             {
-              title: "Consent over consensus",
-              body: "We don't need everyone to love a decision. We need no one to have a serious objection. This keeps us moving without demanding perfection.",
+              title: "Anyone can propose",
+              body: "Any member can bring an idea to the village as a proposal. Who decides it depends on what it would change.",
             },
             {
-              title: "Circles, not hierarchy",
-              body: "Decisions are made in the circle closest to the work. The Development Circle governs the build. The Community Circle governs the human experience. No top-down override.",
+              title: "Decided in the open",
+              body: "Proposals, votes and their results are recorded where members can read them.",
             },
             {
-              title: "Transparency by default",
-              body: "Meeting notes, decisions, and proposals are recorded and accessible to all members. Nothing happens in secret.",
+              title: "Open to change",
+              body: "The way {village} decides can change too, through the same steps as any other decision.",
             },
           ],
         },
@@ -112,7 +121,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
       hideable: true,
       fields: [
         { key: "heading", label: "Heading", kind: "text", max: 40, default: "How a Decision Gets Made" },
-        { key: "intro", label: "Sentence under the heading", kind: "text", max: 100, default: "Every decision follows the same simple path.", optional: true },
+        { key: "intro", label: "Sentence under the heading", kind: "text", max: 100, default: "Most decisions follow the same path.", optional: true },
       ],
       lists: [
         {
@@ -124,11 +133,11 @@ export const GOVERNANCE_PAGE: PageSpec = {
           maxItems: 8,
           fields: [{ key: "text", label: "Step", kind: "text", max: 100, default: "" }],
           default: [
-            { text: "Someone senses a tension or opportunity." },
-            { text: "They bring a proposal to their circle." },
-            { text: "The circle discusses, amends, and tests for consent." },
-            { text: "If no one has a paramount objection, the proposal passes." },
-            { text: "The decision is logged and published." },
+            { text: "Someone notices something that could be better." },
+            { text: "They write it up as a proposal." },
+            { text: "The people it affects talk it through and suggest changes." },
+            { text: "The village decides, in the way it agreed for that kind of decision." },
+            { text: "The decision is recorded for every member to read." },
           ],
         },
       ],
@@ -139,22 +148,22 @@ export const GOVERNANCE_PAGE: PageSpec = {
       shows: "Cards describing your circles, with a link to the circles page. The circles page itself always shows your real circles.",
       hideable: true,
       fields: [
-        { key: "heading", label: "Heading", kind: "text", max: 40, default: "Circles and Their Domains" },
+        { key: "heading", label: "Heading", kind: "text", max: 40, default: "Our Circles" },
         {
           key: "intro",
           label: "Sentence under the heading",
           kind: "long",
           max: 180,
-          default: "Authority lives close to the work. Each circle governs its domain and reports up only when something crosses boundaries.",
+          default: "Each circle looks after one part of the village's work. The circles page shows every one of them, with its roles.",
           optional: true,
         },
-        { key: "linkLabel", label: "Link to the circles page", kind: "text", max: 32, default: "See all circles in detail" },
+        { key: "linkLabel", label: "Link to the circles page", kind: "text", max: 32, default: "See every circle" },
       ],
       lists: [
         {
           key: "items",
           label: "Circle cards",
-          help: "Two side by side on a wide screen. Leave the list empty for none.",
+          help: "Two side by side on a wide screen. Empty, as it starts, draws no cards.",
           itemLabel: "Circle",
           titleKey: "name",
           maxItems: 8,
@@ -162,28 +171,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
             { key: "name", label: "Name", kind: "text", max: 32, default: "" },
             { key: "body", label: "What it looks after", kind: "long", max: 180, default: "" },
           ],
-          default: [
-            {
-              name: "General Coordinating Circle",
-              body: "Where the circles meet: the four leads and circle representatives, coordinating strategy, budget stewardship, and decisions that cross circle boundaries.",
-            },
-            {
-              name: "Outreach & Growth Circle",
-              body: "Connects with people and guides their whole journey into the village: marketing, sales, social media, and membership & onboarding as one flow.",
-            },
-            {
-              name: "Community Circle",
-              body: "The lived experience: events, hospitality, stays on the land, and the governance and team-health practices that keep the human systems honest.",
-            },
-            {
-              name: "Development Circle",
-              body: "The physical realization: master planning, architecture, permitting, construction, land operations, and regenerative systems.",
-            },
-            {
-              name: "Finance & Business Circle",
-              body: "Stewards the money and builds the engines that generate it: financial operations, the legal container, and business development.",
-            },
-          ],
+          default: [],
         },
       ],
     },
@@ -193,14 +181,14 @@ export const GOVERNANCE_PAGE: PageSpec = {
       shows: "Up to three paragraphs on how tension between members is worked through.",
       hideable: true,
       fields: [
-        { key: "heading", label: "Heading", kind: "text", max: 40, default: "Conflict Resolution" },
+        { key: "heading", label: "Heading", kind: "text", max: 40, default: "When Tension Shows Up" },
         {
           key: "first",
           label: "First paragraph",
           kind: "long",
           max: 280,
           default:
-            "When tension shows up, it goes through three stages. First, the people involved have a direct conversation, supported by our shared practice of nonviolent communication. Most things resolve here.",
+            "Disagreements are part of living together. When tension shows up, start with a direct conversation with the people involved.",
         },
         {
           key: "second",
@@ -209,7 +197,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
           kind: "long",
           max: 280,
           default:
-            "If that doesn't land, a facilitated conversation is requested. A trained member from a different circle helps both sides be heard and find a path forward.",
+            "If that does not settle it, ask a steward or someone you trust in the village to help everyone be heard.",
           optional: true,
         },
         {
@@ -218,8 +206,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
           help: "Leave blank for none.",
           kind: "long",
           max: 280,
-          default:
-            "If the tension still won't resolve, the relevant circle holds a mediation. No one is removed from the community without a circle consent vote. We err on the side of repair and reintegration whenever possible.",
+          default: "",
           optional: true,
         },
       ],
@@ -238,7 +225,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
           kind: "long",
           max: 360,
           default:
-            "The community votes stewards in. A steward holds a veto: once a major proposal passes, a steward has {veto} to stop it before it takes effect. That window exists so somebody with the whole picture can catch a decision that would cause harm or break something the village depends on.",
+            "A steward holds a veto: once a major proposal passes, a steward has {veto} to stop it before it takes effect. That window exists so somebody with the whole picture can catch a decision that would cause harm or break something the village depends on.",
         },
         {
           key: "second",
@@ -285,7 +272,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
           kind: "long",
           max: 280,
           default:
-            "The agreements we launch with are not permanent. Any member can propose a change through their circle. Rules that no longer serve the community get amended or removed. Governance is alive; it grows with us.",
+            "The agreements {village} starts with can change. Any member can propose a change, and rules that no longer serve the community can be amended or removed.",
         },
       ],
     },
@@ -302,7 +289,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
           kind: "long",
           max: 280,
           default:
-            "Governance is logged on Hypha, an open-source platform owned by its contributors. Every proposal, vote, and contribution is transparent and traceable. Value in, value out.",
+            "{village} has a space on Hypha, an open-source platform for proposals and votes. What happens there can be read and traced.",
         },
         {
           key: "linkLabel",
@@ -310,7 +297,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
           help: "Shown while your brochure pages are on.",
           kind: "text",
           max: 32,
-          default: "Learn more in the Game Guide",
+          default: "Learn more in the guide",
         },
       ],
     },
@@ -326,7 +313,7 @@ export const GOVERNANCE_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 160,
-          default: "Join the circle closest to your gifts and start shaping the village from the inside.",
+          default: "Find the circle closest to your gifts and help shape the village from the inside.",
           optional: true,
         },
         { key: "stewardLabel", label: "Button to the steward page", kind: "text", max: 28, default: "Become a Steward" },

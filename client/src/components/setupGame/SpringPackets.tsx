@@ -15,6 +15,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { DomainPanel, SettingsPayload } from "@/components/admin/comms/commsSettingsApi";
 import {
   addDomain,
+  checkKeyRights,
   confirmDomain,
   connectReports,
   pasteReportsSecret,
@@ -112,6 +113,17 @@ function wordsFor(beat: BeatId, seeds: Record<string, SeedState>, phase: PacketP
         who: founder,
         cost: "Your Resend plan. The free tier covers a small village to start.",
         undo: "Switch Comms back to preview in the Module Library. Pause all in Comms Settings stops every letter at once.",
+        keystone: true,
+      };
+    case "trade":
+      return {
+        title: "Trade the master key for a sending key",
+        kind: "Keystone",
+        note: "The paste goes straight to the root cellar",
+        grants: "The village keeps sending in its own name. The new key can only send, and only from your domain, so a key that leaks cannot touch your Resend account.",
+        who: founder,
+        cost: "Free.",
+        undo: "Paste the full-access key back. Then delete whichever key you no longer use at resend.com/api-keys.",
         keystone: true,
       };
   }
@@ -230,6 +242,7 @@ export default function SpringPacket(props: PacketProps) {
       {beat === "sign" && <SignBody {...props} />}
       {beat === "nursery" && <NurseryBody {...props} />}
       {beat === "transplant" && <TransplantBody {...props} />}
+      {beat === "trade" && <TradeBody {...props} />}
     </Shell>
   );
 }
@@ -315,6 +328,78 @@ function KeyBody({ comms, setComms }: PacketProps) {
       <div className="sg-actions">
         <button type="button" className="sg-primary" disabled={busy || !value.trim()} onClick={() => void plant()}>
           {busy ? "Planting" : "Plant it"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function TradeBody({ comms, setComms }: PacketProps) {
+  const [value, setValue] = useState("");
+  const { busy, error, doing } = useDoing();
+  const onHost = comms?.key.source === "env";
+  const full = comms?.settings.keyRights === "full";
+  async function check() {
+    const fresh = await doing(() => checkKeyRights(), "Resend could not be asked about the key. Try again in a minute.");
+    if (fresh) setComms(fresh);
+  }
+  async function plant() {
+    const v = value.trim();
+    if (!v) return;
+    const ok = await doing(() => plantResendKey(v), "Resend's key did not save. Try again.");
+    if (ok === null) return;
+    setValue("");
+    // Ask about the new key straight away, so the answer is about this one.
+    const fresh = await doing(() => checkKeyRights(), "The key is planted. Press Check the key to look again.");
+    if (fresh) setComms(fresh);
+  }
+  return (
+    <>
+      {full ? (
+        <>
+          <ol className="sg-steps">
+            <li>
+              On{" "}
+              <a href={RESEND_KEYS} target="_blank" rel="noreferrer">
+                resend.com/api-keys
+              </a>
+              , press Create API Key.
+            </li>
+            <li>Name it for your village, choose Sending access, and pick your sending domain{comms?.settings.domain ? `, ${comms.settings.domain}` : ""}.</li>
+            <li>Copy it. Resend shows it only once.</li>
+            <li>{onHost ? "The key in use is set on the hosting service, so put the new one in RESEND_API_KEY there and come back." : "Paste it here, never into a chat with any AI."}</li>
+            <li>Send yourself a test letter in Comms Settings. When it arrives, delete the old full-access key on resend.com.</li>
+          </ol>
+          {!onHost && (
+            <div className="sg-field">
+              <label htmlFor="sg-trade">Cellar door</label>
+              <input
+                id="sg-trade"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="Starts with re_"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void plant();
+                }}
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="sg-why">Resend says what a key may do when asked. Nothing comes back out of the cellar, only its answer.</p>
+      )}
+      <ErrorLine text={error || (value.trim() && !value.trim().startsWith("re_") ? "Resend keys start with re_. Check you copied the whole key." : "")} />
+      <div className="sg-actions">
+        {full && !onHost && (
+          <button type="button" className="sg-primary" disabled={busy || !value.trim()} onClick={() => void plant()}>
+            {busy ? "Planting" : "Plant the sending key"}
+          </button>
+        )}
+        <button type="button" className={full && !onHost ? "sg-link" : "sg-primary"} disabled={busy} onClick={() => void check()}>
+          {busy ? "Asking Resend" : "Check the key"}
         </button>
       </div>
     </>

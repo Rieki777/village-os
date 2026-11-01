@@ -33,7 +33,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { PLATFORM_GUILDS, SEEDS_BY_ID, keystoneRule, type GuildSeed, type PlantingPhase } from "../../shared/guilds";
 import { MODULES } from "../../shared/modules";
 import { getPool } from "../db/pool";
-import { plantingPhase } from "../lib/gameStart";
+import { cosignPhase } from "../lib/plantingRequests";
 import { effectiveLifecycle } from "../lib/modules";
 import { SECRET_KEYS, secretStatus, type SecretKey } from "../lib/secrets";
 
@@ -193,7 +193,8 @@ type Deps = Pick<AppDeps, "isAdmin" | "projectName">;
 export function register(app: Express, deps: Deps): void {
   app.get("/api/admin/setup-game", async (req, res) => {
     if (!(await deps.isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const phase = await plantingPhase(getPool());
+    // The co-sign's own signal (server/lib/plantingRequests.ts), so the map and the save door agree.
+    const phase = await cosignPhase(getPool());
     res.json(setupGameMap(deps.projectName(), phase, liveHandleReader, (id) => effectiveLifecycle(id)));
   });
 }

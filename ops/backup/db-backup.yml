@@ -481,7 +481,7 @@ jobs:
             echo "  2. Set BACKUP_EXPORT_TOKEN on the Railway app service, and redeploy." >&2
             echo "  3. Add the same value as a GitHub Actions repository secret." >&2
             echo "  4. Add BACKUP_EXPORT_ORIGIN, the village base URL, no trailing slash," >&2
-            echo "     for example https://amora.example.org" >&2
+            echo "     for example https://village.example.org" >&2
             echo "  5. Re-run this workflow." >&2
             echo "Full procedure: docs/RUNBOOK.md, 'Turning on the uploads backup'." >&2
             exit 1

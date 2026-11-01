@@ -128,7 +128,7 @@ export default function StewardJourney() {
               className="flex flex-wrap gap-4"
             >
               {heroPrimary && (
-                <JourneyLink action={heroPrimary.action} className="btn-amora flex items-center gap-2">
+                <JourneyLink action={heroPrimary.action} className="btn-village flex items-center gap-2">
                   <Calendar className="w-5 h-5" />
                   {heroPrimary.label}
                 </JourneyLink>
@@ -514,7 +514,7 @@ function BandButton({ section, targets }: { section: ResolvedSection; targets: T
   const cta = buttonAction(section.fields.ctaLabel, section.fields.ctaTarget, targets);
   if (!cta) return null;
   return (
-    <JourneyLink action={cta.action} className="btn-amora inline-flex items-center gap-2">
+    <JourneyLink action={cta.action} className="btn-village inline-flex items-center gap-2">
       {cta.label}
       <ArrowRight className="w-5 h-5" />
     </JourneyLink>

@@ -487,7 +487,7 @@ You need Railway access and GitHub repository settings access.
 
 4. **Tell GitHub where the village is.** Another new repository secret, named
    `BACKUP_EXPORT_ORIGIN`, value your village's base address with no trailing
-   slash, for example `https://amora.example.org`.
+   slash, for example `https://village.example.org`.
 
 5. **Run it and watch it pass.**
 

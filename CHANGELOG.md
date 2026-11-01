@@ -36,6 +36,14 @@ Work on `main` that has not been published as an image yet. No village runs
 it. It is written here as it lands, so the next release entry is a record
 made at the time.
 
+- **The platform's timezone is UTC.** It was the first village's clock. A
+  village that never chose or confirmed its timezone in Admin, Seasons, moves
+  to UTC with this release: season turns, role terms, the claims window, the
+  calendar and the weekly brief follow. **What you must do:** open the Launch
+  Plan before upgrading. If its timezone row is not green, choose your zone
+  (or press This is right) on the Seasons tab. The row now has to be answered
+  before a launch vote. A village that chose or confirmed its zone keeps it.
+
 ---
 
 ## 1.2.0 (2026-10-03)

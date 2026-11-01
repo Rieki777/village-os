@@ -58,6 +58,10 @@ function lines(current: BeatId | "done", comms: SettingsPayload | null, storm: b
       return phase === "before-launch"
         ? ["The post office is ready. Opening it is a keystone, so read the packet slowly.", "Before launch, any founder can do this alone."]
         : ["The post office is ready. Opening it is a keystone, so read the packet slowly."];
+    case "trade":
+      return comms?.settings.keyRights === "full"
+        ? ["Resend says the key in the cellar can run your whole account. The village only needs to send.", "Trade it for a key that can only send, and only from your domain."]
+        : ["One last planting. The key you planted for the setup can do far more than send.", "Check it first. If it can only send already, you are done."];
     case "done":
       return ["Water runs. The spring is established, and the bees keep visiting.", "If a check ever fails, it shows up here as something to tend."];
   }

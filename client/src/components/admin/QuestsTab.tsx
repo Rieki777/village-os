@@ -10,6 +10,14 @@
  *
  * Admin is a light-only workspace by ruling (2026-09-04), so this file keeps
  * the fixed grays it was written in.
+ *
+ * STARTER QUESTS (Rye, sheet A8 / 19g, 2026-10-31). A fresh village opens on
+ * starters that are standing examples, which nobody can claim and the save
+ * and delete routes refuse. Each one carries Keep instead: it publishes that
+ * starter as a real quest, with whatever the founder changed and the value
+ * they set, and leaves the others standing. The note above the list clears
+ * the ones nobody kept. This is the screen the Journey to Launch row
+ * `starter-quests` links to.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -45,6 +53,7 @@ export default function QuestsTab({ password }: { password: string }) {
     () => Array.from(new Set(quests.map((q) => q?.circle).filter(Boolean))).sort() as string[],
     [quests],
   );
+  const starters = quests.filter((q) => q?.isExample).length;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,6 +140,31 @@ export default function QuestsTab({ password }: { password: string }) {
           <WorkValueEditor draft={addingPay} onChange={setAddingPay} offered={offered} currency={currency || null} cadence="once" inputClassName={inputCls} />
         </div>
       </div>
+
+      {starters > 0 && (
+        <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-medium">{starters === 1 ? "1 starter quest is" : `${starters} starter quests are`} waiting for you</p>
+          <p className="mt-1">
+            Nobody can claim a starter. Keep the ones that fit as real quests, then clear the rest.
+            Posting a quest of your own clears every starter you have not kept.
+          </p>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!window.confirm("Clear the starter quests you have not kept? They are removed for good.")) return;
+              const r = await call("/admin/modules/quests/examples/clear");
+              if (r) {
+                forgetExamplesCache("quests", { confirmed: true });
+                toast.success("Starters cleared");
+                load();
+              }
+            }}
+            className="mt-2 min-h-[44px] px-3 rounded-md border border-amber-400 bg-white font-medium"
+          >
+            Clear the starters you have not kept
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-12 text-gray-400">Loading…</div>
@@ -277,6 +311,37 @@ export default function QuestsTab({ password }: { password: string }) {
                     A poster comes through the village's own upload, so its path starts with /api/uploads/. Leave it empty and the card paints a scene from the quest's circle.
                   </p>
                 </details>
+                {q.isExample ? (
+                  <div className="flex flex-wrap items-center gap-3 mt-3">
+                    <button
+                      onClick={async () => {
+                        // Required, the way posting a new quest requires it:
+                        // a kept starter is a real quest from this moment.
+                        const pay = draftToBody(d.payDraft, offered ?? [], currency, { required: true });
+                        if (!pay.ok) return toast.error(pay.error);
+                        const r = await call(`/admin/quests/${q.id}/keep`, {
+                          title: d.title, description: d.description,
+                          valueMinor: pay.valueMinor, valueTokens: pay.valueTokens, cashMinor: pay.cashMinor,
+                          status: d.status, circle: d.circle,
+                          subtitle: d.subtitle ?? "", story: d.story ?? "", firstStep: d.firstStep ?? "",
+                          deliverable: d.deliverable ?? "", imageUrl: d.imageUrl ?? "",
+                          difficulty: d.difficulty ?? "", duration: d.duration ?? "", impact: d.impact ?? "",
+                          steps: linesToList(d.stepsText ?? ""), tips: linesToList(d.tipsText ?? ""),
+                        });
+                        if (r) {
+                          if (!r.startersLeft) forgetExamplesCache("quests", { confirmed: true });
+                          toast.success("Kept. It is a real quest now");
+                          setDraft({ ...draft, [q.id]: undefined });
+                          load();
+                        }
+                      }}
+                      className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium"
+                    >
+                      Keep as a real quest
+                    </button>
+                    <span className="text-xs text-gray-500">Change anything above first, and set its value.</span>
+                  </div>
+                ) : (
                 <div className="flex items-center gap-3 mt-3">
                   <button
                     disabled={!dirty}
@@ -309,6 +374,7 @@ export default function QuestsTab({ password }: { password: string }) {
                     Delete
                   </button>
                 </div>
+                )}
               </div>
             );
           })}

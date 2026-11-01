@@ -395,6 +395,72 @@ export function questsRepo(pool: Pool): QuestsRepo {
   };
 }
 
+/** What keeping a starter answers with. */
+export type QuestKeep =
+  | { ok: true; quest: QuestRecord }
+  | { ok: false; reason: "missing" | "not_example" };
+
+/**
+ * KEEP ONE STARTER QUEST AS THE VILLAGE'S OWN.
+ *
+ * A fresh village's starters are standing examples (`server/lib/examples.ts`):
+ * inert, refused by every write route, and gone together when a founder clears
+ * them or posts a quest of their own. That left no way to keep the one starter
+ * that already fit. Editing it in place is refused on purpose, because a row
+ * that keeps `is_example` would be deleted by the next retirement along with
+ * the founder's words, so this is the one door that turns the flag off.
+ *
+ * ONE STATEMENT DECIDES, UNDER THE ROW LOCK. The UPDATE carries
+ * `AND is_example = 1`, so two presses of Keep cannot both succeed and a row
+ * that is already real cannot be "kept" again. The founder's edits and the
+ * value land in the same write, and `created_at` restarts, because that column
+ * means when the quest first appeared on a real board and the weekly brief
+ * reads it as new (0088).
+ *
+ * The id is kept. Nothing reads an `ex-` prefix as a flag (the flag is the
+ * column), and a kept quest keeps the address a founder may already have
+ * shared while deciding.
+ */
+export async function keepExampleQuest(
+  pool: Pool,
+  id: string,
+  mutate: (q: QuestRecord) => void,
+): Promise<QuestKeep> {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query<RowDataPacket[]>(`${QUEST_SELECT} WHERE id = ? FOR UPDATE`, [id]);
+    if (!rows[0]) {
+      await conn.rollback();
+      return { ok: false, reason: "missing" };
+    }
+    const quest = rowToQuest(rows[0]);
+    if (!quest.isExample) {
+      await conn.rollback();
+      return { ok: false, reason: "not_example" };
+    }
+    mutate(quest);
+    const kept: QuestRecord = { ...quest, id, isExample: false };
+    const p = questParams(kept);
+    await conn.query(
+      "UPDATE quests SET title=?, description=?, impact=?, gratitude=?, gratitude_min=?, gratitude_max=?, " +
+        "duration=?, difficulty=?, circle=?, status=?, icon=?, role_required=?, min_stage=?, requires_role=?, stay_credit_reward=?, tags=?, sort_order=?, " +
+        "subtitle=?, story=?, first_step=?, steps=?, deliverable=?, tips=?, image_url=?, starts_at=?, ends_at=?, due_at=?, " +
+        "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=?, " +
+        "is_example = 0, created_at = CURRENT_TIMESTAMP WHERE id = ? AND is_example = 1",
+      [...p.slice(1), id],
+    );
+    await conn.commit();
+    await syncQuestCalendar(pool, kept);
+    return { ok: true, quest: kept };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
 // â”€â”€ Claims â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface ClaimRecord {

@@ -225,6 +225,7 @@ beforeAll(async () => {
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "launchvote-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
+      VILLAGE_SECRETS_KEY: "1f".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
     },
@@ -305,6 +306,17 @@ beforeAll(async () => {
     body: { id: "backups-drilled", done: true },
   });
   expect(backups.status, JSON.stringify(backups.json)).toBe(200);
+
+  /*
+   * THE VILLAGE'S CLOCK, WHICH BLOCKS THE LAUNCH VOTE SINCE READINESS R059.
+   * The platform keeps UTC until a founder answers, and confirming the zone
+   * already showing is an answer, so this village keeps UTC and says so.
+   */
+  const zone = (await call("GET", "/api/admin/seasons")).json;
+  const confirmedZone = await call("PUT", "/api/admin/seasons", {
+    body: { seasons: zone.seasons, cadence: zone.cadence, timezone: zone.timezone, confirmTimezone: true },
+  });
+  expect(confirmedZone.status, JSON.stringify(confirmedZone.json)).toBe(200);
 
   /*
    * THE FOUNDER'S ANSWER ABOUT THE VILLAGE-WIDE ISSUANCE CAP, WHICH IS NEW AND
@@ -728,6 +740,30 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => 
     expect(after.launchedAt).toBe(before.launchedAt);
     expect(after.launchedByBallotId).toBe(before.launchedByBallotId);
     expect(after.gameStart?.started).toBe(true);
+  });
+
+  it("AFTER LAUNCH a keystone key waits for a second person, and nothing is saved until then", async () => {
+    // The setup game's co-sign (server/routes/plantingRequests.ts): the launch ballot carried above.
+    const KEY = "sk_live_launchvote_cosign_77aa";
+    const put = await call("PUT", "/api/admin/integrations/stripe_secret_key", { body: { value: KEY } });
+    expect(put.status, JSON.stringify(put.json)).toBe(202);
+    expect(put.json?.asked).toBe(true);
+    expect(JSON.stringify(put.json)).not.toContain(KEY);
+    const integrations = await call("GET", "/api/admin/integrations");
+    expect((integrations.json?.secrets as any[]).find((s) => s.key === "stripe_secret_key")?.configured).toBe(false);
+    const waiting = await call("GET", "/api/admin/planting-requests");
+    expect(waiting.status, JSON.stringify(waiting.json)).toBe(200);
+    const mine = (waiting.json?.waiting as any[]).find((w) => w.slot === "stripe_secret_key");
+    expect(mine?.last4).toBe("77aa");
+    expect(JSON.stringify(waiting.json)).not.toContain(KEY);
+    // The person who asked cannot be the second person, and a member who is not an admin cannot co-sign.
+    expect((await call("POST", `/api/admin/planting-requests/${mine.id}/cosign`)).status).toBe(409);
+    expect((await call("POST", `/api/admin/planting-requests/${mine.id}/cosign`, { token: wrenToken })).status).toBe(403);
+    // Clearing a key is never held: a leaked key can always be pulled at once.
+    expect((await call("PUT", "/api/admin/integrations/stripe_secret_key", { body: { value: "" } })).status).toBe(200);
+    // The asker withdraws, and the request leaves the list.
+    expect((await call("POST", `/api/admin/planting-requests/${mine.id}/decline`)).status).toBe(200);
+    expect(((await call("GET", "/api/admin/planting-requests")).json?.waiting as any[]).length).toBe(0);
   });
 
   it("cannot be started twice", async () => {

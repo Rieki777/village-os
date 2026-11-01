@@ -38,6 +38,7 @@ import { documentedKey } from "./orgChart";
 import { badgeProblem } from "./badges";
 import { priceToStored, USD } from "./stays";
 import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../../shared/tokenScale";
+import { villageHasOwnQuests } from "../repos/questExamples";
 
 export const EXAMPLE_REFUSAL =
   "This is a standing example. Publish your own to replace it.";
@@ -175,6 +176,13 @@ const REAL_CONTENT_CHECK: Record<string, (p: Pool) => Promise<boolean>> = {
     );
     return Number(r.n) > 0;
   },
+  /**
+   * A real quest, or any claim ever taken. The quests section is the starter
+   * board every fresh village opens on (A8 / 19g), and a village that worked
+   * its board and then deleted every quest has still spoken for itself: an
+   * empty table is not a fresh village. See `villageHasOwnQuests`.
+   */
+  quests: (p) => villageHasOwnQuests(p),
 };
 
 /**
@@ -236,7 +244,7 @@ const BY_PARENT: Record<string, { parentTable: string; fk: string; parentKey: st
   forum_thread_tags: { parentTable: "forum_threads", fk: "thread_id", parentKey: "id" },
 };
 
-export type RetireReason = "first_real_item" | "admin_cleared";
+export type RetireReason = "first_real_item" | "admin_cleared" | "all_kept";
 
 interface ExampleStateRow {
   seededAt: string | null;
@@ -533,16 +541,25 @@ export async function seedExamples(
       break;
 
     case "quests":
+      // The starter board (A8 / 19g): the whole story layer, so a founder
+      // reads a complete quest before deciding to keep it. No reward label and
+      // no value: a quest's value is set on its card by the village, when it
+      // is kept (POST /api/admin/quests/:id/keep).
       for (const q of block.quests ?? []) {
         // gratitude_min/max are DERIVED, never authored. shared/questRewards.ts
         // parses the label, here and on every other write path, so an example
         // quest and a real one cannot disagree about what the board advertises.
-        const range = parseRewardRange(q.gratitude);
+        const label = String(q.gratitude ?? "");
+        const range = parseRewardRange(label);
+        const list = (v: unknown) => (Array.isArray(v) && v.length ? J(v.map(String)) : null);
         n += await ins(p, "quests", {
           id: q.id, title: q.title, description: q.description, impact: q.impact,
-          gratitude: q.gratitude, gratitude_min: range.min, gratitude_max: range.max,
+          gratitude: label, gratitude_min: range.min, gratitude_max: range.max,
           duration: q.duration, difficulty: q.difficulty, circle: q.circle,
           status: q.status, icon: q.icon, min_stage: q.minStage ?? null,
+          requires_role: q.requiresRole ?? null,
+          subtitle: q.subtitle ?? null, story: q.story ?? null, first_step: q.firstStep ?? null,
+          steps: list(q.steps), deliverable: q.deliverable ?? null, tips: list(q.tips),
           tags: J(q.tags), sort_order: q.sortOrder, is_example: 1,
         });
       }
@@ -1277,6 +1294,34 @@ export async function retireExamplesWithPair(
     if (!outcome.retired) retired = false;
   }
   return { removed, retired };
+}
+
+/**
+ * A founder KEPT one example as real (the quests door: `keepExampleQuest` in
+ * server/repos/quests.ts). Keeping is per row and deliberately not a
+ * retirement, so the starters a founder has not decided on yet stay on the
+ * board, labelled, for the next decision.
+ *
+ * Two facts move, and this is where both are settled. The row count behind
+ * `modulesWithExamples` changed, so it is recounted now rather than at the
+ * next boot, or the banner would sit over a board with no examples left. And
+ * when the LAST example has been kept, the tombstone is stamped: every
+ * starter was decided, the village has spoken for itself, and a later
+ * `refreshExamples` must never seed the set back over the quests it kept.
+ *
+ * Answers whether any example of the module is still showing.
+ */
+export async function afterExampleKept(
+  p: Pool,
+  moduleId: string,
+  byUserId: string | null = null,
+): Promise<{ stillShowing: boolean }> {
+  await refreshRowPresence(p, moduleId);
+  if (withRows.has(moduleId)) return { stillShowing: true };
+  if (isSeeded(moduleId) && !isRetired(moduleId)) {
+    await retireExamples(p, moduleId, "all_kept", byUserId);
+  }
+  return { stillShowing: false };
 }
 
 /**
