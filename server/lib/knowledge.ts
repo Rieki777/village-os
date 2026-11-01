@@ -407,7 +407,7 @@ export function loadShelves(baseDir: string): Record<ShelfId, number> {
       counts.knowledge += loadOne("knowledge", knowledgeDir, f, f.replace(/\.md$/, ""));
     }
   } else {
-    console.error("[knowledge] docs/knowledge missing: Maia has no literature shelf");
+    console.error("[knowledge] docs/knowledge missing: the guide has no literature shelf");
   }
 
   const modulesDir = path.join(baseDir, "docs", "modules");
@@ -420,7 +420,7 @@ export function loadShelves(baseDir: string): Record<ShelfId, number> {
       counts.modules += loadOne("modules", modulesDir, file, moduleId);
     }
   } else {
-    console.error("[knowledge] docs/modules missing: Maia has no module contracts");
+    console.error("[knowledge] docs/modules missing: the guide has no module contracts");
   }
   return counts;
 }
