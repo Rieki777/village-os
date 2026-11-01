@@ -794,6 +794,18 @@ export async function seasonView(
   });
 }
 
+/**
+ * After the season document is saved: every link to a goal takes the goal's
+ * words as the season says them now (0298). Called by the season's save door
+ * (server/routes/seasons.ts), so a goal reworded and later removed leaves its
+ * links saying what it was last called.
+ */
+export async function refreshLinkedGoalWords(pool: Pool, seasons: unknown): Promise<void> {
+  for (const s of readSeasons(seasons)) {
+    for (const g of s.goals) await repo.refreshGoalWords(pool, g.id, g.text);
+  }
+}
+
 /** Whether a viewer was in a session: an admin reads all; anybody else, the ones they joined. */
 async function sessionsSeen(pool: Pool | PoolConnection, viewer: RoomAsker, sessionIds: readonly number[]): Promise<(id: number) => boolean> {
   if (viewer.admin) return () => true;

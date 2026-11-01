@@ -11,6 +11,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/t
 import { register as registerRoom } from "./routes/liveSessions";
 import { register as registerLibrary } from "./routes/sessionLibrary";
 import { register as registerTemplates } from "./routes/sessionTemplates";
+import { refreshLinkedGoalWords } from "./lib/sessionTemplates";
 import { assignGoalIds, goalIdFor } from "./lib/seasonGoals";
 import { TEMPLATE_REFUSALS, type SeasonView, type SessionTemplate } from "../shared/sessionTemplates";
 
@@ -115,6 +116,8 @@ describe.skipIf(!configured)("season follow-ups, attacked", () => {
     await post("m-ana", monday, "/priorities", { text: "Fix the tank", servesGoalId: water.id });
     // Renamed, keeping its id; then a new goal says the old words, with no id of its own yet.
     goals = assignGoalIds([{ ...water, text: "Irrigate the land" }, { text: "Water the land", done: false }]);
+    // What the season's save door runs after storing the document.
+    await refreshLinkedGoalWords(pool as any, [season()]);
     const fresh = goals.find((g) => g.text === "Water the land")!;
     expect(fresh.id).toBe(`${goalIdFor("Water the land")}-2`);
     const v = await view("m-ana");

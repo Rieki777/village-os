@@ -278,6 +278,17 @@ export async function writeShareServes(q: Queryable, id: number, goal: { id: str
   await q.query("UPDATE `live_session_shares` SET `serves_goal` = ?, `serves_goal_id` = ? WHERE `id` = ?", [goal?.text ?? null, goal?.id ?? null, id]);
 }
 
+/**
+ * A goal reworded on the season: every link to it keeps its words in step, so
+ * a link to a goal later removed says what the goal was last called (0298).
+ * Bounded by the goal's id; a link already saying the words moves nothing.
+ */
+export async function refreshGoalWords(q: Queryable, goalId: string, text: string): Promise<void> {
+  for (const table of ["live_session_priorities", "live_session_shares", "live_session_entries"]) {
+    await q.query(`UPDATE \`${table}\` SET \`serves_goal\` = ? WHERE \`serves_goal_id\` = ? AND (\`serves_goal\` IS NULL OR \`serves_goal\` <> ?)`, [text, goalId, text]);
+  }
+}
+
 // ── A win on an agenda item (0298) ──────────────────────────────────────────
 
 /** One entry of a session, with its kind, for naming the season priority a win serves. */
