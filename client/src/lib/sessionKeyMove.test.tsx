@@ -3,7 +3,8 @@
  * THE SESSION KEY NAMES NO VILLAGE, AND RENAMING IT SIGNS NOBODY OUT (R066).
  *
  * The localStorage key was "amora-auth-token" in every village's browser. It is
- * "village-auth-token" now, and every member signed in before the rename holds
+ * a neutral key now (TOKEN_KEY, spelled only in gameApi.ts, which
+ * SetPassword.test.ts enforces), and every member signed in before the rename holds
  * their session under the old one. So the rename is only safe if:
  *
  *   1. a session under the old key is still a session, read once and moved;
@@ -44,7 +45,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("the session key", () => {
   it("names no village", () => {
-    expect(TOKEN_KEY).toBe("village-auth-token");
+    expect(TOKEN_KEY.length).toBeGreaterThan(0);
     expect(TOKEN_KEY).not.toMatch(/amora/i); // brand-ok: the assertion that the key names no village
     expect(LEGACY_TOKEN_KEY).not.toBe(TOKEN_KEY);
   });

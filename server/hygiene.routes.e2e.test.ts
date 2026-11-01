@@ -163,7 +163,7 @@ describe.skipIf(!DB_CONFIGURED)("security response headers", () => {
 
   it("still let /map embed the map artifact it lives on", async () => {
     // Off first: a village that never turned the map on serves no artifact.
-    const off = await fetch(`${BASE}/grounds/index.html`);
+    const off = await fetch(`${BASE}/grounds/index.html`); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
     expect(off.status).toBe(404);
     expect(await off.json()).toEqual({ error: "module_disabled", module: "map" });
     await mapOn();
