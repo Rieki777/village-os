@@ -243,7 +243,8 @@ describe("on the character page", () => {
       }),
     );
   });
-  afterEach(() => vi.unstubAllGlobals());
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("feeds the class's open paths into the cards, so the seats shown are the ones tagged for it", async () => {
     loadOrg.mockResolvedValue(ORG);

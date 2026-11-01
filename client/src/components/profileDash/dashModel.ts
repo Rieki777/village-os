@@ -182,11 +182,29 @@ export function moonRows(
   });
 }
 
-/** Which wallet rows are the village token and Voice. The first of each kind, in the wallet's own order. */
-export function pickTokens<T extends { kind: string; role: string }>(rows: ReadonlyArray<T>): { village: T | null; voice: T | null } {
+/**
+ * Which wallet rows are the village's value token and Voice.
+ *
+ * The value token is picked BY NAME, the slug `/api/game/config` serves as
+ * `currency.value.slug` (the `gratitude.pool_token` variable, the token the
+ * village pays work and its cycle pool in). It used to be the first row that
+ * was neither Voice nor recognition, in the wallet's own order, and the wallet
+ * lists claimable rows first: Earned Equity came before Village Credits, so
+ * the Tokens tile read 0 for a member holding 25 (E2E finding E6,
+ * 2026-10-31). No slug yet (the config has not answered) or no row for it
+ * (the member's wallet does not list it) is null, which the tile draws as
+ * nothing, never as some other token's balance. A recognition row is never
+ * the value token, even if a village points the variable at one.
+ */
+export function pickTokens<T extends { token: string; kind: string; role: string }>(
+  rows: ReadonlyArray<T>,
+  valueSlug: string | null | undefined,
+): { village: T | null; voice: T | null } {
   return {
     voice: rows.find((r) => r.kind === "voice") ?? null,
-    village: rows.find((r) => r.kind !== "voice" && r.role !== "gratitude" && r.kind !== "recognition" && r.kind !== "gratitude") ?? null,
+    village: valueSlug
+      ? (rows.find((r) => r.token === valueSlug && r.role !== "gratitude" && r.kind !== "recognition") ?? null)
+      : null,
   };
 }
 

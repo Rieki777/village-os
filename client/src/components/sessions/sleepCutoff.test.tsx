@@ -13,7 +13,7 @@
  */
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CONSENT_LABELS, ROOM_COPY, type NightRound, type SessionView } from "@shared/sessions";
 import { json, makeView } from "./__tests__/roomFixture";
 
@@ -123,7 +123,9 @@ describe("a round that outlived its call, on the record", () => {
     beforeEach(() => {
       vi.stubGlobal("fetch", vi.fn(async () => json({ tasks: [], mail: { canSend: false, lastSend: null } })));
     });
+    // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
     afterEach(() => {
+      cleanup();
       vi.unstubAllGlobals();
     });
 

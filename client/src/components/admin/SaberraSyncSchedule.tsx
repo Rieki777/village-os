@@ -229,6 +229,9 @@ function runLines(r: SyncRun): string[] {
         `${r.rebatched} carried forward unchanged, ${r.superseded} replaced by a changed claim, ${r.refused} refused. ` +
         `${count(r.facts, "fact")} stored.`,
     );
+    if (r.gone > 0) {
+      lines.push(`${count(r.gone, "waiting suggestion")} withdrawn: the service stopped sending ${r.gone === 1 ? "its record" : "their records"}.`);
+    }
   } else if (r.outcome === "no-change") {
     lines.push(
       `${count(r.records, "record")} read, the same as the last sync that reached the review queue. Nothing in the queue was touched.`,

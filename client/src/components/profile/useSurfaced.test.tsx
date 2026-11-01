@@ -14,7 +14,7 @@
  *   walked a path for six months was told it was "newly open".
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { cleanup, renderHook, waitFor } from "@testing-library/react";
 
 import { useSurfaced } from "./useSurfaced";
 
@@ -29,7 +29,8 @@ const answer = (body: unknown, ok = true) =>
   vi.stubGlobal("fetch", async () => ({ ok, json: async () => body }) as unknown as Response);
 
 describe("useSurfaced", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("surfaces the first unseen section once the read lands", async () => {
     withTokenStore();
