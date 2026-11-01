@@ -1,11 +1,11 @@
 /**
- * BATCH 74 (2026-11-01): A MIGRATION THAT CANNOT GET ITS LOCK MUST GIVE UP, FAST.
+ * A MIGRATION THAT CANNOT GET ITS LOCK MUST GIVE UP, FAST (2026-11-01).
  *
- * Batch 74 deployed, the new container never answered /health for the whole
- * 900 second healthcheck window, and the OLD deployment went 502 as well about
- * ten minutes in. Working hypothesis H1: 0304 ran `ALTER TABLE users ADD
- * COLUMN` with the server's default `lock_wait_timeout` (one year on MySQL 8,
- * one day on MariaDB). Any DDL, INSTANT included, needs an exclusive metadata
+ * Found while investigating batch 74, whose outage Railway's deploy logs later
+ * traced to a different failure: 0298's SHA1(), rejected by production's
+ * database. The hazard here was real either way. A migration ALTERs a table
+ * with the server's default `lock_wait_timeout` (one year on MySQL 8, one day
+ * on MariaDB), for example 0304's `ALTER TABLE users ADD COLUMN`. Any DDL, INSTANT included, needs an exclusive metadata
  * lock for a moment. One open transaction that had touched `users` makes the
  * ALTER wait, and every later query on `users`, from either server, queues
  * behind the ALTER's pending exclusive request. Eight pool connections stuck
@@ -99,7 +99,7 @@ async function settle<T>(p: Promise<T>, ms: number): Promise<Settled<T>> {
   }
 }
 
-describe.skipIf(!configured)("a migration that cannot get its lock (batch 74, H1)", () => {
+describe.skipIf(!configured)("a migration that cannot get its lock (the metadata-lock pile-up)", () => {
   const base = process.env.TEST_DATABASE_URL as string;
   let admin: mysql.Connection;
   /** Everything a case opened, so afterEach can unwind it in a safe order even after a failure. */
@@ -217,7 +217,7 @@ describe.skipIf(!configured)("a migration that cannot get its lock (batch 74, H1
   function hung(what: string): never {
     throw new Error(
       `${what} was still waiting after ${HANG_BOUND_MS / 1000}s with a ${N}s lock timeout requested: ` +
-        `the statement is queued behind the open transaction with no lock timeout of its own, which is the batch 74 hang.`,
+        `the statement is queued behind the open transaction with no lock timeout of its own: the metadata-lock pile-up this file guards against.`,
     );
   }
 
