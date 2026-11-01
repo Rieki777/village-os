@@ -8,7 +8,9 @@ import { JourneyLink, leavesSite } from "@/components/journey/JourneyLink";
 import { useJourneyContent, useJourneyProgress } from "@/hooks/useJourneyContent";
 import { buttonAction, stepPoints, type TargetContext } from "@/lib/journeyPage";
 import { JOURNEY_LEGACY_STEP_IDS, PROSPERITY_JOURNEY } from "@shared/pageContent/journeys";
-import { useState, useEffect } from "react";
+import { useGuideName } from "@/hooks/useGuideName";
+import { guideNameAtSentenceStart } from "@shared/guideName";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
@@ -34,9 +36,6 @@ import {
  * icons and tier colours, handed out by position.
  */
 
-/** What a visitor calls a guide the village has not named. */
-const UNNAMED_GUIDE = "the village guide";
-
 /** Icons for the steps, in order; a longer list starts again from the top. */
 const STEP_ICONS = [Calendar, Download, FileText, Heart, Vote, PartyPopper, TrendingUp];
 
@@ -55,13 +54,11 @@ const TIER_COLORS = [
 export default function ProsperityJourney() {
   const valueName = useValueTokenName();
   const villageName = useVillageName();
-  // LANE Q: the guide's name is per-deployment config, never a constant. Until
-  // it arrives, or if it never does, the public reads "the village guide"
-  // (Rye's ruling: every village names its own guide, and the name this used
-  // to fall back to belongs to one village's agent).
-  const [assistantName, setAssistantName] = useState(UNNAMED_GUIDE);
+  // The village's own name for its guide, or "The village guide" while it has
+  // none. Raised to a capital because the step's words open a sentence with it.
+  const guide = useGuideName();
   const page = useJourneyContent(PROSPERITY_JOURNEY, (resolved) => ({
-    guide: assistantName,
+    guide: guideNameAtSentenceStart(guide.name),
     acronym: resolved.tiers.fields.acronym,
     framework: resolved.tiers.fields.framework,
   }));
@@ -80,13 +77,6 @@ export default function ProsperityJourney() {
   const closingSecondary = buttonAction(page?.closing.fields.secondaryLabel, page?.closing.fields.secondaryTarget, targets);
   const progress = useJourneyProgress("amora-prosperity-progress", steps, JOURNEY_LEGACY_STEP_IDS.prosperity);
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
-
-  useEffect(() => {
-    fetch("/api/work-with-us-config")
-      .then((r) => r.json())
-      .then((w) => { if (w?.assistantName) setAssistantName(w.assistantName); })
-      .catch(() => { /* the default stands */ });
-  }, []);
 
   // Until the saved words arrive the hero keeps its space and stays
   // invisible, so a visitor never reads the defaults and watches them change.

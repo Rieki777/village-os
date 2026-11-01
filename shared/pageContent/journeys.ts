@@ -923,7 +923,7 @@ const PROSPERITY_STEPS: StepDefault[] = [
     legacyId: "business-proposal",
     stage: "Applicant",
     title: "Submit Business Proposal",
-    description: "Describe your business and how it meets what {village} needs, and {guide} can help you shape it.",
+    description: "Describe your business and how it meets what {village} needs. {guide} can help you shape it.",
     bullets: ["Describe your business vision", "Show how it meets a village need", "Describe its impact", "Include your timeline"],
     label: "Work With Us",
     target: "/work-with-us",
@@ -1003,7 +1003,7 @@ export const PROSPERITY_JOURNEY: PageSpec = buildJourney({
     heading: "Your Path to Prosperity",
     intro: "Follow these {count} steps to start your business at {village}.",
     items: PROSPERITY_STEPS,
-    wordsHelp: "{guide} becomes your guide's name from Work With Us, and {acronym} the short name of your impact tiers.",
+    wordsHelp: "{guide} becomes your guide's name from Work With Us (\"The village guide\" until you name it), and {acronym} the short name of your impact tiers.",
   },
   afterSteps: [
     {

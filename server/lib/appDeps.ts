@@ -281,7 +281,7 @@ export interface AppDeps {
    * loses the implementation's signature, so the omission can only become a
    * compiler error here. Batch it with `paidByVillage` below.
    */
-  computeStage(user: MemberRecord, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean): string;
+  computeStage(user: MemberRecord, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean, holdsRole: boolean): string;
 
   /** Completed training modules for many members, in one query. */
   trainingCompletions(userIds: readonly string[]): Promise<Map<string, string[]>>;

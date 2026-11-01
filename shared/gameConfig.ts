@@ -92,6 +92,13 @@ export type StageRule =
    * anybody thanks anybody, and this rung opens `member.vouch`.
    */
   | { type: "tokens" }
+  /*
+   * HOLDS A ROLE ON THE ORG CHART RIGHT NOW (Rye, 2026-10-31). Was granted by
+   * hand, so a grant outlived the role it stood for. Read live from seatings by
+   * the steward ladder's "Mandate current" test (`holdsRoleNow`). A grant still
+   * works as a floor on top of it.
+   */
+  | { type: "role" }
   | { type: "granted" };                      // manually granted by the team
 
 export interface GameStage {
@@ -588,7 +595,7 @@ export const GAME_CONFIG: GameConfig = {
     { id: "quest-seeker", name: "Quest Seeker", description: "Contributing steadily through quests.", rule: { type: "quests", min: 3 }, gratitudeMultiplier: 2 },
     { id: "initiate", name: "Initiate", description: "Walking the Co-Creator Right of Passage.", rule: { type: "granted" }, gratitudeMultiplier: 2 },
     { id: "co-creator", name: "Co-Creator", description: "Consented by the Co-Creators circle.", rule: { type: "granted" }, gratitudeMultiplier: 3 },
-    { id: "role-holder", name: "Role Holder", description: "Holding a seasonal role for the village.", rule: { type: "granted" }, gratitudeMultiplier: 3 },
+    { id: "role-holder", name: "Role Holder", description: "Holding a seasonal role for the village.", rule: { type: "role" }, gratitudeMultiplier: 3 },
     { id: "guide", name: "Guide", description: "Seven or more years of stewardship.", rule: { type: "granted" }, gratitudeMultiplier: 4 },
     { id: "sage", name: "Sage", description: "Twenty-one or more years of stewardship.", rule: { type: "granted" }, gratitudeMultiplier: 5 },
   ],

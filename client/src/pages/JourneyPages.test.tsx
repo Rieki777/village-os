@@ -588,14 +588,18 @@ describe("/prosperity", () => {
     const step = stepDefault("prosperity", "business-proposal");
     fireEvent.click(await screen.findByText(step.title));
     await waitFor(() => expect(document.body.textContent).toContain(filled(step.description, { guide: "Juniper" })));
+    expect(document.body.textContent).toContain("Juniper can help you shape it.");
   });
 
-  it("calls a guide the village has not named the village guide, never another village's agent", async () => {
+  it("says the village guide in the proposal step while the guide has no name", async () => {
+    workWithUs = { assistantName: "" };
     show(ProsperityJourney);
     const step = stepDefault("prosperity", "business-proposal");
     fireEvent.click(await screen.findByText(step.title));
-    await waitFor(() => expect(document.body.textContent).toContain(filled(step.description, { guide: "the village guide" })));
-    expect(document.body.textContent).not.toMatch(/Maia/);
+    // {guide} opens a sentence in the starter words, so the unnamed guide reads with a capital.
+    await waitFor(() => expect(document.body.textContent).toContain(filled(step.description, { guide: "The village guide" })));
+    expect(document.body.textContent).toContain(". The village guide can help you shape it.");
+    expect(document.body.textContent).not.toContain("Maia");
   });
 
   it("emails the packet request with the village's own subject line", async () => {

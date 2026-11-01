@@ -35,6 +35,8 @@ const DOORS = [
   "POST /api/sessions/:id/entries",
   "PATCH /api/sessions/:id/entries/:entryId",
   "DELETE /api/sessions/:id/entries/:entryId",
+  // A proposal's check (0297, shared/sessionCheck.ts): its facilitator or its proposer.
+  "POST /api/sessions/:id/entries/:entryId/check",
   "POST /api/sessions/:id/respond",
   "POST /api/sessions/:id/act",
   "POST /api/sessions/:id/hosts",

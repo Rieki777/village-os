@@ -56,8 +56,11 @@ function ConsentedReward({ claim, decimals, pay }: { claim: QuestClaim; decimals
    */
   const show = (n: number) => formatTokenAmount(n, decimals);
   // Read once on mount: claiming the moment IS the check, so a re-render can
-  // never re-open it, and two mounted copies cannot both play it.
-  const [fresh] = useState(() => claimMoment(`quest:${claim.id}`));
+  // never re-open it, and two mounted copies cannot both play it. A consent
+  // whose pay the reward moment names is celebrated there instead, once and on
+  // every device (`announcedByRewardMoment`), so this one stays quiet and
+  // leaves its own once unspent.
+  const [fresh] = useState(() => !claim.announcedByRewardMoment && claimMoment(`quest:${claim.id}`));
   const showing = useMomentWindow(fresh);
   const shown = useCountUp(credited, fresh);
 
