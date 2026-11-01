@@ -174,6 +174,7 @@ import { register as registerSessionCalendarRoutes } from "./routes/sessionCalen
 import { register as registerSessionDecisionRoutes } from "./routes/sessionDecisions";
 import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
+import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
@@ -26029,88 +26030,7 @@ ${inner}
    * stale-index white screen the comment further down exists to prevent.
    */
   app.use(compression());
-  /*
-   * The Living Map artifact, served from its SOURCE.
-   *
-   * `docs/prototypes/grounds-v0.html` is ~4 MB of self-contained page. It used
-   * to be copied into `client/public/grounds/` at build time, which put it in
-   * `dist/public` and took the total from 3.7 MB to 7.8 MB against the CI
-   * bundle budget's 6 MB ceiling. That gate exists to catch exactly this
-   * ("something large landed in client/public"), and the honest fix is to stop
-   * shipping a second copy rather than to raise the number.
-   *
-   * So there is one copy on disk and the server hands it out. `..` from
-   * `__dirname` is the repo root in both shapes: `server/` in dev, `dist/` in
-   * production. Nothing else moves, and `/grounds/index.html` is the same URL
-   * the shell has always asked for.
-   *
-   * Registered ahead of the SPA catch-all. A missing artifact 404s here rather
-   * than falling through and returning the app's own HTML, which an iframe
-   * would render as the site inside itself.
-   */
-  const groundsFile = path.resolve(__dirname, "..", "docs", "prototypes", "grounds-v0.html");
-
-  /**
-   * Identify the artifact by content, so it can be cached forever.
-   *
-   * Four megabytes revalidated on every navigation is four megabytes of
-   * nothing, and the map is the surface members open most. Hashed URLs let it
-   * be `immutable`, the same bargain `/assets` already takes.
-   *
-   * The hash is memoised on (size, mtime) rather than recomputed per request:
-   * reading 4 MB to answer a probe would trade one waste for another. It is
-   * also computed LAZILY, so boot does not pay for a file most deployments
-   * never serve, and a mid-flight artifact swap is picked up by the mtime
-   * check rather than needing a restart.
-   */
-  let groundsTag: { key: string; hash: string } | null = null;
-  const groundsInfo = (): { bytes: number; hash: string } | null => {
-    if (!fs.existsSync(groundsFile)) return null;
-    const st = fs.statSync(groundsFile);
-    const key = `${st.size}:${st.mtimeMs}`;
-    if (groundsTag?.key !== key) {
-      const digest = crypto.createHash("sha256").update(fs.readFileSync(groundsFile)).digest("hex");
-      groundsTag = { key, hash: digest.slice(0, 12) };
-    }
-    return { bytes: st.size, hash: groundsTag.hash };
-  };
-
-  /*
-   * The immutable URL. `grounds-<hash>.html` changes name whenever the bytes
-   * change, so a year-long cache can never serve a stale map.
-   */
-  app.get("/grounds/grounds-:hash.html", (req, res) => {
-    const info = groundsInfo();
-    if (!info) return res.status(404).json({ error: "map_artifact_absent" });
-    // A stale hash means a client is asking for a version we no longer have.
-    // Redirect rather than 404: the shell re-reads the manifest and recovers.
-    if (req.params.hash !== info.hash) return res.redirect(302, `/grounds/grounds-${info.hash}.html`);
-    res.type("html");
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    res.sendFile(groundsFile);
-  });
-
-  /*
-   * The stable URL stays, for anything holding the old address and for a
-   * hand-typed check. It revalidates instead of caching hard, because this
-   * name does not change when the bytes do. sendFile's ETag makes that a 304.
-   */
-  app.get("/grounds/index.html", (_req, res) => {
-    if (!fs.existsSync(groundsFile)) return res.status(404).json({ error: "map_artifact_absent" });
-    res.type("html");
-    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-    res.sendFile(groundsFile);
-  });
-
-  /*
-   * The presence probe. `/map` cannot tell a served artifact from the SPA
-   * fallback by status code alone, so it reads a few bytes of JSON instead.
-   * Computed rather than written to disk, so it can never claim an artifact
-   * that is no longer there.
-   *
-   * `present` and `bytes` are the original contract and are unchanged. `url`
-   * is additive: a shell that ignores it still works off /grounds/index.html.
-   */
+  registerGroundsRoutes(app, { groundsFile: path.resolve(__dirname, "..", "docs", "prototypes", "grounds-v0.html") });
   /**
    * The PWA manifest, built from the brand overlay.
    *
@@ -26225,15 +26145,6 @@ ${inner}
       .type("application/xml")
       .set("Cache-Control", "public, max-age=3600")
       .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
-  });
-
-  app.get("/grounds/manifest.json", (_req, res) => {
-    const info = groundsInfo();
-    if (!info) return res.status(404).json({ present: false });
-    // The manifest itself must never be cached, or it would pin the shell to
-    // a hashed URL that has since moved.
-    res.setHeader("Cache-Control", "no-store");
-    res.json({ present: true, bytes: info.bytes, url: `/grounds/grounds-${info.hash}.html` });
   });
 
   /*
