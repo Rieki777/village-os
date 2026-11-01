@@ -51,6 +51,7 @@ import { formatMoney } from "../../shared/money";
 import type { TokenAmount } from "../../shared/workValue";
 import type { QuestRecord, QuestsRepo } from "../repos/quests";
 import { recordEvent } from "./events";
+import { onRealItemPublished } from "./examples";
 import { containsEmail } from "./externalProposals";
 import type { NotifyInput } from "./notify";
 
@@ -565,6 +566,11 @@ export async function acceptQuestProposal(
   // The same function POST /api/admin/quests calls. Every invariant that path
   // carries comes with it, including the reward-range parse.
   await questsRepo.add(quest);
+  // And the same retirement: a quest the village approved onto its board is a
+  // quest of its own, so the starter examples go, exactly as they do when a
+  // founder posts one. Without it the Journey to Launch row stayed open over a
+  // board the village had already made its own.
+  onRealItemPublished(pool, "quests", input.decidedBy);
 
   await pool.query( // module-review-ok: quest_proposals has no repo cache above it, and this file is the table's one enumerable home (the ballots.ts pattern); the QUEST itself is written through questsRepo.add and never here
     "UPDATE quest_proposals SET status = 'accepted', decided_by = ?, decided_at = CURRENT_TIMESTAMP, " +

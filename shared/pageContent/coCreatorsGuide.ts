@@ -1,16 +1,24 @@
 /**
  * The Co-Creators Guide (/co-creators-guide), as fields.
  *
- * The defaults are the words the page carried in code until 2026-10-22, moved
- * here unchanged, EXCEPT:
- *   - the token copy Rye approved that day (cust-audit/TOKEN_COPY_PROPOSAL.md
- *     rows 1 to 8): the "{token}" section is one line plus a link to the
- *     village's own rules at /game-mechanics, and the hold card, the spend
- *     card and the flow chips are gone. The card of live quest and role pay
- *     (EarningsFromTheWork) stays: it reads the work, never typed figures;
- *   - "Love Letter" is `{commitment}` (Amora's commitment name IS "Love
- *     Letter", so it reads the same there), and the criteria are named by
- *     `{good-neighbor}`, the one name field on the Good Neighbor page.
+ * THE DEFAULTS ARE NEUTRAL STARTER TEXT (2026-10-23). They were the founding
+ * village's own guide: its branded ikigai, its four named spaces, its
+ * monthly calls, its Guide and Sage year counts and its slogan. The founding
+ * village now holds its own copy (its record is in server/seeds/), so these
+ * defaults say only what the platform gives every village: quests, roles,
+ * circles, proposals, the path stages, and a decision method the village
+ * picks itself. Carried over on purpose:
+ *   - the token copy Rye approved on 2026-10-22 (cust-audit/
+ *     TOKEN_COPY_PROPOSAL.md rows 1 to 8): the "{token}" section is one line
+ *     plus a link to the village's own rules at /game-mechanics. The card of
+ *     open quests and roles (EarningsFromTheWork) stays: it reads the work,
+ *     never typed figures;
+ *   - the pay ruling (Rye, 2026-10-23): no sentence restates that work is
+ *     paid, because the quest and role cards say it. The card is "Open quests
+ *     and roles", the claim card is "Claim Your Contribution", and the
+ *     fourth ikigai circle is the open work, never "what pays";
+ *   - the criteria are named by `{good-neighbor}`, the one name field on the
+ *     Good Neighbor page, and the commitment by `{commitment}`.
  *
  * Every section after the top can be hidden, and its pill in the sticky bar
  * goes with it. The Hypha section also needs the village's Hypha DHO link
@@ -51,7 +59,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           kind: "long",
           max: 260,
           default:
-            "Your complete guide to co-creating this village. How the economy works, how decisions get made, how to use our governance platform, and what the journey from visitor to Sage looks like.",
+            "Your guide to taking part in {village}: how work is shared, how decisions get made, and how you grow along the path from Visitor to Sage.",
         },
         { key: "alsoCalled", label: "Small line under the paragraph", help: "Leave blank for none.", kind: "text", max: 40, default: "Also called: The Co-Creators Guide", optional: true },
       ],
@@ -62,17 +70,17 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
       shows: "The four overlapping circles and the four boxes beside them.",
       hideable: true,
       fields: [
-        NAV("R-Ikigai"),
-        { key: "heading", label: "Heading", kind: "text", max: 30, default: "Your R-Ikigai" },
+        NAV("Where You Fit"),
+        { key: "heading", label: "Heading", kind: "text", max: 30, default: "Find Where You Fit" },
         {
           key: "intro",
           label: "Sentence under the heading",
           kind: "long",
           max: 160,
-          default: "The intersection of what you love, what you're good at, what {village} needs, and what the village pays for.",
+          default: "Your best fit is where what you love, what you're good at and what {village} needs meet the quests and roles that are open.",
         },
-        { key: "centerTop", label: "Middle of the circles, first line", kind: "text", max: 10, default: "Your" },
-        { key: "centerBottom", label: "Middle of the circles, second line", kind: "text", max: 12, default: "R-Ikigai" },
+        { key: "centerTop", label: "Middle of the circles, first line", kind: "text", max: 10, default: "Where" },
+        { key: "centerBottom", label: "Middle of the circles, second line", kind: "text", max: 12, default: "You Fit" },
       ],
       lists: [
         {
@@ -92,7 +100,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
             {
               label: "What You LOVE",
               title: "What You LOVE (Passion)",
-              body: "Your authentic desires and what brings you alive. What would you do even if no one paid you?",
+              body: "What brings you alive. What would you do for the joy of it?",
             },
             {
               label: "What You're GOOD AT",
@@ -101,13 +109,13 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
             },
             {
               label: "What the VILLAGE NEEDS",
-              title: "What {village} NEEDS (Regeneration)",
-              body: "The gaps we need filled to create a thriving, regenerative community. Where can you fill a real need?",
+              title: "What {village} NEEDS",
+              body: "The gaps that, once filled, make {village} stronger. Where can you fill a real need?",
             },
             {
-              label: "What PAYS",
-              title: "What PAYS (Compensation)",
-              body: "Roles and quests, each with its own value and the tokens it pays, on its card.",
+              label: "What's OPEN",
+              title: "What's OPEN (Quests and Roles)",
+              body: "The roles and quests {village} needs, each on its own card.",
             },
           ],
         },
@@ -144,7 +152,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           help: "The card lists what open quests and roles are set to, read from the work itself.",
           kind: "text",
           max: 40,
-          default: "Get paid for your work",
+          default: "Open quests and roles",
         },
       ],
     },
@@ -162,7 +170,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           kind: "long",
           max: 200,
           default:
-            "{village} practices consent-based decision making where everyone's voice matters, circles hold authority within their domains, and all concerns are heard.",
+            "Everyone's voice matters at {village}. Circles look after their own areas, anyone can bring a proposal, and the village decides together in the way it has chosen.",
         },
         { key: "stepsHeading", label: "Heading over the steps", kind: "text", max: 30, default: "How Proposals Work" },
         {
@@ -171,7 +179,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           help: "Wrap words in **double stars** to make them bold. Leave blank for none.",
           kind: "long",
           max: 160,
-          default: "**Monthly All-Village Calls:** Major cross-circle decisions happen here, with full transparency and participation.",
+          default: "**Village-wide decisions:** what affects everyone goes to the whole village, in the open.",
           optional: true,
         },
         { key: "principlesHeading", label: "Heading over the principles", kind: "text", max: 30, default: "Key Principles" },
@@ -189,9 +197,9 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
             { key: "description", label: "Description", kind: "long", max: 130, default: "" },
           ],
           default: [
-            { title: "Proposal", description: "Anyone can raise a proposal for action or change. Proposals are presented clearly with context and goals." },
-            { title: "Clarification", description: "The circle asks clarifying questions. This isn't debate, just understanding. Proposals may be refined." },
-            { title: "Consent", description: "We look for consent, not unanimous agreement. No reasoned objections means we move forward." },
+            { title: "Proposal", description: "Anyone can raise a proposal for action or change, with clear context and goals." },
+            { title: "Clarification", description: "People ask questions until the proposal is clear, and it may be refined along the way." },
+            { title: "Decision", description: "The village decides in the way it has chosen, and everyone can see the outcome." },
           ],
         },
         {
@@ -206,10 +214,10 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
             { key: "body", label: "Description", kind: "long", max: 130, default: "" },
           ],
           default: [
-            { title: "Circles Hold Authority", body: "Each circle has decision-making power within its domain. No single person overrides the circle." },
-            { title: "Objections vs. Disagreements", body: "A reasoned objection blocks progress. A disagreement is noted but doesn't stop the work. Know the difference." },
-            { title: "Consent Culture", body: "We're not seeking unanimous agreement. We're looking for no reasoned objections. That's enough to move forward." },
-            { title: "Anyone Can Raise Concerns", body: "If you see a problem, speak up. Concerns shape better decisions. Silence isn't consent." },
+            { title: "Circles Look After Their Areas", body: "Each circle makes the decisions that belong to its own area of work." },
+            { title: "Anyone Can Propose", body: "If you see something that could be better, you can bring a proposal. Good ideas come from everywhere." },
+            { title: "Decisions in the Open", body: "Proposals and their outcomes are visible to the village, so everyone knows what was decided." },
+            { title: "Anyone Can Raise Concerns", body: "If you see a problem, speak up. Concerns shape better decisions." },
           ],
         },
       ],
@@ -221,7 +229,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
       hideable: true,
       fields: [
         NAV("Hypha Platform"),
-        { key: "eyebrow", label: "Small label above the heading", kind: "text", max: 32, default: "Where Governance Gets Real", optional: true },
+        { key: "eyebrow", label: "Small label above the heading", kind: "text", max: 32, default: "Where Agreements Are Kept", optional: true },
         { key: "heading", label: "Heading", kind: "text", max: 32, default: "Meet Hypha" },
         {
           key: "intro",
@@ -230,18 +238,17 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           kind: "long",
           max: 450,
           default:
-            "Hypha is the platform where every {village} decision lives, recorded, verifiable, and tamper-proof on a distributed ledger. This isn't a shared Google Doc or a Discord vote that disappears. It's an **incredibly secure, globally trusted governance system** used by communities around the world to hold their most important decisions. Your voice here is permanent. Your contributions here are real.",
+            "{village} keeps its agreements and decisions in its own space on **Hypha**, where they are recorded for every member to see and check.",
         },
         {
           key: "body",
           label: "Second paragraph",
           kind: "long",
           max: 200,
-          default:
-            "No single person, not even the founders, can override a community consent vote on Hypha. That's the point. When we say {village} is community-governed, this is what makes it true.",
+          default: "Your proposals, your contributions and your votes live there, on the record.",
           optional: true,
         },
-        { key: "openLabel", label: "Button to your Hypha space", help: "Opens your Hypha DHO link from Admin, Variables.", kind: "text", max: 30, default: "Open Hypha Platform" },
+        { key: "openLabel", label: "Button to your Hypha space", help: "Opens your Hypha DHO link from Admin, Variables.", kind: "text", max: 30, default: "Open Our Hypha Space" },
         { key: "valueHeading", label: "Heading of the box under the button", kind: "text", max: 30, default: "Value In = Value Out" },
         {
           key: "valueBody",
@@ -249,7 +256,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           kind: "long",
           max: 420,
           default:
-            "Every proposal puts one question to the community: does this contribution serve {village}? Not hours logged, hours are not a contribution. What matters is the actual value created, articulated clearly, and assessed honestly by your peers.",
+            "Every proposal asks one question: does this serve {village}? Describe the value you will create, or have created, clearly and honestly, and the community weighs it.",
         },
         { key: "loopHeading", label: "Heading over the three steps at the bottom", kind: "text", max: 50, default: "The {village} Contribution Loop" },
       ],
@@ -273,14 +280,14 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
               title: "Start with an Agreement",
               subtitle: "Proposing a role, quest, or new contribution",
               description:
-                "Before you begin any new type of contribution, a seasonal role, a quest, or a new initiative, you open it to the community with an Agreement. Describe what you're bringing, what {village} receives, and what you're requesting in return. The community votes. Value in = value out.",
+                "Before you begin a new role, quest or initiative, you open it to the community with an Agreement. Describe what you are bringing, what {village} receives, and what you are asking in return. The community decides.",
               cta: "Create Agreement",
             },
             {
-              title: "Claim Your Tokens",
-              subtitle: "After completing a task, pay period, or season",
+              title: "Claim Your Contribution",
+              subtitle: "After completing a task or season",
               description:
-                "When you've done the work, completed a quest, finished a season as a role holder, or reached a milestone, you come back and propose a Contribution Claim. Detail what you delivered, what {village} gained, and claim the tokens it earned. This is how the value you create becomes visible and rewarded.",
+                "When you've done the work, completed a quest, finished a season as a role holder, or reached a milestone, you come back and propose a Contribution Claim. Detail what you delivered and what {village} gained. This is how the value you create becomes visible.",
               cta: "Propose a Contribution",
             },
             {
@@ -294,7 +301,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
               title: "Delegate Your Voice",
               subtitle: "Trust someone to vote on your behalf",
               description:
-                "Your voice is your governance power, it grows as you contribute. If you trust another member to represent your perspective while you're away or unavailable, you can delegate your voice to them. Choose someone whose judgment aligns with yours and whose commitment to {village} you trust deeply.",
+                "Your voice is your say in how {village} is governed. If you trust another member to represent your perspective while you're away or unavailable, you can delegate your voice to them. Choose someone whose judgment and commitment you trust.",
               cta: "View Members",
             },
           ],
@@ -313,7 +320,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           ],
           default: [
             { label: "Sense", description: "Find where your gifts are most needed. A quest waiting. A gap in the land. A conversation that sparks something." },
-            { label: "Propose", description: "Open your intention to the community in Hypha. Consent-based: the check is simply whether this serves us." },
+            { label: "Propose", description: "Open your intention to the community in Hypha. The question is simply whether it serves the village." },
             { label: "Create", description: "Do the work. Document it. Share what you created with the community." },
           ],
         },
@@ -322,17 +329,17 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
     {
       id: "spaces",
       label: "Spaces",
-      shows: "The coloured cards naming the circles the village is organized into.",
+      shows: "The coloured cards naming the areas the village's work falls into.",
       hideable: true,
       fields: [
-        NAV("The Four Spaces"),
-        { key: "heading", label: "Heading", kind: "text", max: 40, default: "The Four Spaces" },
+        NAV("Areas of Work"),
+        { key: "heading", label: "Heading", kind: "text", max: 40, default: "Areas of Work" },
         {
           key: "intro",
           label: "Sentence under the heading",
           kind: "long",
           max: 150,
-          default: "{village} is organized into four interconnected circles, each stewarding a different dimension of our community.",
+          default: "The work of {village} falls into a few areas, each cared for by the people closest to it.",
         },
       ],
       lists: [
@@ -348,10 +355,10 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
             { key: "description", label: "Description", kind: "text", max: 80, default: "" },
           ],
           default: [
-            { title: "Village Steward Space", description: "Coordinates overall village success, open to all path members" },
-            { title: "Resident Space", description: "Governs residential life and neighbor relations" },
-            { title: "Prosperity Space", description: "Manages business interests and shared enterprise" },
-            { title: "Land Stewardship Space", description: "Cares for land and ecosystem health" },
+            { title: "Village Stewardship", description: "The village as a whole: its direction and its care" },
+            { title: "Daily Life", description: "Homes, neighbors and life together" },
+            { title: "Shared Enterprise", description: "Livelihoods, businesses and shared work" },
+            { title: "Land Care", description: "The health of the land, the water and the living things on it" },
           ],
         },
       ],
@@ -389,14 +396,14 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
             { label: "Guest" },
             { label: "Immersant" },
             { label: "Participant" },
-            { label: "Member", note: "({village} Family)" },
+            { label: "Member" },
             { label: "Contributor" },
             { label: "Quest Seeker" },
             { label: "Initiate" },
             { label: "Co-Creator" },
             { label: "Role Holder" },
-            { label: "Guide", note: "(7+ years)" },
-            { label: "Sage", note: "(21+ years)" },
+            { label: "Guide" },
+            { label: "Sage" },
           ],
         },
         {
@@ -415,13 +422,13 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           default: [
             {
               title: "Guide",
-              body: "After 7+ years of deep participation, you become a Guide. Guides mentor others, hold institutional memory, and help newer members navigate their journey.",
-              duties: "**Responsibilities:** Mentorship, wisdom sharing, ceremony holding, and intergenerational connection.",
+              body: "A Guide has walked the path long enough to help others along it. Guides mentor newer members, hold the village's memory, and help people find their way.",
+              duties: "**Responsibilities:** Mentorship, sharing what they know, and welcoming newcomers.",
             },
             {
               title: "Sage",
-              body: "After 21+ years, a Guide may become a Sage. Sages are the living embodiment of {village}'s values and vision, holding space for the village's evolution.",
-              duties: "**Responsibilities:** Long-term vision, values stewardship, conflict resolution, and community healing.",
+              body: "Sages carry {village}'s long view. They hold its values close and help the village through its hardest decisions.",
+              duties: "**Responsibilities:** The long view, care for the village's values, and help with hard conflicts.",
             },
           ],
         },
@@ -447,7 +454,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 120,
-          default: "To become a resident of {village}, you commit to embodying these four pillars.",
+          default: "Everyone who lives at {village} commits to these.",
         },
         {
           key: "body",
@@ -455,7 +462,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           kind: "long",
           max: 200,
           default:
-            "The {good-neighbor} are essential for anyone seeking to become a Resident. They reflect our commitment to authentic community and mutual respect.",
+            "The {good-neighbor} are essential for anyone who wants to live here. They describe how neighbors treat each other and share the place.",
         },
         { key: "buttonLabel", label: "Button to the Good Neighbor page", kind: "text", max: 40, default: "Read the Full {good-neighbor}" },
       ],
@@ -472,10 +479,10 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
             { key: "description", label: "Description", kind: "text", max: 50, default: "" },
           ],
           default: [
-            { title: "{commitment} Values", description: "Commitment to community values" },
-            { title: "Authentic Communication", description: "Resolve conflicts with integrity" },
-            { title: "Financial Stability", description: "Meet community dues" },
-            { title: "Governance Participation", description: "Active in decision-making" },
+            { title: "Shared Values", description: "Living by what the village stands for" },
+            { title: "Honest Communication", description: "Working through conflict directly and kindly" },
+            { title: "Financial Responsibility", description: "Meeting the commitments you make" },
+            { title: "Taking Part", description: "Active in the work and the decisions" },
           ],
         },
       ],
@@ -492,7 +499,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 120,
-          default: "The infinite journey starts with a single step. Choose your path below.",
+          default: "Every path starts with a single step. Choose yours below.",
         },
         { key: "moreLabel", label: "Link line on every card", kind: "text", max: 20, default: "Learn More" },
       ],
@@ -510,9 +517,9 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
             { key: "description", label: "Description", kind: "text", max: 70, default: "" },
           ],
           default: [
-            { title: "The {commitment}", description: "Read our community covenant and founding values" },
+            { title: "Read the {commitment}", description: "What members sign, and why it matters" },
             { title: "Find Your Quest", description: "Discover opportunities that match your gifts" },
-            { title: "Join Community Call", description: "Meet us live and ask your questions" },
+            { title: "Come to an Event", description: "Meet us live and ask your questions" },
           ],
         },
       ],
@@ -529,8 +536,7 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
           help: "Shown in italics, inside quotation marks.",
           kind: "long",
           max: 280,
-          default:
-            "{village} is an Infinite Game, played to keep creating together. We co-become the most beautiful village, where all beings belong and thrive. Success is measured by the flourishing of our community, land, and relationships.",
+          default: "A village is never finished. We keep building {village} together, one season, one quest and one good decision at a time.",
         },
         { key: "signoff", label: "Line under it", help: "Leave blank for none.", kind: "text", max: 40, default: "Welcome to {village}", optional: true },
       ],

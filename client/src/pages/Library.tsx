@@ -16,6 +16,7 @@ import InfoTip from "@/components/InfoTip";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import { ExampleRefusal, readRefusal } from "@/components/ExampleRefusal";
 import { formatTokenAmount } from "@/lib/tokenAmount";
+import { useTokenNameFor } from "@/hooks/useTokenNameFor";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -31,6 +32,8 @@ const STATUS_LABEL: Record<string, string> = {
 export default function Library() {
   const modules = useModules();
   const libraryModule = useModule("library");
+  // The village's own word for its library token (R084), from the registry.
+  const libraryName = useTokenNameFor("library-credit");
   const { user } = useAuth();
   // A floor is a stage id; members read it by the name this village gives it.
   const stages = useGameConfig()?.stages ?? [];
@@ -62,8 +65,8 @@ export default function Library() {
         const { ok, data: d, refusal } = await readRefusal(r);
         if (refusal && itemId) { setRefusedItem({ id: itemId, message: refusal }); return; }
         if (!ok) throw new Error(d?.error || "That didn't go through. Try again.");
-        if (d.escrow != null) setNotice(`Reserved. ${d.escrow} credit(s) set aside while you borrow.`);
-        if (d.released != null) setNotice(`Cancelled. ${d.released} credit(s) released back to you.`);
+        if (d.escrow != null) setNotice(`Reserved. ${d.escrow} ${libraryName} set aside while you borrow.`);
+        if (d.released != null) setNotice(`Cancelled. ${d.released} ${libraryName} released back to you.`);
         load();
       })
       .catch((e) => setError(e.message));
@@ -78,11 +81,13 @@ export default function Library() {
       <section className="py-12 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
           <h1 className="font-display text-4xl font-bold text-foreground mb-3">Material Library</h1>
-          {/* R47: the Trail line leads and the tooltip defines the credits.
+          {/* R47: the Trail line leads, naming the token as this village does
+              (R084). Its tooltip said how the token is earned, which no
+              shipped sentence says (the 2026-10-22 token ruling).
               The shelf line is the Lore, last and quiet. */}
           <p className="text-muted-foreground max-w-xl mx-auto">
             Borrow what you need with{" "}
-            <InfoTip tip="Library credits are earned by donating items and set aside as a deposit while you borrow. The deposit comes back at return, minus wear.">library credits</InfoTip>.
+            {libraryName}.
           </p>
           <ExamplesBanner moduleId="library" noun="donation" />
           <p className="mt-2 text-sm italic text-muted-foreground max-w-xl mx-auto">
@@ -106,7 +111,7 @@ export default function Library() {
                     formatter, which is what stops this surface and the
                     ledger disagreeing at any scale. See
                     client/src/lib/tokenAmount.ts. */}
-                Your credits: <span className="font-bold">{formatTokenAmount(Number(data.mine.balance ?? 0), Number(data.mine.balanceDecimals ?? 0))}</span>
+                Your {libraryName}: <span className="font-bold">{formatTokenAmount(Number(data.mine.balance ?? 0), Number(data.mine.balanceDecimals ?? 0))}</span>
                 {Number(data.mine.lockedUnits ?? 0) > 0 && (
                   <span className="text-muted-foreground">
                     {" "}to spend, {formatTokenAmount(Number(data.mine.totalUnits ?? 0), Number(data.mine.balanceDecimals ?? 0))} to your name
@@ -181,7 +186,7 @@ export default function Library() {
                   <div className="mt-auto flex items-center justify-between">
                     <p className="text-xs text-muted-foreground">
                       value {i.creditValue} ·{" "}
-                      <InfoTip tip="The deposit is set aside from your credits while the item is out and returns when it does, minus any wear.">deposit</InfoTip>{" "}
+                      <InfoTip tip={`The deposit is set aside from your ${libraryName} while the item is out and returns when it does, minus any wear.`}>deposit</InfoTip>{" "}
                       {i.escrow}
                       {i.minStage && (
                         <>
@@ -194,7 +199,7 @@ export default function Library() {
                       <button
                         onClick={() => call(`/api/library/items/${i.id}/reserve`, undefined, i.id)}
                         disabled={!eligible}
-                        title={eligible ? `Sets aside ${i.escrow} credit(s) while you borrow` : "Not open to you yet"}
+                        title={eligible ? `Sets aside ${i.escrow} ${libraryName} while you borrow` : "Not open to you yet"}
                         className="text-sm bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40"
                       >
                         Borrow

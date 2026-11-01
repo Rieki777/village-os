@@ -390,6 +390,40 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(JSON.stringify(profile.json)).not.toContain("passwordHash");
   });
 
+  it("opens a fresh board on starter quests nobody can claim, and the founder keeps them", async () => {
+    // Rye, sheet A8 / 19g: "a new village starts with a neutral, fully
+    // editable starter set". The boot used to write fourteen LIVE quests onto
+    // this empty board, claimable and paid from the ledger, that nobody had
+    // reviewed. Now every quest a fresh village opens on is a labelled
+    // starter (the quests section of server/seeds/examples-seed.json).
+    const board = await api("GET", "/api/quests");
+    expect(board.json.length).toBeGreaterThan(0);
+    expect(board.json.filter((q: any) => !q.isExample).map((q: any) => q.id), "no live quest on a fresh board").toEqual([]);
+    expect((await api("GET", "/api/examples")).json.modules).toContain("quests");
+
+    // Inert: a member's claim is refused, and the journey asks the founder.
+    const refused = await api("POST", `/api/game/quests/${board.json[0].id}/claim`, {}, doerToken);
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    const asked = (await api("GET", "/api/admin/launch", undefined, founderToken)).json.items
+      .find((i: any) => i.id === "starter-quests");
+    expect(asked.state).toBe("missing");
+
+    // The founder keeps every starter as a real quest, each with a value
+    // (POST /api/admin/quests/:id/keep). The rest of this journey works the
+    // board they kept, so its gates, circles and pay are the starters'.
+    for (const q of board.json) {
+      const kept = await api("POST", `/api/admin/quests/${q.id}/keep`, { valueMinor: 1000000 }, founderToken);
+      expect(kept.status, `${q.id}: ${JSON.stringify(kept.json)}`).toBe(200);
+    }
+    const after = await api("GET", "/api/quests");
+    expect(after.json.length).toBe(board.json.length);
+    expect(after.json.every((q: any) => !q.isExample)).toBe(true);
+    expect((await api("GET", "/api/examples")).json.modules).not.toContain("quests");
+    const answered = (await api("GET", "/api/admin/launch", undefined, founderToken)).json.items
+      .find((i: any) => i.id === "starter-quests");
+    expect(answered.state).toBe("ok");
+  });
+
   it("claims a quest, and cannot double-claim it", async () => {
     const quests = await api("GET", "/api/quests");
     const open = quests.json.find((q: any) => q.status !== "closed") ?? quests.json[0];
@@ -563,7 +597,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
   it("gates quests on stage and role, and an appointment unlocks the role gate", async () => {
     // Revision 2, step 3: progression stops being decoration. A fresh member sits
-    // at guest, below the member stage the scribe quest asks for.
+    // at guest, below the member stage the meeting-notes starter asks for.
     const gated = await api("GET", "/api/quests");
     const stageGated = gated.json.find((q: any) => q.minStage === "member");
     const roleGated = gated.json.find((q: any) => q.requiresRole === "practitioners");
@@ -591,6 +625,12 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(appointment.status).toBe(409);
     expect(appointment.json.minStage).toBe("participant");
 
+    // Sheet 19 (0307): Founders Circle ships with admin access ON, so its holders can open the admin
+    // panel. This suite uses the group as a carrier of capabilities and tests the account-role plane (S2 after R90 demotes peer and expects the panel to close), so it
+    // pins the default and then switches it off. The group's admin access itself is pinned in
+    // server/authzRound.routes.e2e.test.ts.
+    expect((await api("GET", "/api/roles")).json.find((r: any) => r.id === "founders-circle")?.grantsAdmin).toBe(true);
+    expect((await api("PUT", "/api/admin/roles/founders-circle/admin-access", { on: false }, founderToken)).status).toBe(200);
     // Founders Circle carries no stage floor, so that appointment lands, and
     // capabilities show up on /api/game/me.
     const founders = await api(
@@ -4316,19 +4356,21 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * A fresh village has answered neither, and the detail is the sentence a
      * founder acts on rather than a scolding.
      */
+    // The currency warns; the timezone blocks the launch vote since readiness
+    // R059, because the platform keeps UTC and that is nobody's home.
+    const severity: Record<string, string> = { "village-timezone": "blocking", "village-currency": "recommended" };
     for (const id of ["village-timezone", "village-currency"]) {
       const item = launch.json.items.find((i: any) => i.id === id);
       expect(item, `no launch item "${id}"`).toBeTruthy();
       expect(item.detail).not.toContain("No check wired");
       expect(item.state).toBe("missing");
-      // A warning warns. Neither of these may stop a village launching.
-      expect(item.severity).toBe("recommended");
+      expect(item.severity, id).toBe(severity[id]);
       // The address names the control, not the screen it lives on.
       expect(item.fixAt).toContain("setting=");
     }
     // The timezone item names the zone the village is actually running on, so
     // a founder reads what they are inheriting rather than an abstraction.
-    expect(launch.json.items.find((i: any) => i.id === "village-timezone").detail).toMatch(/[A-Za-z]+\/[A-Za-z_]+/);
+    expect(launch.json.items.find((i: any) => i.id === "village-timezone").detail).toContain("Days here run on UTC");
 
     // ANSWERING THE CURRENCY IS STORING ONE, and a village may answer with the
     // platform's own code: the point is that somebody said it.

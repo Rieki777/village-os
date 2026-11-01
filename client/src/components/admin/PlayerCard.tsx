@@ -49,6 +49,8 @@ export type PlayerDetail = {
 };
 
 export type Player = {
+  /** Sheet 19: the power groups that give this member admin access right now. */
+  adminVia?: string[];
   id: string;
   name: string;
   email: string;
@@ -420,6 +422,11 @@ export function PlayerCard({
             )}
           </div>
           <p className="mt-2 text-xs text-gray-600">{ACCESS[access].does}</p>
+          {p.adminVia && p.adminVia.length > 0 && access === "member" && (
+            <p className="mt-1 text-xs text-gray-600">
+              Opens the admin panel through {p.adminVia.join(" and ")}, while they hold it.
+            </p>
+          )}
         </section>
 
         <section aria-label={ladderLabel(stages, ladderTitle)} className="rounded-xl bg-gray-50 px-4 py-3">

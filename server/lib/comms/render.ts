@@ -32,10 +32,14 @@ import { kindForTemplate, type MergeValues } from "../../../shared/comms/mergeFi
 import { GAME_CONFIG } from "../../../shared/gameConfig";
 import { readConfigDocument } from "../../repos/appConfigDocs";
 import { villagePaths } from "../villagePaths";
+import { tokenDef } from "../ledger";
 import { signLink } from "./links";
 import { readLiveWords, type TemplateWords } from "./templates";
 
 export type { EmailVillage } from "../../../shared/comms/letterHtml";
+
+/** The recognition token's slug: `HEARTS` in server/lib/economy.ts, which is too wide an import for a renderer. */
+const RECOGNITION_SLUG = "gratitude";
 
 /** How long a preferences link in an email stays good: a year, because mail is read late. */
 export const PREFERENCES_LINK_DAYS = 365;
@@ -134,6 +138,10 @@ function absoluteLogo(raw: string, site: string): string | null {
  * its postal address (5.18). A blank name inherits the platform's, the same
  * rule the site's merged config follows.
  *
+ * The recognition token's name follows the merged config's rule too: the
+ * token registry's name (Admin, Tokens), else the brand document's older
+ * currency name, else the platform's.
+ *
  * Read once per batch of sends and pass the answer in each render's context.
  * A read that fails answers the platform defaults rather than throwing, so a
  * hiccup costs an email its colours, never the email.
@@ -156,6 +164,7 @@ export async function loadEmailVillage(pool: Pool, origin: string): Promise<Emai
     seed: nonBlank(brand?.theme?.seed) || null,
     character: nonBlank(brand?.theme?.character) || null,
     postalAddress: nonBlank(settings?.postalAddress),
+    tokenName: nonBlank(tokenDef(RECOGNITION_SLUG)?.name) || nonBlank(brand?.currency?.name) || GAME_CONFIG.currency.name,
   };
 }
 

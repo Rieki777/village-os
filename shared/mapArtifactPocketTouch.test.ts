@@ -459,7 +459,7 @@ describe("Maia's phone welcome", () => {
 
   it("raises a badge on ask maia, and says so to a screen reader", () => {
     expect(badge(), "the badge is showing").toBe("");
-    expect(ask().getAttribute("aria-label")).toBe("ask maia, 1 new message");
+    expect(ask().getAttribute("aria-label"), "the guide is unnamed until the shell says otherwise").toBe("ask the village guide, 1 new message");
   });
 
   it("lowers it the moment her sheet opens", async () => {

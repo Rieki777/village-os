@@ -17,6 +17,7 @@
  *   POST /settings/domain          add (or adopt) the sending domain
  *   POST /settings/domain/verify   ask the provider to look again
  *   POST /settings/domain/confirm  a person vouches, when the key cannot ask
+ *   POST /settings/key-rights      ask Resend whether the key may only send
  *   POST /settings/webhook         connect delivery reports with one press
  *   PUT  /settings/webhook         paste the signing secret by hand, or clear it
  *   POST /settings/test            send yourself a test email
@@ -40,7 +41,7 @@ import crypto from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { addressProblem } from "../../shared/comms/address";
 import { DEFAULT_JOURNEYS } from "../../shared/comms/defaults/journeys";
-import { addressOnDomain, domainProblem, normalizeDomain, senderNameProblem } from "../../shared/comms/settings";
+import { addressOnDomain, domainProblem, keyRightsFingerprint, normalizeDomain, senderNameProblem } from "../../shared/comms/settings";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 import type { AppDeps } from "../lib/appDeps";
 import { escapeHtml, validEmailSender } from "../lib/comms/mailer";
@@ -354,6 +355,28 @@ export function register(app: Express, deps: CommsSettingsDeps): void {
       await recordCommsSettings(pool, { domainStatus: "unknown", domainConfirmedBy: null, domainCheckedAt: null });
     }
     res.json({ ...(await settingsPayload(req)), domainPanel: await domainPanel(pool) });
+  });
+
+  /*
+   * WHAT THE KEY MAY DO, asked of Resend once and recorded against this key.
+   *
+   * The setup game's last spring planting trades the full-access key for one
+   * that can only send. Nothing else tells the two apart, so this asks Resend
+   * the one question a send-only key is refused (listing the domains) and
+   * keeps the answer beside the key's fingerprint, never the key. A key saved
+   * later, through any door, reads as not yet asked.
+   */
+  app.post("/api/admin/comms/settings/key-rights", async (req, res) => {
+    if (!(await guardCapability(req, res, "comms.manage", REFUSED))) return;
+    const key = secretStatus("resend_api_key");
+    if (!key.configured) return res.status(409).json({ error: "Paste the Resend key first. This step talks to Resend with it." });
+    const asked = await admin().listDomains();
+    if (!asked.ok && asked.refusal !== "no_rights") {
+      const r = providerRefusal(asked);
+      return res.status(r.status).json({ error: r.error });
+    }
+    await recordCommsSettings(getPool(), { keyRights: asked.ok ? "full" : "sending", keyRightsFor: keyRightsFingerprint(key) });
+    res.json(await settingsPayload(req));
   });
 
   app.post("/api/admin/comms/settings/webhook", async (req, res) => {

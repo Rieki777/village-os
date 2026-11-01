@@ -78,16 +78,18 @@ Wait for all five answers before doing anything else.
    in. Tell me that list in plain words. Do not open `.env` for me.
 
 4. **Start it.**
-   - On this computer or a rented server: `docker compose up -d`, then follow
-     `docker compose logs -f app` until it says it is listening. The first
-     start takes a few minutes while it builds the database. Then check
+   - On this computer or a rented server: `docker compose up -d`, then run
+     `docker compose ps` every minute or so until the app reads `healthy`.
+     The first start takes a few minutes while it builds the database. Then check
      `http://localhost:3000/health` says `"status":"ok"`.
    - On a hosting provider: walk me through creating a MySQL service, a
      service running the image `ghcr.io/rieki777/village-os:` followed by
      VERSION without its `v` (for `v1.2.0`, the tag `1.2.0`), and a
      volume mounted at `/app/data`. I copy each line of `.env` into the
-     service's variables myself, with `DATABASE_URL` set to the MySQL
-     service's own connection string. `docs/PROVISIONING.md` has the detail.
+     service's variables myself, with `DATABASE_URL` set to the reference
+     `${{MySQL.MYSQL_URL}}`. Then show me how to give the service an address
+     (Settings, Networking, Generate Domain, or my own domain with the CNAME
+     Railway shows): I need it before step 5. `docs/PROVISIONING.md` has the detail.
 
 5. **Claim the village.** I open `<my village address>/claim`, enter my email
    and name, and type the `ADMIN_PASSWORD` I read from `.env` myself. The
@@ -95,7 +97,8 @@ Wait for all five answers before doing anything else.
    signed in.
 
 6. **Make it mine.** Point me to **Admin, Make This Yours**, and help me
-   through it at my pace: name, tagline, place, pictures, colours, modules.
+   through it at my pace: name, tagline, place, pictures, colours. Modules
+   are switched on in **Admin, Module Library**.
    Then the **Launch Plan** at `/journey-to-launch`, which lists what is
    still missing, including my currency and my timezone.
 
@@ -110,7 +113,8 @@ Wait for all five answers before doing anything else.
    "success" for an unverified domain and delivers nothing.
 
 9. **Invite the first member.** Show me where on my profile I make an
-   invitation link.
+   invitation link. Before launch, somebody who makes their account with a
+   link I made is a member at once and counts toward the launch vote.
 
 10. **Back up.** Explain why, then take the first backup with the commands in
     `START_HERE.md`, "Backups", and help me copy the `backups` folder

@@ -61,7 +61,7 @@ import { cyclePoolProblem } from "./cyclePool";
 // `toLedgerUnits` is gone from this list on purpose: the conversion happens
 // inside `quoteWorkPay`, so this module converts nothing of its own and
 // cannot come to disagree with the engine about the scale it converted at.
-import { faucetFor, humanAtScale, quoteWorkPay, VILLAGE_VOICE } from "./economy";
+import { faucetFor, HEARTS, humanAtScale, quoteWorkPay, VILLAGE_VOICE } from "./economy";
 import { shareCapFor } from "./gratitude";
 import { tokenDef } from "./ledger";
 import { numberVar, stringVar } from "./variables";
@@ -293,6 +293,15 @@ function claimsOpenInside(startsAt: Date, endsAt: Date): { open: boolean; opensA
 }
 
 /**
+ * What this village calls its recognition token: the registry's name, the
+ * one `mergedConfig()` serves as `currency.name`, and the platform's own word
+ * only for a registry with no row (which a running village never has).
+ */
+function recognitionWord(): string {
+  return tokenDef(HEARTS)?.name?.trim() || GAME_CONFIG.currency.name;
+}
+
+/**
  * The allowance table, one row per stage of the ladder.
  *
  * R73 made a member's per-cycle budget `gratitude.base_budget` times their
@@ -308,16 +317,22 @@ function claimsOpenInside(startsAt: Date, endsAt: Date): { open: boolean; opensA
  *   a multiplier of 0, or a base budget of 0, so members at that stage cannot
  *   give anything and the page never says why;
  *
- *   a heart worth more than the whole per-person share, so every tap on the
+ *   a feed tap worth more than the whole per-person share, so every tap on the
  *   feed is refused while the acknowledgment page still works;
  *
- *   a share that rounds below one Gratitude, where `shareCapFor` floors at 1
+ *   a share that rounds below one whole token, where `shareCapFor` floors at 1
  *   and the dial then means something other than what it reads;
  *
- *   a heart tap cap that allows more taps than the share leaves room for, so
+ *   a feed tap cap that allows more taps than the share leaves room for, so
  *   the number on the feed dial is never the number that bites.
+ *
+ * THE TOKEN IS NAMED BY THE VILLAGE (readiness R064). These sentences said
+ * "heart" and "Gratitude", the first village's words, whatever the village
+ * calls its recognition token. They read the registry name now, the one the
+ * feed's own button and every other page say (see `recognitionWord`).
  */
 function allowanceTable(feedOff: boolean): DryRunAllowance[] {
+  const token = recognitionWord();
   const base = numberVar("gratitude.base_budget");
   const heart = numberVar("feed.heart_amount");
   const fullSends = Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle")));
@@ -341,16 +356,16 @@ function allowanceTable(feedOff: boolean): DryRunAllowance[] {
       note = `Members at ${s.name} can give nothing. Their sending budget is ${base} times ${multiplier}, which comes to zero.`;
     } else if (!heartsSendable && !feedOff) {
       note =
-        `A heart is worth ${heart} and one person may receive ${cap} from a member at ${s.name}, ` +
-        `so every tap on the feed would be refused. Allow fewer full sends, or lower what a heart is worth.`;
+        `A tap on the feed sends ${heart} ${token} and one person may receive ${cap} from a member at ${s.name}, ` +
+        `so every tap on the feed would be refused. Allow fewer full sends, or lower what a tap sends.`;
     } else if (asked < 1) {
       note =
-        `A member at ${s.name} gives ${allowance} a moon. Split ${fullSends} ways that is under one Gratitude, ` +
+        `A member at ${s.name} gives ${allowance} a moon. Split ${fullSends} ways that is under one ${token}, ` +
         `so the ceiling holds at 1 and the full sends dial is doing nothing here.`;
     } else if (tapsTheShareAllows < tapCap && !feedOff) {
       note =
         `A member at ${s.name} gives ${allowance} a moon and up to ${cap} of it to any one person. ` +
-        `That is ${tapsTheShareAllows} hearts to one person, and the feed dial says ${tapCap}, ` +
+        `That is ${tapsTheShareAllows} feed taps to one person, and the feed dial says ${tapCap}, ` +
         `so the ceiling is the one they meet.`;
     } else {
       note =
@@ -748,7 +763,7 @@ export function dryRun(input: DryRunSnapshot, options: DryRunOptions): DryRunRep
       area: "gratitude",
       outcome: "idle",
       sentence:
-        "The feed is off, so nobody is tapping hearts. The allowance below is what a member can " +
+        `The feed is off, so nobody is sending ${recognitionWord()} from it. The allowance below is what a member can ` +
         "give through written acknowledgments alone.",
     });
   }

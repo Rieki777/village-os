@@ -44,6 +44,16 @@ describe("villageFactFor", () => {
     expect((await villageFactFor(pool, "timezone")).state).toBe("missing");
   });
 
+  it("reads a village that stored no season document as running on UTC, unanswered (R059)", async () => {
+    // The platform's zone is UTC now, and a fresh village is told so in the
+    // detail it acts on rather than being told it keeps another village's clock.
+    const { pool } = poolWith({});
+    const answer = await villageFactFor(pool, "timezone");
+    expect(answer.state).toBe("missing");
+    expect(answer.detail).toContain("UTC");
+    expect(answer.detail).not.toContain("Costa_Rica");
+  });
+
   it("counts the zone as answered once somebody has confirmed it", async () => {
     const { pool } = poolWith({
       season: { timezone: "America/Costa_Rica", seasons: [], timezoneAnswer: { at: "2026-09-24T00:00:00.000Z", by: "founder-1" } },
@@ -102,6 +112,26 @@ describe("villageFactFor", () => {
     const answer = await villageFactFor(pool, "walk");
     expect(answer.state).toBe("ok");
     expect(answer.detail).toBe("Written, 1 stop and your own welcome");
+  });
+
+  /*
+   * The starter quests (A8 / 19g): one count of the examples still on the
+   * board. The real-schema walk, keep and clear included, is
+   * server/starterQuests.test.ts; this pins the reading and the failure.
+   */
+  it("counts the starter quests still waiting, from the board", async () => {
+    const seen: string[] = [];
+    const pool = { query: async (sql: string) => { seen.push(sql); return [[{ n: 3 }], []]; } } as unknown as Pool;
+    const answer = await villageFactFor(pool, "starter-quests");
+    expect(seen.join(" ")).toContain("is_example = 1");
+    expect(answer).toEqual({ state: "missing", detail: "3 starter quests are still waiting. Keep the ones that fit and clear the rest" });
+  });
+
+  it("says a failed starter count on the row, and never takes the journey down with it", async () => {
+    const pool = { query: async () => { throw new Error("connection lost"); } } as unknown as Pool;
+    const answer = await villageFactFor(pool, "starter-quests");
+    expect(answer.state).toBe("missing");
+    expect(answer.detail).toContain("Check failed");
   });
 
   it("says a missing resolver is a platform bug rather than answering for it", async () => {

@@ -63,6 +63,33 @@ export async function createInviteOn(
   );
 }
 
+/**
+ * Give an answered request to join its link again (server/routes/joinAnswers.ts):
+ * a new token, a new expiry, and the admin answering now as its maker. Only a
+ * link that was withdrawn or ran out, never one somebody used and never one
+ * still open. True when it did. On the caller's connection, like `createInviteOn`.
+ */
+export async function reissueInviteOn(
+  conn: PoolConnection,
+  input: { id: string; tokenHash: string; inviterUserId: string; days: number },
+): Promise<boolean> {
+  const [result] = await conn.query<ResultSetHeader>( // module-review-ok: one table, one row, no cache above it
+    "UPDATE member_invites SET token_hash = ?, inviter_user_id = ?, revoked_at = NULL, expires_at = CURRENT_TIMESTAMP + INTERVAL ? DAY " +
+      "WHERE id = ? AND village_id = ? AND used_at IS NULL AND (revoked_at IS NOT NULL OR expires_at IS NULL OR expires_at <= CURRENT_TIMESTAMP)",
+    [input.tokenHash, input.inviterUserId, Math.max(1, Math.trunc(input.days)), input.id, VILLAGE],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
+}
+
+/** One link by its id, whatever became of it: the invitation an answered request to join carries (server/routes/joinAnswers.ts). */
+export async function inviteById(pool: Pool, id: string): Promise<InviteRow | null> {
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: one table, one row, no cache above it
+    `SELECT ${COLUMNS} FROM member_invites WHERE village_id = ? AND id = ? LIMIT 1`,
+    [VILLAGE, id],
+  );
+  return rows[0] ? toRow(rows[0]) : null;
+}
+
 /** The link a token's hash names, whatever became of it. */
 export async function inviteByHash(pool: Pool, tokenHash: string): Promise<InviteRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: one table, no cache above it

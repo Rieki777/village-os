@@ -37,8 +37,10 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
 const PORT = 24302 + (process.pid % 900);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "quest-share-admin";
-// Seeded by server/seeds/quests-seed.json on a fresh village.
-const QUEST_ID = "q-welcome-ambassador";
+// A starter on every fresh village: the quests section of
+// server/seeds/examples-seed.json (A8 / 19g). A starter is shared like any
+// quest, labelled on its page, while a founder decides whether to keep it.
+const QUEST_ID = "ex-quest-welcome";
 
 let child: ChildProcess | undefined;
 let testDb: TestDb | undefined;
@@ -101,7 +103,7 @@ describe.skipIf(!DB_CONFIGURED)("a shared quest link", () => {
   it("carries the quest's own title, not the neutral shell's", async () => {
     const html = await (await fetch(`${BASE}/quests/${QUEST_ID}`)).text();
     expect(html).toContain('property="og:title"');
-    expect(html).toMatch(/og:title" content="Welcome Ambassador at /);
+    expect(html).toMatch(/og:title" content="Welcome someone new at /);
     // The neutral value must be GONE, not merely outnumbered.
     expect(html).not.toMatch(/og:title" content="Village"/);
   });
@@ -177,9 +179,8 @@ describe.skipIf(!DB_CONFIGURED)("the share image", () => {
   });
 
   it("renders for a quest with no poster of its own", async () => {
-    // Every seeded quest carries a poster path, and on a fresh village the
-    // FILES are not there, so this is also the fallback-to-scene path.
-    const res = await fetch(`${BASE}/api/og/quest/q-circle-scribe`);
+    // No starter carries a poster, so this is the paint-a-scene path.
+    const res = await fetch(`${BASE}/api/og/quest/ex-quest-meeting-notes`); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
     expect(res.status).toBe(200);
     const bytes = Buffer.from(await res.arrayBuffer());
     expect(bytes.subarray(0, 3).toString("hex")).toBe("ffd8ff");
@@ -250,6 +251,10 @@ describe.skipIf(!DB_CONFIGURED)("a crew gets its room when the village has rooms
       { token: claim, password: "CrewTest123!" }, "");
     founder = String(pw.json?.token ?? "");
     expect(founder, "the founder must hold a session").toBeTruthy();
+    // A starter is inert until a founder keeps it (A8 / 19g), so a crew forms
+    // on one only once it is a real quest, which is what a village would do.
+    const kept = await call("POST", `/api/admin/quests/${QUEST_ID}/keep`, { valueMinor: 1000000 });
+    expect(kept.status, `the starter must be kept: ${JSON.stringify(kept.json)}`).toBe(200);
     // Messaging ships OFF. A crew only gains a room once a village turns it on.
     const on = await call("PUT", "/api/admin/modules/messaging/lifecycle", { lifecycle: "members" });
     expect(on.status, "messaging must switch on").toBe(200);

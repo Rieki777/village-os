@@ -90,6 +90,13 @@ const revised = (key: string, subject: string, preheader: string | null, ...para
   version: 2,
 });
 
+/**
+ * Words that named the recognition token as "Gratitude" whatever a village
+ * calls it, moved onto `{{village.tokenName}}` on 2026-10-23 at version 3, so a
+ * village holding its own copy is offered the change on its Words screen.
+ */
+const tokenNamed = (t: DefaultTemplate): DefaultTemplate => ({ ...t, version: 3 });
+
 const list = (...items: string[]): string => items.map((item) => `- ${item}`).join("\n");
 
 const HI = "Hi {{person.firstName}},";
@@ -115,9 +122,10 @@ const LAST_EMAIL =
   "It's been three weeks since you chose the {{path.name}} path, and this is the last email in the series. From here, a person takes over.";
 /** Every other path's closing line, after the next step it leads with. */
 const LAST_OF_SERIES = "This is the last email in the series. Three weeks on the {{path.name}} path, and from here a person takes over.";
-/** The one Lore line the platform's words carry, on the emails that show the Gratitude wall. */
+/** The one Lore line the platform's words carry, on the emails that show the token's wall. */
 const LORE_GRATITUDE = "Naming what is good is how a village grows more of it.";
-const GRATITUDE_WALL = "[Read the Gratitude wall]({{village.url}}/gratitude)";
+/** The wall at /gratitude, by the name the village gave its token. */
+const GRATITUDE_WALL = "[Read the {{village.tokenName}} wall]({{village.url}}/gratitude)";
 
 // ── The words ───────────────────────────────────────────────────────────────
 
@@ -309,16 +317,16 @@ const RESIDENT: DefaultTemplate[] = [
     SAVE_A_SEAT,
     EVERY_GATHERING,
   ),
-  revised(
+  tokenNamed(revised(
     "path.resident.stories",
     "What daily life here looks like",
     "People here thank each other in public. It's the clearest picture we have.",
     HI,
-    "Spend ten minutes on the Gratitude wall. People here thank each other there in public for the work they do: a fence mended, a meal cooked, a meeting run well. It's the clearest picture we have of daily life in {{village.name}}.",
+    "Spend ten minutes on the {{village.tokenName}} wall. People here thank each other there in public for the work they do: a fence mended, a meal cooked, a meeting run well. It's the clearest picture we have of daily life in {{village.name}}.",
     GRATITUDE_WALL,
     "If a question comes up while you read, reply to this email. A person will answer.",
     LORE_GRATITUDE,
-  ),
+  )),
   revised(
     "path.resident.check_in",
     "Three weeks on the {{path.name}} path",
@@ -421,15 +429,15 @@ const STEWARD: DefaultTemplate[] = [
     SAVE_A_SEAT,
     EVERY_GATHERING,
   ),
-  revised(
+  tokenNamed(revised(
     "path.steward.stories",
     "What holding a role looks like",
     "The work is public, and so is the thanks.",
     HI,
-    "Spend ten minutes on the Gratitude wall. When someone does a role's work, people thank them there in public, and it shows the shape of stewarding here better than any description.",
+    "Spend ten minutes on the {{village.tokenName}} wall. When someone does a role's work, people thank them there in public, and it shows the shape of stewarding here better than any description.",
     GRATITUDE_WALL,
     LORE_GRATITUDE,
-  ),
+  )),
   revised(
     "path.steward.check_in",
     "Three weeks on the {{path.name}} path",
@@ -472,16 +480,16 @@ const PROSPERITY: DefaultTemplate[] = [
     SAVE_A_SEAT,
     EVERY_GATHERING,
   ),
-  revised(
+  tokenNamed(revised(
     "path.prosperity-creator.stories",
     "What people already do here",
-    "The Gratitude wall shows the work, and who it helped.",
+    "The {{village.tokenName}} wall shows the work, and who it helped.",
     HI,
-    "Spend ten minutes on the Gratitude wall. When someone's work helps the village, people say so there in public. It shows what's needed here, what's valued, and who you might work with.",
+    "Spend ten minutes on the {{village.tokenName}} wall. When someone's work helps the village, people say so there in public. It shows what's needed here, what's valued, and who you might work with.",
     GRATITUDE_WALL,
     "If it sparks an idea, reply to this email. A person will answer.",
     LORE_GRATITUDE,
-  ),
+  )),
   revised(
     "path.prosperity-creator.check_in",
     "Three weeks on the {{path.name}} path",
@@ -595,6 +603,39 @@ const PATH_RUNG: DefaultTemplate[] = [
   ),
 ];
 
+/**
+ * THE INVESTOR PACKET, the receipt a visitor gets after asking for it on the
+ * investor page. Two emails, chosen by what actually happened: the packet,
+ * when documents went with it, and a thank-you when the packet is empty, so
+ * nobody is told a packet is attached that is not. Until 2026-10-23 both were
+ * typed into server/index.ts, outside these Words, under a heading in one
+ * fixed colour, and both promised a person "within 48 hours", a promise only
+ * a village can make. Information only, like the investor path: no returns,
+ * no offers, no deadline, and no time a reply is promised by.
+ */
+const INVESTOR_PACKET: DefaultTemplate[] = [
+  words(
+    "investor.packet",
+    "Your {{village.name}} investor packet",
+    "The documents you asked for are inside.",
+    HI,
+    "Thank you for your interest in {{village.name}}. Here are the documents in our current investor packet:",
+    "{{packet.documents}}",
+    "Someone from our team will be in touch to answer your questions.",
+    "You're welcome at our public gatherings too.",
+    "[See what's coming up]({{village.url}}/events)",
+  ),
+  words(
+    "investor.thanks",
+    "Thank you for your interest in {{village.name}}",
+    "We have your request.",
+    HI,
+    "Thank you for your interest in {{village.name}}. We have your request, and someone from our team will be in touch to talk it through with you.",
+    "You're welcome at our public gatherings in the meantime.",
+    "[See what's coming up]({{village.url}}/events)",
+  ),
+];
+
 export const DEFAULT_TEMPLATES: readonly DefaultTemplate[] = [
   ...GATHERINGS,
   ...TIME_VOTES,
@@ -605,6 +646,7 @@ export const DEFAULT_TEMPLATES: readonly DefaultTemplate[] = [
   ...MEMBERS,
   ...LETTERS,
   ...PATH_RUNG,
+  ...INVESTOR_PACKET,
 ];
 
 export const DEFAULT_TEMPLATES_BY_KEY: Readonly<Record<string, DefaultTemplate>> = Object.fromEntries(
@@ -648,16 +690,16 @@ const GENERIC_PATH: Record<PathStepKey, Omit<DefaultTemplate, "key">> = {
     SAVE_A_SEAT,
     EVERY_GATHERING,
   ),
-  stories: revised(
+  stories: tokenNamed(revised(
     "",
     "A look at life in {{village.name}}",
     "People here thank each other in public. It's the clearest picture we have.",
     HI,
-    "Spend ten minutes on the Gratitude wall. People here thank each other there in public for the work they do, and it's the clearest picture we have of life in {{village.name}}.",
+    "Spend ten minutes on the {{village.tokenName}} wall. People here thank each other there in public for the work they do, and it's the clearest picture we have of life in {{village.name}}.",
     GRATITUDE_WALL,
     "If a question comes up while you read, reply to this email. A person will answer.",
     LORE_GRATITUDE,
-  ),
+  )),
   check_in: revised(
     "",
     "Three weeks on the {{path.name}} path",
@@ -774,6 +816,7 @@ export function templateGroups(pathIds: readonly string[] = DEFAULT_PATH_IDS): T
     { id: "joining.request", title: "Asking to join", journeyKey: "joining.request", keys: ["joining.received", "joining.meet_us", "joining.check_in"] },
     { id: "path.rung", title: "A step up a path", journeyKey: null, keys: ["path.rung"] },
     { id: "letters", title: "Letters", journeyKey: null, keys: ["letters.confirm", "letter.layout"] },
+    { id: "investor.packet", title: "Investor packet requests", journeyKey: null, keys: ["investor.packet", "investor.thanks"] },
   ];
 }
 
@@ -804,6 +847,8 @@ export function templateLabel(key: string): string {
     "letters.confirm": "Confirm letters",
     "letter.layout": "Every letter",
     "path.rung": "A step up a path",
+    "investor.packet": "The packet, with its documents",
+    "investor.thanks": "Thank you, while the packet is empty",
   };
   if (fixed[key]) return fixed[key];
   const step = key.match(PATH_KEY)?.[2] as PathStepKey | undefined;

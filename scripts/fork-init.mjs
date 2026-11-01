@@ -376,6 +376,6 @@ console.log(
   DRY
     ? "\nNothing was written (--dry)."
     : COMPOSE
-      ? `\nNext: docker compose up -d, wait for the app to say it is listening\n(docker compose logs -f app), then open ${frontendUrl}/claim. START_HERE.md has the rest.`
+      ? `\nNext: docker compose up -d, wait until docker compose ps shows the app\nhealthy, then open ${frontendUrl}/claim. START_HERE.md has the rest.`
       : `\nNext: put these values in your host's environment variables (on Railway, your\nservice, Variables). This file does not deploy on its own. Then follow START_HERE.md.`,
 );

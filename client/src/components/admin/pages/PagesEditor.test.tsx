@@ -15,9 +15,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import PagesEditor from "./PagesEditor";
 import { HOME_PAGE } from "@shared/pageContent/home";
-import { adoptedDocument } from "@shared/pageContent/resolve";
+import { adoptedDocument, contentVersion } from "@shared/pageContent/resolve";
 
-type Write = { path: string; body: any };
+type Write = { path: string; body: any; was?: string };
 
 function stubFetch(stored: Record<string, unknown> | "fail", writes: Write[]) {
   vi.stubGlobal(
@@ -25,7 +25,7 @@ function stubFetch(stored: Record<string, unknown> | "fail", writes: Write[]) {
     vi.fn(async (url: any, init?: any) => {
       const path = String(url);
       if (init?.method === "PUT") {
-        writes.push({ path, body: JSON.parse(init.body) });
+        writes.push({ path, body: JSON.parse(init.body), was: new Headers(init.headers).get("x-content-was") ?? undefined });
         return new Response(JSON.stringify({ success: true }), { status: 200 });
       }
       if (path.endsWith("/api/admin/content")) {
@@ -46,6 +46,18 @@ afterEach(() => vi.unstubAllGlobals());
 const headlineBox = () => screen.findByLabelText("Headline");
 
 describe("Admin, Pages", () => {
+  it("names the saved words it was opened on, so a save never writes over words that moved since", async () => {
+    const stored = { "page-home": { hero: { badge: "Ours" } } };
+    stubFetch(stored, writes);
+    render(<PagesEditor password="pw" />);
+    const box = (await headlineBox()) as HTMLInputElement;
+    await userEvent.clear(box);
+    await userEvent.type(box, "A valley that remembers");
+    await userEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].was).toBe(contentVersion(stored["page-home"]));
+  });
+
   it("shows the default until a village writes its own, and saves only what changed", async () => {
     stubFetch({}, writes);
     render(<PagesEditor password="pw" />);

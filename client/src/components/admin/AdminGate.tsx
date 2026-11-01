@@ -59,7 +59,8 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
 
-  const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
+  // Sheet 19: or a live holding of a power group with admin access, which the server works out (`adminAccess`).
+  const isAdmin = !!user && (user.role === "admin" || user.role === "founder" || (user as any).adminAccess === true);
   // Where this admin was headed, deep link included (`?tab=email-settings&…`),
   // so the Google round trip comes back to the same screen. The server's
   // normalizeNext checks it before it is signed into the state.

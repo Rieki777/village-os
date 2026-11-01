@@ -1,11 +1,16 @@
 /**
  * The business opportunities page (/opportunities), as fields.
  *
- * The defaults are the words the page carried in code until 2026-10-22, moved
- * here unchanged, except the three lines that said what the recognition token
- * does. Those follow Rye's token ruling of 2026-10-22 (TOKEN_COPY_PROPOSAL
- * rows 31 to 33): a token may be named, and no sentence says what it does.
- * A revenue share "paid in" the recognition token was also the wrong token.
+ * The defaults are NEUTRAL STARTER TEXT (2026-10-23), true of any village.
+ * They were the first village's words until then; that village keeps its own
+ * copy in its database, and the record of it is
+ * server/seeds/amora/pages/page-opportunities.json. The eight cards keep their
+ * kinds of venture, the kinds a village commonly hopes for, and lose every
+ * figure and every status: a "Planning" or an "Active" badge is a claim about
+ * one village's progress, so a card starts with none.
+ *
+ * Rye's token ruling of 2026-10-22 (TOKEN_COPY_PROPOSAL rows 31 to 33) holds
+ * here too: a token may be named, and no sentence says what it does.
  *
  * THE EIGHT VENTURE IDS ARE A STORAGE CONTRACT. `content.money.ventureInvestment`
  * is keyed by them (the investment range a village types per venture), so the
@@ -67,7 +72,7 @@ export const OPPORTUNITIES_PAGE: PageSpec = {
           kind: "long",
           max: 240,
           default:
-            "Join our thriving village economy. These opportunities align business success with community prosperity through shared revenue.",
+            "Bring a business to {village}. Here are the ventures the village would like to see, and how a business here grows with the community.",
         },
       ],
     },
@@ -110,62 +115,58 @@ export const OPPORTUNITIES_PAGE: PageSpec = {
           default: [
             {
               title: "Retreat Center",
-              status: "Planning",
-              description:
-                "A 120-150 key wellness retreat facility offering transformational experiences, workshops, and healing programs.",
-              details: "120-150 guest rooms\nMultiple workshop spaces\nSpa and wellness facilities\nFarm-to-table restaurant",
+              status: "",
+              description: "A place for guests to stay, rest, and learn, with room for workshops and gatherings.",
+              details: "Guest rooms\nWorkshop spaces\nShared meals",
               icon: "tent",
             },
             {
               title: "Health & Wellness Center",
-              status: "Planning",
-              description:
-                "Integrative health services combining traditional and alternative medicine for residents and visitors.",
-              details: "Primary care services\nAlternative therapies\nMental health support\nPreventive wellness programs",
+              status: "",
+              description: "Health and wellbeing services for residents and visitors.",
+              details: "Everyday care\nBodywork and therapies\nWellbeing classes",
               icon: "health",
             },
             {
               title: "Café & Restaurant",
-              status: "Planning",
-              description: "Farm-to-table dining experience showcasing local and organic produce from our regenerative farms.",
-              details: "Organic menu\nCommunity gathering space\nEvent hosting\nCoffee roasting",
+              status: "",
+              description: "A place to eat and meet, cooking with food from the village and the region around it.",
+              details: "Local food\nA gathering space\nEvents",
               icon: "cafe",
             },
             {
               title: "Artisan Market",
-              status: "Future",
-              description:
-                "A marketplace for local crafts, produce, and goods created by community members and regional artisans.",
-              details: "Local crafts and art\nFresh produce\nCommunity goods\nVisitor souvenirs",
+              status: "",
+              description: "A market for crafts, produce, and goods made by members and their neighbours.",
+              details: "Crafts and art\nFresh produce\nEveryday goods",
               icon: "market",
             },
             {
               title: "Learning Center",
-              status: "Future",
-              description:
-                "Educational programs for children and adults, including a forest school and skill-sharing workshops.",
-              details: "Forest school\nAdult education\nSkill workshops\nResearch programs",
+              status: "",
+              description: "Learning for children and adults, from school days to skill-sharing workshops.",
+              details: "Children's learning\nAdult education\nSkill workshops",
               icon: "learning",
             },
             {
               title: "Fitness & Recreation",
-              status: "Future",
-              description: "Fitness facilities and outdoor recreation programs for residents and retreat guests.",
-              details: "Yoga studio\nFitness equipment\nHiking programs\nWater activities",
+              status: "",
+              description: "Ways to move and play, indoors and out, for residents and guests.",
+              details: "Movement classes\nOutdoor activities\nSport and play",
               icon: "fitness",
             },
             {
               title: "Art & Culture Hub",
-              status: "Future",
-              description: "A creative space for artists, musicians, and cultural programs that enrich community life.",
-              details: "Artist studios\nPerformance space\nGallery\nMusic programs",
+              status: "",
+              description: "A home for artists, musicians, and the culture of village life.",
+              details: "Studios\nPerformance space\nExhibitions",
               icon: "art",
             },
             {
               title: "Regenerative Agriculture",
-              status: "Active",
-              description: "Farming operations that produce food for the community while regenerating the land.",
-              details: "Organic vegetables\nFruit orchards\nMedicinal herbs\nPermaculture design",
+              status: "",
+              description: "Growing food for the community while caring for the soil it grows in.",
+              details: "Vegetables\nOrchards\nHerbs",
               icon: "farm",
             },
           ],
@@ -185,7 +186,7 @@ export const OPPORTUNITIES_PAGE: PageSpec = {
           kind: "long",
           max: 480,
           default:
-            "All businesses at {village} share a percentage of revenue with the community. This creates alignment between business success and community prosperity. The exact percentage is negotiated based on the business type and community investment.",
+            "Businesses at {village} share part of their revenue with the community, so a business and the village grow together. The share is agreed with each business, by its kind and by what the community puts in.",
         },
       ],
     },

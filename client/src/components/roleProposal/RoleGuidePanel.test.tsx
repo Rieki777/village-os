@@ -22,8 +22,8 @@ import { ROLE_GUIDE_WORDS, type GuideAnswer, type GuideSuggestion } from "@share
 const MAIA_ONLY: GuideState = {
   choice: null,
   options: [
-    { id: "village", name: "Maia", available: true },
-    { id: "saberra", name: "Sera", available: false },
+    { id: "village", name: "Maia", named: true, available: true },
+    { id: "saberra", name: "Sera", named: true, available: false },
   ],
   answering: "village",
   note: null,
@@ -103,6 +103,18 @@ describe("the role guide panel", () => {
     expect(await screen.findByText(GUIDE_WORDS.answering("Sera"))).toBeTruthy();
     expect(screen.getByText(new RegExp(ROLE_GUIDE_WORDS.kept("the village").replace(/[.]/g, "\\.")))).toBeTruthy();
     expect(screen.getByRole("button", { name: GUIDE_WORDS.switchTo("Maia") })).toBeTruthy();
+  });
+
+  it("opens sentences with an unnamed guide's name in capitals, and does not repeat that it is the village's guide", async () => {
+    const UNNAMED: GuideState = { ...MAIA_ONLY, options: [{ id: "village", name: "the village guide", named: false, available: true }, MAIA_ONLY.options[1]] };
+    serve(UNNAMED, [answer({ guide: { id: "village", name: "the village guide" } })]);
+    draw();
+    expect(await screen.findByText(GUIDE_WORDS.answering("the village guide"))).toBeTruthy();
+    expect(screen.getByText("The village guide is answering.")).toBeTruthy();
+    expect(screen.queryByText(/is this village's own guide/)).toBeNull();
+    expect(screen.getByText(/^The village guide reads it here to suggest your card\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: ROLE_GUIDE_WORDS.open }));
+    expect(await screen.findByText("The village guide: How many hours a week does this role take?")).toBeTruthy();
   });
 
   it("offers no switch while only one guide can answer", async () => {
