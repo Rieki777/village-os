@@ -454,6 +454,7 @@ async function writeTombstone(members: ErasureDeps["members"], id: string): Prom
       u.membershipGranted = false;
       u.walletAddress = null;
       u.walletVerifiedAt = null;
+      u.emailVerifiedAt = null; // the proof was of the address that just went
     }, { erasure: true });
   try {
     await close(tombstoneAddress(id));

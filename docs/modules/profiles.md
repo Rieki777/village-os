@@ -54,6 +54,7 @@ belong to this module, and a fifth is written on the way out.
 | `handle` (varchar 40, `users_handle_unique`), `wallet_address`, `wallet_verified_at` | `drizzle/0003_variables_and_stage_events.sql` | `server/repos/users.ts` |
 | `recognition_balance` | `drizzle/0005_ledger_and_recognition_balance.sql`, renaming `hearts_balance` | `server/repos/users.ts`, and it is a CACHE of the ledger |
 | `journeys`, `prefs`, `contactable`, `token_version`, `role`, `is_example`, `membership_granted` | later migrations | `server/repos/users.ts` |
+| `email_verified_at` (null until the address's owner proves it; R104) | `drizzle/0304_a_member_proves_their_address.sql` | `server/repos/users.ts`, through `proveAddress` in `server/lib/emailVerification.ts` (the address-proof link, set-password, a Google sign-in at that address); the erasure clears it |
 | `primary_character_id` | `drizzle/0069_characters.sql` | `addCharacter`, `setPrimary` and `removeCharacter` in `server/lib/characters.ts`, all three by raw SQL |
 | `title`, `home_structure_key`, `verified_at`, `privacy` | `drizzle/0070_profile_body.sql` | **nothing** |
 
