@@ -14,6 +14,7 @@ import {
   LAUNCH_REQUIREMENTS,
   projectCurrencyCheck,
   recognitionNameCheck,
+  starterQuestsCheck,
   timezoneAnswerCheck,
 } from "./launchRequirements";
 
@@ -166,5 +167,52 @@ describe("the welcome-and-walk requirement", () => {
       expect(words).not.toMatch(/\b(she|her|hers)\b/i);
       expect(words).not.toMatch(/[\u2013\u2014]/);
     }
+  });
+});
+
+/**
+ * THE STARTER QUESTS, ON THE JOURNEY (Rye, sheet A8 / 19g: "a new village
+ * starts with a neutral, fully editable starter set"). The row asks a founder
+ * to keep the starters that fit and clear the rest. Its live behaviour on a
+ * real schema is in server/starterQuests.test.ts; this pins the row and the
+ * sentence it reads from the count.
+ */
+describe("the starter-quests requirement", () => {
+  const item = LAUNCH_REQUIREMENTS.find((r) => r.id === "starter-quests");
+
+  it("is on the journey for every village, recommended and never blocking", () => {
+    expect(item, "no launch requirement \"starter-quests\"").toBeTruthy();
+    expect(item!.severity).toBe("recommended");
+    expect(item!.group).toBe("brand");
+    // Quests is a core module: every village has a board to review.
+    expect(item!.appliesWhenModule).toBeUndefined();
+  });
+
+  it("is read live from the board, never a box a founder ticks", () => {
+    expect(item!.checkKey).toBe("village:starter-quests");
+    expect(item!.declinable).toBeFalsy();
+  });
+
+  it("links to the admin Quests tab, where Keep and Clear are", () => {
+    expect(item!.fixAt).toBe("/admin?tab=quests-admin");
+    expect(item!.fixLabel).toBe("Open Quests");
+  });
+
+  it("says what to do in its own words, with no dash, no persona and no token", () => {
+    expect(item!.title).toBe("Review the starter quests");
+    expect(item!.why).toContain("Keep the ones that fit");
+    expect(item!.why).toContain("clear the rest");
+    for (const words of [item!.title, item!.why, item!.fixLabel]) {
+      expect(words).not.toMatch(/[–—]/);
+      expect(words).not.toMatch(/(she|her|hers|token|tokens|paid|pays|earn)/i);
+    }
+  });
+
+  it("reads open while any starter waits, and done when none does", () => {
+    expect(starterQuestsCheck(0)).toEqual({ state: "ok", detail: "No starter quests are waiting. The board is the village's own" });
+    expect(starterQuestsCheck(1)).toEqual({ state: "missing", detail: "1 starter quest is still waiting. Keep the ones that fit and clear the rest" });
+    expect(starterQuestsCheck(11).detail).toContain("11 starter quests are still waiting");
+    // Junk never reads as waiting work.
+    for (const v of [NaN, -3, undefined as any, null as any]) expect(starterQuestsCheck(v).state).toBe("ok");
   });
 });

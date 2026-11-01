@@ -37,8 +37,10 @@ const DIST = path.resolve(process.cwd(), "dist/index.js");
 const PORT = 24302 + (process.pid % 900);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "quest-share-admin";
-// Seeded by server/seeds/quests-seed.json on a fresh village.
-const QUEST_ID = "q-welcome-ambassador";
+// A starter on every fresh village: the quests section of
+// server/seeds/examples-seed.json (A8 / 19g). A starter is shared like any
+// quest, labelled on its page, while a founder decides whether to keep it.
+const QUEST_ID = "ex-quest-welcome";
 
 let child: ChildProcess | undefined;
 let testDb: TestDb | undefined;
@@ -101,7 +103,7 @@ describe.skipIf(!DB_CONFIGURED)("a shared quest link", () => {
   it("carries the quest's own title, not the neutral shell's", async () => {
     const html = await (await fetch(`${BASE}/quests/${QUEST_ID}`)).text();
     expect(html).toContain('property="og:title"');
-    expect(html).toMatch(/og:title" content="Welcome Ambassador at /);
+    expect(html).toMatch(/og:title" content="Welcome someone new at /);
     // The neutral value must be GONE, not merely outnumbered.
     expect(html).not.toMatch(/og:title" content="Village"/);
   });
@@ -177,9 +179,8 @@ describe.skipIf(!DB_CONFIGURED)("the share image", () => {
   });
 
   it("renders for a quest with no poster of its own", async () => {
-    // Every seeded quest carries a poster path, and on a fresh village the
-    // FILES are not there, so this is also the fallback-to-scene path.
-    const res = await fetch(`${BASE}/api/og/quest/q-circle-scribe`);
+    // No starter carries a poster, so this is the paint-a-scene path.
+    const res = await fetch(`${BASE}/api/og/quest/ex-quest-meeting-notes`);
     expect(res.status).toBe(200);
     const bytes = Buffer.from(await res.arrayBuffer());
     expect(bytes.subarray(0, 3).toString("hex")).toBe("ffd8ff");
