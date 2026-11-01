@@ -38,7 +38,7 @@ function roomOf(sessionId: number): Room {
 export function publishCards(sessionId: number, answer: CardsAnswer): void {
   const room = roomOf(sessionId);
   room.last = answer;
-  for (const l of room.listeners) l(answer);
+  room.listeners.forEach((l) => l(answer));
 }
 
 function read(sessionId: number): void {
@@ -72,6 +72,6 @@ export function useSharedCards(sessionId: number, live: boolean): CardsAnswer | 
 
 /** Stop every poll and forget every answer. Tests start from here. */
 export function forgetSharedCards(): void {
-  for (const room of rooms.values()) if (room.timer) clearInterval(room.timer);
+  rooms.forEach((room) => room.timer && clearInterval(room.timer));
   rooms.clear();
 }
