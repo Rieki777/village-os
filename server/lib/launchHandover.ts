@@ -18,7 +18,22 @@
  */
 import type { Pool } from "mysql2/promise";
 import { HANDOVER_SET, type Capability } from "../../shared/capabilities";
+import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
+import { POWERS } from "./capabilityRegistry";
+
+export interface PowerInPlainWords {
+  /** Its name in the admin list. */
+  title: string;
+  /** What holding it lets somebody do, as a phrase that follows "can". */
+  consequence: string;
+}
+
+/** One power in the words a member reads: on the checklist and in the launch document. */
+export function powerInPlainWords(capability: string): PowerInPlainWords {
+  const entry = POWERS.find((p) => p.capability === capability);
+  return { title: entry?.title ?? capability, consequence: CAPABILITY_CONSEQUENCE[capability as Capability] ?? capability };
+}
 
 export const LAUNCH_HANDOVER_KEY = "launch-handover";
 

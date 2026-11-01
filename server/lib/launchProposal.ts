@@ -47,7 +47,8 @@
  * be PUT ON a slate, which is a different question asked at a different
  * moment, and the close asks its own because `users.role` can move in between.
  */
-import type { Pool } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
+import type { PowerInPlainWords } from "./launchHandover";
 import { HANDOVER_SET } from "../../shared/capabilities";
 import { catalystRoster } from "../repos/users";
 
@@ -169,6 +170,14 @@ export interface LaunchProposalDocInput {
   /** The civil date the journey read done, `YYYY-MM-DD`. */
   openedOn: string;
   slate: readonly SlateMember[];
+  /**
+   * The powers the launch hands to the village, in plain words: the stewards'
+   * selection as it stood when the vote opened (`readLaunchSelection`). Empty
+   * is a real answer and the document says so. The hand-over control refuses
+   * to change the selection while this vote is open, so what members read here
+   * is what crosses.
+   */
+  handover: readonly PowerInPlainWords[];
 }
 
 /**
@@ -191,6 +200,7 @@ export function launchProposalDoc(input: LaunchProposalDocInput): string {
     "Token issuance turns on. Until then this village can be set up in every other way, and nothing can be issued to anybody.",
     "",
     ...stewardSection(input),
+    ...handoverSection(input),
     "## What this vote asks",
     "",
     `Everyone on the roll votes yes: ${input.quorumPct}% participation and ${input.unityPct}% agreement. ${input.onTheRoll} people hold a voice today, and this vote is frozen to those ${input.onTheRoll}.`,
@@ -206,6 +216,31 @@ export function launchProposalDoc(input: LaunchProposalDocInput): string {
     `Every item on the journey to launch read done when ${input.openedBy} opened this, on ${input.openedOn}.`,
     "",
   ].join("\n");
+}
+
+/**
+ * WHAT THE LAUNCH HANDS TO THE VILLAGE, written into the frozen document so a
+ * member votes on the exact list (coordinator ruling on #769, 2026-11-01, on
+ * Rye's "at launch the stewards select WHAT powers are being passed over").
+ */
+function handoverSection(input: LaunchProposalDocInput): string[] {
+  const heading = ["## What the launch hands to the village", ""];
+  if (input.handover.length === 0) {
+    return [
+      ...heading,
+      "None of its powers. The stewards hold every one of them after launch, and hand each to the village when they judge it ready. Handing one back takes a village vote.",
+      "",
+    ];
+  }
+  return [
+    ...heading,
+    `When this carries, the village holds these ${input.handover.length} powers, and only a village vote hands one back:`,
+    "",
+    ...input.handover.map((p) => `- ${p.title}: whoever holds it can ${p.consequence}.`),
+    "",
+    "The stewards hold every other power, and hand each to the village when they judge it ready.",
+    "",
+  ];
 }
 
 /**
@@ -237,8 +272,7 @@ function stewardSection(input: LaunchProposalDocInput): string[] {
     `Each of them answers for themselves. Carrying the role for this first season means holding all ${powers} of the powers this village has to give, and being able to stop a decision the village has already carried inside the window before it lands. Anybody named can decline, and a decline is shown here beside the vote.`,
     "",
     "Whoever accepts is seated when this vote carries. If nobody accepts, the role starts empty and the village votes somebody into it whenever it likes.",
-    "",
-    "Starting the Game hands the village only the powers the stewards selected for it, which may be none. The stewards hand over the rest when they judge the village ready, and handing one back takes a village vote.",
+
     "",
   ];
 }

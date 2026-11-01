@@ -60,6 +60,14 @@ describe("the hand-over control", () => {
     await waitFor(() => expect(posts).toEqual([{ capabilities: [], confirm: true }]));
   });
 
+  it("while the launch vote is open, shows the frozen list and offers no save", async () => {
+    serve({ gameStarted: false, mayAct: true, selected: ["org.seat"], frozen: true, powers: POWERS });
+    render(<HandOverPowers />);
+    await waitFor(() => expect(screen.getByText(/this list is written into it/)).toBeTruthy());
+    expect((screen.getByRole("checkbox", { name: /Who sits in which role/ }) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /Save what the launch hands over/ })).toBeNull();
+  });
+
   it("after launch, shows a held power as held and sends only the newly ticked one", async () => {
     serve({ gameStarted: true, mayAct: true, powers: [{ ...POWERS[0], held: true }, POWERS[1]] });
     render(<HandOverPowers />);

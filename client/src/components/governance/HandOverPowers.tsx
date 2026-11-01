@@ -24,6 +24,8 @@ interface Standing {
   gameStarted: boolean;
   mayAct: boolean;
   selected?: string[];
+  /** Before launch, while the launch vote is open: the list is written into it. */
+  frozen?: boolean;
   powers?: Power[];
 }
 
@@ -53,6 +55,7 @@ export default function HandOverPowers() {
 
   if (!standing?.mayAct || !standing.powers) return null;
   const atLaunch = !standing.gameStarted;
+  const frozen = atLaunch && !!standing.frozen;
   const toggle = (c: string) => {
     setConfirming(false);
     setTicked((t) => (t.includes(c) ? t.filter((x) => x !== c) : [...t, c]));
@@ -97,7 +100,7 @@ export default function HandOverPowers() {
             <input
               type="checkbox"
               checked={p.held || ticked.includes(p.capability)}
-              disabled={busy || p.held}
+              disabled={busy || p.held || frozen}
               onChange={() => toggle(p.capability)}
               className="mt-0.5 h-5 w-5 shrink-0 rounded border-stone-400 text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
             />
@@ -109,44 +112,51 @@ export default function HandOverPowers() {
           </label>
         ))}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        {!confirming ? (
-          <button
-            type="button"
-            disabled={busy || (!atLaunch && ticked.length === 0)}
-            onClick={() => setConfirming(true)}
-            className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {atLaunch ? "Save what the launch hands over" : `Hand over ${ticked.length}`}
-          </button>
-        ) : (
-          <>
-            <span className="text-xs text-stone-700 max-w-sm">
-              {atLaunch
-                ? ticked.length === 0
-                  ? "The launch will hand the village none of its powers. Confirm?"
-                  : `The launch will hand the village ${ticked.length} of its powers. Confirm?`
-                : `The village will hold ${ticked.length} more of its powers, and only a village vote hands one back. Confirm?`}
-            </span>
+      {frozen && (
+        <p className="mt-3 text-xs text-stone-700 max-w-lg">
+          The launch vote is open, and this list is written into it. To change it, withdraw that vote and open a new one.
+        </p>
+      )}
+      {!frozen && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {!confirming ? (
             <button
               type="button"
-              disabled={busy}
-              onClick={send}
+              disabled={busy || (!atLaunch && ticked.length === 0)}
+              onClick={() => setConfirming(true)}
               className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white disabled:opacity-50"
             >
-              Confirm
+              {atLaunch ? "Save what the launch hands over" : `Hand over ${ticked.length}`}
             </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setConfirming(false)}
-              className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm text-stone-700"
-            >
-              Cancel
-            </button>
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              <span className="text-xs text-stone-700 max-w-sm">
+                {atLaunch
+                  ? ticked.length === 0
+                    ? "The launch will hand the village none of its powers. Confirm?"
+                    : `The launch will hand the village ${ticked.length} of its powers. Confirm?`
+                  : `The village will hold ${ticked.length} more of its powers, and only a village vote hands one back. Confirm?`}
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={send}
+                className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirming(false)}
+                className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm text-stone-700"
+              >
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {said && (
         <p role="status" className="mt-2 text-xs text-stone-700">
           {said}

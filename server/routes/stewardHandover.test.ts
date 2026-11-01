@@ -31,7 +31,7 @@ import { STEWARD_ROLE_ID } from "../lib/capabilityHolding";
 import { readLaunchSelection } from "../lib/launchHandover";
 import { liveHoldersOfCapability } from "../lib/roleGrants";
 import { insertRoleIfAbsent } from "../repos/stewardRoles";
-import { HAND_OVER_PATH, HAND_OVER_WORDS, register } from "./stewardHandover";
+import { adminDoorRefusal, HAND_OVER_PATH, HAND_OVER_WORDS, register } from "./stewardHandover";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[stewardHandover] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
@@ -143,7 +143,30 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
       expect(await holdings(), "choosing moves nothing: the launch does that").toEqual([]);
     });
 
+    it("freezes the selection while the launch vote is open: the list is written into it", async () => {
+      viewer = "u-founder";
+      expect((await handOver({ capabilities: ["org.seat"], confirm: true })).status).toBe(200);
+      await q(
+        "INSERT INTO ballots (id, subject_type, subject_ref, open_key, title, doc_markdown, method, weight_mode, " +
+          "unity_pct, quorum_pct, total_weight, electorate_count, opened_by, opens_at, closes_at, status) " +
+          "VALUES ('bal-launch','village_launch','start','village_launch:start','Start the Game','#','custom','equal',100,100,3,3,'u-founder', " +
+          "'2026-11-01 00:00:00','2026-11-08 00:00:00','open')",
+      );
+      try {
+        expect((await call("GET")).json.frozen).toBe(true);
+        const r = await handOver({ capabilities: ["story.tell"], confirm: true });
+        expect(r.status).toBe(409);
+        expect(r.json.error).toBe(HAND_OVER_WORDS.frozen);
+        expect((await readLaunchSelection(pool)).capabilities, "what members are voting on").toEqual(["org.seat"]);
+      } finally {
+        await q("DELETE FROM ballots WHERE id = 'bal-launch'");
+      }
+      expect((await call("GET")).json.frozen, "and it thaws when that vote is gone").toBe(false);
+    });
+
     it("an administrator who is not a founder, and a member, cannot set the selection", async () => {
+      // Before the Game starts the admin door is open as it always was; the stewards' door is not the admin's.
+      expect(await adminDoorRefusal(pool, "u-admin", async (c) => liveHoldersOfCapability(SEATS, ROLES, c))).toBeNull();
       for (const who of ["u-admin", "u-member"]) {
         viewer = who;
         const r = await handOver({ capabilities: ["org.seat"], confirm: true });
@@ -198,6 +221,14 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
       viewer = null;
       expect((await handOver({ capabilities: ["org.seat"], confirm: true })).status).toBe(401);
       expect(await holdings(), "the table the gate reads is untouched").toEqual([]);
+    });
+
+    it("closes the admin door to an administrator with no steward seat, and leaves it to a steward", async () => {
+      const seated = async (capability: string) => liveHoldersOfCapability(SEATS, ROLES, capability);
+      expect(await adminDoorRefusal(pool, "u-admin", seated)).toBe(HAND_OVER_WORDS.adminDoorClosed);
+      expect(await adminDoorRefusal(pool, "u-steward", seated)).toBeNull();
+      // With nobody in the steward seat the panel stays the scaffolding's, as an empty seat leaves it at launch.
+      expect(await adminDoorRefusal(pool, "u-admin", async () => [])).toBeNull();
     });
 
     it("moves nothing without the confirm, with nothing named, or with a power the stewards do not hold", async () => {

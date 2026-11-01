@@ -44,13 +44,14 @@
  */
 import type { Express } from "express";
 import { BREAK_GLASS_SEAT, HANDOVER_SET, type Capability } from "../../shared/capabilities";
-import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
+import type { Pool } from "mysql2/promise";
+import { LAUNCH_SUBJECT_REF, VILLAGE_LAUNCH } from "../../shared/ballotSubjects";
 import type { AppDeps } from "../lib/appDeps";
+import { openBallotFor } from "../lib/ballots";
 import { capabilityHoldings, moveCapabilityToVillage, STEWARD_ROLE_ID } from "../lib/capabilityHolding";
-import { POWERS } from "../lib/capabilityRegistry";
 import { recordEvent } from "../lib/events";
 import { founderPowerStands } from "../lib/gameStart";
-import { readLaunchSelection, writeLaunchSelection } from "../lib/launchHandover";
+import { powerInPlainWords as plainWords, readLaunchSelection, writeLaunchSelection } from "../lib/launchHandover";
 
 export const HAND_OVER_PATH = "/api/governance/powers/hand-to-village";
 
@@ -63,7 +64,36 @@ export const HAND_OVER_WORDS = {
   unconfirmed:
     "Confirm the hand-over. From then on the village holds each power you named, and only a village vote hands one back.",
   tooMany: "That is a lot of hand-overs at once. Wait a few minutes and try again.",
+  frozen:
+    "The launch vote is open, and this list is written into it. To change what the launch hands over, withdraw that vote and open a new one.",
+  adminDoorClosed:
+    "Since the Game started, the stewards decide which powers the village holds. A steward hands one over from the hand-over checklist on the Journey to Launch page.",
 } as const;
+
+/**
+ * THE ADMIN DOOR AFTER LAUNCH (coordinator ruling on #769, 2026-11-01).
+ *
+ * `PUT /api/admin/capabilities/:capability/holding` hands a power to a role,
+ * and before this change nobody could reach it after launch, because the
+ * launch had already crossed every power. Now the launch crosses only the
+ * selection, so the door would be a second way around Rye's ruling. After the
+ * Game starts it is a steward's, exactly as the hand-over route is.
+ *
+ * WITH NOBODY IN THE STEWARD SEAT IT STAYS THE SCAFFOLDING'S, for the reason
+ * the launch closer gives for an empty seat: a power nobody can act on belongs
+ * to nobody, and a village with no steward must still be able to run its own
+ * panel. Before the Game starts it is open, as it always was.
+ */
+export async function adminDoorRefusal(
+  pool: Pool,
+  actorId: string,
+  liveHoldersOf: (capability: string) => Promise<string[]>,
+): Promise<string | null> {
+  if (await founderPowerStands(pool)) return null;
+  const stewards = await liveHoldersOf(BREAK_GLASS_SEAT);
+  if (stewards.length === 0 || stewards.includes(actorId)) return null;
+  return HAND_OVER_WORDS.adminDoorClosed;
+}
 
 /** Ten in ten minutes per person: a power crosses once, so a burst is a script. */
 const ASKS = 10;
@@ -73,12 +103,6 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit"> & {
   /** Who holds a capability live, the way the gate counts it (`liveHoldersNow`). */
   liveHoldersOf(capability: string): Promise<string[]>;
 };
-
-/** The plain words for one power: its name in the admin list and what holding it lets you do. */
-function plainWords(capability: string) {
-  const entry = POWERS.find((p) => p.capability === capability);
-  return { title: entry?.title ?? capability, consequence: CAPABILITY_CONSEQUENCE[capability as Capability] ?? "" };
-}
 
 export function register(app: Express, deps: Deps): void {
   /** May this person use the control, and which stage are we in. */
@@ -96,10 +120,12 @@ export function register(app: Express, deps: Deps): void {
     const pool = deps.getPool();
     const held = new Set((await capabilityHoldings(pool)).map((h) => h.capability));
     const selected = started ? [] : (await readLaunchSelection(pool)).capabilities;
+    const frozen = !started && !!(await openBallotFor(pool, VILLAGE_LAUNCH, LAUNCH_SUBJECT_REF));
     res.json({
       gameStarted: started,
       mayAct: true,
       selected,
+      frozen,
       powers: HANDOVER_SET.map((capability) => ({ capability, ...plainWords(capability), held: held.has(capability) })),
     });
   });
@@ -125,6 +151,10 @@ export function register(app: Express, deps: Deps): void {
     const pool = deps.getPool();
 
     if (!started) {
+      // Frozen while the launch vote is open: members are voting on the list its document carries.
+      if (await openBallotFor(pool, VILLAGE_LAUNCH, LAUNCH_SUBJECT_REF)) {
+        return res.status(409).json({ error: HAND_OVER_WORDS.frozen });
+      }
       const selection = await writeLaunchSelection(pool, named, actorId);
       const titles = selection.capabilities.map((c) => plainWords(c).title);
       await recordEvent(pool, {
@@ -168,7 +198,7 @@ export function register(app: Express, deps: Deps): void {
       moved.push(capability);
       await recordEvent(pool, {
         kind: "governance",
-        text: `The stewards handed this to the village: ${plainWords(capability).consequence || capability}.`,
+        text: `The stewards handed this to the village: whoever holds it can ${plainWords(capability).consequence}.`,
         actorUserId: actorId,
         entityType: "capability",
         entityRef: capability,
