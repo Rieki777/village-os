@@ -3124,7 +3124,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ### Show who holds each role to visitors
 
-On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.
+On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages, and a visitor reads members by first name elsewhere. Off, a visitor who is not signed in reads no member's name, handle, address or portrait on any page: the pulse, the decisions, profiles and role cards included. Signed-in members whose role or badge grants map.viewPeople still read who holds each role, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.
 
 | Fact | Value |
 | --- | --- |
