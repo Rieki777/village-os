@@ -117,13 +117,25 @@ vi.mock("../lib/orgChart", () => ({
   listOrgRoles: async () => [{ id: "role-77", name: "Water Steward" }],
 }));
 
-vi.mock("../lib/externalProposals", () => ({
-  landProposal: async (_p: unknown, input: Record<string, unknown>) => {
-    state.landed += 1;
-    state.landedPayloads.push(input);
-    state.batchIds.push(String(input.batchId));
-    return { ok: true, id: `p-${state.landed}`, outcome: "stored" };
-  },
+vi.mock("../lib/externalProposals", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../lib/externalProposals")>();
+  return {
+    // Pure: the sync keys "what this read carried" by the same identity a landing stores.
+    identityKeyFor: real.identityKeyFor,
+    landProposal: async (_p: unknown, input: Record<string, unknown>) => {
+      state.landed += 1;
+      state.landedPayloads.push(input);
+      state.batchIds.push(String(input.batchId));
+      return { ok: true, id: `p-${state.landed}`, outcome: "stored" };
+    },
+  };
+});
+
+// A record the service stopped sending is withdrawn against the real queue in
+// server/lib/saberraSync.test.ts; here nothing is waiting, so nothing goes.
+vi.mock("../repos/externalProposals", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../repos/externalProposals")>()),
+  withdrawGone: async () => [],
 }));
 
 vi.mock("../repos/moduleFacts", () => ({

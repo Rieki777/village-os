@@ -144,6 +144,18 @@ the newest batch is whole. Accepted, rejected and superseded proposals are left 
 are. A proposal stored before this could read relations cannot be repaired from what is
 stored; the next sync replaces it.
 
+**A record the service stops sending leaves the queue** (2026-10-31). Superseding and moving
+both need the record to come back, so a circle the service archived out of its answer, or
+deleted, used to wait for good: thirteen did, for three weeks. Now, after a read lands, a
+waiting circle, tension or risk whose record the read did not carry is withdrawn
+(`withdrawGone`, status `superseded`), and the run counts it. Only a kind read WHOLE can
+say that: one that failed or was cut short at the page ceiling withdraws nothing, and nor
+does an empty answer for a kind. The structure batch keeps its own rule, since a changed
+structure already replaces the waiting one. If the service sends a withdrawn record again
+unchanged, it comes back into the newest batch (`reopenSuperseded`), and any other claim
+still waiting about the same record is retired. `superseded` is only ever written by a
+landing, never by a steward, so bringing one back undoes no decision.
+
 ## Syncing on a schedule
 
 The founder's commitment to the vendor (2026-10-13) was a polling schedule beside the Sync
@@ -188,7 +200,7 @@ the report).
   and by how much.
 - **The run log** is the last twenty runs, one `app_config` document (`saberra-sync-runs`),
   each with when it started, scheduled or by hand, its outcome, the counts (records read,
-  suggestions landed, carried forward, replaced, refused, facts stored, records held back,
+  suggestions landed, carried forward, replaced, withdrawn as gone, refused, facts stored, records held back,
   records that carried an address), the kinds not offered, the kinds cut short, each failed
   kind and how, how the roles' circles were read with the shapes line (an object's keys taken
   out, and a shape holding any other text dropped), how the kinds were chosen, and one
