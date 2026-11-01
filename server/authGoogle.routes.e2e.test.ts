@@ -761,7 +761,10 @@ describe.skipIf(!DB_CONFIGURED)("forgot-password no longer strands an account wi
 
   it("answers every caller identically, which is the enumeration defence", async () => {
     const unknown = await forgot("nobody-here@example.com");
-    const withPassword = await forgot("haspassword@example.com");
+    // The PROVED account from "the link path": it keeps its password when
+    // Google links it. The unproved one there had its password ended (R104),
+    // so it would now be sent a claim letter, not a reset.
+    const withPassword = await forgot("provedpassword@example.com");
     const withoutPassword = await forgot("locked-out-founder@example.com");
     for (const r of [unknown, withPassword, withoutPassword]) {
       expect(r.status).toBe(200);
