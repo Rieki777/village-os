@@ -184,6 +184,14 @@ describe("the open proposal page", () => {
     expect(screen.queryByRole("button", { name: DECIDE_WORDS.adopt })).toBeNull();
   });
 
+  it("a former member's proposal: the decider reads why it is not adopted here, and may still decline it", async () => {
+    answer = () => json({ proposal: served({ you: { ...POWER, mayAdopt: false, mayDecline: true, formerMember: true } }) });
+    render(<OpenProposal />);
+    expect(await screen.findByText(DECIDE_WORDS.formerMember)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: DECIDE_WORDS.adopt })).toBeNull();
+    expect(screen.getByRole("button", { name: DECIDE_WORDS.decline })).toBeTruthy();
+  });
+
   it("a visitor is told it is for members, with a way to sign in back here", async () => {
     signedIn = null;
     render(<OpenProposal />);

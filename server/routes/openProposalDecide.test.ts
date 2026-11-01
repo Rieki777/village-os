@@ -34,9 +34,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
 import { consentClosesAt, CONSENT_WORDS } from "../../shared/roleProposalConsent";
 import { DECIDE_WORDS, openInviteId } from "../../shared/openProposalDecide";
+import { userParty } from "../../shared/alignments";
 import { whoMayPutHandToVillage } from "../../shared/powerHands";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { escapeHtml } from "../lib/comms/mailer";
+import { recordAlignment } from "../lib/alignmentSubjects";
+import { heldTermsFor } from "../lib/heldTerms";
 import { makeInviteDoor } from "../lib/inviteDoor";
 import { openProposalsWaitingOn } from "../lib/openProposalDecide";
 import { createOrgRole, seatHolder } from "../lib/orgChart";
@@ -58,6 +61,8 @@ const BEN = { id: "u-ben", name: "Ben Moss", email: "ben@example.test" };
 const MO = { id: "u-mo", name: "Mo Hill", email: "mo@example.test" };
 const HAS = { id: "u-has", name: "Rowan Field", email: "rowan-has@example.test" };
 const HIGH = { id: "u-high", name: "Hal Pine", email: "hal@example.test" };
+/** An account whose exit was resolved and who was never admitted again: a former member. */
+const LEFT = { id: "u-left", name: "Lee Gone", email: "left@example.test" };
 
 describe.skipIf(!configured)("open role proposals, the decision, on a real schema", () => {
   let db: TestDb;
@@ -259,6 +264,26 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(state.notices.length).toBe(count);
       expect(await asksOf(id)).toHaveLength(2);
     });
+
+    it("tells the admins once, on a stable key, when nobody holds the power to adopt it, or the village holds it", async () => {
+      // A holder in the chair: the admins hear nothing.
+      const held = await confirmed("chair@example.test");
+      expect(state.adminNotices.filter((n) => n.key.startsWith(`op:${held.id}:`))).toEqual([]);
+
+      state.powerHolders = [];
+      const empty = await confirmed("nochair@example.test");
+      expect(state.adminNotices).toEqual([expect.objectContaining({ type: "governance", key: `op:${empty.id}:waiting:admins` })]);
+      expect(state.adminNotices[0].title).toContain("Gate Keeper");
+      expect(state.notices.filter((n) => n.type === "open_role_proposal_waiting" && n.link === `/open-proposals/${empty.id}`)).toEqual([]);
+
+      state.powerHolders = [FOUNDER.id];
+      await q("INSERT INTO capability_holding (capability, holder_role_id) VALUES ('org.seat', 'village')");
+      const village = await confirmed("villageheld@example.test");
+      expect(state.adminNotices.map((n) => n.key)).toContain(`op:${village.id}:waiting:admins`);
+      expect(state.notices.filter((n) => n.type === "open_role_proposal_waiting" && n.link === `/open-proposals/${village.id}`)).toEqual([]);
+      // The admins' line names the roles, never the address.
+      expect(JSON.stringify(state.adminNotices)).not.toContain("@example.test");
+    });
   });
 
   describe("the page", () => {
@@ -320,6 +345,24 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(mine.status).toBe(403);
       expect(mine.body.message).toBe(DECIDE_WORDS.ownProposal);
       expect((await page(own.id, FOUNDER.id)).body.proposal.you).toMatchObject({ mayAdopt: false, own: true });
+    });
+
+    it("a former member's address is refused: nothing is granted, seated or invited, and declining it still works", async () => {
+      await usersRepo(pool).add({ id: LEFT.id, name: LEFT.name, email: LEFT.email, passwordHash: "x", paths: [] } as any);
+      await q("INSERT INTO exits (id, user_id, status, opened_by) VALUES (?,?,?,?)", ["opd-exit-left", LEFT.id, "resolved", LEFT.id]);
+      const { id } = await confirmed(LEFT.email, [gate]);
+      const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      expect(r.status).toBe(409);
+      expect(r.body).toMatchObject({ error: "former_member", message: DECIDE_WORDS.formerMember });
+      expect((await readOpenProposal(pool, id))?.status).toBe("confirmed");
+      expect((await usersRepo(pool).byId(LEFT.id))?.stageGranted ?? null).toBeNull();
+      expect(await q("SELECT id FROM seat_applications WHERE candidate_user_id = ?", [LEFT.id])).toEqual([]);
+      expect(await q("SELECT id FROM member_invites WHERE id = ?", [openInviteId(id)])).toEqual([]);
+      expect(state.sent.filter((m) => m.origin === "open_proposal.adopted")).toEqual([]);
+      // The decider reads why, and may still decline; a member without the power is not told who left.
+      expect((await page(id, FOUNDER.id)).body.proposal.you).toMatchObject({ mayAdopt: false, mayDecline: true, formerMember: true });
+      expect((await page(id, MO.id)).body.proposal.you.formerMember).toBe(false);
+      expect((await call("POST", `/api/governance/open-proposals/${id}/decline`, {}, FOUNDER.id)).status).toBe(200);
     });
 
     it("after a handover nobody adopts at the door, and the page says so plainly", async () => {
@@ -439,6 +482,68 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(seated).toEqual([{ org_role_id: gate, season_id: "s-next" }]);
     });
 
+    it("one sign-up places every adopted proposal for that address, once each, and withdraws the other links", async () => {
+      const first = await confirmed("twice@example.test", [gate]);
+      const second = await confirmed("twice@example.test", [well]);
+      const a = await call("POST", `/api/governance/open-proposals/${first.id}/adopt`, {}, FOUNDER.id);
+      const b = await call("POST", `/api/governance/open-proposals/${second.id}/adopt`, {}, FOUNDER.id);
+      expect([a.status, b.status]).toEqual([200, 200]);
+      const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+      const newcomer = "u-twice";
+      const inviter = await door.claim(openInviteId(first.id), newcomer);
+      await usersRepo(pool).add({ id: newcomer, name: "Rowan Field", email: "twice@example.test", passwordHash: "x", paths: [] } as any);
+      await door.welcome(inviter as string, newcomer);
+
+      const placed = async () => q("SELECT seat_ids, status FROM seat_applications WHERE candidate_user_id = ?", [newcomer]);
+      const apps = await placed();
+      expect(apps.map((x: any) => (idsOf(x.seat_ids) as string[]).join(",")).sort()).toEqual([gate, well].sort());
+      expect(apps.every((x: any) => x.status === "adopted")).toBe(true);
+      // The other proposal's link no longer opens anything.
+      expect((await door.resolve(inviteToken(linkOf(b.body)))).ok).toBe(false);
+      // A second welcome places nothing twice.
+      await door.welcome(inviter as string, newcomer);
+      expect(await placed()).toHaveLength(2);
+    });
+
+    it("the seated newcomer's terms read as waiting on them until they align, then in force", async () => {
+      const bell = await createOrgRole(pool, { id: "opd-role-bell", name: "Bell Keeper", seats: 1, circleId: "c-land", aim: "Ring the hours." });
+      const { id } = await confirmed("bell@example.test", [bell]);
+      const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      expect(r.status).toBe(200);
+      const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+      const newcomer = "u-bell";
+      const inviter = await door.claim(openInviteId(id), newcomer);
+      expect(inviter).toBe(FOUNDER.id);
+      await usersRepo(pool).add({ id: newcomer, name: "Bea Bell", email: "bell@example.test", passwordHash: "x", paths: [] } as any);
+      await door.welcome(inviter as string, newcomer);
+      const at = new Date("2037-01-01T12:00:00Z");
+      await runSeasonTurn({
+        getPool: () => pool,
+        notify: async () => undefined,
+        notifyAdmins: async () => undefined,
+        closer: { settle: async () => ({ applied: [], held: null, proposerTold: null }) } as any,
+        lapse: () => ({ currentSeasonId: "s-next", cadence: "season_turn" }),
+        calendar: () => ({ ...calendar(), currentSeasonId: "s-next" }),
+        now: () => at,
+      });
+      const [app] = await q("SELECT id, text_id, text_hash FROM seat_applications WHERE candidate_user_id = ?", [newcomer]);
+      expect(await q("SELECT org_role_id FROM org_role_assignments WHERE user_id = ? AND ended_at IS NULL", [newcomer])).toEqual([{ org_role_id: bell }]);
+      const read = async () =>
+        (await heldTermsFor(pool, [{ applicationId: String(app.id) }], { timezone: "UTC", nameOf: (u) => (u === newcomer ? "Bea Bell" : "Someone"), today: "2037-01-02" })).get(String(app.id))?.alignment;
+      // Seated, and the terms wait on the newcomer: the village aligned when it adopted, they have not.
+      const before = await read();
+      expect(before?.state).toBe("pending");
+      expect(before?.parties).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ partyKey: userParty(newcomer), label: "Bea Bell", aligned: false }),
+          expect.objectContaining({ partyKey: "village", aligned: true }),
+        ]),
+      );
+      // They align from the application's page; then the terms are in force.
+      await recordAlignment(pool, { textId: String(app.text_id), partyKey: userParty(newcomer), userId: newcomer, contentHash: String(app.text_hash), intent: "I hold Bell Keeper on these terms.", method: "click", authorityRef: null });
+      expect((await read())?.state).toBe("in-force");
+    });
+
     it("a new invitation replaces one nobody used, and none is made once it was used", async () => {
       const { id } = await confirmed("again@example.test");
       const first = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
@@ -511,6 +616,34 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       state.answer = { status: "skipped", messageId: null, reason: "not_configured" };
       const r = await call("POST", `/api/governance/open-proposals/${id}/decline`, {}, FOUNDER.id);
       expect(r.body).toMatchObject({ emailed: false, message: DECIDE_WORDS.declinedNotEmailed("not_set_up") });
+    });
+  });
+
+  describe("retention", () => {
+    it("the tidy job takes the name and address off an adopted proposal nobody arrived for, 90 days on, and keeps the rest", async () => {
+      const adopt = async (email: string, roles: string[]) => {
+        const p = await confirmed(email, roles);
+        const r = await call("POST", `/api/governance/open-proposals/${p.id}/adopt`, {}, FOUNDER.id);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+        return p.id;
+      };
+      const never = await adopt("never@example.test", [gate]);
+      const came = await adopt("came@example.test", [gate]);
+      // Somebody arrived through it: the link was used.
+      await makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) }).claim(openInviteId(came), "u-came");
+      // An address with an account here: placed at once, no invitation.
+      const account = await adopt(MO.email, [well]);
+      const recent = await adopt("recent-yes@example.test", [gate]);
+      const old = new Date(Date.now() - 91 * 24 * 60 * 60_000);
+      await q("UPDATE open_role_proposals SET decided_at = ? WHERE id IN (?, ?, ?)", [old, never, came, account]);
+
+      await tidyOpenProposals(pool, new Date());
+      expect(await readOpenProposal(pool, never)).toMatchObject({ status: "adopted", name: null, email: null });
+      expect(await readOpenProposal(pool, came)).toMatchObject({ name: "Rowan Field", email: "came@example.test" });
+      expect(await readOpenProposal(pool, account)).toMatchObject({ name: "Rowan Field", email: MO.email });
+      expect(await readOpenProposal(pool, recent)).toMatchObject({ name: "Rowan Field", email: "recent-yes@example.test" });
+      // The decision record stays: it names a role, never a person.
+      expect((await readOpenProposal(pool, never))?.decision.words).toMatch(/^Adopted on /);
     });
   });
 
