@@ -42,7 +42,7 @@ try anything else.
 | Explain what Stripe, Resend and Anthropic each cost and what each unlocks | Create an account, accept terms, enter card details, or spend their money |
 | Tell the founder exactly which DNS record to add and where | Sign in to `/admin` as the founder, or hold their session token |
 | Say plainly that a step needs a decision only they can make | Make that decision for them and report it as done |
-| Read `.env.example` and explain any variable | Push to `Rieki777/village-os`, ask anybody for access to it, or run the `:edge` image for a village |
+| Read `.env.example` and explain any variable | Push to `ReGen-Civics/village-os`, ask anybody for access to it, or run the `:edge` image for a village |
 
 ### Where the line sits in Admin
 
@@ -159,9 +159,9 @@ provider's variables, and restart the village.
 It is a white-label coordination platform for a village: a piece of land, a
 community, and the work of running both. Its name is **Village OS** (it was
 called game-amora until 1.2.0), and every village runs the same published
-image, `ghcr.io/rieki777/village-os:<version>`, pinned to a release. Forking is
+image, `ghcr.io/regen-civics/village-os:<version>`, pinned to a release. Forking is
 optional, only for a village that means to change the code, and nobody needs
-access to `Rieki777/village-os` to run one. What makes an instance somebody's
+access to `ReGen-Civics/village-os` to run one. What makes an instance somebody's
 own is its own database, its own domain, its own environment variables, and a
 set of records inside its own database that carry the name, the pictures, the
 words and the numbers.

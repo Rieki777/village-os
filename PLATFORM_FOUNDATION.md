@@ -119,7 +119,7 @@ Stage computation: `computeStage()` interprets the declarative rules in
 ## Launching project #2 (checklist)
 
 **The fast path (no code):** run the published image
-(`ghcr.io/rieki777/village-os:<version>`, pinned to a release; `START_HERE.md`
+(`ghcr.io/regen-civics/village-os:<version>`, pinned to a release; `START_HERE.md`
 walks it), then do everything in `/admin` → "Make This Yours" — identity,
 images, numbers, and all content. That covers most projects, and needs no
 fork and no access to the repository.

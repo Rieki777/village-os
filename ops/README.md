@@ -30,7 +30,7 @@ this file is in service of that one rule.
    A command that does not block until the old process has genuinely
    exited defeats the whole point of this tool.
 3. Know the image tag and the git SHA you are rolling. The release lane
-   publishes `ghcr.io/rieki777/village-os` at `:<semver>` plus the moving
+   publishes `ghcr.io/regen-civics/village-os` at `:<semver>` plus the moving
    `:stable` and `:edge` tags; whichever tag you pass, pass the exact short
    git SHA (7 hex characters) that tag points at as `--sha`. The roller
    checks the SHA, not the tag name, because the tag can move.

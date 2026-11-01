@@ -167,7 +167,7 @@ the same command with `--diff`. Read the validator's closing list of what it can
 Open the pull request with the module template:
 
 ```
-https://github.com/Rieki777/village-os/compare?template=module-listing.md
+https://github.com/ReGen-Civics/village-os/compare?template=module-listing.md
 ```
 
 ## Changes that are not modules

@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/rieki777/village-os",
+  "image": "ghcr.io/regen-civics/village-os",
   "maxPinDays": 30,
   "paging": {
     "webhookUrl": null

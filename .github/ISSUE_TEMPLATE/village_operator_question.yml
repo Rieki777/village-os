@@ -9,8 +9,8 @@ body:
         words and we will work out which part of the machinery it is.
 
         If the answer turns out to be missing from
-        [the provisioning walkthrough](https://github.com/Rieki777/village-os/blob/main/docs/PROVISIONING.md)
-        or [the fork runbook](https://github.com/Rieki777/village-os/blob/main/docs/FORK_RUNBOOK.md),
+        [the provisioning walkthrough](https://github.com/ReGen-Civics/village-os/blob/main/docs/PROVISIONING.md)
+        or [the fork runbook](https://github.com/ReGen-Civics/village-os/blob/main/docs/FORK_RUNBOOK.md),
         that is a documentation bug and fixing it is part of answering you.
 
   - type: textarea

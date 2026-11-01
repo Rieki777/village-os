@@ -2,7 +2,7 @@
 #
 # One image, many villages.
 #
-# Every village runs this image: published as ghcr.io/rieki777/village-os by
+# Every village runs this image: published as ghcr.io/regen-civics/village-os by
 # .github/workflows/release.yml, started by docker-compose.yml on one machine,
 # and built by Railway for a village deploying from source (railway.toml sets
 # the Dockerfile builder). It replaced the nixpacks build on 2026-08-31.
