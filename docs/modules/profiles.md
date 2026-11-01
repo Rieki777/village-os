@@ -171,7 +171,10 @@ which is inside the image-budget ratchet, and the `archetypes` table has no admi
 is raw SQL.
 
 `GET /api/profiles/:handle` calls `authedUser(req)` but does not require it. A null viewer is a
-stranger, gets `publicView`, and is served. There is no `app.use` gate over `/api/profiles`, and
+stranger, gets `publicView` with a first name in place of the full name, and is served, unless the
+village keeps its people for members (`org.public_people` off), when a stranger's handle finds
+nobody and the answer is the same 404 an unknown handle gets (R097,
+`server/lib/peopleLock.ts`). There is no `app.use` gate over `/api/profiles`, and
 there is no rate limit either: the handler never calls `overLimit`, and
 `scripts/check-route-limits.mjs` deliberately exempts public reads, so no gate will ever raise it.
 See [Sharp edges](#sharp-edges) for what one anonymous request costs.
