@@ -2,8 +2,9 @@
  * Every statement against `session_cards` and `session_card_lines` (drizzle/0296).
  *
  * A card lasts as long as its session: `clearClosedCards` deletes the cards of
- * every closed session with their lines, and a member's erasure deletes every
- * card that named them (`cardIdsNaming`). Nothing else ever deletes a card.
+ * every closed or discarded session with their lines, a member's erasure
+ * deletes every card that named them (`forgetCardsNaming`), and a card that
+ * read somebody who has since withdrawn is deleted (`forgetCardsReading`).
  */
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
@@ -64,14 +65,20 @@ export async function linesOf(q: Queryable, cardIds: readonly number[]): Promise
   return rows.map((r) => ({ cardId: Number(r.card_id), userId: String(r.user_id), line: r.line == null ? null : String(r.line), shared: Number(r.shared) === 1 }));
 }
 
-/** How many cards a session holds, and when the last was pulled (ms). The caller holds the session row's lock. */
-export async function cardCount(q: Queryable, sessionId: number): Promise<{ count: number; lastAt: number | null }> {
+/**
+ * How many cards a session holds, the highest number among them, and when the
+ * last was pulled (ms). The caller holds the session row's lock. A new card
+ * takes `maxN + 1`, never `count + 1`: a card taken back mid-session (somebody
+ * it read withdrew, or was erased) leaves a gap, and counting would hand the
+ * next card a number a surviving card still holds.
+ */
+export async function cardCount(q: Queryable, sessionId: number): Promise<{ count: number; maxN: number; lastAt: number | null }> {
   const [rows] = await q.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS `c`, MAX(`created_at`) AS `last` FROM `session_cards` WHERE `session_id` = ?",
+    "SELECT COUNT(*) AS `c`, COALESCE(MAX(`n`), 0) AS `max_n`, MAX(`created_at`) AS `last` FROM `session_cards` WHERE `session_id` = ?",
     [sessionId],
   );
   const last = rows[0]?.last;
-  return { count: Number(rows[0]?.c ?? 0), lastAt: last ? new Date(last).getTime() : null };
+  return { count: Number(rows[0]?.c ?? 0), maxN: Number(rows[0]?.max_n ?? 0), lastAt: last ? new Date(last).getTime() : null };
 }
 
 export interface CardWrite {
@@ -122,12 +129,36 @@ async function deleteCards(q: Queryable, ids: readonly number[]): Promise<number
   return Number(r.affectedRows ?? 0);
 }
 
-/** Delete the cards, with their lines, of every session that has closed. Returns how many cards went. */
+/**
+ * Delete the cards, with their lines, of every session that has closed or is
+ * gone. A discarded session's row is deleted outright (`discardSession`), so
+ * the join is a LEFT JOIN: a card whose session no longer exists goes too.
+ * Returns how many cards went.
+ */
 export async function clearClosedCards(q: Queryable): Promise<number> {
   const [rows] = await q.query<RowDataPacket[]>(
-    "SELECT c.`id` FROM `session_cards` c JOIN `live_sessions` s ON s.`id` = c.`session_id` WHERE s.`status` = 'closed' LIMIT 500",
+    "SELECT c.`id` FROM `session_cards` c LEFT JOIN `live_sessions` s ON s.`id` = c.`session_id` WHERE s.`id` IS NULL OR s.`status` = 'closed' LIMIT 500",
   );
   return deleteCards(q, rows.map((r) => Number(r.id)));
+}
+
+/** Delete every card that READ any of these members (they have a line on it), with all its lines. Returns how many cards went. */
+export async function forgetCardsReading(q: Queryable, userIds: readonly string[]): Promise<number> {
+  if (!userIds.length) return 0;
+  const [rows] = await q.query<RowDataPacket[]>(
+    "SELECT DISTINCT `card_id` FROM `session_card_lines` WHERE `user_id` IN (?) AND `line` IS NOT NULL",
+    [[...userIds]],
+  );
+  return deleteCards(q, rows.map((r) => Number(r.card_id)));
+}
+
+/** How many cards still name this member: a line row for them, or pulled by them. Erasure's read back. */
+export async function cardsNamingCount(q: Queryable, userId: string): Promise<number> {
+  const [rows] = await q.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS `n` FROM (SELECT `card_id` FROM `session_card_lines` WHERE `user_id` = ? UNION SELECT `id` FROM `session_cards` WHERE `pulled_by` = ?) AS `naming`",
+    [userId, userId],
+  );
+  return Number(rows[0]?.n ?? 0);
 }
 
 /** Delete every card that named this member, present or read, with all its lines. Returns how many cards went. */
