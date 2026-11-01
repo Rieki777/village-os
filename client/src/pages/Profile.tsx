@@ -19,6 +19,7 @@ import InvitePanel from "@/components/profile/InvitePanel";
 import StartHereCard from "@/components/profile/StartHereCard";
 import type { MembershipSigning } from "@shared/membershipSigning";
 import PathFacts from "@/components/profile/PathFacts";
+import InventoryCard from "@/components/profile/InventoryCard";
 import QuietSection from "@/components/profile/QuietSection";
 import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
 import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
@@ -53,6 +54,7 @@ import type { StageAdvance } from "@/components/StageAdvanced";
 import StatRow from "@/components/profileDash/StatRow";
 import StagePanel from "@/components/profileDash/StagePanel";
 import TodayStrip from "@/components/profileDash/TodayStrip";
+import AsksPanel from "@/components/asks/AsksPanel";
 import YourCompanions from "@/components/profileDash/YourCompanions";
 import TreasuryPanel from "@/components/profileDash/TreasuryPanel";
 import LevelUpMoment from "@/components/profileDash/LevelUpMoment";
@@ -508,6 +510,11 @@ export default function Profile() {
               <TodayStrip data={dash} />
             </div>
 
+            {/* ASKED OF YOU: what other members asked this member, and what they asked (shared/memberAsks.ts). */}
+            <div id="waiting" className={`scroll-mt-28 ${tabOf("today")}`}>
+              <AsksPanel />
+            </div>
+
             {/* YOUR COMPANIONS, beside the tasks on a desktop and on the Quests tab on a phone. */}
             <div className={tabOf("quests")}>
               <YourCompanions />
@@ -707,6 +714,10 @@ export default function Profile() {
               {config && prog ? (
                 <MaturityLadder showNext={false} stages={config.stages} stageIndex={prog.stageIndex} consentedQuests={prog.consentedQuests} />
               ) : null}
+
+              {/* BORROWED AND BOOKED: loans, stays and homes asked about, live only.
+                  Homes are listed once: on the Resident path card when walked. */}
+              <InventoryCard lotsOnPath={user.paths.includes("resident")} />
 
               {/* THE PATH BAND: a walked path's particulars, an unwalked one's quiet line. */}
               {SHEET_SECTIONS.filter((sec) => sec.band === "path" && sec.path && user.paths.includes(sec.path)).map((sec) => (

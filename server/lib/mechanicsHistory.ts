@@ -18,6 +18,7 @@
  * as its previous value.
  */
 import { VARIABLES_BY_KEY, withheldFromPublic, type VariableDef } from "../../shared/gameVariables";
+import { isRedactedCredential } from "./credentialRedaction";
 
 /** What a proposal's change shows where a value is held back. */
 export const KEPT_PRIVATE = "(kept private)";
@@ -28,12 +29,12 @@ export const KEPT_PRIVATE = "(kept private)";
  * `GET /api/game/mechanics/proposals` serves each change's `from`, `to`, their
  * display forms and `currentValue`, the dial's LIVE value read at request
  * time; `/proposals/:id/document` and `/handoff` print the stored `from` and
- * `to` into markdown. None of the three asked this question. Today the one
- * flagged dial cannot reach them, because `validateChangeSet` refuses every
- * founder-held dial and `tokens.base_rpc_url` is one, so this is the second
- * lock and not the first: it holds the day a dial is flagged without being
- * founder-held, and for a credential-SHAPED value on an open dial, which is
- * the case `looksLikeCredential` exists for.
+ * `to` into markdown. None of the three asked this question. A founder-held
+ * dial takes proposals (Rye, 2026-09-25), and `tokens.base_rpc_url`, the one
+ * flagged dial, is a sealed integration secret now and refused as a change,
+ * so this is the lock for a credential-SHAPED value on any proposable dial
+ * (a key riding in `governance.hub_url`, say), which is the case
+ * `looksLikeCredential` exists for, and for any dial flagged in future.
  */
 export function changeIsWithheld(key: string, ...values: unknown[]): boolean {
   const def = VARIABLES_BY_KEY[key];
@@ -96,7 +97,11 @@ export function publicAmendment(
   // default for display, marked so the page can say so.
   const from = r.old_value ?? def?.default ?? null;
   const to = r.new_value ?? def?.default ?? null;
-  const held = (v: string | null) => withheldFromPublic({ withheld: def?.withheld, value: v ?? "" });
+  // A value the ledger stored with its key removed (credentialRedaction.ts) is
+  // no longer credential-shaped, so it is held back by its marker, and the
+  // feed says "kept private" where a key used to be, as it always did.
+  const held = (v: string | null) =>
+    withheldFromPublic({ withheld: def?.withheld, value: v ?? "" }) || isRedactedCredential(v);
   const withheld = !!def?.withheld || held(from) || held(to);
   return {
     id: String(r.id),

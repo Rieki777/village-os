@@ -37,6 +37,7 @@ import { seasonDocumentToStore, suggestNextSeasonDates } from "../lib/seasonCale
 import { restampSeatsToCalendar, type RestampDeps } from "../lib/seatTermLanding";
 import { villageClock } from "../lib/stewardship";
 import { seasonSaved } from "../lib/seasonTurn";
+import { refreshLinkedGoalWords } from "../lib/sessionTemplates";
 import { planTargetAt, planWindowPayload } from "../../shared/seasonPlans";
 
 type SeasonConfig = { seasons: any[]; cadence: string; timezone: string };
@@ -119,6 +120,8 @@ export function register(app: Express, deps: Deps): void {
     if (!saving.ok) return res.status(400).json({ error: saving.error });
     const before = seasonState().current?.id ?? null;
     await seasonRepo.put(saving.doc);
+    // 0298: links to a reworded goal take its new words. A failure is logged and never fails the save.
+    await refreshLinkedGoalWords(getPool(), seasonState().seasons).catch((e) => console.error("[seasons] linked goal words were not refreshed", e));
     const after = seasonState();
     if (after.current && after.current.id !== before) {
       await addActivity("season", `The season has turned: ${after.current.name}`, { actorUserId: adminActor(req)?.id, entityType: "season" });

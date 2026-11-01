@@ -50,6 +50,7 @@ import { recordEvent } from "../lib/events";
 import { isTombstone } from "../lib/oauthAccounts";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
+import { emailAccent } from "../lib/emailAccent";
 import { FORM_CONSENT_FIELD } from "../../shared/comms/contracts";
 import {
   allHomeTypes,
@@ -84,6 +85,7 @@ type Deps = Pick<
   | "sendResendEmail"
   | "deploymentOrigin"
   | "projectName"
+  | "brandColour"
 >;
 
 export function register(app: Express, deps: Deps): void {
@@ -102,6 +104,8 @@ export function register(app: Express, deps: Deps): void {
   } = deps;
   /** See the header: the two names the moved handlers reach for, and no more. */
   const notifyDeps = { origin: deploymentOrigin, projectName };
+  // The village's own colour on every housing email (server/lib/emailAccent.ts).
+  const accent = () => emailAccent(deps.brandColour());
 
   /**
    * ── HOUSING AVAILABILITY (0077) ────────────────────────────────────────
@@ -450,7 +454,7 @@ export function register(app: Express, deps: Deps): void {
           html:
             `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">` +
             `<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">` +
-            `<div style="background:#2D5A5A;color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">Someone wants a home</div></div>` +
+            `<div style="background:${accent()};color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">Someone wants a home</div></div>` +
             `<div style="padding:22px 24px;line-height:1.6">` +
             line("Name", name) +
             line("Email", email) +
@@ -459,7 +463,7 @@ export function register(app: Express, deps: Deps): void {
             line("Hamlet", hamlet ?? "none chosen") +
             line("Came from", arrivedFrom === "map" ? "the living map" : "the site") +
             (notes ? `<p style="margin:14px 0 4px"><strong>What they told us</strong></p><p style="margin:0;white-space:pre-wrap">${escapeHtml(notes)}</p>` : "") +
-            `<p style="margin-top:20px"><a href="${origin}/admin" style="color:#2D5A5A">Open it in Admin</a></p>` +
+            `<p style="margin-top:20px"><a href="${origin}/admin" style="color:${accent()}">Open it in Admin</a></p>` +
             `</div></div></body></html>`,
         });
       }
@@ -472,7 +476,7 @@ export function register(app: Express, deps: Deps): void {
         html:
           `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">` +
           `<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">` +
-          `<div style="background:#2D5A5A;color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">Your reservation request is in</div></div>` +
+          `<div style="background:${accent()};color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">Your reservation request is in</div></div>` +
           `<div style="padding:22px 24px;line-height:1.6">` +
           `<p>Hi ${escapeHtml(name)},</p>` +
           `<p>We have your request for a ${escapeHtml(homeType)}${hamlet ? ` in ${escapeHtml(hamlet)}` : ""}. Someone from the founding team will read it and get in touch about the deposit and what happens next.</p>` +
@@ -581,7 +585,7 @@ export function register(app: Express, deps: Deps): void {
         html:
           `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">` +
           `<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">` +
-          `<div style="background:#2D5A5A;color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">${escapeHtml(notice.heading)}</div></div>` +
+          `<div style="background:${accent()};color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">${escapeHtml(notice.heading)}</div></div>` +
           `<div style="padding:22px 24px;line-height:1.6">` +
           notice.body.map((p) => `<p>${escapeHtml(p)}</p>`).join("") +
           `<p style="color:#6b7280;font-size:13px;margin-top:20px">The team</p>` +

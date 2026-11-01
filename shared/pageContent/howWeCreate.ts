@@ -1,19 +1,26 @@
 /**
  * How We Create (/how-we-create), as fields.
  *
- * The defaults are the words the page carried in code until 2026-10-22, moved
- * here unchanged, EXCEPT the token copy Rye approved that day
- * (cust-audit/TOKEN_COPY_PROPOSAL.md rows 9 to 14): a token is named, and no
- * sentence says what it does. The economy section became "Our Tokens", one
- * line plus a link to the village's own rules at /game-mechanics; the pool
- * card, the conversion card and the footnote are gone.
+ * THE DEFAULTS ARE NEUTRAL STARTER TEXT (2026-10-23). They were the founding
+ * village's own: its sociocracy and Teal, its eight circles, its development
+ * board, its three-month seasons and its slogan. The founding village now
+ * holds its own copy (its record is in server/seeds/), so these defaults
+ * describe only what the platform gives every village: circles, proposals,
+ * a decision method the village picks itself (governance.default_method),
+ * seasons, and its tokens by name.
+ *
+ * The token copy Rye approved on 2026-10-22 (cust-audit/TOKEN_COPY_PROPOSAL.md
+ * rows 9 to 14) stays: a token is named, and no sentence says what it does.
+ * The "Get paid for your work" card is gone from the token section's default
+ * list (Rye, 2026-10-23: the quest and role cards already say it), so the
+ * section is the line and the link alone until a village adds a card.
  *
  * The Hypha section draws only while the village's Hypha DHO link is set
  * (Admin, Variables, `hypha.org_url`) as well as switched on here: a village
  * with no Hypha space was being told "we use Hypha.earth tools".
  *
- * "8 Sociocratic Circles" stays default text in an editable line. Wiring it to
- * the village's real circles (/api/org) is a later change.
+ * The governance phases name no count of circles. Wiring them to the
+ * village's real circles (/api/org) is a later change.
  */
 import type { FieldSpec, PageSpec } from "./types";
 
@@ -43,7 +50,7 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
           label: "Sentence under the headline",
           kind: "long",
           max: 160,
-          default: "Our governance, economic, and organizational systems are designed to ensure all beings belong and thrive.",
+          default: "How {village} makes decisions, shares its work and moves through the seasons.",
         },
       ],
     },
@@ -67,14 +74,14 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
           ],
           default: [
             {
-              title: "Sociocracy & Teal",
+              title: "Shared Governance",
               description:
-                "We blend sociocratic governance with Teal organization principles. Self-management, wholeness, and evolutionary purpose guide our structure.",
+                "Decisions are made together by the people they affect. Circles take care of their own areas of work, and anyone can bring a proposal.",
             },
             {
-              title: "Adaptive Governance",
+              title: "Decisions That Fit",
               description:
-                "Using Hypha tools, each circle designs its own governance strategy, from consent to consensus, tailored to its unique culture, values, and mission.",
+                "{village} chooses how it decides: by consent, by consensus, by majority, or by rules of its own. It can change that choice by agreement.",
             },
             {
               title: "{token}",
@@ -83,7 +90,7 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
             {
               title: "Seasonal Rhythm",
               description:
-                "Every 3 months, the community decides together what kind of season comes next, a living response to what {village} needs most right now.",
+                "The village moves through seasons. At each turn, it looks back at what it did and decides together what comes next.",
             },
           ],
         },
@@ -126,12 +133,7 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
             { key: "title", label: "Title", kind: "text", max: 30, default: "" },
             { key: "body", label: "Description", kind: "long", max: 220, default: "" },
           ],
-          default: [
-            {
-              title: "Get paid for your work",
-              body: "Every quest and role shows what it is worth on its own card. Revenue shares from community and private businesses are agreed with the village.",
-            },
-          ],
+          default: [],
         },
       ],
     },
@@ -147,7 +149,7 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 120,
-          default: "Multi-tiered governance balancing development expertise with community wisdom.",
+          default: "Who decides what, and how that changes as the village grows.",
         },
         { key: "buttonLabel", label: "Button to the Roles page", help: "Leave blank for no button.", kind: "text", max: 32, default: "Explore Governance Roles", optional: true },
       ],
@@ -162,16 +164,16 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
           fields: [{ key: "title", label: "Title", kind: "text", max: 30, default: "" }, ...numbered("item", "Line", 5, 60)],
           default: [
             {
-              title: "Development Phase",
-              item1: "Development Board provides expert oversight",
-              item2: "Community Advisory Council shapes culture",
-              item3: "Core Team manages execution",
+              title: "Early Days",
+              item1: "The people who start it hold the first decisions",
+              item2: "Circles form around the work",
+              item3: "Members take on roles as they join",
             },
             {
-              title: "Operations Phase",
-              item1: "8 Sociocratic Circles take active role",
-              item2: "Leadership Council coordinates",
-              item3: "Community self-governance emerges",
+              title: "Established",
+              item1: "Circles decide within their own areas",
+              item2: "Anyone can bring a proposal",
+              item3: "The whole village decides what affects everyone",
             },
           ],
         },
@@ -190,8 +192,7 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
           help: "Wrap words in **double stars** to make them bold.",
           kind: "long",
           max: 280,
-          default:
-            "Inspired by Teal and sociocracy, we use **Hypha.earth** tools to let each circle design its own governance strategy. No one-size-fits-all-each space can tailor decision-making to its unique culture, values, and mission.",
+          default: "{village} keeps its agreements and decisions on **Hypha**. Each circle can set up how it decides, to suit its own work.",
         },
         { key: "boxHeading", label: "Heading of the box under the methods", kind: "text", max: 40, default: "How Hypha Enables This" },
         {
@@ -200,7 +201,7 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
           kind: "long",
           max: 400,
           default:
-            "Hypha provides tools to formalize agreements, track roles, and manage proposals. Each circle can configure voting thresholds, quorum requirements, and decision timeframes. This creates transparency while honoring each group's autonomy. All agreements and role assignments are recorded on-chain for accountability.",
+            "Hypha holds agreements, roles and proposals in one place. A circle can set its own voting threshold, quorum and time to decide, and every agreement stays on the record for anyone to check.",
         },
       ],
       lists: [
@@ -237,8 +238,7 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 200,
-          default:
-            "Every 3 months, the community votes on what kind of season comes next, a collective response to what {village} needs most. Each season is its own chapter.",
+          default: "{village} moves through the year in seasons. Each season has its own focus, and the community decides together what it will be.",
         },
         {
           key: "note",
@@ -246,8 +246,7 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
           help: "Wrap words in **double stars** to make them bold. Leave blank for none.",
           kind: "long",
           max: 320,
-          default:
-            "**No fixed cycle.** At the end of each season, the community comes together to vote on what's needed next. A village that just built all summer might choose Winter to design what comes next. A village deep in planning might choose Spring to break ground. The seasons follow {village}'s needs, not a calendar.",
+          default: "**Each season is a chapter.** At its end the village looks back at what it did, celebrates, and sets the focus for the next one.",
           optional: true,
         },
       ],
@@ -268,22 +267,22 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
             {
               name: "Spring",
               title: "Spring Season",
-              description: "Breaking ground. Starting new buildings, projects, and initiatives. The season for bold beginnings and planting what we want to grow.",
+              description: "Beginnings. Starting new projects and planting what we want to grow.",
             },
             {
               name: "Summer",
               title: "Summer Season",
-              description: "Full momentum. Festivals, events, gatherings, and high community activity. The season to show up, celebrate, and build together at full energy.",
+              description: "Full momentum. Gatherings, shared work and celebration. The season to show up and build together.",
             },
             {
               name: "Fall",
               title: "Fall Season",
-              description: "Harvest time. Reflection, lessons learned, and appreciating the abundance we've created. The season to gather what we've grown and give thanks.",
+              description: "Harvest. Gathering what has grown, learning from the year and giving thanks.",
             },
             {
               name: "Winter",
               title: "Winter Season",
-              description: "Deep design. Systems redesign, governance evolution, economic modelling, financial preparation, and investor relations. The season to think long.",
+              description: "Rest and design. Looking at how the village works and planning what comes next. The season to think long.",
             },
           ],
         },
@@ -301,10 +300,10 @@ export const HOW_WE_CREATE_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 160,
-          default: "Dive deeper into our governance and economic systems in the Co-Creators Guide, or join a community call to ask questions.",
+          default: "Read the Co-Creators Guide for the detail, or come to an event and ask your questions.",
         },
         { key: "guideLabel", label: "Button to the Co-Creators Guide", kind: "text", max: 30, default: "Read the Co-Creators Guide" },
-        { key: "eventsLabel", label: "Second button", help: "Leave blank for one button.", kind: "text", max: 28, default: "Join Community Call", optional: true },
+        { key: "eventsLabel", label: "Second button", help: "Leave blank for one button.", kind: "text", max: 28, default: "See Upcoming Events", optional: true },
       ],
     },
   ],

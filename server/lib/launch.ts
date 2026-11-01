@@ -27,9 +27,11 @@ import type { Pool } from "mysql2/promise";
 import {
   LAUNCH_REQUIREMENTS,
   projectCurrencyCheck,
+  starterQuestsCheck,
   timezoneAnswerCheck,
   type LaunchRequirement,
 } from "../../shared/launchRequirements";
+import { exampleQuestCount } from "../repos/questExamples";
 import {
   ISSUANCE_CAP_KEY,
   ISSUANCE_CAP_REQUIREMENT,
@@ -43,6 +45,7 @@ import { countWords, purposeStatementProblem } from "../../shared/governingPurpo
 import { MAP_WALK_DOC, welcomeWalkCheck } from "../../shared/mapAddress";
 import { governingPurpose } from "./governingPurpose";
 import { villageSecretsLaunchCheck } from "./secrets";
+import { LAUNCH_PROOFS } from "./launchProofs";
 
 /**
  * The one `checkKey` this file resolves by name. It is a constant so the
@@ -353,7 +356,13 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
       continue;
     }
 
-    const check = deps.checks[req.checkKey];
+    /*
+     * THE ROWS PROVED BY EVIDENCE (./launchProofs.ts) resolve here when the
+     * caller injects nothing for them, which server/index.ts no longer does.
+     * An injected check still wins, so a test can hold every other row still.
+     */
+    const proof = LAUNCH_PROOFS[req.checkKey];
+    const check = deps.checks[req.checkKey] ?? (proof ? () => proof(pool, deps.env ?? process.env) : undefined);
     if (!check) {
       // A registry entry without a resolver is a wiring bug. Fail VISIBLY on
       // the page rather than silently dropping the row â€” a checklist that
@@ -544,6 +553,19 @@ export async function villageFactFor(
    */
   if (fact === "walk") {
     return welcomeWalkCheck(await readConfigDocument(pool, MAP_WALK_DOC));
+  }
+  /*
+   * THE STARTER QUESTS a founder has not yet kept or cleared, counted on the
+   * board itself (A8 / 19g). Every way of deciding ends in that one number,
+   * so it is the answer, and a village seeded before starters were examples
+   * holds none. A failed read says so on the row; the journey still renders.
+   */
+  if (fact === "starter-quests") {
+    try {
+      return starterQuestsCheck(await exampleQuestCount(pool));
+    } catch (e: any) {
+      return { state: "missing", detail: `Check failed: ${String(e?.message ?? e).slice(0, 120)}` };
+    }
   }
   return {
     state: "missing",

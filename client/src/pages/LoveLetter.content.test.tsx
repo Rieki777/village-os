@@ -12,7 +12,10 @@
  *   - a contribution level's amount is what a signing records, its label is
  *     what the signer reads;
  *   - `{commitment}` is what the page says where it said "Love Letter", so a
- *     village that calls it that reads the page it had;
+ *     village that calls it that reads that name;
+ *   - with nothing written, the page is the neutral starter letter
+ *     (2026-10-23), read here from the spec's defaults: no prices, no levels,
+ *     no other village's words;
  *   - the `{words}` the server fills the letter with are the page's own,
  *     word for word (`pageVarsFrom` against `usePageVars`).
  *
@@ -24,7 +27,7 @@ import { cleanup, render, renderHook, screen, waitFor } from "@testing-library/r
 import userEvent from "@testing-library/user-event";
 import { LETTER_PAGE_SECTION, letterSourceFrom, renderMembershipLetter } from "@shared/membershipLetter";
 import { LOVE_LETTER_PAGE } from "@shared/pageContent/loveLetter";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
 import { pageVarsFrom } from "@shared/pageContent/vars";
 
 let config: Record<string, any>;
@@ -106,6 +109,17 @@ function markersOf(doc: Doc, skip: (sectionId: string, key: string) => boolean):
 
 const missingFrom = (text: string, markers: Array<[string, string]>) => markers.filter(([, v]) => !text.includes(v)).map(([where, v]) => `${where} (${v})`);
 
+/** A field's default as the spec holds it, filled with this file's village. The words are the spec's to choose. */
+const starter = (sectionId: string, key: string, commitment = "Love Letter") =>
+  fillVars(LOVE_LETTER_PAGE.sections.find((s) => s.id === sectionId)!.fields.find((f) => f.key === key)!.default, {
+    village: "Fernhollow",
+    commitment,
+    entity: "Fernhollow Commons",
+    member: "member",
+  });
+const starterList = (sectionId: string, key: string) =>
+  LOVE_LETTER_PAGE.sections.find((s) => s.id === sectionId)!.lists!.find((l) => l.key === key)!.default;
+
 describe("every field in the Membership letter spec reaches the page", () => {
   it("renders a distinct marker typed into each field and each list row", async () => {
     const doc = markerDocument(LOVE_LETTER_PAGE) as Doc;
@@ -159,26 +173,26 @@ describe("every field in the Membership letter spec reaches the page", () => {
 });
 
 describe("the page with no words of its own", () => {
-  it("reads as it did for a village that calls its letter Love Letter", async () => {
+  it("reads as the starter letter, in the village's own names, with no prices and no levels", async () => {
     render(<LoveLetter />);
-    await screen.findByText("Dear Future Fernhollow Family Member,");
+    await screen.findByText(starter("letter", "greeting"));
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("The Fernhollow Love Letter");
     expect(screen.getByText(/Our founding covenant, and your official membership in Fernhollow Commons\./)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Sign Your Membership" })).toBeInTheDocument();
-    expect(screen.getByText("Fill in your details below to officially join the Fernhollow Family and become a member of Fernhollow Commons.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign the Love Letter & Join the Fernhollow Family" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: starter("form", "visitorHeading") })).toBeInTheDocument();
+    expect(screen.getByText(starter("form", "visitorLede"))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: starter("form", "submitLabel") })).toBeInTheDocument();
     expect(screen.getByText(/I have read the Love Letter above and commit to the values and agreements of the Fernhollow community as a member of Fernhollow Commons\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Good Neighbor Criteria" })).toHaveAttribute("href", "/good-neighbor");
-    expect(screen.getByText("Suggested: $33-$108/month.")).toBeInTheDocument();
+    // A price is one village's to set: no suggested line and no levels until
+    // the village writes them, and the signer can still describe an amount.
+    expect(starterList("contribution", "tiers")).toEqual([]);
+    expect(screen.queryByText(/Suggested:/)).toBeNull();
+    expect(document.body.textContent ?? "").not.toMatch(/\$/);
     const options = Array.from(document.querySelectorAll("#letter-contribution option")).map((o) => [o.getAttribute("value"), o.textContent]);
     expect(options).toEqual([
       ["", "Select contribution level"],
-      ["33", "$33/month, Seed level"],
-      ["55", "$55/month, Sprout level"],
-      ["88", "$88/month, Grove level"],
-      ["108", "$108/month, Forest level"],
-      ["custom", "I'd like to discuss a custom amount"],
+      ["custom", starter("contribution", "customLabel")],
     ]);
     for (const label of ["Investor / Capital Contributor", "Village Steward / Co-Creator", "Resident / Future Villager", "Prosperity Creator / Business Builder"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
@@ -188,17 +202,17 @@ describe("the page with no words of its own", () => {
   it("says the village's own name for the letter where it said Love Letter", async () => {
     config = { project: { name: "Fernhollow", commitmentName: "Covenant" }, currency: { name: "Seeds" } };
     render(<LoveLetter />);
-    await screen.findByText(/By signing this Covenant, you are/);
+    await screen.findByText(/By signing this Covenant, you/);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("The Fernhollow Covenant");
-    expect(screen.getByRole("button", { name: "Sign the Covenant & Join the Fernhollow Family" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: starter("form", "submitLabel", "Covenant") })).toBeInTheDocument();
     expect(document.body.textContent ?? "").not.toContain("Love Letter");
   });
 
   it("leaves out the suggested line when the village blanks it and has no short note", async () => {
     storedPage = { contribution: { suggested: "" } };
     render(<LoveLetter />);
-    await screen.findByText("Dear Future Fernhollow Family Member,");
+    await screen.findByText(starter("letter", "greeting"));
 
     expect(screen.queryByText(/Suggested:/)).toBeNull();
   });
@@ -206,7 +220,7 @@ describe("the page with no words of its own", () => {
   it("with no commitments, draws neither the list nor the line leading into it", async () => {
     storedPage = { letter: { commitments: [] } };
     render(<LoveLetter />);
-    await screen.findByText("Dear Future Fernhollow Family Member,");
+    await screen.findByText(starter("letter", "greeting"));
 
     expect(screen.queryByText("As a member of Fernhollow Commons, you commit to:")).toBeNull();
   });

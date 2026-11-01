@@ -1,9 +1,12 @@
 /**
  * The homepage (brochure villages), as fields.
  *
- * The defaults are the words the page carried in code until 2026-10-22, moved
- * here unchanged, so switching the page onto this spec changes nothing a
- * visitor sees. A village replaces them in Admin, Pages, Home.
+ * The defaults are NEUTRAL STARTER TEXT (2026-10-23): true of any village, in
+ * its own name through `{village}` and the other words, and claiming nothing
+ * about a place, a price or a person. They were the first village's words
+ * until then; that village keeps its own copy in its database, and the record
+ * of it is server/seeds/amora/pages/page-home.json. A village replaces them in
+ * Admin, Pages, Home.
  *
  * LIMITS were set from the layout, not the current copy: each is what its box
  * holds at 375px and at 1280px before it wraps into something that no longer
@@ -44,10 +47,10 @@ export const HOME_PAGE: PageSpec = {
         {
           key: "highlight",
           label: "Word to show in gold",
-          help: "A word or phrase from the headline, exactly as it appears there. Leave blank for none.",
+          help: "A word or phrase from the headline, exactly as it appears there. {village} picks out your village's name. Leave blank for none.",
           kind: "text",
           max: 24,
-          default: "Beautiful",
+          default: "{village}",
           optional: true,
         },
         {
@@ -56,7 +59,7 @@ export const HOME_PAGE: PageSpec = {
           help: "{in-location} becomes \" in\" plus your Location, or nothing when Location is blank. Wrap words in **double stars** to make them bold.",
           kind: "long",
           max: 200,
-          default: "A regenerative village{in-location} where all beings **belong** and **thrive**. Start here: pick your path.",
+          default: "A village{in-location}, growing with everyone who joins it. Start here: **pick your path**.",
         },
       ],
     },
@@ -93,7 +96,7 @@ export const HOME_PAGE: PageSpec = {
             { name: "Align", description: "Discover our values" },
             { name: "Experience", description: "Visit & participate" },
             { name: "Co-Create", description: "Join our circles" },
-            { name: "Integrate", description: "Become a member" },
+            { name: "Integrate", description: "Become a {member}" },
             { name: "Home", description: "Make it home" },
           ],
         },
@@ -133,8 +136,7 @@ export const HOME_PAGE: PageSpec = {
             {
               title: "Investor",
               subtitle: "Capital Contributor",
-              description:
-                "Plant capital in a project built to last. The village grows, community ownership stays intact, and returns and values move in the same direction.",
+              description: "Put capital to work in {village}. See how investing here works and what it helps build.",
             },
             {
               title: "Village Steward",
@@ -168,7 +170,7 @@ export const HOME_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 180,
-          default: "{village} attracts people who are done half-living. Here are some of the souls who find their way here.",
+          default: "Some of the people {village} hopes to welcome. See if one of them sounds like you.",
         },
         {
           key: "footer",
@@ -193,34 +195,34 @@ export const HOME_PAGE: PageSpec = {
           ],
           default: [
             {
-              label: "Digital Nomad Couple",
-              tagline: "We want roots without walls.",
-              body: "Location-independent professionals ready to stop bouncing between Airbnbs and plant themselves somewhere with depth, community, and a reason to stay.",
+              label: "Remote Workers",
+              tagline: "My work travels. I want roots.",
+              body: "People whose work goes wherever they go, looking for a place with depth, neighbours, and a reason to stay.",
             },
             {
-              label: "Worldschooling Family",
-              tagline: "Our kids deserve a village.",
-              body: "Families who want their children raised by a community, surrounded by nature, multi-generational wisdom, and real-world learning instead of a system.",
+              label: "Families",
+              tagline: "Our children deserve a village.",
+              body: "Parents who want their children to grow up close to nature, with neighbours of every age around them.",
             },
             {
-              label: "Retiree & Snowbird",
-              tagline: "Finally, a second chapter worth living.",
-              body: "Post-career dreamers who want warmth, beauty, belonging, and a role that still matters, not a golf course.",
+              label: "Elders",
+              tagline: "My next chapter still matters.",
+              body: "People with a lifetime of experience who want warmth, belonging, and a role that counts.",
             },
             {
-              label: "Longevity Seeker",
-              tagline: "I want to live well, not just long.",
-              body: "Health-conscious individuals chasing clean air, organic food, movement, community, and purpose as medicine: building a life designed to thrive.",
+              label: "Growers & Makers",
+              tagline: "I want to work with my hands.",
+              body: "Gardeners, builders, and craftspeople who want their skills to feed and shelter a community.",
             },
             {
-              label: "Remote Exec & Founder",
-              tagline: "I built the life. Now I want meaning.",
-              body: "High-achievers who want their next chapter to matter: contributing capital, skills, or leadership to something regenerative and lasting.",
+              label: "Builders & Backers",
+              tagline: "I want to help build something lasting.",
+              body: "People who bring capital, skills, or leadership, and want them to go into something that lasts.",
             },
             {
-              label: "Regional Changemaker",
-              tagline: "I want to build something here.",
-              body: "Local and regional changemakers who see {village} as the proving ground for a regenerative future in their own part of the world, and want to help shape it.",
+              label: "Neighbours",
+              tagline: "I live nearby and want to help.",
+              body: "People from the surrounding area who want to help shape {village} and share in what it becomes.",
             },
           ],
         },
@@ -238,7 +240,7 @@ export const HOME_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 200,
-          default: "Join our next community call to learn about the basics and ask any questions. It's the perfect first step on any path.",
+          default: "Join a community call to learn the basics and ask any question. It's a good first step on any path.",
         },
         { key: "primaryLabel", label: "First button", kind: "text", max: 28, default: "Join Community Call" },
         {

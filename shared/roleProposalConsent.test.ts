@@ -72,6 +72,16 @@ describe("where consent stands", () => {
     expect(consentState([ask(null), ask(null)], after)).toBe("lapsed");
   });
 
+  it("E8: every holder asked has consented, so the window has nothing left to wait for", () => {
+    // One asked, one consented: consented now, inside the window.
+    expect(consentState([ask("consent")], during)).toBe("consented");
+    expect(consentState([ask("consent"), ask("consent")], during)).toBe("consented");
+    // Control: one of two still to answer keeps it open until the window closes.
+    expect(consentState([ask("consent"), ask(null)], during)).toBe("open");
+    // An objection still blocks, whatever the others said.
+    expect(consentState([ask("consent"), ask("consent"), ask("object")], during)).toBe("objected");
+  });
+
   it("names the window's last day while it is open", () => {
     expect(consentStateWords("open", "2026-11-10")).toBe("The circle is asked to consent or object by 10 November 2026.");
   });

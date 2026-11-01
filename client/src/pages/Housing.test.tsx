@@ -56,7 +56,7 @@ vi.mock("@/hooks/useVillageContent", () => ({
 
 import Housing from "./Housing";
 import { HOUSING_PAGE } from "@shared/pageContent/housing";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
 
 /** What `GET /api/housing/public` answers, with only `homes` varying. */
 const answering = (homes: unknown[]) =>
@@ -110,10 +110,11 @@ describe("a village that has not described its homes", () => {
   it("leaves the rest of the page standing", async () => {
     renderPage();
     await waitFor(() => expect(screen.queryByText("Land Share Agreements")).toBeTruthy());
-    // The hero, the land features, the Land Share explainer and the closing
-    // call to action all stay. Only the tier cards are conditional.
+    // The hero, the Land Share explainer and the closing call to action all
+    // stay. The tier cards are conditional, and so are the land features,
+    // which ship empty (2026-10-23) and draw no band until a village lists one.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Housing at Willowbrook");
-    expect(screen.getByText("Mountain Views")).toBeTruthy();
+    expect(document.querySelector("section.bg-aqua-light")).toBeNull();
     expect(screen.getByText("Interested in Housing?")).toBeTruthy();
     expect(screen.getByText("Learn About Residency")).toBeTruthy();
   });
@@ -256,8 +257,18 @@ describe("every field in the Housing spec reaches the page", () => {
   });
 
   it("fills {village} in the defaults", async () => {
+    const intro = HOUSING_PAGE.sections.find((s) => s.id === "tenure")!.fields.find((f) => f.key === "intro")!.default;
+    expect(intro).toContain("{village}");
     renderPage();
-    expect(await screen.findByText(/^At Willowbrook, you don't purchase land outright/)).toBeTruthy();
+    expect(await screen.findByText(fillVars(intro, { village: "Willowbrook" }))).toBeTruthy();
+  });
+
+  it("ships no land features, because views, springs and forest are one piece of land's facts", async () => {
+    expect(HOUSING_PAGE.sections.find((s) => s.id === "features")!.lists![0].default).toEqual([]);
+    saved.page = { features: { items: [{ title: "River Meadow", body: "A meadow by the river.", icon: "water" }] } };
+    renderPage();
+    expect(await screen.findByText("River Meadow")).toBeTruthy();
+    expect(document.querySelector("section.bg-aqua-light")).toBeTruthy();
   });
 });
 

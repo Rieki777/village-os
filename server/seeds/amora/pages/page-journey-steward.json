@@ -1,0 +1,181 @@
+{
+  "arc": {
+    "intro": "Your role deepens with each season.",
+    "items": [
+      {
+        "level": "Guide",
+        "description": "Mentor to newer stewards and circle facilitators"
+      },
+      {
+        "level": "Sage",
+        "description": "Village wisdom keeper and strategic guide"
+      }
+    ],
+    "heading": "Long-Term Growth"
+  },
+  "faq": {
+    "heading": "Common Questions"
+  },
+  "hero": {
+    "intro": "The Village Steward Space is for those coordinating and executing for the success of the whole Village. Join circles, take on roles, and help shape our regenerative community through sociocratic governance.",
+    "eyebrow": "Village Steward Journey",
+    "headline": "Steward the Village",
+    "highlight": "Village",
+    "primaryLabel": "Start with Community Call",
+    "primaryTarget": "#events",
+    "secondaryLabel": "Learn How We Create",
+    "secondaryTarget": "/how-we-create"
+  },
+  "steps": {
+    "intro": "Each step deepens your connection with the community and helps you find where your gifts fit.",
+    "items": [
+      {
+        "stage": "Visitor",
+        "title": "Attend Community Call",
+        "bullet1": "Meet the founding team",
+        "bullet2": "Learn about our vision",
+        "bullet3": "Ask questions live",
+        "bullet4": "Connect with other visitors",
+        "actionLabel": "Join Community Call",
+        "description": "Learn about the basics and ask any immediate questions about {village}.",
+        "actionTarget": "#events"
+      },
+      {
+        "stage": "Guest",
+        "title": "Participate in Events",
+        "bullet1": "Weekly potlucks",
+        "bullet2": "Village weaving gatherings",
+        "bullet3": "Land tours",
+        "bullet4": "Workshops and retreats",
+        "actionLabel": "View Events",
+        "description": "Join potlucks, events, workshops, and parties on our land to experience the community.",
+        "actionTarget": "#events"
+      },
+      {
+        "stage": "Immersant",
+        "title": "Village Weaving Immersion (Optional)",
+        "bullet1": "Optional, join if it calls you",
+        "bullet2": "2-4 week immersion period",
+        "bullet3": "Shadow existing circle members",
+        "bullet4": "Identify your R-Ikigai fit",
+        "actionLabel": "Learn About Circles",
+        "description": "Optional: spend immersive time in the village learning how it operates, observing circles in action, and discovering where your gifts are most needed. A beautiful step, but not required.",
+        "actionTarget": "/circles"
+      },
+      {
+        "stage": "Participant",
+        "title": "Community Training",
+        "bullet1": "Do the training, or show you already live it",
+        "bullet2": "Nonviolent Communication basics",
+        "bullet3": "Authentic relating practices",
+        "bullet4": "Consent-based decision making",
+        "actionLabel": "Learn About Training",
+        "description": "Either complete our training in NVC (Nonviolent Communication), authentic relating, and other community practices, or demonstrate you already know and live these essential practices.",
+        "actionTarget": "/training"
+      },
+      {
+        "stage": "Member",
+        "title": "Join the {village} Family",
+        "bullet1": "Understand our values deeply",
+        "bullet2": "Reflect on your commitment",
+        "bullet3": "Sign the {commitment}",
+        "bullet4": "Join the {village} Family",
+        "actionLabel": "Read the {commitment}",
+        "description": "Contemplate and sign our {commitment}, formally becoming a member of the community.",
+        "actionTarget": "/love-letter"
+      },
+      {
+        "stage": "Contributor",
+        "title": "Participate in a Circle",
+        "bullet1": "Choose a circle aligned with your gifts",
+        "bullet2": "Attend circle meetings",
+        "bullet3": "Participate in consent rounds",
+        "bullet4": "Build relationships with circle members",
+        "actionLabel": "Explore Circles",
+        "description": "Join one of our sociocratic circles to contribute to community decision-making.",
+        "actionTarget": "/circles"
+      },
+      {
+        "stage": "Quest Seeker",
+        "title": "Explore Quests",
+        "bullet1": "Browse available quests",
+        "bullet2": "Choose quests matching your skills",
+        "bullet3": "Submit your own quest proposal",
+        "bullet4": "",
+        "actionLabel": "View Quests",
+        "description": "Take on quests to contribute meaningfully to the village, or propose your own quest if you don't see your gift. A great way to demonstrate your commitment.",
+        "actionTarget": "/quests"
+      },
+      {
+        "stage": "Initiate",
+        "title": "Co-Creator Right of Passage",
+        "bullet1": "Demonstrate sustained commitment",
+        "bullet2": "Present to the Co-Creators circle",
+        "bullet3": "Receive consent from members",
+        "bullet4": "Celebrate your passage",
+        "actionLabel": "Read Co-Creator Criteria",
+        "description": "Complete the right of passage with a vote from the Co-Creators circle to become a full member.",
+        "actionTarget": "/co-creators-guide"
+      },
+      {
+        "stage": "Co-Creator",
+        "title": "Explore & Apply for Roles",
+        "bullet1": "Review available roles",
+        "bullet2": "Propose your role contribution",
+        "bullet3": "Receive circle consent",
+        "bullet4": "Begin your seasonal role",
+        "actionLabel": "Explore Roles",
+        "description": "Find a role that aligns with your gifts and apply for the upcoming season.",
+        "actionTarget": "/roles"
+      }
+    ],
+    "heading": "Your Journey to Co-Creation"
+  },
+  "ladder": {
+    "intro": "Each new season requires successful role proposals to continue. As you grow, so does your voice and responsibility.",
+    "items": [
+      {
+        "level": "Role Holder",
+        "benefits": "Voice in your circle",
+        "requirement": "Apply and be approved for a seasonal role"
+      },
+      {
+        "level": "Guide",
+        "benefits": "Mentorship responsibilities",
+        "requirement": "After multiple seasons in a role"
+      },
+      {
+        "level": "Sage",
+        "benefits": "Highest voice, wisdom keeper, strategic guidance",
+        "requirement": "After seasons as a Guide"
+      }
+    ],
+    "heading": "The Path of Growth"
+  },
+  "rights": {
+    "body": "As a Village Steward, you hold real ownership of this place, and real responsibility for it. Read the full covenant between co-owners.",
+    "heading": "Your Rights and Responsibilities",
+    "ctaLabel": "Read Rights and Responsibilities",
+    "ctaTarget": "/steward-rights"
+  },
+  "seasons": {
+    "body": "Every 3 months, the community votes on what kind of season comes next. Seasons aren't on a fixed cycle, they're chosen based on what {village} needs. Spring for new builds, Summer for events and energy, Fall for harvest and reflection, Winter for systems design and planning. Each seasonal transition is marked by a festival.",
+    "heading": "Seasonal Festivals",
+    "ctaLabel": "Learn About Our Seasons",
+    "ctaTarget": "/seasonal-festivals"
+  },
+  "nextStep": {
+    "body": "Tell us where you're coming from and what calls you here. We'll reach out with the right invitation.",
+    "heading": "Your Next Step",
+    "footnote": "Or join our next community call to learn more first.",
+    "giftsHint": "e.g. regenerative farming, facilitation, web development...",
+    "thanksCta": "Join the Next Community Call",
+    "giftsLabel": "What gifts do you bring? (skills, time, passion)",
+    "thanksBody": "We've received your message and will be in touch soon with your next invitation into the village.",
+    "submitLabel": "Begin My Stewardship Journey",
+    "footnoteLink": "join our next community call",
+    "questionHint": "Share what resonated, what you're looking for, or any questions on your heart...",
+    "questionLabel": "What called you to stewardship?",
+    "thanksHeading": "Welcome, future Steward."
+  }
+}

@@ -9,13 +9,16 @@
  * the server's copy is on its way. A field the page drew and the server did
  * not would be a member aligning with words they never saw.
  *
- * THE DEFAULTS ARE THE LETTER EXACTLY AS IT WAS. For a village that calls its
- * letter "Love Letter" and has written none of these fields, the letter comes
- * out byte for byte as it did before 2026-10-22, so its fingerprint (the
- * letter version members align with) does not move. That is pinned in
- * server/lib/membershipLetter.test.ts against fingerprints taken from the old
- * code. A village with another name for its letter now reads that name where
- * the letter used to say "Love Letter", which is a new letter version for it.
+ * THE DEFAULTS ARE A NEUTRAL STARTER LETTER (2026-10-23), true of any village
+ * and claiming nothing about its land, its prices or how it decides. Until
+ * then they were the first village's letter, word for word. That village
+ * keeps its own copy in its database (the record is
+ * server/seeds/amora/pages/page-love-letter.json), so its letter version did
+ * not move. EVERY OTHER VILLAGE THAT HAD NOT WRITTEN ITS OWN LETTER GOT A NEW
+ * LETTER VERSION WITH THIS CHANGE: a member who aligned before keeps the
+ * words they read, and the next signing aligns with these. Both are pinned in
+ * server/lib/membershipLetter.test.ts: the starter letter's fingerprints, and
+ * the old fingerprints reproduced from the adopted copy.
  *
  * `{entity}` works in this page's fields as well as the usual words: the name
  * a member joins (Legal, Membership entity), or the village's name.
@@ -54,14 +57,14 @@ export const LOVE_LETTER_PAGE: PageSpec = {
       shows:
         "The letter itself. A member who aligns keeps these exact words, so changing any of them makes a new version of the letter; members who already aligned keep the words they read. The opening and governance paragraphs are in Covenant.",
       fields: [
-        { key: "greeting", label: "Greeting", kind: "text", max: 80, default: "Dear Future {village} Family Member," },
+        { key: "greeting", label: "Greeting", kind: "text", max: 80, default: "Dear friend of {village}," },
         {
           key: "joining",
           label: "Paragraph after the opening",
           kind: "long",
           max: 400,
           default:
-            "By signing this {commitment}, you are not just joining a community. You are becoming a co-creator of the most beautiful village we can imagine together. You are saying yes to regeneration, of the land, of community, of yourself.",
+            "By signing this {commitment}, you become part of {village}. You are saying yes to the people here, to caring for this place, and to building the village together.",
         },
         {
           key: "commitLead",
@@ -80,7 +83,7 @@ export const LOVE_LETTER_PAGE: PageSpec = {
           default:
             "In return, you become a full member of {entity}, gaining access to community spaces, governance participation, and the opportunity to deepen your involvement through roles, residency, or business creation.",
         },
-        { key: "closing", label: "Closing line", kind: "text", max: 60, default: "With love and anticipation," },
+        { key: "closing", label: "Closing line", kind: "text", max: 60, default: "With a warm welcome," },
         { key: "signature", label: "Signed by", kind: "text", max: 60, default: "The {village} Community" },
       ],
       lists: [
@@ -94,14 +97,13 @@ export const LOVE_LETTER_PAGE: PageSpec = {
           maxItems: 12,
           fields: [{ key: "text", label: "Commitment", kind: "text", max: 100, default: "" }],
           default: [
-            { text: "Treat all beings with respect, compassion, and authentic communication" },
-            { text: "Participate in community governance through our sociocratic circles" },
-            { text: "Contribute to the regeneration of the land and ecosystem" },
-            { text: "Support fellow community members in their growth and wellbeing" },
+            { text: "Treat everyone here with respect, care, and honest communication" },
+            { text: "Take part in how {village} makes its decisions" },
+            { text: "Care for the land and the places we share" },
+            { text: "Support the people around you in their growth and wellbeing" },
             { text: "Honor the values and agreements of the {village} community" },
-            { text: "Practice Nonviolent Communication and authentic relating" },
             { text: "Meet financial obligations as agreed with the community" },
-            { text: "Show up for community life, circles, celebrations, and shared care" },
+            { text: "Show up for community life, celebrations, and shared care" },
           ],
         },
       ],
@@ -118,7 +120,7 @@ export const LOVE_LETTER_PAGE: PageSpec = {
           help: ENTITY_HELP,
           kind: "long",
           max: 200,
-          default: "Fill in your details below to officially join the {village} Family and become a member of {entity}.",
+          default: "Fill in your details below to join {village} and become a member of {entity}.",
         },
         {
           key: "standardsLabel",
@@ -136,7 +138,7 @@ export const LOVE_LETTER_PAGE: PageSpec = {
           max: 240,
           default: "I have read the {commitment} above and commit to the values and agreements of the {village} community as a member of {entity}.",
         },
-        { key: "submitLabel", label: "Button", kind: "text", max: 60, default: "Sign the {commitment} & Join the {village} Family" },
+        { key: "submitLabel", label: "Button", kind: "text", max: 60, default: "Sign the {commitment} & Join {village}" },
       ],
       lists: [
         {
@@ -169,23 +171,23 @@ export const LOVE_LETTER_PAGE: PageSpec = {
           help: "Leave blank for none.",
           kind: "text",
           max: 60,
-          default: "Suggested: $33-$108/month.",
+          default: "",
           optional: true,
         },
-        { key: "customLabel", label: "Last choice: a custom amount", kind: "text", max: 60, default: "I'd like to discuss a custom amount" },
+        { key: "customLabel", label: "Last choice: a custom amount", kind: "text", max: 60, default: "I'd like to discuss an amount" },
         {
           key: "customPlaceholder",
           label: "Hint in the custom amount box",
           kind: "text",
           max: 80,
-          default: "Tell us what works for you (e.g. $20/month, in-kind, barter)",
+          default: "Tell us what works for you: an amount, in-kind, or barter",
         },
       ],
       lists: [
         {
           key: "tiers",
           label: "Levels",
-          help: "Up to six, before the custom choice. The amount is what a signing records; the label is what the signer reads.",
+          help: "Up to six, before the custom choice. The amount is what a signing records; the label is what the signer reads. With none, the signer describes an amount in their own words.",
           itemLabel: "Level",
           titleKey: "label",
           maxItems: 6,
@@ -193,12 +195,7 @@ export const LOVE_LETTER_PAGE: PageSpec = {
             { key: "value", label: "Amount recorded", kind: "text", max: 12, default: "" },
             { key: "label", label: "What the signer reads", kind: "text", max: 48, default: "" },
           ],
-          default: [
-            { value: "33", label: "$33/month, Seed level" },
-            { value: "55", label: "$55/month, Sprout level" },
-            { value: "88", label: "$88/month, Grove level" },
-            { value: "108", label: "$108/month, Forest level" },
-          ],
+          default: [],
         },
       ],
     },
@@ -213,7 +210,7 @@ export const LOVE_LETTER_PAGE: PageSpec = {
           help: "Shown in quotation marks. Leave blank for none.",
           kind: "text",
           max: 140,
-          default: "You are not just joining a place. You are becoming part of something alive.",
+          default: "Welcome to {village}. We're glad you're here.",
           optional: true,
         },
       ],

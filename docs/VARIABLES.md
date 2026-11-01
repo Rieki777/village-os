@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 194 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 194 open and 47 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 212 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 214 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-239 dials in 36 categories. 141 carry a minimum and a maximum. By type: 105 integer, 19 decimal, 18 percentage, 27 boolean, 31 choice, 38 text, 1 longtext.
+241 dials in 36 categories. 143 carry a minimum and a maximum. By type: 107 integer, 19 decimal, 18 percentage, 27 boolean, 31 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -69,7 +69,7 @@ Each dial also says WHEN a change lands. 212 of them as soon as it is saved, and
 | Village | 2 | 1 | 1 |
 | Health | 1 | 1 | 0 |
 | Badges | 1 | 1 | 0 |
-| Platform | 1 | 0 | 1 |
+| Platform | 3 | 0 | 3 |
 | Calendar | 4 | 4 | 0 |
 | Introductions | 4 | 4 | 0 |
 | Exit | 10 | 10 | 0 |
@@ -296,6 +296,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Alert when a metric moves this much | `health.alert_change_pct` | Health | integer | `40` | the whole village |
 | Featured badges per member | `badges.max_featured` | Badges | integer | `3` | the whole village |
 | Share bug reports and ideas with the platform team | `platform.feedback_relay` | Platform | boolean | `true` | the founder or an admin |
+| Cooling-off before a key lands with nobody to co-sign | `platform.cosign_cooling_hours` | Platform | integer | `48` | the founder or an admin |
+| How long a key waits for its co-sign | `platform.cosign_expiry_hours` | Platform | integer | `72` | the founder or an admin |
 | The solar event that opens the village year | `calendar.year_anchor` | Calendar | choice | `december_solstice` | the whole village |
 | Hemisphere | `calendar.hemisphere` | Calendar | choice | `north` | the whole village |
 | Mark the cross-quarter days | `calendar.cross_quarters` | Calendar | boolean | `false` | the whole village |
@@ -2369,7 +2371,7 @@ Displays token balances and Gratitude flows on member profiles. Turn off while t
 
 ### Base RPC endpoint
 
-Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number.
+Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number. Saved under Admin, Integrations, where it is sealed, because a dedicated endpoint carries its key in the address. The host variable BASE_RPC_URL works too.
 
 | Fact | Value |
 | --- | --- |
@@ -2380,7 +2382,8 @@ Where balances are read from. A public endpoint is fine to start; a dedicated on
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
-| Shown to the public | Listed, and open to proposals. Its value stays off the public rules page because it can carry a provider key; admins still see it. |
+| Shown to the public | Listed. Its value stays off the public rules page because it can carry a provider key. |
+| Where it is set | Admin, Integrations, sealed, as the `base_rpc_url` integration secret. This dial takes only its default now. |
 
 ## Hypha
 
@@ -3123,7 +3126,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ### Show who holds each role to visitors
 
-On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.
+On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages, and a visitor reads members by first name elsewhere. Off, a visitor who is not signed in reads no member's name, handle, address or portrait on any page: the pulse, the decisions, profiles and role cards included. Signed-in members whose role or badge grants map.viewPeople still read who holds each role, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.
 
 | Fact | Value |
 | --- | --- |
@@ -3835,7 +3838,7 @@ How many badges a member may pin to their byline (forum posts, map chips). 0 tur
 
 ## Platform
 
-1 dial. 1 for the founder or an admin.
+3 dials. 3 for the founder or an admin.
 
 ### Share bug reports and ideas with the platform team
 
@@ -3847,6 +3850,36 @@ A copy of each bug report and idea submitted here reaches the platform team who 
 | Type | boolean, on or off |
 | Default | `true` |
 | Range | on or off |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Cooling-off before a key lands with nobody to co-sign
+
+After launch, saving a key that touches money, email or the hosting waits for a second admin. A village with only one admin waits this many hours instead, and the steward and founder role holders are told and can decline it in that time.
+
+| Fact | Value |
+| --- | --- |
+| Key | `platform.cosign_cooling_hours` |
+| Type | integer, a whole number |
+| Default | `48` |
+| Range | 1 to 336 |
+| Counted in | hours |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### How long a key waits for its co-sign
+
+After launch, a key that needs a second admin's co-sign waits this many hours. Unsigned by then, it is dropped and its value wiped, and the admin who asked can save it again.
+
+| Fact | Value |
+| --- | --- |
+| Key | `platform.cosign_expiry_hours` |
+| Type | integer, a whole number |
+| Default | `72` |
+| Range | 1 to 720 |
+| Counted in | hours |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -3912,7 +3945,7 @@ Also put the four midpoints between the solstices and equinoxes on the calendar.
 
 ### Your village's own seasons
 
-The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Dry: 12-01, Green: 05-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.
+The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Planting: 03-01, Harvest: 09-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.
 
 | Fact | Value |
 | --- | --- |

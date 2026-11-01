@@ -15,7 +15,7 @@ export default function ModuleShelf({
 }) {
   return (
     <section className="mb-10">
-      <h2 className="font-display text-xl sm:text-2xl font-bold text-foreground">{label}</h2>
+      <h2 className="font-display text-xl sm:text-2xl font-bold text-foreground [overflow-wrap:anywhere]">{label}</h2>
       <p className="text-sm text-muted-foreground mt-0.5 mb-4">{gloss}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>
     </section>

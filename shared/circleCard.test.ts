@@ -75,6 +75,24 @@ describe("the circle card model", () => {
     expect(roles.note).toBeNull();
   });
 
+  it("a visitor or a guest is offered the door with no membership to refuse them: propose a role, with that role picked (2026-10-31)", () => {
+    const roles = [
+      { id: "r-1", name: "Water Keeper", capacity: 2, holderCount: 2, state: "filled", holderHandles: undefined },
+      { id: "r-2", name: "Seed Librarian", capacity: 1, holderCount: 0, state: "open", holderHandles: undefined },
+      { id: "r 3", name: "Gate Keeper", capacity: 2, holderCount: 1, state: "partial", holderHandles: undefined },
+      { id: "r-4", name: "Example Role", capacity: 1, holderCount: 0, state: "open", isExample: true, holderHandles: undefined },
+    ];
+    const rowsFor = (readerMayApply?: boolean) => {
+      const card = buildCircleCard(base({ roles, ...(readerMayApply === undefined ? {} : { readerMayApply }) }));
+      const section = find(card.sections, "roles") as Extract<CircleSection, { kind: "roles" }>;
+      return section.slot.kind === "shown" ? section.slot.value : [];
+    };
+    expect(rowsFor(false).map((r) => r.applyHref)).toEqual([null, "/propose-a-role?role=r-2", "/propose-a-role?role=r%203", null]);
+    // A member, and a caller that says nothing, keep the member door.
+    expect(rowsFor(true).map((r) => r.applyHref)).toEqual([null, "/propose?type=role_application&seat=r-2", "/propose?type=role_application&seat=r%203", null]);
+    expect(rowsFor().map((r) => r.applyHref)).toEqual(rowsFor(true).map((r) => r.applyHref));
+  });
+
   it("carries each role's pay beside its Apply link, and none where the reader may not read it (2026-10-30)", () => {
     const pay = { value: null, lines: [{ token: "village-voice", name: "Village Voice", amount: 5, voice: true }], source: "own" as const, cadence: "cycle" as const };
     const card = buildCircleCard(

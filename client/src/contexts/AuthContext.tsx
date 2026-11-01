@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { TOKEN_KEY } from "@/lib/gameApi";
+import { TOKEN_KEY, authToken, clearAuthToken } from "@/lib/gameApi";
 import { forgetExamplesCache } from "@/components/ExamplesBanner";
-import { removeStored, storedText, writeStored } from "@/lib/safeStorage";
+import { writeStored } from "@/lib/safeStorage";
 import { SIGN_IN_STORAGE_BLOCKED, canKeepSignedIn, sessionWriteRefused } from "@/lib/signInStorage";
 
 export interface User {
@@ -52,11 +52,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // took the whole app down. A blocked store now reads as no session, which is
   // the truth: nothing was ever stored in it. The member is told why at the
   // moment they try to sign in. See client/src/lib/signInStorage.ts.
-  const [token, setToken] = useState<string | null>(() => storedText("local", TOKEN_KEY));
+  // Through authToken(), which also moves a session still under the old key (R066).
+  const [token, setToken] = useState<string | null>(() => authToken());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedToken = storedText("local", TOKEN_KEY);
+    const storedToken = authToken();
     if (storedToken) {
       validateToken(storedToken);
     } else {
@@ -79,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // A removal that refuses leaves a dead token on disk, and the next
         // load re-validates it and lands right back here. Signing this tab
         // out is still the right move, so the result is read and not acted on.
-        removeStored("local", TOKEN_KEY);
+        clearAuthToken();
         setToken(null);
         forgetExamplesCache();
       }
@@ -151,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Tell the server first: without this the token stays valid for its full
     // 30 days and anyone who copied it stays signed in. tokenVersion is the
     // only revocation lever, so this ends every session on every device.
-    const tk = storedText("local", TOKEN_KEY);
+    const tk = authToken();
     if (tk) {
       try {
         await fetch("/api/auth/logout", {
@@ -169,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     // Signing out never refuses. A store that will not take the removal is
     // no reason to hold somebody in a session they asked to leave.
-    removeStored("local", TOKEN_KEY);
+    clearAuthToken();
     setToken(null);
     setUser(null);
     forgetExamplesCache();

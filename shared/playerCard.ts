@@ -261,6 +261,15 @@ export interface PlayerCardInput {
   /** The village's own name, from the brand overlay. */
   villageName: Read<string | null>;
   season: Read<{ id: string; name: string | null; startsOn: string | null; endsOn: string | null } | null>;
+  /**
+   * THE SEASON A PROPOSAL IS FOR (E9). In proposal mode the hero (eyebrow,
+   * span, moon pill) and "My moon cycle" are drawn in it, so a proposal for
+   * next season is never headed with this season's name and dates. Null is a
+   * proposal with no season to be for, and draws none. Left out, the card
+   * draws the running `season`. "My applications" always reads `season`,
+   * because past, this season and next season are told from today.
+   */
+  proposalSeason?: { id: string; name: string | null; startsOn: string | null; endsOn: string | null } | null;
   nextSeasonId: Read<string | null>;
   /** The village's class names from /api/archetypes, keyed by class key. */
   archetypeNames: Read<Record<string, string> | null>;
@@ -559,6 +568,11 @@ function portraitOf(owner: PlayerCardInput["owner"]): PortraitOut {
   return { kind: "sigil", letter: (Array.from(owner.displayName.trim())[0] ?? "").toUpperCase() };
 }
 
+/** The season the card is drawn in: a proposal's own when the host names one (E9), else the running one. */
+function seasonDrawn(input: PlayerCardInput): PlayerCardInput["season"] {
+  return input.mode === "proposal" && input.proposalSeason !== undefined ? input.proposalSeason : input.season;
+}
+
 function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): HeaderOut {
   const rolesLine =
     roles === undefined
@@ -589,7 +603,7 @@ function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): Head
     timeZone: input.timeZone,
     ownerUserId: input.owner.userId,
     villageName: input.villageName,
-    season: input.season,
+    season: seasonDrawn(input),
     roles,
     applications: input.applications,
     proposal: input.mode === "proposal",
@@ -879,8 +893,9 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
 
 function timeline(input: PlayerCardInput, roles: PlayerRoleIn[]): TimelineOut {
   const tz = input.timeZone;
-  const seasonStart = input.season ? instantOf(input.season.startsOn, tz) : null;
-  const seasonEnd = input.season ? instantOf(input.season.endsOn, tz) : null;
+  const season = seasonDrawn(input);
+  const seasonStart = season ? instantOf(season.startsOn, tz) : null;
+  const seasonEnd = season ? instantOf(season.endsOn, tz) : null;
   const from = seasonStart ?? LUNAR_CLOCK.boundsFor(input.now).startsAt;
   const to = seasonEnd ?? LUNAR_CLOCK.boundsFor(new Date(LUNAR_CLOCK.boundsFor(input.now).endsAt.getTime() + 1)).endsAt;
 
