@@ -386,6 +386,14 @@ and the village is on the new schema whether or not the new code works. So a bad
 not a failed deploy, it is a village that cannot start, and the only lever anybody has is to
 put the previous image back.
 
+**The previous release is still serving while your migration runs, on the same database.** A
+DDL statement needs its table to itself for a moment, and while it waits for that, every later
+query on the table queues behind it, from both servers. That is how batch 74 took Amora down on
+2026-11-01. So the runner caps each statement's lock wait (`MIGRATION_LOCK_WAIT_SECONDS` in
+`server/db/migrate.ts`), retries a timed-out statement a bounded number of times in the same
+boot, and then fails the boot naming the file, the statement and the lock; the next boot resumes
+at that statement. A lock timeout in a deploy log means retry the deploy, never edit the SQL.
+
 **Expand, never contract.** A migration may ADD. It may not take away. Rolling one release
 back over an already-migrated database has to work, so the previous release must still be able
 to read and write whatever the migration produced.

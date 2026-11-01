@@ -38,6 +38,18 @@
  *    statement 4, and the next boot resumes at 3 on a table that is actually
  *    further along, replaying DDL that already ran. `GET_LOCK`/`RELEASE_LOCK`
  *    around the whole function serializes that instead of leaving it to luck.
+ *
+ * A THIRD (batch 74, 2026-11-01): EVERY STATEMENT'S LOCK WAIT IS CAPPED. A
+ * migration runs while the previous deployment is still serving the same
+ * database, and any DDL, INSTANT included, needs an exclusive metadata lock on
+ * its table for a moment. The server default for that wait is one year on
+ * MySQL 8. One open transaction that has touched the table makes the ALTER
+ * wait, and every later query on that table, from BOTH servers, queues behind
+ * the ALTER's pending exclusive request. That froze Amora for fifteen minutes.
+ * `applyPending` now sets `lock_wait_timeout` and `innodb_lock_wait_timeout`
+ * on its own connection (see MIGRATION_LOCK_WAIT_SECONDS), retries a timed-out
+ * statement a bounded number of times, and otherwise fails the boot naming the
+ * file, the statement and the lock, with the resume offset still correct.
  */
 import fs from "fs";
 import path from "path";
@@ -53,6 +65,136 @@ export const MIGRATIONS_DIR = path.resolve(process.cwd(), "drizzle");
  * a quick operation that should time out fast.
  */
 export const MIGRATION_LOCK_TIMEOUT_SECONDS = 600;
+
+/**
+ * HOW LONG ONE MIGRATION STATEMENT MAY WAIT FOR A LOCK: 10 SECONDS.
+ *
+ * Unrelated to MIGRATION_LOCK_TIMEOUT_SECONDS above, which is the runner's own
+ * GET_LOCK against another booting container. This one is the TABLE's lock,
+ * and it is set as both `lock_wait_timeout` (metadata locks, which every DDL
+ * statement takes) and `innodb_lock_wait_timeout` (row locks, which a backfill
+ * UPDATE takes), on the migration connection only, for the length of the run.
+ *
+ * The number is a trade between two costs, and both sides are measured here:
+ *
+ *  - TOO SHORT and a normal deploy fails on a brief, harmless lock. What holds
+ *    a lock on a table in this app is an autocommit query (milliseconds) or a
+ *    short app transaction such as a ledger posting (well under a second). Ten
+ *    seconds is more than ten times the longest of those.
+ *  - TOO LONG and the old server stalls for all of it. While the ALTER waits,
+ *    every new query on that table queues behind it, and the app's pool has
+ *    eight connections (server/db/pool.ts), so a handful of signed-in requests
+ *    on `users` is every connection, and the whole old server waits the full
+ *    timeout. Ten seconds reads as a slow page to a member; thirty starts to
+ *    read as the site being down.
+ *
+ * A wait that ends in a timeout is retried (MIGRATION_LOCK_WAIT_ATTEMPTS), with
+ * a pause between attempts in which the old server's queued requests run and
+ * the long transaction gets the chance to finish. A statement that only needed
+ * the lock is safe to retry: every migration statement runs in autocommit (no
+ * file opens a transaction), so one that timed out changed nothing. Worst case
+ * for a whole boot is `worstCaseLockWaitSeconds()`, held under a quarter of
+ * railway.toml's healthcheckTimeout by server/db/migrateLockWait.test.ts.
+ */
+export const MIGRATION_LOCK_WAIT_SECONDS = 10;
+/** Attempts per statement when the wait times out, the first included. */
+export const MIGRATION_LOCK_WAIT_ATTEMPTS = 3;
+/** Pause before each retry, in ms; the last entry repeats. */
+export const MIGRATION_LOCK_WAIT_BACKOFF_MS: readonly number[] = [5_000, 15_000];
+/**
+ * Retries across ONE whole run, every file and statement together. Without it
+ * the bound would grow with the number of statements: twenty statements that
+ * each time out once would cost twenty waits and twenty pauses.
+ */
+export const MIGRATION_LOCK_WAIT_RETRY_BUDGET = 4;
+
+/** Overrides for the lock-wait cap. Tests pass short values; production passes nothing. */
+export interface LockWaitOptions {
+  timeoutSeconds?: number;
+  attempts?: number;
+  backoffMs?: readonly number[];
+  retryBudget?: number;
+}
+
+interface ResolvedLockWait {
+  timeoutSeconds: number;
+  attempts: number;
+  backoffMs: readonly number[];
+  retryBudget: number;
+}
+
+function resolveLockWait(o: LockWaitOptions = {}): ResolvedLockWait {
+  const r: ResolvedLockWait = {
+    timeoutSeconds: o.timeoutSeconds ?? MIGRATION_LOCK_WAIT_SECONDS,
+    attempts: o.attempts ?? MIGRATION_LOCK_WAIT_ATTEMPTS,
+    backoffMs: o.backoffMs ?? MIGRATION_LOCK_WAIT_BACKOFF_MS,
+    retryBudget: o.retryBudget ?? MIGRATION_LOCK_WAIT_RETRY_BUDGET,
+  };
+  // Both server variables take whole seconds, minimum 1. The value is also
+  // interpolated into a SET, so it must be exactly an integer.
+  if (!Number.isInteger(r.timeoutSeconds) || r.timeoutSeconds < 1) {
+    throw new Error(`lock wait timeout must be a whole number of seconds, at least 1 (got ${r.timeoutSeconds})`);
+  }
+  if (!Number.isInteger(r.attempts) || r.attempts < 1) throw new Error(`lock wait attempts must be at least 1 (got ${r.attempts})`);
+  if (!Number.isInteger(r.retryBudget) || r.retryBudget < 0) throw new Error(`lock wait retry budget must be 0 or more (got ${r.retryBudget})`);
+  return r;
+}
+
+/**
+ * The longest one run can spend on lock waits that END IN A TIMEOUT, pauses
+ * included: every retry the budget allows, each after a full wait and the
+ * longest pause, plus the final wait that fails the boot. A statement that
+ * waits and then GETS its lock is outside this figure, since that wait ended
+ * because the lock came free.
+ */
+export function worstCaseLockWaitSeconds(o: LockWaitOptions = {}): number {
+  const r = resolveLockWait(o);
+  const retries = r.attempts > 1 ? r.retryBudget : 0;
+  const longestPause = Math.max(0, ...r.backoffMs) / 1000;
+  return (retries + 1) * r.timeoutSeconds + retries * longestPause;
+}
+
+/** MySQL and MariaDB both report a lock wait that ran out as 1205, and a deadlock victim as 1213. */
+function lockConflictOf(err: any): "lock-wait-timeout" | "deadlock" | null {
+  const errno = Number(err?.errno);
+  if (errno === 1205 || err?.code === "ER_LOCK_WAIT_TIMEOUT") return "lock-wait-timeout";
+  if (errno === 1213 || err?.code === "ER_LOCK_DEADLOCK") return "deadlock";
+  return null;
+}
+
+/** A schema change waits on the table's metadata lock; a data change, on row locks. */
+function isDdl(statement: string): boolean {
+  return /^\s*(ALTER|CREATE|DROP|RENAME|TRUNCATE|OPTIMIZE)\b/i.test(statement);
+}
+
+/** One line of the statement for a log or an error: the SQL is public, and 160 characters names it. */
+function statementHead(statement: string): string {
+  const flat = statement.replace(/\s+/g, " ").trim();
+  return flat.length > 160 ? `${flat.slice(0, 160)}...` : flat;
+}
+
+/**
+ * Cap this connection's lock waits for the run, and return how to put back
+ * what it had. Restoring matters for the test harness, which hands its own
+ * connection in and keeps using it; the boot and the CLI close theirs anyway.
+ */
+async function capLockWaits(conn: mysql.Connection, seconds: number): Promise<() => Promise<void>> {
+  const [[prev]] = await conn.query<any[]>(
+    "SELECT @@SESSION.lock_wait_timeout AS lwt, @@SESSION.innodb_lock_wait_timeout AS ilwt",
+  );
+  await conn.query(`SET SESSION lock_wait_timeout = ${seconds}`);
+  await conn.query(`SET SESSION innodb_lock_wait_timeout = ${seconds}`);
+  return async () => {
+    try {
+      const lwt = Number(prev?.lwt);
+      const ilwt = Number(prev?.ilwt);
+      if (Number.isInteger(lwt) && lwt > 0) await conn.query(`SET SESSION lock_wait_timeout = ${lwt}`);
+      if (Number.isInteger(ilwt) && ilwt > 0) await conn.query(`SET SESSION innodb_lock_wait_timeout = ${ilwt}`);
+    } catch {
+      // Cleanup, like releaseMigrationLock below: never the error to fail a boot over.
+    }
+  };
+}
 
 export function discoverMigrations(dir: string = MIGRATIONS_DIR): string[] {
   /*
@@ -168,6 +310,19 @@ export type ApplyFailureDetail =
       statementIndex: number;
       statementsTotal: number;
       message: string;
+      /**
+       * Set when the statement gave up waiting for a lock (or lost a deadlock)
+       * on every attempt. The SQL is fine and the fix is a redeploy once the
+       * other transaction is gone; `message` says so in words.
+       */
+      lockWait?: {
+        kind: "lock-wait-timeout" | "deadlock";
+        /** A schema change, so the wait was on the table's metadata lock; otherwise a row lock. */
+        ddl: boolean;
+        timeoutSeconds: number;
+        attempts: number;
+        statement: string;
+      };
     }
   | {
       kind: "tamper-detected";
@@ -253,13 +408,20 @@ async function verifyAndBackfillChecksums(
  * parameter (rather than only the module constant) so a test can prove the
  * give-up path without waiting ten minutes for it: pass a small number and
  * hold the same lock name from a second connection first.
+ *
+ * `lockWait` overrides the per-statement lock-wait cap the same way, for the
+ * same reason (see MIGRATION_LOCK_WAIT_SECONDS). Every statement runs on `conn`
+ * itself, one connection and never a pool, so the cap set on it is the cap
+ * every statement meets.
  */
 export async function applyPending(
   conn: mysql.Connection,
   dir: string = MIGRATIONS_DIR,
   log: (line: string) => void = () => {},
   lockTimeoutSeconds: number = MIGRATION_LOCK_TIMEOUT_SECONDS,
+  lockWait: LockWaitOptions = {},
 ): Promise<ApplyResult> {
+  const lw = resolveLockWait(lockWait);
   const dbName = await currentDatabaseName(conn);
   const lockName = `village-migrate:${dbName}`.slice(0, 64);
   const gotLock = await acquireMigrationLock(conn, lockName, lockTimeoutSeconds);
@@ -278,7 +440,44 @@ export async function applyPending(
       failedDetail: { kind: "lock-timeout", lockName, timeoutSeconds: lockTimeoutSeconds, message },
     };
   }
+  let restoreLockWaits: (() => Promise<void>) | null = null;
   try {
+    // FIRST, before any statement can touch a table: cap how long one may wait
+    // for a lock. Taken after GET_LOCK, so the runner's own lock keeps its own
+    // timeout and is never shortened by this.
+    restoreLockWaits = await capLockWaits(conn, lw.timeoutSeconds);
+    log(
+      `  lock waits: ${lw.timeoutSeconds}s per statement, ${lw.attempts} attempt(s), ` +
+        `${lw.retryBudget} retries for this run`,
+    );
+
+    let retriesLeft = lw.attempts > 1 ? lw.retryBudget : 0;
+    let lastAttempts = 1;
+    /**
+     * Run one query, and run it again if it only lost a lock: a wait that ran
+     * out or a deadlock. Wraps each query on its own, so retrying a progress
+     * write can never run the migration statement before it a second time.
+     */
+    const withLockRetry = async <T>(what: string, query: () => Promise<T>): Promise<T> => {
+      for (let attempt = 1; ; attempt += 1) {
+        lastAttempts = attempt;
+        try {
+          return await query();
+        } catch (err) {
+          const conflict = lockConflictOf(err);
+          if (!conflict || attempt >= lw.attempts || retriesLeft <= 0) throw err;
+          retriesLeft -= 1;
+          const pauseMs = lw.backoffMs[Math.min(attempt - 1, lw.backoffMs.length - 1)] ?? 0;
+          log(
+            `  WAIT: ${what} ${
+              conflict === "deadlock" ? "lost a deadlock" : `waited ${lw.timeoutSeconds}s for a lock and gave up`
+            } (attempt ${attempt} of ${lw.attempts}); trying again in ${pauseMs / 1000}s`,
+          );
+          await new Promise((r) => setTimeout(r, pauseMs));
+        }
+      }
+    };
+
     await conn.query(
       "CREATE TABLE IF NOT EXISTS `_migrations_applied` (" +
         "`filename` varchar(255) NOT NULL, " +
@@ -322,46 +521,99 @@ export async function applyPending(
           : `  RUN:  ${file} (${parts.length} statements)`,
       );
       let i = startAt;
+      // Which query was in flight when something threw: the statement itself,
+      // or the bookkeeping after it. They leave the ledger in different states.
+      let phase: "statement" | "progress" | "completion" = "statement";
       try {
         for (; i < parts.length; i += 1) {
-          await conn.query(parts[i]);
+          phase = "statement";
+          await withLockRetry(`${file} statement ${i + 1} of ${parts.length}`, () => conn.query(parts[i]));
           // Record progress after EACH statement, so a failure half-way through
           // is resumable. Without this, a file that failed on statement 7 of 12
           // replayed statements 1-6 on every subsequent boot — and since those
           // are usually non-idempotent DDL, the deployment bricked permanently
-          // on an error about a column that already exists.
-          await recordProgress(conn, file, i + 1);
+          // on an error about a column that already exists. A statement that
+          // THREW never reaches this line, so a timed-out statement is never
+          // recorded as done: the offset stays at the last one that ran.
+          phase = "progress";
+          await withLockRetry(`recording ${file} statement ${i + 1} as done`, () => recordProgress(conn, file, i + 1));
         }
+        phase = "completion";
         if (await hasChecksumColumn(conn)) {
-          await conn.query("INSERT INTO `_migrations_applied` (filename, checksum) VALUES (?, ?)", [
-            file,
-            sha256Hex(bytes),
-          ]);
+          await withLockRetry(`recording ${file} as applied`, () =>
+            conn.query("INSERT INTO `_migrations_applied` (filename, checksum) VALUES (?, ?)", [file, sha256Hex(bytes)]),
+          );
         } else {
-          await conn.query("INSERT INTO `_migrations_applied` (filename) VALUES (?)", [file]);
+          await withLockRetry(`recording ${file} as applied`, () =>
+            conn.query("INSERT INTO `_migrations_applied` (filename) VALUES (?)", [file]),
+          );
         }
         // Completion is recorded in the ledger; the partial row has done its
         // job and would otherwise mislead a later reader.
-        await conn.query("DELETE FROM `_migrations_partial` WHERE filename = ?", [file]);
+        await withLockRetry(`clearing ${file}'s progress row`, () =>
+          conn.query("DELETE FROM `_migrations_partial` WHERE filename = ?", [file]),
+        );
         result.applied.push(file);
         log(`  DONE: ${file}`);
       } catch (err: any) {
         // Stop on first failure: later migrations were written against a schema
         // this one was supposed to produce.
-        result.failed = `${file}: ${err.message}`;
+        const statementIndex = Math.min(i + 1, parts.length);
+        const conflict = lockConflictOf(err);
+        let message: string = err.message;
+        // Every rewritten message names the file itself; the driver's own does not.
+        let namesFile = true;
+        let lockWaitDetail: Extract<ApplyFailureDetail, { kind: "migration-failed" }>["lockWait"];
+        if (phase === "statement" && conflict) {
+          const ddl = isDdl(parts[i]);
+          const head = statementHead(parts[i]);
+          lockWaitDetail = { kind: conflict, ddl, timeoutSeconds: lw.timeoutSeconds, attempts: lastAttempts, statement: head };
+          const what =
+            conflict === "deadlock"
+              ? `lost a deadlock against another connection on each of ${lastAttempts} attempt(s)`
+              : `gave up waiting for ${ddl ? "the table's metadata lock" : "a row lock"} after ` +
+                `${lastAttempts} attempt(s) of ${lw.timeoutSeconds}s each`;
+          const spent = lastAttempts < lw.attempts ? " This boot's retry budget was already spent." : "";
+          const resume =
+            i === 0
+              ? `No statement of this file has run, and the next boot starts it at statement 1.`
+              : `${i === 1 ? "Statement 1" : `Statements 1 to ${i}`} of this file ran and ${i === 1 ? "is" : "are"} ` +
+                `recorded, and the next boot resumes at statement ${i + 1}.`;
+          message =
+            `${file}, statement ${statementIndex} of ${parts.length}, ${what} (${err.code ?? "lock"}: ${err.message}).${spent} ` +
+            `The SQL is fine. Another connection, usually a transaction left open on the same table, held ` +
+            (ddl
+              ? `a lock on it for the whole wait, and a schema change needs the table to itself for a moment. `
+              : `the rows this statement updates for the whole wait. `) +
+            `This statement changed nothing. ${resume} Redeploy to retry. If it stops here again, find the long ` +
+            `transaction first (SHOW PROCESSLIST, information_schema.INNODB_TRX). Statement: ${head}`;
+        } else if (phase === "progress") {
+          message =
+            `${file}: statement ${statementIndex} of ${parts.length} ran, and recording it as done then failed ` +
+            `(${err.message}). The next boot runs statement ${statementIndex} again.`;
+        } else if (phase === "completion") {
+          message =
+            `${file}: all ${parts.length} statements ran, and the bookkeeping after them then failed ` +
+            `(${err.message}). No statement runs again: the next boot finds the file complete, or finishes recording it.`;
+        } else {
+          namesFile = false;
+        }
+        result.failed = namesFile ? message : `${file}: ${message}`;
         result.failedDetail = {
           kind: "migration-failed",
           file,
-          statementIndex: i + 1,
+          statementIndex,
           statementsTotal: parts.length,
-          message: err.message,
+          message,
+          ...(lockWaitDetail ? { lockWait: lockWaitDetail } : {}),
         };
-        log(`  FAIL: ${file} -> ${err.message} (statement ${i + 1} of ${parts.length})`);
+        log(`  FAIL: ${file} -> ${message} (statement ${statementIndex} of ${parts.length})`);
         break;
       }
     }
     return result;
   } finally {
+    if (restoreLockWaits) await restoreLockWaits();
     await releaseMigrationLock(conn, lockName);
   }
 }
