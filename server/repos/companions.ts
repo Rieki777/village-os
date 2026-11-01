@@ -290,6 +290,25 @@ export async function questionsShownToMemberOn(pool: Q, ownerUserId: string, day
 }
 
 /**
+ * Who speaks for the circle a budget belongs to: the live member holders of
+ * its active seats flagged `represents_circle` (the third door of
+ * `mayDeclare`, server/lib/orgChart.ts). Null for a budget that does not
+ * exist or is an example.
+ */
+export async function circleSpeakersForBudget(pool: Q, budgetId: string): Promise<{ circleId: string; holders: string[] } | null> {
+  const [budgets] = await pool.query<RowDataPacket[]>("SELECT circle_id FROM circle_budgets WHERE id = ? AND is_example = 0", [budgetId]);
+  if (!budgets[0]) return null;
+  const circleId = String(budgets[0].circle_id);
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT DISTINCT a.user_id FROM org_role_assignments a JOIN org_roles r ON r.id = a.org_role_id " +
+      "WHERE r.circle_id = ? AND r.active = 1 AND r.is_example = 0 AND r.represents_circle = 1 " +
+      "AND a.ended_at IS NULL AND a.holder_kind = 'member' AND a.is_example = 0 AND a.user_id IS NOT NULL ORDER BY a.user_id",
+    [circleId],
+  );
+  return { circleId, holders: rows.map((r) => String(r.user_id)) };
+}
+
+/**
  * Held questions that carry their evidence, oldest first. A question held for
  * want of a source never opens, so it is never listed here.
  */
