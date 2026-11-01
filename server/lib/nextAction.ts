@@ -64,6 +64,21 @@ function applies(when: NextActionRule["when"], f: NextActionFacts): boolean {
   }
 }
 
+/**
+ * BEFORE LAUNCH, A FOUNDER'S NEXT STEP IS THE VILLAGE ITSELF. The member rules
+ * above told a founder of a village with no members yet to do the training,
+ * which is a step for someone joining, not for someone still setting the place
+ * up (the founder-path pass of 2026-11-01). While founder power stands (the
+ * village has not voted to start its Game), a founder or admin is sent to the
+ * setup game, which lists everything the village still needs; after launch
+ * they get the member rules like everyone else.
+ */
+export const FOUNDER_SETUP_STEP = { id: "founder-setup", label: "Set up your village", href: "/setup-game" } as const;
+
+export function founderStepFor(role: unknown, founderPowerStands: boolean): typeof FOUNDER_SETUP_STEP | null {
+  return founderPowerStands && (role === "founder" || role === "admin") ? FOUNDER_SETUP_STEP : null;
+}
+
 /** The first rule that applies, in order; the last rule when none does. */
 export function pickNextAction<R extends NextActionRule>(rules: readonly R[], facts: NextActionFacts): R {
   return rules.find((rule) => applies(rule.when, facts)) ?? rules[rules.length - 1];
