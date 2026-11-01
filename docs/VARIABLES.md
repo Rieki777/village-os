@@ -3912,7 +3912,7 @@ Also put the four midpoints between the solstices and equinoxes on the calendar.
 
 ### Your village's own seasons
 
-The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Dry: 12-01, Green: 05-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.
+The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Planting: 03-01, Harvest: 09-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.
 
 | Fact | Value |
 | --- | --- |
