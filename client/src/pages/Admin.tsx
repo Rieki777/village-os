@@ -47,7 +47,8 @@ import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
-import { putSubmissionStatus } from "@/components/admin/submissionStatus";
+import { FORM_TYPES, putSubmissionStatus } from "@/components/admin/submissionStatus";
+import OpenProposalsPanel from "@/components/admin/OpenProposalsPanel";
 import ProposalAcceptCash from "@/components/admin/ProposalAcceptCash";
 import LandTab from "@/components/admin/LandTab";
 import GameRolesTab from "@/components/admin/GameRolesTab";
@@ -85,13 +86,6 @@ import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
 import { CommsJourneys, CommsLetters, CommsOverview, CommsPeople, CommsSentMail, CommsSettings, CommsWords, EmailField } from "@/components/admin/comms";
 import { ExampleChip, ExamplesBanner, forgetExamplesCache } from "@/components/ExamplesBanner";
-// visit-inquiry and membership-508 were missing, and they are the two highest-value
-// submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
-// membership. Both were reachable only by scrolling "All types". The strings are
-// the ones the pages actually POST, from Visit.tsx and LoveLetter.tsx.
-// membership-request is somebody with no invitation asking to join, from
-// RequestMembership.tsx (Rye, 2026-09-09: requests sit in admin for a team to talk to them).
-const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact", "comms-change"] as const;
 
 /**
  * THE SERVER'S OWN SENTENCE, WHEN IT HAS ONE.
@@ -793,6 +787,7 @@ export function SubmissionsTab({ password }: { password: string }) {
         </div>
       </div>
 
+      <OpenProposalsPanel password={password} />
       {loading ? (
         <div className="text-center py-12 text-gray-400">Loading...</div>
       ) : submissions.length === 0 ? (
