@@ -46,8 +46,6 @@ import {
   type TemplateRoomView,
   cleanServesGoal,
   groupTensions,
-  resolveGoal,
-  type SeasonGoalRef,
   weekOf,
   type SeasonPriorityItem,
   type SeasonRef,
@@ -56,7 +54,6 @@ import {
   type SeasonWin,
 } from "../../shared/sessionTemplates";
 import { seasonEndInstant } from "./governanceWindows";
-import { assignGoalIds } from "./seasonGoals";
 import { cleanLine, cleanText } from "../../shared/sessions";
 import { isPresentAt, mapSession, namesFor, rolesIn, type MemberLookup, type Outcome, type Refusal } from "./liveSessions";
 
@@ -266,15 +263,8 @@ const mapPriority = (r: RowDataPacket): PriorityRow => ({
   text: String(r.text ?? ""),
   position: Number(r.position ?? 1),
   outcome: isPriorityOutcome(r.outcome) ? r.outcome : null,
-  servesGoalId: r.serves_goal_id == null || r.serves_goal_id === "" ? null : String(r.serves_goal_id),
   servesGoal: r.serves_goal == null || r.serves_goal === "" ? null : String(r.serves_goal),
 });
-
-/** A link's words as the season says them now, when it still holds the goal; else the words it was linked with. */
-function currentWords<T extends { servesGoalId: string | null; servesGoal: string | null }>(row: T, goals: readonly SeasonGoalRef[]): T {
-  const goal = resolveGoal(goals, row.servesGoalId, row.servesGoal);
-  return goal ? { ...row, servesGoalId: goal.id, servesGoal: goal.text } : row;
-}
 
 /** The session of the fed-from template that this one reads back: the latest opened before it. */
 async function fedFromSession(q: Pool | PoolConnection, template: SessionTemplate | null, sessionId: number) {
@@ -372,13 +362,9 @@ export async function roomView(
     text: String(r.text ?? ""),
     speaker: Number(r.speaker_no) > 0 ? nameOf(Number(r.speaker_no)) : null,
     broughtAs: intOrNull(r.library_id),
-    servesGoalId: r.serves_goal_id == null || r.serves_goal_id === "" ? null : String(r.serves_goal_id),
     servesGoal: r.serves_goal == null || r.serves_goal === "" ? null : String(r.serves_goal),
     at: toIso(r.created_at),
   }));
-  const goals = season?.goals ?? [];
-  const words = <T extends { servesGoalId: string | null; servesGoal: string | null }>(rows: T[]) => rows.map((r) => currentWords(r, goals));
-  const readBack = (r: SeriesReadBack | null) => (r ? { ...r, rows: words(r.rows) } : null);
   return {
     template: f.template
       ? { id: f.template.id, name: f.template.name, category: f.template.category, summary: f.template.summary, flow: f.template.flow }
@@ -388,10 +374,10 @@ export async function roomView(
     open: f.s.status === "open",
     here: hereNos.map((no) => ({ no, name: nameOf(no) })),
     stick: stick.order.length ? { people: stick.order.map((no) => ({ no, name: nameOf(no) })), holder, next, rounds: stick.rounds } : null,
-    priorities: f.template ? words((await repo.priorityRows(pool, sessionId)).map(mapPriority)) : [],
-    review: readBack(review),
-    carried: readBack(carried),
-    shares: words(shares),
+    priorities: f.template ? (await repo.priorityRows(pool, sessionId)).map(mapPriority) : [],
+    review,
+    carried,
+    shares,
     season: f.template && season && season.goals.length ? season : null,
   };
 }
@@ -440,11 +426,11 @@ export async function addPriority(
   sessionId: number,
   who: RoomAsker,
   raw: unknown,
-  goals: readonly SeasonGoalRef[] = [],
+  goals: readonly string[] = [],
   now = new Date(),
 ): Promise<Outcome<null>> {
   const b = bodyOf(raw);
-  const serves = cleanServesGoal(b, goals);
+  const serves = cleanServesGoal(b.servesGoal, goals);
   if (!serves.ok) return refuse(400, R.goalUnknown);
   return inTemplatedRoom(pool, sessionId, who, true, async (conn, f) => {
     const mine = (await repo.priorityRows(conn, sessionId)).map(mapPriority);
@@ -455,31 +441,13 @@ export async function addPriority(
       const from = carried?.rows.find((p) => p.id === Number(b.fromCarried));
       if (!from) return refuse(404, R.priorityNotFound);
       // A priority taken up again keeps the season priority it served, unless the room names another.
-      const kept = serves.value ?? resolveGoal(goals, from.servesGoalId, from.servesGoal);
-      await repo.insertPriority(conn, {
-        sessionId,
-        position,
-        text: from.text,
-        authorNo: f.no,
-        carriedFromId: from.id,
-        servesGoal: kept?.text ?? from.servesGoal,
-        servesGoalId: kept?.id ?? from.servesGoalId,
-        now,
-      });
+      const servesGoal = serves.value ?? from.servesGoal;
+      await repo.insertPriority(conn, { sessionId, position, text: from.text, authorNo: f.no, carriedFromId: from.id, servesGoal, now });
       return done(null);
     }
     const text = cleanLine(b.text, TEMPLATE_LIMITS.priorityText);
     if (!text) return refuse(400, R.priorityNeeded);
-    await repo.insertPriority(conn, {
-      sessionId,
-      position,
-      text,
-      authorNo: f.no,
-      carriedFromId: null,
-      servesGoal: serves.value?.text ?? null,
-      servesGoalId: serves.value?.id ?? null,
-      now,
-    });
+    await repo.insertPriority(conn, { sessionId, position, text, authorNo: f.no, carriedFromId: null, servesGoal: serves.value, now });
     return done(null);
   });
 }
@@ -495,7 +463,7 @@ export async function patchPriority(
   who: RoomAsker,
   priorityId: number,
   raw: unknown,
-  goals: readonly SeasonGoalRef[] = [],
+  goals: readonly string[] = [],
   now = new Date(),
 ): Promise<Outcome<null>> {
   const b = bodyOf(raw);
@@ -508,8 +476,8 @@ export async function patchPriority(
         await repo.deletePriority(conn, priorityId);
         return done(null);
       }
-      if ("servesGoalId" in b || "servesGoal" in b) {
-        const serves = cleanServesGoal(b, goals);
+      if ("servesGoal" in b) {
+        const serves = cleanServesGoal(b.servesGoal, goals);
         if (!serves.ok) return refuse(400, R.goalUnknown);
         await repo.writePriorityServes(conn, priorityId, serves.value, now);
         return done(null);
@@ -538,12 +506,12 @@ export async function addShare(
   sessionId: number,
   who: RoomAsker,
   raw: unknown,
-  goals: readonly SeasonGoalRef[] = [],
+  goals: readonly string[] = [],
   now = new Date(),
 ): Promise<Outcome<null>> {
   const b = bodyOf(raw);
   if (!isShareKind(b.kind)) return refuse(400, R.shareKind);
-  const serves = cleanServesGoal(b, goals);
+  const serves = cleanServesGoal(b.servesGoal, goals);
   if (!serves.ok) return refuse(400, R.goalUnknown);
   const kind = b.kind;
   const text = cleanText(b.text, TEMPLATE_LIMITS.shareText);
@@ -553,7 +521,7 @@ export async function addShare(
     const stick = readStick(f.stickRaw);
     const named = typeof b.speakerNo === "number" && stick.order.includes(b.speakerNo) ? b.speakerNo : null;
     const speakerNo = named ?? stickHolders(stick).holder ?? 0;
-    await repo.insertShare(conn, { sessionId, kind, text, speakerNo, authorNo: f.no, servesGoal: serves.value?.text ?? null, servesGoalId: serves.value?.id ?? null, now });
+    await repo.insertShare(conn, { sessionId, kind, text, speakerNo, authorNo: f.no, servesGoal: serves.value, now });
     return done(null);
   });
 }
@@ -565,45 +533,14 @@ export async function patchShare(
   who: RoomAsker,
   shareId: number,
   raw: unknown,
-  goals: readonly SeasonGoalRef[] = [],
+  goals: readonly string[] = [],
 ): Promise<Outcome<null>> {
-  const serves = cleanServesGoal(bodyOf(raw), goals);
+  const serves = cleanServesGoal(bodyOf(raw).servesGoal, goals);
   if (!serves.ok) return refuse(400, R.goalUnknown);
   return inTemplatedRoom(pool, sessionId, who, false, async (conn) => {
     if (!(await repo.shareRow(conn, sessionId, shareId, true)).length) return refuse(404, R.shareNotFound);
     await repo.writeShareServes(conn, shareId, serves.value);
     return done(null);
-  });
-}
-
-/**
- * Name, change or clear the season priority a WIN on an agenda item serves
- * (0298). The room's own entries, any session, templated or not: anybody in
- * the open room, the people who may add a win there. Only a win serves the
- * season. Answers with every win's link in that session.
- */
-export async function patchEntryServes(
-  pool: Pool,
-  sessionId: number,
-  who: RoomAsker,
-  entryId: number,
-  raw: unknown,
-  goals: readonly SeasonGoalRef[] = [],
-): Promise<Outcome<{ entryLinks: Record<number, string> }>> {
-  const serves = cleanServesGoal(bodyOf(raw), goals);
-  if (!serves.ok) return refuse(400, R.goalUnknown);
-  return rooms.inTransaction(pool, async (conn) => {
-    const f = await roomFacts(conn, sessionId, who, true);
-    if (!f) return refuse(404, R.roomNotFound);
-    if (f.s.status !== "open") return refuse(409, R.roomClosed);
-    if (!f.joined) return refuse(403, R.joinFirst);
-    const rows = await repo.entryKindRow(conn, sessionId, entryId, true);
-    if (!rows.length) return refuse(404, R.entryNotFound);
-    if (String(rows[0].kind) !== "win") return refuse(400, R.onlyWins);
-    await repo.writeEntryServes(conn, entryId, serves.value);
-    // The room's own view reads the link off the entry, so its version moves and every open page sees it.
-    await rooms.bumpVersion(conn, sessionId);
-    return done({ entryLinks: Object.fromEntries((await repo.entryLinkRows(conn, sessionId)).map((r) => [Number(r.id), String(r.serves_goal_id)])) });
   });
 }
 
@@ -647,7 +584,7 @@ export interface SeasonEntry {
   focus: string;
   startsOn: string;
   endsOn: string | null;
-  goals: { id: string; text: string; done: boolean }[];
+  goals: { text: string; done: boolean }[];
 }
 
 /** The season document's list, read tolerantly. */
@@ -660,18 +597,17 @@ export function readSeasons(raw: unknown): SeasonEntry[] {
       focus: typeof x.focus === "string" ? x.focus : "",
       startsOn: String(x.startsOn),
       endsOn: typeof x.endsOn === "string" && x.endsOn ? x.endsOn : null,
-      // Ids come with the document since 0298; one read before then derives them the same way.
-      goals: assignGoalIds(Array.isArray(x.goals) ? x.goals : [])
-        .filter((g) => g.text.trim())
-        .map((g) => ({ id: g.id, text: g.text.trim(), done: g.done })),
+      goals: (Array.isArray(x.goals) ? x.goals : [])
+        .filter((g: any) => g && typeof g.text === "string" && g.text.trim())
+        .map((g: any) => ({ text: String(g.text).trim(), done: g.done === true })),
     }))
     .sort((a, b) => a.startsOn.localeCompare(b.startsOn));
 }
 
-/** The running season as a room reads it: its id, name and its goals' ids and words. */
+/** The running season as a room reads it: its id, name and the words of its goals. */
 export function seasonRefOf(current: unknown): SeasonRef | null {
   const [s] = readSeasons(current ? [current] : []);
-  return s ? { id: s.id, name: s.name, goals: s.goals.map((g) => ({ id: g.id, text: g.text })) } : null;
+  return s ? { id: s.id, name: s.name, goals: s.goals.map((g) => g.text) } : null;
 }
 
 /**
@@ -704,47 +640,25 @@ export async function seasonView(
   const endDay = season.endsOn ?? seasons[i + 1]?.startsOn ?? null;
   const to = (endDay ? seasonEndInstant(endDay, tz) : null) ?? new Date("9999-12-31T00:00:00Z");
 
-  // Every link finds its goal by id, or, for a link from before ids, by its words.
-  const refs: SeasonGoalRef[] = season.goals.map((g) => ({ id: g.id, text: g.text }));
-  const text = (v: unknown) => (v == null || v === "" ? null : String(v));
-  const goalOf = (r: RowDataPacket) => resolveGoal(refs, text(r.serves_goal_id), text(r.serves_goal));
-
-  type Linked<T> = T & { goalId: string | null; linkedWords: string | null };
-  const priorities: Linked<SeasonPriorityItem>[] = (await repo.prioritiesInWindow(pool, from, to)).map((r) => ({
+  const priorities: (SeasonPriorityItem & { servesGoal: string | null })[] = (await repo.prioritiesInWindow(pool, from, to)).map((r) => ({
     text: String(r.text ?? ""),
     outcome: isPriorityOutcome(r.outcome) ? r.outcome : null,
+    servesGoal: r.serves_goal == null || r.serves_goal === "" ? null : String(r.serves_goal),
     sessionId: Number(r.session_id),
     sessionTitle: String(r.session_title ?? ""),
     at: toIso(r.session_at),
-    goalId: goalOf(r)?.id ?? null,
-    linkedWords: text(r.serves_goal),
   }));
   const shareRows = await repo.sharesInWindow(pool, ["win", "tension", "not_working"], from, to);
-  const winOf = (r: RowDataPacket, source: SeasonWin["source"]): Linked<SeasonWin> => {
-    const goal = goalOf(r);
-    return {
-      text: String(r.text ?? ""),
-      servesGoal: goal?.text ?? text(r.serves_goal),
-      source,
-      sessionTitle: String(r.session_title ?? ""),
-      at: toIso(r.session_at),
-      goalId: goal?.id ?? null,
-      linkedWords: text(r.serves_goal),
-    };
-  };
-  // Wins from a meeting's wins section and from agenda items alike, in the order their meetings were held.
-  const wins = [
-    ...shareRows.filter((r) => r.kind === "win").map((r) => winOf(r, "meeting")),
-    ...(await repo.itemWinsInWindow(pool, from, to)).map((r) => winOf(r, "item")),
-  ].sort((a, b) => a.at.localeCompare(b.at));
-  const plainPriority = ({ goalId: _g, linkedWords: _w, ...p }: Linked<SeasonPriorityItem>): SeasonPriorityItem => p;
-  const plainWin = ({ goalId: _g, linkedWords: _w, ...w }: Linked<SeasonWin>): SeasonWin => w;
+  const wins: SeasonWin[] = shareRows
+    .filter((r) => r.kind === "win")
+    .map((r) => ({ text: String(r.text ?? ""), servesGoal: r.serves_goal == null || r.serves_goal === "" ? null : String(r.serves_goal), sessionTitle: String(r.session_title ?? ""), at: toIso(r.session_at) }));
+  const goalTexts = new Set(season.goals.map((g) => g.text));
+  const strip = ({ servesGoal: _drop, ...p }: SeasonPriorityItem & { servesGoal: string | null }): SeasonPriorityItem => p;
   const goals = season.goals.map((g) => ({
-    id: g.id,
     text: g.text,
     done: g.done,
-    priorities: priorities.filter((p) => p.goalId === g.id).map(plainPriority),
-    wins: wins.filter((w) => w.goalId === g.id).map(plainWin),
+    priorities: priorities.filter((p) => p.servesGoal === g.text).map(strip),
+    wins: wins.filter((w) => w.servesGoal === g.text),
   }));
 
   // Wins over time, a row per week that had any, oldest first. Everything is dated by the
@@ -753,10 +667,11 @@ export async function seasonView(
   const week = (iso: string): SeasonWeek => {
     const k = weekOf(iso);
     let w = weeks.get(k);
-    if (!w) weeks.set(k, (w = { weekOf: k, wins: [], prioritiesSet: 0, prioritiesDone: 0 }));
+    if (!w) weeks.set(k, (w = { weekOf: k, wins: [], itemWins: 0, prioritiesSet: 0, prioritiesDone: 0 }));
     return w;
   };
-  for (const w of wins) week(w.at).wins.push(plainWin(w));
+  for (const w of wins) week(w.at).wins.push(w);
+  for (const r of await repo.itemWinsInWindow(pool, from, to)) week(toIso(r.session_at)).itemWins++;
   for (const p of priorities) {
     const w = week(p.at);
     w.prioritiesSet++;
@@ -765,89 +680,25 @@ export async function seasonView(
 
   // Tensions from Heart share: what was named a tension, or as not working, around a talking stick.
   const groups = groupTensions(
-    shareRows
-      .filter((r) => r.kind !== "win")
-      .map((r) => ({
-        shareId: Number(r.id),
-        text: String(r.text ?? ""),
-        sessionId: Number(r.session_id),
-        at: toIso(r.session_at),
-        sameAsId: intOrNull(r.same_as_id),
-        standsAlone: Number(r.stands_alone) === 1,
-      })),
+    shareRows.filter((r) => r.kind !== "win").map((r) => ({ text: String(r.text ?? ""), sessionId: Number(r.session_id), at: toIso(r.session_at) })),
   );
-  const wereIn = await sessionsSeen(pool, viewer, groups.flatMap((g) => g.sessionIds));
-  // The words reach people who were in a Heart share the tension came up in; each wording only for its own Heart share.
-  const tensions = groups.map((g) => {
-    const seen = g.sessionIds.some((id) => wereIn(id));
-    return { ...g, text: seen ? g.text : null, members: seen ? (g.members ?? []).filter((m) => wereIn(m.sessionId)) : null };
-  });
+  const wereIn = viewer.admin || viewer.no == null
+    ? null
+    : new Set((await repo.sessionsWith(pool, viewer.no, Array.from(new Set(groups.flatMap((g) => g.sessionIds))))).map((r) => Number(r.session_id)));
+  const tensions = groups.map((g) => ({
+    ...g,
+    text: viewer.admin || (wereIn && g.sessionIds.some((id) => wereIn.has(id))) ? g.text : null,
+  }));
 
   return done({
     season: { id: season.id, name: season.name, focus: season.focus, startsOn: season.startsOn, endsOn: endDay },
     seasons: seasons.map((x) => ({ id: x.id, name: x.name, startsOn: x.startsOn })),
     goals,
-    unlinked: priorities.filter((p) => !p.goalId).map((p) => ({ ...plainPriority(p), servedGoal: p.linkedWords })),
-    unlinkedWins: wins.filter((w) => !w.goalId).map(plainWin),
+    unlinked: priorities.filter((p) => !p.servesGoal || !goalTexts.has(p.servesGoal)).map(strip),
+    unlinkedWins: wins.filter((w) => !w.servesGoal || !goalTexts.has(w.servesGoal)),
     weeks: Array.from(weeks.values()).sort((a, b) => a.weekOf.localeCompare(b.weekOf)),
     tensions,
   });
-}
-
-/**
- * After the season document is saved: every link to a goal takes the goal's
- * words as the season says them now (0298). Called by the season's save door
- * (server/routes/seasons.ts), so a goal reworded and later removed leaves its
- * links saying what it was last called.
- */
-export async function refreshLinkedGoalWords(pool: Pool, seasons: unknown): Promise<void> {
-  for (const s of readSeasons(seasons)) {
-    for (const g of s.goals) await repo.refreshGoalWords(pool, g.id, g.text);
-  }
-}
-
-/** Whether a viewer was in a session: an admin reads all; anybody else, the ones they joined. */
-async function sessionsSeen(pool: Pool | PoolConnection, viewer: RoomAsker, sessionIds: readonly number[]): Promise<(id: number) => boolean> {
-  if (viewer.admin) return () => true;
-  if (viewer.no == null || !sessionIds.length) return () => false;
-  const ids = new Set((await repo.sessionsWith(pool, viewer.no, Array.from(new Set(sessionIds)))).map((r) => Number(r.session_id)));
-  return (id) => ids.has(id);
-}
-
-/**
- * Say how a Heart share tension groups (0298): `{ sameAsId }` joins it to
- * another tension (null lets go), `{ standsAlone }` keeps the word guess away
- * from it. Only people who were in that Heart share, and admins; joining two
- * needs both. A tension is something captured as a tension or as not working.
- */
-export async function regroupTension(pool: Pool, shareId: number, raw: unknown, viewer: RoomAsker): Promise<Outcome<null>> {
-  const b = bodyOf(raw);
-  const one = await repo.shareById(pool, shareId);
-  const isTension = (r: RowDataPacket | undefined) => !!r && (r.kind === "tension" || r.kind === "not_working");
-  if (!isTension(one[0])) return refuse(404, R.tensionNotFound);
-  if ("standsAlone" in b) {
-    const seen = await sessionsSeen(pool, viewer, [Number(one[0].session_id)]);
-    if (!seen(Number(one[0].session_id))) return refuse(403, R.tensionNotYours);
-    await repo.writeStandsAlone(pool, shareId, b.standsAlone === true);
-    if (b.standsAlone === true) await repo.releaseSameAs(pool, shareId);
-    return done(null);
-  }
-  if (!("sameAsId" in b)) return refuse(400, R.tensionNotFound);
-  if (b.sameAsId == null) {
-    const seen = await sessionsSeen(pool, viewer, [Number(one[0].session_id)]);
-    if (!seen(Number(one[0].session_id))) return refuse(403, R.tensionNotYours);
-    await repo.writeSameAs(pool, shareId, null);
-    return done(null);
-  }
-  const otherId = Number(b.sameAsId);
-  const other = Number.isInteger(otherId) && otherId > 0 && otherId !== shareId ? await repo.shareById(pool, otherId) : [];
-  if (!isTension(other[0])) return refuse(404, R.tensionNotFound);
-  const seen = await sessionsSeen(pool, viewer, [Number(one[0].session_id), Number(other[0].session_id)]);
-  if (!seen(Number(one[0].session_id)) || !seen(Number(other[0].session_id))) return refuse(403, R.tensionNotYours);
-  await repo.writeSameAs(pool, shareId, otherId);
-  // The other one is joined too, so a "stands alone" on it gives way to the people's word.
-  await repo.writeStandsAlone(pool, otherId, false);
-  return done(null);
 }
 
 // ── One member: the export and the erasure ──────────────────────────────────

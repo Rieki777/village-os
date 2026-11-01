@@ -72,7 +72,6 @@ import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, 
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerBrochurePagesRoutes } from "./routes/brochurePages";
-import { register as registerPeopleLock, ballotCardForViewer, ballotForViewer, firstNameOf, hiddenFromStranger } from "./routes/peopleLock";
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -85,7 +84,6 @@ import { register as registerSignUpRoutes } from "./routes/register";
 import { register as registerInviteRoutes } from "./routes/invites";
 import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
-import { register as registerVerifyEmailRoutes } from "./routes/verifyEmail";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
@@ -191,7 +189,6 @@ import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerCompanionRoutes } from "./routes/companions";
-import { register as registerMemberAskRoutes } from "./routes/memberAsks";
 import { register as registerStockAvatarRoutes, STOCK_AVATAR_DIR } from "./routes/stockAvatars";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
@@ -436,7 +433,7 @@ import {
   staysForUser,
   staysOpenState,
 } from "./lib/stays";
-import { baseRpcUrl, createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
+import { createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
 import { allExits, blockingStates, cancelExit, createExit, exitById, exitOpenState, openExitFor, sweepBalances } from "./lib/exit";
 import {
   DEFAULT_EXIT_POLICY,
@@ -642,7 +639,6 @@ import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { grantCashPayToTreasury, seedStarterRoles } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
-import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
@@ -661,7 +657,7 @@ import {
 } from "./lib/agentProfile";
 // ── END LANE L6 IMPORTS ─────────────────────────────────────────────────────
 import {
-  allSecretStatuses, BASE_RPC_CARD, ROOT_SLOT_CARDS,
+  allSecretStatuses, ROOT_SLOT_CARDS,
   loadSecrets,
   NO_VILLAGE_SECRETS_KEY_SENTENCE,
   putSecret,
@@ -6489,7 +6485,6 @@ async function startServer() {
   app.use(["/api/map/draft", "/api/map/publish", "/api/agent/v1/map/draft"], express.json({ limit: SCENE_BODY_LIMIT }));
 
   app.use(express.json({ limit: "1mb" }));
-  registerPeopleLock(app, { authedUser, getPool, boolVar });
 
   // ── LANE L6 ZONE START: your agent ──────────────────────────────────────────
   //
@@ -7956,8 +7951,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       return "The email provider refused the message, so nothing was sent. Open the claim link below yourself, and check the server log for the provider's own reason.";
     };
     if (user) {
-      // R104: a password nobody proved here may be a stranger's, planted at this address first. raiseToFounder ends it (and its sessions and agent reach) in the write that raises the role, and the claim link below then goes to the address.
-      user = (await raiseToFounder(members, user, (id, change) => withAgentReachEnded(getPool(), id, change, { notify }).then((r) => r.changed))) ?? user;
+      await members.update(user.id, (u: any) => { u.role = "founder"; });
       // Expired-link recovery: an account created by bootstrap that never set a
       // password cannot log in and cannot ask for a reset. Re-running bootstrap
       // (break-glass path) re-sends a fresh claim link for exactly that case.
@@ -8052,19 +8046,22 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       kind: "audit", text, actorUserId: userId, entityType: "user", entityRef: userId, audience: "admin",
     });
   };
-  const letters = { authSecret: AUTH_TOKEN_SECRET, sendEmail: sendResendEmail, escapeHtml, origin: notifyDeps.origin, projectName: () => mergedConfig().project.name }; // every auth letter's five
   registerRecoveryRoutes(app, {
-    ...letters,
+    authSecret: AUTH_TOKEN_SECRET,
     members,
     overLimit,
     clientIp,
     resetPerIpHourly: () => numberVar("abuse.password_reset_per_ip_hourly"),
+    sendEmail: sendResendEmail,
+    escapeHtml,
+    origin: notifyDeps.origin,
+    projectName: () => mergedConfig().project.name,
     recordAudit: recordAuthAudit,
   });
   const joined = (u: { id: string; name: string; handle: string }) => memberJoined(u, { addActivity, firstName, greeterRoleId: () => stringVar("arrival.greeter_role"), seats: loadRoleHolders, everyone: () => members.all(), notify });
   const inviteDoor = makeInviteDoor({ getPool, members }); // one invitation for both sign-up doors
   registerSignUpRoutes(app, {
-    overLimit, clientIp, members, hashPassword, publicUser, joined, invites: inviteDoor, sendVerification: (m) => sendVerifyLetter(letters, m),
+    overLimit, clientIp, members, hashPassword, publicUser, joined, invites: inviteDoor,
     makeHandle: (name) => uniqueHandle(slugifyHandle(name)),
     encodeToken: (userId, email) => encodeToken(AUTH_TOKEN_SECRET, userId, email),
   });
@@ -8082,10 +8079,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
     authedUser,
     invites: inviteDoor,
-    endReachAround: (id, change) => withAgentReachEnded(getPool(), id, change, { notify }).then((r) => r.changed), // R104: ending an unproved password ends what its sessions planted
-    onPasswordEnded: (m) => void sendPasswordEndedLetter(letters, m),
   });
-  registerVerifyEmailRoutes(app, { ...letters, members, authedUser, verifyPassword, overLimit, clientIp, recordAudit: recordAuthAudit });
 
   /**
    * Sign out. tokenVersion is the only revocation lever there is (no session
@@ -8127,7 +8121,6 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if ((lost.refusal = setPasswordLinkRefusal(claim, u.tokenVersion))) return;
       u.passwordHash = hash;
       u.tokenVersion = (u.tokenVersion ?? 0) + 1;
-      proveAddress(u, u.email); // R104: the link reached this mailbox, and the only password now is its reader's
     }), { notify }); // notify: the member hears that a delegation they gave was ended (endVoiceGiven)
     if (lost.refusal) return res.status(401).json({ error: lost.refusal });
     if (!fresh) return res.status(404).json({ error: "Account not found" });
@@ -8864,7 +8857,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         heartedByMe: heartedIds.has(String(t.id)),
         isExample: Number(t.is_example ?? 0) === 1,
         tags: tagsByThread.get(String(t.id)) ?? [],
-        author: { id: viewer ? t.author_id : null, name: firstName(t.author_name ?? "Member"), handle: t.author_handle },
+        author: { id: t.author_id, name: firstName(t.author_name ?? "Member"), handle: t.author_handle },
         at: new Date(t.created_at).toISOString(),
       };
     });
@@ -9058,7 +9051,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           title: r.title ?? String(r.body).slice(0, 80),
           preview: String(r.body).slice(0, 160),
           imageUrl: r.image_url, heartCount: Number(r.heart_count), replyCount: Number(r.reply_count),
-          author: { id: user ? r.author_id : null, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
+          author: { id: r.author_id, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
           pinned: !!r.pinned_at, locked: !!r.locked_at, hidden: !!r.hidden_at,
           isExample: Number(r.is_example ?? 0) === 1,
           eventStartsAt,
@@ -9215,8 +9208,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const [tagRows] = await getPool().query<any[]>("SELECT tag FROM forum_thread_tags WHERE thread_id = ?", [req.params.id]);
     const [authorRow] = await getPool().query<any[]>("SELECT name, handle FROM users WHERE id = ?", [thread.authorId]);
     res.json({
-      ...thread, ...(user ? {} : { authorId: null }), // R097: no internal id to a stranger
-      author: { id: user ? thread.authorId : null, name: firstName(authorRow[0]?.name ?? "Member"), handle: authorRow[0]?.handle ?? null },
+      ...thread,
+      author: { id: thread.authorId, name: firstName(authorRow[0]?.name ?? "Member"), handle: authorRow[0]?.handle ?? null },
       tags: tagRows.map((t) => t.tag),
       replies: replyRows
         .filter((r) => !r.hidden_at || mod)
@@ -9225,7 +9218,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           parentReplyId: r.parent_reply_id,
           body: r.hidden_at ? "[hidden by moderation]" : r.body,
           hidden: !!r.hidden_at,
-          author: { id: user ? r.author_id : null, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
+          author: { id: r.author_id, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
           createdAt: new Date(r.created_at).toISOString(),
           editedAt: r.edited_at ? new Date(r.edited_at).toISOString() : null,
         })),
@@ -17278,7 +17271,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     { key: "assistant_api_key", title: "Anthropic, the AI guide", unlocks: "The AI guide: proposal intake, the launch journey, and call synthesis. Blank means every form still works, with no guide on them.", getAt: "console.anthropic.com", placeholder: "sk-ant-…" },
     { key: "riverside_webhook_secret", title: "Riverside recording deliveries", unlocks: "Call automation's inbound deliveries. It fails closed: with no secret set, every payload is discarded with an inert 200 and nobody is told why.", getAt: "Riverside → webhook settings → send this same value as the x-riverside-secret header", placeholder: "a long random string you choose" },
     { key: "governance_hub_secret", title: "Governance hub deliveries", unlocks: "How a Hypha vote's executed outcome comes home. Fails closed the same way. Until it is set, outcomes are reported by the proposer and applied by an admin.", getAt: "Issued when your fork is registered with the hub", placeholder: "the value the hub issued you" },
-    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, BASE_RPC_CARD, ...ROOT_SLOT_CARDS,
+    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, ...ROOT_SLOT_CARDS,
   ];
 
   interface IntegrationCard {
@@ -18329,7 +18322,6 @@ ${inner}
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
   registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: String(getWorkWithUs().assistantName || "Maia"), timeZone: getSeasonConfig().timezone }) });
-  registerMemberAskRoutes(app, { authedUser, getPool, members, notify, overLimit, firstName });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, seasonState, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
@@ -19505,12 +19497,12 @@ ${inner}
    * your own home is private by you is absurd.
    */
   app.get("/api/profiles/:handle", async (req, res) => {
-    const viewer = await authedUser(req);
-    const targetId = hiddenFromStranger(viewer, boolVar("org.public_people")) ? null : await userIdForHandle(getPool(), req.params.handle); // R097: the lock
+    const targetId = await userIdForHandle(getPool(), req.params.handle);
     if (!targetId) return res.status(404).json({ error: "Not found" });
     const loaded = await loadProfile(getPool(), villageId(), targetId);
     if (!loaded) return res.status(404).json({ error: "Not found" });
 
+    const viewer = await authedUser(req);
     const { startsAt } = cycleWindow();
     const full = {
       ...loaded.view,
@@ -19521,7 +19513,7 @@ ${inner}
       return res.json({ ...full, party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null) });
     }
     res.json({
-      ...publicView(full, loaded.privacy, viewer ? full.name : firstNameOf(full.name)), // a stranger reads a first name (R097)
+      ...publicView(full, loaded.privacy),
       party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null),
     });
   });
@@ -19572,7 +19564,7 @@ ${inner}
   });
 
   // The hero and the wall, both in server/routes/gratitudeVoices.ts.
-  registerGratitudeVoiceRoutes(app, { getPool, authedUser, gratitudeLog: () => gratitudeRepo.all() });
+  registerGratitudeVoiceRoutes(app, { getPool, gratitudeLog: () => gratitudeRepo.all() });
   registerGratitudeNudgeRoutes(app, { getPool, authedUser, members, notify, notifyDeps, remainingFor: async (u) => (await gratitudeBudget(u)).remaining });
 
   // Gratitude: my journal (received + sent, with amounts)
@@ -20087,7 +20079,7 @@ ${inner}
     listenerPosture({
       hubUrl: stringVar("governance.hub_url"),
       hubSecretConfigured: secretConfigured("governance_hub_secret"),
-      rpcUrl: baseRpcUrl(),
+      rpcUrl: stringVar("tokens.base_rpc_url"),
     });
 
   /**
@@ -20193,7 +20185,7 @@ ${inner}
     }
     try {
       const found = await discoverCandidates({
-        baseRpcUrl: baseRpcUrl(),
+        baseRpcUrl: stringVar("tokens.base_rpc_url").trim(),
         founderAddress,
         nameHint: String(req.body?.nameHint ?? ""),
       });
@@ -20481,9 +20473,9 @@ ${inner}
        * CHANGING is village news. Those are different audiences and this line
        * only ever needed the second.
        *
-       * The record keeps before and after (recordMechanicsChange above; a key in
-       * either is removed on write, lib/credentialRedaction.ts, and the public
-       * feed withholds the rest). Redacting by pattern was the other option and it is the
+       * Nothing is lost from the record: recordMechanicsChange above keeps the
+       * before and after for the audit trail, behind auth, which is where a
+       * value belongs. Redacting by pattern was the other option and it is the
        * weaker one, because it needs a list of what looks secret and a URL with
        * a key in the path defeats most such lists.
        */
@@ -22889,8 +22881,8 @@ ${inner}
       tallies,
       unity: unityPctOf(tallies),
       quorum: quorumPctOf(tallies, b.totalWeight),
-      // Votes and weights are member-visible on purpose (the Hypha voter-list posture, ruling 22
-      // staged); a stranger reads `ballotForViewer`'s counts only (R098, server/lib/peopleLock.ts).
+      // Votes and weights are member-visible on purpose (the Hypha voter-list
+      // posture). This village does not run secret ballots, and the page says so.
       votes: await Promise.all(
         votes.map(async (v) => ({ name: await nameOf(v.userId), choice: v.choice, weight: v.weight, castAt: v.castAt })),
       ),
@@ -23285,7 +23277,7 @@ ${inner}
     const subjectRef = String(req.query.subjectRef ?? "").trim();
     if (subjectType && subjectRef) {
       const list = await ballotsFor(getPool(), subjectType, subjectRef);
-      return res.json(await Promise.all(list.map(async (b) => ballotCardForViewer(viewer, await serveBallotCard(b, viewer?.id)))));
+      return res.json(await Promise.all(list.map((b) => serveBallotCard(b, viewer?.id))));
     }
     const limit = Math.max(1, Math.min(200, Math.trunc(Number(req.query.limit)) || 100));
     const offset = Math.max(0, Math.trunc(Number(req.query.offset)) || 0);
@@ -23293,7 +23285,7 @@ ${inner}
       "SELECT * FROM ballots ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
       [limit, offset],
     );
-    res.json(await Promise.all(rows.map(async (r) => ballotCardForViewer(viewer, await serveBallotCard(rowToBallot(r), viewer?.id)))));
+    res.json(await Promise.all(rows.map((r) => serveBallotCard(rowToBallot(r), viewer?.id))));
   });
 
   /**
@@ -23328,7 +23320,7 @@ ${inner}
       amendedKeysFor(getPool(), b.id),
       ballotsFor(getPool(), b.subjectType, b.subjectRef),
     ]);
-    res.json(ballotForViewer(viewer, {
+    res.json({
       ...payload,
       appliedKeys,
       priorAttempts: chain
@@ -23341,7 +23333,7 @@ ${inner}
           opensAt: p.opensAt,
           closedAt: p.closedAt,
         })),
-    }));
+    });
   });
 
   /**
@@ -26211,7 +26203,6 @@ ${inner}
       "Disallow: /tokens",
       "Disallow: /set-password",
       "Disallow: /forgot-password",
-      "Disallow: /verify-email",
       // Five megabytes of self-contained page, and an app rather than a
       // document: nothing in it is worth indexing and a crawler re-fetching it
       // costs real bandwidth on the deployment's bill.

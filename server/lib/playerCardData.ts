@@ -100,7 +100,6 @@ import { endedSeasons } from "../../shared/applicationGroups";
 import { isLapsed, rowToAssignment, rowToRole, type LapseContext, type OrgAssignment, type OrgRole } from "./orgChart";
 import { coveredSeatIds, type Relation, type RelationType } from "./orgRelations";
 import { projectSeat, type SeatTier } from "./seatProjection";
-import { firstNameOf } from "./peopleLock";
 import { readCardRows, readCharacters, readProposalRows, readSignTables, type SignTable } from "../repos/playerCard";
 import { portraitsVisibleTo } from "../repos/characterPortraits";
 import { avatarFor } from "./characters";
@@ -591,12 +590,7 @@ export async function buildPlayerCards(
     const input: PlayerCardInput = {
       now: ctx.now,
       timeZone: ctx.timeZone,
-      // A signed-out reader reads the owner by first name and never by their
-      // internal id (R097's public tier); the route has already refused them
-      // the card outright while the village keeps its people for members.
-      owner: ctx.viewerUserId
-        ? { userId: owner.userId, displayName: String(user.name ?? ""), avatar: avatars.get(owner.userId) ?? null }
-        : { userId: "", displayName: firstNameOf(user.name), avatar: avatars.get(owner.userId) ?? null },
+      owner: { userId: owner.userId, displayName: String(user.name ?? ""), avatar: avatars.get(owner.userId) ?? null },
       viewerUserId: ctx.viewerUserId,
       viewerMember: ctx.viewerMember === true,
       villageName: ctx.villageName,

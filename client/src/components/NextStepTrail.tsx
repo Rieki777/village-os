@@ -39,7 +39,7 @@ export function clearTrailCache(): void {
 
 const HIDDEN_KEY = "village.trail.hidden";
 
-const QUIET_EXACT = new Set(["/profile", "/login", "/register", "/forgot-password", "/set-password", "/verify-email"]);
+const QUIET_EXACT = new Set(["/profile", "/login", "/register", "/forgot-password", "/set-password"]);
 const QUIET_PREFIX = ["/admin", "/project-history", "/journey-to-launch", "/claim"];
 
 export function isQuietPath(path: string, stepHref?: string): boolean {

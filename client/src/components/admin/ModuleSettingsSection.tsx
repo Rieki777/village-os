@@ -74,12 +74,6 @@ interface Dial {
    * field existed it was indistinguishable from one that never looked.
    */
   answered?: boolean;
-  /**
-   * THIS DIAL'S VALUE LIVES IN THE SEALED INTEGRATION SECRETS now, under this
-   * slot. The server refuses any value here but the default and never sends
-   * what is stored, so the row shows where the setting went in place of a field.
-   */
-  movedToSecret?: string;
 }
 
 /**
@@ -413,14 +407,6 @@ export default function ModuleSettingsSection({
                       )}
                       {ECHO[v.key] && <p className="text-xs text-gray-700 mt-1" aria-live="polite">{ECHO[v.key](draft)}</p>}
                     </div>
-                    {v.movedToSecret ? (
-                      <p className="text-xs text-gray-700 max-w-[260px]">
-                        Saved under Integrations, sealed, because a dedicated endpoint carries its key in the address.{" "}
-                        <a href="/admin?tab=integrations" className="text-teal-deep underline">
-                          Open Integrations
-                        </a>
-                      </p>
-                    ) : (<>
                     {v.type === "boolean" ? (
                       <select
                         value={draft}
@@ -502,7 +488,6 @@ export default function ModuleSettingsSection({
                         Reset
                       </button>
                     )}
-                    </>)}
                   </div>
                   {warning && (
                     <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3" role="status">

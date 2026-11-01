@@ -56,8 +56,7 @@ import { tokenDef } from "../lib/ledger";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow, isExampleUser, onRealItemPublished } from "../lib/examples";
 import { requireModule } from "../lib/modules";
-import { boolVar, numberVar } from "../lib/variables";
-import { firstNameOf, peopleTier } from "../lib/peopleLock";
+import { numberVar } from "../lib/variables";
 import { userIdForHandle } from "../lib/profile";
 
 type Deps = Pick<
@@ -267,14 +266,8 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /** Who holds a badge or a skill — matching, never surveillance: active,
-   *  unexpired, non-warning awards only, names as the member set them.
-   *
-   *  A STRANGER READS LESS (R097). While the village keeps its people for
-   *  members (`org.public_people` off) the list is empty; otherwise a first
-   *  name and the handle a profile is reached by, and never the internal id
-   *  or the full name, which are a member's to read. */
+   *  unexpired, non-warning awards only, names as the member set them. */
   app.get("/api/badges/match", async (req, res) => {
-    const tier = peopleTier(!!(await authedUser(req)), boolVar("org.public_people"));
     const badgeId = String(req.query.badge ?? "");
     const skill = String(req.query.skill ?? "").toLowerCase();
     if (!badgeId && !skill) return res.status(400).json({ error: "say what to match: ?badge=<id> or ?skill=<tag>" });
@@ -293,19 +286,11 @@ export function register(app: Express, deps: Deps): void {
       );
     } else {
       [rows] = await getPool().query<any[]>(
-        // u.is_example = 0, as on the badge branch above: a skill search puts real people in touch.
-        "SELECT u.id, u.name, u.handle FROM skill_tags s JOIN users u ON u.id = s.user_id WHERE s.tag = ? AND u.is_example = 0 ORDER BY u.name LIMIT 100",
+        "SELECT u.id, u.name, u.handle FROM skill_tags s JOIN users u ON u.id = s.user_id WHERE s.tag = ? ORDER BY u.name LIMIT 100",
         [skill],
       );
     }
-    if (tier === "none") return res.json({ members: [] });
-    res.json({
-      members: rows.map((r) =>
-        tier === "member"
-          ? { id: r.id, name: r.name, handle: r.handle ?? null }
-          : { id: null, name: firstNameOf(r.name), handle: r.handle ?? null },
-      ),
-    });
+    res.json({ members: rows.map((r) => ({ id: r.id, name: r.name, handle: r.handle ?? null })) });
   });
 
   app.post("/api/badges/:id/claim", async (req, res) => {

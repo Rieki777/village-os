@@ -41,7 +41,6 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
 import { makeSetPasswordToken, SET_PASSWORD_LINK_REFUSAL, signTokenPayload } from "./lib/memberTokens";
-import { makeEmailVerifyToken } from "./lib/emailVerification";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -323,52 +322,6 @@ describe.skipIf(!DB_CONFIGURED)("a village with no Google credentials degrades h
     expect(res.status).toBe(200);
     expect((await res.json()).token).toBeTruthy();
   });
-
-  it("bootstrap ENDS a password nobody proved before it makes that row the founder (R104)", async () => {
-    // A stranger signs up at the founder's address before the founder runs
-    // bootstrap. Bootstrap used to raise that row and send no claim link,
-    // because it had a password: the stranger's.
-    const email = "planted-founder@example.com";
-    const reg = await fetch(`${BARE_BASE}/api/auth/register`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Planted Founder", email, password: "the-planters-password", paths: [] }), // module-review-ok: a throwaway test password for a server this file starts and kills
-    });
-    const planted = await reg.json();
-    expect(reg.status, JSON.stringify(planted)).toBe(200);
-
-    const boot = await fetch(`${BARE_BASE}/api/admin/bootstrap`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: ADMIN, email, name: "Planted Founder" }),
-    });
-    const booted = await boot.json();
-    expect(boot.status, JSON.stringify(booted)).toBe(200);
-    expect(booted.userId).toBe(planted.user.id);
-    expect(booted.claimUrl, "no claim link, so the founder's only way in is the planter's password").toMatch(/\/set-password\?token=/);
-
-    const logIn = await fetch(`${BARE_BASE}/api/auth/login`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password: "the-planters-password" }), // module-review-ok: a throwaway test password for a server this file starts and kills
-    });
-    expect(logIn.status, "the planter's password opens the founder's account").toBe(401);
-    const session = await fetch(`${BARE_BASE}/api/profile`, { headers: { Authorization: `Bearer ${planted.token}` } }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
-    expect(session.status, "the planter's session outlived the bootstrap").toBe(401);
-
-    // The claim link is the founder's way in, and using it proves the address.
-    const claim = decodeURIComponent(String(booted.claimUrl).split("token=")[1]);
-    const set = await fetch(`${BARE_BASE}/api/auth/set-password`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: claim, password: "the-founders-own-password" }), // module-review-ok: a throwaway test password for a server this file starts and kills
-    });
-    const setBody = await set.json();
-    expect(set.status, JSON.stringify(setBody)).toBe(200);
-    expect(setBody.user.role).toBe("founder");
-    const [rows] = await bareDb!.conn.query<any[]>("SELECT email_verified_at FROM users WHERE id = ?", [planted.user.id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    expect(rows[0].email_verified_at, "redeeming the mailed claim link did not record the proof").not.toBeNull();
-  });
 });
 
 describe.skipIf(!DB_CONFIGURED)("a village WITH credentials offers Google beside the password", () => {
@@ -481,34 +434,14 @@ describe.skipIf(!DB_CONFIGURED)("the happy path: a new member signs in with Goog
 });
 
 describe.skipIf(!DB_CONFIGURED)("the link path", () => {
-  /** Sign up by email and password, the door that never asked whether the address is yours. */
-  async function signUpByPassword(email: string, name: string) {
-    const reg = await fetch(`${BASE}/api/auth/register`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+  it("links a verified Google address to an existing PASSWORD account", async () => {
+    const email = "haspassword@example.com";
+    const reg = await fetch(`${BASE}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password: "a-password-1", paths: [] }),
+      body: JSON.stringify({ name: "Has Password", email, password: "a-password-1", paths: [] }),
     });
-    const json = await reg.json();
-    expect(reg.status, JSON.stringify(json)).toBe(200);
-    return { id: String(json.user.id), token: String(json.token) };
-  }
-  const logInStatus = async (email: string, password: string) =>
-    (await fetch(`${BASE}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) })).status; // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
-  const sessionStatus = async (token: string) =>
-    (await fetch(`${BASE}/api/profile`, { headers: { Authorization: `Bearer ${token}` } })).status; // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
-  const storedRow = async (id: string) => {
-    const [rows] = await testDb!.conn.query<any[]>("SELECT password_hash, token_version, email_verified_at FROM users WHERE id = ?", [id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    return rows[0];
-  };
-
-  it("links a Google address to a password account nobody proved ONLY by ending that password and its sessions (R104)", async () => {
-    // Somebody signs up at an address they do not own. The real owner later
-    // arrives by Google. Before R104 the owner landed in this account with the
-    // planter's password and session still live.
-    const email = "haspassword@example.com";
-    const planted = await signUpByPassword(email, "Has Password");
-    expect(await sessionStatus(planted.token), "the planter's session works before the link").toBe(200);
-    expect((await storedRow(planted.id)).email_verified_at, "sign-up took a typed address as proved").toBeNull();
+    const registered = await reg.json();
 
     const { state, nonce } = await beginSignIn();
     nextResponse = {
@@ -517,40 +450,15 @@ describe.skipIf(!DB_CONFIGURED)("the link path", () => {
     };
     const { cookie } = await callback(state);
     const body = await (await exchange(cookie)).json();
-    expect(body.user.id).toBe(planted.id);
+    expect(body.user.id).toBe(registered.user.id);
 
-    expect(await logInStatus(email, "a-password-1"), "the planted password still opens the account").toBe(401);
-    expect(await sessionStatus(planted.token), "a session minted from the planted password survived").toBe(401);
-    expect(await sessionStatus(body.token), "the Google holder's session does not work").toBe(200);
-    const row = await storedRow(planted.id);
-    expect(row.password_hash).toBe("");
-    expect(row.email_verified_at, "Google proved the address and the row does not say so").not.toBeNull();
-  });
-
-  it("keeps a PROVED password account's password and session when Google links it", async () => {
-    // Proved the way the letter proves it: the link, with the member's own session.
-    const email = "provedpassword@example.com";
-    const member = await signUpByPassword(email, "Proved Password");
-    const proof = await fetch(`${BASE}/api/auth/verify-email`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+    // Linking must not disturb the credential that was already there.
+    const stillWorks = await fetch(`${BASE}/api/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${member.token}` },
-      body: JSON.stringify({ token: makeEmailVerifyToken(TOKEN_SECRET, member.id, email) }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: "a-password-1" }),
     });
-    expect(proof.status, await proof.clone().text()).toBe(200);
-    expect((await storedRow(member.id)).email_verified_at).not.toBeNull();
-
-    const { state, nonce } = await beginSignIn();
-    nextResponse = {
-      status: 200,
-      claims: claimsFor({ nonce, sub: "google-sub-provedpassword", email, email_verified: true, name: "Proved Password" }),
-    };
-    const { cookie } = await callback(state);
-    const body = await (await exchange(cookie)).json();
-    expect(body.user.id).toBe(member.id);
-
-    // Linking a proved account must not disturb the credential that was already there.
-    expect(await logInStatus(email, "a-password-1")).toBe(200);
-    expect(await sessionStatus(member.token)).toBe(200);
+    expect(stillWorks.status).toBe(200);
   });
 
   it("unblocks the account with NO password, which is the founder's state today", async () => {
@@ -761,10 +669,7 @@ describe.skipIf(!DB_CONFIGURED)("forgot-password no longer strands an account wi
 
   it("answers every caller identically, which is the enumeration defence", async () => {
     const unknown = await forgot("nobody-here@example.com");
-    // The PROVED account from "the link path": it keeps its password when
-    // Google links it. The unproved one there had its password ended (R104),
-    // so it would now be sent a claim letter, not a reset.
-    const withPassword = await forgot("provedpassword@example.com");
+    const withPassword = await forgot("haspassword@example.com");
     const withoutPassword = await forgot("locked-out-founder@example.com");
     for (const r of [unknown, withPassword, withoutPassword]) {
       expect(r.status).toBe(200);

@@ -13,10 +13,6 @@
  *   4. GET /api/library handed every viewer each item's donor id.
  *   5. PUT /api/admin/capabilities/:capability/holding re-pointed a power the
  *      village already held, with no vote and no glass.
- *   6. The Base RPC endpoint, key in its path, sat in the plain game variable
- *      `tokens.base_rpc_url`. The server boots here over a legacy row, so the
- *      move into the sealed store runs exactly as it does on an upgrade, and
- *      every surface plus the server's own log is read for the key afterwards.
  *
  * Boots dist/index.js against a throwaway schema like every routes suite, and
  * skips loudly without TEST_DATABASE_URL.
@@ -47,11 +43,6 @@ let testDb: TestDb | undefined;
 let dataDir = "";
 let pool: mysql.Pool;
 let founderToken = "";
-/** Everything the server printed, so a test can prove a key never reached the log. */
-const serverLogs: string[] = [];
-/** The pre-upgrade endpoint, seeded as a plain variable row before the server boots. Fake. */
-const LEGACY_KEY = "AuthzLegacyFakeKey0123456789abcd";
-const LEGACY_URL = `https://base-mainnet.g.alchemy.com/v2/${LEGACY_KEY}`;
 
 async function call(
   method: string,
@@ -98,11 +89,6 @@ beforeAll(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-authz-round-"));
   testDb = await provisionTestDb();
   pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the e2e harness scratch-schema pool, the routes-suite shape
-  // A village upgrading with its endpoint still in the plain variable.
-  await pool.query( // module-review-ok: the e2e harness seeding its own scratch schema with the pre-upgrade row
-    "INSERT INTO game_variables (config_key, value, value_type) VALUES ('tokens.base_rpc_url', ?, 'text')",
-    [LEGACY_URL],
-  );
 
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
@@ -118,12 +104,10 @@ beforeAll(async () => {
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
       STRIPE_WEBHOOK_SECRET: "whsec_authzround", // module-review-ok: a throwaway value for the spawned scratch server, never a real credential
-      VILLAGE_SECRETS_KEY: "1f".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
-      BASE_RPC_URL: "",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const logs = serverLogs;
+  const logs: string[] = [];
   child.stdout?.on("data", (d) => logs.push(String(d)));
   child.stderr?.on("data", (d) => logs.push(String(d)));
 
@@ -201,63 +185,18 @@ describe.skipIf(!DB_CONFIGURED)("one public request, one recipient", () => {
 describe.skipIf(!DB_CONFIGURED)("the public amendment history", () => {
   const KEY_URL = "https://base-mainnet.g.alchemy.com/v2/AuthzRoundKey0123456789abcdef";
 
-  it("moved the legacy endpoint into the sealed store at boot, and no surface or log carries its key", async () => {
-    // The plain row is gone from the table the boot found it in.
-    const [left] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM game_variables WHERE config_key = 'tokens.base_rpc_url'"); // module-review-ok: the e2e harness reading its own scratch schema
-    expect(Number(left[0]?.n)).toBe(0);
+  it("keeps a withheld dial's row and never its value", async () => {
+    const set = await call("PUT", "/api/admin/variables/tokens.base_rpc_url", { value: KEY_URL });
+    expect(set.status, set.text).toBe(200);
 
-    // POSITIVE FIRST: the admin card holds it, sealed, masked to four characters.
-    const integ = await call("GET", "/api/admin/integrations");
-    expect(integ.status, integ.text).toBe(200);
-    const st = (integ.json?.secrets as any[]).find((s) => s.key === "base_rpc_url");
-    expect(st).toMatchObject({ configured: true, source: "admin", last4: "abcd", atRest: "sealed", unreadable: false });
-    expect((integ.json?.cards as any[]).some((c) => c.key === "base_rpc_url"), "the endpoint has a card").toBe(true);
-
-    // Only now does an absence mean anything.
-    for (const [route, token] of [
-      ["/api/admin/integrations", founderToken],
-      ["/api/admin/variables", founderToken],
-      ["/api/game/mechanics", ""],
-      ["/api/game/mechanics/history", ""],
-      ["/api/game/pulse", ""],
-    ] as const) {
-      const r = await call("GET", route, undefined, token);
-      expect(r.status, route).toBe(200);
-      expect(r.text, route).not.toContain(LEGACY_KEY);
-    }
-
-    // The move is on the public record, with its values kept private.
     const feed = await call("GET", "/api/game/mechanics/history", undefined, "");
+    expect(feed.status).toBe(200);
+    expect(feed.text).not.toContain("AuthzRoundKey");
     expect(feed.text).not.toContain("alchemy");
     const row = (feed.json as any[]).find((h) => h.key === "tokens.base_rpc_url");
-    expect(row, "the move is on the record").toBeTruthy();
+    expect(row, "the change is still on the record").toBeTruthy();
     expect(row.withheld).toBe(true);
-    expect(row.from).toBe("");
-
-    // And the server printed the move without printing the key.
-    expect(serverLogs.join("")).toContain("base_rpc_url");
-    expect(serverLogs.join("")).not.toContain(LEGACY_KEY);
-  });
-
-  it("the variables door refuses an endpoint, and names where it goes instead", async () => {
-    const set = await call("PUT", "/api/admin/variables/tokens.base_rpc_url", { value: KEY_URL });
-    expect(set.status, set.text).toBe(400);
-    expect(set.text).toContain("Integrations");
-    expect(set.text).not.toContain("AuthzRoundKey");
-  });
-
-  it("an endpoint saved in Integrations is sealed on disk and reads back masked", async () => {
-    const put = await call("PUT", "/api/admin/integrations/base_rpc_url", { value: KEY_URL });
-    expect(put.status, put.text).toBe(200);
-    expect(put.text).not.toContain("AuthzRoundKey");
-    const st = (put.json?.secrets as any[]).find((s) => s.key === "base_rpc_url");
-    expect(st).toMatchObject({ configured: true, source: "admin", last4: "cdef", atRest: "sealed" });
-    const [doc] = await pool.query<any[]>("SELECT value FROM app_config WHERE config_key = 'integration-secrets'"); // module-review-ok: the e2e harness reading its own scratch schema
-    expect(JSON.stringify(doc)).toContain("ciphertext");
-    expect(JSON.stringify(doc)).not.toContain("AuthzRoundKey");
-    const vars = await call("GET", "/api/admin/variables");
-    expect(vars.text).not.toContain("AuthzRoundKey");
-    expect(serverLogs.join("")).not.toContain("AuthzRoundKey");
+    expect(row.to).toBe("");
   });
 
   it("a proposal's credential-shaped value reaches neither the list, the document nor the handoff", async () => {

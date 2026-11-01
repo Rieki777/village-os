@@ -49,9 +49,7 @@ import {
   listTemplates,
   moveTemplate,
   patchPriority,
-  patchEntryServes,
   patchShare,
-  regroupTension,
   roomView,
   seasonRefOf,
   seasonView,
@@ -188,22 +186,6 @@ export function register(app: Express, deps: Deps): void {
     res.json({ view: out.value });
   });
 
-  /** Say how a Heart share tension groups: the people who were there know better than the word guess. */
-  app.post(`${SEASON_VIEW_API}/tensions/:shareId`, async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
-    const userId = String(user.id);
-    if (await overLimit(`session-templates-room:${userId}`, TEMPLATE_LIMITS.roomWritesPerHour, HOUR_MS)) return res.status(429).json({ error: R.slowDown });
-    const shareId = parseId(req.params?.shareId);
-    if (shareId == null) return res.status(404).json({ error: R.tensionNotFound });
-    const viewer = { no: await memberNo(getPool(), userId), admin: await isAdmin(req) };
-    const out = await regroupTension(getPool(), shareId, req.body, viewer);
-    if (!out.ok) return res.status(out.status).json({ error: out.error });
-    const view = await seasonView(getPool(), seasonState(), typeof req.body?.season === "string" ? req.body.season.slice(0, 64) : null, viewer);
-    if (!view.ok) return res.status(view.status).json({ error: view.error });
-    res.json({ view: view.value });
-  });
-
   // ── The room's panel ──────────────────────────────────────────────────────
 
   const ROOM = `${TEMPLATES_API}/rooms/:sessionId`;
@@ -280,14 +262,6 @@ export function register(app: Express, deps: Deps): void {
     const shareId = parseId(req.params?.shareId);
     if (shareId == null) return res.status(404).json({ error: R.shareNotFound });
     await afterWrite(res, w.sessionId, w.asker, await patchShare(getPool(), w.sessionId, w.asker, shareId, req.body, goals()));
-  });
-
-  app.patch(`${ROOM}/entries/:entryId`, async (req, res) => {
-    const w = await roomWriter(req, res);
-    if (!w) return;
-    const entryId = parseId(req.params?.entryId);
-    if (entryId == null) return res.status(404).json({ error: R.entryNotFound });
-    answer(res, await patchEntryServes(getPool(), w.sessionId, w.asker, entryId, req.body, goals()), (v) => v);
   });
 
   app.post(`${ROOM}/shares/:shareId/bring`, async (req, res) => {

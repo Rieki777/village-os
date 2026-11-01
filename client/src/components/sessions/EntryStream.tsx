@@ -10,15 +10,8 @@
  * beside it, so a long note is read whole while it is typed. What is being
  * typed is a draft, so it is still there when the room comes back to this
  * item. Enter adds it; Shift and Enter starts a new line.
- *
- * A WIN SERVES THE SEASON (0298): under each win, "Serves" names the season
- * priority it serves, for anybody in the open room, and the season view
- * (/sessions/season) counts it there.
  */
 import { useState } from "react";
-import { templateRoomApi } from "@shared/sessionTemplates";
-import { gameFetch } from "@/lib/gameApi";
-import { ServesChip, ServesPicker, useSeasonGoals } from "./ServesPicker";
 import { ROOM_COPY, SESSION_LIMITS, cleanText, type EntryKind } from "@shared/sessions";
 import EntryCard from "./EntryCard";
 import GrowingText from "./GrowingText";
@@ -40,21 +33,6 @@ export default function EntryStream({ view, actions, kind, itemId, title, addLab
   const list = view.entries.filter((e) => e.kind === kind && e.itemId === itemId);
   const canAdd = view.me.joined && view.status === "open";
   const headingId = `stream-${kind}-${itemId ?? "loose"}`;
-  const goals = useSeasonGoals(kind === "win");
-  const [linking, setLinking] = useState<number | null>(null);
-  const [links, setLinks] = useState<Record<number, string | null>>({});
-  const servesOf = (id: number, fromView: string | null | undefined) => (id in links ? links[id] : (fromView ?? null));
-  const link = async (entryId: number, goalId: string | null) => {
-    setLinking(entryId);
-    try {
-      const res = await gameFetch(`${templateRoomApi(view.id)}/entries/${entryId}`, { method: "PATCH", body: JSON.stringify({ servesGoalId: goalId }) });
-      if (res.ok) setLinks((prev) => ({ ...prev, [entryId]: goalId }));
-    } catch {
-      // The picker shows what the room holds; the next poll says so.
-    } finally {
-      setLinking(null);
-    }
-  };
 
   const add = async () => {
     const clean = cleanText(text, SESSION_LIMITS.text);
@@ -83,14 +61,8 @@ export default function EntryStream({ view, actions, kind, itemId, title, addLab
       {list.length ? (
         <ul className="space-y-2">
           {list.map((e) => (
-            <li key={e.id} className="space-y-1">
+            <li key={e.id}>
               <EntryCard view={view} actions={actions} entry={e} />
-              {kind === "win" && goals.length > 0 &&
-                (canAdd ? (
-                  <ServesPicker goals={goals} value={servesOf(e.id, e.servesGoalId)} label={e.text} disabled={linking === e.id} onChange={(g) => void link(e.id, g)} />
-                ) : (
-                  <ServesChip goal={goals.find((g) => g.id === servesOf(e.id, e.servesGoalId))?.text ?? null} />
-                ))}
             </li>
           ))}
         </ul>

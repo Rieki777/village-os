@@ -82,33 +82,6 @@ export interface AccountFacts {
   passwordHash?: string;
   isExample?: boolean;
   prefs?: any;
-  /**
-   * When the owner of `email` proved they read it (0304): a redeemed address
-   * link, a redeemed set-password link, or a Google sign-in whose verified
-   * address is this one. Null or absent means nobody ever has.
-   *
-   * It vouches for ONE address. No route changes `users.email` today except
-   * the erasure, which clears this with it; any route that ever does must
-   * clear it too, or the proof would vouch for an address nobody proved.
-   */
-  emailVerifiedAt?: string | null;
-}
-
-/**
- * A password nobody proved belongs to the person who reads this address (R104).
- *
- * Email sign-up stores whatever address it is handed, so a password account
- * can exist at an address its maker does not own. Whoever reads that mailbox
- * later, through Google or a reset link, must not land in an account somebody
- * else still holds the key to. So this is the question every door asks before
- * it hands the row to the mailbox owner or raises its role.
- *
- * An account with NO password is never this: there is no key for anybody else
- * to hold. Every session on such a row came from Google or from a set-password
- * link, and both reach only the mailbox.
- */
-export function holdsUnprovenPassword(member: Pick<AccountFacts, "passwordHash" | "emailVerifiedAt">): boolean {
-  return !!member.passwordHash && !member.emailVerifiedAt;
 }
 
 /**
@@ -136,14 +109,9 @@ export function isUnclaimable(member: AccountFacts): boolean {
   return member.isExample === true || isTombstone(member);
 }
 
-/**
- * `takeOver` on a sign-in or a link: the row holds a password nobody proved
- * (holdsUnprovenPassword), so the caller must end it, and every session it
- * minted, in the same locked write that hands the row to the Google holder.
- */
 export type SignInDecision =
-  | { kind: "sign_in"; userId: string; takeOver: boolean }
-  | { kind: "link"; userId: string; takeOver: boolean }
+  | { kind: "sign_in"; userId: string }
+  | { kind: "link"; userId: string }
   | { kind: "create" }
   | { kind: "refuse"; reason: string };
 
@@ -170,29 +138,6 @@ export type SignInDecision =
  * success, forever. That is fixed in the same change (see
  * `maySendSetPasswordLink`), which is what makes "the mailbox could already do
  * this" true for every account. Before that fix it held for most.
- *
- * AND IT HAS A SECOND PRECONDITION, which it did not have until R104. "The
- * mailbox could already take the account" protects the Google holder. It says
- * nothing about whoever SET the existing password, and email sign-up never
- * asked them to prove the address. So somebody could plant a password account
- * at the address a future member would bring to Google, and the link handed
- * that member a row the planter could still sign into, with every session the
- * planter had minted still live: the account pre-hijack.
- *
- * So a password nobody proved (holdsUnprovenPassword) is ENDED by the link,
- * and the decision says so as `takeOver`. The caller clears the hash and bumps
- * tokenVersion in the same locked write as the link, and ends the agent reach
- * around it. That is exactly the power the mailbox already had (a reset ends
- * the old password and every session too), used without the round trip, so
- * the argument above stays true. It also works on a village with no email at
- * all, where refusing and mailing a link would strand the member.
- *
- * It applies on a SUBJECT match too. A link the old code wrote may sit on a
- * planted account, so the Google holder's next sign-in ends that password as
- * well. The cost falls on an honest member who set a password, never proved
- * the address, and then used Google: their password goes once and their other
- * devices sign out once. They are signed in by Google at that moment, and
- * forgot-password sets a new password from the same mailbox.
  *
  * WHAT IS REFUSED, and why each one:
  *
@@ -229,7 +174,7 @@ export function decideGoogleSignIn(input: {
 
   if (bySub) {
     if (isUnclaimable(bySub)) return { kind: "refuse", reason: "account_unavailable" };
-    return { kind: "sign_in", userId: bySub.id, takeOver: holdsUnprovenPassword(bySub) };
+    return { kind: "sign_in", userId: bySub.id };
   }
 
   if (byEmail) {
@@ -237,7 +182,7 @@ export function decideGoogleSignIn(input: {
     if (existingLinkOnEmailMatch && existingLinkOnEmailMatch !== sub) {
       return { kind: "refuse", reason: "already_linked_elsewhere" };
     }
-    return { kind: "link", userId: byEmail.id, takeOver: holdsUnprovenPassword(byEmail) };
+    return { kind: "link", userId: byEmail.id };
   }
 
   return { kind: "create" };

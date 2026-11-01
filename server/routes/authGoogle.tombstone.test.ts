@@ -69,8 +69,6 @@ function mount(members: Record<string, any>) {
     clientIp: () => "127.0.0.1",
     recordAudit: () => {},
     onMemberJoined: () => {},
-    endReachAround: (_userId: string, change: () => Promise<any>) => change(),
-    onPasswordEnded: () => {},
     invites: {
       required: () => false,
       resolve: async () => ({ ok: false, error: "" }),

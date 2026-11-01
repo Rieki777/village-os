@@ -333,27 +333,12 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const wrong = await api("POST", "/api/admin/bootstrap", { password: "not-it", email: founder.email });
     expect(wrong.status).toBe(401);
 
-    // …and elevates the member to founder with the right one. Never with the
-    // password typed at sign-up still standing, though (R104): nobody proved
-    // that whoever typed it reads this address, and a stranger can sign up at
-    // the founder's address before the founder runs bootstrap. So bootstrap
-    // ends that password and every session minted from it, and hands back the
-    // claim link that sets the founder's own. No email is needed for that.
+    // …and elevates the member to founder with the right one.
     const boot = await api("POST", "/api/admin/bootstrap", { password: ADMIN, email: founder.email });
     expect(boot.status).toBe(200);
     expect(boot.json.success).toBe(true);
-    expect(boot.json.claimUrl, "the founder has no way in but a password nobody proved").toMatch(/\/set-password\?token=/);
-    const stale = await api("GET", "/api/admin/players", undefined, founderToken);
-    expect(stale.status, "a session minted before bootstrap survived it").toBe(401);
-    const claimed = await api("POST", "/api/auth/set-password", {
-      token: decodeURIComponent(String(boot.json.claimUrl).split("token=")[1]),
-      password: founder.password,
-    });
-    expect(claimed.status, JSON.stringify(claimed.json)).toBe(200);
-    expect(claimed.json.user.role).toBe("founder");
-    founderToken = claimed.json.token;
 
-    // The claimed session passes requireAdmin (role is read live, control success)…
+    // The SAME token now passes requireAdmin (role is read live, control success)…
     const asFounder = await api("GET", "/api/admin/players", undefined, founderToken);
     expect(asFounder.status).toBe(200);
     const list = Array.isArray(asFounder.json) ? asFounder.json : (asFounder.json.players ?? asFounder.json.users ?? []);
@@ -3297,9 +3282,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     try {
       // Point the platform at the stub and open the section.
-      // The endpoint is an integration secret now, sealed under the fixture key.
-      const rpcSet = await api("PUT", "/api/admin/integrations/base_rpc_url", { value: `http://127.0.0.1:${RPC_STUB_PORT}` }, founderToken);
-      expect(rpcSet.status, JSON.stringify(rpcSet.json)).toBe(200);
+      await api("PUT", "/api/admin/variables/tokens.base_rpc_url", { value: `http://127.0.0.1:${RPC_STUB_PORT}` }, founderToken);
       await api("PUT", "/api/admin/variables/tokens.equity_address", { value: "0x1111111111111111111111111111111111111111" }, founderToken);
       await api("PUT", "/api/admin/variables/tokens.show_economics_section", { value: "true" }, founderToken);
 

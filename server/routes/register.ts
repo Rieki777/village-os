@@ -30,16 +30,6 @@
  * arrives anyway is still used, because it is still somebody's vouch. A bad
  * one is ignored there, because refusing an account the village would have let
  * in without any link would be a refusal with no reason behind it.
- *
- * ── THE ADDRESS IS UNPROVED UNTIL ITS OWNER SAYS SO (R104) ──────────────────
- *
- * Nothing here can tell whether the person typing an address reads it, so the
- * account is made with `emailVerifiedAt` null and the address is mailed a link
- * that proves it (server/lib/emailVerification.ts). Signing in by password
- * never waits on that, so a village with no email provider loses nothing. What
- * waits is trust in this password as the mailbox owner's: until the address is
- * proved, a Google sign-in at it ends the password, and no founder grant or
- * bootstrap raises the row while the password stands.
  */
 import { randomBytes } from "node:crypto";
 import type { Express, Request } from "express";
@@ -66,12 +56,6 @@ export interface RegisterDeps {
   encodeToken(userId: string, email: string): string;
   publicUser(member: any): any;
   invites: InviteDoor;
-  /**
-   * Mail the new account's address a link that proves it (R104,
-   * `sendVerifyLetter` in server/lib/emailVerification.ts). Must never
-   * reject: a village with no email provider still makes the account.
-   */
-  sendVerification(member: { id: string; email: string; name: string }): Promise<unknown>;
 }
 
 export function register(app: Express, deps: RegisterDeps): void {
@@ -124,11 +108,6 @@ export function register(app: Express, deps: RegisterDeps): void {
       id: userId,
       name,
       email,
-      // Whoever typed this address has not shown they read it, so the account
-      // starts unproved (R104). Until the letter below is redeemed, this
-      // password is never trusted as the mailbox owner's: a Google sign-in at
-      // this address ends it, and no founder grant lands on this row.
-      emailVerifiedAt: null,
       passwordHash: await deps.hashPassword(password),
       handle: await deps.makeHandle(name),
       paths: chosen.paths ?? [],
@@ -146,9 +125,6 @@ export function register(app: Express, deps: RegisterDeps): void {
       throw err;
     }
     await deps.joined({ id: userId, name, handle: user.handle });
-    // Not awaited: a slow provider must not hold the sign-up, and the letter
-    // carries the only copy of the link. It is never put in the response.
-    void deps.sendVerification({ id: userId, email, name }).catch(() => undefined);
     for (const pathId of user.paths) commsSink.fire({ type: "path_joined", personKey: userId, userId, email, name, pathId, source: "signup" });
     if (inviter) await deps.invites.welcome(inviter, userId);
     res.json({ success: true, token: deps.encodeToken(userId, email), user: deps.publicUser(user) });

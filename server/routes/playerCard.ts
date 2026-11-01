@@ -50,7 +50,6 @@ import { userIdForHandle } from "../lib/profile";
 import { villageClock } from "../lib/stewardship";
 import type { CycleClock } from "../../shared/cycleClock";
 import { mapShowsStructureTo, orgSeatTier } from "../lib/seatProjection";
-import { hiddenFromStranger } from "../lib/peopleLock";
 import { roleHeldBy } from "../repos/playerCard";
 
 export type CardDeps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" | "getPool" | "firstName"> & {
@@ -149,13 +148,9 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/people/:handle/role-card", async (req, res) => {
     const pool: Pool = deps.getPool();
     const handle = String(req.params.handle ?? "");
-    const viewer = await deps.authedUser(req);
-    // R097: while the village keeps its people for members, a handle finds
-    // nobody for a stranger. Answering at all would confirm the member exists,
-    // and the card carries their name and portrait.
-    if (handle !== "me" && hiddenFromStranger(viewer, deps.boolVar("org.public_people"))) return res.status(404).json({ error: "Not found" });
     let ownerId = await userIdForHandle(pool, handle);
     if (!ownerId && handle === "me") {
+      const viewer = await deps.authedUser(req);
       if (!viewer) return res.status(401).json({ error: "auth_required", message: "Sign in to see your card" });
       ownerId = String(viewer.id);
     }

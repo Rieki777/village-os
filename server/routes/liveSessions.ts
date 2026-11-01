@@ -520,9 +520,7 @@ export function register(app: Express, deps: Deps): void {
     if (!checkOffer()) return res.status(404).json({ error: CHECK_REFUSALS.off });
     const entryId = parseId(req.params?.entryId);
     if (entryId == null) return res.status(404).json({ error: R.entryUnknown });
-    // A check reads the season's goals as words (0298 gave them ids): only the words cross, as the bridge rulings say.
-    const ref = seasonRefOf(deps.seasonState?.().current ?? null);
-    const season = ref ? { name: ref.name, goals: ref.goals.map((g) => g.text) } : null;
+    const season = seasonRefOf(deps.seasonState?.().current ?? null);
     answer(res, await checkEntry(w.pool, w.id, w.actor, entryId, { season, lapseContext: deps.lapseContext }), () => ({ ok: true }));
   });
 
