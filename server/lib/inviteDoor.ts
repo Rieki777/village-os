@@ -32,11 +32,21 @@
  * taken, and that sign-up can give it back open, or welcome its newcomer, after
  * membership ended. So the door also refuses a former member (`leftTheVillage`:
  * a resolved departure and not admitted again), at the same three steps.
+ *
+ * A LINK NAMED AFTER A DECISION FINISHES IT AT THE WELCOME (open proposals
+ * part B). A link minted because the village adopted somebody's role proposal
+ * (`inv-open-<proposal id>`, shared/openProposalDecide.ts) carries the place
+ * the village decided on: the Member stage and the roles. The feature that
+ * mints such links registers what its arrival does (`whenInvitedArrives`), and
+ * `welcome` runs it for the link the new account actually took, read back from
+ * the table, so both sign-up doors finish it with no change to either. Like the
+ * vouch it never costs anybody the account: a failure is the feature's to
+ * report, and the person still arrives.
  */
 import type { Pool } from "mysql2/promise";
 
 import { leftTheVillage } from "./formerMember";
-import { claimInvite, inviteByHash, releaseInvite, revokeInvite } from "../repos/memberInvites";
+import { claimInvite, inviteByHash, inviteTakenBy, releaseInvite, revokeInvite } from "../repos/memberInvites";
 import { livingVouchesFor, recordVouch } from "../repos/vouches";
 import { INVITATION_NEEDED, INVITE_REFUSALS, hashInviteToken, inviteStanding } from "./invites";
 import { isTombstone } from "./oauthAccounts";
@@ -73,6 +83,32 @@ async function makerStill(pool: Pool, makerId: string, maker: InviterFacts | nul
   return !(await leftTheVillage(pool, { ...maker, id: makerId }));
 }
 
+/** What a link named after a decision does when the account it made arrives. Never throws past the door. */
+export type InvitedArrival = (arrival: { inviteId: string; inviterUserId: string; userId: string }) => Promise<void>;
+
+const arrivals: Array<{ prefix: string; run: InvitedArrival }> = [];
+
+/**
+ * Register what an arrival through a link whose id starts with `prefix` does.
+ * Called once, from the feature that mints such links, at boot.
+ */
+export function whenInvitedArrives(prefix: string, run: InvitedArrival): void {
+  if (!prefix) throw new Error("an arrival hook needs the prefix of the links it is for");
+  arrivals.push({ prefix, run });
+}
+
+/** The arrival hooks for the link this account took, run in order. Never throws. */
+async function arrive(pool: Pool, inviterUserId: string, userId: string): Promise<void> {
+  if (arrivals.length === 0) return;
+  try {
+    const inviteId = await inviteTakenBy(pool, userId);
+    if (!inviteId) return;
+    for (const a of arrivals) if (inviteId.startsWith(a.prefix)) await a.run({ inviteId, inviterUserId, userId });
+  } catch (err) {
+    console.warn(`[invites] the arrival for ${userId} did not finish: ${String((err as Error)?.message ?? err)}`);
+  }
+}
+
 export interface InviteDoor {
   /** Whether this village joins by invitation. Read per request, so the dial takes effect at once. */
   required(): boolean;
@@ -82,7 +118,7 @@ export interface InviteDoor {
   claim(inviteId: string, userId: string): Promise<string | null>;
   /** Give the link back when the account was never made. */
   release(inviteId: string, userId: string): Promise<void>;
-  /** Record the inviter's vouch for the account their link made. Never throws. */
+  /** Record the inviter's vouch for the account their link made, and finish what the link was made for. Never throws. */
   welcome(inviterUserId: string, userId: string): Promise<void>;
 }
 
@@ -96,6 +132,56 @@ export interface InviteDoorHost {
 }
 
 export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
+  /*
+   * THE INVITER'S VOUCH, kind `arrival`, which is the kind 0198 named for it
+   * and nothing wrote until now. It is recorded after the account exists, so
+   * it must never cost anybody the account: a failure is logged and the
+   * person still arrives, one vouch short, which a member can see and give.
+   *
+   * The same rules as any vouch, from the one function that holds them, and
+   * the same consequence: a village whose bar is one admits on this vouch.
+   * A village that turned vouching off records it and admits nobody on it.
+   *
+   * A maker who left between the door's check and this line gives no vouch:
+   * the link was taken before the erasure withdrew it, and a tombstone has
+   * nobody behind it to vouch.
+   */
+  async function vouchOnArrival(inviterUserId: string, userId: string): Promise<void> {
+    try {
+      if (!(await makerStill(host.getPool(), inviterUserId, await host.members.byId(inviterUserId)))) return;
+      const needed = vouchBar(numberVar("membership.vouches_required"));
+      const refusal = refuseVouch({
+        voucherUserId: inviterUserId,
+        vouchedUserId: userId,
+        existing: [],
+        vouchedIsMember: false,
+        // The account was made a moment ago by this same sign-up, so it is never a tombstone.
+        vouchedIsGone: false,
+        kind: "arrival",
+        needed,
+      });
+      if (refusal) return;
+      const pool = host.getPool();
+      await recordVouch(pool, {
+        id: `vch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        voucherUserId: inviterUserId,
+        vouchedUserId: userId,
+        kind: "arrival",
+        note: null,
+      });
+      // The count of people still here, the one the vouch route admits on:
+      // a vouch a departed member gave before they left admits nobody.
+      if (vouchState(await livingVouchesFor(pool, userId), needed).met) {
+        await host.members.update(userId, (m: any) => {
+          m.membershipGranted = true;
+        });
+        commsSink.fire({ type: "member_admitted", userId });
+      }
+    } catch (err) {
+      console.warn(`[invites] the arrival vouch for ${userId} was not recorded: ${String((err as Error)?.message ?? err)}`);
+    }
+  }
+
   return {
     required: () => boolVar("membership.invite_only"),
 
@@ -141,54 +227,10 @@ export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
 
     release: (inviteId, userId) => releaseInvite(host.getPool(), inviteId, userId),
 
-    /*
-     * THE INVITER'S VOUCH, kind `arrival`, which is the kind 0198 named for it
-     * and nothing wrote until now. It is recorded after the account exists, so
-     * it must never cost anybody the account: a failure is logged and the
-     * person still arrives, one vouch short, which a member can see and give.
-     *
-     * The same rules as any vouch, from the one function that holds them, and
-     * the same consequence: a village whose bar is one admits on this vouch.
-     * A village that turned vouching off records it and admits nobody on it.
-     *
-     * A maker who left between the door's check and this line gives no vouch:
-     * the link was taken before the erasure withdrew it, and a tombstone has
-     * nobody behind it to vouch.
-     */
+    // The vouch, then whatever the link was made for (`whenInvitedArrives`). Neither throws.
     async welcome(inviterUserId, userId) {
-      try {
-        if (!(await makerStill(host.getPool(), inviterUserId, await host.members.byId(inviterUserId)))) return;
-        const needed = vouchBar(numberVar("membership.vouches_required"));
-        const refusal = refuseVouch({
-          voucherUserId: inviterUserId,
-          vouchedUserId: userId,
-          existing: [],
-          vouchedIsMember: false,
-          // The account was made a moment ago by this same sign-up, so it is never a tombstone.
-          vouchedIsGone: false,
-          kind: "arrival",
-          needed,
-        });
-        if (refusal) return;
-        const pool = host.getPool();
-        await recordVouch(pool, {
-          id: `vch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          voucherUserId: inviterUserId,
-          vouchedUserId: userId,
-          kind: "arrival",
-          note: null,
-        });
-        // The count of people still here, the one the vouch route admits on:
-        // a vouch a departed member gave before they left admits nobody.
-        if (vouchState(await livingVouchesFor(pool, userId), needed).met) {
-          await host.members.update(userId, (m: any) => {
-            m.membershipGranted = true;
-          });
-          commsSink.fire({ type: "member_admitted", userId });
-        }
-      } catch (err) {
-        console.warn(`[invites] the arrival vouch for ${userId} was not recorded: ${String((err as Error)?.message ?? err)}`);
-      }
+      await vouchOnArrival(inviterUserId, userId);
+      await arrive(host.getPool(), inviterUserId, userId);
     },
   };
 }

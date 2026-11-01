@@ -34,9 +34,8 @@
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
-import { GAME_CONFIG } from "../../shared/gameConfig";
 import { sortMembersByName } from "../../shared/memberOrder";
-import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "../lib/examples";
+import { grantStage } from "../lib/stageGrant";
 import { roleHoldersNow } from "../repos/pathLadders";
 
 type Deps = Pick<
@@ -102,22 +101,12 @@ export function register(app: Express, deps: Deps): void {
     );
   });
 
+  // The one path a stage is granted by (server/lib/stageGrant.ts), which an adopted open role proposal takes too.
   app.put("/api/admin/players/:id/stage", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const { stageId } = req.body ?? {};
-    if (stageId && !GAME_CONFIG.stages.some((s) => s.id === stageId)) {
-      return res.status(400).json({ error: "Unknown stage" });
-    }
-    const target = await members.byId(req.params.id);
-    if (!target) return res.status(404).json({ error: "Not found" });
-    // The seed sets each identity's stage so its example content renders at
-    // the right level; moving one is editing example content.
-    if (isExampleUser(target)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    const before = await stageOf(target);
-    const updated = await members.update(target.id, (u: any) => { u.stageGranted = stageId ?? null; });
-    if (!updated) return res.status(404).json({ error: "Not found" });
-    const after = await stageOf(updated);
-    await recordStageEvent(updated, before, after, stageId ? "granted by an admin" : "grant removed");
-    res.json({ success: true, stageComputed: after });
+    const out = await grantStage({ members, stageOf, recordStageEvent }, req.params.id, stageId, stageId ? "granted by an admin" : "grant removed");
+    if (!out.ok) return res.status(out.status).json(out.body);
+    res.json({ success: true, stageComputed: out.stageComputed });
   });
 }

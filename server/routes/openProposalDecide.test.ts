@@ -49,8 +49,9 @@ const configured = testDbConfigured();
 if (!configured) console.warn("[openProposalDecide] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
 
 const ORIGIN = "https://village.example.test";
-const NEXT = { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01", endsOn: "2099-03-20" };
-const NOW_SEASON = { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01", endsOn: "2098-12-31" };
+// Before 2038: a term is a TIMESTAMP, and a season ending later cannot be held (shared/seatTerms.ts RECORD_LIMIT).
+const NEXT = { id: "s-next", name: "Season of Roots", startsOn: "2037-01-01", endsOn: "2037-03-20" };
+const NOW_SEASON = { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01", endsOn: "2037-01-01" };
 const FOUNDER = { id: "u-founder", name: "Fern Oak", email: "founder@example.test" };
 const ANA = { id: "u-ana", name: "Ana Reed", email: "ana@example.test" };
 const BEN = { id: "u-ben", name: "Ben Moss", email: "ben@example.test" };
@@ -95,7 +96,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
     const orchard = await createOrgRole(pool, { id: "opd-role-orchard", name: "Orchard Keeper", seats: 1, circleId: "c-land", aim: "Tend the trees." });
     const compost = await createOrgRole(pool, { id: "opd-role-compost", name: "Compost Keeper", seats: 2, circleId: "c-land", aim: "Turn the heap." });
     founderRole = await createOrgRole(pool, { id: "opd-role-founder", name: "Founder", seats: 1, circleId: "c-core", aim: "Hold the village." });
-    const until = new Date("2098-12-01T00:00:00Z");
+    const until = new Date("2036-12-01T00:00:00Z");
     await seatHolder(pool, orchard, { userId: ANA.id, seasonId: "s-now", termEndsAt: until });
     await seatHolder(pool, compost, { userId: BEN.id, seasonId: "s-now", termEndsAt: until });
     // The proposer's own account holds a role in the circle too: it is never asked about its own proposal.
@@ -215,6 +216,8 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
   const page = (id: string, as: string | null) => call("GET", `/api/governance/open-proposals/${id}`, undefined, as);
   const linkOf = (body: any): string => String(body?.invitation?.link ?? "");
   const inviteToken = (link: string) => new URL(link).searchParams.get("invite") as string;
+  /** A JSON column, as the driver hands it back: parsed already on MySQL, text on MariaDB. */
+  const idsOf = (v: unknown): unknown => (Array.isArray(v) ? v : JSON.parse(String(v)));
 
   describe("nothing unconfirmed reaches a person", () => {
     it("a sent proposal asks nobody and rings nobody, and its page is not there", async () => {
@@ -276,8 +279,9 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       const p = r.body.proposal;
       expect(p).toMatchObject({ id, status: "confirmed", proposer: "Rowan", why: "I live up the road and the gate is always shut.", aim: "The gate opens at dawn every day." });
       expect(p.roles).toEqual([{ id: gate, name: "Gate Keeper", circle: "Land Circle", note: "I open gates for a living." }]);
-      expect(p.season).toMatchObject({ id: "s-next", name: "Season of Roots", startsOn: "2099-01-01" });
-      expect(p.consent).toMatchObject({ state: "open", asked: 2, consented: 0, objected: 0 });
+      expect(p.season).toMatchObject({ id: "s-next", name: "Season of Roots", startsOn: "2037-01-01" });
+      // Ana, Ben and u-has hold roles in the Land Circle; u-has is asked here, since this address is not its own.
+      expect(p.consent).toMatchObject({ state: "open", asked: 3, consented: 0, objected: 0 });
       expect(p.you).toMatchObject({ mayAdopt: false, mayDecline: false, holdsThePower: false });
       expect(JSON.stringify(r.body)).not.toContain("page2@example.test");
       expect(JSON.stringify(r.body)).not.toContain("Field");
@@ -415,13 +419,13 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       const apps = await q("SELECT id, status, seat_ids, term_season_id, adopted_via, adopted_ref, authority_ref, UNIX_TIMESTAMP(starts_at) AS starts_s FROM seat_applications WHERE candidate_user_id = ?", [newcomer]);
       expect(apps).toHaveLength(1);
       expect(apps[0]).toMatchObject({ status: "adopted", term_season_id: "s-next", adopted_via: "holder", adopted_ref: FOUNDER.id, authority_ref: `org.seat@${founderRole}` });
-      expect(JSON.parse(String(apps[0].seat_ids))).toEqual([gate]);
-      expect(Number(apps[0].starts_s) * 1000).toBe(Date.parse("2099-01-01T00:00:00Z"));
+      expect(idsOf(apps[0].seat_ids)).toEqual([gate]);
+      expect(Number(apps[0].starts_s) * 1000).toBe(Date.parse("2037-01-01T00:00:00Z"));
       expect(state.notices.some((n) => n.userId === newcomer && n.link === `/role-applications/${apps[0].id}`)).toBe(true);
       expect(state.adminNotices).toEqual([]);
 
       // The season turn seats them on the first day, as it seats any adopted application.
-      const at = new Date("2099-01-01T12:00:00Z");
+      const at = new Date("2037-01-01T12:00:00Z");
       await runSeasonTurn({
         getPool: () => pool,
         notify: async () => undefined,
@@ -468,7 +472,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(state.stageEvents).toEqual([expect.objectContaining({ userId: HAS.id, to: "member" })]);
       const apps = await q("SELECT status, seat_ids, term_season_id, adopted_ref FROM seat_applications WHERE candidate_user_id = ?", [HAS.id]);
       expect(apps).toEqual([expect.objectContaining({ status: "adopted", term_season_id: "s-next", adopted_ref: FOUNDER.id })]);
-      expect(JSON.parse(String(apps[0].seat_ids))).toEqual([well]);
+      expect(idsOf(apps[0].seat_ids)).toEqual([well]);
       const mail = state.sent.find((m) => m.origin === "open_proposal.adopted");
       expect(mail?.text).toContain(`${ORIGIN}/profile`);
       expect(mail?.text).not.toContain("invite");

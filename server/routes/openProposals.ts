@@ -33,8 +33,16 @@
  * The tidy job also takes the name and address off a declined or withdrawn
  * proposal 90 days after it was decided.
  *
- * Confirmed proposals wait on the admin's list here. Asking the circle and the
- * power to decide, and the account an adoption makes, are the next change.
+ * Confirmed proposals wait on the admin's list here.
+ *
+ * ── CONFIRMING ASKS THE CIRCLE (part B) ─────────────────────────────────────
+ *
+ * The confirm step, and only the confirm step, asks every live holder of a
+ * role in the proposed roles' circles to consent or object within 2 business
+ * days, and tells the holders of the power that seats people it waits on them
+ * (server/lib/openProposalDecide.ts). The members-only page where it is read,
+ * answered, adopted or declined, and the account an adoption makes, are
+ * server/routes/openProposalDecide.ts, registered from here.
  *
  * The desk side asks the gate on `intake.moderate`, as the other public queues do.
  */
@@ -58,14 +66,19 @@ import { effectiveLifecycle } from "../lib/modules";
 import { listOrgRoles } from "../lib/orgChart";
 import { singlePublicAddress } from "../lib/publicAddress";
 import { registerJob } from "../lib/scheduler";
+import { arrivalFor, confirmAndAsk, tellTheCircle } from "../lib/openProposalDecide";
+import { whenInvitedArrives } from "../lib/inviteDoor";
+import { OPEN_INVITE_PREFIX } from "../../shared/openProposalDecide";
 import { dbDocument } from "../repos/store-db";
+import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposalDecide";
 import * as store from "../repos/openProposals";
 import { villageCircles } from "../repos/roleProposals";
 
 type Deps = Pick<
   AppDeps,
   "getPool" | "overLimit" | "clientIp" | "guardCapability" | "authedUser" | "commsPostOffice" | "deploymentOrigin" | "projectName" | "escapeHtml" | "seasonState"
-> & {
+> &
+  Omit<DecideRouteDeps, "postEmail" | "now"> & {
   /** The one mail door. A suite hands in a fake to watch what would go out. */
   postEmail?: (email: OutgoingEmail) => Promise<PostResult>;
   /** The governance module's lifecycle; the roles are its own. */
@@ -95,6 +108,19 @@ export function register(app: Express, deps: Deps): void {
   const governance = deps.governanceLifecycle ?? (() => effectiveLifecycle("governance"));
   const now = () => (deps.now ? deps.now() : new Date());
   const site = () => deploymentOrigin().replace(/\/+$/, "");
+  /** What the decision's work reads (server/lib/openProposalDecide.ts). */
+  const decide = {
+    getPool,
+    notify: deps.notify,
+    notifyAdmins: deps.notifyAdmins,
+    members: deps.members,
+    stageOf: deps.stageOf,
+    recordStageEvent: deps.recordStageEvent,
+    liveHoldersOf: deps.liveHoldersOf,
+    calendar: deps.seatCalendar,
+    lapse: deps.lapse,
+    now,
+  };
 
   /** The switch, read fresh: one small row, and an admin who just flipped it sees it at once. */
   async function settings(): Promise<OpenProposalSettings> {
@@ -196,8 +222,15 @@ export function register(app: Express, deps: Deps): void {
     if (await overLimit(`open-proposal:confirm:${clientIp(req)}`, 30, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
     const at = now();
-    const confirmed = token && token.length <= 100 ? await store.confirmOpenProposal(getPool(), hashOf(token), new Date(at.getTime() - OPEN_CONFIRM_HOURS * 60 * 60_000), at) : null;
+    // Confirmed, and the circle asked, in one transaction (part B). A used, old or unknown token asks nobody.
+    const confirmed = token && token.length <= 100 ? await confirmAndAsk(decide, hashOf(token), new Date(at.getTime() - OPEN_CONFIRM_HOURS * 60 * 60_000), at) : null;
     if (!confirmed) return res.status(410).json({ error: OPEN_WORDS.confirmGone });
+    try {
+      await tellTheCircle(decide, confirmed);
+    } catch (e) {
+      // The asks are written and wait under Tasks; a notice that did not go is not the person's problem.
+      console.error("[open-proposals] the circle could not all be told", e);
+    }
     res.json({ confirmed: true, message: OPEN_WORDS.confirmed });
   });
 
@@ -259,6 +292,12 @@ export function register(app: Express, deps: Deps): void {
   // ── The tidy job (sheet 19i) ──────────────────────────────────────────────
 
   registerJob(TIDY_JOB, TIDY_EVERY_MS, async () => tidyOpenProposals(getPool(), now()));
+
+  // ── The decision (part B) ─────────────────────────────────────────────────
+
+  registerOpenProposalDecide(app, { ...deps, postEmail, now });
+  // A sign-up through an adopted proposal's invitation finishes the adoption, whichever door it came by.
+  whenInvitedArrives(OPEN_INVITE_PREFIX, arrivalFor(decide));
 }
 
 /** Delete what was never confirmed after 48 hours; take the name and address off what was declined or withdrawn after 90 days. */

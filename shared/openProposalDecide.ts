@@ -113,12 +113,12 @@ export const DECIDE_WORDS = {
   declineAsk: "Decline it? They get a short, kind email saying no.",
   declineYes: "Yes, decline it",
   declineNo: "Keep it",
-  ownProposal: "This proposal came from your own address, so another holder of the power that seats people decides it.",
+  ownProposal: "This proposal came from your own address, so it is decided by another holder of the power that seats people.",
   /** The door after a handover, and with nobody in the chair. Plain, and no path invented. */
   door: {
     "village-holds-it": "The village holds the power that seats people now, so nobody adopts this proposal on their own. It waits here until the village settles how it adopts one from outside.",
-    "nobody-holds-it": "Nobody holds the power that seats people right now, so this proposal waits here until somebody does.",
-    "a-role-holds-it": "A holder of the power that seats people adopts it or declines it.",
+    "nobody-holds-it": "Right now nobody holds the power that seats people, so this proposal waits here until somebody does.",
+    "a-role-holds-it": "It is adopted or declined by a holder of the power that seats people.",
   } satisfies Record<DoorReason, string>,
 
   // What a decision answers. Every one that sends nothing says what to do instead.
@@ -131,6 +131,7 @@ export const DECIDE_WORDS = {
   declinedNotEmailed: (why: NotSentWhy) => `Declined. ${NOT_SENT[why]}`,
   reissued: (days: number) => `A new invitation is ready, and the old one no longer works. It works once and lasts ${days} days.`,
   reissuedEmailed: "It went to them by email.",
+  reissuedNotEmailed: (why: NotSentWhy) => `${NOT_SENT[why]} Copy it below and send it to them yourself.`,
   reissue: "Make a new invitation",
   reissueLine: "They have not used their invitation yet. A new one replaces it, and goes to them by email.",
   invitationUsed: "They made their account with their invitation.",
@@ -138,6 +139,8 @@ export const DECIDE_WORDS = {
   copied: "Copied",
 
   // Refusals, each with what to do.
+  notAHolder: "Adopting or declining a proposal is for a live holder of the power that seats people.",
+  pending: "That address already has an application waiting for one of these roles. Decide that one on its page first.",
   decided: "This proposal has been decided, so there is nothing left to decide.",
   raced: "Somebody else decided this proposal a moment ago. Read it again.",
   noInvitation: "There is no invitation to replace: they already made their account, or this proposal was not adopted.",

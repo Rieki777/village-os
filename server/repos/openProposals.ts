@@ -7,9 +7,18 @@
  * Instants are written from Node's clock and read back with UNIX_TIMESTAMP,
  * as server/repos/roleProposals.ts does, so the database's own zone never
  * moves one. Raw SQL only, never `dbCollection`.
+ *
+ * THE DECISION RIDES IN THE BODY (part B). An adoption is recorded in words
+ * that name a role, and under the authority it was made by (`org.seat@<role
+ * id>`), and the account the invitation later makes carries that authority.
+ * Both are written once, with the status, as two plain keys of `body_json`
+ * (`decidedWords`, `decidedAuthority`), so part B needs no migration. The
+ * body's reader (`openBodyOf`) never sees them, and they name nobody, so the
+ * tidy job's anonymising leaves them as they are.
  */
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { openBodyOf, OPEN_PROPOSAL_STATUSES, type OpenProposalBody, type OpenProposalStatus } from "../../shared/openProposals";
+import type { OpenDecision } from "../../shared/openProposalDecide";
 
 type Db = Pool | PoolConnection;
 
@@ -24,6 +33,8 @@ export interface StoredOpenProposal {
   createdAt: Date;
   confirmedAt: Date | null;
   decidedAt: Date | null;
+  /** The decision in words and the authority it was made under, once decided (part B). */
+  decision: OpenDecision;
 }
 
 const COLUMNS =
@@ -44,6 +55,14 @@ const json = (v: unknown): unknown => {
 
 const fromSeconds = (v: unknown): Date | null => (v === null || v === undefined ? null : new Date(Number(v) * 1000));
 
+const textOr = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v : null);
+
+/** The decision kept in the body, whatever else the body holds. Never throws. */
+function decisionOf(raw: unknown): OpenDecision {
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return { words: textOr(o.decidedWords), authority: textOr(o.decidedAuthority) };
+}
+
 function rowOf(r: any): StoredOpenProposal {
   const status = (OPEN_PROPOSAL_STATUSES as readonly string[]).includes(String(r.status)) ? (r.status as OpenProposalStatus) : "unconfirmed";
   return {
@@ -57,6 +76,7 @@ function rowOf(r: any): StoredOpenProposal {
     createdAt: fromSeconds(r.created_s) as Date,
     confirmedAt: fromSeconds(r.confirmed_s),
     decidedAt: fromSeconds(r.decided_s),
+    decision: decisionOf(json(r.body_json)),
   };
 }
 
@@ -70,9 +90,38 @@ export async function insertOpenProposal(
   );
 }
 
-export async function readOpenProposal(db: Db, id: string): Promise<StoredOpenProposal | null> {
-  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${COLUMNS} FROM open_role_proposals WHERE id = ? LIMIT 1`, [id]);
+/** One proposal, or null. Pass a transaction's connection and `lock` to hold its row until commit. */
+export async function readOpenProposal(db: Db, id: string, lock = false): Promise<StoredOpenProposal | null> {
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${COLUMNS} FROM open_role_proposals WHERE id = ? LIMIT 1${lock ? " FOR UPDATE" : ""}`, [id]);
   return rows[0] ? rowOf(rows[0]) : null;
+}
+
+/** Several proposals by id, in one read. */
+export async function openProposalsByIds(db: Db, ids: readonly string[]): Promise<StoredOpenProposal[]> {
+  if (!ids.length) return [];
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${COLUMNS} FROM open_role_proposals WHERE id IN (?)`, [[...ids]]);
+  return rows.map(rowOf);
+}
+
+/**
+ * DECIDE A CONFIRMED PROPOSAL, once (part B): adopted or declined, the moment
+ * it was decided, and the decision kept in the body. Guarded on `confirmed`, so
+ * of two deciders at once exactly one moves it. True when this call did.
+ */
+export async function decideOpenProposal(
+  db: Db,
+  id: string,
+  to: "adopted" | "declined",
+  decision: OpenDecision,
+  now: Date,
+): Promise<boolean> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE open_role_proposals SET status = ?, decided_at = ?, " +
+      "body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', ?, '$.decidedAuthority', ?) " +
+      "WHERE id = ? AND status = 'confirmed'",
+    [to, now, decision.words ?? "", decision.authority ?? "", id],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
 }
 
 /**
@@ -93,6 +142,20 @@ export async function confirmOpenProposal(db: Db, confirmHash: string, notBefore
   );
   if (Number(result.affectedRows ?? 0) !== 1) return null;
   return readOpenProposal(db, id);
+}
+
+/**
+ * Put an adoption back, when the place it was to make could not be made: the
+ * proposal waits on the village again, its decision cleared. Guarded on
+ * `adopted`, and only ever called by the request that adopted it.
+ */
+export async function undoAdoption(db: Db, id: string): Promise<boolean> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE open_role_proposals SET status = 'confirmed', decided_at = NULL, " +
+      "body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', '$.decidedAuthority') WHERE id = ? AND status = 'adopted'",
+    [id],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
 }
 
 /** The proposals waiting with the village, or in any one status, oldest first. */
