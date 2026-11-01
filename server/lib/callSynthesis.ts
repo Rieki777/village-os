@@ -100,6 +100,25 @@ export function chapterCandidates(segments: TranscriptSegment[]): { startMs: num
   return marks;
 }
 
+/** What the user turn carries: the recording's title, the chapter marks and the tape. */
+export interface SynthesisTranscriptInput {
+  title: string;
+  chapterMarks: { startMs: number }[];
+  segments: TranscriptSegment[];
+}
+
+/**
+ * The user turn both synthesis paths send, the synchronous admin route and the
+ * batch tick. One builder, so the two can never send different things.
+ */
+export function synthesisUserContent(input: SynthesisTranscriptInput): string {
+  return JSON.stringify({
+    title: input.title,
+    chapterMarks: input.chapterMarks,
+    segments: input.segments.slice(0, 400).map((s) => ({ startMs: s.startMs, text: s.text.slice(0, 400) })),
+  }).slice(0, 100000);
+}
+
 /** The synthesis system prompt: JSON only, evidence demanded, roles constrained. */
 export function synthesisSystemPrompt(candidates: { id: string; name: string; purpose: string }[]): string {
   return (

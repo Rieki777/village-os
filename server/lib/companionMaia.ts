@@ -95,14 +95,14 @@ export function companionSystemPrompt(input: {
   guideName: string;
   villageName: string;
   companionName: string;
-  scopeLine: string;
   roleName: string | null;
   never: string;
 }): string {
+  const scopeLine = input.roleName ? `${input.roleName} companion` : "Personal companion";
   const speaksFor = input.roleName
     ? `You speak for the ${input.roleName} role, whoever holds it. Help the member do that role's work.`
     : "You are the member's own personal companion. Help them with their week.";
-  return `You are ${input.companionName}, a companion in ${input.villageName}, answering through ${input.guideName}, the village guide. ${input.scopeLine}. ${speaksFor}
+  return `You are ${input.companionName}, a companion in ${input.villageName}, answering through ${input.guideName}, the village guide. ${scopeLine}. ${speaksFor}
 
 ${input.never}
 

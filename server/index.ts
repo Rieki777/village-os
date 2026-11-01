@@ -452,7 +452,7 @@ import {
   transcriptFor,
   videoIdsFromRss,
 } from "./lib/recordings";
-import { chapterCandidates, synthesisSystemPrompt } from "./lib/callSynthesis";
+import { chapterCandidates, synthesisSystemPrompt, synthesisUserContent } from "./lib/callSynthesis";
 // ── K2 ZONE START: synthesis through the batch API ──────────────────────────
 import {
   MAX_BATCH_SIZE,
@@ -13955,14 +13955,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
           model: SYNTHESIS_MODEL,
           max_tokens: SYNTHESIS_MAX_TOKENS,
           system: synthesisSystemPrompt(roleCandidates),
-          messages: [{
-            role: "user",
-            content: JSON.stringify({
-              title: rec.title,
-              chapterMarks,
-              segments: transcript.segments.slice(0, 400).map((s) => ({ startMs: s.startMs, text: s.text.slice(0, 400) })),
-            }).slice(0, 100000),
-          }],
+          messages: [{ role: "user", content: synthesisUserContent({ title: rec.title, chapterMarks, segments: transcript.segments }) }],
         }),
       });
       if (!resp.ok) {
