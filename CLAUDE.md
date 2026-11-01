@@ -388,8 +388,8 @@ put the previous image back.
 
 **The previous release is still serving while your migration runs, on the same database.** A
 DDL statement needs its table to itself for a moment, and while it waits for that, every later
-query on the table queues behind it, from both servers. That is how batch 74 took Amora down on
-2026-11-01. So the runner caps each statement's lock wait (`MIGRATION_LOCK_WAIT_SECONDS` in
+query on the table queues behind it, from both servers. That is the working explanation for
+batch 74 taking Amora down on 2026-11-01. So the runner caps each statement's lock wait (`MIGRATION_LOCK_WAIT_SECONDS` in
 `server/db/migrate.ts`), retries a timed-out statement a bounded number of times in the same
 boot, and then fails the boot naming the file, the statement and the lock; the next boot resumes
 at that statement. A lock timeout in a deploy log means retry the deploy, never edit the SQL.

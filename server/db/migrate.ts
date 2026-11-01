@@ -45,7 +45,8 @@
  * its table for a moment. The server default for that wait is one year on
  * MySQL 8. One open transaction that has touched the table makes the ALTER
  * wait, and every later query on that table, from BOTH servers, queues behind
- * the ALTER's pending exclusive request. That froze Amora for fifteen minutes.
+ * the ALTER's pending exclusive request. That is the working explanation (H1,
+ * unconfirmed until the deploy logs are read) for Amora's fifteen-minute outage.
  * `applyPending` now sets `lock_wait_timeout` and `innodb_lock_wait_timeout`
  * on its own connection (see MIGRATION_LOCK_WAIT_SECONDS), retries a timed-out
  * statement a bounded number of times, and otherwise fails the boot naming the
@@ -75,12 +76,13 @@ export const MIGRATION_LOCK_TIMEOUT_SECONDS = 600;
  * statement takes) and `innodb_lock_wait_timeout` (row locks, which a backfill
  * UPDATE takes), on the migration connection only, for the length of the run.
  *
- * The number is a trade between two costs, and both sides are measured here:
+ * The number is a trade between two costs:
  *
  *  - TOO SHORT and a normal deploy fails on a brief, harmless lock. What holds
- *    a lock on a table in this app is an autocommit query (milliseconds) or a
- *    short app transaction such as a ledger posting (well under a second). Ten
- *    seconds is more than ten times the longest of those.
+ *    a lock on a table in this app is an autocommit query or a short app
+ *    transaction such as a ledger posting, both expected to last from
+ *    milliseconds to well under a second (an expectation, not a measurement of
+ *    production). Ten seconds leaves more than ten times that.
  *  - TOO LONG and the old server stalls for all of it. While the ALTER waits,
  *    every new query on that table queues behind it, and the app's pool has
  *    eight connections (server/db/pool.ts), so a handful of signed-in requests
