@@ -2,6 +2,7 @@ import Layout from "@/components/Layout";
 import { KeyRound, ArrowRight, Mail, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
+import { claimLinkHere } from "@/lib/claimLink";
 
 /**
  * The founder's way in on day one, and the way back in after a lockout.
@@ -152,11 +153,13 @@ export default function Bootstrap() {
                     <p className="text-sm font-medium text-amber-ink">
                       Open this now, on this device:
                     </p>
+                    {/* On THIS address: the server builds the link from FRONTEND_URL,
+                        which may not answer yet (lib/claimLink.ts). */}
                     <a
-                      href={claimUrl}
+                      href={claimLinkHere(claimUrl, window.location.origin)}
                       className="block break-all rounded-lg bg-amber-ink/5 p-3 text-sm text-teal-deep underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-deep"
                     >
-                      {claimUrl}
+                      {claimLinkHere(claimUrl, window.location.origin)}
                     </a>
                     <p className="text-xs text-amber-ink">
                       It expires in an hour and works once. If it expires, come back to this page

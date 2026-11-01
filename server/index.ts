@@ -3,7 +3,7 @@ import { FORMER_MEMBER_HOLD, resolveExit } from "./lib/exitResolve";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
-import { joiningOf, pickNextAction } from "./lib/nextAction";
+import { founderStepFor, joiningOf, pickNextAction } from "./lib/nextAction";
 import { ideaReceipt } from "./lib/questIdeaReceipt";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
@@ -4616,7 +4616,7 @@ async function nextActionFor(user: any): Promise<{ id: string; label: string; hr
  * another, which is how the two ladder serializers already diverged once.
  */
 async function servedNextAction(user: any): Promise<{ id: string; label: string; href: string }> {
-  const rule = await nextActionFor(user);
+  const rule = founderStepFor(user?.role, await founderPowerStands(getPool())) ?? (await nextActionFor(user));
   return { ...rule, label: withCommitmentName(rule.label, mergedConfig().project.commitmentName) };
 }
 
@@ -12220,7 +12220,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // zero that reads like an empty village.
       tooFew = `The roll could not be read: ${String(e?.message ?? e).slice(0, 160)}`;
     }
-    return {
+    return { governanceOn: LIFECYCLE_RANK[effectiveLifecycle("governance")] >= LIFECYCLE_RANK.members,
       onTheRoll,
       tooFew,
       unityPct: threshold?.minUnityPct ?? null,
