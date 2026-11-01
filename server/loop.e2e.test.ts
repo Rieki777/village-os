@@ -3297,7 +3297,9 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     try {
       // Point the platform at the stub and open the section.
-      await api("PUT", "/api/admin/variables/tokens.base_rpc_url", { value: `http://127.0.0.1:${RPC_STUB_PORT}` }, founderToken);
+      // The endpoint is an integration secret now, sealed under the fixture key.
+      const rpcSet = await api("PUT", "/api/admin/integrations/base_rpc_url", { value: `http://127.0.0.1:${RPC_STUB_PORT}` }, founderToken);
+      expect(rpcSet.status, JSON.stringify(rpcSet.json)).toBe(200);
       await api("PUT", "/api/admin/variables/tokens.equity_address", { value: "0x1111111111111111111111111111111111111111" }, founderToken);
       await api("PUT", "/api/admin/variables/tokens.show_economics_section", { value: "true" }, founderToken);
 

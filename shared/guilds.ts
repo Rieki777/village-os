@@ -1248,6 +1248,38 @@ export const SEEDS: readonly GuildSeed[] = [
     open: ["The exact Etherscan page for API keys."],
     source: "server/lib/hypha/discovery.ts; server/index.ts integration card.",
   },
+  {
+    id: "base-rpc-url",
+    kind: "hand-carried",
+    title: "Read Base through your own endpoint",
+    provider: { name: "Alchemy, or any Base provider", url: "https://dashboard.alchemy.com" },
+    scopes: [],
+    handles: [{ store: "village-secret", slot: "base_rpc_url" }],
+    need: "optional",
+    risk: "ordinary",
+    lifespan: "lasting",
+    consequence:
+      "Token balances and the Hypha bridge read Base through an endpoint this village pays for. An Alchemy endpoint also lets the bridge list the founder's token contracts with no Basescan key.",
+    undo: "Clear it. Reads go back to the free public Base node, which is enough to start.",
+    cost: "A free tier serves a small village; a listener needs a paid plan.",
+    dependsOn: ["village-secrets-key"],
+    liveCheck: {
+      via: "probe",
+      probe: "secret-present",
+      how: "The integrations status reports the slot as configured. A balance read that returns is what proves it.",
+      strength: "present",
+      proves: "An endpoint is set.",
+    },
+    nursery: null,
+    compost: ["Delete the key at the provider.", "Clear the Base RPC endpoint under Admin, Integrations."],
+    rotation: { every: "year" },
+    holder: { who: "any-founder" },
+    certainty: "unverified",
+    open: ["The exact Alchemy page that shows a Base Mainnet endpoint."],
+    source:
+      "server/lib/secrets.ts (the base_rpc_url slot, and the boot move out of the old tokens.base_rpc_url variable); " +
+      "server/lib/base-reads.ts baseRpcUrl; server/index.ts integration card.",
+  },
 
   // ── Module seeds ────────────────────────────────────────────────────────────
   {

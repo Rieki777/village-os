@@ -2369,7 +2369,7 @@ Displays token balances and Gratitude flows on member profiles. Turn off while t
 
 ### Base RPC endpoint
 
-Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number.
+Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number. Saved under Admin, Integrations, where it is sealed, because a dedicated endpoint carries its key in the address. The host variable BASE_RPC_URL works too.
 
 | Fact | Value |
 | --- | --- |
@@ -2380,7 +2380,8 @@ Where balances are read from. A public endpoint is fine to start; a dedicated on
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
-| Shown to the public | Listed, and open to proposals. Its value stays off the public rules page because it can carry a provider key; admins still see it. |
+| Shown to the public | Listed. Its value stays off the public rules page because it can carry a provider key. |
+| Where it is set | Admin, Integrations, sealed, as the `base_rpc_url` integration secret. This dial takes only its default now. |
 
 ## Hypha
 

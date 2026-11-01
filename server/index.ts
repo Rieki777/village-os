@@ -435,7 +435,7 @@ import {
   staysForUser,
   staysOpenState,
 } from "./lib/stays";
-import { createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
+import { baseRpcUrl, createWalletChallenge, readOnchainBalance, readTokenIdentity, verifyWalletSignature } from "./lib/base-reads";
 import { allExits, blockingStates, cancelExit, createExit, exitById, exitOpenState, openExitFor, sweepBalances } from "./lib/exit";
 import {
   DEFAULT_EXIT_POLICY,
@@ -660,7 +660,7 @@ import {
 } from "./lib/agentProfile";
 // ── END LANE L6 IMPORTS ─────────────────────────────────────────────────────
 import {
-  allSecretStatuses, ROOT_SLOT_CARDS,
+  allSecretStatuses, BASE_RPC_CARD, ROOT_SLOT_CARDS,
   loadSecrets,
   NO_VILLAGE_SECRETS_KEY_SENTENCE,
   putSecret,
@@ -17276,7 +17276,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     { key: "assistant_api_key", title: "Anthropic, the AI guide", unlocks: "The AI guide: proposal intake, the launch journey, and call synthesis. Blank means every form still works, with no guide on them.", getAt: "console.anthropic.com", placeholder: "sk-ant-…" },
     { key: "riverside_webhook_secret", title: "Riverside recording deliveries", unlocks: "Call automation's inbound deliveries. It fails closed: with no secret set, every payload is discarded with an inert 200 and nobody is told why.", getAt: "Riverside → webhook settings → send this same value as the x-riverside-secret header", placeholder: "a long random string you choose" },
     { key: "governance_hub_secret", title: "Governance hub deliveries", unlocks: "How a Hypha vote's executed outcome comes home. Fails closed the same way. Until it is set, outcomes are reported by the proposer and applied by an admin.", getAt: "Issued when your fork is registered with the hub", placeholder: "the value the hub issued you" },
-    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, ...ROOT_SLOT_CARDS,
+    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, BASE_RPC_CARD, ...ROOT_SLOT_CARDS,
   ];
 
   interface IntegrationCard {
@@ -20085,7 +20085,7 @@ ${inner}
     listenerPosture({
       hubUrl: stringVar("governance.hub_url"),
       hubSecretConfigured: secretConfigured("governance_hub_secret"),
-      rpcUrl: stringVar("tokens.base_rpc_url"),
+      rpcUrl: baseRpcUrl(),
     });
 
   /**
@@ -20191,7 +20191,7 @@ ${inner}
     }
     try {
       const found = await discoverCandidates({
-        baseRpcUrl: stringVar("tokens.base_rpc_url").trim(),
+        baseRpcUrl: baseRpcUrl(),
         founderAddress,
         nameHint: String(req.body?.nameHint ?? ""),
       });
@@ -20479,9 +20479,9 @@ ${inner}
        * CHANGING is village news. Those are different audiences and this line
        * only ever needed the second.
        *
-       * Nothing is lost from the record: recordMechanicsChange above keeps the
-       * before and after for the audit trail, behind auth, which is where a
-       * value belongs. Redacting by pattern was the other option and it is the
+       * The record keeps before and after (recordMechanicsChange above; a key in
+       * either is removed on write, lib/credentialRedaction.ts, and the public
+       * feed withholds the rest). Redacting by pattern was the other option and it is the
        * weaker one, because it needs a list of what looks secret and a URL with
        * a key in the path defeats most such lists.
        */
