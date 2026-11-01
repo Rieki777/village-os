@@ -87,6 +87,7 @@ export const JOIN_ANSWER_WORDS = {
   acceptedEmailed: (address: string, days: number) => `Accepted. The invitation went to ${address}. It works once and lasts ${days} days.`,
   acceptedNotEmailed: (why: NotSentWhy) => `Accepted. ${NOT_SENT[why]} Copy their invitation below and send it to them yourself.`,
   alreadyMember: "Accepted. That address already has an account here, so no invitation was needed.",
+  acceptedAccount: "Accepted, and they have been told. They sent it signed in, so they already have an account and no invitation was needed.",
   alreadyAccepted: "This request was already accepted, and its invitation went out then.",
   declinedEmailed: (address: string) => `Declined. A kind no went to ${address}.`,
   declinedNotEmailed: (why: NotSentWhy) => `Declined. ${NOT_SENT[why]}`,

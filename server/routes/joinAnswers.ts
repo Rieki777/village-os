@@ -47,7 +47,9 @@
  *     the village's queue is the queue's work. The link still counts in their
  *     open list, so it is theirs to withdraw.
  *   - An address that already has an account here gets no invitation and no
- *     email: they can already sign in.
+ *     email: they can already sign in. A request sent while signed in names
+ *     its account, so it gets no invitation whatever address was typed, and
+ *     the bell tells them, as a status move always did.
  *
  * Who may answer is the gate on `intake.moderate`, as `PUT
  * /api/admin/submissions/:id/status` asks it, and the answer needs a member
@@ -72,10 +74,11 @@ import { isExampleUser } from "../lib/examples";
 import { hashInviteToken, INVITE_DAYS, invitePath, mintInviteToken } from "../lib/invites";
 import { isTombstone } from "../lib/oauthAccounts";
 import { singlePublicAddress } from "../lib/publicAddress";
+import { submissionStatusNotice } from "../lib/submissionNotices";
 import { whileSessionHolds } from "../lib/sessionHold";
 import { createInviteOn, inviteById, reissueInviteOn, revokeInvite } from "../repos/memberInvites";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability" | "submissionsRepo" | "commsPostOffice" | "deploymentOrigin" | "projectName" | "escapeHtml"> & {
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability" | "submissionsRepo" | "commsPostOffice" | "deploymentOrigin" | "projectName" | "escapeHtml" | "notify"> & {
   /** The one mail door. A suite hands in a fake to watch what would go out. */
   postEmail?: (email: OutgoingEmail) => Promise<PostResult>;
 };
@@ -112,7 +115,7 @@ async function makeJoinInvite(pool: Pool, submissionId: string, inviterUserId: s
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, members, guardCapability, submissionsRepo, deploymentOrigin, projectName, escapeHtml } = deps;
+  const { authedUser, getPool, members, guardCapability, submissionsRepo, deploymentOrigin, projectName, escapeHtml, notify } = deps;
   const postEmail = deps.postEmail ?? ((email: OutgoingEmail) => post(deps.commsPostOffice, email));
 
   /** The request and the admin answering it, or null after answering the desk. */
@@ -134,7 +137,7 @@ export function register(app: Express, deps: Deps): void {
       return null;
     }
     const data = (row.data ?? {}) as Record<string, unknown>;
-    return { user, id, row, address: singlePublicAddress(data.email), typed: String(data.email ?? "").trim(), firstName: greetingName(data.name) };
+    return { user, id, row, account: row.userId ? String(row.userId) : null, address: singlePublicAddress(data.email), typed: String(data.email ?? "").trim(), firstName: greetingName(data.name) };
   }
 
   /** Move the request to `status`, through the one inbox (`submissionsRepo`), the whole list handed back. */
@@ -144,6 +147,18 @@ export function register(app: Express, deps: Deps): void {
     if (i === -1 || all[i].status === status) return;
     all[i] = { ...all[i], status };
     await submissionsRepo.replaceAll(all);
+  }
+
+  /**
+   * The bell, for a request sent while signed in: it names the account, so the
+   * person is told the way `PUT /api/admin/submissions/:id/status` told them,
+   * under the same key, so a later status move never tells them twice.
+   */
+  async function ring(row: any, status: "accepted" | "declined") {
+    const notice = submissionStatusNotice(String(row.type ?? ""), status, row.data);
+    if (!row.userId || !notice) return false;
+    await notify({ userId: String(row.userId), type: "submission_status", title: notice.headline, body: notice.line, link: "/profile", dedupeKey: `submission:${String(row.id)}:${status}` });
+    return true;
   }
 
   /** An address that already has an account here: a real, present person. */
@@ -173,9 +188,15 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/admin/join-requests/:id/accept", async (req, res) => {
     const got = await answering(req, res);
     if (!got) return;
-    const { user, id, address, typed, firstName } = got;
+    const { user, id, row, account, address, typed, firstName } = got;
     const pool = getPool();
 
+    // Sent while signed in: they have an account already, whatever address they typed. The bell tells them.
+    if (account) {
+      await setStatus(id, "accepted");
+      await ring(row, "accepted");
+      return res.json({ success: true, alreadyMember: true, emailed: false, emailedTo: null, link: null, message: JOIN_ANSWER_WORDS.acceptedAccount });
+    }
     if (await isMember(address)) {
       await setStatus(id, "accepted");
       return res.json({ success: true, alreadyMember: true, emailed: false, emailedTo: null, link: null, message: JOIN_ANSWER_WORDS.alreadyMember });
@@ -211,7 +232,7 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/admin/join-requests/:id/decline", async (req, res) => {
     const got = await answering(req, res);
     if (!got) return;
-    const { id, row, address, typed, firstName } = got;
+    const { id, row, account, address, typed, firstName } = got;
     const pool = getPool();
     if (row.status === "declined") return res.json({ success: true, emailed: false, emailedTo: null, withdrawn: false, message: JOIN_ANSWER_WORDS.alreadyDeclined });
 
@@ -221,6 +242,8 @@ export function register(app: Express, deps: Deps): void {
     const withdrawn = invite ? await revokeInvite(pool, invite.id, invite.inviterUserId) : false;
     if (invite && !withdrawn && (await inviteById(pool, invite.id))?.usedByUserId) return res.status(409).json({ error: JOIN_ANSWER_WORDS.alreadyJoined });
     await setStatus(id, "declined");
+    // Sent while signed in: the bell tells them too, as a status move always did.
+    if (account) await ring(row, "declined");
 
     let why: NotSentWhy | null = null;
     if (!address) why = typed ? "bad_address" : "no_address";

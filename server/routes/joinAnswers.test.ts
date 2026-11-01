@@ -52,6 +52,8 @@ describe.skipIf(!configured)("answering a request to join, on a real schema", ()
     moderators: [ADMIN.id] as string[],
     submissions: [] as any[],
     sent: [] as OutgoingEmail[],
+    /** What the bell was asked to ring. */
+    rung: [] as any[],
     /** What the post office answers the next send with. */
     answer: { status: "sent", messageId: "msg-1" } as PostResult,
   };
@@ -85,6 +87,10 @@ describe.skipIf(!configured)("answering a request to join, on a real schema", ()
       deploymentOrigin: () => ORIGIN,
       projectName: () => "Test Village",
       escapeHtml,
+      notify: async (input: any) => {
+        state.rung.push(input);
+        return { fresh: true };
+      },
       postEmail: async (email: OutgoingEmail) => {
         state.sent.push(email);
         return state.answer;
@@ -107,6 +113,7 @@ describe.skipIf(!configured)("answering a request to join, on a real schema", ()
     state.viewer = ADMIN;
     state.moderators = [ADMIN.id];
     state.sent.length = 0;
+    state.rung.length = 0;
     state.answer = { status: "sent", messageId: "msg-1" };
   });
 
@@ -200,6 +207,26 @@ describe.skipIf(!configured)("answering a request to join, on a real schema", ()
     expect(statusOf(id)).toBe("accepted");
     expect(state.sent).toHaveLength(0);
     expect(await inviteById(pool, joinInviteId(id))).toBeNull();
+  });
+
+  it("ATTACK: a request sent while signed in gets no invitation whatever address was typed, and the bell tells them", async () => {
+    const id = request({ name: "Ivo", email: "someone-else@example.test" });
+    state.submissions.find((s) => s.id === id).userId = MEMBER.id;
+    const yes = await answer(id, "accept");
+    expect(yes.status).toBe(200);
+    expect(yes.body).toMatchObject({ success: true, alreadyMember: true, emailed: false, link: null, message: JOIN_ANSWER_WORDS.acceptedAccount });
+    expect(statusOf(id)).toBe("accepted");
+    expect(state.sent).toHaveLength(0);
+    expect(await inviteById(pool, joinInviteId(id))).toBeNull();
+    // Told by the bell, under the key a status move uses, so nobody is told twice.
+    expect(state.rung).toEqual([expect.objectContaining({ userId: MEMBER.id, type: "submission_status", dedupeKey: `submission:${id}:accepted` })]);
+
+    const other = request({ name: "Ivo", email: "ivo-typed@example.test" });
+    state.submissions.find((s) => s.id === other).userId = MEMBER.id;
+    state.rung.length = 0;
+    const no = await answer(other, "decline");
+    expect(no.body).toMatchObject({ success: true, emailed: true });
+    expect(state.rung).toEqual([expect.objectContaining({ userId: MEMBER.id, dedupeKey: `submission:${other}:declined` })]);
   });
 
   it("ATTACK: accepting twice makes one invitation and sends one email; the second is refused", async () => {
