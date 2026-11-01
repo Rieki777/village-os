@@ -23,7 +23,7 @@
  * this component's wiring, and the route behind it has its own server tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Router } from "wouter";
 
@@ -53,7 +53,9 @@ describe("HandoverTab", () => {
       vi.fn(async () => ({ ok: true, json: async () => PAYLOAD })),
     );
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -157,6 +159,7 @@ async function choose(roleId: string) {
 
 describe("HandoverTab: a power for a role nobody holds (ask 5)", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -223,6 +226,7 @@ describe("HandoverTab: a power for a role nobody holds (ask 5)", () => {
 
 describe("HandoverTab: is the village ready to hold this power (ask 6)", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -338,6 +342,7 @@ function heldServer(deleteAnswer: (glass: boolean) => { status: number; json: an
 
 describe("HandoverTab: bringing a power back (ask 7)", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -420,6 +425,7 @@ describe("HandoverTab: bringing a power back (ask 7)", () => {
  */
 describe("HandoverTab: the last power moves the pen (0219)", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

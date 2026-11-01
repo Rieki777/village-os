@@ -22,7 +22,7 @@
  * draw the step without pretending to be a server.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Router } from "wouter";
 import { GAME_CONFIG } from "@shared/gameConfig";
@@ -53,7 +53,9 @@ function stubFetch() {
 
 describe("the Setup Wizard's Identity step", () => {
   beforeEach(stubFetch);
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });

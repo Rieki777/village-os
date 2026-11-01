@@ -22,7 +22,7 @@
  * enforcement behind the route has its own server tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -109,7 +109,9 @@ describe("ModuleSettingsSection", () => {
     putAnswer = { status: 200, body: { ok: true } };
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: any) => answer(String(url), init)));
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -339,6 +341,7 @@ describe("ModuleSettingsSection, arriving from a setup link", () => {
     );
 
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
