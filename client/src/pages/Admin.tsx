@@ -925,7 +925,7 @@ export function IntegrationsTab({ password }: { password: string }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(refusal(d, "failed"));
-      toast.success(value.trim() ? "Key saved" : "Key cleared");
+      toast.success(d?.asked ? String(d.message) : value.trim() ? "Key saved" : "Key cleared");
       setDrafts((p) => ({ ...p, [key]: "" }));
       load();
     } catch (e: any) { toast.error(e?.message ?? "Failed"); }

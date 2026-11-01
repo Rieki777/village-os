@@ -181,7 +181,7 @@ import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { claimsAnnouncedHere } from "./lib/rewardMoment";
 import { feedOrigin as feedOriginOf, feedUidHost } from "./lib/feedOrigin";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
-import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
+import { register as registerModuleLibraryRoutes, moduleChangeReaders, plantingDoor } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
@@ -8375,7 +8375,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     });
   });
 
-  registerModuleLibraryRoutes(app, { isAdmin, authedUser, firstName, projectName: () => mergedConfig().project.name, buildMarker: BUILD_MARKER, liveHoldersOf, sharedPasswordPosture: async () => (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET)).length === 0, seedExamplesOnEnable: async (id: string) => { try { const seed = loadExampleSeed(SEEDS_DIR); if (seed) await seedExamples(getPool(), id, seed, { baseCycle: currentCycle().cycleNumber }); } catch (e) { console.error(`[examples] seeding "${id}" on enable failed (continuing)`, e); } } });
+  registerModuleLibraryRoutes(app, { isAdmin, authedUser, firstName, projectName: () => mergedConfig().project.name, buildMarker: BUILD_MARKER, liveHoldersOf, sharedPasswordPosture: async () => (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET)).length === 0, seedExamplesOnEnable: async (id: string) => { try { const seed = loadExampleSeed(SEEDS_DIR); if (seed) await seedExamples(getPool(), id, seed, { baseCycle: currentCycle().cycleNumber }); } catch (e) { console.error(`[examples] seeding "${id}" on enable failed (continuing)`, e); } } , notify, plantingAdmins: async () => (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET)).map((u: any) => ({ id: String(u.id), name: String(u.name ?? u.handle ?? "An admin") })), plantingObjectors: async () => [...(await liveHoldersOf(STEWARD_VETO)), ...(await members.all()).filter((u: any) => u.role === "founder" && isPresentMember(u, AUTH_TOKEN_SECRET)).map((u: any) => String(u.id))] });
 
   /*
    * Lane METER: the builders' pool, said out loud.
@@ -17400,6 +17400,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(503).json({ error: NO_VILLAGE_SECRETS_KEY_SENTENCE, message: villageSecretsRefusal() });
     }
     // value: "" clears the admin-typed key (env fallback, if any, resumes).
+    const asked = await plantingDoor(key, value, actor); if (asked) return res.status(202).json(asked); // after launch a keystone waits for a co-sign (server/routes/plantingRequests.ts)
     await putSecret(getPool(), key, value, actor);
     void recordEvent(getPool(), {
       kind: "audit", text: `integrations:${key}:${value.trim() ? "set" : "cleared"}`,

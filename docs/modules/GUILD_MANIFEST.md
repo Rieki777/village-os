@@ -73,14 +73,23 @@ page opens. What else it asks depends on launch.
 - **After launch, it needs a second person's co-sign**, one tap on their own device. A village with
   nobody to co-sign gets a cooling-off pause and a receipt email instead.
 
-`keystoneRule(risk, phase)` in `shared/guilds.ts` is the one place this is decided. The phase comes
-from `plantingPhase` in `server/lib/gameStart.ts`, which reads `founderPowerStands`, the same fact
-that already ends the founder's own powers at launch. It deliberately does not read the launch
-document's `launchedAt`: a village that was live before the launch vote existed has no `launchedAt`
-at all, and it must still ask for a co-sign on a production key.
+`keystoneRule(risk, phase)` in `shared/guilds.ts` is the one place this is decided. Since 2026-10-31
+it is enforced at the one door every key is saved through, `PUT /api/admin/integrations/:key`
+(`server/routes/plantingRequests.ts`, migration 0306):
 
-Nothing enforces this rule yet, because no screen plants a seed packet yet. The Integrations screen
-saves keys directly and predates the setup game; it is not gated by this rule.
+- After launch, saving a keystone key held in the village's own store (both Stripe values, the
+  Resend key, the guide's key, and the Railway and DNS roots) answers 202 and creates a request. The
+  value is sealed in it and wiped the moment it is decided.
+- Another admin with their own login co-signs it in the setup game. The asker never can, and an
+  agent never can.
+- A village with only one admin is never locked out. The request lands after
+  `platform.cosign_cooling_hours` (48), and the steward and founder role holders are told and may
+  decline it in that time. An unsigned co-sign expires after `platform.cosign_expiry_hours` (72).
+- Clearing a key is never held.
+
+The phase is `cosignPhase` in `server/lib/plantingRequests.ts`: the launch ballot carrying, Rye's
+"before they go live". It is not `plantingPhase` (game start), which reads as live for a village
+migration 0112 marked started; that choice is with the coordinator, and flipping it is one line.
 
 ## Green means alive
 
