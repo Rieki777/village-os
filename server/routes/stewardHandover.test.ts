@@ -55,7 +55,7 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
 
   const q = (sql: string, args: unknown[] = []) => pool.query<any[]>(sql, args).then(([rows]) => rows); // module-review-ok: fixture SQL on the scratch schema this suite provisioned
   const call = async (method: "GET" | "POST", body?: unknown) => {
-    const r = await fetch(`${base}${HAND_OVER_PATH}`, {
+    const r = await fetch(`${base}${HAND_OVER_PATH}`, { // module-review-ok: this test IS the client, calling the server it booted itself; there is no outbound call to correlate
       method,
       headers: { "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
