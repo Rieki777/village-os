@@ -87,6 +87,7 @@ import { register as registerTrainingRoutes } from "./routes/training";
 import { register as registerGoogleAuthRoutes } from "./routes/authGoogle";
 import { register as registerSignUpRoutes } from "./routes/register";
 import { register as registerInviteRoutes } from "./routes/invites";
+import { register as registerJoinAnswerRoutes } from "./routes/joinAnswers";
 import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
 import { register as registerVerifyEmailRoutes } from "./routes/verifyEmail";
@@ -8083,6 +8084,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     encodeToken: (userId, email) => encodeToken(AUTH_TOKEN_SECRET, userId, email),
   });
   registerInviteRoutes(app, { authedUser, getPool, members, guardCapability, mayAct, overLimit, clientIp, invites: inviteDoor });
+  registerJoinAnswerRoutes(app, { authedUser, getPool, members, guardCapability, submissionsRepo, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, notify }); // Accept emails the invitation, Decline a kind no (sheet A5)
   registerGoogleAuthRoutes(app, {
     authSecret: AUTH_TOKEN_SECRET,
     availability: googleSignInAvailability,
