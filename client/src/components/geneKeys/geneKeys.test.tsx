@@ -47,7 +47,7 @@ import GeneKeysSeal, { ABOVE_A_MODAL } from "./GeneKeysSeal";
 import CircleLines from "./CircleLines";
 import GeneKeysReveal from "./GeneKeysReveal";
 import { PARTS } from "@/pages/GeneKeys";
-import { GeneKeysLines, GeneKeysOwnerControls } from "./GeneKeysLines";
+import { GeneKeysLines, GeneKeysOwnerControls, natalLine } from "./GeneKeysLines";
 import GeneKeysComplements, { COMPLEMENTS_WORDS } from "./GeneKeysComplements";
 import CircleGlyph from "./CircleGlyph";
 import HolderGeneKeys from "./HolderGeneKeys";
@@ -216,7 +216,7 @@ describe("a circle's six lines", () => {
 });
 
 const own = (v: GeneKeysView, over: Partial<OwnGeneKeysView> = {}): OwnGeneKeysView => ({
-  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, cardOut: false, cardIn: false, inCards: false, source: "exact", stale: false, ...over,
+  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, cardOut: false, cardIn: false, inCards: false, signs: { sun: null, moon: null, rising: null }, source: "exact", stale: false, ...over,
 });
 
 describe("Love and Prosperity on the lines card", () => {
@@ -299,6 +299,20 @@ describe("Maia speaks your type", () => {
     rerender(<Router hook={memoryLocation({ path: "/" }).hook}><MaiaTypeLine /></Router>);
     expect(screen.queryByText("From Maia:")).toBeNull();
     setMyGeneKeys(null);
+  });
+});
+
+describe("a member's own Western signs", () => {
+  it("says the Sun and Moon to their owner, says plainly when the Moon is not known, and says nothing without either", () => {
+    expect(natalLine({ sun: 3, moon: 10, rising: null })).toBe("Western astrology, yours alone to see: Sun in Cancer, Moon in Aquarius.");
+    expect(natalLine({ sun: 4, moon: null, rising: null })).toMatch(/^Western astrology, yours alone to see: Sun in Leo\. Your Moon changed sign on your birth day/);
+    expect(natalLine({ sun: null, moon: null, rising: null })).toBeNull();
+    expect(natalLine(undefined)).toBeNull();
+  });
+
+  it("shows on the owner's own controls", () => {
+    inRouter(<GeneKeysOwnerControls mine={own(WREN, { signs: { sun: 3, moon: 10, rising: null } })} />);
+    expect(screen.getByText(/Sun in Cancer, Moon in Aquarius/)).toBeTruthy();
   });
 });
 

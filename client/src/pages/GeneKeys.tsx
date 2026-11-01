@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { GENE_KEYS_SITE, viewOf, type Chart, type GeneKeysView } from "@shared/geneKeys";
 import { resultsAcross, type TimeWindow } from "@shared/geneKeysSky";
+import { signsFor } from "@/components/geneKeys/natal";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
@@ -64,6 +65,8 @@ interface Picked {
   view: GeneKeysView;
   /** True when the member chose between windows; false when their time decided it. */
   chosen: boolean;
+  /** The minutes after local midnight the birth could fall in, for the Western signs (`signsFor`). */
+  spans: [number, number][];
 }
 
 function clock(minute: number): string {
@@ -171,7 +174,9 @@ export default function GeneKeysPage() {
         setMine(at);
         if (found.length === 1) {
           const chart = found[0].result.chart;
-          setPicked({ chart, view: viewOf(chart), chosen: false });
+          // An exact time is one minute; without one, every part of the day the birth could be in.
+          const spans: [number, number][] = at !== null ? [[at, at]] : (PARTS.find((x) => x.id === part)?.spans ?? [[0, 1439]]).map(([f, t]) => [f, t]);
+          setPicked({ chart, view: viewOf(chart), chosen: false, spans });
           setStep("result");
         } else {
           setWindows(found);
@@ -190,7 +195,10 @@ export default function GeneKeysPage() {
     setWorking(true);
     setProblem(null);
     try {
-      const saved = await saveMyGeneKeys({ chart: picked.chart, source: picked.chosen ? "chosen" : "exact", ...savePayload(choices, fromCard) });
+      const [year, month, day] = date.split("-").map(Number);
+      // Only the sign numbers leave this device; the date, time and town never do.
+      const signs = place ? signsFor({ year, month, day }, place.zone, picked.spans) : undefined;
+      const saved = await saveMyGeneKeys({ chart: picked.chart, source: picked.chosen ? "chosen" : "exact", ...savePayload(choices, fromCard), signs });
       setMyGeneKeys(saved.mine);
       setBadge(saved.badgeEarned);
       setStep("done");
@@ -344,7 +352,8 @@ export default function GeneKeysPage() {
                         type="button"
                         className="flex min-h-16 w-full items-center gap-4 rounded-xl border border-border bg-card px-4 py-3 text-left hover:border-notice"
                         onClick={() => {
-                          setPicked({ chart: w.result.chart, view: v, chosen: !yours });
+                          // Their own time when it falls in this window; otherwise the window is where the birth could be.
+                          setPicked({ chart: w.result.chart, view: v, chosen: !yours, spans: yours ? [[mine!, mine!]] : [[w.from, w.to - 1]] });
                           setStep("result");
                         }}
                       >

@@ -24,7 +24,7 @@ import { effectiveLifecycle } from "./modules";
 import { awardFirstTierNow } from "./badges";
 import {
   BODIES, GENE_KEYS_CALC_VERSION, analyse, chartProblems, inCardsBy, profileOf, viewOf, withArticle,
-  type Chart, type Complement, type ComplementsAnswer, type GeneKeysView, type OwnGeneKeysView,
+  type Chart, type Complement, type ComplementsAnswer, type GeneKeysView, type NatalSigns, type OwnGeneKeysView,
 } from "../../shared/geneKeys";
 import {
   cardReadableGeneKeys, complementCandidates, deleteGeneKeys, readGeneKeys, shownGeneKeysByHandle, shownGeneKeysFor, updateGeneKeysSettings, writeGeneKeys,
@@ -52,6 +52,7 @@ function ownViewOf(row: GeneKeysRow): OwnGeneKeysView | null {
     cardOut: row.cardOut,
     cardIn: row.cardIn,
     inCards: inCardsBy(row),
+    signs: { sun: row.sunSign, moon: row.moonSign, rising: row.risingSign },
     source: row.source,
     stale: row.calcVersion < GENE_KEYS_CALC_VERSION,
   };
@@ -62,7 +63,7 @@ function ownViewOf(row: GeneKeysRow): OwnGeneKeysView | null {
 const SOURCES: readonly GeneKeysSource[] = ["exact", "chosen"];
 
 export type SaveParse =
-  | { ok: true; chart: Chart; source: GeneKeysSource; visibility: GeneKeysVisibility; maia: boolean; cards?: boolean }
+  | { ok: true; chart: Chart; source: GeneKeysSource; visibility: GeneKeysVisibility; maia: boolean; cards?: boolean; signs: NatalSigns }
   | { ok: false; problem: string };
 
 /**
@@ -87,14 +88,33 @@ export function parseSave(body: unknown): SaveParse {
   }
   if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "Maia's permission is a yes or a no." };
   if (b.cards !== undefined && typeof b.cards !== "boolean") return { ok: false, problem: "Session cards are a yes or a no." };
+  const signs = parseSigns(b.signs);
+  if (!signs) return { ok: false, problem: "Signs are numbers from 0 (Aries) to 11 (Pisces)." };
   return {
     ok: true,
+    signs,
     ...(typeof b.cards === "boolean" ? { cards: b.cards } : {}),
     chart,
     source: b.source as GeneKeysSource,
     visibility: (b.visibility as GeneKeysVisibility | undefined) ?? "show",
     maia: (b.maia as boolean | undefined) ?? false,
   };
+}
+
+/**
+ * A member's own Western signs as the page read them: each 0 to 11, or null or
+ * absent for not known. Absent altogether, none is known, so a new reading
+ * never keeps the signs of an old one. Anything else is refused.
+ */
+function parseSigns(raw: unknown): NatalSigns | null {
+  if (raw === undefined || raw === null) return { sun: null, moon: null, rising: null };
+  if (typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const one = (v: unknown): number | null | undefined =>
+    v === undefined || v === null ? null : Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 11 ? (v as number) : undefined;
+  const sun = one(r.sun), moon = one(r.moon), rising = one(r.rising);
+  if (sun === undefined || moon === undefined || rising === undefined) return null;
+  return { sun, moon, rising };
 }
 
 export type SettingsParse = ({ ok: true } & GeneKeysSettingsPatch) | { ok: false; problem: string };
@@ -157,6 +177,7 @@ export async function saveGeneKeys(pool: Pool, userId: string, save: Extract<Sav
     hdAuthority: design.authority,
     visibility: save.visibility,
     maia: save.maia,
+    signs: save.signs,
     source: save.source,
     calcVersion: GENE_KEYS_CALC_VERSION,
   });

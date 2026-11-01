@@ -73,9 +73,9 @@ onboarding. Anyone may pull (his ruling of 2026-10-30), so any pull opens it.
 - "Not today", or closing it any way, means not again in that session (kept on the device). A later session may
   ask once more.
 - Somebody with no lines yet is sent to find them (`/profile/gene-keys?next=/sessions/:id`) and brought back to the
-  room after. That page reads Gene Keys and, from the same birth, the Human Design type, strategy and authority. It
-  reads no Western natal chart (no Sun, Moon or rising sign of their own; the card's Western astrology is today's
-  sky), so the invitation promises Gene Keys and Human Design only. Reached this way, that page's last step asks
+  room after. That page reads Gene Keys and, from the same birth, the Human Design type, strategy and authority and
+  the member's own Sun and Moon signs (0303; no rising sign yet, see docs/modules/gene-keys.md), so the invitation
+  promises those and nothing more. Reached this way, that page's last step asks
   Maia's permission and the card's own yes as two named boxes of their own (`ShareChoices`), unticked unless the
   member ticked them before, and the save carries the card answer (`cards` in `PUT /api/gene-keys/me`). Reached
   any other way it asks nothing about cards and sends no card answer, so an earlier one stands.

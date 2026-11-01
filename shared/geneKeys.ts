@@ -375,6 +375,19 @@ export function inCardsBy(choice: { cardIn: boolean; cardOut: boolean }): boolea
   return CARDS_ASK_THEIR_OWN_YES ? choice.cardIn && !choice.cardOut : !choice.cardOut;
 }
 
+/** The twelve Western signs, 0 Aries to 11 Pisces (tropical). The session card's sky reads the same list. */
+export const SIGNS = [
+  "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces",
+] as const;
+export type SignName = (typeof SIGNS)[number];
+
+/** A member's own Western signs, 0 Aries to 11 Pisces, tropical; null when not known. */
+export interface NatalSigns {
+  sun: number | null;
+  moon: number | null;
+  rising: number | null;
+}
+
 export interface OwnGeneKeysView extends GeneKeysView {
   visibility: GeneKeysVisibility;
   maia: boolean;
@@ -388,6 +401,8 @@ export interface OwnGeneKeysView extends GeneKeysView {
   cardIn: boolean;
   /** Whether their own choice puts them on cards (`inCardsBy`). Lines shown and Maia allowed are asked as well. */
   inCards: boolean;
+  /** Their own Western signs (0303), 0 Aries to 11 Pisces, each null when not known. Shown to them alone. */
+  signs: NatalSigns;
   source: GeneKeysSource;
   /** Computed by an older calculator than this release runs: ask the member to read the sky again. */
   stale: boolean;

@@ -21,8 +21,9 @@
  *
  * Somebody with no lines yet is sent to find them (/profile/gene-keys) and
  * brought back to this room after (`?next=`). That page reads Gene Keys and,
- * from the same birth, the Human Design type, strategy and authority. It reads
- * no Western natal chart, so the invitation does not promise one.
+ * from the same birth, the Human Design type, strategy and authority and the
+ * member's own Sun and Moon signs (0303). It does not read a rising sign yet,
+ * so the invitation promises the Sun and Moon by name and nothing more.
  */
 import { useState } from "react";
 import { Link } from "wouter";
@@ -50,8 +51,8 @@ export const INVITE_WORDS = {
   yes: "Yes, read me",
   notToday: "Not today",
   done: "You are in. The next card reads you too.",
-  noLines: "The room pulled a card. It reads today's sky and the Gene Keys and Human Design lines of everyone who says yes. Find yours in a few minutes, then come back to this room.",
-  findLines: "Find my Gene Keys and Human Design",
+  noLines: "The room pulled a card. It reads today's sky and the Gene Keys and Human Design lines of everyone who says yes. Find yours, and your own Sun and Moon signs, in a few minutes, then come back to this room.",
+  findLines: "Find my Gene Keys, Human Design and astrology",
   birth: "Your birth details never leave this device.",
 } as const;
 

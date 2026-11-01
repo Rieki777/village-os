@@ -15,7 +15,7 @@
  */
 import { useState } from "react";
 import { Link } from "wouter";
-import { GENE_KEYS_SITE, MOON_SPHERES, withArticle, type GeneKeysView, type OwnGeneKeysView, type SphereView } from "@shared/geneKeys";
+import { GENE_KEYS_SITE, MOON_SPHERES, SIGNS, withArticle, type GeneKeysView, type OwnGeneKeysView, type SphereView } from "@shared/geneKeys";
 import { changeMyGeneKeys, removeMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { setMyGeneKeys } from "./useMyGeneKeys";
@@ -84,6 +84,22 @@ export function GeneKeysLines({ view, whose }: { view: GeneKeysView; whose: stri
 }
 
 /** The owner's own controls, under their card. */
+/**
+ * A member's own Western signs, in words, for them alone (0303): the Sun and
+ * Moon of their birth, read on their device when they found their lines. A sign
+ * the page could not be sure of (the Moon changed sign that day and no birth
+ * time was given) is said to be unknown, not guessed.
+ */
+export function natalLine(signs: OwnGeneKeysView["signs"] | undefined): string | null {
+  if (!signs || (signs.sun === null && signs.moon === null)) return null;
+  const parts: string[] = [];
+  if (signs.sun !== null) parts.push(`Sun in ${SIGNS[signs.sun]}`);
+  if (signs.moon !== null) parts.push(`Moon in ${SIGNS[signs.moon]}`);
+  if (signs.rising !== null) parts.push(`${SIGNS[signs.rising]} rising`);
+  const unsure = signs.moon === null ? " Your Moon changed sign on your birth day, so it needs your birth time to say which." : "";
+  return `Western astrology, yours alone to see: ${parts.join(", ")}.${unsure}`;
+}
+
 export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -101,6 +117,7 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
   };
 
   const shown = mine.visibility === "show";
+  const signs = natalLine(mine.signs);
   const cards = useModuleOn("session-card");
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-4">
@@ -118,6 +135,7 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
           : " Session cards welcome you by name and leave your lines out."}
         {cards ? "" : " Your village has not turned session cards on, so this choice waits for when it does."}
       </p>
+      {signs ? <p className={HINT}>{signs}</p> : null}
       {mine.stale ? (
         <p className="text-sm text-notice">Your lines were found with an older calculator. Find them again to be sure they are right.</p>
       ) : null}

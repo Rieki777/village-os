@@ -10,7 +10,7 @@ import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
 export type Queryable = Pool | PoolConnection;
 
-import { CARDS_ASK_THEIR_OWN_YES, type GeneKeysSource, type GeneKeysVisibility } from "../../shared/geneKeys";
+import { CARDS_ASK_THEIR_OWN_YES, type GeneKeysSource, type GeneKeysVisibility, type NatalSigns } from "../../shared/geneKeys";
 
 export type { GeneKeysSource, GeneKeysVisibility };
 
@@ -31,13 +31,17 @@ export interface GeneKeysRow {
   cardOut: boolean;
   /** "Read me on session cards" (0301): the member's own yes. */
   cardIn: boolean;
+  /** Their own Western signs (0303), 0 to 11, or null when not known. */
+  sunSign: number | null;
+  moonSign: number | null;
+  risingSign: number | null;
   source: GeneKeysSource;
   calcVersion: number;
   updatedAt: string | null;
 }
 
 const COLUMNS =
-  "`user_id`, `chart`, `profile`, `hd_type`, `hd_authority`, `visibility`, `maia`, `complement`, `maia_plain`, `card_out`, `card_in`, `source`, `calc_version`, `updated_at`";
+  "`user_id`, `chart`, `profile`, `hd_type`, `hd_authority`, `visibility`, `maia`, `complement`, `maia_plain`, `card_out`, `card_in`, `sun_sign`, `moon_sign`, `rising_sign`, `source`, `calc_version`, `updated_at`";
 
 function parseChart(text: unknown): unknown {
   try {
@@ -46,6 +50,8 @@ function parseChart(text: unknown): unknown {
     return null;
   }
 }
+
+const signOf = (v: unknown): number | null => (v == null || !Number.isInteger(Number(v)) || Number(v) < 0 || Number(v) > 11 ? null : Number(v));
 
 function toRow(r: RowDataPacket): GeneKeysRow {
   return {
@@ -60,6 +66,9 @@ function toRow(r: RowDataPacket): GeneKeysRow {
     maiaPlain: Number(r.maia_plain) === 1,
     cardOut: Number(r.card_out) === 1,
     cardIn: Number(r.card_in) === 1,
+    sunSign: signOf(r.sun_sign),
+    moonSign: signOf(r.moon_sign),
+    risingSign: signOf(r.rising_sign),
     source: r.source === "chosen" || r.source === "typed" ? r.source : "exact",
     calcVersion: Number(r.calc_version),
     updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
@@ -80,6 +89,8 @@ export interface GeneKeysWrite {
   hdAuthority: string;
   visibility: GeneKeysVisibility;
   maia: boolean;
+  /** Their own Western signs (0303); absent or null, not known. */
+  signs?: NatalSigns;
   source: GeneKeysSource;
   calcVersion: number;
 }
@@ -87,12 +98,16 @@ export interface GeneKeysWrite {
 /** One row per member: a new reading replaces the old one whole. */
 export async function writeGeneKeys(pool: Queryable, w: GeneKeysWrite): Promise<void> {
   await pool.query(
-    "INSERT INTO `member_gene_keys` (`user_id`, `chart`, `profile`, `hd_type`, `hd_authority`, `visibility`, `maia`, `source`, `calc_version`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+    "INSERT INTO `member_gene_keys` (`user_id`, `chart`, `profile`, `hd_type`, `hd_authority`, `visibility`, `maia`, `sun_sign`, `moon_sign`, `rising_sign`, `source`, `calc_version`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
       "ON DUPLICATE KEY UPDATE `chart` = VALUES(`chart`), `profile` = VALUES(`profile`), `hd_type` = VALUES(`hd_type`), " +
       "`hd_authority` = VALUES(`hd_authority`), `visibility` = VALUES(`visibility`), `maia` = VALUES(`maia`), " +
+      "`sun_sign` = VALUES(`sun_sign`), `moon_sign` = VALUES(`moon_sign`), `rising_sign` = VALUES(`rising_sign`), " +
       "`source` = VALUES(`source`), `calc_version` = VALUES(`calc_version`)",
-    [w.userId, JSON.stringify(w.chart), w.profile, w.hdType, w.hdAuthority, w.visibility, w.maia ? 1 : 0, w.source, w.calcVersion],
+    [
+      w.userId, JSON.stringify(w.chart), w.profile, w.hdType, w.hdAuthority, w.visibility, w.maia ? 1 : 0,
+      w.signs?.sun ?? null, w.signs?.moon ?? null, w.signs?.rising ?? null, w.source, w.calcVersion,
+    ],
   );
 }
 
