@@ -49,7 +49,8 @@ export interface GeneKeysSettings {
   /** "Talk to me plainly". */
   maiaPlain?: boolean;
   /** "Leave me out of session cards". */
-  cardOut?: boolean;
+  /** Yes or no to being read on session cards. */
+  cards?: boolean;
 }
 
 export async function changeMyGeneKeys(patch: GeneKeysSettings): Promise<OwnGeneKeysView> {

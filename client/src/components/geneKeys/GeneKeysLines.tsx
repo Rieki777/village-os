@@ -115,7 +115,12 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
             ? `${guideNameAtSentenceStart(guide)} uses your lines to choose its suggestions, and talks to you plainly.`
             : `${guideNameAtSentenceStart(guide)} uses your lines to shape its suggestions, and says when it does.`
           : `${guideNameAtSentenceStart(guide)} does not use your lines.`}
-        {cards ? (mine.cardOut ? " Session cards welcome you by name and leave your lines out." : mine.maia && shown ? " Session cards can read your lines." : "") : ""}
+        {mine.inCards
+          ? mine.maia && shown
+            ? " Session cards can read your lines."
+            : ` Session cards read your lines only while they are shown and ${guide} may use them.`
+          : " Session cards welcome you by name and leave your lines out."}
+        {cards ? "" : " Your village has not turned session cards on, so this choice waits for when it does."}
       </p>
       {mine.stale ? (
         <p className="text-sm text-notice">Your lines were found with an older calculator. Find them again to be sure they are right.</p>
@@ -132,11 +137,10 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
             {mine.maiaPlain ? `Let ${guide} speak to my type` : "Talk to me plainly"}
           </button>
         ) : null}
-        {cards ? (
-          <button type="button" className={BTN_PLAIN} disabled={busy} onClick={() => act(() => changeMyGeneKeys({ cardOut: !mine.cardOut }))}>
-            {mine.cardOut ? "Include me in session cards" : "Leave me out of session cards"}
-          </button>
-        ) : null}
+        {/* Shown whether or not the village has session cards on, so a member decides before a card ever reads them. */}
+        <button type="button" className={BTN_PLAIN} disabled={busy} onClick={() => act(() => changeMyGeneKeys({ cards: !mine.inCards }))}>
+          {mine.inCards ? "Leave me out of session cards" : "Read me on session cards"}
+        </button>
         <ShareLines view={mine} />
         <Link href="/profile/gene-keys" className={BTN_PLAIN}>
           Find them again
