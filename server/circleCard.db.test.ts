@@ -164,9 +164,20 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
       ["Seed Librarian", "Open"],
     ]);
     expect(rows.every((r) => r.holderCards.length === 0)).toBe(true);
-    expect(rows.find((r) => r.id === "seat-seed")?.applyHref).toBe("/propose?type=role_application&seat=seat-seed");
+    // A visitor is offered propose a role, with that role picked: the member door would only refuse them (2026-10-31).
+    expect(rows.find((r) => r.id === "seat-seed")?.applyHref).toBe("/propose-a-role?role=seat-seed");
     expect(rows.find((r) => r.id === "seat-water")?.applyHref).toBeNull();
     expect(roles.note).toBe("Sign in to open the holders' cards.");
+
+    // A reader who holds terms.read keeps the member door.
+    admin = true;
+    try {
+      const member = section((await read("c-garden")).body.card, "roles") as Extract<CircleSection, { kind: "roles" }>;
+      const memberRows = member.slot.kind === "shown" ? member.slot.value : [];
+      expect(memberRows.find((r) => r.id === "seat-seed")?.applyHref).toBe("/propose?type=role_application&seat=seat-seed");
+    } finally {
+      admin = false;
+    }
     const text = JSON.stringify(body);
     expect(text).not.toContain("Cai");
     expect(text).not.toContain("Gil");
