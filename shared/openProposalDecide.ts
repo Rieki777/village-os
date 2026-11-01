@@ -82,6 +82,13 @@ const NOT_SENT: Record<NotSentWhy, string> = {
 /** Who may decide at the door now, in the words the page shows a reader who may not. */
 export type DoorReason = "village-holds-it" | "a-role-holds-it" | "nobody-holds-it";
 
+/**
+ * The same three readings by name, for client code: the dash guard
+ * (scripts/check-hyphen-dash.mjs) reads raw text under client/src and takes
+ * "-it" for a hyphen standing in for a dash.
+ */
+export const DOOR = { villageHolds: "village-holds-it", nobodyHolds: "nobody-holds-it", aRoleHolds: "a-role-holds-it" } as const satisfies Record<string, DoorReason>;
+
 export const DECIDE_WORDS = {
   // The page.
   heading: (proposer: string | null, roles: readonly string[]) => `${proposer || "Somebody"} proposes to hold ${andList(roles) || "a role"} next season`,

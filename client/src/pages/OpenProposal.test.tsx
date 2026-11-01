@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CONSENT_WORDS, type ConsentState } from "@shared/roleProposalConsent";
-import { DECIDE_WORDS } from "@shared/openProposalDecide";
+import { DECIDE_WORDS, DOOR } from "@shared/openProposalDecide";
 import { consentOf } from "@/test/roleProposalFixture";
 
 const ID = "op-0123456789abcdef0123";
@@ -66,7 +66,7 @@ function served(over: Record<string, unknown> = {}, state: ConsentState = "open"
     decidedOn: null,
     decided: null,
     consent: consentOf(state, { you: consentYou }),
-    door: { because: "a-role-holds-it", words: DECIDE_WORDS.door["a-role-holds-it"] },
+    door: { because: DOOR.aRoleHolds, words: DECIDE_WORDS.door[DOOR.aRoleHolds] },
     invitation: null,
     you: READER,
     ...over,
@@ -114,7 +114,7 @@ describe("the open proposal page", () => {
     expect(screen.getByText("I live up the road and the gate is always shut.")).toBeTruthy();
     expect(screen.getByRole("heading", { name: CONSENT_WORDS.heading })).toBeTruthy();
     expect(screen.queryByRole("button", { name: DECIDE_WORDS.adopt })).toBeNull();
-    expect(screen.getByText(DECIDE_WORDS.door["a-role-holds-it"])).toBeTruthy();
+    expect(screen.getByText(DECIDE_WORDS.door[DOOR.aRoleHolds])).toBeTruthy();
   });
 
   it("an asked holder consents on the proposal's own route", async () => {
@@ -156,10 +156,10 @@ describe("the open proposal page", () => {
 
   it("after a handover the card says so plainly and offers nothing", async () => {
     answer = () =>
-      json({ proposal: served({ you: { ...READER, holdsThePower: false }, door: { because: "village-holds-it", words: DECIDE_WORDS.door["village-holds-it"] } }) });
+      json({ proposal: served({ you: { ...READER, holdsThePower: false }, door: { because: DOOR.villageHolds, words: DECIDE_WORDS.door[DOOR.villageHolds] } }) });
     render(<OpenProposal />);
     await heading();
-    expect(screen.getByText(DECIDE_WORDS.door["village-holds-it"])).toBeTruthy();
+    expect(screen.getByText(DECIDE_WORDS.door[DOOR.villageHolds])).toBeTruthy();
     expect(screen.queryByRole("button", { name: DECIDE_WORDS.adopt })).toBeNull();
     expect(screen.queryByRole("button", { name: DECIDE_WORDS.decline })).toBeNull();
   });
