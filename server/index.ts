@@ -14141,7 +14141,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json({
       states,
       blocking: blockingStates(states),
-      exit: await openExitFor(getPool(), target.id),
+      exit: await openExitFor(getPool(), target.id), formerMember: await leftTheVillage(getPool(), target), // E4: the desk says they already left
     });
   });
 
@@ -14150,7 +14150,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const exits = await allExits(getPool());
     const withNames = [];
     for (const e of exits) {
-      withNames.push({ ...e, userName: (await members.byId(e.userId))?.name ?? "(anonymized)" });
+      const who = await members.byId(e.userId); withNames.push({ ...e, userName: who?.name ?? "(anonymized)", formerMember: e.status === "resolved" && (await leftTheVillage(getPool(), who)) });
     }
     // `defaults` and `terms` travel with the policy so the editor can mark each
     // term that is still the platform's without keeping a second copy of the

@@ -359,6 +359,21 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
     expect(await q("SELECT `id` FROM `member_vouches` WHERE `voucher_user_id` = ?", [id])).toHaveLength(1);
   });
 
+  it("no second exit opens for a former member, and one admitted again can leave again (e2e sweep, E4)", async () => {
+    const { id, exitId } = await member({ holdsValue: true });
+    expect((await resolve(exitId, id)).outcome).toBe("former");
+    const again = await createExit(pool, { userId: id, kind: "voluntary", openedBy: "admin-1", noticeDays: 0 });
+    expect(again.ok, "a former member had a second exit opened").toBe(false);
+    expect(again.ok ? "" : again.error).toMatch(/already left the village/);
+    expect((await q("SELECT `id` FROM `exits` WHERE `user_id` = ?", [id])).length).toBe(1);
+    // The control: admitted again, they are a member, and a member may leave.
+    await usersRepo(pool).update(id, (u: any) => {
+      u.membershipGranted = true;
+      u.stageGranted = "member";
+    });
+    expect((await createExit(pool, { userId: id, kind: "voluntary", openedBy: "admin-1", noticeDays: 0 })).ok).toBe(true);
+  });
+
   it("a former member's delegations end with their membership, never in a step a cancel could still undo (round 6)", async () => {
     const { id, exitId } = await member({ holdsValue: true });
     const giver = `delegator-${id}`;
@@ -421,9 +436,12 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
       "org-seatings",
       "role-applications",
       "invitations",
+      "subscriptions",
     ]);
     expect(out.body.vacatedRoles).toEqual(["treasury"]);
     expect(String(out.body.message)).toMatch(/treasury/);
+    // Rye, 2026-10-31, ruling 8: the cancelled payments do not come back either, and the admin is told so.
+    expect(String(out.body.message)).toMatch(/their recurring payments through Stripe/);
     expect(String(out.body.message)).toMatch(/do not come back/);
     expect(await statusOf(exitId)).toBe("cancelled");
     expect(await admission(id), "they stay a member").toEqual({ membershipGranted: true, stageGranted: "member" });

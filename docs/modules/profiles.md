@@ -418,8 +418,8 @@ after the account is gone is banked, delivers nothing, sends no receipt and tell
 cancels that subscription in Stripe on every such charge (round 4). A cancel nobody could make is
 owed on `/review`, derived from the audit trail (`server/lib/owedCancels.ts`), until Finish, the
 hourly job or a person's "I cancelled these by hand" settles it. The departure page reads
-`?for=exit`: a member who holds tokens is told that resolving keeps them a former member and the
-payments keep renewing until an admin cancels them.
+`?for=exit`: a member who holds tokens is told that resolving keeps them a former member and that
+resolving cancels the payments all the same (Rye, 2026-10-31, ruling 8).
 
 **The sweep is a sequence and not a transaction, on purpose, and it resumes.** `server/lib/erasure.ts`
 opens no connection and calls no `beginTransaction`, and its header argues at length why it must

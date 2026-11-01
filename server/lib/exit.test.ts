@@ -379,7 +379,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
     const cash = await stateFor(u, "cash");
     expect(cash.count, "two unpaid rows; the paid one is history").toBe(2);
     expect(cash.blocking).toBe(false);
-    expect(cash.description).toContain("is owed 15.00 USD in cash the village has not paid yet");
+    expect(cash.description).toContain("is owed $15.00 in cash the village has not paid yet");
     expect(cash.description).toContain("they stay on as a former member");
     expect(blockingStates(await exitOpenState(pool, u, [])).map((s) => s.domain)).not.toContain("cash");
   });
