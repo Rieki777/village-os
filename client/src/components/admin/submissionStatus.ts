@@ -13,6 +13,18 @@
 import { toast } from "sonner";
 import { API_BASE, authHeaders } from "@/components/admin/adminApi";
 
+/**
+ * The form types the Form Submissions filter offers. Moved out of client/src/pages/Admin.tsx unchanged.
+ *
+ * visit-inquiry and membership-508 were missing, and they are the two highest-value
+ * submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
+ * membership. Both were reachable only by scrolling "All types". The strings are
+ * the ones the pages actually POST, from Visit.tsx and LoveLetter.tsx.
+ * membership-request is somebody with no invitation asking to join, from
+ * RequestMembership.tsx (Rye, 2026-09-09: requests sit in admin for a team to talk to them).
+ */
+export const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact", "comms-change"] as const;
+
 export async function putSubmissionStatus(
   password: string,
   id: string,

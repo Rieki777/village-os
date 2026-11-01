@@ -215,6 +215,8 @@ const Forum = lazyPage(() => import("./pages/Forum"));
 const Messages = lazyPage(() => import("./pages/Messages"));
 const Introductions = lazyPage(() => import("./pages/Introductions"));
 const RequestMembership = lazyPage(() => import("./pages/RequestMembership"));
+const ProposeARole = lazyPage(() => import("./pages/ProposeARole"));
+const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) => ({ default: m.ConfirmProposal })));
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
@@ -354,6 +356,10 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/request-membership" component={RequestMembership} />
+      {/* Confirm before :token, so the email's link is never read as a link made for one person. */}
+      <Route path="/propose-a-role/confirm" component={ConfirmProposal} />
+      <Route path="/propose-a-role/:token" component={ProposeARole} />
+      <Route path="/propose-a-role" component={ProposeARole} />
       <Route path="/set-password" component={SetPassword} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/email/preferences" component={EmailPreferences} />

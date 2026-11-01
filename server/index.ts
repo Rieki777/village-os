@@ -153,6 +153,7 @@ import { register as registerPlayerCardRoutes } from "./routes/playerCard";
 import { register as registerCircleCardRoutes } from "./routes/circleCard";
 import { register as registerApplicationCardRoutes, orgRoleExtras } from "./routes/applicationCard";
 import { register as registerRoleProposalRoutes } from "./routes/roleProposals";
+import { register as registerOpenProposalRoutes } from "./routes/openProposals";
 import { register as registerRoleGuideRoutes } from "./routes/roleGuide";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
@@ -24741,6 +24742,7 @@ ${inner}
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
+  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState }); // a role proposal from somebody with no account (0305)
   registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
