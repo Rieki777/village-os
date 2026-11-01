@@ -351,7 +351,7 @@
           "seeds"
         ],
         "meta": {
-          "location": "The long table under the mango tree",
+          "location": "The long table under the big tree",
           "ctaLabel": "Tell us you are coming",
           "ctaUrl": "https://example.org/seed-swap",
           "startsInDays": 12,
@@ -1023,7 +1023,7 @@
         "id": "ex-share-need",
         "type": "need",
         "title": "Looking for a timber framer for a two-week build",
-        "detail": "We are raising a 6x8 metre workshop frame in the dry season and have the timber milled and stacked, but nobody here has cut joinery at this scale before.\n\nWe can offer accommodation, all meals, and stay credits for the duration. What we are really after is someone willing to teach while they work. We want to come out of it with four people who can do it again.",
+        "detail": "We are raising a 6x8 metre workshop frame next season and have the timber milled and stacked, but nobody here has cut joinery at this scale before.\n\nWe can offer accommodation, all meals, and stay credits for the duration. What we are really after is someone willing to teach while they work. We want to come out of it with four people who can do it again.",
         "contact": "build@example.org",
         "status": "open",
         "isExample": true

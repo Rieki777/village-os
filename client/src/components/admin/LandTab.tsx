@@ -352,7 +352,7 @@ export default function LandTab({ password }: { password: string }) {
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="9.2345, -83.8412"
+            placeholder="12.3456, -45.6789"
             className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 font-mono"
           />
           {parsed && parsed.ok && (
