@@ -2424,7 +2424,8 @@ const RULINGS = [
     status: (f) => (f.staged.secrecy ? "**Staged, and the code currently says the opposite.**" : "**Built.**"),
     note: () =>
       "Votes are named on purpose today: the decision page says this village does not run secret ballots, and the roll " +
-      "serves each voter's name, choice and frozen weight. No secrecy setting exists. The ruling supersedes the earlier " +
+      "serves each voter's name, choice and frozen weight to a signed-in member. A stranger reads the counts, tallies and " +
+      "status alone, and never the roll. No secrecy setting exists. The ruling supersedes the earlier " +
       "one that closed this question in the other direction. Counts and shares of weight stay visible under every setting, " +
       "so the people-and-weight sentence is unaffected.",
   },
@@ -3502,9 +3503,10 @@ export function render(f) {
   p();
   if (f.routes.anonymous.length) {
     p(
-      "The routes that answer a stranger are the village's public record. At the module's `public` lifecycle they serve " +
-        "the ballot list, one decision in full and the objection lineage to anybody on the internet, which includes each " +
-        "voter's first name, their choice and their frozen weight. Ruling 22 changes that and is staged.",
+      "The routes that answer a stranger are the village's public record. At the module's `public` lifecycle a stranger " +
+        "reads the ballot list, one decision and the objection lineage as titles, counts, tallies, dials and status. Who " +
+        "voted, how, who has not voted yet, who objected and the document itself are for signed-in members, and ruling 22, " +
+        "still staged, is about what members read.",
     );
     p();
   }
@@ -3565,11 +3567,6 @@ export function render(f) {
     "- **A close and its executor are not one transaction.** The ballot is closed by one guarded update and the executor " +
       "runs after it. An executor that throws leaves a ballot closed and passed with nothing applied, and only the " +
       "mechanics subject has a second door to apply by hand.",
-  );
-  p(
-    `- **${f.routes.anonymous.filter((r) => r.path.startsWith("/api/governance")).length} reads under the governance prefix answer a ` +
-      "stranger**, and at the module's `public` lifecycle that means the whole voter roll with names, choices and weights " +
-      "is served to the internet.",
   );
   p(
     "- **A weight in token mode is displayed in ledger units.** A holding a member reads as 0.1 weighs 100 in the tally, " +

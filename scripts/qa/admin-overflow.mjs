@@ -51,7 +51,7 @@ const PROBE = () => {
   for (const el of document.querySelectorAll("body *")) {
     const r = el.getBoundingClientRect();
     if (!r.width || r.right <= vw + 1 || contained(el)) continue;
-    culprits.push({ tag: el.tagName.toLowerCase(), right: Math.round(r.right), text: (el.textContent || el.getAttribute("placeholder") || "").trim().replace(/\s+/g, " ").slice(0, 40) });
+    culprits.push({ tag: `${el.tagName.toLowerCase()}${el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\s+/).slice(0, 4).join(".") : ""}`, right: Math.round(r.right), text: (el.textContent || el.getAttribute("placeholder") || "").trim().replace(/\s+/g, " ").slice(0, 40) });
   }
   // CONTENT can spill out of a box that itself fits (a button shrunk below its label, one
   // long word), and then no element's box crosses the edge at all. Without this the sweep

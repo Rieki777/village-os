@@ -158,6 +158,8 @@ export async function buildCircleCardFor(
     })),
     timeZone: ctx.timeZone,
     frameworkTerms: ctx.frameworkTerms,
+    // A reader who may not read terms is offered the door that has no membership to refuse them at.
+    readerMayApply: ctx.tier.terms,
     live,
     reviewOn: ctx.reviewOn,
     pending: openProposals ? openProposals.flatMap((p) => circleWordKeysOf(p.payload)) : undefined,

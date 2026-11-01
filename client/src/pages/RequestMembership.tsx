@@ -215,6 +215,14 @@ export default function RequestMembership() {
                 </a>
                 .
               </p>
+              {/* Somebody who already knows the role they want can propose for it, no account needed (sheet 19i). */}
+              <p className="mt-3 text-center text-muted-foreground">
+                Know the role you'd take on next season?{" "}
+                <a href="/propose-a-role" className="font-medium text-foreground underline underline-offset-2">
+                  Propose a role
+                </a>
+                .
+              </p>
             </>
           )}
         </div>

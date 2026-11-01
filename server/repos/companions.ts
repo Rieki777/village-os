@@ -280,6 +280,15 @@ export async function questionsShownOn(pool: Q, companionId: string, dayKey: str
   return Number(row?.n ?? 0);
 }
 
+/** Questions shown to one member on one day, across every companion they have. */
+export async function questionsShownToMemberOn(pool: Q, ownerUserId: string, dayKey: string): Promise<number> {
+  const [[row]] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM companion_items WHERE owner_user_id = ? AND type = 'question' AND day_key = ? AND status <> 'held'",
+    [ownerUserId, dayKey],
+  );
+  return Number(row?.n ?? 0);
+}
+
 /**
  * Held questions that carry their evidence, oldest first. A question held for
  * want of a source never opens, so it is never listed here.
