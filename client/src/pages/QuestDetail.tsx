@@ -21,7 +21,7 @@ import {
   Lightbulb, ListChecks, Send, Sparkles, Sprout, Users,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchGameMe, gameFetch, QuestClaim, useGameConfig } from "@/lib/gameApi";
+import { CATALYST_FALLBACK, fetchGameMe, gameFetch, QuestClaim, useGameConfig, villageWord } from "@/lib/gameApi";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import QuestActions from "@/components/QuestActions";
 import QuestCrews from "@/components/QuestCrews";
@@ -133,7 +133,21 @@ export default function QuestDetail() {
   const Icon = iconFor(quest?.icon);
   const steps = quest?.steps ?? [];
   const tips = quest?.tips ?? [];
-  const why = quest?.story ?? quest?.description ?? "";
+  /*
+   * WHAT IT ASKS FOR, THEN WHY IT MATTERS (2026-10-23).
+   *
+   * Admin's quest editor has two boxes: "What it asks for" (`description`)
+   * and "Why it matters" (`story`). This page drew `story ?? description`,
+   * and every seeded quest carries both, so the first box landed on no page
+   * at all. The description now leads the reading column as one plain line
+   * and the story sits under its own heading. The same words in both boxes
+   * show once.
+   */
+  const lead = String(quest?.description ?? "").trim();
+  const story = String(quest?.story ?? "").trim();
+  const why = story && story !== lead ? story : "";
+  // Whoever runs the place, in the village's own word (Admin, Make This Yours).
+  const catalyst = villageWord(cfg?.project?.catalystName, CATALYST_FALLBACK);
 
   if (loaded && !quest) {
     return (
@@ -286,9 +300,16 @@ export default function QuestDetail() {
         <div className="container max-w-5xl grid lg:grid-cols-[1fr_360px] gap-8 items-start">
           {/* The reading column */}
           <div className="space-y-8 min-w-0">
-            {/* Why this quest matters. A quest with no story and no
-                description renders no heading either: an empty section is the
-                one thing the board's own empty-state law forbids. */}
+            {/* What the quest asks for, in the admin's own words. */}
+            {lead && (
+              <p className="text-lg text-foreground leading-relaxed break-words" data-quest-lead>
+                {lead}
+              </p>
+            )}
+
+            {/* Why this quest matters. A quest with no story renders no
+                heading either: an empty section is the one thing the board's
+                own empty-state law forbids. */}
             {(why || quest.impact) && (
               <div>
                 <h2 className="font-display text-xl font-bold text-foreground mb-3">
@@ -388,14 +409,12 @@ export default function QuestDetail() {
                   {quest.deliverable ??
                     "A link or a few words showing what you did. The circle reads it before consenting."}
                 </p>
-                {/* The quest pays what it says, worked out by the function the consent
-                    pays from (0265). A consent is a yes; nobody picks an amount. */}
+                {/* The quest's value, worked out by the function the consent pays
+                    from (0265). The block says it all: no sentence under it
+                    restates that the work is paid (Rye, 2026-10-23). */}
                 {quest.pay && (
                   <div className="mt-3 pt-3 border-t border-border">
                     <WorkPayBlock pay={quest.pay} variant="full" />
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      When the circle confirms your work, the quest pays what it says here.
-                    </p>
                   </div>
                 )}
               </div>
@@ -427,7 +446,7 @@ export default function QuestDetail() {
                   {quest.minStage
                     ? (gateFix(quest, stages, cfg?.project?.commitmentName) ??
                       "Keep walking the Path of Growth and this opens on its own.")
-                    : "Ask a founder or the circle about stepping into it."}
+                    : `Ask ${catalyst.aName} or the circle about stepping into it.`}
                 </p>
               </div>
             )}

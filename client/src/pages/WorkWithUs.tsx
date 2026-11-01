@@ -73,8 +73,8 @@ const PROPOSAL_FIELDS: { key: keyof Proposal; label: string; hint: string; requi
  */
 const RECIPROCITY_FALLBACK: ReciprocityOption[] = [
   { value: "Financial - Cash", title: "Financial: Cash", desc: "A direct payment for your work, materials, or service: upfront, on milestones, or on completion." },
-  { value: "Tokens", title: "Tokens", desc: "Value held within the community ecosystem, credit you can use at the café and across the village." },
-  { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share, e.g. 10% of revenue in exchange for rent or water infrastructure." },
+  { value: "Tokens", title: "Tokens", desc: "You earn contribution tokens." },
+  { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share, e.g. part of your revenue in exchange for space on the land." },
   { value: "Memorandum of Understanding", title: "Memorandum of Understanding", desc: "A clear, living exchange of contribution, e.g. you grow vegetables, share some harvest, and add to the beauty of the land." },
 ];
 

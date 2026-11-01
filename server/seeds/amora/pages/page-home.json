@@ -1,0 +1,109 @@
+{
+  "cta": {
+    "body": "Join our next community call to learn about the basics and ask any questions. It's the perfect first step on any path.",
+    "heading": "Ready to Begin Your Journey?",
+    "primaryLabel": "Join Community Call",
+    "secondaryLabel": "View All Events"
+  },
+  "hero": {
+    "badge": "",
+    "subline": "A regenerative village{in-location} where all beings **belong** and **thrive**. Start here: pick your path.",
+    "headline": "{tagline}",
+    "highlight": "Beautiful"
+  },
+  "paths": {
+    "cards": [
+      {
+        "id": "investor",
+        "title": "Investor",
+        "subtitle": "Capital Contributor",
+        "description": "Plant capital in a project built to last. The village grows, community ownership stays intact, and returns and values move in the same direction."
+      },
+      {
+        "id": "steward",
+        "title": "Village Steward",
+        "subtitle": "Co-Creator",
+        "description": "Hold a role, join a circle, and keep the whole village running."
+      },
+      {
+        "id": "resident",
+        "title": "Resident",
+        "subtitle": "Co-Creator",
+        "description": "Make {village} your home. Find a place to live, join the waitlist, and belong."
+      },
+      {
+        "id": "prosperity",
+        "title": "Prosperity Creator",
+        "subtitle": "Business Builder",
+        "description": "Launch or grow your business inside the village, and share in what you build."
+      }
+    ],
+    "intro": "Four ways into {village}. Pick the one that fits you today. You can add more later.",
+    "eyebrow": "What brought you here?",
+    "heading": "Choose your path"
+  },
+  "journey": {
+    "intro": "Each stage is a chance to get to know each other. You figure out if {village} fits your life; we figure out if you're a good fit for the village.",
+    "stages": [
+      {
+        "name": "Align",
+        "description": "Discover our values"
+      },
+      {
+        "name": "Experience",
+        "description": "Visit & participate"
+      },
+      {
+        "name": "Co-Create",
+        "description": "Join our circles"
+      },
+      {
+        "name": "Integrate",
+        "description": "Become a member"
+      },
+      {
+        "name": "Home",
+        "description": "Make it home"
+      }
+    ],
+    "heading": "From First Visit to Home"
+  },
+  "personas": {
+    "intro": "{village} attracts people who are done half-living. Here are some of the souls who find their way here.",
+    "items": [
+      {
+        "body": "Location-independent professionals ready to stop bouncing between Airbnbs and plant themselves somewhere with depth, community, and a reason to stay.",
+        "label": "Digital Nomad Couple",
+        "tagline": "We want roots without walls."
+      },
+      {
+        "body": "Families who want their children raised by a community, surrounded by nature, multi-generational wisdom, and real-world learning instead of a system.",
+        "label": "Worldschooling Family",
+        "tagline": "Our kids deserve a village."
+      },
+      {
+        "body": "Post-career dreamers who want warmth, beauty, belonging, and a role that still matters, not a golf course.",
+        "label": "Retiree & Snowbird",
+        "tagline": "Finally, a second chapter worth living."
+      },
+      {
+        "body": "Health-conscious individuals chasing clean air, organic food, movement, community, and purpose as medicine: building a life designed to thrive.",
+        "label": "Longevity Seeker",
+        "tagline": "I want to live well, not just long."
+      },
+      {
+        "body": "High-achievers who want their next chapter to matter: contributing capital, skills, or leadership to something regenerative and lasting.",
+        "label": "Remote Exec & Founder",
+        "tagline": "I built the life. Now I want meaning."
+      },
+      {
+        "body": "Local and regional changemakers who see {village} as the proving ground for a regenerative future in their own part of the world, and want to help shape it.",
+        "label": "Regional Changemaker",
+        "tagline": "I want to build something here."
+      }
+    ],
+    "footer": "See yourself here? There's a path with your name on it.",
+    "eyebrow": "People like you",
+    "heading": "Who Comes to {village}?"
+  }
+}

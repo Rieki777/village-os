@@ -601,8 +601,9 @@ export default function InvestorJourney() {
       </section>
       )}
 
-      {/* Development Phases */}
-      {phases && !phases.hidden && (
+      {/* Development Phases. Not drawn until the village lists a phase: a
+          heading over an empty band would say the village plans nothing. */}
+      {phases && !phases.hidden && phases.lists.items.length > 0 && (
       <section className="py-20 bg-teal-deep text-white">
         <div className="container">
           <motion.div

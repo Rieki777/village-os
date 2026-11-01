@@ -90,6 +90,13 @@ describe("StartHereCard: a signed-in guest who has not asked yet", () => {
     expect(within(card()).queryByRole("link", { name: /Raise your hand/ })).toBeNull();
   });
 
+  it("names the step in the village's own word for a member", () => {
+    const named = config({ project: { name: "Test Village", commitmentName: "Love Letter", memberName: "Elderling" } } as Partial<PublicGameConfig>);
+    render(<StartHereCard ownerId="u1" me={me()} signing={null} config={named} catalogue={CATALOGUE} />);
+    expect(within(card()).getByText("Become an Elderling")).toBeInTheDocument();
+    expect(within(card()).queryByText("Become a member")).toBeNull();
+  });
+
   it("waits, drawing nothing, until it knows whether they already asked", () => {
     const { container } = render(<StartHereCard ownerId="u1" me={me()} signing={undefined} config={config()} />);
     expect(container).toBeEmptyDOMElement();

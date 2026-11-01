@@ -9,8 +9,10 @@
  * acknowledgement email. Two of those carried a response promise ("up to a
  * month") that only the village can make.
  *
- * The defaults are the words the page and the email carried until 2026-10-22,
- * so switching onto this spec changes nothing a visitor reads.
+ * The defaults are neutral starter text (2026-10-23): the first village's
+ * reply time ("up to a month") came out of the thank-you and the email,
+ * because only a village can promise one. That village keeps its own copy in
+ * its database; the record is server/seeds/amora/pages/page-work-with-us.json.
  */
 import type { PageSpec } from "./types";
 
@@ -47,7 +49,7 @@ export const WORK_WITH_US_PAGE: PageSpec = {
           kind: "long",
           max: 240,
           default:
-            "Thank you for offering your gifts to {village}. A reply can take up to a month, and there's room to talk it through and revise.",
+            "Thank you for offering your gifts to {village}. We read every proposal with care, and there's room to talk it through and revise.",
         },
       ],
     },
@@ -64,7 +66,7 @@ export const WORK_WITH_US_PAGE: PageSpec = {
           kind: "long",
           max: 400,
           default:
-            "Thank you for offering your gifts. We read every Work With Us proposal with care. Please allow up to a month for a thoughtful response, and room for conversation and revision.",
+            "Thank you for offering your gifts. We read every Work With Us proposal with care, and we will reply once we have. There is room for conversation and revision.",
         },
       ],
     },
