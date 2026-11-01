@@ -352,7 +352,7 @@ export default function Register() {
                     />
                     <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
                   </div>
-                  <p id="register-password-rule" className="mt-1 text-xs text-gray-500">
+                  <p id="register-password-rule" className="mt-1 text-xs text-muted-foreground">
                     At least {PASSWORD_MIN} characters.
                   </p>
                 </div>
