@@ -34,6 +34,7 @@
 import { randomBytes } from "node:crypto";
 import type { Express, Request } from "express";
 
+import { cleanName, passwordProblem } from "../../shared/accountRules";
 import { claimPaths } from "../../shared/gameConfig";
 import type { InviteDoor } from "../lib/inviteDoor";
 import { INVITE_REFUSALS, readInviteToken } from "../lib/invites";
@@ -69,10 +70,18 @@ export function register(app: Express, deps: RegisterDeps): void {
     if (await deps.overLimit(`register:${deps.clientIp(req)}`, Math.max(1, numberVar("abuse.register_per_ip_hourly")), 60 * 60 * 1000)) {
       return res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
     }
-    const { name, email, password, paths } = req.body ?? {};
-    if (!name || !email || !password || !paths || !Array.isArray(paths)) {
+    const { name: rawName, email, password, paths } = req.body ?? {};
+    if (!rawName || !email || !password || !paths || !Array.isArray(paths)) {
       return res.status(400).json({ error: "Missing required fields" });
     }
+    // The rules every door that makes or changes an account keeps (readiness R117,
+    // shared/accountRules.ts): 8 characters at least, as set-password asks, and a
+    // name trimmed and capped as the claim door caps it.
+    const weak = passwordProblem(password);
+    if (weak) return res.status(400).json({ error: weak.error, field: weak.field });
+    const named = cleanName(rawName);
+    if (!named.ok) return res.status(400).json({ error: named.refusal.error, field: named.refusal.field });
+    const name = named.name;
     // The domain closed accounts are written at. An account here would read as
     // closed everywhere, and one at a departing member's tombstone address
     // used to block that member's erasure for good (round 2, finding 5). No

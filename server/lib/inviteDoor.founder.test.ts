@@ -42,8 +42,8 @@ describe.skipIf(!configured)("a founder's invitation before launch, on a real sc
   const account = async (role?: "founder" | "admin") => {
     seq += 1;
     const id = `u-fd-${seq}`;
-    await usersRepo(pool).add({ id, name: `Person ${seq}`, email: `${id}@example.test`, passwordHash: "x", paths: [] });
-    if (role) await q("UPDATE users SET role = ? WHERE id = ?", [role, id]);
+    // Through the repository, role and all: a raw UPDATE would sit under its cache, unseen.
+    await usersRepo(pool).add({ id, name: `Person ${seq}`, email: `${id}@example.test`, passwordHash: "x", paths: [], ...(role ? { role } : {}) });
     return id;
   };
 
@@ -56,6 +56,8 @@ describe.skipIf(!configured)("a founder's invitation before launch, on a real sc
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 });
+    // The S5 harness provisions a village whose Game has started; these cases begin before launch.
+    await launched(false);
   });
 
   afterAll(async () => {
