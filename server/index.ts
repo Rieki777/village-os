@@ -1083,8 +1083,8 @@ const DEFAULT_WORK_WITH_US = {
     "Hi, I'm {name}. I help people shape their offering to the village. There's no wrong way to start. What are you dreaming of bringing?",
   reciprocityOptions: [
     { value: "Financial - Cash", title: "Financial: Cash", desc: "A direct payment for your work, materials, or service: upfront, on milestones, or on completion." },
-    { value: "Tokens", title: "Tokens", desc: "Value held within the community ecosystem, credit you can use at the café and across the village." },
-    { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share. For example, 10% of revenue in exchange for rent or water infrastructure." },
+    { value: "Tokens", title: "Tokens", desc: "You earn contribution tokens." },
+    { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share. For example, part of your revenue in exchange for space on the land." },
     { value: "Memorandum of Understanding", title: "Memorandum of Understanding", desc: "A clear, living exchange of contribution. For example, you grow vegetables, share some harvest, and add to the beauty of the land." },
   ],
 };

@@ -14,21 +14,30 @@ import {
 
 const vars = { village: "Willowbrook", tagline: "Roots and rivers", "in-location": " in the hills" };
 
+/** A Home field's default, as the spec holds it: the words are the spec's to choose, the behaviour is this file's. */
+const homeDefault = (sectionId: string, key: string) =>
+  HOME_PAGE.sections.find((s) => s.id === sectionId)!.fields.find((f) => f.key === key)!.default;
+const homeList = (sectionId: string, key: string) =>
+  HOME_PAGE.sections.find((s) => s.id === sectionId)!.lists!.find((l) => l.key === key)!.default;
+
 describe("resolving a page", () => {
   it("falls back to every default when the village has saved nothing", () => {
     const page = resolvePage(HOME_PAGE, null, vars);
     expect(page.hero.fields.headline).toBe("Roots and rivers");
-    expect(page.hero.fields.subline).toContain("A regenerative village in the hills where");
-    expect(page.personas.fields.heading).toBe("Who Comes to Willowbrook?");
-    expect(page.journey.lists.stages).toHaveLength(5);
+    // `{in-location}` is filled where the default puts it.
+    expect(homeDefault("hero", "subline")).toContain("{in-location}");
+    expect(page.hero.fields.subline).toBe(fillVars(homeDefault("hero", "subline"), vars));
+    expect(page.hero.fields.subline).toContain(" in the hills");
+    expect(page.personas.fields.heading).toBe(fillVars(homeDefault("personas", "heading"), vars));
+    expect(page.journey.lists.stages).toHaveLength(homeList("journey", "stages").length);
     expect(page.paths.lists.cards.map((c) => c.id)).toEqual(["investor", "steward", "resident", "prosperity"]);
   });
 
   it("takes a saved field and back-fills the rest field by field", () => {
     const page = resolvePage(HOME_PAGE, { hero: { headline: "Ours now" } }, vars);
     expect(page.hero.fields.headline).toBe("Ours now");
-    expect(page.hero.fields.highlight).toBe("Beautiful");
-    expect(page.cta.fields.heading).toBe("Ready to Begin Your Journey?");
+    expect(page.hero.fields.highlight).toBe(fillVars(homeDefault("hero", "highlight"), vars));
+    expect(page.cta.fields.heading).toBe(homeDefault("cta", "heading"));
   });
 
   it("lets an optional field be blanked, and refuses a blank for a required one", () => {
@@ -47,8 +56,8 @@ describe("resolving a page", () => {
     const cards = page.paths.lists.cards;
     expect(cards.map((c) => c.id)).toEqual(["investor", "steward", "resident", "prosperity"]);
     expect(cards[2].title).toBe("Neighbour");
-    expect(cards[2].description).toBe("Make Willowbrook your home. Find a place to live, join the waitlist, and belong.");
-    expect(cards[0].title).toBe("Investor");
+    expect(cards[2].description).toBe(fillVars(homeList("paths", "cards")[2].description, vars));
+    expect(cards[0].title).toBe(homeList("paths", "cards")[0].title);
   });
 
   it("hides only a hideable section", () => {
@@ -67,8 +76,8 @@ describe("keeping the words on the page", () => {
   it("writes every field out with {words} kept, so a later default change moves nothing", () => {
     const doc = adoptedDocument(HOME_PAGE, { hero: { headline: "Ours now" } }) as Record<string, Record<string, unknown>>;
     expect(doc.hero.headline).toBe("Ours now");
-    expect(doc.personas.heading).toBe("Who Comes to {village}?");
-    expect((doc.journey.stages as unknown[]).length).toBe(5);
+    expect(doc.personas.heading).toBe(homeDefault("personas", "heading"));
+    expect((doc.journey.stages as unknown[]).length).toBe(homeList("journey", "stages").length);
     expect(pageDocumentProblems(HOME_PAGE, doc)).toEqual([]);
     // The page reads exactly as it did before the words were kept.
     expect(resolvePageRaw(HOME_PAGE, doc)).toEqual(resolvePageRaw(HOME_PAGE, { hero: { headline: "Ours now" } }));

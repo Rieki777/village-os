@@ -75,13 +75,18 @@ export function readMembershipRef(ref: string): { letterVersion: string; signing
   return LETTER_VERSION.test(letterVersion) && signingId ? { letterVersion, signingId } : null;
 }
 
-/** The opening, for a village that has not written its own (LoveLetter.tsx carried it until PR9). */
+/**
+ * The opening, for a village that has not written its own (LoveLetter.tsx
+ * carried it until PR9). Neutral starter words since 2026-10-23: the first
+ * village's slogan came out, and that village keeps its own opening in its
+ * `covenant` section (record: server/seeds/amora/pages-covenant-seed.json).
+ */
 export const DEFAULT_OPENING =
-  "Something in you called you here. Maybe it was the land itself, alive with possibility. Maybe it was the vision of a village where all beings belong and thrive. Maybe it was simply the feeling that the world you want to live in needs to be built.";
+  "Something in you called you here. Maybe it was the land, or the people you met. Maybe it was simply the feeling that the world you want to live in needs to be built, and that you could help build it.";
 
 /** How the village will govern itself, for a village that has not written its own. */
 export const DEFAULT_GOVERNANCE =
-  "How residents govern themselves, and how we steward this land together, will be co-created by the first residents. Nothing here is handed down. You are not joining a finished system; you are helping write it.";
+  "How we govern ourselves, and how we care for this place together, is decided by the people who live and work here. Nothing here is handed down, and you will help shape what comes next.";
 
 export interface LetterSource {
   /** The village's name. Never blank: the caller passes its own fallback. */

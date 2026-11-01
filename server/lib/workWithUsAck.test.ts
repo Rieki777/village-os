@@ -14,14 +14,18 @@ import { WORK_WITH_US_PAGE } from "../../shared/pageContent/workWithUs";
 const vars = { village: "Willowbrook" };
 
 describe("the acknowledgement email", () => {
-  it("says today's words until the village writes its own", () => {
+  it("says the spec's starter words until the village writes its own", () => {
+    const body = WORK_WITH_US_PAGE.sections.find((s) => s.id === "email")!.fields.find((f) => f.key === "body")!.default;
     const mail = workWithUsAckEmail({}, vars, "Ana");
     expect(mail.subject).toBe("We've received your proposal");
     expect(mail.html).toContain("Your proposal is with us");
     expect(mail.html).toContain("<p>Hi Ana,</p>");
-    // escapeHtml turns the apostrophe in "We" into an entity, so the
-    // paragraph is checked on a run of words that carries none.
-    expect(mail.html).toContain("Please allow up to a month for a thoughtful response");
+    // escapeHtml would turn an apostrophe into an entity; the starter
+    // paragraph carries none, so it is checked whole.
+    expect(body).not.toMatch(/['&<>"]/);
+    expect(mail.html).toContain(body);
+    // A reply time is a promise only a village can make (2026-10-23).
+    expect(mail.html).not.toContain("up to a month");
   });
 
   it("carries every word the village saved for it: subject, message and title", () => {

@@ -94,7 +94,10 @@ async function fillIn(asVisitor = false) {
     await user.type(screen.getByLabelText(/Email Address/), "juno@example.test");
   }
   await user.click(screen.getByRole("button", { name: /Village Steward/ }));
-  await user.selectOptions(screen.getByLabelText(/Monthly Membership Contribution/), "33");
+  // The starter letter has no levels (a price is one village's to set), so
+  // the signer describes an amount in their own words.
+  await user.selectOptions(screen.getByLabelText(/Monthly Membership Contribution/), "custom");
+  await user.type(screen.getByLabelText("Your custom monthly contribution"), "Whatever the circle suggests");
   await user.type(screen.getByLabelText(/What called you to/), "The grove.");
   for (const box of screen.getAllByRole("checkbox")) await user.click(box);
   return user;
