@@ -242,7 +242,7 @@ function scanFile(file) {
  *    here would notice if one of those literals were darkened or lightened.
  *  - Attribute states: `data-[state=open]:`, `aria-selected:` and the like.
  *    None paints the soft tone or a faded brand today.
- *  - Stylesheets. `.btn-amora:hover` lives in index.css, and
+ *  - Stylesheets. `.btn-village:hover` lives in index.css, and
  *    client/src/lib/brandGroundContrast.test.ts resolves and measures it.
  *  - A class list split across strings, such as `cn("text-white", "hover:bg-teal")`:
  *    each string is its own list, so the two are never joined.

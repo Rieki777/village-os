@@ -25,6 +25,7 @@
  * they have borrowed and where they will be on Thursday are the second.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Inventory } from "../../shared/profileInventory";
 
 export interface Privacy {
   /** Where they sleep is not public data. */
@@ -82,6 +83,8 @@ export interface ProfileView {
   /** Present only when the viewer may see it. Absent is different from empty. */
   standing?: Array<{ token: string; name: string; balance: number; decimals: number }>;
   gratitude?: { receivedThisSeason: number; givenThisSeason: number; lifetime: number };
+  /** What they have borrowed, booked and asked to reserve (shared/profileInventory.ts). */
+  inventory?: Inventory;
 }
 
 const MOON_MS = 29.53058867 * 24 * 60 * 60 * 1000;
@@ -103,10 +106,15 @@ export function moonsSince(joinedAt: Date | string | null | undefined, now = new
  * public by default. This way a new field is private until somebody writes the
  * line that publishes it.
  */
-export function publicView(full: ProfileView, privacy: Privacy): ProfileView {
+/**
+ * `name` is what this reader may call the member. The route passes the full
+ * name to a signed-in reader and a first name to a stranger (R097: the public
+ * tier never carries a full display name); absent, it is the full name.
+ */
+export function publicView(full: ProfileView, privacy: Privacy, name: string = full.name): ProfileView {
   const out: ProfileView = {
     handle: full.handle,
-    name: full.name,
+    name,
     title: full.title,
     joinedAt: full.joinedAt,
     moonsOnTheLand: full.moonsOnTheLand,
@@ -117,8 +125,10 @@ export function publicView(full: ProfileView, privacy: Privacy): ProfileView {
     out.standing = full.standing;
     out.gratitude = full.gratitude;
   }
+  if (privacy.showInventory && full.inventory) out.inventory = full.inventory;
   return out;
 }
+
 
 export async function loadProfile(
   pool: Pool,

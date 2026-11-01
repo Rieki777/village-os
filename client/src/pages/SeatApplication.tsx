@@ -21,6 +21,11 @@
  *                                Consent or Object (CircleConsent.tsx). Once the
  *                                circle has consented, the holder's adopt button
  *                                reads "Record the adoption".
+ *   WHO ADOPTS IT                while it waits, who in this village can adopt
+ *                                it, as the server read it from who holds the
+ *                                power (E8): the role as "Role (FirstName)", what
+ *                                has to happen first when nobody holds it, or the
+ *                                village's vote once the village holds it
  *   WHERE IT STANDS              waiting for a seat holder, the village voting
  *                                (with a link to the vote), adopted, held
  *   WHAT YOU CAN DO              the holder's card: "Align for the village" and
@@ -369,6 +374,13 @@ export default function SeatApplication() {
                 waiting={app.status === "awaiting-holder"}
                 onAnswered={() => void load()}
               />
+            )}
+
+            {/* Who adopts it in this village, read on the server from who holds the power (E8). */}
+            {app.status === "awaiting-holder" && app.whoAdopts && (
+              <p className="text-sm text-stone-700" data-who-adopts="">
+                {app.whoAdopts}
+              </p>
             )}
 
             {app.status === "voting" && app.ballotId && (

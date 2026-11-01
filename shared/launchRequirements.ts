@@ -26,6 +26,9 @@
  */
 import { MODULES } from "./modules";
 
+/** The provisioning runbook, for the steps no screen in a village can take. */
+export const FORK_RUNBOOK_URL = "https://github.com/Rieki777/village-os/blob/main/docs/FORK_RUNBOOK.md"; // brand-ok: the upstream platform repository's own address, never a village's brand
+
 export type LaunchGroup =
   | "identity" // who runs this village: admins, handles, the shared-password exit
   | "brand" // name, tagline, copy — the overlay that de-Amoras a fork
@@ -125,7 +128,7 @@ export function recognitionNameCheck(
  * HAS THIS VILLAGE SAID WHERE IT IS?
  *
  * Two facts the platform ships a default for and no screen ever asks about.
- * The season timezone is `America/Costa_Rica` and the currency is whatever
+ * The season timezone is `UTC` and the currency is whatever
  * `GAME_CONFIG` carries, and both are inherited in silence by every fork: the
  * season list derives dated seasons from the day it is asked, so the season
  * item below it goes green without anybody opening the tab, and the currency
@@ -139,8 +142,11 @@ export function recognitionNameCheck(
  * which is why the season document carries `timezoneAnswer` and this reads
  * that instead.
  *
- * RECOMMENDED, NEVER BLOCKING. A warning warns; a village that wants to launch
- * on the defaults may. What it may not do is never be asked.
+ * The CURRENCY row is recommended: a village that wants to launch on the
+ * platform's currency may. The TIMEZONE row is blocking since readiness R059
+ * (2026-10-31): UTC is nobody's home, and a village that launched on it would
+ * turn its seasons, terms and weekly brief at somebody else's midnight. Saying
+ * "UTC is right" with the confirm button is an answer like any other.
  */
 export function timezoneAnswerCheck(
   answered: boolean,
@@ -171,6 +177,34 @@ export function projectCurrencyCheck(
         state: "missing",
         detail: "Prices follow the platform's own currency, which nobody here has confirmed",
       };
+}
+
+/**
+ * ARE ANY STARTER QUESTS STILL WAITING FOR A DECISION?
+ *
+ * A fresh village opens its board on starter quests that are standing
+ * examples (the `quests` section of server/seeds/examples-seed.json): written
+ * by the platform, labelled, and claimable by nobody. Rye, sheet A8 / 19g: "a
+ * new village starts with a neutral, fully editable starter set". The village
+ * decides each one: keep it as a real quest, or clear it.
+ *
+ * Answered from one number, the examples still on the board, because every
+ * way of deciding ends there. Keeping turns a row real, clearing deletes the
+ * rest, and a quest of the village's own (posted, or approved from a
+ * proposal) retires them all. A village seeded before starters were examples
+ * has none, so it reads as answered the day this ships, which is the point:
+ * a running board is not a template.
+ *
+ * RECOMMENDED, NEVER BLOCKING. Starters are inert and labelled, so a village
+ * that launches with some still standing has misled nobody.
+ */
+export function starterQuestsCheck(waiting: number): { state: "ok" | "missing"; detail: string } {
+  const n = Math.max(0, Math.trunc(Number(waiting) || 0));
+  if (n === 0) return { state: "ok", detail: "No starter quests are waiting. The board is the village's own" };
+  return {
+    state: "missing",
+    detail: `${n} starter quest${n === 1 ? " is" : "s are"} still waiting. Keep the ones that fit and clear the rest`,
+  };
 }
 
 /** The platform's own requirements. Listings add theirs below, from the registry. */
@@ -278,6 +312,24 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     // The walk lives on the map, so a village that does not run the map has
     // nothing to write it on, and the link would land on a module gate.
     appliesWhenModule: "map",
+  },
+  {
+    id: "starter-quests",
+    group: "brand",
+    title: "Review the starter quests",
+    /*
+     * RYE, SHEET A8 / 19g: "a new village starts with a neutral, fully
+     * editable starter set". The set is the quests section of the examples
+     * seed, and this is where a founder is asked to make it theirs. The check
+     * is `starterQuestsCheck` above, read live from the board through
+     * `village:starter-quests` in server/lib/launch.ts. Quests is a core
+     * module, so this applies to every village.
+     */
+    why: "A new village opens with starter quests so the board is never empty, and nobody can claim them. Keep the ones that fit as real quests and set what each is worth, then clear the rest. Posting a quest of your own clears them too.",
+    severity: "recommended",
+    checkKey: "village:starter-quests",
+    fixAt: "/admin?tab=quests-admin",
+    fixLabel: "Open Quests",
   },
 
   // ── Integrations: keys, each honest about what stops without it ──────────
@@ -432,8 +484,8 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     id: "village-timezone",
     group: "brand",
     title: "Say which timezone the village keeps",
-    why: "A day here starts at midnight somewhere, and the platform ships Costa Rica's. Season turns, role terms, the claims window, every time on the calendar and the weekly brief all read it, so a village that never says lives on somebody else's clock.",
-    severity: "recommended",
+    why: "A day here starts at midnight somewhere, and until you say where, the platform keeps UTC. Season turns, role terms, the claims window, every time on the calendar and the weekly brief all read it, so a village that never says lives on a clock nobody there keeps. Choose yours, or confirm UTC if it is right.",
+    severity: "blocking",
     checkKey: "village:timezone",
     fixAt: "/admin?tab=season&setting=season.timezone",
     fixLabel: "Open Seasons",
@@ -538,8 +590,10 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
       "safe, so no forged login is possible; it just quietly makes sessions unreliable.",
     severity: "blocking",
     checkKey: "session-secret",
-    fixAt: "/admin?tab=integrations",
-    fixLabel: "Set it in the environment",
+    // An environment variable, so no screen in the village can set it. The
+    // Integrations tab this used to open cannot, and said nothing of the kind.
+    fixAt: `${FORK_RUNBOOK_URL}#environment-variables`,
+    fixLabel: "How to set it on your host",
     runbookAnchor: "env",
   },
   {
@@ -552,7 +606,8 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
       "money. Someone leaving needs to know how their contribution is honoured BEFORE they need to know.",
     severity: "blocking",
     checkKey: "exit-policy-terms",
-    fixAt: "/admin?tab=settings",
+    // The terms are edited on Departures. Settings holds dues and land figures.
+    fixAt: "/admin?tab=exits-admin",
     fixLabel: "Write the terms",
     runbookAnchor: "exit-policy",
   },
@@ -563,8 +618,10 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     why: "A backup nobody has restored is a hope, not a backup. Do the drill before there is anything you cannot afford to lose.",
     severity: "blocking",
     checkKey: "manual:backups-drilled",
-    fixAt: "/admin?tab=settings",
-    fixLabel: "Open Data & backups",
+    // A drill done on the host, so the runbook's steps are the door. There is
+    // no "Data & backups" screen for the old label to have meant.
+    fixAt: `${FORK_RUNBOOK_URL}#backups-s12--mysql-is-the-only-authority-now`,
+    fixLabel: "The backup and restore steps",
     runbookAnchor: "backups",
   },
 ];

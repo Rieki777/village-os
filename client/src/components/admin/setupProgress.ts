@@ -75,7 +75,9 @@
  * blank is a legitimate final answer belongs in the self-reported group above,
  * not in `fields`.
  */
+import { isCleared } from "@shared/brandCleared";
 import { HUMAN_NEEDS } from "@shared/needs";
+import type { ContentEditor } from "./wizardFacts";
 
 /** How many needs the platform offers. The denominator of the needs row. */
 const PLATFORM_NEED_COUNT = HUMAN_NEEDS.length;
@@ -211,7 +213,9 @@ export const SETUP_STEPS: readonly SetupStep[] = [
  * and a wizard that hands somebody a door to a room that was demolished is
  * worse than one that stays quiet about it.
  */
-export const SETUP_CONTENT_EDITORS: readonly { tab: string; label: string; hint: string }[] = [
+export { PAGE_OFF_HINT, contentEditorHint, useWizardFacts } from "./wizardFacts";
+
+export const SETUP_CONTENT_EDITORS: readonly ContentEditor[] = [
   /*
    * ORG CHART AND TEAM PAGE WERE MISSING FROM THIS LIST, and they are the two
    * surfaces a fresh village publishes people on. A founder walked the whole
@@ -223,14 +227,14 @@ export const SETUP_CONTENT_EDITORS: readonly { tab: string; label: string; hint:
    * first and the thing a village is most answerable for.
    */
   { tab: "org-chart", label: "Org Chart", hint: "Your circles, your roles, and who holds them. This is what /roles and /team show." },
-  { tab: "team", label: "Team Page", hint: "The portraits and short bios on /team, for the people you want a card for." },
-  { tab: "faqs", label: "FAQs", hint: "The Common Questions on each journey page." },
-  { tab: "milestones", label: "Build Progress", hint: "Your real build milestones shown on the homepage." },
+  { tab: "team", label: "Team Page", hint: "The portraits and short bios on /team, for the people you want a card for.", brochure: true },
+  { tab: "faqs", label: "FAQs", hint: "The Common Questions on each journey page.", brochure: true },
+  { tab: "milestones", label: "Build Progress", hint: "Your real build milestones shown on the homepage.", brochure: true },
   { tab: "training-modules", label: "Training modules", hint: "Your community's onboarding/learning modules." },
-  { tab: "visit-config", label: "Visit program", hint: "Visit types, logistics, and booking copy." },
-  { tab: "investor-summary", label: "Investor summary", hint: "The plain-language money facts on the investor page." },
+  { tab: "visit-config", label: "Visit program", hint: "Visit types, logistics, and booking copy.", brochure: true },
+  { tab: "investor-summary", label: "Investor summary", hint: "The plain-language money facts on the investor page.", brochure: true },
   { tab: "season", label: "Season", hint: "The current season banner (name, theme, dates)." },
-  { tab: "quests-admin", label: "Quests", hint: "Seeded starter quests. Rewrite, add or remove them here so the board is yours." },
+  { tab: "quests-admin", label: "Quests", hint: "Keep the starter quests that fit, clear the rest, and post your own." },
 ];
 
 /** The brand document as `GET /api/admin/brand` returns it, loosely typed
@@ -335,6 +339,9 @@ export type SetupObservations = Partial<Record<SetupStepKey, SetupObservation>>;
  *  string. Whitespace does not count: a space bar is not a village name. */
 function hasValue(brand: BrandLike | null | undefined, field: SetupField): boolean {
   const group = brand?.[field.group];
+  // A line the village chose to leave empty (R088, shared/brandCleared.ts) is
+  // an answer: Identity is not unfinished because a village wants no tagline.
+  if (field.group === "project" && isCleared(group, field.key)) return true;
   return String(group?.[field.key] ?? "").trim().length > 0;
 }
 

@@ -68,6 +68,8 @@ import {
   ADOPTING_POWER,
   adoptionPath,
   adoptRefusal,
+  whoAdoptsWords,
+  type AdopterFacts,
   applicationBallotDoc,
   applicationBallotTitle,
   applicationHref,
@@ -221,6 +223,20 @@ export function roleApplicationDoor(): ApplyDoor | null {
   return door;
 }
 
+/** Who adopts in this village, for a reader, the candidate left out of the names (E8). */
+export type AdoptersReader = (viewer: any, candidateId: string | null) => Promise<AdopterFacts>;
+
+let adopters: AdoptersReader | null = null;
+
+/**
+ * The facts the sentence naming who adopts is read from, as `register` built
+ * the reader, for a role proposal's submit confirm (server/routes/roleProposals.ts).
+ * Null until this route module is registered, like `roleApplicationDoor`.
+ */
+export function roleAdoptersReader(): AdoptersReader | null {
+  return adopters;
+}
+
 export function register(app: Express, deps: Deps): void {
   const { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName } = deps;
   const { liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse, landingDeps } = deps;
@@ -242,6 +258,27 @@ export function register(app: Express, deps: Deps): void {
     const ctx = known ?? (await capabilityCtx(viewer));
     return whoMayPutHandToVillage(isVillageHeld(ADOPTING_POWER as Capability, ctx.villageHeld), await liveHoldersOf(ADOPTING_POWER));
   }
+
+  /**
+   * WHO ADOPTS IN THIS VILLAGE, for the sentence that names them (E8): the
+   * roles carrying `org.seat`, each with who holds it live through that role,
+   * the candidate left out. Read off the same state `adoptionRule` reads, so
+   * the words cannot promise a power nobody holds.
+   */
+  async function adopterFacts(viewer: any, candidateId: string | null): Promise<AdopterFacts> {
+    const ctx = await capabilityCtx(viewer);
+    const live = new Set(await liveHoldersOf(ADOPTING_POWER));
+    const seated = loadRoleHolders();
+    const groups = await Promise.all(
+      rolesCarrying(ADOPTING_POWER).map(async (r) => {
+        const ids = Array.from(new Set(seated.filter((h) => h.roleId === r.id && live.has(h.userId) && h.userId !== candidateId).map((h) => h.userId)));
+        const names = (await Promise.all(ids.map((id) => nameOf(id)))).filter((x): x is string => !!x && x.trim() !== "");
+        return { name: r.name, holders: names };
+      }),
+    );
+    return { villageHolds: isVillageHeld(ADOPTING_POWER as Capability, ctx.villageHeld), heldLive: live.size > 0, groups };
+  }
+  adopters = adopterFacts;
 
   /**
    * The signed-in member holding `terms.read`, or null after answering 401.
@@ -350,6 +387,8 @@ export function register(app: Express, deps: Deps): void {
     viewerId: string | null,
     rule: Awaited<ReturnType<typeof adoptionRule>> | null,
     known?: { ballot: ApplicationBallot | null; seats: SeatForCapacity[]; view: TextView | null; proposal: StoredProposal | null; asks: StoredAsk[]; askRoles: AskRoles },
+    /** Who adopts it in this village, in words, while it waits (E8). The one-application read says it; the list does not. */
+    whoAdopts: string | null = null,
   ) {
     const pool = getPool();
     const seats = known ? known.seats : await seatsForUpdate(pool, a.seatIds);
@@ -402,6 +441,7 @@ export function register(app: Express, deps: Deps): void {
         known ? known.view : undefined,
         !!viewerId && !!rule && adoptRefusal(rule, viewerId, a.candidateUserId) === null,
       ),
+      whoAdopts: awaiting ? whoAdopts : null,
       ...(viewerId && rule
         ? {
             you: {
@@ -840,7 +880,13 @@ export function register(app: Express, deps: Deps): void {
     const id = String(req.params.id ?? "");
     const a = APPLICATION_ID.test(id) ? await readApplication(getPool(), id) : null;
     if (!a) return res.status(404).json({ error: "There is no application by that id." });
-    res.json({ application: await served(a, String(viewer.id), await adoptionRule(viewer)) });
+    // Who adopts it in this village, named while it waits (E8): members only, behind `terms.read` like the page.
+    let whoAdopts: string | null = null;
+    if (a.status === "awaiting-holder") {
+      const proposal = (await proposalsForApplications(getPool(), [a.id])).get(a.id) ?? null;
+      whoAdopts = whoAdoptsWords({ ...(await adopterFacts(viewer, a.candidateUserId)), changesRoles: !!proposal && changesRoles(proposal.body) });
+    }
+    res.json({ application: await served(a, String(viewer.id), await adoptionRule(viewer), undefined, whoAdopts) });
   });
 
   /** The application a holder door acts on, or null after answering. */

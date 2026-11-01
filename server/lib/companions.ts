@@ -48,6 +48,7 @@ import {
   effectiveCap,
   isDraftKind,
   MAX_ANSWER,
+  MAX_QUESTIONS_PER_MEMBER_PER_DAY,
   MAX_BODY,
   MAX_QUOTE,
   MAX_TITLE,
@@ -78,6 +79,8 @@ import {
   membersByIds,
   openHeld,
   questionsShownOn,
+  circleSpeakersForBudget,
+  questionsShownToMemberOn,
   releasableHeld,
   reopenItem,
   rolesHeldBy,
@@ -260,6 +263,8 @@ export async function landItem(env: CompanionsEnv, companion: CompanionRow, inpu
   else if (input.type === "question") {
     const cap = effectiveCap(companion.dailyQuestionCap, env.ceiling);
     if ((await questionsShownOn(pool, companion.id, env.today)) >= cap) status = "held";
+    // And the member's own ceiling, across every companion they have.
+    else if ((await questionsShownToMemberOn(pool, companion.ownerUserId, env.today)) >= MAX_QUESTIONS_PER_MEMBER_PER_DAY) status = "held";
   }
 
   const id = `citem-${randomUUID().slice(0, 12)}`;
@@ -289,13 +294,43 @@ export async function landItem(env: CompanionsEnv, companion: CompanionRow, inpu
 }
 
 /**
+ * A purchase's yes: the budget spend that pays the member back lands as a
+ * draft on the personal companion of whoever speaks for the circle, and that
+ * person's own yes records it through the treasury's spend door. Keyed on the
+ * purchase, so a second yes finds the hand-off already made.
+ */
+export async function handOffPurchase(
+  env: CompanionsEnv,
+  item: ItemRow,
+  plan: Extract<ConfirmPlan, { way: "payback" }>,
+): Promise<{ ok: true; landedId: string } | { ok: false; status: number; error: string }> {
+  const personal = (await syncArmy(env, plan.holderId)).find((c) => c.scope === "personal");
+  if (!personal) return { ok: false, status: 409, error: "The person who speaks for this circle has no companion to hand this to." };
+  const landed = await landItem(env, personal, {
+    type: "draft",
+    kind: "budget_spend",
+    title: String(plan.spend.note ?? item.title).slice(0, MAX_TITLE),
+    payload: plan.spend,
+    quote: item.quote,
+    sourceRef: `companion:${item.id}`,
+    origin: item.origin,
+    dedupeKey: `payback:${item.id}`,
+  });
+  if (!landed.ok) return { ok: false, status: 409, error: landed.error };
+  return { ok: true, landedId: landed.item.id };
+}
+
+/**
  * The day turns for one companion: questions unanswered for seven days
  * expire, and held questions open, oldest first, up to today's cap.
  */
 export async function turnTheDay(env: CompanionsEnv, companion: CompanionRow): Promise<void> {
   await expireQuestions(env.pool, addDays(env.today, -QUESTION_EXPIRY_DAYS), companion.ownerUserId);
   const cap = effectiveCap(companion.dailyQuestionCap, env.ceiling);
-  const room = cap - (await questionsShownOn(env.pool, companion.id, env.today));
+  const room = Math.min(
+    cap - (await questionsShownOn(env.pool, companion.id, env.today)),
+    MAX_QUESTIONS_PER_MEMBER_PER_DAY - (await questionsShownToMemberOn(env.pool, companion.ownerUserId, env.today)),
+  );
   if (room > 0) await openHeld(env.pool, await releasableHeld(env.pool, companion.id, room), env.today);
 }
 
@@ -386,6 +421,16 @@ export function draftDetail(kind: DraftKind, p: Record<string, unknown>, names: 
       const slug = words.budgetToken?.(String(p.budgetId)) ?? null;
       const amount = slug ? words.tokenAmount(slug, Number(p.amountMinor)) : "An amount";
       return `${amount} from the circle budget, to ${whoOf(p, names)}.${p.note ? `\n"${String(p.note)}"` : ""}`;
+    }
+    case "purchase":
+    {
+      const slug = words.budgetToken?.(String(p.budgetId)) ?? null;
+      const amount = slug ? words.tokenAmount(slug, Number(p.amountMinor)) : "An amount";
+      return [
+        `${amount} paid back to you from the circle budget.`,
+        p.note ? `"${String(p.note)}"` : "",
+        p.toOutside ? `Bought from: ${String(p.toOutside)}` : "",
+      ].filter(Boolean).join("\n");
     }
     case "gratitude_note":
       return `${words.recognition(Number(p.amount))} to ${whoOf(p, names)}.\n"${String(p.message)}"`;
@@ -548,7 +593,9 @@ export type ConfirmPlan =
   | { way: "http"; first: DoorCall; then?: (firstAnswer: any) => DoorCall | { error: string } }
   | { way: "quest"; prose: { title: string; description: string | null; firstStep: string | null } }
   | { way: "rsvp"; eventId: string; status: string; occurrenceKey: string | null; memberDraftId: string | null; changed: boolean }
-  | { way: "mail"; mailto: string };
+  | { way: "mail"; mailto: string }
+  /** A purchase: hand a budget spend that pays the member back to whoever speaks for the circle. */
+  | { way: "payback"; holderId: string; spend: Record<string, unknown> };
 
 export type Planned =
   | { ok: true; item: ItemRow; kind: DraftKind; payload: Record<string, unknown>; edited: string[]; plan: ConfirmPlan }
@@ -609,6 +656,28 @@ export async function planConfirm(pool: Pool, userId: string, itemId: string, ed
       return {
         ...base,
         plan: { way: "http", first: { method: "POST", path: "/api/wallet/send", body: { to: to.userId, tokenType: p.tokenType, amount: p.amountMinor, note: p.note ?? "", clientNonce: nonce } } },
+      };
+    }
+    case "purchase": {
+      // The member's yes cannot record a spend that pays the member, so it
+      // hands one to the person who speaks for the circle (`handOffPurchase`).
+      const speakers = await circleSpeakersForBudget(pool, String(p.budgetId));
+      if (!speakers) return { ok: false, status: 404, error: "No such budget" };
+      const others = speakers.holders.filter((h) => h !== userId);
+      if (speakers.holders.includes(userId)) {
+        return { ok: false, status: 409, error: "You speak for this circle yourself, and a spend never pays the person asking. Ask another steward to record it." };
+      }
+      if (others.length === 0) return { ok: false, status: 409, error: "Nobody speaks for this circle yet, so there is nobody to pay you back. Ask an admin." };
+      if (others.length > 1) return { ok: false, status: 409, error: "More than one person speaks for this circle, so this cannot pick who pays you back. Ask one of them." };
+      const what = typeof p.note === "string" && p.note.trim() ? p.note.trim() : it.title;
+      const me = await namesFor(pool, [{ payload: { toUserId: userId } }]);
+      return {
+        ...base,
+        plan: {
+          way: "payback",
+          holderId: others[0],
+          spend: { budgetId: String(p.budgetId), amountMinor: p.amountMinor, note: `Pay back ${me.person(userId)}: ${what}`.slice(0, 180), toUserId: userId },
+        },
       };
     }
     case "budget_spend": {

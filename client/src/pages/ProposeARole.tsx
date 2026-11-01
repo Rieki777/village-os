@@ -5,6 +5,10 @@
  *   /propose-a-role/<token>         a link made for one person
  *   /propose-a-role/confirm?token=  the link in the confirmation email
  *
+ * `?role=<id>` ticks that role when it is on offer: a circle card's Apply link
+ * for a visitor or a guest lands here with it (shared/circleCard.ts). A guest
+ * who is signed in finds their name and address filled in.
+ *
  * Next season's roles, grouped by circle. The person picks up to three, says
  * what they bring to each and why, and gives their name and address. Sending
  * asks the address to confirm; nothing reaches the village until it does
@@ -18,6 +22,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "wouter";
 import { ArrowRight, MailCheck } from "lucide-react";
 import Layout from "@/components/Layout";
+import { useOptionalAuth } from "@/contexts/AuthContext";
 import { OPEN_AIM_MAX, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OPEN_WHY_MAX, OPEN_WORDS } from "@shared/openProposals";
 
 const FIELD =
@@ -107,13 +112,27 @@ export default function ProposeARole() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ field: string | null; message: string } | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  const me = useOptionalAuth()?.user ?? null;
 
   useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("role") ?? "";
     fetch(`/api/open-proposals/form${link ? `?link=${encodeURIComponent(link)}` : ""}`)
       .then((r) => r.json())
-      .then((d) => setForm(d?.open ? { kind: "open", village: String(d.village ?? ""), season: d.season ?? null, roles: Array.isArray(d.roles) ? d.roles : [] } : { kind: "closed", message: String(d?.message ?? OPEN_WORDS.closed) }))
+      .then((d) => {
+        const roles: FormRole[] = Array.isArray(d?.roles) ? d.roles : [];
+        setForm(d?.open ? { kind: "open", village: String(d.village ?? ""), season: d.season ?? null, roles } : { kind: "closed", message: String(d?.message ?? OPEN_WORDS.closed) });
+        // The role the Apply link was for, ticked, when the village still offers it.
+        if (d?.open && wanted && roles.some((r) => r.id === wanted)) setPicked((p) => (Object.keys(p).length ? p : { [wanted]: "" }));
+      })
       .catch(() => setForm({ kind: "failed" }));
   }, [link]);
+
+  // A guest who is signed in: their own name and address, which they can still change.
+  useEffect(() => {
+    if (!me) return;
+    setName((n) => n || String(me.name ?? ""));
+    setEmail((e) => e || String(me.email ?? ""));
+  }, [me]);
 
   const circles = useMemo(() => {
     const by = new Map<string, FormRole[]>();

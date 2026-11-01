@@ -159,6 +159,20 @@ describe("each required item", () => {
     expect(sender("Hill Village <hello@village.example.test>", withDomain, "env").detail).toContain("EMAIL_FROM");
   });
 
+  it("counts a delivered test only when it went out after the key was saved", () => {
+    // 2026-10-31: the key was swapped at noon, and the test it is judged by went out at nine.
+    const savedAt = "2026-10-31T12:00:00.000Z";
+    const before = { ...DELIVERED_TEST, createdAt: Date.parse("2026-10-31T09:00:00.000Z") / 1000 };
+    const after = { ...DELIVERED_TEST, createdAt: Date.parse("2026-10-31T13:00:00.000Z") / 1000 };
+    const key = { configured: true, source: "admin" as const, last4: "abcd", setAt: savedAt };
+    const old = item(facts({ key, testEmail: before }), "test-email");
+    expect(old.done).toBe(false);
+    expect(old.detail).toContain("before this key was saved");
+    expect(item(facts({ key, testEmail: after }), "test-email").done).toBe(true);
+    // A key set on the hosting service has no saving time, so any delivered test counts for it.
+    expect(item(facts({ key: { ...key, source: "env", setAt: null }, testEmail: before }), "test-email").done).toBe(true);
+  });
+
   it("counts the test email once the provider reports it delivered", () => {
     const t = (over: Partial<TestEmailRow>): TestEmailRow => ({ ...DELIVERED_TEST, ...over });
     expect(testEmailDelivered(null)).toBe(false);

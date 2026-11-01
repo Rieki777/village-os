@@ -67,18 +67,7 @@ describe("extracting a document's words", () => {
     expect(at.ok && at.kind).toBe("pdf");
   });
 
-  it("abandons a PDF read that runs past the timeout", async () => {
-    vi.resetModules();
-    // A PDF.js that never answers, as a crafted file might.
-    vi.doMock("unpdf", () => ({ getDocumentProxy: () => new Promise(() => undefined) }));
-    try {
-      const fresh = await import("./roleDocumentText");
-      expect(await fresh.readPdf(makePdf(["Gate keeper"]), 20)).toEqual({ ok: false, status: 422, error: DOCUMENT_WORDS.slowPdf });
-    } finally {
-      vi.doUnmock("unpdf");
-      vi.resetModules();
-    }
-  });
+  // A read that runs past the timeout, and one that never yields, are pinned on the worker in ./roleDocumentText.worker.test.ts.
 
   it("reads the bytes, never the name: a PDF called .txt is read as a PDF", async () => {
     const r = await extractRoleDocumentText({ bytes: makePdf(["Gate keeper"]), filename: "notes.txt" });

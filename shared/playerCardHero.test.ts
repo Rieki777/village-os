@@ -101,6 +101,27 @@ describe("the hero", () => {
     expect(h.eyebrow).toBe("Riverbend");
   });
 
+  it("E9: a proposal card is drawn in the season it is for, and counts no day of a season not running", () => {
+    const next = { id: "s3", name: "Second Season", startsOn: "2027-01-01", endsOn: "2027-03-21" };
+    const card = buildPlayerCard(input({ mode: "proposal", proposalSeason: next }));
+    expect(card.header.eyebrow).toBe("Riverbend · Second Season");
+    expect(card.header.span).toBe("1 January to 20 March 2027");
+    expect(card.header.moon).toMatchObject({ words: "October Moon", day: null, of: null, over: null });
+    // My moon cycle runs over that season.
+    expect(card.timeline.moons[0].startsAt.slice(0, 10)).toBe("2027-01-01");
+    // A season that has already ended: named, with no day counted.
+    const past = buildPlayerCard(input({ mode: "proposal", proposalSeason: { id: "s1", name: "First Season", startsOn: "2026-03-01", endsOn: "2026-06-01" } })).header;
+    expect(past.eyebrow).toBe("Riverbend · First Season");
+    expect(past.moon.day).toBeNull();
+    // No season for the proposal: none drawn, never the running one.
+    const none = buildPlayerCard(input({ mode: "proposal", proposalSeason: null })).header;
+    expect(none.eyebrow).toBe("Riverbend");
+    expect(none.span).toBeNull();
+    // Control: the live card, and a proposal card with no season named, keep the running season.
+    expect(buildPlayerCard(input({ proposalSeason: next })).header.eyebrow).toBe("Riverbend · Season of Foundations");
+    expect(buildPlayerCard(input({ mode: "proposal" })).header.moon.words).toBe("October Moon · Day 22 of 92");
+  });
+
   it("names the moon by the month its new moon falls in, in the village's zone", () => {
     // The lunation that holds 22 October 2026 began with the new moon of 10 October.
     expect(moonNameOf(new Date("2026-10-10T15:50:00Z"), TZ)).toBe("October Moon");

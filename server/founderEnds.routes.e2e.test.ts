@@ -270,6 +270,17 @@ beforeAll(async () => {
   })).status).toBe(200);
 
   /*
+   * THE VILLAGE'S CLOCK, WHICH BLOCKS THE LAUNCH VOTE SINCE READINESS R059.
+   * The platform keeps UTC until a founder answers, and confirming the zone
+   * already showing is an answer, so this village keeps UTC and says so.
+   */
+  const zone = (await call("GET", "/api/admin/seasons")).json;
+  const confirmedZone = await call("PUT", "/api/admin/seasons", {
+    body: { seasons: zone.seasons, cadence: zone.cadence, timezone: zone.timezone, confirmTimezone: true },
+  });
+  expect(confirmedZone.status, JSON.stringify(confirmedZone.json)).toBe(200);
+
+  /*
    * THE FOUNDER'S ANSWER ABOUT THE VILLAGE-WIDE ISSUANCE CAP, WHICH IS NEW AND
    * BLOCKS THE VOTE UNTIL IT IS GIVEN.
    *

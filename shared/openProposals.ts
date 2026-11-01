@@ -18,6 +18,15 @@
  * In the 2026-10-02 voice: the next step, never the machinery.
  */
 
+/** The village's public link. */
+export const OPEN_PROPOSAL_PATH = "/propose-a-role";
+
+/** The public link with one role already picked: the door a visitor or a guest is offered on a role. */
+export function openProposalHref(roleId?: string | null): string {
+  const id = String(roleId ?? "").trim();
+  return id ? `${OPEN_PROPOSAL_PATH}?role=${encodeURIComponent(id)}` : OPEN_PROPOSAL_PATH;
+}
+
 /** One to this many roles in one proposal. */
 export const OPEN_PROPOSAL_MAX_ROLES = 3;
 export const OPEN_NAME_MAX = 120;

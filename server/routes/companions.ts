@@ -54,6 +54,7 @@ import {
   engineName,
   outcomeRefFrom,
   planConfirm,
+  handOffPurchase,
   recordOutcome,
   releaseClaim,
   syncArmy,
@@ -475,6 +476,13 @@ export function register(app: Express, deps: Deps): void {
     const refused = (r: { status: number; json: any }) => ({ ok: false as const, status: r.status, error: String(r.json?.error ?? r.json?.message ?? "That door said no.") });
 
     if (plan.way === "mail") return { ok: true, outcomeRef: "mailto", mailto: plan.mailto };
+
+    // A purchase: the pay-back spend goes to whoever speaks for the circle.
+    if (plan.way === "payback") {
+      const handed = await handOffPurchase(env(), planned.item, plan);
+      if (!handed.ok) return handed;
+      return { ok: true, outcomeRef: `payback:${handed.landedId}` };
+    }
 
     if (plan.way === "http") {
       const first = await throughDoor(app, req, plan.first);

@@ -46,6 +46,7 @@
 import type { Pool } from "mysql2/promise";
 
 import { leftTheVillage } from "./formerMember";
+import { founderPowerStands } from "./gameStart";
 import { claimInvite, inviteByHash, inviteTakenBy, releaseInvite, revokeInvite } from "../repos/memberInvites";
 import { livingVouchesFor, recordVouch } from "../repos/vouches";
 import { INVITATION_NEEDED, INVITE_REFUSALS, hashInviteToken, inviteStanding } from "./invites";
@@ -70,6 +71,8 @@ interface InviterFacts {
   email?: unknown;
   membershipGranted?: unknown;
   stageGranted?: unknown;
+  /** The account's role: a `founder`'s invitation admits before launch (R068). */
+  role?: unknown;
 }
 
 /** A maker whose link may still open the door: a member row that is not a tombstone. */
@@ -145,10 +148,20 @@ export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
    * A maker who left between the door's check and this line gives no vouch:
    * the link was taken before the erasure withdrew it, and a tombstone has
    * nobody behind it to vouch.
+   *
+   * BEFORE LAUNCH A FOUNDER'S INVITATION ADMITS (readiness R068). On a fresh
+   * village the bar is the launch vote's electorate, 3, an invitation is one
+   * vouch, and before launch nobody but an admin can vouch, so a founder's
+   * first invitees arrived as guests and the launch roll could never pass 1.
+   * While `founderPowerStands` (the Game has not started), the invitee of a
+   * founder account is admitted on arrival, the vouch still recorded. After
+   * launch it is one vouch like anybody's. A village that switched vouching
+   * off (a bar of 0) admits nobody on any vouch, this one included.
    */
   async function vouchOnArrival(inviterUserId: string, userId: string): Promise<void> {
     try {
-      if (!(await makerStill(host.getPool(), inviterUserId, await host.members.byId(inviterUserId)))) return;
+      const maker = await host.members.byId(inviterUserId);
+      if (!(await makerStill(host.getPool(), inviterUserId, maker))) return;
       const needed = vouchBar(numberVar("membership.vouches_required"));
       const refusal = refuseVouch({
         voucherUserId: inviterUserId,
@@ -171,7 +184,8 @@ export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
       });
       // The count of people still here, the one the vouch route admits on:
       // a vouch a departed member gave before they left admits nobody.
-      if (vouchState(await livingVouchesFor(pool, userId), needed).met) {
+      const foundersDoor = needed > 0 && String(maker?.role ?? "") === "founder" && (await founderPowerStands(pool));
+      if (foundersDoor || vouchState(await livingVouchesFor(pool, userId), needed).met) {
         await host.members.update(userId, (m: any) => {
           m.membershipGranted = true;
         });

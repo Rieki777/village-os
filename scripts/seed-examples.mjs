@@ -163,12 +163,19 @@ if (want("quests")) {
     // gratitude_min/max are DERIVED, never authored: parseRewardRange is the
     // parser, the same one server/lib/examples.ts and server/repos/quests.ts
     // use, so this script and the shipped path write identical bounds.
-    const r = parseRewardRange(q.gratitude);
+    // The same columns server/lib/examples.ts writes, story layer included:
+    // the starters carry no reward label, so the label is "" here too.
+    const label = String(q.gratitude ?? "");
+    const r = parseRewardRange(label);
+    const list = (v) => (Array.isArray(v) && v.length ? J(v.map(String)) : null);
     await ins("quests", {
       id: q.id, title: q.title, description: q.description, impact: q.impact,
-      gratitude: q.gratitude, gratitude_min: r.min, gratitude_max: r.max,
+      gratitude: label, gratitude_min: r.min, gratitude_max: r.max,
       duration: q.duration, difficulty: q.difficulty, circle: q.circle,
       status: q.status, icon: q.icon, min_stage: q.minStage ?? null,
+      requires_role: q.requiresRole ?? null,
+      subtitle: q.subtitle ?? null, story: q.story ?? null, first_step: q.firstStep ?? null,
+      steps: list(q.steps), deliverable: q.deliverable ?? null, tips: list(q.tips),
       tags: J(q.tags), sort_order: q.sortOrder, is_example: 1,
     });
   }

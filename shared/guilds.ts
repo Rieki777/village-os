@@ -392,8 +392,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "session-secret",
-      strength: "present",
-      proves: "A secret is set. Signing members in with it is what proves it works.",
+      strength: "alive",
+      proves: "A session signed with the secret verifies, through the same code that signs members in.",
     },
     nursery: { how: "Its own value in a staging environment." },
     compost: ["Delete AUTH_TOKEN_SECRET from Railway. Every member is signed out."],
@@ -545,8 +545,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "village-secrets-key",
-      strength: "present",
-      proves: "A key of the right shape is set. Saving and reading back one key is what proves it seals.",
+      strength: "alive",
+      proves: "A test value seals and opens with the key, and every key saved under Integrations opens with it.",
     },
     nursery: { how: "A different key in staging. Never copy production's." },
     compost: ["Delete VILLAGE_SECRETS_KEY from Railway only when the village itself is composted."],
@@ -1046,8 +1046,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "assistant-key",
-      strength: "present",
-      proves: "A key is set. One answer from the guide is what proves it works.",
+      strength: "alive",
+      proves: "The guide answered on this key. Asking it one question is the proof.",
     },
     nursery: null,
     compost: [
@@ -1087,8 +1087,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "stripe-keys",
-      strength: "present",
-      proves: "A key is set. A test checkout is what proves it works.",
+      strength: "alive",
+      proves: "Stripe answered a checkout made with this key, in live mode. Starting one checkout and closing it before paying is the proof.",
     },
     nursery: { how: "A Stripe test-mode key and a test checkout before the live key is planted." },
     compost: [
@@ -1133,8 +1133,8 @@ export const SEEDS: readonly GuildSeed[] = [
     liveCheck: {
       via: "launch-check",
       checkKey: "stripe-webhook",
-      strength: "present",
-      proves: "A signing secret is set. A test event from Stripe arriving signed is what proves it.",
+      strength: "alive",
+      proves: "A signed event from Stripe arrived and verified with this secret. The first card payment is the proof, or one paid test checkout in test mode.",
     },
     nursery: { how: "A test-mode endpoint, then a test event sent from Stripe's dashboard." },
     compost: [
@@ -1247,6 +1247,38 @@ export const SEEDS: readonly GuildSeed[] = [
     certainty: "unverified",
     open: ["The exact Etherscan page for API keys."],
     source: "server/lib/hypha/discovery.ts; server/index.ts integration card.",
+  },
+  {
+    id: "base-rpc-url",
+    kind: "hand-carried",
+    title: "Read Base through your own endpoint",
+    provider: { name: "Alchemy, or any Base provider", url: "https://dashboard.alchemy.com" },
+    scopes: [],
+    handles: [{ store: "village-secret", slot: "base_rpc_url" }],
+    need: "optional",
+    risk: "ordinary",
+    lifespan: "lasting",
+    consequence:
+      "Token balances and the Hypha bridge read Base through an endpoint this village pays for. An Alchemy endpoint also lets the bridge list the founder's token contracts with no Basescan key.",
+    undo: "Clear it. Reads go back to the free public Base node, which is enough to start.",
+    cost: "A free tier serves a small village; a listener needs a paid plan.",
+    dependsOn: ["village-secrets-key"],
+    liveCheck: {
+      via: "probe",
+      probe: "secret-present",
+      how: "The integrations status reports the slot as configured. A balance read that returns is what proves it.",
+      strength: "present",
+      proves: "An endpoint is set.",
+    },
+    nursery: null,
+    compost: ["Delete the key at the provider.", "Clear the Base RPC endpoint under Admin, Integrations."],
+    rotation: { every: "year" },
+    holder: { who: "any-founder" },
+    certainty: "unverified",
+    open: ["The exact Alchemy page that shows a Base Mainnet endpoint."],
+    source:
+      "server/lib/secrets.ts (the base_rpc_url slot, and the boot move out of the old tokens.base_rpc_url variable); " +
+      "server/lib/base-reads.ts baseRpcUrl; server/index.ts integration card.",
   },
 
   // ── Module seeds ────────────────────────────────────────────────────────────

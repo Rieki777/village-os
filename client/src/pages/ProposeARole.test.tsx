@@ -14,6 +14,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { OPEN_WORDS } from "@shared/openProposals";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
+const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
+vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: auth.user }) }));
 
 import ProposeARole, { ConfirmProposal } from "./ProposeARole";
 
@@ -48,6 +50,8 @@ function serve(form: unknown, answer: { status: number; body: unknown } = { stat
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  auth.user = null;
+  window.history.pushState({}, "", "/");
 });
 
 describe("the form", () => {
@@ -109,6 +113,34 @@ describe("the form", () => {
     const hp = document.querySelector('input[name="hp"]') as HTMLInputElement;
     expect(hp.tabIndex).toBe(-1);
     expect(hp.closest('[aria-hidden="true"]')).toBeTruthy();
+  });
+
+  it("a circle card's Apply link lands with its role ticked, and a role no longer offered ticks nothing", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-host");
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByText("Welcome Host");
+    const ticked = (id: string) => (within(document.querySelector(`[data-role="${id}"]`) as HTMLElement).getByRole("checkbox") as HTMLInputElement).checked;
+    expect(ticked("r-host")).toBe(true);
+    expect(ticked("r-gate")).toBe(false);
+    cleanup();
+    window.history.pushState({}, "", "/propose-a-role?role=r-gone");
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByText("Welcome Host");
+    expect(["r-gate", "r-well", "r-host", "r-cook"].some(ticked)).toBe(false);
+  });
+
+  it("a guest who is signed in finds their name and address filled in, and can change them", async () => {
+    auth.user = { name: "Gil Moss", email: "gil@example.test" };
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByText("Gate Keeper");
+    const name = screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement;
+    expect(name.value).toBe("Gil Moss");
+    expect((screen.getByLabelText(OPEN_WORDS.emailLabel) as HTMLInputElement).value).toBe("gil@example.test");
+    fireEvent.change(name, { target: { value: "Gil" } });
+    expect(name.value).toBe("Gil");
   });
 
   it("closed: says so, and shows no form", async () => {
