@@ -112,7 +112,7 @@ export default function PoolStatement() {
         once, so these shares are a reading and not a payment.
       </p>
 
-      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 [overflow-wrap:anywhere] [&>*]:min-w-0">
         <div className="rounded-lg border border-border p-3">
           <dt className="text-xs text-muted-foreground">The pool</dt>
           <dd className="text-xl font-semibold text-foreground">{num(data.totals.pool)}</dd>

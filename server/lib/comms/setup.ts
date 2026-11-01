@@ -62,6 +62,8 @@ export interface SecretFacts {
   configured: boolean;
   source: "admin" | "env" | "none";
   last4: string | null;
+  /** When the value was saved in the admin. Null for a key set on the hosting service. */
+  setAt?: string | null;
 }
 
 export interface SetupFacts {
@@ -336,6 +338,20 @@ function rehearsalItem(f: SetupFacts): Omit<SetupItem, "n" | "required"> {
   };
 }
 
+/**
+ * EVIDENCE NEWER THAN THE KEY (the rule #738 applies to the launch rows).
+ *
+ * A test email proves the key that sent it. Once a new key is saved in the
+ * admin, an older test proves the old one, so it does not count. A key set on
+ * the hosting service has no saving time; changing it means a restart, and the
+ * next test proves it.
+ */
+export function testProvesKey(t: TestEmailRow, key: { source?: string; setAt?: string | null }): boolean {
+  if (key.source !== "admin" || !key.setAt) return true;
+  // The ledger keeps whole seconds and the key's time keeps milliseconds, so compare seconds.
+  return t.createdAt >= Math.floor(Date.parse(key.setAt) / 1000);
+}
+
 /** The latest test email counts once the provider says it arrived. */
 export function testEmailDelivered(t: TestEmailRow | null): boolean {
   if (!t) return false;
@@ -347,6 +363,9 @@ function testItem(f: SetupFacts): Omit<SetupItem, "n" | "required"> {
   const t = f.testEmail;
   const fix = "Send yourself a test. It counts once the delivery report says it arrived.";
   if (!t) return { key: "test-email", label, done: false, detail: "No test sent yet.", fix };
+  if (!testProvesKey(t, f.key)) {
+    return { key: "test-email", label, done: false, detail: "The last test went out before this key was saved.", fix: "Send another to prove the new key." };
+  }
   if (testEmailDelivered(t)) {
     return { key: "test-email", label, done: true, detail: `Delivered to ${t.toEmail}.`, fix: "Send another whenever something changes." };
   }
@@ -423,7 +442,7 @@ export async function gatherSetupFacts(deps: GatherDeps): Promise<SetupFacts> {
     deps.secretStatus ??
     ((key: "resend_api_key" | "resend_webhook_secret"): SecretFacts => {
       const s = storedSecretStatus(key, env);
-      return { configured: s.configured, source: s.source, last4: s.last4 };
+      return { configured: s.configured, source: s.source, last4: s.last4, setAt: s.setAt };
     });
   const [settings, emailConfig, testEmail, lastReportAt] = await Promise.all([
     readCommsSettings(pool),

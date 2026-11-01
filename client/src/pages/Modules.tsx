@@ -164,7 +164,8 @@ export default function Modules() {
 
   return (
     <Layout>
-      <div className="container max-w-5xl py-8 sm:py-12">
+      {/* Inherited by every heading, card and term below: a long word a village gives a shelf or a module wraps instead of widening the page. */}
+      <div className="container max-w-5xl py-8 sm:py-12 [overflow-wrap:anywhere]">
         <header className="mb-6">
           <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground">Module Library</h1>
           {/* The cards themselves are single links, so the pill mechanics

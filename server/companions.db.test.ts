@@ -134,6 +134,41 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     expect(four.dayKey).toBe(addDays(TODAY, 1));
   });
 
+  it("caps a member at six questions a day across every companion; the seventh is held and opens when there is room", async () => {
+    const army = await syncArmy(env(), "u-rick");
+    // A third companion, so three companions at three each could reach nine.
+    await pool.query( // module-review-ok: a fixture quest companion on the scratch schema, so one member holds three companions
+      "INSERT INTO companions (id, owner_user_id, scope, scope_id, name) VALUES ('comp-rick-quest', 'u-rick', 'quest', 'q-shelves', 'Shelves')",
+    );
+    const [quest] = (await syncArmy(env(), "u-rick")).filter((c) => c.id === "comp-rick-quest");
+    const [personal] = army.filter((c) => c.scope === "personal");
+    const [role] = army.filter((c) => c.scope === "role");
+    expect([personal, role, quest].every(Boolean)).toBe(true);
+
+    const statuses: string[] = [];
+    for (const [c, n] of [[personal, 3], [role, 3], [quest, 1]] as const) {
+      for (let i = 0; i < n; i++) {
+        const r = await question(c, `${c.scope} question ${i}?`); // never the id: a random id can hold seven digits in a row, which reads as a phone number
+        statuses.push(r.ok ? r.item.status : r.error);
+      }
+    }
+    expect(statuses).toEqual(["open", "open", "open", "open", "open", "open", "held"]);
+
+    // Same day: turning any of them opens nothing more.
+    for (const c of [personal, role, quest]) await turnTheDay(env(), c);
+    const [[shown]] = await pool.query<any[]>( // module-review-ok: counting the member's open questions across every companion, which no repo reads by owner
+      "SELECT COUNT(*) AS n FROM companion_items WHERE owner_user_id = 'u-rick' AND type = 'question' AND day_key = ? AND status <> 'held'",
+      [TODAY],
+    );
+    expect(Number(shown.n)).toBe(6);
+    // Next morning: there is room again, and the held one opens.
+    await turnTheDay(env({ today: addDays(TODAY, 1) }), quest);
+    const [[opened]] = await pool.query<any[]>( // module-review-ok: the quest companion's held question, read back after the day turned
+      "SELECT status, day_key FROM companion_items WHERE companion_id = 'comp-rick-quest' AND type = 'question'",
+    );
+    expect(opened.status).toBe("open");
+  });
+
   it("a member's lower cap holds back sooner, and the village ceiling binds a member's higher one", async () => {
     const ben = (await syncArmy(env(), "u-ben")).find((c) => c.scope === "personal")!;
     await pool.query("UPDATE companions SET daily_question_cap = 1 WHERE id = ?", [ben.id]); // module-review-ok: a member's lowered cap, set directly so the cap rule is tested apart from the PATCH route
