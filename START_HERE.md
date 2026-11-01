@@ -46,8 +46,11 @@ Either download `village-os-starter-<version>.zip` from the latest release at
 whole repository if you mean to change the code:
 
 ```
-git clone https://github.com/Rieki777/village-os.git
+git clone --branch v1.2.0 https://github.com/Rieki777/village-os.git
 ```
+
+That is the release this file belongs to. Never clone without `--branch`: the
+tip of `main` is unreleased work.
 
 Open a terminal in that folder. Never start from a copy of somebody else's
 village folder: it holds their secrets and their members' data.
@@ -68,12 +71,12 @@ your village.
 
 ```
 docker compose up -d
-docker compose logs -f app
+docker compose ps
 ```
 
 The first start downloads the software and builds the database, and takes a
-few minutes. Wait for a line saying the server is listening, then press
-Ctrl+C to stop watching (the village keeps running). Check it at
+few minutes. Run `docker compose ps` again every minute or so until the app
+reads `healthy`. Check it at
 <http://localhost:3000/health>: it should say `"status":"ok"`.
 
 ### 5. Claim it
@@ -86,7 +89,8 @@ shared password stops working for everybody but you.
 ### 6. Make it yours
 
 Sign in and open **Admin, Make This Yours**: the name, the line under it,
-where you are, your pictures, your colours, your modules. Then open the
+where you are, your pictures, your colours. Modules are switched on in
+**Admin, Module Library**. Then open the
 **Launch Plan** (`/journey-to-launch`). It lists what is still missing,
 including two things that ship blank on purpose: the currency your prices are
 in, and the timezone your days start in.
@@ -119,8 +123,12 @@ verified and delivers nothing, so wait until Resend marks the domain verified.
 ### 9. Invite people
 
 Members join by invitation. Open your profile and make an invitation link for
-each person: one use each, valid for fourteen days. Somebody without a link
-can ask to join at `/request-membership`, and the request lands in your Admin.
+each person: one use each, valid for fourteen days. Before your village
+launches, each person who makes their account with a link you made is a member
+straight away, and counts toward the launch vote. After launch, a link is one
+vouch of the three a newcomer needs (`membership.vouches_required`). Somebody
+without a link can ask to join at `/request-membership`, and the request lands
+in your Admin.
 
 ---
 
@@ -132,9 +140,15 @@ can ask to join at `/request-membership`, and the request lands in your Admin.
 2. On your own computer, get the files (step 2 above) and run
    `node scripts/fork-init.mjs --village-name "Your Village" --admin-email you@example.org --domain village.example.org`.
 3. Copy each value from `.env` into the service's Variables, by hand. Set
-   `DATABASE_URL` to the MySQL service's own connection string.
-4. Deploy. The first boot builds the database; give it up to fifteen minutes
-   before you worry. Then continue from step 5 above, at your own address.
+   `DATABASE_URL` as a reference to the MySQL service's `MYSQL_URL`: in the app
+   service's Variables, add `DATABASE_URL` with the value
+   `${{MySQL.MYSQL_URL}}` (use your MySQL service's name if you renamed it).
+4. Give the service an address: in its Settings, under Networking, click
+   **Generate Domain** (an address ending in `.up.railway.app`), or add your own
+   domain there and create the CNAME record Railway shows at your DNS provider.
+   That address is where you open `/claim`.
+5. Deploy. The first boot builds the database; give it up to fifteen minutes
+   before you worry. Then continue from step 5 above, at the address from step 4.
 
 [`docs/PROVISIONING.md`](docs/PROVISIONING.md) walks the hosted path in
 detail, including custom domains, payments and the health check.

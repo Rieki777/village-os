@@ -85,9 +85,18 @@ In your Railway project: add a MySQL database service; add an app service
 that runs the image `ghcr.io/rieki777/village-os:1.2.0` (name a release,
 never `:edge`, which is the untested tip of `main`); and add a volume to the
 app service mounted at `/app/data` (this is where member uploads live;
-`server/seeds/` in the repository is never touched at deploy time). Connect
-the app service to MySQL so `DATABASE_URL` is filled in for you
-automatically as a service reference; you do not type this one by hand.
+`server/seeds/` in the repository is never touched at deploy time). Then set
+`DATABASE_URL` as a reference to the MySQL service's `MYSQL_URL`: in the app
+service's Variables, add `DATABASE_URL` with the value `${{MySQL.MYSQL_URL}}`
+(use your MySQL service's name if you renamed it). It is a reference, so
+Railway fills in the value and keeps it current; you never paste the password
+itself.
+
+Give the app service an address before anything else asks for one: in its
+Settings, under Networking, click **Generate Domain** for an address ending in
+`.up.railway.app`, or add your own domain there and create the CNAME record
+Railway shows at your DNS provider. Every later step that says
+`<your-domain>`, `/health` and `/claim` among them, means this address.
 
 ## 3. Generate your environment variables
 
@@ -228,9 +237,10 @@ at what has been applied, without changing anything:
 npx tsx scripts/run-migration.ts --status
 ```
 
-Point this at your Railway MySQL's connection string (Railway shows it in
-the MySQL service's Connect tab; use the public proxy URL if you are running
-this from outside Railway's own network).
+This one is for developers, and a founder can skip it: it needs a clone with
+its dependencies installed and the database's own password, from the MySQL
+service's Connect tab (the public proxy URL from outside Railway's network).
+`/health` below tells you the same thing without either.
 
 Then check `https://<your-domain>/health` answers `ok` and its `build` field
 carries a real git SHA. A build marker that never changes means the deploy

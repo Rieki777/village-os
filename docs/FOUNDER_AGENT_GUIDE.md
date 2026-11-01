@@ -572,8 +572,13 @@ three parts:
    sign-up page the link opens, which posts to `POST /api/auth/register`, or
    Google sign-in at `/api/auth/google/start` (`server/routes/authGoogle.ts`),
    set up as `docs/GOOGLE_SIGN_IN.md` says. Both doors check the invitation
-   the same way (`server/lib/inviteDoor.ts`), and both make a plain member
-   holding no privileges. Somebody without a link can ask to join at
+   the same way (`server/lib/inviteDoor.ts`). BEFORE LAUNCH, an invitation a
+   founder made admits the person as a member the moment they make their
+   account, so the launch roll counts them (readiness R068: the bar is 3
+   vouches and nobody else can vouch yet). AFTER LAUNCH, an invitation is one
+   vouch of `membership.vouches_required`; the rest come from members who may
+   vouch, or an admin grants Member under Admin, Players. Either way the
+   account holds no privileges until a role or an admin gives them. Somebody without a link can ask to join at
    `/request-membership`, and the request lands in the founder's Admin.
 3. **An admin sets the role afterwards**, at `PUT /api/admin/users/:id/role`.
    It takes exactly `member`, `admin` or `founder`. Before the village launches,
