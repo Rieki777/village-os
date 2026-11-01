@@ -29,7 +29,7 @@ export interface GeneKeysRow {
   maiaPlain: boolean;
   /** "Leave me out of session cards" (0296): welcomed by name, never read. */
   cardOut: boolean;
-  /** "Read me on session cards" (0301): the member's own yes. */
+  /** "Read me on session cards" (0308): the member's own yes. */
   cardIn: boolean;
   source: GeneKeysSource;
   calcVersion: number;

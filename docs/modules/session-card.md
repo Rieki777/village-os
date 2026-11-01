@@ -7,7 +7,7 @@ Provenance: platform
 > The day's sky is read in the browser by `skyAt` in `shared/geneKeysSky.ts`, still the only file that imports
 > `astronomy-engine`. Routes in `server/routes/sessionCard.ts`; the rules in `server/lib/sessionCard.ts`; every
 > statement in `server/repos/sessionCards.ts`; the schema in `drizzle/0296_a_session_pulls_a_card.sql` and
-> `drizzle/0301_a_card_asks_its_own_yes.sql`. The card
+> `drizzle/0308_a_card_asks_its_own_yes.sql`. The card
 > in the room is `client/src/components/sessionCard/PullACard.tsx`, mounted in the drop in stage.
 
 **An optional card anyone in a live session can pull at the start, as often as they like. It reads the sky of the

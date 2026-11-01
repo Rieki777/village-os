@@ -364,7 +364,7 @@ export interface GeneKeysView {
 /**
  * WHETHER A SESSION CARD ASKS ITS OWN YES (the clause 13 review's F4, Rye's
  * call). True: a card reads a member only after they say yes to cards
- * themselves (`card_in`, 0301), whatever they let Maia do. False: a card reads
+ * themselves (`card_in`, 0308), whatever they let Maia do. False: a card reads
  * anyone who shows their lines and lets Maia use them, unless they said no
  * (`card_out`, 0296). The toggle writes both, so either ruling is this line.
  */
@@ -384,7 +384,7 @@ export interface OwnGeneKeysView extends GeneKeysView {
   maiaPlain: boolean;
   /** "Leave me out of session cards" (shared/sessionCard.ts): welcomed by name, never read. */
   cardOut: boolean;
-  /** "Read me on session cards" (0301): their own yes. */
+  /** "Read me on session cards" (0308): their own yes. */
   cardIn: boolean;
   /** Whether their own choice puts them on cards (`inCardsBy`). Lines shown and Maia allowed are asked as well. */
   inCards: boolean;
