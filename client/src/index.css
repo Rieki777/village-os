@@ -1702,7 +1702,12 @@ html {
  */
 /* Not button: a button is short and must keep its label, and letting it shrink
  * spilled "Save Changes" out of its own box. */
-.admin-fit :where(input, select, textarea) {
+/* A label wrapping a select sizes to the select, and the select to its longest option;
+ * letting the label shrink is what lets the select's own max-width resolve. */
+/* And a plain div, which as a flex or grid item otherwise keeps its content's width:
+ * with text free to wrap, removing that floor hides nothing. An explicit width or
+ * shrink-0 on the element still holds. */
+.admin-fit :where(input, select, textarea, label, div) {
   min-width: 0;
   max-width: 100%;
 }

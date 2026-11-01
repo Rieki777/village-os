@@ -81,3 +81,60 @@ export function makePdf(lines: string[], pages = 1): Buffer {
   out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(out, "latin1");
 }
+
+/** PDF objects, numbered from 1, with a true cross-reference table. Each object is its bytes. */
+function pdfOf(objects: Buffer[]): Buffer {
+  const parts: Buffer[] = [Buffer.from("%PDF-1.4\n", "latin1")];
+  const offsets: number[] = [];
+  let at = parts[0].length;
+  objects.forEach((o, i) => {
+    offsets.push(at);
+    const piece = Buffer.concat([Buffer.from(`${i + 1} 0 obj\n`, "latin1"), o, Buffer.from("\nendobj\n", "latin1")]);
+    parts.push(piece);
+    at += piece.length;
+  });
+  const table = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  parts.push(Buffer.from(`${table}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${at}\n%%EOF\n`, "latin1"));
+  return Buffer.concat(parts);
+}
+
+/**
+ * A COMPRESSION BOMB: one page whose content stream is a few tens of
+ * kilobytes deflated and `inflatedBytes` once inflated, every byte of it a
+ * text-show operator, so reading its words is real work and real memory.
+ */
+export function makeBombPdf(inflatedBytes = 64 * 1024 * 1024): Buffer {
+  const op = Buffer.from("(A) Tj ", "latin1");
+  const raw = Buffer.alloc(inflatedBytes);
+  for (let i = 0; i < inflatedBytes; i += op.length) op.copy(raw, i, 0, Math.min(op.length, inflatedBytes - i));
+  const body = Buffer.concat([Buffer.from("BT /F1 12 Tf 72 720 Td ", "latin1"), raw, Buffer.from(" ET", "latin1")]);
+  const deflated = zlib.deflateSync(body, { level: 9 });
+  return pdfOf([
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>", "latin1"),
+    Buffer.from("<< /Type /Pages /Kids [5 0 R] /Count 1 >>", "latin1"),
+    Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>", "latin1"),
+    Buffer.concat([Buffer.from(`<< /Length ${deflated.length} /Filter /FlateDecode >>\nstream\n`, "latin1"), deflated, Buffer.from("\nendstream", "latin1")]),
+    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>", "latin1"),
+  ]);
+}
+
+/** One real page in a page tree that claims `claimed` of them, as a crafted file might. */
+export function makeClaimedPagesPdf(claimed: number): Buffer {
+  const stream = "BT /F1 12 Tf 72 720 Td (Gate keeper) Tj ET";
+  return pdfOf([
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>", "latin1"),
+    Buffer.from(`<< /Type /Pages /Kids [5 0 R] /Count ${claimed} >>`, "latin1"),
+    Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>", "latin1"),
+    Buffer.from(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`, "latin1"),
+    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>", "latin1"),
+  ]);
+}
+
+/** A readable PDF whose cross-reference table points every object at the wrong place, and whose startxref lies. */
+export function makeBrokenXrefPdf(lines: string[]): Buffer {
+  const good = makePdf(lines).toString("latin1");
+  return Buffer.from(
+    good.replace(/^(\d{10}) 00000 n $/gm, (_m, o: string) => `${String(Number(o) + 7919).padStart(10, "0")} 00000 n `).replace(/startxref\n\d+/, "startxref\n999999"),
+    "latin1",
+  );
+}

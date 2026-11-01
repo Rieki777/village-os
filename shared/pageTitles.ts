@@ -66,6 +66,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/profile": "My profile",
   "/login": "Sign in",
   "/set-password": "Choose a password",
+  "/verify-email": "Confirm your address",
   "/forgot-password": "Set a new password",
   "/game-mechanics": "Game Mechanics",
   "/exit-policy": "Leaving well",

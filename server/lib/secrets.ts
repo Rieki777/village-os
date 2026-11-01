@@ -75,8 +75,13 @@
  * absent and the env fallback (if any) takes over.
  */
 import type { Pool } from "mysql2/promise";
+import { VARIABLES } from "../../shared/gameVariables";
 import { registrySecretKeys } from "../../shared/modules";
+import { insertMechanicsChange } from "../repos/mechanicsChanges";
+import { scrubCredentialCopies } from "./credentialScrub";
+import { recordEvent } from "./events";
 import { keyEnvProblem, keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
+import { setVariable, storedOverride } from "./variables";
 
 /**
  * The platform's own slots. A literal union, so every call site still typechecks.
@@ -103,6 +108,10 @@ const BASE_SECRET_KEYS = [
   "riverside_webhook_secret",
   "governance_hub_secret",
   "basescan_api_key",
+  // The Base RPC endpoint. A dedicated one carries its provider key in the
+  // address, so it is a credential, and it used to be the plain game variable
+  // `tokens.base_rpc_url`. See `moveVariableSecrets` below for the move.
+  "base_rpc_url",
   "railway_project_token",
   "dns_zone_token",
 ] as const;
@@ -147,6 +156,7 @@ const BASE_ENV_FALLBACK: Record<BaseSecretKey, string | null> = {
   riverside_webhook_secret: "RIVERSIDE_WEBHOOK_SECRET",
   governance_hub_secret: "GOVERNANCE_HUB_SECRET",
   basescan_api_key: "BASESCAN_API_KEY",
+  base_rpc_url: "BASE_RPC_URL",
   railway_project_token: null,
   dns_zone_token: null,
 };
@@ -171,6 +181,55 @@ export const ROOT_SLOT_CARDS: ReadonlyArray<{ key: BaseSecretKey; title: string;
   { key: "railway_project_token", title: "Railway, one project", unlocks: "Lets the setup game set and remove this village's hosting variables inside one Railway project and environment. It reaches no other project, and nothing ever reads it back out.", getAt: "railway.com → your project → Settings → Tokens", placeholder: "a token for this project only" },
   { key: "dns_zone_token", title: "DNS, one domain", unlocks: "Lets the setup game add the records email and your address need, in this one domain only. It is removed after launch and planted again when a record has to change.", getAt: "your DNS host → API tokens → a token limited to this one zone", placeholder: "a token for this zone only" },
 ];
+
+/**
+ * The Integrations card for the Base RPC endpoint, which `integrationCards()`
+ * lists beside the Basescan card. Here beside its slot for the same reason the
+ * root cards are: the copy that says why it is sealed sits next to the slot.
+ */
+export const BASE_RPC_CARD: { key: BaseSecretKey; title: string; unlocks: string; getAt: string; placeholder: string } = {
+  key: "base_rpc_url",
+  title: "Base RPC endpoint",
+  unlocks: "Where token balances and the Hypha Bridge read Base. Blank reads the free public node, which is enough to start. A dedicated endpoint carries its key in the address, which is why it is kept here, sealed. An Alchemy endpoint also lets the Hypha Bridge list your token contracts with no second key.",
+  getAt: "dashboard.alchemy.com → your app → Base Mainnet endpoint, or any Base provider",
+  placeholder: "https://base-mainnet.g.alchemy.com/v2/…",
+};
+
+/**
+ * SLOTS WHOSE VALUE AN OLDER RELEASE KEPT IN A PLAIN GAME VARIABLE.
+ *
+ * Derived from the registry's `movedToSecret` (shared/gameVariables.ts), so
+ * the dial and this store name the move in one place. A slot here reads its
+ * old variable as a LEGACY PLAINTEXT ENTRY, with exactly the rules a
+ * pre-2026-08-30 plaintext row in this document already has:
+ *
+ *   - it resolves during the dual-read window (`ACCEPT_LEGACY_PLAINTEXT`),
+ *     ranked as admin-typed, because an admin typed it
+ *   - its status says `atRest: "plaintext"`, which the Integrations card
+ *     already renders as "saved in the clear, set the key and restart"
+ *   - the boot pass seals it and clears the variable when a key is usable,
+ *     and names it (never its value) when one is not
+ *   - clearing or replacing the slot clears the variable too, and clearing
+ *     needs no key, so an operator who cannot seal can still take it out
+ *
+ * A blank or default variable row is not a value: the public node is the
+ * fallback anyway, so there is nothing to keep.
+ */
+const VARIABLE_HOMES: ReadonlyArray<{ slot: SecretKey; dial: string; fallback: string }> = VARIABLES.filter(
+  (v) => !!v.movedToSecret,
+).map((v) => ({ slot: v.movedToSecret as SecretKey, dial: v.key, fallback: v.default }));
+
+function variableHomeOf(key: SecretKey) {
+  return VARIABLE_HOMES.find((h) => h.slot === key);
+}
+
+/** What an older release left in this slot's old variable, or "" when nothing worth keeping is there. */
+function legacyVariableValue(key: SecretKey): string {
+  const home = variableHomeOf(key);
+  if (!home) return "";
+  const v = (storedOverride(home.dial) ?? "").trim();
+  return v && v !== home.fallback ? v : "";
+}
 
 /** The env value a slot falls back to, or "" for a slot with no fallback. */
 function envFallback(key: SecretKey, env: NodeJS.ProcessEnv): string {
@@ -329,11 +388,27 @@ export async function loadSecrets(pool: Pool, env: NodeJS.ProcessEnv = process.e
   cache = row ? (typeof row.value === "string" ? JSON.parse(row.value) : row.value) : {};
   warnedUnreadable.clear();
   await resealPlaintextSecrets(pool, env);
+  // Needs the variables cache, which boot loads before this store.
+  await moveVariableSecrets(pool, env);
+  // Copies of a key an older release left in two records (credentialScrub.ts
+  // says why that runs here, at boot, and not as a numbered migration).
+  await scrubCredentialCopies(pool);
 }
 
 function mustCache(): SecretsDoc {
   if (!cache) throw new Error("secrets read before boot loaded them");
   return cache;
+}
+
+/**
+ * The entry a slot holds: its row in this document, or else its old game
+ * variable read as a legacy plaintext entry (see `VARIABLE_HOMES`).
+ */
+function storedEntry(key: SecretKey): StoredSecret | undefined {
+  const entry = mustCache()[key];
+  if (entry) return entry;
+  const value = legacyVariableValue(key);
+  return value ? { value, setBy: `the old game variable ${variableHomeOf(key)!.dial}`, setAt: "" } : undefined;
 }
 
 /**
@@ -383,10 +458,129 @@ export async function resealPlaintextSecrets(
   return { sealed: plaintext.length, leftPlaintext: 0 };
 }
 
-/** Which keys are still stored in the clear. For tests and for an ops read. */
+/** Which keys are still stored in the clear, an old game variable included. For tests and for an ops read. */
 export function plaintextSecretKeys(): string[] {
   const doc = mustCache();
-  return Object.keys(doc).filter((k) => isLegacy(doc[k]));
+  const inDoc = Object.keys(doc).filter((k) => isLegacy(doc[k]));
+  const inVariables = VARIABLE_HOMES.filter((h) => !doc[h.slot] && legacyVariableValue(h.slot)).map((h) => String(h.slot));
+  return [...inDoc, ...inVariables];
+}
+
+/**
+ * Clear a slot's old game variable and say so in both records, without ever
+ * failing the caller: the deed (a seal, a set, a clear) has already happened.
+ * The ledger row's old value is the endpoint, and the ledger's one INSERT
+ * stores it with the key removed.
+ */
+async function retireVariable(pool: Pool, key: SecretKey, how: "moved-from-variable" | "variable-cleared", note: string): Promise<void> {
+  const home = variableHomeOf(key);
+  const value = legacyVariableValue(key);
+  if (!home || !value) return;
+  const r = await setVariable(pool, home.dial, home.fallback);
+  if (!r.ok) {
+    console.warn(`[secrets] could not clear the old game variable ${home.dial}: ${r.error}`);
+    return;
+  }
+  try {
+    await insertMechanicsChange(pool, {
+      id: `mech-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      configKey: home.dial,
+      oldValue: value,
+      newValue: null,
+      actorUserId: null,
+      source: "platform",
+      proposalRef: null,
+      note,
+    });
+  } catch (e) {
+    console.error(`[secrets] the amendment ledger did not record clearing ${home.dial} (${String((e as any)?.code ?? "error")}); the variable is cleared`);
+  }
+  await recordEvent(pool, {
+    kind: "audit", text: `integrations:${String(key)}:${how}`,
+    actorKind: "system", entityType: "integration", entityRef: String(key), audience: "admin",
+  });
+}
+
+/**
+ * THE MOVE OUT OF THE GAME VARIABLES, at boot, after the reseal above.
+ *
+ * For each slot in `VARIABLE_HOMES` whose old variable still holds a value:
+ *
+ *   NOTHING STORED, KEY USABLE   seal the value into the slot (attributed to
+ *       the migration, last4 kept for the mask), prove the sealed box opens
+ *       to the same bytes, write the document, and only then clear the
+ *       variable and record the move. The order is the safety: the variable
+ *       is the only copy until the sealed one is on disk and known to open.
+ *   SOMETHING STORED, READABLE   that entry is admin-typed and wins every
+ *       read, so the variable is a dead copy in the clear. Cleared.
+ *   SOMETHING STORED, UNREADABLE, or NO USABLE KEY   nothing moves and nothing
+ *       is cleared. The variable keeps resolving as a legacy plaintext entry,
+ *       so the village keeps its endpoint, and the warning names the slot,
+ *       the variable and what is wrong with the key, never the value.
+ *
+ * Why keep reading it rather than fall back to the public node: the key in
+ * that variable is already exposed, so dropping it buys no secrecy, and it
+ * would cost a village its paid endpoint (and the Hypha Bridge its contract
+ * lookup) on an upgrade nobody told it about. What closes the exposure is
+ * rotating the key at the provider, which an operator does, and the
+ * Integrations card says the value is in the clear until a boot with the key
+ * seals it.
+ *
+ * Idempotent: once moved the variable has no row, so the second boot finds
+ * nothing. Never throws into boot; a failure leaves the variable working.
+ */
+export async function moveVariableSecrets(
+  pool: Pool,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{ moved: string[]; stranded: string[] }> {
+  const moved: string[] = [];
+  const stranded: Array<{ slot: string; dial: string; why: string }> = [];
+  for (const home of VARIABLE_HOMES) {
+    const value = legacyVariableValue(home.slot);
+    if (!value) continue;
+    try {
+      const existing = mustCache()[home.slot];
+      if (existing) {
+        if (openStored(home.slot, env, ACCEPT_LEGACY_PLAINTEXT) !== null) {
+          await retireVariable(pool, home.slot, "variable-cleared", "Cleared: an endpoint was already saved under Admin, Integrations, and that one is the one in use.");
+        } else {
+          stranded.push({ slot: String(home.slot), dial: home.dial, why: "A value is already saved in Integrations and this deployment cannot open it." });
+        }
+        continue;
+      }
+      const key = villageSecretsKey(env);
+      if (!key) {
+        stranded.push({ slot: String(home.slot), dial: home.dial, why: villageSecretsKeyProblem(env) ?? `${VILLAGE_SECRETS_ENV} cannot be read.` });
+        continue;
+      }
+      const box = sealWith(key, value);
+      if (openWith(key, box) !== value) {
+        stranded.push({ slot: String(home.slot), dial: home.dial, why: "The sealed copy did not open to the same value, so nothing was changed." });
+        continue;
+      }
+      const next: SecretsDoc = {
+        ...mustCache(),
+        [home.slot]: { ...box, last4: value.slice(-4), setBy: `migration:${home.dial}`, setAt: new Date().toISOString() },
+      };
+      await pool.query(DOC_UPSERT, [JSON.stringify(next)]); // module-review-ok: this store IS the repo for its one app_config row, as it has been since S63
+      cache = next;
+      await retireVariable(pool, home.slot, "moved-from-variable", "Moved into the sealed integration secrets: Admin, Integrations, Base RPC endpoint.");
+      moved.push(String(home.slot));
+    } catch (e) {
+      stranded.push({ slot: String(home.slot), dial: home.dial, why: `The move failed (${String((e as any)?.code ?? "error")}) and will be tried again next boot.` });
+    }
+  }
+  if (moved.length > 0) {
+    console.log(`[secrets] moved ${moved.join(", ")} out of the game variables into the sealed store`);
+  }
+  for (const s of stranded) {
+    console.warn(
+      `[secrets] ${s.slot} is still stored in the clear in the game variable ${s.dial} and was NOT moved ` +
+        `into the sealed store. ${s.why} Every database dump carries it. It keeps working, and Admin, ` +
+        "Integrations shows it as saved in the clear; once the key is usable, restart and it moves.",
+    );
+  }
+  return { moved, stranded: stranded.map((s) => s.slot) };
 }
 
 // ── Reads ───────────────────────────────────────────────────────────────────
@@ -401,7 +595,7 @@ function openStored(
   env: NodeJS.ProcessEnv,
   acceptLegacy: boolean,
 ): string | null {
-  const entry = mustCache()[key];
+  const entry = storedEntry(key);
   if (isSealed(entry)) {
     const k = villageSecretsKey(env);
     const opened = k ? openWith(k, entry) : null;
@@ -472,7 +666,7 @@ export function secretStatus(
   env: NodeJS.ProcessEnv = process.env,
   acceptLegacy: boolean = ACCEPT_LEGACY_PLAINTEXT,
 ): SecretStatus {
-  const entry = mustCache()[key];
+  const entry = storedEntry(key);
   const atRest: SecretStatus["atRest"] = isSealed(entry)
     ? "sealed"
     : isLegacy(entry)
@@ -560,4 +754,14 @@ export async function putSecret(
   await pool.query(DOC_UPSERT, [JSON.stringify(doc)]); // module-review-ok: this store IS the repo for its one app_config row, as it has been since S63
   warnedUnreadable.delete(String(key));
   cache = doc;
+  // A slot that used to be a game variable: the value just typed (or the
+  // clear) supersedes whatever an older release left there, so the plaintext
+  // copy goes too. After the write above, never before it, and with no key
+  // needed, the same as any clear.
+  await retireVariable(
+    pool,
+    key,
+    "variable-cleared",
+    trimmed ? "Replaced by an endpoint saved under Admin, Integrations." : "Cleared from Admin, Integrations.",
+  );
 }
