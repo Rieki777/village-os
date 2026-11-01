@@ -16,7 +16,7 @@
  */
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useGameConfig } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { announceProfileChange } from "@/lib/profileRefresh";
 import { cashPayWords, linesWords, useDisplayRates } from "@/lib/workPay";
@@ -115,9 +115,10 @@ export default function TreasuryPanel({
   const rates = useDisplayRates();
   /** The village's own word for its recognition token, never a literal (scripts/check-village-facts.mjs). */
   const thanksName = useTokenName("Recognition");
+  const config = useGameConfig();
   const [claiming, setClaiming] = useState(false);
   const [said, setSaid] = useState("");
-  const { village, voice } = pickTokens(data.wallet ?? []);
+  const { village, voice } = pickTokens(data.wallet ?? [], config?.currency?.value?.slug);
   const cash = data.cash ? cashSummary(data.cash) : null;
   const cycleStart = data.cycle?.startsAt ?? null;
   const thisMoon = (token: string | undefined) => (token && data.ledger && cycleStart ? earnedIn(data.ledger, token, cycleStart) : null);

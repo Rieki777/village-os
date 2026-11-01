@@ -356,7 +356,7 @@ export default function Profile() {
   const nextRung = stages && stageIndex !== null ? (stages[stageIndex + 1] ?? null) : null;
   const progress = nextRungProgress(nextRung, { consentedQuests: prog?.consentedQuests ?? null, training: prog?.training ?? null });
   const rolesLine = (prog?.roles ?? []).map((r) => roleWithHolders(r.name, [user.name])).join(", ");
-  const { village: villageToken } = pickTokens(dash.wallet ?? []);
+  const { village: villageToken } = pickTokens(dash.wallet ?? [], config?.currency?.value?.slug);
   const seasonWords = dash.season
     ? [dash.season.name, dash.season.day !== null && dash.season.of !== null ? `day ${Math.min(dash.season.day, dash.season.of)} of ${dash.season.of}` : ""].filter(Boolean).join(" · ")
     : null;
