@@ -174,6 +174,16 @@ describe("the open proposal page", () => {
     expect(screen.queryByRole("button", { name: DECIDE_WORDS.adopt })).toBeNull();
   });
 
+  it("a declined proposal reads as declined, with no circle's answer calling it adopted", async () => {
+    answer = () => json({ proposal: served({ status: "declined", statusWords: "Declined on 2 Nov", decided: "Declined on 2 Nov", you: { ...POWER, mayAdopt: false, mayDecline: false } }) });
+    render(<OpenProposal />);
+    await heading();
+    expect(screen.getAllByText("Declined on 2 Nov").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Adopted")).toBeNull();
+    expect(screen.queryByRole("heading", { name: CONSENT_WORDS.heading })).toBeNull();
+    expect(screen.queryByRole("button", { name: DECIDE_WORDS.adopt })).toBeNull();
+  });
+
   it("a visitor is told it is for members, with a way to sign in back here", async () => {
     signedIn = null;
     render(<OpenProposal />);

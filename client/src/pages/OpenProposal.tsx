@@ -238,14 +238,17 @@ export default function OpenProposal() {
               </dl>
             </section>
 
-            <CircleConsent
-              applicationId={p.id}
-              consent={p.consent}
-              decided={p.decided}
-              waiting={p.status === "confirmed"}
-              onAnswered={() => void load()}
-              answer={answerConsent}
-            />
+            {/* The circle's answer while it waits and once adopted. A declined one has no adoption to record, and its line says so above. */}
+            {(p.status === "confirmed" || p.status === "adopted") && (
+              <CircleConsent
+                applicationId={p.id}
+                consent={p.consent}
+                decided={p.status === "adopted" ? p.decided : null}
+                waiting={p.status === "confirmed"}
+                onAnswered={() => void load()}
+                answer={answerConsent}
+              />
+            )}
 
             {p.status === "confirmed" && (
               <section aria-labelledby="op-decide" className="rounded-xl border-2 border-teal-deep/40 bg-white p-5" data-decider-card="">

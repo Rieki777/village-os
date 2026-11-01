@@ -85,7 +85,7 @@ export type DoorReason = "village-holds-it" | "a-role-holds-it" | "nobody-holds-
 export const DECIDE_WORDS = {
   // The page.
   heading: (proposer: string | null, roles: readonly string[]) => `${proposer || "Somebody"} proposes to hold ${andList(roles) || "a role"} next season`,
-  fromOutside: "From outside the village. Adopted, they are invited to make an account, and their roles start on the season's first day.",
+  fromOutside: "Proposed through the village's public page. Adopted, they hold these roles from the season's first day.",
   rolesHeading: "The roles",
   wordsHeading: "In their words",
   why: "Why them, and why now",
