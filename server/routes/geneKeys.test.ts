@@ -214,6 +214,22 @@ describe.skipIf(!configured)("gene keys against a real schema", () => {
     expect(Object.keys(JSON.parse(row.chart)).sort()).toEqual(["design", "personality"]);
   });
 
+  it("takes the card's own yes in the same save when it is sent, and leaves an earlier choice alone when it is not", async () => {
+    const yes = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", maia: true, cards: true } });
+    expect(yes.status).toBe(200);
+    expect(yes.body.geneKeys.inCards).toBe(true);
+    // Finding them again from the profile sends no card answer: the yes stands.
+    const again = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", maia: true } });
+    expect(again.body.geneKeys.inCards).toBe(true);
+    const no = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", cards: false } });
+    expect(no.body.geneKeys.inCards).toBe(false);
+    expect((await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", cards: "yes" } })).status).toBe(400);
+    // A first save that says nothing about cards is not read on them.
+    await q("DELETE FROM `member_gene_keys`"); // module-review-ok: fixture SQL against the S5 scratch schema
+    const first = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", maia: true } });
+    expect(first.body.geneKeys.inCards).toBe(false);
+  });
+
   it("stores nothing a client sends beyond the 26 activations", async () => {
     const extra = { ...structuredClone(WREN), birth: { date: "1990-06-15", city: "New York" } } as any;
     extra.personality.Sun.note = "born at home";

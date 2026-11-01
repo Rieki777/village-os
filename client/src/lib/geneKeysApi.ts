@@ -36,6 +36,8 @@ export async function saveMyGeneKeys(save: {
   source: GeneKeysSource;
   visibility: GeneKeysVisibility;
   maia: boolean;
+  /** The card's own yes, sent only when the page asked for it (reached from a card's invitation). */
+  cards?: boolean;
 }): Promise<{ mine: OwnGeneKeysView; badgeEarned: string | null }> {
   const got = await call<{ geneKeys: OwnGeneKeysView; badgeEarned?: string | null }>("/api/gene-keys/me", { method: "PUT", body: JSON.stringify(save) });
   return { mine: got.geneKeys, badgeEarned: got.badgeEarned ?? null };

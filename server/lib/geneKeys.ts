@@ -62,11 +62,13 @@ function ownViewOf(row: GeneKeysRow): OwnGeneKeysView | null {
 const SOURCES: readonly GeneKeysSource[] = ["exact", "chosen"];
 
 export type SaveParse =
-  | { ok: true; chart: Chart; source: GeneKeysSource; visibility: GeneKeysVisibility; maia: boolean }
+  | { ok: true; chart: Chart; source: GeneKeysSource; visibility: GeneKeysVisibility; maia: boolean; cards?: boolean }
   | { ok: false; problem: string };
 
 /**
- * A save body: `{ chart, source, visibility?, maia? }`. The chart is rebuilt
+ * A save body: `{ chart, source, visibility?, maia?, cards? }`. `cards` is the
+ * member's own yes or no to session cards, sent only when the page asked it
+ * (reached from a card's invitation); absent, an earlier answer stands. The chart is rebuilt
  * from its 26 activations so nothing else a client sent is ever stored.
  * `typed` is not accepted yet: a profile typed from memory has no chart behind it.
  */
@@ -84,8 +86,10 @@ export function parseSave(body: unknown): SaveParse {
     return { ok: false, problem: "Lines are shown or hidden." };
   }
   if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "Maia's permission is a yes or a no." };
+  if (b.cards !== undefined && typeof b.cards !== "boolean") return { ok: false, problem: "Session cards are a yes or a no." };
   return {
     ok: true,
+    ...(typeof b.cards === "boolean" ? { cards: b.cards } : {}),
     chart,
     source: b.source as GeneKeysSource,
     visibility: (b.visibility as GeneKeysVisibility | undefined) ?? "show",
@@ -156,6 +160,7 @@ export async function saveGeneKeys(pool: Pool, userId: string, save: Extract<Sav
     source: save.source,
     calcVersion: GENE_KEYS_CALC_VERSION,
   });
+  if (typeof save.cards === "boolean") await updateGeneKeysSettings(pool, userId, { cards: save.cards });
   return ownGeneKeys(pool, userId);
 }
 
