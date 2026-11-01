@@ -62,13 +62,16 @@ Never, whatever you are asked:
   listens.** There is no migrate step. A first boot on an empty database takes
   between a minute and four minutes. That is normal, not a hang.
 - A village's name, words, colours, pictures and modules live in its database
-  and are set in Admin, Make This Yours (`/admin?tab=setup`), after the first
-  sign-in. No file holds them.
+  and are set after the first sign-in: the words, colours and pictures in
+  Admin, Make This Yours (`/admin?tab=setup`), and the modules in Admin,
+  Module Library. No file holds them.
 - Four core modules are always on (quests, gratitude, progression,
   profiles). Every other module ships OFF until the founder turns it on.
   `docs/MODULES.md` lists every one, generated from the code; never quote a count from memory.
 - Members join by invitation link (`/register?invite=...`), which any member
-  allowed to vouch makes from their profile. Somebody without one can ask to
+  allowed to vouch makes from their profile. Before launch, a founder's link
+  makes the person a member when they make their account; after launch a link
+  is one vouch of the three a newcomer needs. Somebody without one can ask to
   join at `/request-membership`.
 - The software is in English today.
 
@@ -97,15 +100,17 @@ Follow `START_HERE.md`. In outline:
 3. **Write `.env`.** `node scripts/fork-init.mjs --compose --village-name "..."
    --admin-email "..."` (part A), or without `--compose` for part B. It
    generates every secret and lists, in plain words, what it could not fill.
-4. **Start it.** `docker compose up -d`, then `docker compose logs -f app`
-   until it says it is listening.
+4. **Start it.** `docker compose up -d`, then `docker compose ps` until the app
+   reads `healthy` (on a provider: give the service an address first, as
+   `docs/PROVISIONING.md` says).
 5. **Claim it.** The founder opens `<address>/claim` and types the
    `ADMIN_PASSWORD` they read from `.env` themselves. The page hands them a
    link to set their own password. After that, the shared password stops
    working for everybody except `BREAK_GLASS_ADMIN_EMAIL`.
 6. **Make it theirs.** Admin, Make This Yours. Then the Launch Plan
    (`/journey-to-launch`), which lists what is still missing, including the
-   currency and the timezone, both of which ship blank on purpose.
+   currency, which ships blank on purpose, and the timezone, which starts on
+   UTC and must be chosen or confirmed before the launch vote.
 7. **Email.** Without `RESEND_API_KEY` and an `EMAIL_FROM` on a domain they
    verified in Resend, nothing is emailed, including password resets. Resend
    answers "success" for an unverified domain and delivers nothing, so do not

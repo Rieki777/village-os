@@ -2,14 +2,15 @@
 /**
  * THE SEASON TAB ASKS WHICH CLOCK THE VILLAGE KEEPS.
  *
- * The platform ships `America/Costa_Rica`, every fork inherits it, and nothing
- * ever asked: seasons derive dated entries whatever the zone, so the launch
+ * The platform ships a default zone (UTC since readiness R059; the fixture below
+ * keeps a stored zone of its own), every fork inherits it, and nothing ever
+ * asked: seasons derive dated entries whatever the zone, so the launch
  * checklist's season item is green on a fresh village without anybody opening
  * this tab. The zone decides when a day, a season and the claims window turn,
  * and when every time on the calendar is shown.
  *
- * THE CONFIRM BUTTON IS THE POINT. A village really in Costa Rica has nothing
- * to change, so without a way to agree there is no way to answer at all, and
+ * THE CONFIRM BUTTON IS THE POINT. A village really on the zone showing has
+ * nothing to change, so without a way to agree there is no way to answer at all, and
  * the stored zone cannot be read as agreement: this tab is handed the
  * normalised document, so a save writes the platform's zone back whether or
  * not a human looked.

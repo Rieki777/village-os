@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Amora · The Living Map</title>
+<title>The Living Map</title>
 <style>
   :root{
     --wood-d:#241a10; --wood:#33261656; --wood-s:#3a2b1a; --gold:#c9a25e; --gold-b:#ecd08a;
@@ -1744,7 +1744,7 @@
  <!-- Named for where it goes. Circles from the land; the land again from the
       Loom or the in-map circles. CSS shows one half by the body's mode. -->
  <button id="pbMap"><b><svg class="pbm-go" viewBox="0 0 24 24" aria-hidden="true"><circle class="ln" cx="12" cy="12" r="7.6"/><circle class="sol" cx="12" cy="12" r="2.6"/><circle class="sol" cx="12" cy="4.4" r="1.9"/><circle class="sol" cx="18.6" cy="15.8" r="1.9"/><circle class="sol" cx="5.4" cy="15.8" r="1.9"/></svg><svg class="pbm-back" viewBox="0 0 24 24" aria-hidden="true"><path class="sol" d="M2.2 19c2.6-4.2 4.6-7 6.6-7 2.1 0 3.4 2.3 4.9 4.5 1.2-1.8 2.2-3 3.5-3 1.7 0 3.1 2 4.8 5.5z"/><circle class="sol" cx="16.8" cy="6.4" r="2.7"/></svg></b><span class="pbm-go">circles</span><span class="pbm-back">land</span></button>
- <button id="pbAsk"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M12 4.7c-4.3 0-7.9 2.8-7.9 6.3 0 2 1.2 3.8 3 5-.3 1.3-1 2.4-2.1 3.4 2.1-.4 3.9-1.2 5-2.3.6.1 1.3.2 2 .2 4.3 0 7.9-2.8 7.9-6.3s-3.6-6.3-7.9-6.3z"/><circle class="sol" cx="8.7" cy="11" r="1.15"/><circle class="sol" cx="12" cy="11" r="1.15"/><circle class="sol" cx="15.3" cy="11" r="1.15"/></svg></b>ask maia<span class="pbadge" id="pbAskBadge" aria-hidden="true" style="display:none">1</span></button>
+ <button id="pbAsk"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M12 4.7c-4.3 0-7.9 2.8-7.9 6.3 0 2 1.2 3.8 3 5-.3 1.3-1 2.4-2.1 3.4 2.1-.4 3.9-1.2 5-2.3.6.1 1.3.2 2 .2 4.3 0 7.9-2.8 7.9-6.3s-3.6-6.3-7.9-6.3z"/><circle class="sol" cx="8.7" cy="11" r="1.15"/><circle class="sol" cx="12" cy="11" r="1.15"/><circle class="sol" cx="15.3" cy="11" r="1.15"/></svg></b><span id="guideAsk">ask the guide</span><span class="pbadge" id="pbAskBadge" aria-hidden="true" style="display:none">1</span></button>
  <button id="pbAttn"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M6.3 3.9v16.4"/><path class="sol" d="M6.3 5.1h11.6l-3.1 3.5 3.1 3.5H6.3z"/></svg></b>help<span class="pbadge" id="pbBadge">0</span></button>
  <button id="pbMore"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M4.4 7.3q7.6-1 15.2 0M4.4 12q7.6-1 15.2 0M4.4 16.7q7.6-1 15.2 0"/></svg></b>more</button>
  <button id="pbExit" aria-label="Leave the map"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M13.4 4.3H5.7v15.4h7.7"/><path class="ln" d="M11.3 12h8.3M16.3 8.7 19.6 12l-3.3 3.3"/></svg></b>leave</button>
@@ -1968,12 +1968,12 @@
 <div id="maia">
   <div id="maiaHead">
     <canvas id="maiaFace" width="42" height="42"></canvas>
-    <div class="who"><b>Maia</b><span id="maiaSub">village guide · advisor dock</span></div>
+    <div class="who"><b id="guideTitle">The village guide</b><span id="maiaSub">village guide · advisor dock</span></div>
     <button class="mvb" id="maiaVoice" type="button" aria-pressed="false"
-      data-tip="Maia can say this out loud, or stay written down. Your choice, remembered.">◍ read</button>
+      data-tip="The village guide can say this out loud, or stay written down. Your choice, remembered.">◍ read</button>
     <!-- A BUTTON, so the keyboard reaches it. It has no handler of its own:
          its click bubbles to #maiaHead, which is the one toggle. -->
-    <button class="min" id="maiaMin" type="button" aria-controls="maiaLog maiaActions maiaInput" aria-expanded="true" aria-label="Minimise Maia">—</button>
+    <button class="min" id="maiaMin" type="button" aria-controls="maiaLog maiaActions maiaInput" aria-expanded="true" aria-label="Minimise the village guide">—</button>
   </div>
   <div id="maiaLog"></div>
   <div id="maiaActions">
@@ -1981,7 +1981,7 @@
     <button class="chip" data-say="where can I help">Where can I help?</button>
     <button class="chip" data-say="what happened today">What's alive?</button>
   </div>
-  <div id="maiaInput"><input id="maiaText" placeholder="Ask Maia. Try 'walk me to the greenhouse'…"><button id="maiaSend">➤</button></div>
+  <div id="maiaInput"><input id="maiaText" placeholder="Ask the village guide. Try 'walk me to the greenhouse'…"><button id="maiaSend">➤</button></div>
 </div>
 
 <div id="toasts"></div>
@@ -2418,7 +2418,7 @@ SCENE.threads=[ // sample forum threads (labeled sample) — multi-addressed per
  {id:'t6',title:'Proposal: quiet hours around the sanctuary site',structures:['sanctuary','council'],author:'Teo',aud:'member',replies:18,last:'6h',ex:'Draft consent language inside.'},
  {id:'t7',title:'Herons nesting at the upper pond: give them room',structures:['ponds'],author:'Land circle',aud:'public',replies:5,last:'2d',ex:'Detour path flagged with ribbon.'},
  {id:'t8',title:'Trail washout after Tuesday\'s rain',structures:['trailhead'],author:'Kai',aud:'member',replies:6,last:'8h',ex:'Need gravel and four hands.'},
- {id:'t9',title:'Welcome thread: introduce yourself',structures:['gate','welcome'],author:'Maia',aud:'public',replies:31,last:'20m',ex:'New faces, say hola.'},
+ {id:'t9',title:'Welcome thread: introduce yourself',structures:['gate','welcome'],author:'Village guide',aud:'public',replies:31,last:'20m',ex:'New faces, say hola.'},
  {id:'t10',title:'Compost temperatures are perfect this week',structures:['foodforest','greenhouse'],author:'Compost Alchemist',aud:'public',replies:4,last:'1d',ex:'62°C and steaming.'},
  {id:'t11',title:'Council agenda: next fire',structures:['council'],author:'Storyweaver',aud:'member',replies:8,last:'12h',ex:'Three items so far; add yours.'},
  {id:'t12',title:'Lost: one blue water bottle, sentimental',structures:[],author:'Ibá',aud:'member',replies:2,last:'4h',ex:'Last seen somewhere between everywhere.'},
@@ -4784,7 +4784,7 @@ function homeSheet(key){
     <p>Tell us who is coming and when, and a steward answers. Nothing is held until you hear back.</p>
     <div class="acts">
       ${route?`<a class="btn" href="${escq(siteHref(route))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${escj(route)}')">Begin your request</a>`:''}
-      <button class="btn ghostbtn" onclick="askAboutLiving('${escj(key)}')">Ask Maia about living here</button>
+      <button class="btn ghostbtn" onclick="askAboutLiving('${escj(key)}')">Ask ${escq(mapGuideName())} about living here</button>
       <button class="btn ghostbtn" onclick="closeDoor()">Back to the land</button>
     </div>`;
   $('module').classList.add('show');
@@ -4901,7 +4901,7 @@ function healthChipRows(){const rows=chipRows();
 window.healthChipRows=healthChipRows;
 function rebuildVitals(){const w=$('vitals');
   const rows=chipRows();
-  w.innerHTML=`<div id="villageName">Amora<small>the living map</small></div>`+rows.map(r=>
+  w.innerHTML=`<div id="villageName">${mapVillageName()?escq(mapVillageName())+'<small>the living map</small>':'The living map'}</div>`+rows.map(r=>
     `<button type="button" class="vital" data-k="${escq(r.k)}"${r.example?' data-example="1"':''} aria-label="${escq(r.label)}: ${escq(r.v)}, ${escq(vitalProv(r))}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(r.how)} · ${escq(vitalSrcWord(r))}"><svg viewBox="0 0 24 24" fill="none" stroke="#e8c877" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="${chipIcon(r.icon)}"/></svg><span><b>${escq(r.v)}</b><small>${escq(r.label)}${r.example?'<i> · example</i>':''}</small>${r.example?'<em class="vex" aria-hidden="true">example</em>':''}</span></button>`).join('')
    +`<button type="button" class="vital" data-k="moon" aria-label="The Moon: ${escq(SCENE.moonName)}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(SCENE.moonName)}"><span id="moon">${escq(SCENE.moon)}</span></button>`;
   /* A KEY CAN OPEN A READING. The chips were divs with an onclick, so the
@@ -5347,7 +5347,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
     const head=t2=>`<div style="font-variant:small-caps;letter-spacing:.14em;font-size:10px;color:#8a7347;margin-bottom:4px">${t2}</div>`;
     body.innerHTML=`<p>${escq(s.blurb)}</p>
     <p style="margin-top:9px;font-style:italic;color:#4a3a26">${escq(s.role||'A new organ, still finding its function in the body of the village.')}</p>
-    <div style="font-size:10.5px;color:#8a7347;margin-top:3px">${escq(dn)} · ${escq(phaseName(s.phase))} · AMORA MASTER PLAN V7</div>
+    <div style="font-size:10.5px;color:#8a7347;margin-top:3px">${escq(dn)} · ${escq(phaseName(s.phase))}</div>
     ${(window.LOTS&&LOTS[s.key])?`<p style="margin-top:6px;font-size:12px;color:#6b4d1e">⌂ <b>${LOTS[s.key].sold} of ${LOTS[s.key].total}</b> lots spoken for · ${LOTS[s.key].total-LOTS[s.key].sold} open${housingSet(s.key)?' · reserve through the door below':''}</p>${housingSet(s.key)?'':`<p style="margin:3px 0 0;font-size:11.5px;color:#a3703d">${housingNote(s.key)}</p>`}`:''}
     ${window.eventCard?eventCard(s):''}
     ${doorBtns(s)}
@@ -5369,8 +5369,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
         :`<div style="font-size:11.5px;color:#8a7347">No flows declared yet. In build mode you can say what comes in and what goes out.</div>`}
     </div>
     <div style="margin-top:12px">${(s.modules||[]).map((m,mi)=>`<button class="btn" style="margin:0 6px 6px 0" onclick="openDoorHere(${mi})">${escq(doorLabel(m))} ➤</button>`).join('')}</div>
-    ${s.state==='blueprint'?`<p style="margin-top:10px;font-size:12.5px">This one lives in the <b>Vision</b>. ${document.body.classList.contains('pocket')?'Turn on Vision under <b>More</b>':'Toggle the Vision layer'} to see the full masterplan build-out, and what it would take to make it real.</p>`:''}
-    <div class="lastv">last verified 2 days ago · Amora stewards</div>`}
+    ${s.state==='blueprint'?`<p style="margin-top:10px;font-size:12.5px">This one lives in the <b>Vision</b>. ${document.body.classList.contains('pocket')?'Turn on Vision under <b>More</b>':'Toggle the Vision layer'} to see the full masterplan build-out, and what it would take to make it real.</p>`:''}`}
   if(i===1)body.innerHTML=q.length?q.map(x=>`<div class="qcard" data-item="${escq(itemAddr('quest',x))}"><h4>⚑ ${escq(x.q)}</h4><div class="meta">${escq(x.r)} · ${escq(x.need)}</div>
     <div class="claim"><button class="btn" onclick="claimQuest('${escj(x.q)}','${escj(s.name)}')">${claimed(x)?'✔ Yours · tap to release':'Claim this quest'}</button></div>
     ${claimed(x)&&x.how_to?`<div class="firststep"><b>Your first step</b>${escq(x.how_to)}</div>`:''}
@@ -5875,8 +5874,8 @@ function mvPaint(){
   const hear=MVOICE.mode==='hear';
   b.setAttribute('aria-pressed',hear?'true':'false');
   b.textContent=hear?(MVOICE.engine==='loading'?'♪ warming':'♪ hear'):'◍ read';
-  b.title=hear?'Maia is speaking out loud. Tap to read her instead.'
-              :'Maia is written down. Tap to hear her out loud.'}
+  b.title=hear?mapGuideCap()+' is speaking out loud. Tap to read instead.'
+              :mapGuideCap()+' is written down. Tap to hear it out loud.'}
 window.mvPaint=mvPaint;
 
 function mvMode(next){
@@ -6121,7 +6120,7 @@ $('maiaHead').onclick=e=>{$('maia').classList.toggle('min')};
    watches the class instead of chasing each of them. */
 (function(){const m=$('maia'),b=$('maiaMin');if(!m||!b)return;
   const sync=()=>{const min=m.classList.contains('min');b.setAttribute('aria-expanded',String(!min));
-    b.setAttribute('aria-label',min?'Show Maia':'Minimise Maia')};
+    b.setAttribute('aria-label',(min?'Show ':'Minimise ')+mapGuideName())};
   sync();new MutationObserver(sync).observe(m,{attributes:true,attributeFilter:['class']})})();
 
 /* The tour was a second script about the same eight places. It is the journey
@@ -8809,7 +8808,7 @@ function siteHref(route){return (window.SITE_BASE||'')+route}
    qa/verify_door_routes.js re-derives it and fails when this list rots.
    NOT `SITE_ROUTES`: that name is taken at :4504 by the journey map, and a
    second const of the same name kills this whole script block in silence. */
-const SITE_PAGES=['/','/admin','/admin/mint','/aligned','/badges','/campaigns','/cash-payouts','/circles','/claim','/co-creators-guide','/contribute','/decisions','/email/a','/email/preferences','/email/unsubscribe','/events','/exit-policy','/feed','/feedback','/first-walk','/forgot-password','/forum','/game-mechanics','/good-neighbor','/governance','/gratitude','/housing','/how-we-create','/introductions','/investor','/journal','/journey-to-launch','/library','/login','/love-letter','/map','/map/circles','/master-plan','/messages','/modules','/network','/opportunities','/photographs','/places','/powers','/profile','/profile/characters','/profile/gene-keys','/project-history','/propose','/propose-quest','/prosperity','/quests','/register','/request-membership','/reserve','/resident','/resident-rights','/review','/role-proposals/new','/roles','/season-plans','/season-plans/mine','/seasonal-festivals','/sessions','/sessions/season','/set-password','/setup-game','/stay','/steward','/steward-rights','/team','/tokens','/tools','/training','/village-email','/village-health','/visit','/wallet','/work-with-us'];
+const SITE_PAGES=['/','/admin','/admin/mint','/aligned','/badges','/campaigns','/cash-payouts','/circles','/claim','/co-creators-guide','/contribute','/decisions','/email/a','/email/preferences','/email/unsubscribe','/events','/exit-policy','/feed','/feedback','/first-walk','/forgot-password','/forum','/game-mechanics','/good-neighbor','/governance','/gratitude','/housing','/how-we-create','/introductions','/investor','/journal','/journey-to-launch','/library','/login','/love-letter','/map','/map/circles','/master-plan','/messages','/modules','/network','/opportunities','/photographs','/places','/powers','/profile','/profile/characters','/profile/gene-keys','/project-history','/propose','/propose-a-role','/propose-a-role/confirm','/propose-quest','/prosperity','/quests','/register','/request-membership','/reserve','/resident','/resident-rights','/review','/role-proposals/new','/roles','/season-plans','/season-plans/mine','/seasonal-festivals','/sessions','/sessions/season','/set-password','/setup-game','/stay','/steward','/steward-rights','/team','/tokens','/tools','/training','/verify-email','/village-email','/village-health','/visit','/wallet','/work-with-us'];
 window.SITE_PAGES=SITE_PAGES;
 /* WHAT COMES BACK IS THE CANONICAL PATH, and that is a security property, not
    a convenience. The membership test strips ? and # FIRST, so `/gratitude`
@@ -9926,7 +9925,7 @@ function buildOrgMap(){
       nodes+=`<g transform="translate(${qx.toFixed(1)},${qy.toFixed(1)})"><text text-anchor="middle" font-size="8" fill="#e8c877">+${quests.length-6}</text></g>`}});
   nodes+=`<g class="onode" data-go="community" data-kind="village" transform="translate(${CX},${CY})">
     <circle r="34" fill="rgba(201,162,94,.14)" stroke="#ecd08a" stroke-width="2.6"/>
-    <text y="-1" text-anchor="middle" font-size="13" fill="#f2e7c6">${escq(SCENE.name||'Amora')}</text>
+    <text y="-1" text-anchor="middle" font-size="13" fill="#f2e7c6">${escq(mapVillageName()||SCENE.name||'Village')}</text>
     <text y="13" text-anchor="middle" font-size="8" fill="#b9af8f">the village</text></g>`;
   $('orgSvg').innerHTML=`<g id="orgRoot">${edges}${orbits}${nodes}</g>`;
   orgApplyVB()}
@@ -11599,7 +11598,7 @@ if($('pbAsk'))$('pbAsk').onclick=()=>{document.body.classList.toggle('msheet');
    opened it, which is why it watches the class and not the button. */
 function maiaUnread(on){const b=$('pbAskBadge'),a=$('pbAsk');if(!b||!a)return;
   b.style.display=on?'':'none';
-  if(on)a.setAttribute('aria-label','ask maia, 1 new message');else a.removeAttribute('aria-label')}
+  if(on)a.setAttribute('aria-label','ask '+mapGuideName()+', 1 new message');else a.removeAttribute('aria-label')}
 window.maiaUnread=maiaUnread;
 try{new MutationObserver(()=>{if(document.body.classList.contains('msheet'))maiaUnread(false)})
   .observe(document.body,{attributes:true,attributeFilter:['class']})}catch(_){}
@@ -11840,6 +11839,32 @@ window.endWalk=endWalk;
    band. */
 /* gates fed by real use */
 const _openPanelW=openPanel;openPanel=function(k,t,i){window.WGATE&&(WGATE.tap=true);return _openPanelW(k,t,i)};
+/* WHO THE MAP SAYS IT IS (customizability, 2026-10-31). The village's own
+   name and its guide's arrive in the shell's {type:'config'} push, from Make
+   This Yours and Work With Us. Until they do, and always when this file is
+   opened on its own, the bar reads "The living map" and the guide "the
+   village guide": no village lends another its name (Rye, 2026-10-22: Maia
+   is one village's guide, and every village names its own). Function
+   declarations, read through window, so a caller in this block that runs
+   before any push is answered instead of throwing. */
+function mapVillageName(){const w=window.VILLAGE_WORDS;return(w&&w.name)||''}
+function mapGuideName(){const w=window.VILLAGE_WORDS;return(w&&w.guide)||'the village guide'}
+function mapGuideCap(){const g=mapGuideName();return g.charAt(0).toUpperCase()+g.slice(1)}
+function applyVillageWords(v){
+  window.VILLAGE_WORDS={name:typeof v.name==='string'?v.name.trim().slice(0,80):'',
+    guide:typeof v.guide==='string'?v.guide.trim().slice(0,40):''};
+  const G=mapGuideName(),Gc=mapGuideCap();
+  const set=(id,f)=>{const el=$(id);if(el)f(el)};
+  set('guideTitle',el=>{el.textContent=Gc});
+  set('guideAsk',el=>{el.textContent=window.VILLAGE_WORDS.guide?'ask '+G:'ask the guide'});
+  set('maiaText',el=>{el.placeholder=`Ask ${G}. Try 'walk me to the greenhouse'…`});
+  set('maiaVoice',el=>{el.dataset.tip=`${Gc} can say this out loud, or stay written down. Your choice, remembered.`});
+  set('maiaMin',el=>{el.setAttribute('aria-label',(el.getAttribute('aria-expanded')==='false'?'Show ':'Minimise ')+G)});
+  if(typeof mvPaint==='function')try{mvPaint()}catch(_){}
+  if(typeof rebuildVitals==='function')rebuildVitals();
+  try{document.title=(mapVillageName()?mapVillageName()+' · ':'')+'The Living Map'}catch(_){}
+}
+window.applyVillageWords=applyVillageWords;
 /* config over the bridge: skin + walk + vocabulary in one push */
 addEventListener('message',e=>{
   if(location.protocol!=='file:'&&e.origin!==location.origin)return;
@@ -11881,6 +11906,9 @@ addEventListener('message',e=>{
     if(typeof renderPhaseVocab==='function')renderPhaseVocab();
     if(typeof renderInspect==='function'&&typeof inspKey!=='undefined'&&inspKey)renderInspect();
     if(typeof panelKey!=='undefined'&&panelKey)openPanel(panelKey)}
+  /* The village's own name and its guide's. Absent keeps what the map has;
+     a blank guide is an unnamed one (WHO THE MAP SAYS IT IS). */
+  if(d.village&&typeof d.village==='object')applyVillageWords(d.village);
   /* Last, so an address held for the land is answered by the land that just
      arrived. See ROUTE_WAIT_MS. */
   landArrived();

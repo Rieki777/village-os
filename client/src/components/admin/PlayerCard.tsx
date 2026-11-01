@@ -48,6 +48,8 @@ export type PlayerDetail = {
 };
 
 export type Player = {
+  /** Sheet 19: the power groups that give this member admin access right now. */
+  adminVia?: string[];
   id: string;
   name: string;
   email: string;
@@ -285,8 +287,8 @@ export function PlayersKey({
           <p className="mt-1 text-sm text-gray-600">What their account may do on this site.</p>
           <ul className="mt-3 space-y-2">
             {ACCESS_ORDER.map((a) => (
-              <li key={a} className="flex items-start gap-3 text-sm">
-                <span className={`mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${ACCESS[a].pill}`}>
+              <li key={a} className="flex flex-wrap items-start gap-x-3 gap-y-1 text-sm">
+                <span className={`mt-0.5 shrink-0 max-w-full rounded-full border px-2 py-0.5 text-xs font-medium ${ACCESS[a].pill}`}>
                   {ACCESS[a].label} · {count(a)}
                 </span>
                 <span className="text-gray-700">{ACCESS[a].does}</span>
@@ -415,6 +417,11 @@ export function PlayerCard({
             )}
           </div>
           <p className="mt-2 text-xs text-gray-600">{ACCESS[access].does}</p>
+          {p.adminVia && p.adminVia.length > 0 && access === "member" && (
+            <p className="mt-1 text-xs text-gray-600">
+              Opens the admin panel through {p.adminVia.join(" and ")}, while they hold it.
+            </p>
+          )}
         </section>
 
         <section aria-label={ladderLabel(stages)} className="rounded-xl bg-gray-50 px-4 py-3">

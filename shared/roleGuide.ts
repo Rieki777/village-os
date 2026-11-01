@@ -16,6 +16,7 @@
  * Pure: types and words only.
  */
 import type { GuideId } from "./guideChoice";
+import { guideNameAtSentenceStart as atStart } from "./guideName";
 import type { GuideFlag } from "./roleGuideChecks";
 
 export type RoleGuideStep = "words" | "season";
@@ -75,11 +76,11 @@ export interface GuideAnswer {
 export const ROLE_GUIDE_WORDS = {
   open: "Let AI help me with this",
   bringIn: "Bring in a description of your role",
-  kept: (village: string) => `${village} doesn't keep your document. Only the fields you accept are saved.`,
+  kept: (village: string) => `${atStart(village)} doesn't keep your document. Only the fields you accept are saved.`,
   sharedWith: {
-    village: (name: string) => `${name} reads it here to suggest your card.`,
+    village: (name: string) => `${atStart(name)} reads it here to suggest your card.`,
     saberra: (name: string) =>
-      `${name} reads it through the village's outside memory service to suggest your card. It goes under your role titles, with people's names swapped for their role titles.`,
+      `${atStart(name)} reads it through the village's outside memory service to suggest your card. It goes under your role titles, with people's names swapped for their role titles.`,
   },
   suggested: "Suggested",
   from: "From what you wrote:",
@@ -90,5 +91,7 @@ export const ROLE_GUIDE_WORDS = {
   send: "Send",
   nothingMissing: "That's everything the card needs. Look it over and change anything you like.",
   unreachable: "The guide can't answer right now. Your words are safe, and you can carry on by hand.",
-  thinking: (name: string) => `${name} is reading`,
+  thinking: (name: string) => `${atStart(name)} is reading`,
+  /** The label before the guide's question: "Maia:", "The village guide:". */
+  asks: (name: string) => `${atStart(name)}:`,
 } as const;

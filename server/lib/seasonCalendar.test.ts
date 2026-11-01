@@ -232,18 +232,79 @@ describe("no season running is a loud condition", () => {
 });
 
 /**
+ * THE PLATFORM'S CLOCK IS UTC, AND A VILLAGE'S OWN CLOCK OUTLIVES THE MOVE
+ * (readiness R059, 2026-10-31).
+ *
+ * The default was `America/Costa_Rica`, the first village's zone, inherited by
+ * every fork until a founder answered. The order rule: a default a live village
+ * still inherits must not change under it. The live village holds its own zone
+ * AND its own season list in its stored document, which is the shape the third
+ * case reads; the fourth is the shape that WOULD move, and says so.
+ */
+describe("the platform's default clock", () => {
+  it("is UTC", () => {
+    expect(GAME_CONFIG.season.timezone).toBe("UTC");
+  });
+
+  it("is what a village that stored nothing reads, in every branch the normaliser takes", () => {
+    expect(normalizeSeasonConfig(undefined).timezone).toBe("UTC");
+    expect(normalizeSeasonConfig({}).timezone).toBe("UTC");
+    expect(normalizeSeasonConfig({ seasons: [], cadence: "quarterly" }).timezone).toBe("UTC");
+    // The legacy single-season document carries no zone of its own.
+    expect(normalizeSeasonConfig({ name: "First", startsOn: "2026-01-01", endsOn: "2026-04-01" }).timezone).toBe("UTC");
+  });
+
+  it("never moves a village that stored its own zone, list or no list", () => {
+    const answer = { at: "2026-10-30T00:00:00.000Z", by: "founder-1" };
+    const ownList = normalizeSeasonConfig({
+      seasons: [{ id: "season-1", name: "Season of Foundations", startsOn: "2026-06-21", endsOn: "2026-12-31" }],
+      cadence: "solstice-equinox",
+      timezone: "America/Costa_Rica",
+      timezoneAnswer: answer,
+    });
+    expect(ownList.timezone).toBe("America/Costa_Rica");
+    expect(ownList.timezoneAnswer).toEqual(answer);
+    const derived = normalizeSeasonConfig({ seasons: [], cadence: "solstice-equinox", timezone: "America/Costa_Rica" });
+    expect(derived.timezone).toBe("America/Costa_Rica");
+  });
+
+  it("moves a village whose stored document never carried a zone, which is why the Launch Plan asks", () => {
+    // Not the live village's shape: every Season tab save sends the zone, and
+    // a confirmation does too. Pinned so the consequence is a decision on the
+    // page rather than a surprise on a deploy.
+    const noZone = normalizeSeasonConfig({
+      seasons: [{ id: "s1", name: "First", startsOn: "2026-01-01", endsOn: "2026-04-01" }],
+      cadence: "custom",
+    });
+    expect(noZone.timezone).toBe("UTC");
+    expect(noZone.timezoneAnswer ?? null).toBeNull();
+  });
+
+  it("is never refused by the save that confirms it", () => {
+    const saved = seasonDocumentToStore(
+      { seasons: [], cadence: "solstice-equinox", timezone: "UTC", confirmTimezone: true },
+      new Date("2026-10-31T00:00:00Z"),
+      { timezone: "UTC", timezoneAnswer: null },
+      "founder-1",
+    );
+    expect(saved.ok).toBe(true);
+    if (saved.ok) expect(saved.doc.timezoneAnswer).toEqual({ at: "2026-10-31T00:00:00.000Z", by: "founder-1" });
+  });
+});
+
+/**
  * HAS THIS VILLAGE SAID WHICH CLOCK IT KEEPS?
  *
- * The platform ships `America/Costa_Rica`, and every fork inherits it in
- * silence: seasons derive dated entries whatever the zone, so the launch
+ * The platform ships `UTC` (it shipped `America/Costa_Rica` until R059), and
+ * every fork inherits it in silence: seasons derive dated entries whatever the zone, so the launch
  * checklist's season item goes green without anybody opening the tab, and the
  * zone decides when a day, a season, the claims window and every time on the
  * calendar turn.
  *
  * A STORED ZONE PROVES NOTHING, which is the whole reason for a separate
  * field. `GET /api/admin/seasons` hands the tab the NORMALISED document, so a
- * fresh village's form already holds Costa Rica's zone and any save writes it
- * back. Renaming a season would otherwise count as confirming a clock.
+ * fresh village's form already holds the platform's zone and any save writes
+ * it back. Renaming a season would otherwise count as confirming a clock.
  */
 describe("the timezone answer", () => {
   const AT = new Date("2026-09-23T10:00:00Z");

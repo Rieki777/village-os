@@ -36,6 +36,9 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => "a-token",
+  // The owed-postings panel names each token through useTokenNameMap, which
+  // reads the village's own names from the game config (readiness, R-words).
+  useGameConfig: () => ({ currency: { names: {} } }),
 }));
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },

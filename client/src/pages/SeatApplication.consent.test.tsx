@@ -145,6 +145,23 @@ describe("the circle's answer on the application page", () => {
   });
 });
 
+describe("who adopts it, named for this village (E8)", () => {
+  it("every member reads who can adopt it while it waits, as the server read it from who holds the power", async () => {
+    const who = "Steward Circle (Hal) adopts it.";
+    answer = () => json({ application: served("open", READER, undefined, { whoAdopts: who }) });
+    render(<SeatApplication />);
+    const line = await screen.findByText(who);
+    expect(line.closest("[data-who-adopts]")).toBeTruthy();
+  });
+
+  it("says nothing of it once the application is decided", async () => {
+    answer = () => json({ application: { ...served("consented", READER), status: "adopted", statusWords: "Adopted", whoAdopts: null } });
+    render(<SeatApplication />);
+    await heading();
+    expect(document.querySelector("[data-who-adopts]")).toBeNull();
+  });
+});
+
 describe("Record the adoption", () => {
   it("is drawn for a holder of the power once the circle has consented, and shows the decision record", async () => {
     answer = () => json({ application: served("consented", POWER) });

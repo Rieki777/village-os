@@ -479,7 +479,7 @@ export default function LoveLetter() {
               {user ? LETTER_WORDS.heading(letterTitle) : words.fields.visitorHeading}
             </h2>
             <p className="text-muted-foreground mb-8 break-words">
-              {user ? LETTER_WORDS.lede(villageName) : words.fields.visitorLede}
+              {user ? LETTER_WORDS.lede(villageName, pageVars?.member ?? "member") : words.fields.visitorLede}
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-6">

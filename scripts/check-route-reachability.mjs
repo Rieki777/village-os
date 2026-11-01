@@ -73,6 +73,12 @@ const ALLOWLIST = {
   // purpose. Excluded from the route list by the deriver too; belt and braces.
   "/404": "the not-found page, reached by failing to reach something else",
 
+  // Open role proposals (sheet 19i): both arrive by a link somebody was sent,
+  // never by a link on the site. The confirm page is the link in the
+  // confirmation email, and a token page is a link an admin made for one person.
+  "/propose-a-role/confirm": "the link in the confirmation email, never linked from the site",
+  "/propose-a-role/:token": "a link an admin makes for one person and sends them, never linked from the site",
+
   // The treasurer's payout list outside /admin (Rye, 2026-10-30), for a finance
   // role holding cash.pay without being an admin. Its one door is the books half
   // of the profile cash card, which renders only for a key holder; a nav entry
@@ -84,6 +90,9 @@ const ALLOWLIST = {
   // would be a link to an error message. /forgot-password keeps its one door
   // on the sign-in page, which is the only place a person wants it.
   "/set-password": "entered from a one-time email link; a site link has no token",
+  // The address-proof letter sign-up sends (R104). Same shape: a signed link
+  // that only the mailbox holds, and a page with nothing to do without it.
+  "/verify-email": "entered from the address-proof link sign-up mails; a site link has no token",
   // The three pages Village Comms emails link to (the comms build spec
   // 5.4). Each reads a signed `?t=` link that only an email carries, so a site
   // link would open a page with nothing to act on. A member changes the same

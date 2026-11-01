@@ -62,10 +62,23 @@ export default function Visit() {
    */
   const subtitle = (cfg?.hero_subtitle ?? `Experience the land, meet the people, and decide if ${villageName} is where you belong.`).trim();
   const contactNote = (cfg?.logistics?.contact_note ?? "Fill in the form below or email the team.").trim();
-  // The cards in the village's order (Admin, Pages, Visit), for the grid and
-  // the form's choice alike. A program with none draws no empty grid: the
-  // form below still takes a message.
-  const visitTypes = cfg ? [...(cfg.visit_types ?? [])].sort((a, b) => a.order - b.order) : [];
+
+  /*
+   * A PROGRAMME WITH NOTHING IN IT DRAWS NO HEADING. The platform's starter
+   * programme ships with no logistics (where the land is, where to sleep and
+   * what to bring are one village's facts), and a village may list no ways
+   * to visit. "Logistics" or "Pick a way to visit" over an empty grid reads as
+   * a page that failed to load, so each section waits for something to show;
+   * the form below still takes a visit request either way.
+   */
+  const visitTypes = Array.isArray(cfg?.visit_types) ? [...cfg.visit_types].sort((a, b) => a.order - b.order) : [];
+  const logistics = cfg
+    ? [
+        { Icon: Plane, title: "Getting there", body: cfg.logistics?.getting_there },
+        { Icon: HomeIcon, title: "Accommodation", body: cfg.logistics?.accommodation },
+        { Icon: Backpack, title: "What to bring", body: cfg.logistics?.what_to_bring },
+      ].filter((l) => String(l.body ?? "").trim())
+    : [];
 
   useEffect(() => {
     let alive = true;
@@ -137,7 +150,9 @@ export default function Visit() {
           ) : !cfg ? (
             <div className="text-center text-stone-500">Opening the ways to visit…</div>
           ) : (
-            <div className="grid md:grid-cols-3 gap-5">
+            // Fewer than three cards sit centred at their own width, so the
+            // starter programme's two do not leave a hole on the right.
+            <div className={`grid gap-5 ${visitTypes.length >= 3 ? "md:grid-cols-3" : visitTypes.length === 2 ? "md:grid-cols-2 max-w-3xl mx-auto" : "max-w-md mx-auto"}`}>
               {visitTypes.map((v) => (
                 <div key={v.id} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col">
                   {v.title?.trim() && <h3 className="font-display text-xl font-semibold text-teal-deep mb-3">{v.title}</h3>}
@@ -187,18 +202,14 @@ export default function Visit() {
       </section>
       )}
 
+      {logistics.length > 0 && (
       <section className="bg-white py-20">
         <div className="container max-w-4xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep">Logistics</h2>
           </div>
-          {cfg && (
-            <div className="grid md:grid-cols-3 gap-4">
-              {[
-                { Icon: Plane, title: "Getting there", body: cfg.logistics?.getting_there },
-                { Icon: HomeIcon, title: "Accommodation", body: cfg.logistics?.accommodation },
-                { Icon: Backpack, title: "What to bring", body: cfg.logistics?.what_to_bring },
-              ].filter((l) => String(l.body ?? "").trim()).map((l) => {
+            <div className={`grid gap-4 ${logistics.length >= 3 ? "md:grid-cols-3" : logistics.length === 2 ? "md:grid-cols-2 max-w-3xl mx-auto" : "max-w-md mx-auto"}`}>
+              {logistics.map((l) => {
                 const Icon = l.Icon;
                 return (
                   <div key={l.title} className="bg-stone-50 rounded-2xl border border-stone-200 p-5">
@@ -211,9 +222,9 @@ export default function Visit() {
                 );
               })}
             </div>
-          )}
         </div>
       </section>
+      )}
 
       <section id="visit-form" className="bg-sage/15 py-20">
         <div className="container max-w-2xl mx-auto px-4">

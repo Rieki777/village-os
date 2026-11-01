@@ -689,6 +689,15 @@ The retention sweep never deletes an unstamped row, at any age.
   driven entirely by variables — `retention.submissions_days`,
   `map.contact_retention_days` (contact bodies), and
   `retention.notifications_days` (read rows only). 0 disables a sweep.
+- **Open role proposals** (0305, `server/routes/openProposals.ts`): the
+  names and addresses of people with no account, who proposed for a role
+  at `/propose-a-role`. Fixed, not dialled (sheet 19i): a proposal never
+  confirmed is DELETED 48 hours after it was sent, and a declined or
+  withdrawn one loses its name and address 90 days after it was decided,
+  keeping only the roles and the words the circle's record needs. The
+  hourly `open-proposals-tidy` job does both, and the form says so in one
+  line. Nothing unconfirmed reaches a person: until its address answers,
+  a proposal notifies nobody and no queue lists it.
 - **Export** (`GET /api/profile/export`): everything the village
   holds on the member — profile minus secrets, stage, claims, gratitude
   both directions, full signed ledger, balances, stage events, submissions,

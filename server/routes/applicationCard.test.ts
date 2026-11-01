@@ -41,6 +41,7 @@ const CALENDAR: SeatCalendar = {
   currentSeasonId: "s-now",
   timezone: "UTC",
 };
+const SEASON_NAMES: Record<string, string> = { "s-old": "Old", "s-now": "Now", "s-next": "Next" };
 const TERMS = {
   v: 1,
   term: { reviewOn: "2026-12-01" },
@@ -87,7 +88,8 @@ function harness() {
       seasonState: () => ({
         current: { id: "s-now", name: "Now", startsOn: "2026-06-01", endsOn: "2027-01-01" },
         upcoming: { id: "s-next" },
-        seasons: CALENDAR.seasons as any[],
+        // Named, so a card can say which season it is drawn in (E9).
+        seasons: CALENDAR.seasons.map((s) => ({ ...s, name: SEASON_NAMES[s.id] ?? null })) as any[],
         timezone: "UTC",
       }),
       lapse: () => ({ currentSeasonId: "s-now", cadence: "never" }),
@@ -240,6 +242,19 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
     expect(r.body.viewer).toEqual({ level: "self", isSelf: true });
     const past = r.body.card.applications.past.value.map((a: any) => a.status);
     expect(past).toContain("Held, with no application on file");
+  });
+
+  it("E9: the card is drawn in the season the application is for, never the running one", async () => {
+    // Filed for the next season: its name and its dates, and no day counted of a season not begun.
+    const next = (await h.call("/api/governance/role-applications/sa-00000000000000a3/card")).body.card.header;
+    expect(next.eyebrow).toBe("Riverbend · Next");
+    expect(next.span).toBe("1 January to 31 May 2027");
+    expect(next.moon.day).toBeNull();
+    // Control: an application for the running season reads the running season, day counted.
+    const now = (await h.call("/api/governance/role-applications/sa-00000000000000a1/card")).body.card.header;
+    expect(now.eyebrow).toBe("Riverbend · Now");
+    expect(now.span).toBe("1 June to 31 December 2026");
+    expect(now.moon.day).not.toBeNull();
   });
 
   it("an unknown or malformed id is 404 for a member", async () => {

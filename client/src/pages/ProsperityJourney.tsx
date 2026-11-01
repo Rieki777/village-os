@@ -169,7 +169,7 @@ export default function ProsperityJourney() {
               className="relative flex flex-wrap gap-4"
             >
               {heroPrimary && (
-                <JourneyLink action={heroPrimary.action} className="btn-amora flex items-center gap-2">
+                <JourneyLink action={heroPrimary.action} className="btn-village flex items-center gap-2">
                   <Download className="w-5 h-5" />
                   {heroPrimary.label}
                 </JourneyLink>
@@ -484,7 +484,7 @@ export default function ProsperityJourney() {
             <p className="text-muted-foreground mb-8">
               <Emphasized text={page.packet.fields.body} />
             </p>
-            <JourneyLink action={packetCta.action} className="btn-amora inline-flex items-center gap-2">
+            <JourneyLink action={packetCta.action} className="btn-village inline-flex items-center gap-2">
               <Download className="w-5 h-5" />
               {packetCta.label}
             </JourneyLink>
@@ -517,7 +517,7 @@ export default function ProsperityJourney() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               {closingPrimary && (
-                <JourneyLink action={closingPrimary.action} className="btn-amora flex items-center gap-2">
+                <JourneyLink action={closingPrimary.action} className="btn-village flex items-center gap-2">
                   <Calendar className="w-5 h-5" />
                   {closingPrimary.label}
                 </JourneyLink>

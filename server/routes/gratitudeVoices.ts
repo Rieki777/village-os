@@ -39,6 +39,7 @@ import type { Express } from "express";
 
 import type { AppDeps } from "../lib/appDeps";
 import { heroVoices, wallEntries, type WallLogRow } from "../lib/gratitudeVoices";
+import { firstNameOf } from "../lib/peopleLock";
 
 /**
  * The log arrives as a FUNCTION rather than as the repo.
@@ -49,10 +50,10 @@ import { heroVoices, wallEntries, type WallLogRow } from "../lib/gratitudeVoices
  * what it can reach, and "one read of the log" is the honest size of what this
  * one needs.
  */
-type Deps = Pick<AppDeps, "getPool"> & { gratitudeLog: () => Promise<WallLogRow[]> };
+type Deps = Pick<AppDeps, "getPool" | "authedUser"> & { gratitudeLog: () => Promise<WallLogRow[]> };
 
 export function register(app: Express, deps: Deps): void {
-  const { getPool, gratitudeLog } = deps;
+  const { getPool, gratitudeLog, authedUser } = deps;
 
   app.get("/api/game/gratitude/voices", async (_req, res) => {
     try {
@@ -65,7 +66,15 @@ export function register(app: Express, deps: Deps): void {
     }
   });
 
-  app.get("/api/game/gratitude/wall", async (_req, res) => {
-    res.json(await wallEntries(getPool(), await gratitudeLog()));
+  /*
+   * A STRANGER READS FIRST NAMES (R097). The wall answers a signed-out
+   * visitor, and the public tier never carries a full display name. While the
+   * village keeps its people for members the lock in front of every route
+   * (server/lib/peopleLock.ts) takes the first names too.
+   */
+  app.get("/api/game/gratitude/wall", async (req, res) => {
+    const entries = await wallEntries(getPool(), await gratitudeLog());
+    if (await authedUser(req)) return res.json(entries);
+    res.json(entries.map((e) => ({ ...e, from: { ...e.from, name: firstNameOf(e.from.name) }, to: { ...e.to, name: firstNameOf(e.to.name) } })));
   });
 }

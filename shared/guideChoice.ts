@@ -22,8 +22,13 @@
  * member is never answered by one guide while believing it was the other.
  * When neither is reachable nothing answers, and a page draws no button.
  *
- * Pure: no clock, no pool, no imports.
+ * THE VILLAGE GUIDE'S NAME comes from shared/guideName.ts: the name the
+ * village typed, or "the village guide" while it has none. Mid-sentence it
+ * stays as it is; wherever it opens a sentence it is raised to a capital.
+ *
+ * Pure: no clock, no pool.
  */
+import { guideNameAtSentenceStart as atStart } from "./guideName";
 
 export const GUIDE_IDS = ["village", "saberra"] as const;
 export type GuideId = (typeof GUIDE_IDS)[number];
@@ -33,6 +38,8 @@ export interface GuideOption {
   id: GuideId;
   /** The name the guide answers under: the village's name for its own, the vendor's for its agent. */
   name: string;
+  /** False while the village has not named its own guide, so a page does not repeat "the village guide". */
+  named: boolean;
   /** Whether it can answer right now. */
   available: boolean;
 }
@@ -52,11 +59,11 @@ export interface GuideState {
 
 export const GUIDE_WORDS = {
   heading: "Who you're talking to",
-  answering: (name: string) => `${name} is answering.`,
-  fellBack: (chosen: string, other: string) => `${chosen} can't answer right now, so ${other} is answering.`,
-  village: (name: string) => `${name} is this village's own guide.`,
+  answering: (name: string) => `${atStart(name)} is answering.`,
+  fellBack: (chosen: string, other: string) => `${atStart(chosen)} can't answer right now, so ${other} is answering.`,
+  village: (name: string) => `${atStart(name)} is this village's own guide.`,
   saberra: (name: string) =>
-    `${name} works through the village's outside memory service. What you ask goes to it under your role titles, and it may keep the conversation.`,
+    `${atStart(name)} works through the village's outside memory service. What you ask goes to it under your role titles, and it may keep the conversation.`,
   switchTo: (name: string) => `Talk to ${name}`,
   saved: "Saved. Every guide here now answers as your choice.",
 } as const;

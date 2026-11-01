@@ -230,9 +230,21 @@ describe("the rulings of 2026-10-13", () => {
 
   it("Q3: every seed that cannot yet turn green is listed, and the Resend key is not among them", () => {
     const notAlive = seedsNotYetAlive().map((s) => s.id);
-    for (const id of ["auth-token-secret", "village-secrets-key", "stripe-secret-key", "stripe-webhook", "anthropic-api-key"]) {
-      expect(notAlive).toContain(id);
+    // These five read presence until 2026-10-31. Their launch rows now read
+    // evidence (server/lib/launchProofs.ts and villageSecretsLaunchCheck), so
+    // they can turn green, and each still names the row that proves it.
+    const proved: Record<string, string> = {
+      "auth-token-secret": "session-secret",
+      "village-secrets-key": "village-secrets-key",
+      "stripe-secret-key": "stripe-keys",
+      "stripe-webhook": "stripe-webhook",
+      "anthropic-api-key": "assistant-key",
+    };
+    for (const [id, checkKey] of Object.entries(proved)) {
+      expect(notAlive, id).not.toContain(id);
+      expect(SEEDS_BY_ID[id]!.liveCheck, id).toMatchObject({ via: "launch-check", checkKey, strength: "alive" });
     }
+    expect(notAlive.length, "some seeds still read presence, and the list says which").toBeGreaterThan(0);
     expect(notAlive).not.toContain("resend-api-key");
     const probe = SEEDS_BY_ID["resend-api-key"]!.liveCheck;
     // The post office's own test email, read by item 13's reader (Rye: reuse it).
@@ -243,7 +255,8 @@ describe("the rulings of 2026-10-13", () => {
   it("Q4: the governance crossings are platform seeds, and only hypha keeps Basescan", () => {
     const crossings = PLATFORM_GUILDS.find((g) => g.id === "crossings")!.seeds;
     expect(crossings).toEqual(["governance-hub-secret", "hypha-voice-webhook-secret"]);
-    expect(MODULES.find((m) => m.id === "hypha")!.guild).toEqual(["basescan-api-key"]);
+    // And the Base RPC endpoint since it became a sealed slot: the bridge reads through it.
+    expect(MODULES.find((m) => m.id === "hypha")!.guild).toEqual(["basescan-api-key", "base-rpc-url"]);
   });
 
   it("names only real settings in a condition, and skips a conditional seed whose setting is empty", () => {

@@ -80,7 +80,9 @@ type Presence = "checking" | "present" | "absent";
  */
 async function probeGrounds(): Promise<{ presence: Presence; url: string }> {
   try {
-    const res = await fetch(GROUNDS_MANIFEST, { headers: { Accept: "application/json" } });
+    // With the session: the probe sits behind the map module's gate
+    // (server/routes/grounds.ts), so a members-only map answers a member.
+    const res = await gameFetch(GROUNDS_MANIFEST, { headers: { Accept: "application/json" } });
     if (!res.ok) return { presence: "absent", url: GROUNDS };
     const body = await res.json();
     if (body?.present !== true) return { presence: "absent", url: GROUNDS };
@@ -348,6 +350,8 @@ export default function LivingMap() {
       if (body?.skin) payload.skin = body.skin;
       Object.assign(payload, walkPush(body));
       if (body?.vocabulary) payload.vocabulary = body.vocabulary;
+      // The village's own name and its guide's, for the map's top bar and dock.
+      if (body?.village) payload.village = body.village;
       /*
        * The published land (0063), or the blank one when nothing is published:
        * the map's own seed is another village's land. The scene crosses the

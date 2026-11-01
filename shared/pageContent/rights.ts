@@ -7,13 +7,18 @@
  * vision for a resident's finances. So the skeleton is written once here and
  * each page hands it its own words.
  *
- * The defaults are the words each page carried in code until 2026-10-22,
- * moved here unchanged, EXCEPT the token rows Rye approved that day
- * (cust-audit/TOKEN_COPY_PROPOSAL.md rows 15-20): a token may be named, and no
- * sentence says what it does. So the resident "Dues Offset" right is now "A
- * Share in What We Build", the dues and finances paragraphs lose their token
- * sentence, the steward pay card says only that each card shows its worth,
- * and the steward stages no longer promise token access or more tokens.
+ * THE DEFAULTS ARE NEUTRAL STARTER TEXT (2026-10-23). Until then they were the
+ * founding village's own words, and every other village showed that village's
+ * land model, its businesses and its year thresholds as its own. The founding
+ * village now holds its own copy (its record is in server/seeds/), so these
+ * defaults say only what is true of any village: no tenure instrument, no
+ * businesses, no years, no named circles, no decision method stated as fact.
+ * A village writes its own rights over them in Admin, Pages.
+ *
+ * Two rulings bind them. A token may be named and no sentence says what it
+ * does (Rye, 2026-10-22). No sentence restates that work is paid, because the
+ * quest and role cards say it (Rye, 2026-10-23), which is why the steward
+ * "Get Paid for Your Contribution" right is gone.
  *
  * `{transfer}` IS THE RESIDENT PAGE'S OWN WORD. The Land Share card used to
  * splice Legal's `landShareTransferNote` into its sentence in code. It is a
@@ -23,8 +28,8 @@
  * which tells a founder it does nothing there.
  *
  * LIMITS start from cust-audit/pages-D-guides-rights.md and were then raised
- * where today's own copy is longer (the resident "Village Dues" card runs to
- * about 400 characters) and proven at 1280, 390 and 320 pixels wide.
+ * where the founding village's own copy was longer (its "Village Dues" card
+ * runs to about 400 characters) and proven at 1280, 390 and 320 pixels wide.
  */
 import type { FieldSpec, ListSpec, PageSpec, SectionSpec } from "./types";
 
@@ -123,7 +128,7 @@ function rightsPage(words: RightsPageWords): PageSpec {
     },
     {
       id: "ownership",
-      label: "Co-ownership card",
+      label: "Card under the top",
       shows: "The single card just under the top of the page.",
       hideable: true,
       fields: [
@@ -258,133 +263,108 @@ export const RIGHTS_RESIDENT_PAGE: PageSpec = rightsPage({
   descriptionHelp:
     "{transfer} becomes your Land Share transfer note from Legal (a space, then the note), or nothing when Legal has none.",
   hero: {
-    eyebrow: "Resident Space",
+    eyebrow: "For Residents",
     headline: "Your Rights and Responsibilities",
     intro:
-      "Living at {village} means you are not a tenant. You are a co-owner of the whole village. These are the rights that protect you and the responsibilities that make this place worth protecting.",
+      "Living at {village} means sharing a place with neighbors. Here is what you can count on, and what your neighbors can count on from you.",
   },
   ownership: {
-    heading: "You Live Here. This Is Yours.",
-    body: "The land at {village} is held collectively, not by a landlord, not by a developer, not by any single person. Every resident is a steward of the whole of it. Your home is your private space. The rest belongs to all of you. Approach every interaction with the land and the community from that place: this is mine, and it's also all of ours.",
+    heading: "A Home Among Neighbors",
+    body: "Your home is your own space. The land and buildings you share with your neighbors are looked after by everyone who lives here. Care for the shared places the way you care for your home, and expect the same of your neighbors.",
   },
   rights: {
     eyebrow: "What You Hold",
     heading: "Your Rights as a Resident",
-    intro:
-      "These rights are protected by community governance structures and the Land Share Agreement, not by goodwill alone.",
+    intro: "What every resident of {village} can count on.",
     items: [
       {
-        title: "Your Land Share is Yours",
+        title: "A Secure Home",
         description:
-          "Your Land Share Agreement gives you long-term security on your piece of this land, renewable, transferable to your children{transfer}, and protected by community ownership structures that ensure the land itself can never be sold away from the community.",
+          "Your residency agreement sets out how long your home is yours, what it costs, and how it can be passed on{transfer}. Read it in full before you sign, and ask about anything that is unclear.",
       },
       {
-        title: "Security Through Community Ownership",
+        title: "A Voice in Village Life",
         description:
-          "The land belongs to all of us collectively. That means no single person can take it away, sell it off, or change its use without community consent. Your home sits on ground that is held in trust for the whole, including your family, and the families that come after.",
+          "You can bring a proposal on anything that affects life here, and you have a say in the decisions that touch your home and your neighbors.",
       },
       {
-        title: "Voice in Community Life",
+        title: "Shared Spaces",
         description:
-          "Residents hold full voice in the Circles that govern daily community life. As you grow into the community and reach the appropriate milestones, your governance rights deepen, from participating in decisions that affect your daily life to shaping the long-term direction of {village}.",
+          "The shared land, buildings and gathering places are yours to use and enjoy, alongside everyone else who lives here.",
       },
       {
-        title: "Access to All Commons",
-        description:
-          "The trails, food forests, gathering spaces, streams, ponds, and the shared land are yours to use and enjoy. Seasonal festivals, community events, potlucks, and village celebrations are part of your life here.",
+        title: "Privacy at Home",
+        description: "Your home is your own. Neighbors, and anyone acting for the village, ask before they come in.",
       },
       {
-        title: "Community Services and Care",
+        title: "A Fair Hearing",
         description:
-          "As a resident, you have access to the wellness programs, education offerings, healing arts, and community care that {village} develops together. The businesses and services that grow here serve the community first.",
+          "If a dispute involves you, you hear what is said and you have your say before anything is decided.",
       },
-      // TOKEN_COPY_PROPOSAL row 15 (Rye, 2026-10-22).
       {
-        title: "A Share in What We Build",
-        description:
-          "The vision is a community where shared business profits make life here net-positive for every resident.",
+        title: "Clear Costs",
+        description: "Before you sign, you see what you will pay and what it covers.",
       },
     ],
   },
   responsibilities: {
     eyebrow: "What You Carry",
     heading: "Your Responsibilities as a Resident",
-    intro:
-      "This is what it means to live here: the beautiful parts and the full weight of belonging to a place and the people in it.",
+    intro: "Village life works because everyone carries a share. This is what your neighbors count on from you.",
     items: [
       {
         title: "Care for Your Home and Its Surroundings",
         description:
-          "Your home is your space and the community's landscape. Maintain your home to a standard that honors the land around it, keeping shared pathways clear, managing your immediate space with care, and contributing to the beauty of the village.",
+          "Keep your home and the space around it in good order, keep shared paths clear, and leave shared spaces as you found them or better.",
       },
       {
-        title: "Act as a Co-Owner",
+        title: "Share the Work",
         description:
-          "You live here. This place is yours as much as it is anyone's. Pick up what needs picking up. Notice what others might miss. Bring a co-owner's eye to every interaction with the land, the buildings, and the community. Not because you have to, because this place is actually yours.",
+          "Shared spaces and systems need looking after. Every resident takes a share of that work, and the quest board shows what needs doing.",
       },
       {
-        title: "Contribute to Maintenance",
-        description:
-          "The village runs on the shared effort of its residents. Every resident contributes time to the maintenance of shared spaces, infrastructure, and community assets. This isn't outsourced, it's how we stay alive. Details of your contribution commitment are agreed during your residency onboarding.",
-      },
-      // TOKEN_COPY_PROPOSAL row 16: the token sentence is gone, the rest is as it was.
-      {
-        title: "Village Dues",
-        description:
-          "Monthly village dues cover utilities, shared infrastructure maintenance, and community services. The vision is for dues to be fully covered by profits from {village}'s shared businesses, the retreat center, cafe, wellness offerings, and other enterprises, creating a net-positive financial life for all residents. Exact monthly amounts will be shared before signing your Land Share Agreement.",
+        title: "Pay Your Village Dues",
+        description: "Village dues cover the shared costs of living here. Keep up with them as agreed, and ask if anything about them is unclear.",
       },
       {
-        title: "Participate in Community Processes",
+        title: "Take Part in Village Decisions",
         description:
-          "Living here means showing up, to Circle meetings that affect your domain, to conflict resolution processes when they arise, to seasonal votes, and to the community governance that keeps everything running. Showing up is required. It's what makes self-governance real.",
+          "Read the proposals that affect your home, have your say, and show up when the village gathers to decide.",
       },
       {
-        title: "Honor the Good Neighbor Principles",
+        title: "Be a Good Neighbor",
         description:
-          "The Good Neighbor principles are a living guide to how we share space here. They cover noise, boundaries, shared resources, children and families, and how we handle conflict. Every resident commits to upholding and practicing them.",
+          "The Good Neighbor page sets out how {village} shares space and works through conflict. Every resident agrees to live by it.",
       },
       {
-        title: "Raise the Next Generation Together",
-        description:
-          "Children here are raised by the whole village, not just their parents. As a resident, you share responsibility for a child-safe, child-enriching environment, showing up for Children's Play Days, respecting family spaces, and contributing to the culture that children grow up in.",
+        title: "Welcome New Neighbors",
+        description: "Help newcomers find their way, the way someone once helped you.",
       },
     ],
   },
   finances: {
-    heading: "The Vision for Your Finances Here",
-    body: "Village dues exist to keep the infrastructure running, water, power, roads, shared maintenance. Right now, they're a cost. The longer-term vision is different: as {village}'s shared businesses mature, the retreat center, the cafe, the wellness center, the artisan market, the education programs, the revenue they generate flows back into the community.",
-    // TOKEN_COPY_PROPOSAL row 17.
-    body2:
-      "The goal is a life here that is economically net-positive. Where your business participation or your role in community operations covers your dues and gives you back more than you put in.",
-    body3:
-      'This is what "Wealth Through Contribution" actually means. Not a promise. A design intention we\'re building toward together.',
+    heading: "What Living Here Costs",
+    body: "Village dues cover the shared costs of living at {village}, such as upkeep of shared spaces and common services. You see the amount and what it covers before you sign anything.",
+    body2: "If you have questions about money, ask them before you commit. Clear answers up front make for good neighbors.",
+    body3: "",
   },
   progression: {
-    eyebrow: "Deepening Over Time",
-    heading: "Rights Grow With Your Roots",
-    intro:
-      "The longer you live here, the deeper your governance voice becomes. This is a recognition of wisdom that can only come from time, presence, and commitment.",
+    eyebrow: "Over Time",
+    heading: "How Your Place Here Grows",
+    intro: "Your place in {village} deepens as you take part. Each stage brings new ways to contribute.",
     stages: [
-      { level: "Resident", description: "Full access to commons, housing rights, community participation", years: "Year 1+" },
-      {
-        level: "Established Resident",
-        description: "Deeper governance voice, eligible for Circle Representative roles",
-        years: "Year 3+",
-      },
-      {
-        level: "Long-Term Resident",
-        description: "Senior voice in community decisions, Sage eligibility, rights of nature representation",
-        years: "Year 7+",
-      },
+      { level: "Newcomer", description: "Settling in, meeting neighbors and learning how the village works", years: "" },
+      { level: "Resident", description: "Taking part in decisions and sharing the work of the village", years: "" },
+      { level: "Long-Term Resident", description: "Welcoming newcomers and keeping the village's memory", years: "" },
     ],
-    footnote: "Year thresholds are approximate and will be confirmed in the Resident Agreement.",
+    footnote: "",
   },
   cta: {
     heading: "Ready to Call This Home?",
-    body: "Your journey begins with a Community Call. Come meet the team, ask your questions, and feel what's possible here.",
+    body: "The Resident journey walks you through each step, from a first visit to moving in.",
     primaryLabel: "Return to Resident Journey",
     primaryWhere: "the Resident journey page",
-    secondaryLabel: "Read Good Neighbor Principles",
+    secondaryLabel: "Read the Good Neighbor Page",
     secondaryWhere: "the Good Neighbor page",
   },
 });
@@ -395,111 +375,92 @@ export const RIGHTS_STEWARD_PAGE: PageSpec = rightsPage({
   path: "/steward-rights",
   who: "steward",
   hero: {
-    eyebrow: "Village Steward Space",
+    eyebrow: "For Village Stewards",
     headline: "Your Rights and Responsibilities",
     intro:
-      "This is a covenant between co-owners, not a legal document. Every Village Steward holds both, the rights that come from real ownership of this place, and the responsibilities that make those rights worth something.",
+      "Stewards look after the whole village: its work, its decisions and its people. Here is what you hold as a steward, and what {village} counts on you to carry.",
   },
   ownership: {
-    heading: "You Are a Co-Owner of This Village",
-    body: 'Not in a passive sense. Not in a "you paid for something" sense. In the deepest sense, the land, the buildings, the culture, the economy, the future of this place are in your hands as much as anyone else\'s. Act from that space. Steward it as if you built it, because you are building it, right now.',
+    heading: "You Help Shape This Village",
+    body: "As a steward you take part in the decisions and the work that keep {village} going. Look after it as if you built it, because together with everyone here, you are building it.",
   },
   rights: {
     eyebrow: "What You Hold",
     heading: "Your Rights as a Steward",
-    intro:
-      "These are not privileges granted from above. They are yours because you showed up, committed, and earned them through the journey.",
+    intro: "These rights come with the commitment you make as a steward.",
     items: [
       {
         title: "Voice in Governance",
         description:
-          "As a Village Steward you hold a genuine voice in how this community is shaped. You have the right to participate in Circle consent rounds, vote on decisions within your domain, and elect representatives to the Leadership Council. Your perspective matters at every level.",
-      },
-      // TOKEN_COPY_PROPOSAL row 18: the card names no token and says nothing a token does.
-      {
-        title: "Get Paid for Your Contribution",
-        description: "Every role you hold and every quest you complete shows what it is worth on its own card.",
+          "You can bring proposals, take part in your circle's decisions, and have your say on the decisions that affect the whole village.",
       },
       {
-        title: "Apply for Seasonal Roles",
+        title: "Take On a Role",
         description:
-          "Once you complete your Co-Creator Right of Passage, you have the right to propose yourself for any seasonal role that fits your gifts, whether that's a Circle facilitation role, a land stewardship position, or a new role you help design. Roles are renewed by consent each season.",
+          "You can propose yourself for a role that fits your gifts, or propose a new one {village} needs. Every role has a term, and the village agrees who holds it.",
       },
       {
-        title: "Advance Along the Path",
+        title: "Grow Along the Path",
         description:
-          "After multiple seasons serving in a role, you earn the right to be recognized as a Guide, a mentor and anchor for those coming after you. After seasons as a Guide, you may become a Sage, holding the highest governance voice and long-term vision for the village.",
+          "As you contribute, you move along {village}'s path of growth, taking on more responsibility and helping the people who come after you.",
       },
       {
-        title: "Access to Shared Land and Commons",
+        title: "Shared Spaces",
         description:
-          "The land is yours to steward. You have the right to access all common areas, food forests, trails, gathering spaces, and natural features of the land. You can participate in every seasonal festival, community event, and village gathering.",
-      },
-      {
-        title: "Retreat and Wellness Access",
-        description:
-          "As a contributing steward, you have access to {village}'s wellness offerings at community rates. Retreat facilities, healing arts programs, and wellness services are part of what this community builds together, and you are part of what makes them possible.",
+          "The shared land and gathering places are yours to use and look after, and you are welcome at village gatherings.",
       },
     ],
   },
   responsibilities: {
     eyebrow: "What You Carry",
     heading: "Your Responsibilities as a Steward",
-    intro:
-      "Rights and responsibilities are two sides of the same belonging. One without the other isn't community, it's just a transaction.",
+    intro: "Rights and responsibilities go together. This is what the village counts on from its stewards.",
     items: [
       {
         title: "Show Up for Your Circle",
         description:
-          "Your Circle is counting on you. Attend meetings consistently, participate in consent rounds, and bring your whole self to the governance of your domain. If you can't make it, communicate early and often.",
+          "Come to your circle's meetings, take part in its decisions, and let people know early when you can't make it.",
       },
       {
-        title: "Act as a Co-Owner",
+        title: "Look After the Whole",
         description:
-          "Every steward is a co-owner of this village. Not in a legal technicality, in a lived reality. Approach every decision, every piece of land, every shared resource as if it belongs to you and to everyone here, because it does. Pick up what needs picking up. Fix what needs fixing. Notice what others might miss.",
+          "Treat every shared space, resource and decision as yours to care for. Pick up what needs picking up, and notice what others might miss.",
       },
       {
         title: "Take On Quests",
         description:
-          "Quests are how the village grows. As a steward you commit to actively taking on quests that stretch your contribution, building, tending, hosting, documenting, organizing. Your engagement keeps the community alive.",
+          "Quests are how the work of the village gets done. Take on quests that use your gifts, and propose new ones when you see a need.",
       },
       {
-        title: "Practice the Community Ways",
+        title: "Handle Conflict With Care",
         description:
-          "{village} runs on Nonviolent Communication, authentic relating, and consent-based decision-making. As a steward, you commit to practicing these tools, not just knowing them. When conflict arises, you bring it to the appropriate process before it festers.",
+          "When conflict comes up, speak directly and kindly, and bring it to the village's way of resolving conflict before it grows.",
       },
       {
-        title: "Contribute to the Seasonal Rhythm",
-        description:
-          "Every three months the community shapes its next season. Your presence in that vote matters. Attend seasonal transitions, participate in harvest circles and planting celebrations, and help decide collectively what {village} focuses on next.",
+        title: "Take Part in Each Season",
+        description: "When a season turns, help the village look back at what it did and decide together what comes next.",
       },
       {
-        title: "Lift Others as You Rise",
-        description:
-          "Your path from Visitor to Co-Creator to Guide to Sage is a relay. As you advance, you carry responsibility for welcoming newcomers, mentoring Initiates, and making it easier for the next person to find their place here.",
+        title: "Welcome Those Who Come Next",
+        description: "Help newcomers find their place, share what you know, and make the path easier for the next person.",
       },
     ],
   },
   progression: {
     eyebrow: "Your Path Forward",
-    heading: "Rights Deepen as You Grow",
-    intro:
-      "Your rights and voice grow with your commitment, in recognition that those who have poured the most into this place hold the most wisdom for its future.",
-    // TOKEN_COPY_PROPOSAL rows 19 and 20.
+    heading: "Growing Into the Work",
+    intro: "Your part in {village} grows with what you contribute. Each stage carries more responsibility for the whole.",
     stages: [
-      { level: "Co-Creator", description: "Full governance voice, seasonal role eligibility", years: "" },
-      { level: "Guide", description: "Mentorship responsibilities, voice in cross-circle decisions", years: "" },
-      {
-        level: "Sage",
-        description: "Highest governance voice, wisdom keeper, long-term strategic guidance for the village",
-        years: "",
-      },
+      { level: "Co-Creator", description: "Contributing steadily and taking part in village decisions", years: "" },
+      { level: "Role Holder", description: "Holding a role for its term and carrying its work", years: "" },
+      { level: "Guide", description: "Mentoring newer stewards and sharing what you have learned", years: "" },
+      { level: "Sage", description: "Keeping the village's long view and helping it through hard decisions", years: "" },
     ],
     footnote: "",
   },
   cta: {
     heading: "Ready to Begin?",
-    body: "The Steward journey starts with a single step, showing up to a Community Call and saying yes to what's calling you.",
+    body: "The Steward journey walks you through each step, from your first visit to taking on a role.",
     primaryLabel: "Return to Steward Journey",
     primaryWhere: "the Steward journey page",
     secondaryLabel: "Explore Quests",

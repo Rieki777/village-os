@@ -2,13 +2,19 @@
  * The Good Neighbor page (/good-neighbor), as fields: the village's admission
  * covenant, every word of it the village's own.
  *
- * The defaults are the words the page carried in code until 2026-10-22, moved
- * here unchanged, with two deliberate exceptions the lane brief asked for:
- *   - the closing button says "Sign the {commitment}" (it said "Sign the
- *     Membership Covenant" beside a commitment name it never read);
+ * THE DEFAULTS ARE NEUTRAL STARTER TEXT (2026-10-23). They were the founding
+ * village's own covenant: its communication training, its background check,
+ * its children's day, its local-leadership target, its land lease terms and
+ * an epigraph from a named person. The founding village now holds its own
+ * copy (its record is in server/seeds/), so these defaults keep only what
+ * any village could sign up to, and leave the practices a village may or may
+ * not adopt for it to write. Two things carry over on purpose:
+ *   - the closing button says "Sign the {commitment}";
  *   - every place the page names the criteria writes `{good-neighbor}`, which
  *     is the headline field below, so renaming the criteria renames them
  *     everywhere at once (see goodNeighborName.ts).
+ * No sentence restates that work is paid (Rye, 2026-10-23): the quest and
+ * role cards say it.
  *
  * The criteria, dealbreakers, steps and commitments are FREE lists: a village
  * writes as many as it has. A criterion's practices and a dealbreaker group's
@@ -43,7 +49,7 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
       label: "Top of the page",
       shows: "The headline and the words under it.",
       fields: [
-        { key: "eyebrow", label: "Small label above the headline", kind: "text", max: 30, default: "Our Living Covenant", optional: true },
+        { key: "eyebrow", label: "Small label above the headline", kind: "text", max: 30, default: "How We Live Together", optional: true },
         {
           key: "name",
           label: "Headline: what you call these criteria",
@@ -58,7 +64,7 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           kind: "long",
           max: 240,
           default:
-            "This is not a legal document or a list of rules. This is a heartfelt covenant, a living agreement that expresses the values we embody together and the commitment we make to one another as neighbors.",
+            "What {village} asks of everyone who lives here, and what the village promises in return. Read it before you commit, and ask about anything that is unclear.",
         },
         {
           key: "quote",
@@ -66,10 +72,10 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           help: "Shown in italics, inside quotation marks. Leave blank for none.",
           kind: "long",
           max: 140,
-          default: "We are called to be architects of the future, not its victims.",
+          default: "",
           optional: true,
         },
-        { key: "quoteBy", label: "Who said it", kind: "text", max: 40, default: "Buckminster Fuller", optional: true },
+        { key: "quoteBy", label: "Who said it", kind: "text", max: 40, default: "", optional: true },
       ],
     },
     {
@@ -77,7 +83,7 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
       label: "What the village values",
       shows: "A row of short cards under the top of the page.",
       hideable: true,
-      fields: [{ key: "heading", label: "Heading", kind: "text", max: 60, default: "What {village} Values, and Why It Matters" }],
+      fields: [{ key: "heading", label: "Heading", kind: "text", max: 60, default: "What {village} Values" }],
       lists: [
         {
           key: "items",
@@ -92,16 +98,16 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           ],
           default: [
             {
-              title: "Regenerative Living",
-              body: "We don't just sustain, we heal. This community is built on the belief that humans can actively restore the land, water systems, and ecosystems we depend on. We leave things better than we found them.",
+              title: "Care for Each Other",
+              body: "Neighbors look out for one another. One person's wellbeing touches everyone's, so we show up for ourselves and for the whole.",
             },
             {
-              title: "Community Care",
-              body: "We practice radical responsibility alongside deep interdependence. That means you show up for yourself and for the whole. We know that a single person's wellbeing affects everyone's.",
+              title: "Care for the Land",
+              body: "The land and water we share hold us up. We tend them so they are healthier for the people who come after us.",
             },
             {
-              title: "Regenerative Purpose",
-              body: "Your life here has meaning. You're not just living in a nice place, you're aligning your unique gifts with what {village} needs. This is the heart of the {village} R-Ikigai.",
+              title: "Shared Responsibility",
+              body: "Everyone here carries part of the work and part of the decisions. That is how a village runs itself.",
             },
           ],
         },
@@ -118,8 +124,7 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 200,
-          default:
-            "Think of these as the operating system for our shared life. They describe who we are, how we show up for each other, and what makes {village} work as a living organism.",
+          default: "These describe how we show up for each other, and what makes life at {village} work.",
         },
       ],
       lists: [
@@ -140,81 +145,59 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           ],
           default: [
             {
-              title: "Core Values Alignment",
-              subtitle: "You Live the Vision",
+              title: "Shared Values",
+              subtitle: "You Share What Matters Here",
               description:
-                "You understand and embrace {village}'s vision of regenerative living and community stewardship. You're genuinely interested in being part of a living experiment, not just finding a nice place to live.",
-              practice1: "You engage with the community intentionally: show up to potlucks, participate in circles, take your voice seriously.",
-              practice2: "You're curious about how things work here: our governance, our economy, our values.",
-              practice3: "You accept that community life sometimes requires conversations you'd rather skip. We do it anyway, with care.",
+                "You understand what {village} is for and you want to help build it. You have read the {commitment} and you agree with its spirit.",
+              practice1: "You come to gatherings and take part in village life.",
+              practice2: "You ask how things work here: how decisions are made, how work is shared, how money is handled.",
+              practice3: "You accept that shared life sometimes asks for conversations you would prefer to skip, and you have them with care.",
             },
             {
-              title: "Communication & Conflict Resolution",
-              subtitle: "You Practice Authentic Relating",
+              title: "Honest Communication",
+              subtitle: "You Speak Directly and Kindly",
               description:
-                "You're willing to learn and practice Nonviolent Communication (NVC) or similar practices for authentic relating. You see conflict as a doorway to deeper connection, not a threat.",
-              practice1: "You attend our community training in NVC or conflict resolution (required for residents).",
-              practice2: "When something's bothering you, you address it directly, not through gossip or silence.",
-              practice3: "You're willing to apologize, make repairs, and evolve.",
-              note: "What disqualifies someone: Unwillingness to engage in honest conversation or a pattern of avoiding conflict through manipulation, blame, or withdrawal.",
+                "You are willing to talk through disagreement openly. You see conflict as something to work through together.",
+              practice1: "When something bothers you, you raise it directly, early and kindly.",
+              practice2: "You listen to understand before you answer.",
+              practice3: "You are willing to apologize, make repair, and change.",
+              note: "What does not fit here: a pattern of avoiding conflict through blame, manipulation or withdrawal.",
             },
             {
               title: "Financial Responsibility",
-              subtitle: "You Can Meet Your Obligations",
+              subtitle: "You Can Meet Your Commitments",
               description:
-                "You have the financial capacity to sustain your commitment to {village}. You're honest about your resources and realistic about what you can afford.",
-              practice1: "You've done the math on housing, land leases, HOA fees, village dues, and shared costs.",
-              practice2: "You have a clear income source or savings to cover your commitment for at least 3-5 years.",
-              practice3: "If circumstances change, you communicate early. You don't disappear or default.",
-              note: "This is not about wealth. {village} welcomes teachers, artists, young families, retirees, and remote workers. What matters is alignment and honesty.",
+                "You can sustain your commitment to {village}. You are honest about your resources and realistic about what you can afford.",
+              practice1: "You know what living here costs, housing and village dues included, before you commit.",
+              practice2: "You have a clear way to cover those costs.",
+              practice3: "If your circumstances change, you tell the village early.",
+              note: "What matters is honesty about what you can sustain.",
             },
             {
-              title: "Contribution to Community Life",
-              subtitle: "You Show Up and Participate",
-              description:
-                "You give your time, energy, or skills to the community in some way. You're not just a consumer of community benefits, you're a co-creator.",
-              practice1: "You identify your {village} R-Ikigai: the intersection of what you love, what you're good at, and what {village} needs.",
-              practice2: "You propose contributions, and the quests and roles you take on pay what their cards say.",
-              practice3: "You participate in circles aligned with your interests and gifts.",
-              note: "This is not about perfection. We all have seasons of high and lower capacity. What matters is consistent engagement and honesty.",
+              title: "Contribution to Village Life",
+              subtitle: "You Show Up and Take Part",
+              description: "You give your time, energy or skills to the life of the village, in the way that fits your gifts.",
+              practice1: "You look for where your gifts meet what {village} needs.",
+              practice2: "You propose contributions and take on quests and roles.",
+              practice3: "You join the circles that fit your interests and gifts.",
+              note: "Everyone has seasons of more and less capacity. What matters is steady engagement and honesty about what you can give.",
             },
             {
-              title: "Respect for Land, Nature, and All Beings",
-              subtitle: "You Are a Steward",
+              title: "Respect for the Land",
+              subtitle: "You Care for Shared Places",
               description:
-                "You understand that {village}'s land is sacred and alive. You practice stewardship: protecting water, supporting regeneration, leaving no trace where possible.",
-              practice1: "You follow our water conservation guidelines and waste reduction practices.",
-              practice2: "You participate in land stewardship (gardening, trail maintenance, reforestation) or support those who do.",
-              practice3: "You treat shared spaces with care, as if they're your own responsibility.",
+                "You treat the land, the water and the shared spaces as yours to look after, alongside everyone else who lives here.",
+              practice1: "You use water, energy and materials with care.",
+              practice2: "You take part in caring for the land, or support those who do.",
+              practice3: "You treat shared spaces as your own responsibility.",
             },
             {
-              title: "Cultural Openness & Intergenerational Respect",
-              subtitle: "You Value Diversity",
+              title: "Openness and Respect",
+              subtitle: "You Value Different Ways of Being",
               description:
-                "You genuinely value diversity and different ways of being. You're open to learning from people of different cultures, ages, backgrounds, and perspectives.",
-              practice1: "You engage respectfully with our local neighbors and team members.",
-              practice2: "You support the goal of 30%+ local representation in leadership and decision-making.",
-              practice3: "You honor elders, welcome children, and understand that multi-generational living is central to our vision.",
-            },
-            {
-              title: "Background Check Acknowledgment",
-              subtitle: "Safety and Trust for Everyone",
-              description:
-                "You're willing to undergo a standard background check as part of our resident vetting process. This is about safety and trust for the whole community.",
-              practice1: "You'll provide identifying information and authorize a background check.",
-              practice2: "Results are reviewed confidentially by the Resident Circle.",
-              practice3: "A background check is one input among many in our evaluation of cultural fit.",
-              note: "A background check is not automatically disqualifying. Many people have complicated histories. What matters is honesty, accountability, and demonstrated commitment to change.",
-            },
-            {
-              title: "Children's Play Day Participation",
-              subtitle: "For Families",
-              description:
-                "If you're a parent or guardian, you understand that children are central to {village}'s vision. You participate in at least one Children's Play Day as part of the joining process.",
-              practice1: "You attend one Children's Play Day as part of your onboarding, a chance for the village to meet your family.",
-              practice2: "You practice village parenting, understanding that raising children is a collective responsibility.",
-              practice3: "You support the school pilot and educational initiatives.",
-              note: "This applies only to families with children. Non-parents support children's wellbeing in other ways.",
+                "You welcome people of different cultures, ages, backgrounds and views, and you are open to learning from them.",
+              practice1: "You treat neighbors, guests and the wider community with respect.",
+              practice2: "You make room for every age, from children to elders.",
             },
           ],
         },
@@ -232,7 +215,7 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 160,
-          default: "We want to be honest about this. Some behaviors or commitments are incompatible with {village}'s vision.",
+          default: "Some behaviors cannot be part of life at {village}, and it is kinder to say so up front.",
         },
       ],
       lists: [
@@ -246,28 +229,27 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           fields: [{ key: "category", label: "Group name", kind: "text", max: 40, default: "" }, ...numbered("item", "Line", 5, 150)],
           default: [
             {
-              category: "Active Harm or Abuse",
-              item1: "History of violence, sexual abuse, or serious harm to others (except with demonstrated accountability and healing over substantial time)",
-              item2: "Current patterns of manipulation, coercion, or abuse",
-              item3: "Unwillingness to engage in conflict resolution or take responsibility for harm",
+              category: "Harm or Abuse",
+              item1: "A history of violence or serious harm to others, without real accountability and repair",
+              item2: "Current patterns of manipulation, coercion or abuse",
+              item3: "Refusing to take responsibility for harm done",
             },
             {
-              category: "Fundamentally Extractive Mindset",
-              item1: "Viewing the community purely as a resource to exploit",
-              item2: "Refusal to contribute or participate in shared governance",
-              item3: "Consistent dishonesty or fraud",
+              category: "Taking Without Giving",
+              item1: "Treating the community only as a resource to use",
+              item2: "Refusing to contribute or to take part in shared decisions",
+              item3: "Repeated dishonesty or fraud",
             },
             {
-              category: "Misalignment on Core Values",
-              item1: "Deep opposition to regenerative living practices",
-              item2: "Unwillingness to respect the land or honor our environmental commitments",
-              item3: "Active resistance to cultural diversity or multi-generational inclusion",
+              category: "Disrespect",
+              item1: "Hostility toward people because of who they are",
+              item2: "Disregard for the land and the shared spaces",
             },
             {
-              category: "Incompatibility with Our Governance",
-              item1: "Insistence on top-down authority or individual control",
-              item2: "Refusal to practice authentic communication or engage in conflict resolution",
-              item3: "Inability or unwillingness to honor consent-based decision-making",
+              category: "Working Against Shared Decisions",
+              item1: "Insisting on control over decisions that belong to the group",
+              item2: "Refusing to take part in resolving conflict",
+              item3: "Ignoring what the village has agreed",
             },
           ],
         },
@@ -279,13 +261,13 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
       shows: "The numbered steps from first visit to welcome.",
       hideable: true,
       fields: [
-        { key: "heading", label: "Heading", kind: "text", max: 50, default: "The Conversation, Not Just the Criteria" },
+        { key: "heading", label: "Heading", kind: "text", max: 50, default: "How Joining Works" },
         {
           key: "intro",
           label: "Sentence under the heading",
           kind: "long",
           max: 140,
-          default: "These criteria are not a checklist to complete in isolation. They're a conversation starter. Here's how we assess fit:",
+          default: "These criteria start a conversation. Here is how {village} and a newcomer get to know each other:",
         },
       ],
       lists: [
@@ -301,19 +283,14 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
             { key: "body", label: "Description", kind: "long", max: 200, default: "" },
           ],
           default: [
-            { title: "Initial Exploration", body: "You learn about {village} through events, tours, and conversations. You ask hard questions." },
-            { title: "Community Engagement", body: "You attend potlucks, workshops, and gatherings. You get to know people. They get to know you." },
+            { title: "First Visit", body: "You learn about {village} through its pages, its events and its people, and you ask your questions." },
+            { title: "Getting to Know Each Other", body: "You come to gatherings and meet the people who live here. They get to know you too." },
+            { title: "An Honest Conversation", body: "You talk openly with people from the village about your values, your hopes and your concerns." },
             {
-              title: "Deep Conversation",
-              body: "If you're serious about residency, you have structured conversations with the Resident Circle about your values, your history, your commitment, and your concerns.",
+              title: "Agreement",
+              body: "When you and the village are both ready, the village decides in the way it has chosen, and you sign the {commitment}.",
             },
-            { title: "Background Check", body: "You authorize a standard background check and reference check." },
-            { title: "Observation Period", body: "A period of participation before full commitment, so both you and the community can assess genuine fit." },
-            {
-              title: "Resident Consent",
-              body: "Current residents and the Resident Circle give their consent. The bar is genuine consent with no reasoned objections, not unanimous agreement.",
-            },
-            { title: "Celebration", body: "If approved, we celebrate your commitment with the whole community. Welcome home." },
+            { title: "Celebration", body: "We celebrate your arrival with the whole village. Welcome home." },
           ],
         },
       ],
@@ -331,7 +308,7 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           help: NAME_HELP,
           kind: "long",
           max: 140,
-          default: "This covenant is two-way. If you commit to the {good-neighbor}, {village} commits to you:",
+          default: "This goes both ways. If you commit to the {good-neighbor}, {village} commits to you:",
         },
       ],
       lists: [
@@ -344,15 +321,14 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           maxItems: 12,
           fields: [{ key: "text", label: "Commitment", kind: "text", max: 100, default: "" }],
           default: [
-            { text: "Create a genuinely supportive and thriving community" },
-            { text: "Practice transparent governance and decision-making" },
-            { text: "Share financial benefits from commercial enterprises with all residents" },
-            { text: "Protect your investment and provide stability (30-99 year land leases with renewal options)" },
-            { text: "Honor your voice and participation in decisions that affect you" },
-            { text: "Support your growth, learning, and evolution" },
-            { text: "Celebrate your contributions and make your belonging real" },
-            { text: "Handle conflict with care and commitment to resolution" },
-            { text: "Protect the land and ecological integrity for generations" },
+            { text: "A supportive community that looks out for you" },
+            { text: "Open, transparent decision-making" },
+            { text: "A voice in the decisions that affect you" },
+            { text: "Clear agreements about your home and what it costs" },
+            { text: "Support for your growth and learning" },
+            { text: "Celebrating what you bring" },
+            { text: "Care and commitment when conflict comes up" },
+            { text: "Care for the land, for the generations to come" },
           ],
         },
       ],
@@ -371,15 +347,14 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           kind: "long",
           max: 260,
           default:
-            "The {good-neighbor} exist because we believe something rare is possible here: a community where freedom and belonging, individual purpose and collective thriving, human flourishing and ecological regeneration all reinforce each other.",
+            "The {good-neighbor} exist because good neighbors make a good village. They help everyone here know what to expect of each other.",
         },
         {
           key: "body2",
           label: "Second paragraph",
           kind: "long",
           max: 200,
-          default:
-            "If that resonates, and you're ready to live by these criteria and give this place your best, the belonging you get back here is real. Welcome home.",
+          default: "If this sounds like the way you want to live, we would love to meet you.",
           optional: true,
         },
         {
@@ -390,7 +365,7 @@ export const GOOD_NEIGHBOR_PAGE: PageSpec = {
           max: 32,
           default: "Sign the {commitment}",
         },
-        { key: "eventsLabel", label: "Second button", help: "Leave blank for one button.", kind: "text", max: 28, default: "Attend a Community Call", optional: true },
+        { key: "eventsLabel", label: "Second button", help: "Leave blank for one button.", kind: "text", max: 28, default: "See Upcoming Events", optional: true },
       ],
     },
   ],

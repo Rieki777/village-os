@@ -23,6 +23,7 @@ import type { DomainPanel, SettingsPayload } from "@/components/admin/comms/comm
 import FieldNotes from "@/components/setupGame/FieldNotes";
 import JourneyView from "@/components/setupGame/JourneyView";
 import SpringPlot from "@/components/setupGame/SpringPlot";
+import WaitingKeys from "@/components/setupGame/WaitingKeys";
 import { LAYER_WORD, layerEstablished, orderedLayers, seedLight } from "@/components/setupGame/journeyModel";
 import { readComms, readDomain, readLaunch, readMap, said, type LaunchItem, type SetupGameMap } from "@/components/setupGame/setupGameApi";
 import "@/components/setupGame/forest.css";
@@ -196,6 +197,7 @@ export default function SetupGame() {
           ) : null}
 
           {problem ? <div className="sg-card">{problem}</div> : null}
+          <WaitingKeys />
           {!map && !problem ? <p className="sg-note">Reading the forest.</p> : null}
 
           {map && view === "journey" ? <JourneyView map={map} launch={launch} comms={comms} onPlaySpring={() => choose("spring")} /> : null}

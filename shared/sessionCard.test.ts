@@ -118,6 +118,14 @@ describe("the plain reading", () => {
     expect(card.collective.map((c) => c.system)).toEqual(["human-design", "western"]);
   });
 
+  it("names everyone in the room in its first line, and says who was read when that is not everyone", () => {
+    const first = card.collective[0].text;
+    expect(first).toMatch(/^Here today: Wren, Kai and Sam\. Read from their own lines: Wren and Kai, /);
+    expect(first).not.toMatch(/Between you/);
+    const all = plainReading(readRoom(people.filter((p) => p.chart), AUG)).collective[0].text;
+    expect(all).toMatch(/^Here today: Wren and Kai\. Between you, /);
+  });
+
   it("says the sky once: the panels carry the gates and signs, the reading does not repeat them", () => {
     const all = card.collective.map((c) => c.text).join(" ");
     expect(all).not.toMatch(new RegExp(`gate ${AUG.gates.Sun.gate}, line ${AUG.gates.Sun.line}`));

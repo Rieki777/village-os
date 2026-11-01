@@ -21,6 +21,7 @@
  *                        status is not configured.
  */
 import { fetchGuide } from "@/lib/guideApi";
+import { guideNameAtSentenceStart } from "@shared/guideName";
 
 export type AiHelpStep = "words" | "season";
 
@@ -28,7 +29,7 @@ export type AiHelpStatus =
   | { configured: false; reason: "not configured" }
   | {
       configured: true;
-      /** The name of the guide answering now. */
+      /** The name of the guide answering now, as it opens a sentence ("The village guide will read it"). */
       guide: string;
       /** Hand the step's panel the text of the member's document. Never stored. */
       bringIn: (text: string) => void;
@@ -54,7 +55,7 @@ export async function aiHelpStatus(step: AiHelpStep): Promise<AiHelpStatus> {
   if (!answering) return NOT_CONFIGURED;
   return {
     configured: true,
-    guide: answering.name,
+    guide: guideNameAtSentenceStart(answering.name),
     bringIn: (text: string) => {
       for (const l of Array.from(listeners[step])) l(text);
     },
