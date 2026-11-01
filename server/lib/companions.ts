@@ -48,6 +48,7 @@ import {
   effectiveCap,
   isDraftKind,
   MAX_ANSWER,
+  MAX_QUESTIONS_PER_MEMBER_PER_DAY,
   MAX_BODY,
   MAX_QUOTE,
   MAX_TITLE,
@@ -78,6 +79,7 @@ import {
   membersByIds,
   openHeld,
   questionsShownOn,
+  questionsShownToMemberOn,
   releasableHeld,
   reopenItem,
   rolesHeldBy,
@@ -260,6 +262,8 @@ export async function landItem(env: CompanionsEnv, companion: CompanionRow, inpu
   else if (input.type === "question") {
     const cap = effectiveCap(companion.dailyQuestionCap, env.ceiling);
     if ((await questionsShownOn(pool, companion.id, env.today)) >= cap) status = "held";
+    // And the member's own ceiling, across every companion they have.
+    else if ((await questionsShownToMemberOn(pool, companion.ownerUserId, env.today)) >= MAX_QUESTIONS_PER_MEMBER_PER_DAY) status = "held";
   }
 
   const id = `citem-${randomUUID().slice(0, 12)}`;
@@ -295,7 +299,10 @@ export async function landItem(env: CompanionsEnv, companion: CompanionRow, inpu
 export async function turnTheDay(env: CompanionsEnv, companion: CompanionRow): Promise<void> {
   await expireQuestions(env.pool, addDays(env.today, -QUESTION_EXPIRY_DAYS), companion.ownerUserId);
   const cap = effectiveCap(companion.dailyQuestionCap, env.ceiling);
-  const room = cap - (await questionsShownOn(env.pool, companion.id, env.today));
+  const room = Math.min(
+    cap - (await questionsShownOn(env.pool, companion.id, env.today)),
+    MAX_QUESTIONS_PER_MEMBER_PER_DAY - (await questionsShownToMemberOn(env.pool, companion.ownerUserId, env.today)),
+  );
   if (room > 0) await openHeld(env.pool, await releasableHeld(env.pool, companion.id, room), env.today);
 }
 
