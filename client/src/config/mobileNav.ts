@@ -80,7 +80,7 @@ export const TAB_SLOTS: TabSlot[] = [
  *
  * Matched as exact paths, query and trailing slash stripped.
  */
-export const BARE_ROUTES: string[] = ["/login", "/register", "/set-password", "/forgot-password"];
+export const BARE_ROUTES: string[] = ["/login", "/register", "/set-password", "/forgot-password", "/verify-email"];
 
 export type FabAction = {
   key: string;

@@ -207,6 +207,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} applications still wait on a role holder.",
     celebrate: false,
   },
+  // One member asked another to do something, or the one asked answered it
+  // (shared/memberAsks.ts). Quiet: an ask is a small thing between two people.
+  ask: {
+    group: "work",
+    blurb: "Someone asked you to do something, or answered something you asked.",
+    many: "{n} asks moved.",
+    celebrate: false,
+  },
   // How much your vote weighs is power, and the weight routes moved it for a
   // year while telling the person it belonged to nothing at all. The trail was
   // readable the whole time, which is a different thing from being told: a

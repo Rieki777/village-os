@@ -45,8 +45,10 @@
  * its table for a moment. The server default for that wait is one year on
  * MySQL 8. One open transaction that has touched the table makes the ALTER
  * wait, and every later query on that table, from BOTH servers, queues behind
- * the ALTER's pending exclusive request. That is the working explanation (H1,
- * unconfirmed until the deploy logs are read) for Amora's fifteen-minute outage.
+ * the ALTER's pending exclusive request. That was the first hypothesis for
+ * Amora's fifteen-minute outage; Railway's deploy logs showed the outage was
+ * 0298's SHA1() rejected by production's database instead. The hazard stands
+ * on its own: nothing capped the wait.
  * `applyPending` now sets `lock_wait_timeout` and `innodb_lock_wait_timeout`
  * on its own connection (see MIGRATION_LOCK_WAIT_SECONDS), retries a timed-out
  * statement a bounded number of times, and otherwise fails the boot naming the
