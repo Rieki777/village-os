@@ -31,6 +31,7 @@
 import { fenceForPrompt, toolNameToKey } from "./villageReaders";
 import { providerFor, type ProviderId, type ToolResult, type WireMessage } from "./assistantProviders";
 import { guardedFetchJson } from "./toolcheck";
+import { PLATFORM_CALLS, notePlatformCall, type PlatformCallOutcome } from "./integrations";
 
 export type AssistantMode =
   | "proposal"
@@ -477,6 +478,17 @@ function withPrefetched(system: string, prefetched: { key: string; data: unknown
 }
 
 /**
+ * The record each answer keeps, read by the launch journey's `assistant-key`
+ * row (server/lib/launchProofs.ts): one answer from the guide is what proves
+ * its key works. A member's own key keeps none. It is theirs, and it says
+ * nothing about the village's.
+ */
+async function noteReply(source: KeySource, outcome: PlatformCallOutcome): Promise<void> {
+  if (source === "village") await notePlatformCall(PLATFORM_CALLS.guideReply, outcome);
+  else if (source === "platform") await notePlatformCall(PLATFORM_CALLS.guideReplyBorrowed, outcome);
+}
+
+/**
  * Every guard, then the call, then as many tool turns as the mode allows.
  *
  * The per-IP burst limit runs first and ONCE, because it is a guard about a
@@ -601,6 +613,7 @@ export async function callAssistant(req: AssistantRequest): Promise<AssistantRes
         if (!r.ok) {
           // The key never reaches a log line, whoever it belongs to.
           console.error(`[assistant:${req.mode}] ${provider.id} error`, r.status, (await r.text()).slice(0, 300));
+          await noteReply(resolved.source, { ok: false, status: String(r.status), detail: `${provider.id} answered ${r.status}` });
           return { ok: false, status: 502, error: "assistant-error", ...spent() };
         }
         data = await r.json();
@@ -609,8 +622,10 @@ export async function callAssistant(req: AssistantRequest): Promise<AssistantRes
       // The guarded dialer throws its refusal or the upstream status as the
       // message; neither carries the key or the body.
       console.error(`[assistant:${req.mode}] ${provider.id}`, String((err as any)?.message ?? err).slice(0, 200));
+      await noteReply(resolved.source, { ok: false, status: "network", detail: `${provider.id} could not be reached` });
       return { ok: false, status: 502, error: "assistant-error", ...spent() };
     }
+    await noteReply(resolved.source, { ok: true });
 
     iterations += 1;
     const reply = provider.parse(data);

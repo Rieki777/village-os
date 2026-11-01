@@ -43,6 +43,7 @@ import { countWords, purposeStatementProblem } from "../../shared/governingPurpo
 import { MAP_WALK_DOC, welcomeWalkCheck } from "../../shared/mapAddress";
 import { governingPurpose } from "./governingPurpose";
 import { villageSecretsLaunchCheck } from "./secrets";
+import { LAUNCH_PROOFS } from "./launchProofs";
 
 /**
  * The one `checkKey` this file resolves by name. It is a constant so the
@@ -353,7 +354,13 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
       continue;
     }
 
-    const check = deps.checks[req.checkKey];
+    /*
+     * THE ROWS PROVED BY EVIDENCE (./launchProofs.ts) resolve here when the
+     * caller injects nothing for them, which server/index.ts no longer does.
+     * An injected check still wins, so a test can hold every other row still.
+     */
+    const proof = LAUNCH_PROOFS[req.checkKey];
+    const check = deps.checks[req.checkKey] ?? (proof ? () => proof(pool, deps.env ?? process.env) : undefined);
     if (!check) {
       // A registry entry without a resolver is a wiring bug. Fail VISIBLY on
       // the page rather than silently dropping the row â€” a checklist that
