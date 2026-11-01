@@ -9,6 +9,10 @@
  * what they bring to each and why, and gives their name and address. Sending
  * asks the address to confirm; nothing reaches the village until it does
  * (server/routes/openProposals.ts). The words are shared/openProposals.ts.
+ *
+ * WHAT IS KEPT, said on the form in one line (sheet 19i): a proposal never
+ * confirmed is deleted after 48 hours, and a declined one loses its name and
+ * address after 90 days (docs/ARCHITECTURE.md, 3.9).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "wouter";
@@ -269,6 +273,9 @@ export default function ProposeARole() {
             </label>
             <input id="propose-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={FIELD} {...invalid("email")} />
             <p className="mt-2 text-sm text-muted-foreground">{OPEN_WORDS.emailNote}</p>
+            <p className="mt-1 text-sm text-muted-foreground" data-kept-for="">
+              {OPEN_WORDS.keptFor}
+            </p>
           </div>
           {/* The honeypot. Named `hp` so no autofill heuristic fills it; see ReserveHome.tsx. */}
           <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: 0 }}>

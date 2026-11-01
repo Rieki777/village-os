@@ -58,11 +58,15 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     governance: "public",
     seasons: [NOW_SEASON, NEXT] as any[],
     limited: [] as string[],
+    /** Count every hit the way the real limiter does (the attack tests); off, only `limited` refuses. */
+    counting: false,
     sent: [] as OutgoingEmail[],
     answer: { status: "sent", messageId: "m-1" } as PostResult,
     clock: null as Date | null,
   };
 
+  /** The limiter's counts, per bucket, while `state.counting` is on. */
+  const hits = new Map<string, number>();
   const q = (sql: string, args: unknown[] = []) => pool.query<any[]>(sql, args).then(([rows]) => rows); // module-review-ok: fixture SQL on the scratch schema this suite provisioned
 
   beforeAll(async () => {
@@ -80,8 +84,14 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     app.use(express.json());
     register(app, {
       getPool: () => pool,
-      overLimit: async (bucket: string) => state.limited.some((b) => bucket.startsWith(b)),
-      clientIp: () => "203.0.113.9",
+      overLimit: async (bucket: string, max: number) => {
+        if (state.limited.some((b) => bucket.startsWith(b))) return true;
+        if (!state.counting) return false;
+        const n = (hits.get(bucket) ?? 0) + 1;
+        hits.set(bucket, n);
+        return n > max;
+      },
+      clientIp: (req: any) => String(req.headers["x-test-ip"] ?? "203.0.113.9"),
       guardCapability: async (_req: any, res: any) => {
         if (state.viewer && state.moderators.includes(state.viewer.id)) return true;
         res.status(state.viewer ? 403 : 401).json({ error: state.viewer ? "forbidden" : "auth_required" });
@@ -130,16 +140,18 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     state.governance = "public";
     state.seasons = [NOW_SEASON, NEXT];
     state.limited = [];
+    state.counting = false;
+    hits.clear();
     state.sent.length = 0;
     state.answer = { status: "sent", messageId: "m-1" };
     state.clock = null;
     await q("DELETE FROM app_config WHERE config_key = 'open-proposals'");
   });
 
-  const call = async (method: string, path: string, body?: unknown) => {
+  const call = async (method: string, path: string, body?: unknown, ip?: string) => {
     const res = await fetch(`${base}${path}`, { // module-review-ok: a test calling its own local server, never an outside host
       method,
-      headers: body === undefined ? {} : { "content-type": "application/json" },
+      headers: { ...(body === undefined ? {} : { "content-type": "application/json" }), ...(ip ? { "x-test-ip": ip } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     return { status: res.status, body: (await res.json()) as any };
@@ -279,6 +291,31 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       expect(r.status).toBe(429);
       expect(r.body.error).toBe(OPEN_WORDS.tooMany);
       expect(state.sent).toHaveLength(0);
+    });
+
+    it("ATTACK: 100 proposals from one connection: 5 go, 95 are refused, and only 5 emails are sent", async () => {
+      state.counting = true;
+      const before = (await q("SELECT COUNT(*) AS n FROM open_role_proposals"))[0].n;
+      const statuses: number[] = [];
+      for (let i = 0; i < 100; i += 1) statuses.push((await call("POST", "/api/open-proposals", proposal({ email: `flood${i}@example.test` }), "198.51.100.7")).status);
+      expect(statuses.filter((x) => x === 200)).toHaveLength(5);
+      expect(statuses.filter((x) => x === 429)).toHaveLength(95);
+      expect(statuses.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
+      expect(state.sent).toHaveLength(5);
+      expect((await q("SELECT COUNT(*) AS n FROM open_role_proposals"))[0].n).toBe(before + 5);
+      // Another connection is not caught by this one's cap.
+      expect((await call("POST", "/api/open-proposals", proposal({ email: "elsewhere@example.test" }), "198.51.100.8")).status).toBe(200);
+    });
+
+    it("ATTACK: one address from 20 connections: 3 go, 17 are refused, and that address gets 3 emails at most", async () => {
+      state.counting = true;
+      const statuses: number[] = [];
+      for (let i = 0; i < 20; i += 1) statuses.push((await call("POST", "/api/open-proposals", proposal({ email: "Target@Example.test" }), `192.0.2.${i + 1}`)).status);
+      expect(statuses.filter((x) => x === 200)).toHaveLength(3);
+      expect(statuses.filter((x) => x === 429)).toHaveLength(17);
+      // The cap is on the address as folded, so a change of case is the same address.
+      expect((await call("POST", "/api/open-proposals", proposal({ email: "target@example.test" }), "192.0.2.99")).status).toBe(429);
+      expect(state.sent.filter((m) => m.to.email.toLowerCase() === "target@example.test")).toHaveLength(3);
     });
 
     it.each([
