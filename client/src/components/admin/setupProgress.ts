@@ -75,6 +75,7 @@
  * blank is a legitimate final answer belongs in the self-reported group above,
  * not in `fields`.
  */
+import { isCleared } from "@shared/brandCleared";
 import { HUMAN_NEEDS } from "@shared/needs";
 import type { ContentEditor } from "./wizardFacts";
 
@@ -338,6 +339,9 @@ export type SetupObservations = Partial<Record<SetupStepKey, SetupObservation>>;
  *  string. Whitespace does not count: a space bar is not a village name. */
 function hasValue(brand: BrandLike | null | undefined, field: SetupField): boolean {
   const group = brand?.[field.group];
+  // A line the village chose to leave empty (R088, shared/brandCleared.ts) is
+  // an answer: Identity is not unfinished because a village wants no tagline.
+  if (field.group === "project" && isCleared(group, field.key)) return true;
   return String(group?.[field.key] ?? "").trim().length > 0;
 }
 

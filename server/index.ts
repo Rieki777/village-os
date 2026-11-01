@@ -789,6 +789,7 @@ import {
 } from "./lib/resources";
 import { CAPITALS } from "../shared/capitals";
 import { defaultDisplayCurrency } from "../shared/money";
+import { overlayOrNone } from "../shared/brandCleared";
 import {
   addMember as addPatternMember,
   applyRoll,
@@ -2751,7 +2752,7 @@ function mergedConfig() {
   return {
     project: {
       name: pick(brand.project.name, p.name),
-      tagline: pick(brand.project.tagline, p.tagline),
+      tagline: overlayOrNone(brand.project, "tagline", p.tagline), // a village may clear it on purpose (R088): shared/brandCleared.ts
       memberName: pick(brand.project.memberName, p.memberName),
       catalystName: pick((brand.project as any).catalystName, p.catalystName), // three LABELS, gating nothing
       roleName: pick((brand.project as any).roleName, p.roleName), seatName: pick((brand.project as any).seatName, p.seatName), // why role and seat stay two words: shared/gameConfig.ts
@@ -2774,7 +2775,7 @@ function mergedConfig() {
       // controls hide themselves rather than post a stranger's investment
       // enquiry to an address this village does not own.
       contactEmail: pick((brand.project as any).contactEmail, p.contactEmail),
-      footerBlurb: pick((brand.project as any).footerBlurb, p.footerBlurb),
+      footerBlurb: overlayOrNone(brand.project, "footerBlurb", p.footerBlurb),
     },
     // THE TOKEN REGISTRY IS THE SINGLE SOURCE OF TRUTH FOR A TOKEN'S NAME
     // (Rye, 2026-08-14). Renaming Gratitude in the Mint has to change every
