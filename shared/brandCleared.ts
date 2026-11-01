@@ -56,7 +56,11 @@ export function isCleared(project: unknown, key: string): boolean {
  * well, so the stored document reads the way the page does; restoring leaves
  * the box empty, which inherits the platform default again.
  */
-export function withCleared<T extends Record<string, unknown>>(project: T, key: ClearableBrandField, on: boolean): T {
+export function withCleared<T extends Record<string, unknown>>(
+  project: T,
+  key: ClearableBrandField,
+  on: boolean,
+): T & { cleared: ClearableBrandField[] } {
   const rest = clearedFields(project).filter((k) => k !== key);
   const cleared = on ? [...rest, key] : rest;
   return { ...project, [key]: on ? "" : project[key] ?? "", cleared };
