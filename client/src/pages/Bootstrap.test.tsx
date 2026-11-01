@@ -84,8 +84,11 @@ describe("claiming a village", () => {
     await claim(f);
 
     expect(screen.getByText(/no email provider is configured/i)).toBeInTheDocument();
+    // The server builds the link from FRONTEND_URL, which may not answer yet.
+    // The page puts the same path and token on the address the founder is
+    // using right now (lib/claimLink.ts), which is the one that works.
     const link = screen.getByRole("link", { name: /set-password\?token=abc123/i });
-    expect(link).toHaveAttribute("href", "https://village.example/set-password?token=abc123");
+    expect(link).toHaveAttribute("href", `${window.location.origin}/set-password?token=abc123`);
   });
 
   /**
