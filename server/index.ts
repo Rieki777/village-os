@@ -18321,7 +18321,7 @@ ${inner}
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
   registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: String(getWorkWithUs().assistantName || "Maia"), timeZone: getSeasonConfig().timezone }) });
-  registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
+  registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, seasonState, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
   registerSessionRhythmRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify, lapseContext });
