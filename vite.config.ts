@@ -160,28 +160,38 @@ function routeChunkPreload(): Plugin {
 }
 
 /**
- * SMALL PURE MODULES SHARE ONE CHUNK.
+ * SMALL SHARED MODULES SHARE TWO LAZY CHUNKS.
  *
  * Rollup gives every shared module its own chunk, and CI charges every file a
  * whole 4 KB block (scripts/check-dist-budget.mjs), so a 300-byte API helper
- * imported by two pages costs 4 KB. A LEAF module (it imports nothing of
- * ours) under this many bytes of source, living in shared/ or client/src/lib/
- * and loaded only after the first page, goes into one lazy "smalls" chunk.
+ * imported by two pages costs 4 KB. A module under this many bytes of source,
+ * imported by two or more modules and loaded only after the first page, goes
+ * into "smalls" (plain modules in shared/, client/src/lib/, client/src/hooks/)
+ * or "smallui" (components). See `smallGroupOf` for the exact rule.
  *
- * Measured on the profile dashboard's composed tree (2026-10-31): 6620 KB
- * block-charged before, 6572 KB after, main JS unchanged at 613 KB, no circular
- * chunk, and nothing new preloaded by index.html. 3000 bytes left 4 KB of
- * headroom and 12000 bought nothing more. Measure both budgets with
- * check-dist-budget.mjs after any change.
+ * Measured on batch 62 (2026-10-31, with experimentalMinChunkSize 4096 below):
+ * 6500 KB block-charged with the old leaf-only rule, 6460 KB with this one
+ * (this rule without minChunkSize, 6528). The first page fetches the same
+ * code, about 242 KB gzipped either way, in more files: main JS reads 361 KB
+ * where it read 623 KB, because rollup moves the boot modules the groups
+ * import out of the entry chunk into shared boot chunks, which is why the
+ * MAX_BOOT_JS_KB budget exists. The groups are 31 KB ("smalls") and 58 KB
+ * ("smallui") gzipped. 6000 bytes measured 6492 KB; 12000 measured 6448 KB
+ * with a 77 KB "smallui", too much for a route's first paint to wait on.
+ * Measure all three budgets with check-dist-budget.mjs after any change.
  *
- * Three rules keep it safe, each one found by a build that broke without it:
- * - Never a module the entry imports statically, or the first page load
- *   fetches the whole chunk (it pulled 200 KB to boot when tried).
- * - Leaves only, and nothing the natural kit imports, or "smalls" and
- *   "natural" import each other and rollup warns of a circular chunk.
- * - Only shared/ and client/src/lib/: plain modules, never components.
+ * Four rules keep it safe, each one found by a build that broke without it:
+ * - `onlyExplicitManualChunks` (output, below). Without it rollup moves every
+ *   unassigned dependency of a group INTO the group, react included, and the
+ *   first page load then fetches the whole group (400 KB when tried).
+ * - Never a module the entry imports statically, for the same reason.
+ * - A group imports only packages, boot modules and its own or an earlier
+ *   group, and nothing the natural kit imports joins one, or two chunks import
+ *   each other and rollup warns of a circular chunk.
+ * - Two or more importers. A module with one importer already rides in that
+ *   importer's chunk, so grouping it saves nothing and only grows the group.
  */
-const SMALL_MODULE_BYTES = 6000;
+const SMALL_MODULE_BYTES = 9000;
 /**
  * The modules the entry imports statically, worked out on the first call and
  * kept for the rest of the build. `vite build` is one build per process here;
@@ -190,6 +200,52 @@ const SMALL_MODULE_BYTES = 6000;
 let eagerModules: Set<string> | null = null;
 /** The natural interface kit, grouped into its own chunk below. */
 const NATURAL_KIT = /components[\\/]natural[\\/]|lib[\\/]celebrated|shared[\\/]capabilities/;
+/**
+ * The two merged groups and where their members live. A "smalls" member is a
+ * plain module; a "smallui" member is a component. "smallui" may import
+ * "smalls" and never the reverse, so the two can never import each other.
+ */
+const SMALL_GROUPS = [
+  { name: "smalls", home: /[\\/]shared[\\/][^\\/]+\.ts$|client[\\/]src[\\/](lib|hooks)[\\/].+\.ts$/, mayImport: ["smalls"] },
+  { name: "smallui", home: /client[\\/]src[\\/]components[\\/].+\.tsx?$/, mayImport: ["smalls", "smallui"] },
+] as const;
+type SmallGroup = (typeof SMALL_GROUPS)[number]["name"];
+/** Each module's group, worked out once per build like `eagerModules`. */
+const smallVerdicts = new Map<string, SmallGroup | null>();
+
+type ModuleInfoOf = (id: string) => { code?: string | null; importers: readonly string[]; importedIds: readonly string[] } | null;
+
+/**
+ * Which merged group a module joins, or null. It must be small, lazy, shared
+ * by at least two importers (a module with one importer already rides in that
+ * importer's chunk and costs no block of its own), and import only packages,
+ * boot modules, or members of a group its own group may import. That last rule
+ * keeps each group closed, so no chunk of ours can import it back.
+ */
+function smallGroupOf(id: string, info: ModuleInfoOf, eager: Set<string>): SmallGroup | null {
+  const known = smallVerdicts.get(id);
+  if (known !== undefined) return known;
+  // Provisionally none, so an import cycle settles as "not small" instead of looping.
+  smallVerdicts.set(id, null);
+  const m = info(id);
+  const group = SMALL_GROUPS.find((g) => g.home.test(id));
+  const ok =
+    !!group &&
+    !!m?.code &&
+    m.code.length < SMALL_MODULE_BYTES &&
+    !eager.has(id) &&
+    m.importers.length >= 2 &&
+    !NATURAL_KIT.test(id) &&
+    !m.importers.some((by) => NATURAL_KIT.test(by)) &&
+    m.importedIds.every((dep) => {
+      if (dep.includes("node_modules") || eager.has(dep)) return true;
+      const of = smallGroupOf(dep, info, eager);
+      return of !== null && (group.mayImport as readonly string[]).includes(of);
+    });
+  const verdict = ok ? group.name : null;
+  smallVerdicts.set(id, verdict);
+  return verdict;
+}
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), routeChunkPreload()],
@@ -262,6 +318,8 @@ export default defineConfig({
          * off the day the total has room without it.
          */
         experimentalMinChunkSize: 4096,
+        // Groups hold only what manualChunks names: see SMALL_MODULE_BYTES.
+        onlyExplicitManualChunks: true,
         manualChunks: (id: string, { getModuleInfo, getModuleIds }) => {
           if (id.includes("lucide-react")) return "icons";
           /*
@@ -277,7 +335,7 @@ export default defineConfig({
           if (NATURAL_KIT.test(id)) {
             return "natural";
           }
-          // SMALL PURE MODULES, one lazy chunk: see SMALL_MODULE_BYTES above.
+          // SMALL SHARED MODULES, two lazy chunks: see SMALL_MODULE_BYTES above.
           // Only modules the entry does NOT import statically, so the first
           // page load fetches nothing it did not fetch before.
           if (!eagerModules) {
@@ -290,18 +348,7 @@ export default defineConfig({
               for (const dep of getModuleInfo(m)?.importedIds ?? []) stack.push(dep);
             }
           }
-          const code = getModuleInfo(id)?.code;
-          if (
-            code &&
-            code.length < SMALL_MODULE_BYTES &&
-            !eagerModules.has(id) &&
-            !(getModuleInfo(id)?.importers ?? []).some((by) => NATURAL_KIT.test(by)) &&
-            (getModuleInfo(id)?.importedIds ?? []).every((dep) => dep.includes("node_modules")) &&
-            /[\\/]shared[\\/][^\\/]+\.ts$|client[\\/]src[\\/]lib[\\/][^\\/]+\.ts$/.test(id)
-          ) {
-            return "smalls";
-          }
-          return undefined;
+          return smallGroupOf(id, getModuleInfo, eagerModules) ?? undefined;
         },
       },
     },

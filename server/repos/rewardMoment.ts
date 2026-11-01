@@ -52,6 +52,16 @@ export async function workCreditRowsSince(
   return rows;
 }
 
+/** Every claim whose consent paid this account something at or after the member's baseline, with the token. */
+export async function questConsentRefsSince(pool: Pool, accountId: string, userId: string): Promise<RowDataPacket[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT DISTINCT `source_ref`, `token_type` FROM `token_ledger` " +
+      `WHERE \`to_account\` = ? AND \`source\` = 'quest_consent' AND \`amount\` > 0 AND \`at\` >= ${BASELINE}`,
+    [accountId, userId],
+  );
+  return rows;
+}
+
 /** A member's cash rows marked paid at or after their baseline, oldest first. */
 export async function cashPaidRowsSince(pool: Pool, userId: string, limit: number): Promise<RowDataPacket[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
@@ -100,6 +110,12 @@ export async function roleNameRows(pool: Pool, seatIds: string[]): Promise<RowDa
     [seatIds],
   );
   return rows;
+}
+
+/** Every marker a member left: their baseline and each arrival they were shown. For erasure. */
+export async function forgetRewardMomentsOf(pool: Pool, userId: string): Promise<ResultSetHeader> {
+  const [res] = await pool.query<ResultSetHeader>("DELETE FROM `reward_moment_seen` WHERE `user_id` = ?", [userId]);
+  return res;
 }
 
 /** The proposal behind each accepted submission, as the proposer wrote it. */

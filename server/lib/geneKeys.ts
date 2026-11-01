@@ -83,7 +83,7 @@ export function parseSave(body: unknown): SaveParse {
   if (b.visibility !== undefined && b.visibility !== "show" && b.visibility !== "hide") {
     return { ok: false, problem: "Lines are shown or hidden." };
   }
-  if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "Maia's permission is a yes or a no." };
+  if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "The guide's permission is a yes or a no." };
   return {
     ok: true,
     chart,
@@ -98,7 +98,7 @@ export type SettingsParse = ({ ok: true } & GeneKeysSettingsPatch) | { ok: false
 export function parseSettings(body: unknown): SettingsParse {
   const b = (body ?? {}) as Record<string, unknown>;
   if (b.visibility !== undefined && b.visibility !== "show" && b.visibility !== "hide") return { ok: false, problem: "Lines are shown or hidden." };
-  if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "Maia's permission is a yes or a no." };
+  if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "The guide's permission is a yes or a no." };
   if (b.complement !== undefined && typeof b.complement !== "boolean") return { ok: false, problem: "Who complements me is a yes or a no." };
   if (b.maiaPlain !== undefined && typeof b.maiaPlain !== "boolean") return { ok: false, problem: "Talking plainly is a yes or a no." };
   if (b.cards !== undefined && typeof b.cards !== "boolean") return { ok: false, problem: "Session cards are a yes or a no." };

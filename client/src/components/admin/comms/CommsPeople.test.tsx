@@ -7,7 +7,7 @@
  * a reason, and Stop on a journey reaches that journey and no other.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CommsPeople from "@/components/admin/comms/CommsPeople";
 
@@ -80,7 +80,9 @@ describe("the People screen", () => {
     suppression = null;
     stubFetch();
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });

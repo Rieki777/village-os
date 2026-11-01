@@ -18,7 +18,7 @@ import mysql from "mysql2/promise";
 import { CREDITS, ensureVoiceToken, faucetFor, mint, VILLAGE_VOICE } from "./lib/economy";
 import { loadTokenRegistry, memberAccount, PLATFORM_TOKEN, RECOGNITION_FAUCET } from "./lib/ledger";
 import { loadVariables } from "./lib/variables";
-import { markRewardMomentSeen, pendingRewardMoment } from "./lib/rewardMoment";
+import { claimsAnnouncedHere, markRewardMomentSeen, pendingRewardMoment } from "./lib/rewardMoment";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
@@ -174,5 +174,31 @@ describe.skipIf(!configured)("a reward moment each time something lands", () => 
     await pay(u, CREDITS, 9, "quest_consent", "rm-s-claim-2");
     const next = await pendingRewardMoment(pool, u);
     expect(next.lines).toEqual([expect.objectContaining({ work: "Paint the shed" })]);
+  });
+
+  it("tells the quest page which consents it announces, so each is announced once", async () => {
+    const u = await makeMember("rm-once");
+    await claimFor(u, "rm-once-old", "Before the baseline");
+    await pay(u, CREDITS, 10, "quest_consent", "rm-once-old");
+    // No look yet, so no baseline: the reward moment announces nothing, and owns nothing.
+    expect(await claimsAnnouncedHere(pool, u)).toEqual(new Set());
+    await new Promise((r) => setTimeout(r, 1100));
+    await pendingRewardMoment(pool, u); // the baseline
+
+    await claimFor(u, "rm-once-paid", "Build the seed shelves");
+    await pay(u, CREDITS, 40, "quest_consent", "rm-once-paid");
+    await claimFor(u, "rm-once-thanks", "Thanked only");
+    await pay(u, PLATFORM_TOKEN, 5, "quest_consent", "rm-once-thanks");
+    await pay(u, CREDITS, 7, "role_cycle", "rm-once-role");
+
+    const owned = await claimsAnnouncedHere(pool, u);
+    // Earnings after the baseline, from a consent: named by the reward moment, so the quest page stays quiet.
+    expect(owned.has("rm-once-paid")).toBe(true);
+    // History, Gratitude only, and work that is not a quest remain the quest page's to celebrate.
+    expect(owned.has("rm-once-old")).toBe(false);
+    expect(owned.has("rm-once-thanks")).toBe(false);
+    expect(owned.has("rm-once-role")).toBe(false);
+    // And what it owns is a quest it names.
+    expect((await pendingRewardMoment(pool, u)).lines.map((l) => l.work)).toContain("Build the seed shelves");
   });
 });

@@ -35,6 +35,8 @@ import RolesForYourLines from "@/components/geneKeys/RolesForYourLines";
 import { setMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
 import { countryName, loadPlaces, searchPlaces, zoneName, type Place } from "@/components/geneKeys/places";
 import { BTN_GOLD, BTN_LINK, BTN_PLAIN, EYEBROW, HINT, INPUT } from "@/components/geneKeys/ui";
+import { useGuideName } from "@/hooks/useGuideName";
+import { guideNameAtSentenceStart } from "@shared/guideName";
 
 type Step = "form" | "choose" | "result" | "share" | "done";
 
@@ -94,6 +96,8 @@ export default function GeneKeysPage() {
   const [picked, setPicked] = useState<Picked | null>(null);
   const [visibility, setVisibility] = useState<"show" | "hide">("show");
   const [maia, setMaia] = useState(false);
+  // The village's own guide, or "the village guide" while it has no name.
+  const guide = useGuideName().name;
 
   useEffect(() => {
     if (!on || !user) return;
@@ -404,8 +408,8 @@ export default function GeneKeysPage() {
               <label className="flex min-h-11 cursor-pointer items-start gap-3">
                 <input type="checkbox" className="mt-1 h-5 w-5 accent-notice" checked={maia} onChange={(e) => setMaia(e.target.checked)} />
                 <span className="flex flex-col">
-                  <span className="font-medium">Let Maia use my lines to guide me</span>
-                  <span className="text-sm text-muted-foreground">Maia shapes quest and role suggestions to how you work best.</span>
+                  <span className="font-medium">Let {guide} use my lines to guide me</span>
+                  <span className="text-sm text-muted-foreground">{guideNameAtSentenceStart(guide)} shapes quest and role suggestions to how you work best.</span>
                 </span>
               </label>
               <p className={HINT}>You can change both any time on your profile.</p>

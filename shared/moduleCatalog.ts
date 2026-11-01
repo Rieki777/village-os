@@ -418,7 +418,7 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
       "Gene Keys lines and Human Design type, read from a member's birth details on their own device",
       "A seal on the portrait, two words and two numbers, which a member can hide at any time",
       "A circle sees which of the six lines it holds, and a gap becomes an invitation to hold one",
-      "Role suggestions say why they fit, and Maia shapes her offers to each member's type when they say yes",
+      "Role suggestions say why they fit, and the village guide shapes its offers to each member's type when they say yes",
     ],
     forWhom: "Villages forming teams and roles that want to understand the people who fill them.",
     setupSummary: "Nothing to set up. Members find their lines from their character page.",

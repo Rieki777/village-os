@@ -36,9 +36,11 @@ import {
   prosperityLadder,
   residentLadder,
   stewardLadder,
+  holdsRoleNow,
   NO_MOONS,
   type SeatingFacts,
 } from "./pathLadders";
+import { climbLadder, type LadderStage } from "./admission";
 
 /** A village whose seatings lapse at a season turn, currently in season two. */
 const CTX: LapseContext = { currentSeasonId: "s2", cadence: "season_turn", now: new Date("2026-06-01T00:00:00Z") };
@@ -530,5 +532,55 @@ describe("particularsFor", () => {
     const out = particularsFor(["steward"], { seatings: [orphan] }, moon);
     expect(out.steward!.seats[0]!.roleName).toBe("role-1");
     expect(out.steward!.seats[0]!.live).toBe(true);
+  });
+});
+
+
+/*
+ * ROLE HOLDER IS READ, NOT GRANTED (Rye, 2026-10-31: "we want this to work
+ * automatically"). The stage ladder's Role Holder rung asks `holdsRoleNow`,
+ * which is the steward ladder's "Mandate current" test, so the two never
+ * disagree about one person.
+ */
+describe("holding a role lifts the Role Holder stage on its own", () => {
+  it("is true for a live, current member seating and false once it ends or lapses", () => {
+    expect(holdsRoleNow([seating()], CTX)).toBe(true);
+    expect(holdsRoleNow([seating({ endedAt: new Date("2026-05-01T00:00:00Z") })], CTX)).toBe(false);
+    expect(holdsRoleNow([seating({ seasonId: "s1" })], CTX)).toBe(false);
+    expect(holdsRoleNow([seating({ termEndsAt: new Date("2026-05-01T00:00:00Z") })], CTX)).toBe(false);
+    expect(holdsRoleNow([], CTX)).toBe(false);
+  });
+
+  it("agrees with the steward ladder's Mandate current rung on every case", () => {
+    const cases = [
+      [seating()],
+      [seating({ seasonId: "s1" })],
+      [seating({ endedAt: new Date("2026-05-01T00:00:00Z") })],
+      [seating({ isExample: true })],
+      [seating({ roleIsExample: true })],
+      [seating({ holderKind: "agent" })],
+      [],
+    ];
+    for (const rows of cases) {
+      expect(holdsRoleNow(rows, CTX)).toBe(rung(stewardLadder(rows, CTX, NO_MOONS), "mandate").lit);
+    }
+  });
+
+  it("never counts an example seating or an agent", () => {
+    expect(holdsRoleNow([seating({ isExample: true })], CTX)).toBe(false);
+    expect(holdsRoleNow([seating({ roleIsExample: true })], CTX)).toBe(false);
+    expect(holdsRoleNow([seating({ holderKind: "agent" })], CTX)).toBe(false);
+  });
+
+  it("the shipped ladder reads Role Holder from a role, and a grant still sets a floor", () => {
+    const stages = GAME_CONFIG.stages;
+    expect(stages.find((s) => s.id === "role-holder")?.rule.type).toBe("role");
+    const member = { membershipGranted: true, stageGranted: null } as any;
+    const holdsRole = (s: LadderStage) => s.rule.type === "role" || s.rule.type === "account" || s.rule.type === "default" || s.rule.type === "membership";
+    const none = (s: LadderStage) => s.rule.type === "account" || s.rule.type === "default" || s.rule.type === "membership";
+    expect(climbLadder(stages, member, holdsRole)).toBe("role-holder");
+    expect(climbLadder(stages, member, none)).toBe("member");
+    // The role ends, and a grant made earlier still holds them where it put them.
+    expect(climbLadder(stages, { ...member, stageGranted: "role-holder" }, none)).toBe("role-holder");
   });
 });
