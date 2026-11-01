@@ -11,7 +11,7 @@
  * hears that the yes admitted nobody.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -45,7 +45,8 @@ async function move(status: string) {
 }
 
 describe("moving a submission tells the desk what happened", () => {
-  afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
   describe("a request to join", () => {
     beforeEach(() => serve("membership-request"));

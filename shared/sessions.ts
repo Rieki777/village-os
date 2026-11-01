@@ -40,6 +40,7 @@
 import type { FilledIn } from "./sessionOnBehalf";
 import type { ItemVotes } from "./sessionVotes";
 import type { TaskCard } from "./sessionTasks";
+import type { CheckView } from "./sessionCheck";
 
 // ── Stages ───────────────────────────────────────────────────────────────────
 
@@ -1024,6 +1025,12 @@ export interface SessionView {
    * the circle has never closed a session.
    */
   circleLastMetAt: string | null;
+  /**
+   * Each checked proposal's read (0297, shared/sessionCheck.ts), for everybody
+   * who sees the room. Null, or absent in an older fixture, when the module
+   * that offers checks is not open to members.
+   */
+  check?: CheckView | null;
   me: { userId: number; joined: boolean; facilitates: boolean; secretary: boolean; admin: boolean };
 }
 
@@ -1066,6 +1073,7 @@ export interface SessionListRow {
  *   POST   /api/sessions/:id/entries              { kind, text, itemId?, ownerSeatId?, dueOn? } -> { id }
  *   PATCH  /api/sessions/:id/entries/:entryId     { claim?, release?, ownerSeatId?, text?, dueOn?, status? } -> { ok }
  *   DELETE /api/sessions/:id/entries/:entryId     { ok }
+ *   POST   /api/sessions/:id/entries/:entryId/check   {} -> { ok } (a proposal's read, 0297: shared/sessionCheck.ts)
  *   POST   /api/sessions/:id/respond              { target, value, text? } -> { ok } (never for someone else)
  *   POST   /api/sessions/:id/on-behalf/:fillId/undo   {} -> { ok } (shared/sessionOnBehalf.ts)
  *   POST   /api/sessions/:id/act                  { action: SessionAction } -> { ok, state }

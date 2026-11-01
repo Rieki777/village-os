@@ -25,6 +25,7 @@ import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { STATE_WORDS, isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
+import { coordinatingCircle } from "@shared/coordinatingCircle";
 
 interface RoleEntry {
   id: string;
@@ -430,6 +431,16 @@ export default function Roles() {
     historyShown,
   };
 
+  // The circle the others link back to is the village's own top circle, or
+  // none. This line named "the General Coordinating Circle" to every village.
+  // Held invisible until /api/org answers, so the sentence never grows a
+  // clause in front of the reader.
+  const coordinator = coordinatingCircle(circles);
+  const orgPending = roles === null && !failed;
+  const circlesHow = `Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)${
+    coordinator ? `, and links back to the ${String(coordinator.name)}.` : "."
+  }`;
+
   // Grouped by circle, in the order the village sorted its circles, with a
   // dormant circle's seats still listed under it.
   const circleOrder = new Map(circles.map((c, i) => [c.name, i]));
@@ -488,13 +499,13 @@ export default function Roles() {
               className="mb-14 grid sm:grid-cols-3 gap-4"
             >
               {[
-                { label: "Circles", description: "Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on), and links back to the General Coordinating Circle." },
+                { label: "Circles", description: circlesHow, pending: orgPending },
                 { label: "Roles", description: "Specific responsibilities inside a circle. One person can hold many roles. If a person leaves, the role stays and gets reassigned." },
                 { label: "Consent", description: "Decisions move forward when no one has a reasoned objection that the proposal would cause harm or block the aim. Everyone loving them is not the bar." },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl bg-muted/30 border border-border p-5">
                   <div className="text-sm font-bold text-foreground mb-1">{item.label}</div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{item.description}</p>
+                  <p className={`text-xs text-muted-foreground leading-relaxed${"pending" in item && item.pending ? " invisible" : ""}`}>{item.description}</p>
                 </div>
               ))}
             </motion.div>

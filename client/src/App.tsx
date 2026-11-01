@@ -180,6 +180,7 @@ const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
 const VillageEmail = lazyPage(() => import("./pages/VillageEmail"));
 const GoodNeighbor = brochurePage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
+const SetupGame = lazyPage(() => import("./pages/SetupGame"));
 const ProjectHistory = brochurePage(() => import("./pages/ProjectHistory"));
 const Bootstrap = lazyPage(() => import("./pages/Bootstrap"));
 const Feedback = lazyPage(() => import("./pages/Feedback"));
@@ -262,6 +263,7 @@ function Router() {
     <Switch>
       <Route path="/" component={LandingRoute} />
       <Route path="/journey-to-launch" component={JourneyToLaunch} />
+      <Route path="/setup-game" component={SetupGame} />
       <Route path="/project-history" component={ProjectHistory} />
       <Route path="/claim" component={Bootstrap} />
       <Route path="/feedback" component={Feedback} />

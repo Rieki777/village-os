@@ -495,7 +495,15 @@ describe("/prosperity", () => {
     workWithUs = { assistantName: "Juniper" };
     show(ProsperityJourney);
     fireEvent.click(await screen.findByText("Submit Business Proposal"));
-    await waitFor(() => expect(document.body.textContent).toContain("Juniper, our guide, can help you shape it."));
+    await waitFor(() => expect(document.body.textContent).toContain("Juniper can help you shape it."));
+  });
+
+  it("says the village guide in the proposal step while the guide has no name", async () => {
+    workWithUs = { assistantName: "" };
+    show(ProsperityJourney);
+    fireEvent.click(await screen.findByText("Submit Business Proposal"));
+    await waitFor(() => expect(document.body.textContent).toContain("mission. The village guide can help you shape it."));
+    expect(document.body.textContent).not.toContain("Maia");
   });
 
   it("emails the packet request with the village's own subject line", async () => {

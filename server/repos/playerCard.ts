@@ -103,7 +103,7 @@ export async function readCardRows(
     ),
     q(
       "SELECT s.circle_id, COUNT(*) AS n FROM live_session_entries e JOIN live_sessions s ON s.id = e.session_id " +
-        `WHERE e.kind = 'decision' AND e.created_at >= ? AND s.circle_id IN (SELECT circle_id FROM org_roles WHERE id IN (${held})) ` +
+        `WHERE e.kind = 'decision' AND e.status = 'done' AND e.created_at >= ? AND s.circle_id IN (SELECT circle_id FROM org_roles WHERE id IN (${held})) ` +
         "GROUP BY s.circle_id",
       [window.threeMoonsFrom, ...ids],
     ),
@@ -241,7 +241,7 @@ export async function readSignTables(
         )
       : null,
     want("live_session_entries")
-      ? q("SELECT session_id, kind, created_at FROM live_session_entries WHERE kind = 'decision' AND created_at >= ?", [since])
+      ? q("SELECT session_id, kind, status, created_at FROM live_session_entries WHERE kind = 'decision' AND status = 'done' AND created_at >= ?", [since])
       : null,
   ]);
   const rows: SignRows = {};

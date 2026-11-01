@@ -38,6 +38,8 @@ describe.skipIf(!configured)("the circle card's live parts, on a real schema", (
   let handler: Handler;
   let admin = true;
   let sessions: "members" | "off" = "members";
+  /** The card route's `viewer`, from the last `read()`. */
+  let viewer: { signedIn: boolean; mayPropose: boolean; sessionsOn: boolean };
   const q = async (sql: string, params: unknown[] = []) => (await pool.query<any[]>(sql, params))[0]; // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned, never a production table
 
   async function read(): Promise<CircleCard> {
@@ -54,6 +56,7 @@ describe.skipIf(!configured)("the circle card's live parts, on a real schema", (
     };
     await handler({ params: { id: "c-garden" }, headers: {} }, res);
     expect(out.status).toBe(200);
+    viewer = out.body.viewer;
     return out.body.card;
   }
   // Loosely typed on purpose: each case reads the one kind its key draws as.
@@ -111,9 +114,12 @@ describe.skipIf(!configured)("the circle card's live parts, on a real schema", (
     const met = await session("c-garden", thisMoon, [1, 2]);
     const elsewhere = await session("c-other", thisMoon, [1, 2]);
     await session("c-garden", lastMoon, [1]);
+    // A decision counts once the room consents to it (`done`); one still proposed, or set aside, is not one.
     await q(
-      "INSERT INTO `live_session_entries` (`session_id`, `kind`, `text`, `author_no`, `created_at`) VALUES (?, 'decision', 'Plant the beans', 1, ?), (?, 'decision', 'Elsewhere', 1, ?)",
-      [met, thisMoon, elsewhere, thisMoon],
+      "INSERT INTO `live_session_entries` (`session_id`, `kind`, `text`, `status`, `author_no`, `created_at`) VALUES " +
+        "(?, 'decision', 'Plant the beans', 'done', 1, ?), (?, 'decision', 'Elsewhere', 'done', 1, ?), " +
+        "(?, 'decision', 'Still being proposed', 'open', 1, ?), (?, 'decision', 'Set aside', 'parked', 1, ?)",
+      [met, thisMoon, elsewhere, thisMoon, met, thisMoon, met, thisMoon],
     );
     // A rhythm the circle keeps, written the way Live Sessions stores one (0271).
     await q(
@@ -156,10 +162,13 @@ describe.skipIf(!configured)("the circle card's live parts, on a real schema", (
     expect(meet.slot.kind === "shown" && meet.slot.value.links).toEqual([{ label: "Open Live Sessions", href: "/sessions" }]);
     const whole = section(card, "wholeness");
     expect(whole.slot.kind === "shown" && whole.slot.value.lines[0]).toContain("how everyone is arriving");
+    expect(viewer.sessionsOn).toBe(true);
     sessions = "off";
     const off = await read();
     expect(section(off, "meet").slot).toEqual({ kind: "unread" });
     expect(section(off, "wholeness").slot).toEqual({ kind: "unread" });
+    // The page reads the same answer, and asks Live Sessions nothing.
+    expect(viewer.sessionsOn).toBe(false);
     sessions = "members";
   });
 
@@ -178,6 +187,7 @@ describe.skipIf(!configured)("the circle card's live parts, on a real schema", (
       value: { lines: ["Due for review on 21 Dec 2026, the last day of this season."], links: [] },
     });
     for (const key of ["signs", "meet", "wholeness", "tensions"]) expect(section(card, key).slot).toEqual({ kind: "unread" });
+    expect(viewer.sessionsOn).toBe(false);
     admin = true;
   });
 });

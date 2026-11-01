@@ -920,8 +920,17 @@ jobs:
         # a lane can run the identical measurement before pushing. The budget
         # numbers still live here, and the script reads them from this file
         # when the environment does not supply them, so there is one authority.
+        #
+        # MAX_BOOT_JS_KB is every script index.html loads, in real bytes, and
+        # it is the number a visitor pays before the first page renders. Main
+        # JS reads one file, so it fell from 620 to 362 KB on 2026-10-31 when
+        # the small-module groups in vite.config.ts moved react and the shared
+        # boot modules into their own boot chunks, while the first page loaded
+        # the same 731 KB. So main JS came DOWN to 400 at the same time, and
+        # this ceiling sits at that day's figure plus a little.
         env:
-          MAX_MAIN_JS_KB: 700
+          MAX_MAIN_JS_KB: 400
+          MAX_BOOT_JS_KB: 750
           MAX_TOTAL_DIST_KB: 6600
           MAX_SINGLE_IMAGE_KB: 400
         run: |

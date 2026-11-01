@@ -169,7 +169,15 @@ export interface PlayerRoleIn {
   stepBack?: Read<string | null>;
   timeCommitment?: Read<string | null>;
   worksWith: Read<WorksWithIn[]>;
+  /** What the village has handed to this role (`capability_holding`). */
   powers: Read<PowerIn[]>;
+  /**
+   * A10: the powers this role's classes suit, by the village's own affinity
+   * map, with every power held anywhere already taken out. Shown only when
+   * nothing is handed over, and only as information. Optional, so a host that
+   * does not read it draws the card exactly as before.
+   */
+  suited?: Read<PowerIn[]>;
   tensions: Read<TensionIn[]>;
   /**
    * The reader holds this role too. A holder reads its open words and answers
@@ -413,7 +421,8 @@ export interface RoleOut {
   holdingWell: HoldingWellOut;
   notMine: { heading: string; term: string | null; items: Slot<string[]> };
   runbook: { heading: string; text: Slot<string> };
-  powers: { heading: string; items: Slot<string[]> };
+  /** `note` is set only on the "Suited to" reading, and says nothing was handed over. */
+  powers: { heading: string; items: Slot<string[]>; note: string | null };
   tensions: Slot<TensionsOut>;
   /**
    * What this reader can do about a tension here: "raise" for a member who
@@ -718,6 +727,14 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
           )
         : empty(W.noPowers);
   const anyShared = !!role.powers?.some((p) => p.sharedWith?.length);
+  // A10: nothing handed over, so say what the role suits, once per power and
+  // never a power it already holds. An unread or empty list leaves the card
+  // saying "No powers held", which is still true.
+  const heldKeys = new Set((role.powers ?? []).map((p) => p.key));
+  const suited = (role.suited ?? []).filter(
+    (p, i, all) => !heldKeys.has(p.key) && all.findIndex((q) => q.key === p.key) === i,
+  );
+  const showSuited = role.powers !== undefined && role.powers.length === 0 && suited.length > 0;
 
   return {
     id: role.id,
@@ -753,7 +770,9 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     holdingWell: ccos.holdingWell,
     notMine: { heading: W.notMine, term: roleTerm("notMine", terms), items: wordsSlot(role.notMine, W.notWritten) },
     runbook: { heading: W.runbook, text: textSlot(role.runbook, W.notWritten) },
-    powers: { heading: anyShared ? W.powersShared : W.powers, items: powers },
+    powers: showSuited
+      ? { heading: W.suitedTo, items: shown(suited.map((p) => p.label)), note: W.suitedNote }
+      : { heading: anyShared ? W.powersShared : W.powers, items: powers, note: null },
     tensions: tensionsFor(role, input),
     tensionDoor: tensionDoorFor(role, input),
     handover: roleHandover(role),

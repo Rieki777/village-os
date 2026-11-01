@@ -39,7 +39,8 @@
  */
 import { reservationsForMember } from "./housing";
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import type { SeatingFacts } from "../lib/pathLadders";
+import { holdsRoleNow, type SeatingFacts } from "../lib/pathLadders";
+import type { LapseContext } from "../lib/orgChart";
 
 const COLUMNS =
   "a.id, a.org_role_id, a.holder_kind, a.user_id, a.season_id, a.term_ends_at, " +
@@ -89,6 +90,28 @@ const toRow = (r: RowDataPacket): SeatingFacts => ({
  * Scoped to the member in the statement, never by a check the caller is
  * trusted to have made first, so an id from somewhere else matches no row.
  */
+/**
+ * Everyone who holds a role right now, for the whole village in ONE query.
+ *
+ * The stage ladder's Role Holder rung reads it. A roster computes a stage for
+ * every member, so it asks once and looks each person up, the same discipline
+ * as `consentedCounts` and `paidByVillage`. Only live member seatings are read;
+ * `holdsRoleNow` then applies the lapse rule, which is derived and has no column.
+ */
+export async function roleHoldersNow(pool: Pool, ctx: LapseContext): Promise<Set<string>> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM org_role_assignments a ` +
+      "LEFT JOIN org_roles r ON r.id = a.org_role_id " +
+      "WHERE a.holder_kind = 'member' AND a.ended_at IS NULL",
+  );
+  const byMember = new Map<string, SeatingFacts[]>();
+  for (const row of rows) {
+    const id = String(row.user_id);
+    byMember.set(id, [...(byMember.get(id) ?? []), toRow(row)]);
+  }
+  return new Set(Array.from(byMember).filter(([, seatings]) => holdsRoleNow(seatings, ctx)).map(([id]) => id));
+}
+
 export async function seatingsForMember(pool: Pool, userId: string): Promise<SeatingFacts[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT ${COLUMNS} FROM org_role_assignments a ` +

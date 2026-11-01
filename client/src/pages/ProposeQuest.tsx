@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { fetchConfigCached } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import GuideChat from "@/components/GuideChat";
+import { useGuideName } from "@/hooks/useGuideName";
 import { sendProposal, assistantAvailable } from "@/lib/proposals";
 import type { IdeaHold, IdeaReceipt } from "@shared/questIdeas";
 
@@ -70,11 +71,10 @@ export default function ProposeQuest() {
    * "what do you need" field, and the fine print under the submit button.
    */
   const [projectName, setProjectName] = useState("village");
-  // LANE Q: the guide's name is a per-deployment persona set in the Setup
-  // Wizard, and this page hardcoded "Maia" in two places. A fork that renamed
-  // its guide had the button and the chat header calling her by the platform's
-  // first tenant's name. WorkWithUs.tsx already reads it from this document.
-  const [assistantName, setAssistantName] = useState("Maia");
+  // The guide's name is the village's own (workWithUs.assistantName), and an
+  // unnamed guide reads "the village guide" (shared/guideName.ts).
+  const guide = useGuideName();
+  const assistantName = guide.name;
   const [aiAvailable, setAiAvailable] = useState(false);
   const [mode, setMode] = useState<"ai" | "form">("form");
   const [form, setForm] = useState<QuestProposal>({
@@ -92,10 +92,6 @@ export default function ProposeQuest() {
   useEffect(() => {
     fetchConfigCached().then((c) => { if (c?.project?.name) setProjectName(c.project.name); });
     assistantAvailable().then((ok) => { setAiAvailable(ok); if (ok) setMode("ai"); });
-    fetch("/api/work-with-us-config")
-      .then((r) => r.json())
-      .then((w) => { if (w?.assistantName) setAssistantName(w.assistantName); })
-      .catch(() => { /* the default stands */ });
   }, []);
 
   // Prefill for a signed-in member, without clobbering anything they've typed.
@@ -253,7 +249,7 @@ export default function ProposeQuest() {
       </section>
 
       {/* Talk it through, or fill it in yourself */}
-      {aiAvailable && (
+      {aiAvailable && guide.loaded && (
         <div className="bg-background">
           <div className="container max-w-2xl mx-auto flex flex-wrap gap-2 pb-6">
             <button
@@ -276,7 +272,7 @@ export default function ProposeQuest() {
         </div>
       )}
 
-      {mode === "ai" && aiAvailable && (
+      {mode === "ai" && aiAvailable && guide.loaded && (
         <section className="pb-24 bg-background">
           <div className="container max-w-2xl mx-auto">
             <GuideChat

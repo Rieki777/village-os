@@ -24,7 +24,7 @@
  * three states, not the site shell around them.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
@@ -99,7 +99,9 @@ describe("the review queue tells three states apart", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -247,6 +249,7 @@ describe("the change limit on a batch card", () => {
     vi.restoreAllMocks();
   });
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -369,6 +372,7 @@ describe("what the review page says after an accept", () => {
     vi.restoreAllMocks();
   });
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -715,6 +719,7 @@ describe("each key opens its own section, and only refusing both closes the page
     vi.restoreAllMocks();
   });
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -798,6 +803,7 @@ describe("the role card preview on a proposed seat", () => {
     vi.restoreAllMocks();
   });
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
