@@ -18647,13 +18647,13 @@ ${inner}
     // The VALUE token — the one the cycle pool distributes across recognition.
     // Named in the token registry (Admin → Tokens), so a fork that renames its
     // token there changes every public mention at once. Distinct from the
-    // recognition currency above on purpose: recognition is the signal with no
-    // financial value; this is the tracked value it steers each cycle.
+    // recognition currency above on purpose. `names` is every registry token's
+    // name by slug, so a page names stay or library credits as renamed (R084).
     const valueSlug = String(stringVar("gratitude.pool_token"));
     const valueDef = tokenDef(valueSlug);
     res.json({
       project: m.project,
-      currency: { ...m.currency, value: { slug: valueSlug, name: valueDef?.name ?? valueSlug } },
+      currency: { ...m.currency, value: { slug: valueSlug, name: valueDef?.name ?? valueSlug }, names: Object.fromEntries(allTokens().map((t) => [t.slug, t.name])) },
       images: m.images,
       paths: GAME_CONFIG.paths,
       stages: servedLadder(mergedConfig().project.commitmentName),

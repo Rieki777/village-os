@@ -98,6 +98,9 @@ export interface PublicGameConfig {
      *  every page that mentions it. Recognition itself carries no financial
      *  value; this is the tracked value it steers each cycle. */
     value?: { slug: string; name: string };
+    /** Every registry token's name, by slug (readiness R084). Read through
+     *  `useTokenNameFor` (client/src/hooks/useTokenNameFor.ts). Older servers omit it. */
+    names?: Record<string, string>;
   };
   images: BrandImages;
   paths: { id: string; label: string; role: string; route: string }[];

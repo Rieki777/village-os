@@ -1,6 +1,6 @@
 {
   "note": "Village facts welded into client copy, recorded per file and per rule. This list only ever shrinks. Read scripts/check-village-facts.mjs before editing it, and lower PENDING_CEILING in that file to match the total here.",
-  "total": 14,
+  "total": 12,
   "rules": {
     "money": {
       "what": "a currency amount in display text",
@@ -35,9 +35,7 @@
     "client/src/pages/Admin.tsx::token-name": 2,
     "client/src/pages/Admin.tsx::unit": 2,
     "client/src/pages/Contribute.tsx::money": 1,
-    "client/src/pages/MasterPlan.tsx::unit": 1,
-    "client/src/pages/Stay.tsx::money": 1,
-    "client/src/pages/Wallet.tsx::money": 1
+    "client/src/pages/MasterPlan.tsx::unit": 1
   },
   "entries": {
     "client/src/components/SwapCard.tsx::money": {
@@ -67,12 +65,6 @@
     "client/src/pages/MasterPlan.tsx::unit": {
       "since": "2026-09-03",
       "note": "The land tile's label at line 36, which is the fallback when a village states no unit. A hectares village that leaves the note box empty publishes its land in acres."
-    },
-    "client/src/pages/Stay.tsx::money": {
-      "since": "2026-09-03"
-    },
-    "client/src/pages/Wallet.tsx::money": {
-      "since": "2026-09-03"
     }
   }
 }
