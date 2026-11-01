@@ -180,7 +180,7 @@ describe.skipIf(!DB_CONFIGURED)("the share image", () => {
 
   it("renders for a quest with no poster of its own", async () => {
     // No starter carries a poster, so this is the paint-a-scene path.
-    const res = await fetch(`${BASE}/api/og/quest/ex-quest-meeting-notes`);
+    const res = await fetch(`${BASE}/api/og/quest/ex-quest-meeting-notes`); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
     expect(res.status).toBe(200);
     const bytes = Buffer.from(await res.arrayBuffer());
     expect(bytes.subarray(0, 3).toString("hex")).toBe("ffd8ff");
@@ -251,6 +251,10 @@ describe.skipIf(!DB_CONFIGURED)("a crew gets its room when the village has rooms
       { token: claim, password: "CrewTest123!" }, "");
     founder = String(pw.json?.token ?? "");
     expect(founder, "the founder must hold a session").toBeTruthy();
+    // A starter is inert until a founder keeps it (A8 / 19g), so a crew forms
+    // on one only once it is a real quest, which is what a village would do.
+    const kept = await call("POST", `/api/admin/quests/${QUEST_ID}/keep`, { valueMinor: 1000000 });
+    expect(kept.status, `the starter must be kept: ${JSON.stringify(kept.json)}`).toBe(200);
     // Messaging ships OFF. A crew only gains a room once a village turns it on.
     const on = await call("PUT", "/api/admin/modules/messaging/lifecycle", { lifecycle: "members" });
     expect(on.status, "messaging must switch on").toBe(200);
