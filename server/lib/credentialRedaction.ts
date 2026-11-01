@@ -73,7 +73,7 @@ function originOf(text: string): string | null {
 }
 
 /** A URL-looking token inside free text, up to whitespace, a bracket or a quote. */
-const URL_TOKEN = /[a-z][a-z0-9+.-]*:\/\/[^\s()<>"']+/gi;
+const URL_TOKEN = /[a-z][a-z0-9+.-]{0,31}:\/\/[^\s()<>"']+/gi;
 
 /** Every credential-shaped URL inside the text swapped for its origin and the marker. */
 function swapCredentialUrls(text: string): string {
