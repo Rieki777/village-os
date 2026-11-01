@@ -153,6 +153,7 @@ const registry = await loadShared("modules");
 const launch = await loadShared("launchRequirements", ["modules"]);
 const poolLib = await loadShared("modulePool", ["modules"]);
 const guilds = await loadShared("guilds");
+const setupNeeds = await loadShared("setupNeeds");
 
 const { MODULES, moduleListingProblems, priceLine, isPaid } = registry;
 const { poolStatus, modulePayoutProblems } = poolLib;
@@ -261,6 +262,30 @@ console.log("\nGuild manifest (shared/guilds.ts:guildProblems)");
     note(`seed(s) ${toBuild.map((s) => s.id).join(", ")} land in a slot that does not exist yet; their flow is modelled and not built.`);
   }
   note("Whether each guild's consequence and undo lines are TRUE. The shape is checked; a reviewer reads the words against the code.");
+}
+
+// ── 1c. The setup needs, from the one function that owns their rules ─────────
+//
+// Everything besides seeds a module waits for: a dial, words, content, a
+// person holding a power, a live check (shared/setupNeeds.ts). A module whose
+// setup is not "none" and that declares neither a required need nor a seed
+// cannot tell the setup game, Journey to Launch or a founder what it needs, so
+// it fails here. Dial and capability references are resolved by
+// shared/setupNeeds.test.ts, which loads the registries this script cannot.
+
+console.log("\nSetup needs (shared/setupNeeds.ts:setupNeedsProblems)");
+{
+  const problems = setupNeeds.setupNeedsProblems(targets);
+  if (problems.length) {
+    for (const p of problems) console.log(`    ${p}`);
+    bad(`setup needs problems for the selected module(s): ${problems.length}`);
+  } else {
+    ok("setup needs problems for the selected module(s): 0");
+  }
+  for (const m of targets) {
+    const unverified = (m.setupNeeds ?? []).filter((n) => n.certainty === "unverified");
+    if (unverified.length) note(`${m.id}: setup need(s) ${unverified.map((n) => n.id).join(", ")} are marked unverified.`);
+  }
 }
 
 // ── 2. Per listing ───────────────────────────────────────────────────────────

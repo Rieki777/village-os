@@ -9,6 +9,7 @@
  * Modules tab — platform language, never one village's brand.
  */
 import type { Capability } from "./capabilities";
+import type { SetupNeed } from "./setupNeeds";
 
 export type ModuleLifecycle = "off" | "preview" | "members" | "public";
 
@@ -359,6 +360,15 @@ export interface ModuleDef {
    * `group`. Every `vendor.secretKeys` slot must be planted by a seed here.
    */
   guild?: readonly string[];
+  /**
+   * THE NEEDS: everything besides seeds this module waits for, a dial to set,
+   * words to write, content to make, a person to hold a power, a live check
+   * (shared/setupNeeds.ts). A seed stays in `guild` and is never repeated here.
+   * Optional in the TYPE only so test fixtures stay small; `setupNeedsProblems`
+   * refuses a module whose setup is not "none" with neither a required need
+   * nor a seed.
+   */
+  setupNeeds?: readonly SetupNeed[];
   /** The named counterparty. Required at connected and managed, absent at included. */
   vendor?: ModuleVendor;
   /**
@@ -592,6 +602,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "map",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-circle",
+        kind: "content",
+        ref: "map",
+        title: "Draw one circle",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "know-and-decide",
@@ -628,6 +653,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "resources",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-flow",
+        kind: "content",
+        ref: "resources",
+        title: "Show how one resource flows",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=resources-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "village-content",
     group: "know-and-decide",
@@ -752,6 +792,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "stays",
     guild: ["stripe-secret-key", "stripe-webhook"],
+    setupNeeds: [
+      {
+        id: "first-room",
+        kind: "content",
+        ref: "stays",
+        title: "Post one room and a price",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=stays-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -787,6 +842,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "automation",
     guild: ["riverside-webhook-secret", "anthropic-api-key"],
+    setupNeeds: [
+      {
+        id: "first-recording",
+        kind: "content",
+        ref: "automation",
+        title: "Feed it one call recording",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=calls-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -813,6 +883,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "health",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-measurement",
+        kind: "content",
+        ref: "health",
+        title: "Record one measurement of the land",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=health-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "village-content",
     group: "know-and-decide",
@@ -836,6 +921,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "library",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-item",
+        kind: "content",
+        ref: "library",
+        title: "Put one item on the shelves",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=library-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -880,6 +980,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "badges",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-badge",
+        kind: "content",
+        ref: "badges",
+        title: "Create a badge and award it once",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=badges-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "recognise",
@@ -898,6 +1013,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "exchange",
     guild: ["stripe-secret-key", "stripe-webhook"],
+    setupNeeds: [
+      {
+        id: "first-listing",
+        kind: "content",
+        ref: "exchange",
+        title: "List a token and post its price",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=exchange-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -941,6 +1071,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "redemption",
     guild: [],
+    setupNeeds: [
+      {
+        id: "process-text",
+        kind: "decision",
+        ref: "redemption.process_text",
+        title: "Write how redemption works here",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/redemption#setting-redemption.process_text",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     // A redemption row names the member who asked, what they asked for, and
     // who decided. That is a named person's financial request.
@@ -1002,6 +1147,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "commerce",
     guild: ["stripe-secret-key", "stripe-webhook"],
+    setupNeeds: [
+      {
+        id: "first-product",
+        kind: "content",
+        ref: "commerce",
+        title: "Create one product",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=products",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -1039,6 +1199,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "crowdpool",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-campaign",
+        kind: "content",
+        ref: "crowdpool",
+        title: "Link one hub campaign",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/crowdpool#setting-config",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     // The cache holds hub-public campaign content and the public names its
     // feed already shows. No member of THIS village appears in it at all.
@@ -1081,6 +1256,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "tools",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-tool",
+        kind: "content",
+        ref: "tools",
+        title: "Add one tool card",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=tools-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -1120,6 +1310,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "events",
     guild: [],
+    setupNeeds: [
+      {
+        id: "hemisphere",
+        kind: "decision",
+        ref: "calendar.hemisphere",
+        title: "Say which hemisphere this village is in",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/events#setting-calendar.hemisphere",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -1337,6 +1542,34 @@ export const MODULES: ModuleDef[] = [
   {
     id: "hypha",
     guild: ["basescan-api-key"],
+    setupNeeds: [
+      {
+        id: "dho-address",
+        kind: "decision",
+        ref: "hypha.org_url",
+        title: "Set your DHO address",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/hypha#setting-hypha.org_url",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+      {
+        id: "first-contract",
+        kind: "content",
+        ref: "hypha",
+        title: "Confirm one token contract",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/hypha",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     // The module's own tables hold contract addresses, what those contracts
     // call themselves, village-level supply and treasury figures, and a log of
@@ -1420,6 +1653,73 @@ export const MODULES: ModuleDef[] = [
     // verified sending domain, a key for it, and the sealing key the stored
     // provider key and delivery-report secret are kept under.
     guild: ["resend-account", "resend-setup-key", "resend-sending-domain", "resend-api-key", "resend-webhook-secret", "village-secrets-key"],
+    setupNeeds: [
+      {
+        id: "sender",
+        kind: "words",
+        ref: "comms-settings.senderName",
+        title: "Name the sender your letters come from",
+        scope: "village",
+        phase: "before-launch",
+        need: "required",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+      {
+        id: "postal-address",
+        kind: "words",
+        ref: "comms-settings.postalAddress",
+        title: "Give the postal address for the footer",
+        scope: "village",
+        phase: "before-launch",
+        need: "required",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+      {
+        id: "test-email",
+        kind: "check",
+        ref: "comms.test",
+        title: "Send yourself a test email and see it delivered",
+        scope: "village",
+        phase: "before-launch",
+        need: "required",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+      {
+        id: "who-runs-comms",
+        kind: "hands",
+        ref: "comms.manage",
+        title: "Choose who runs the village's email",
+        scope: "village",
+        phase: "after-launch",
+        need: "recommended",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+      {
+        id: "consent-words",
+        kind: "words",
+        ref: "comms-settings.consentText",
+        title: "Read the consent words on public forms",
+        scope: "village",
+        phase: "later",
+        need: "optional",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+    ],
     /*
      * REQUIRED, because the parts that make email arrive are the village's own
      * and no default can stand in for them: its provider key, a sending
@@ -1497,6 +1797,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "saberra",
     guild: ["saberra-api-secret"],
+    setupNeeds: [
+      {
+        id: "service-address",
+        kind: "content",
+        ref: "saberra",
+        title: "Give it this village's own address at the service",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/saberra#setting-config",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "connected",
     dataClass: "village-content",
     group: "know-and-decide",
