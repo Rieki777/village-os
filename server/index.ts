@@ -84,6 +84,7 @@ import { register as registerSignUpRoutes } from "./routes/register";
 import { register as registerInviteRoutes } from "./routes/invites";
 import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
+import { register as registerVerifyEmailRoutes } from "./routes/verifyEmail";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
@@ -640,6 +641,7 @@ import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { grantCashPayToTreasury, seedStarterRoles } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
+import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
@@ -7952,7 +7954,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       return "The email provider refused the message, so nothing was sent. Open the claim link below yourself, and check the server log for the provider's own reason.";
     };
     if (user) {
-      await members.update(user.id, (u: any) => { u.role = "founder"; });
+      // R104: a password nobody proved here may be a stranger's, planted at this address first. raiseToFounder ends it (and its sessions and agent reach) in the write that raises the role, and the claim link below then goes to the address.
+      user = (await raiseToFounder(members, user, (id, change) => withAgentReachEnded(getPool(), id, change, { notify }).then((r) => r.changed))) ?? user;
       // Expired-link recovery: an account created by bootstrap that never set a
       // password cannot log in and cannot ask for a reset. Re-running bootstrap
       // (break-glass path) re-sends a fresh claim link for exactly that case.
@@ -8047,22 +8050,19 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       kind: "audit", text, actorUserId: userId, entityType: "user", entityRef: userId, audience: "admin",
     });
   };
+  const letters = { authSecret: AUTH_TOKEN_SECRET, sendEmail: sendResendEmail, escapeHtml, origin: notifyDeps.origin, projectName: () => mergedConfig().project.name }; // every auth letter's five
   registerRecoveryRoutes(app, {
-    authSecret: AUTH_TOKEN_SECRET,
+    ...letters,
     members,
     overLimit,
     clientIp,
     resetPerIpHourly: () => numberVar("abuse.password_reset_per_ip_hourly"),
-    sendEmail: sendResendEmail,
-    escapeHtml,
-    origin: notifyDeps.origin,
-    projectName: () => mergedConfig().project.name,
     recordAudit: recordAuthAudit,
   });
   const joined = (u: { id: string; name: string; handle: string }) => memberJoined(u, { addActivity, firstName, greeterRoleId: () => stringVar("arrival.greeter_role"), seats: loadRoleHolders, everyone: () => members.all(), notify });
   const inviteDoor = makeInviteDoor({ getPool, members }); // one invitation for both sign-up doors
   registerSignUpRoutes(app, {
-    overLimit, clientIp, members, hashPassword, publicUser, joined, invites: inviteDoor,
+    overLimit, clientIp, members, hashPassword, publicUser, joined, invites: inviteDoor, sendVerification: (m) => sendVerifyLetter(letters, m),
     makeHandle: (name) => uniqueHandle(slugifyHandle(name)),
     encodeToken: (userId, email) => encodeToken(AUTH_TOKEN_SECRET, userId, email),
   });
@@ -8080,7 +8080,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     onMemberJoined: (user) => void joined(user), // every door in records the join and greets: register calls joined too
     authedUser,
     invites: inviteDoor,
+    endReachAround: (id, change) => withAgentReachEnded(getPool(), id, change, { notify }).then((r) => r.changed), // R104: ending an unproved password ends what its sessions planted
+    onPasswordEnded: (m) => void sendPasswordEndedLetter(letters, m),
   });
+  registerVerifyEmailRoutes(app, { ...letters, members, authedUser, verifyPassword, overLimit, clientIp, recordAudit: recordAuthAudit });
 
   /**
    * Sign out. tokenVersion is the only revocation lever there is (no session
@@ -8122,6 +8125,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if ((lost.refusal = setPasswordLinkRefusal(claim, u.tokenVersion))) return;
       u.passwordHash = hash;
       u.tokenVersion = (u.tokenVersion ?? 0) + 1;
+      proveAddress(u, u.email); // R104: the link reached this mailbox, and the only password now is its reader's
     }), { notify }); // notify: the member hears that a delegation they gave was ended (endVoiceGiven)
     if (lost.refusal) return res.status(401).json({ error: lost.refusal });
     if (!fresh) return res.status(404).json({ error: "Account not found" });
@@ -26205,6 +26209,7 @@ ${inner}
       "Disallow: /tokens",
       "Disallow: /set-password",
       "Disallow: /forgot-password",
+      "Disallow: /verify-email",
       // Five megabytes of self-contained page, and an app rather than a
       // document: nothing in it is worth indexing and a crawler re-fetching it
       // costs real bandwidth on the deployment's bill.
