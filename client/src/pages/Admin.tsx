@@ -192,7 +192,7 @@ function ForumModerationTab({ password }: { password: string }) {
           read on every request since it shipped, with no editor anywhere. */}
       <ForumCategoriesEditor password={password} />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(["open", "resolved", "dismissed"] as const).map((s) => (
           <button
             key={s}
@@ -362,7 +362,7 @@ function MessageReportsTab({ password }: { password: string }) {
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(["open", "resolved", "dismissed"] as const).map((s) => (
           <button
             key={s}
@@ -658,7 +658,7 @@ function AdminNav({
                   onTouchMove={open ? undefined : moveHold}
                   onTouchEnd={open ? undefined : endHold}
                   onTouchCancel={open ? undefined : endHold}
-                  title={label}
+                  title={label} data-admin-tab={key}
                   aria-label={label}
                   aria-current={active ? "page" : undefined}
                   className={`w-full flex items-center text-sm font-medium transition-colors ${
@@ -2095,7 +2095,7 @@ function FaqAdminTab({ password }: { password: string }) {
         <p className="text-sm text-gray-500">Manage the Common Questions section shown on each journey page.</p>
       </div>
 
-      <div className="flex items-center gap-2 mb-6 border-b border-gray-200">
+      <div className="flex flex-wrap items-center gap-x-2 mb-6 border-b border-gray-200">
         {FAQ_PATHWAYS.map((p) => (
           <button
             key={p.id}
@@ -8112,7 +8112,7 @@ export default function Admin() {
             table inside sets the floor and the page scrolls sideways. The
             padding steps down on small screens, where 32px a side was a
             tenth of the width. */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-4xl">
+        <main className="admin-fit flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-4xl">
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
