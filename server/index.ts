@@ -55,6 +55,7 @@ import {
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 import { GPS_CHANGE } from "../shared/governingPurpose";
 import { pageContentProblem } from "../shared/pageContent";
+import { contentVersion } from "../shared/pageContent/resolve";
 import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
 import { pageVarsFrom } from "../shared/pageContent/vars";
 import { workWithUsAckEmail } from "./lib/workWithUsAck";
@@ -135,6 +136,7 @@ import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/r
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { keepFirstPlanIfUsed } from "./lib/commandCentrePlanDefault";
+import { keepGovernanceWords } from "./lib/governanceWordsKept";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
@@ -1910,6 +1912,8 @@ async function ensureDataFiles() {
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
   await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
+  // How We Govern's defaults went neutral: a village that already holds its page words keeps this page's too.
+  await runOnce("keep-governance-words-2026-11-01", () => keepGovernanceWords(contentRepo).then(() => undefined));
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
@@ -7825,6 +7829,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const pageProblem = pageContentProblem(req.params.section, req.body);
     if (pageProblem) return res.status(400).json({ error: pageProblem });
     const content = contentRepo.get();
+    // A save names the words it was opened on; when they moved since, it never writes over them.
+    const was = req.get("x-content-was");
+    if (was && was !== contentVersion(content[req.params.section])) return res.status(409).json({ error: "These words changed since this page was opened. Reload it to see them, then make your change again." });
     content[req.params.section] = req.body;
     await contentRepo.put(content);
     res.json({ success: true });
