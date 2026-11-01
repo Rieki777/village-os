@@ -12,12 +12,18 @@ This describes a FRESH village: what a village standing up a new instance holds 
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 It describes the sources at fingerprint `5078ce08b11dc47f`, which regenerating reproduces.
 ||||||| 4d42c46
 It describes the sources at fingerprint `22e59fa493698af0`, which regenerating reproduces.
 =======
 It describes the sources at fingerprint `c114a702f0028d87`, which regenerating reproduces.
 >>>>>>> w747
+||||||| a95471a
+It describes the sources at fingerprint `22e59fa493698af0`, which regenerating reproduces.
+=======
+It describes the sources at fingerprint `59fa5e8acf1146aa`, which regenerating reproduces.
+>>>>>>> w739
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -1062,12 +1068,18 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 ```json
 {
 <<<<<<< HEAD
+<<<<<<< HEAD
   "commit": "5078ce08b11dc47f",
 ||||||| 4d42c46
   "commit": "22e59fa493698af0",
 =======
   "commit": "c114a702f0028d87",
 >>>>>>> w747
+||||||| a95471a
+  "commit": "22e59fa493698af0",
+=======
+  "commit": "59fa5e8acf1146aa",
+>>>>>>> w739
   "module": {
     "id": "governance",
     "shipsAs": "off",

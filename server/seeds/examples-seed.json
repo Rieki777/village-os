@@ -210,69 +210,370 @@
     ]
   },
   "quests": {
-    "_trigger": "POST /api/admin/quests creates a real quest",
-    "_note": "Seeds only into a genuinely empty quests table, so a village with real quests never sees these.",
+    "_trigger": "POST /api/admin/quests creates a real quest and retires the rest, and so does accepting a quest proposal. POST /api/admin/quests/:id/keep turns ONE starter real and leaves the others standing.",
+    "_note": "The starter board every fresh village opens on (Rye, sheet A8 / 19g: a neutral, fully editable starter set). The ONE source of truth for a new village's quests: server/seeds/quests-seed.json is frozen and seeds nothing. Seeds only where the village has no quest and no claim of its own. No reward label and no value: a quest's value is set on its card by the village, when a founder keeps it. Generic on purpose: no place, facility, person or price that one village has and another may not.",
     "quests": [
       {
-        "id": "ex-quest-swale",
-        "title": "Cut a swale along the north slope",
-        "description": "The north slope sheds water fast enough to take topsoil with it. A swale on contour slows the run-off, sinks it, and buys the young plantings above it a dry-season margin. Bring a shovel and a decent hat; the A-frame level lives in the tool shed.",
-        "impact": "Water that used to leave the property in an afternoon stays in the ground for weeks. The plantings uphill stop needing hand-watering by the second season.",
-        "gratitude": "60-120",
-        "duration": "Two mornings",
-        "difficulty": "Intermediate",
-        "circle": "Land & Water",
-        "status": "open",
-        "icon": "Sprout",
-        "minStage": "member",
+        "id": "ex-quest-welcome",
+        "title": "Welcome someone new",
+        "subtitle": "Be the first hello a newcomer remembers.",
+        "description": "Meet a newcomer at their first gathering or visit. Show them around, answer what you can, and introduce them to a few people by name.",
+        "impact": "People stay where somebody learned their name in the first week.",
+        "story": "Most people decide how they feel about a place within their first hour. Whoever welcomes them shapes that hour: a nervous arrival becomes someone who knows three names, where to find water, and what happens next.",
+        "firstStep": "At the next gathering, introduce yourself to one person you have never met.",
+        "steps": [
+          "Pick an upcoming gathering and plan to arrive early.",
+          "Greet newcomers as they arrive, learn their names, and show them the essentials.",
+          "Answer their questions honestly, and note the ones you could not answer.",
+          "Before you leave, introduce each newcomer to someone who shares one of their interests.",
+          "Check in with them a week later."
+        ],
+        "deliverable": "A few lines on who you welcomed and one thing that would make the next arrival smoother.",
+        "tips": [
+          "Name tags feel small until you watch someone relax because they can read the room.",
+          "Most questions from a newcomer are really asking where they fit. Answer that one."
+        ],
+        "duration": "One gathering, and a check-in a week later",
+        "difficulty": "Beginner",
+        "circle": "Community Development",
+        "status": "Open",
+        "icon": "Users",
         "tags": [
-          "land",
-          "water",
-          "outdoor"
+          "welcome",
+          "people",
+          "newcomers"
         ],
         "sortOrder": 1,
         "isExample": true
       },
       {
-        "id": "ex-quest-orientation",
-        "title": "Host one arrival through their first week",
-        "description": "Someone new lands next month. This quest is being the person who meets them, walks them around, introduces them to four people by name, and checks in on day seven. This is a landing.",
-        "impact": "The single strongest predictor of whether a newcomer is still around at six months is whether anyone learned their name in week one.",
-        "gratitude": "40-80",
-        "duration": "A few hours across one week",
-        "difficulty": "Beginner",
-        "circle": "Welcome & Belonging",
-        "status": "open",
-        "icon": "Heart",
-        "minStage": "member",
+        "id": "ex-quest-shared-meal",
+        "title": "Host a shared meal",
+        "subtitle": "Set the table and let the village happen.",
+        "description": "Plan and host a potluck or shared meal. Pick a date and a place, invite widely, sort out who brings what, and gather a crew to set up and clean up.",
+        "impact": "Friendships start and plans take shape over shared food.",
+        "story": "Shared meals are where a village becomes real. People who only nod at each other in meetings end up talking for an hour over the second helping. Hosting one well is logistics in service of a good evening.",
+        "firstStep": "Pick a date that is clear on the calendar and write one sentence about the gathering.",
+        "steps": [
+          "Choose the date, the place and a theme if you want one.",
+          "Invite widely: the board, the feed and a few personal asks each reach different people.",
+          "Coordinate who brings what, plus a crew to set up and a crew to clean up.",
+          "Host the evening: welcome people, open the meal, and keep an eye on anyone new.",
+          "Thank the helpers and note what to repeat or drop next time."
+        ],
+        "deliverable": "A short recap: who came, what was shared, and what you would repeat.",
+        "tips": [
+          "Plan the cleanup crew before the meal, never during it.",
+          "A visible welcome table saves every late arrival."
+        ],
+        "duration": "One evening, plus planning",
+        "difficulty": "Intermediate",
+        "circle": "Community Development",
+        "status": "Open",
+        "icon": "ChefHat",
         "tags": [
-          "welcome",
+          "gatherings",
+          "food",
           "people"
         ],
         "sortOrder": 2,
         "isExample": true
       },
       {
-        "id": "ex-quest-toolshed",
-        "title": "Inventory and label the tool shed",
-        "description": "Nobody can find the good pruning saw. Photograph every tool, note its condition, label the shelves, and write down what is actually missing. If the Material Library is on, this is what stocks it.",
-        "impact": "Ends the twenty-minute hunt that precedes every job, and gives the village its first honest list of what it owns.",
-        "gratitude": "50-100",
-        "duration": "One full day",
+        "id": "ex-quest-meeting-notes",
+        "title": "Take the notes at a circle meeting",
+        "subtitle": "Keep the village's memory.",
+        "description": "Record one circle meeting: the proposals, the decisions, who carries each action, and the questions left open. Publish the notes the same day.",
+        "impact": "Decisions that are written down get carried out, and newcomers can see how the village decides.",
+        "story": "Decisions fade and notes last. Good notes turn an evening of discussion into a record everyone can trust: what was decided, who carries it, and why.",
+        "firstStep": "Read the last set of published notes and list what a newcomer would still not understand.",
+        "steps": [
+          "Join the meeting and capture proposals, decisions and owners as they land.",
+          "Write the notes the same day, while the detail is fresh.",
+          "Publish them where the circle keeps its records.",
+          "Flag the open questions so the next meeting starts where this one ended."
+        ],
+        "deliverable": "A link to the published notes: decisions, owners and open questions.",
+        "tips": [
+          "Record decisions and their reasons. The play by play can stay in the room.",
+          "Put a name next to every action. Unowned actions dissolve."
+        ],
+        "duration": "One meeting, and an hour to write it up",
         "difficulty": "Beginner",
-        "circle": "Build & Repair",
-        "status": "open",
-        "icon": "Wrench",
+        "circle": "Governance",
+        "status": "Open",
+        "icon": "BookOpen",
+        "minStage": "member",
         "tags": [
-          "tools",
-          "indoor",
-          "organising"
+          "writing",
+          "governance",
+          "records"
         ],
         "sortOrder": 3,
         "isExample": true
+      },
+      {
+        "id": "ex-quest-work-day",
+        "title": "Lead a work day on a shared space",
+        "subtitle": "Many hands, one morning, a difference you can see.",
+        "description": "Pick one shared space that needs care, agree the job with whoever looks after it, gather a crew and lead a morning of work. Clearing, building, mending and tidying all count.",
+        "impact": "A shared space stays usable, and a crew learns to work together.",
+        "story": "Shared spaces drift until someone gathers a crew. A good work day has one clear job, enough tools and a snack break, and it ends with something everyone can see and use the same afternoon.",
+        "firstStep": "Walk the space and photograph the one job that would make the biggest difference.",
+        "steps": [
+          "Agree the job, the date and the limits with whoever looks after the space.",
+          "Gather tools and materials, and check what is safe to do.",
+          "Invite a crew and give each person a clear task.",
+          "Work the morning, and stop while people still have energy.",
+          "Photograph the result and note anything left for next time."
+        ],
+        "deliverable": "Before and after photos, and a note on what is left to do.",
+        "tips": [
+          "One clear job beats five half finished ones.",
+          "Bring water and food. People remember how a work day felt."
+        ],
+        "duration": "One morning, plus planning",
+        "difficulty": "Intermediate",
+        "circle": "Land Stewardship",
+        "status": "Open",
+        "icon": "TreePine",
+        "tags": [
+          "outdoor",
+          "crew",
+          "care"
+        ],
+        "sortOrder": 4,
+        "isExample": true
+      },
+      {
+        "id": "ex-quest-garden-bed",
+        "title": "Start or tend a shared garden bed",
+        "subtitle": "Learn the ground by feeding it.",
+        "description": "Take on one garden bed for a season: prepare the soil, plant, water, weed and harvest, and share what grows. If the village has no garden yet, this is how one starts.",
+        "impact": "Food grown together feeds people and teaches everyone who helps.",
+        "story": "A single bed is small enough to care for well and big enough to teach a season of lessons. Whatever grows in it ends up on a shared table.",
+        "firstStep": "Find a spot that gets at least six hours of sun and ask who decides how it is used.",
+        "steps": [
+          "Agree the spot and what to grow with whoever looks after the ground.",
+          "Prepare the soil and plant.",
+          "Water and weed on a rhythm you can keep, and ask for cover when you are away.",
+          "Harvest and share what grows.",
+          "Write down what worked so the next season starts ahead."
+        ],
+        "deliverable": "Photos across the season and a note on what grew and what you would change.",
+        "tips": [
+          "Plant less than you think. A small bed kept well beats a big one left to the weeds.",
+          "Water in the morning and less is lost to the sun."
+        ],
+        "duration": "A season, an hour or two a week",
+        "difficulty": "Beginner",
+        "circle": "Land Stewardship",
+        "status": "Open",
+        "icon": "Sprout",
+        "tags": [
+          "food",
+          "outdoor",
+          "growing"
+        ],
+        "sortOrder": 5,
+        "isExample": true
+      },
+      {
+        "id": "ex-quest-teach-skill",
+        "title": "Teach a skill you know",
+        "subtitle": "Pass on something your hands or head already know.",
+        "description": "Run a short session teaching something you know well, from bread to bookkeeping. Plan it, invite people, teach it, and leave them with a page of notes.",
+        "impact": "Every skill shared is one more person in the village who can do it.",
+        "story": "Every village is full of skills nobody knows about. A short session turns one person's know-how into something several people can do, and it is the easiest way to meet the people who share your interests.",
+        "firstStep": "Write down three things you could teach in an hour, then pick the one people ask you about most.",
+        "steps": [
+          "Choose the skill and decide what someone will be able to do by the end.",
+          "Pick a time and place, and post the invitation.",
+          "Gather materials so everyone gets hands on.",
+          "Teach it, leave time for questions, and hand out a page of notes."
+        ],
+        "deliverable": "Your notes or handout, and a line on who came.",
+        "tips": [
+          "Teach one thing well. A second session is always possible.",
+          "Let people try it while you are still in the room."
+        ],
+        "duration": "Two hours, plus preparation",
+        "difficulty": "Intermediate",
+        "circle": "Education",
+        "status": "Open",
+        "icon": "Compass",
+        "tags": [
+          "learning",
+          "skills",
+          "workshop"
+        ],
+        "sortOrder": 6,
+        "isExample": true
+      },
+      {
+        "id": "ex-quest-photo-day",
+        "title": "Photograph a day in the village",
+        "subtitle": "Show what an ordinary day here looks like.",
+        "description": "Spend a day or an event photographing what actually happens, then edit a small set and give each picture a sentence of context. Ask before photographing anyone up close.",
+        "impact": "Honest pictures help the right people find the village, and help the village remember itself.",
+        "story": "The people meant to find a village usually find it through honest pictures of real days: work in progress, full tables, muddy boots. The same pictures are a gift to the village later, when it wants to remember what this year looked like.",
+        "firstStep": "Spend twenty minutes photographing one everyday scene, then pick the single frame that tells it best.",
+        "steps": [
+          "Choose a day, an event or a week of small moments.",
+          "Photograph what actually happens. Real days make the best pictures.",
+          "Ask before photographing people up close, every time.",
+          "Edit a small set. Five strong pictures beat fifty loose ones.",
+          "Caption each with a sentence of context and share them where the village keeps its pictures."
+        ],
+        "deliverable": "A small edited set with captions, shared where the village can find it.",
+        "tips": [
+          "Early and late light flatter everything.",
+          "Whoever looks at these next year needs the caption more than you think."
+        ],
+        "duration": "One day, plus editing",
+        "difficulty": "Beginner",
+        "circle": "Arts & Culture",
+        "status": "Open",
+        "icon": "Camera",
+        "tags": [
+          "photos",
+          "stories",
+          "media"
+        ],
+        "sortOrder": 7,
+        "isExample": true
+      },
+      {
+        "id": "ex-quest-wellness-session",
+        "title": "Offer a wellness session",
+        "subtitle": "Share a practice you are trained in.",
+        "description": "Offer a session in a practice you are trained in, such as yoga, meditation, massage or movement. Agree the space, set clear agreements at the start, and gather a word of feedback after.",
+        "impact": "People who are well keep everything else going.",
+        "story": "A village that works hard needs places to rest and recover. Sessions from trained hands keep people well, and a regular one gives the week a rhythm.",
+        "firstStep": "Write three sentences about the session: what it is, who it is for, and what to bring.",
+        "steps": [
+          "Confirm the offering and any space or equipment it needs.",
+          "Schedule the session and post it where people look for gatherings.",
+          "Open with clear consent and comfort agreements.",
+          "Gather a word of feedback after, and decide whether it should recur."
+        ],
+        "deliverable": "A note on the session: who came, how it went, and whether it should recur.",
+        "tips": [
+          "Small and regular works better than big and once.",
+          "Clear agreements at the start make deeper work possible."
+        ],
+        "duration": "One session",
+        "difficulty": "Intermediate",
+        "circle": "Wellness",
+        "status": "Open",
+        "icon": "Leaf",
+        "requiresRole": "practitioners",
+        "tags": [
+          "wellness",
+          "care",
+          "body"
+        ],
+        "sortOrder": 8,
+        "isExample": true
+      },
+      {
+        "id": "ex-quest-site-rough-edge",
+        "title": "Find a rough edge on the village site",
+        "subtitle": "Make the village's own site easier to use.",
+        "description": "Use the village's site the way a newcomer would, find the first thing that confuses or breaks, and report it with the steps to see it again. Fix it too, if you can.",
+        "impact": "Every rough edge smoothed is one less reason for a newcomer to give up.",
+        "story": "A village's site is shared infrastructure, the same as a path or a kitchen: invisible when it works, and everyone's problem when it does not. A clear report is half of every fix.",
+        "firstStep": "Spend ten minutes on the site as a newcomer would, and write down the first thing that slowed you down.",
+        "steps": [
+          "Use the site as someone who has never been here.",
+          "Write down each rough edge with the steps to see it again.",
+          "Add a screenshot for anything you can see.",
+          "Pass the report to whoever looks after the site, or fix it yourself if you can."
+        ],
+        "deliverable": "Your report, with steps and screenshots, or a link to what you fixed.",
+        "tips": [
+          "A problem you can make happen twice is half solved.",
+          "One clear report beats ten vague ones."
+        ],
+        "duration": "An hour or two",
+        "difficulty": "Beginner",
+        "circle": "Technology",
+        "status": "Open",
+        "icon": "Laptop",
+        "tags": [
+          "digital",
+          "feedback",
+          "site"
+        ],
+        "sortOrder": 9,
+        "isExample": true
+      },
+      {
+        "id": "ex-quest-music-circle",
+        "title": "Start a music or song circle",
+        "subtitle": "A few instruments and someone willing to begin.",
+        "description": "Gather people for an evening of music or singing. A few shared instruments, a song or two everyone knows, and someone to open and close the circle are all it takes.",
+        "impact": "Singing and playing together is one of the quickest ways a group of people becomes a village.",
+        "story": "Music is how a village celebrates, grieves and remembers itself. A circle needs no stage and no skill floor, only a few instruments and someone willing to hold it.",
+        "firstStep": "Pick a date and invite three people directly. A circle of four is already a circle.",
+        "steps": [
+          "Set the time and place, and post the invitation.",
+          "Bring or borrow a few shared instruments so nobody needs to own one.",
+          "Open simply, with a rhythm or a song anyone can join.",
+          "Close while the energy is still warm."
+        ],
+        "deliverable": "A note or a short clip from the circle: who gathered and what was played or sung.",
+        "tips": [
+          "Percussion is the doorway for shy joiners.",
+          "Ending on time is what brings people back."
+        ],
+        "duration": "One evening",
+        "difficulty": "Beginner",
+        "circle": "Arts & Culture",
+        "status": "Open",
+        "icon": "Music",
+        "tags": [
+          "music",
+          "gatherings",
+          "culture"
+        ],
+        "sortOrder": 10,
+        "isExample": true
+      },
+      {
+        "id": "ex-quest-repair",
+        "title": "Repair something everyone uses",
+        "subtitle": "Fix the thing everyone has learned to work around.",
+        "description": "Find something shared that is broken or wearing out, such as a door, a tool, a bench or a tap. Agree the repair with whoever looks after it, and fix it properly.",
+        "impact": "Shared things that work get used and looked after.",
+        "story": "Every place has a list of small broken things everyone has learned to step around. Fixing one is honest work with a result you can use the same day, and it shows that shared things here get looked after.",
+        "firstStep": "Ask three people which shared thing they most often work around, and pick the most common answer.",
+        "steps": [
+          "Agree the repair with whoever looks after the thing.",
+          "Gather tools and materials, and check what is safe to do yourself.",
+          "Make the repair, and test it.",
+          "Note what you used and anything that will need attention again."
+        ],
+        "deliverable": "Before and after photos, and a note on the materials used.",
+        "tips": [
+          "Ask about load and safety before improvising a fix.",
+          "Whoever leaves the tools tidy is everyone's favourite builder."
+        ],
+        "duration": "Half a day",
+        "difficulty": "Advanced",
+        "circle": "Land Stewardship",
+        "status": "Open",
+        "icon": "Hammer",
+        "tags": [
+          "building",
+          "repair",
+          "care"
+        ],
+        "sortOrder": 11,
+        "isExample": true
       }
     ],
-    "_memberTrigger": "The first quest a founder posts clears them."
+    "_memberTrigger": "A founder keeps the ones that fit as real quests and clears the rest."
   },
   "forum": {
     "_trigger": "POST /api/forum/threads creates a real thread",

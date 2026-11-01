@@ -234,7 +234,7 @@ export const SETUP_CONTENT_EDITORS: readonly ContentEditor[] = [
   { tab: "visit-config", label: "Visit program", hint: "Visit types, logistics, and booking copy.", brochure: true },
   { tab: "investor-summary", label: "Investor summary", hint: "The plain-language money facts on the investor page.", brochure: true },
   { tab: "season", label: "Season", hint: "The current season banner (name, theme, dates)." },
-  { tab: "quests-admin", label: "Quests", hint: "Seeded starter quests. Rewrite, add or remove them here so the board is yours." },
+  { tab: "quests-admin", label: "Quests", hint: "Keep the starter quests that fit, clear the rest, and post your own." },
 ];
 
 /** The brand document as `GET /api/admin/brand` returns it, loosely typed
