@@ -182,6 +182,16 @@ export interface Ballot {
   /** Null means the viewer is outside this electorate. Zero means inside it,
    *  holding no weight, which is a different and much louder fact. */
   myWeight: number | null;
+  /** People who have spoken, counted by the server (delegated rows aside). */
+  votedCount?: number;
+  /**
+   * "stranger" when nobody is signed in (R098). The roll, the objections'
+   * authors, the document and the closing note arrive EMPTY, and the counts
+   * beside them are real, so the page says why the lists are empty.
+   */
+  viewerTier?: "stranger";
+  /** How many objections were filed, sent with `viewerTier: "stranger"`. */
+  objectionCount?: number;
 }
 
 /** An earlier ballot the village held on this same subject. */

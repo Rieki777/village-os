@@ -72,6 +72,7 @@ import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, 
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerBrochurePagesRoutes } from "./routes/brochurePages";
+import { register as registerPeopleLock, ballotCardForViewer, ballotForViewer, firstNameOf, hiddenFromStranger } from "./routes/peopleLock";
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -6484,6 +6485,7 @@ async function startServer() {
   app.use(["/api/map/draft", "/api/map/publish", "/api/agent/v1/map/draft"], express.json({ limit: SCENE_BODY_LIMIT }));
 
   app.use(express.json({ limit: "1mb" }));
+  registerPeopleLock(app, { authedUser, getPool, boolVar });
 
   // ── LANE L6 ZONE START: your agent ──────────────────────────────────────────
   //
@@ -8856,7 +8858,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         heartedByMe: heartedIds.has(String(t.id)),
         isExample: Number(t.is_example ?? 0) === 1,
         tags: tagsByThread.get(String(t.id)) ?? [],
-        author: { id: t.author_id, name: firstName(t.author_name ?? "Member"), handle: t.author_handle },
+        author: { id: viewer ? t.author_id : null, name: firstName(t.author_name ?? "Member"), handle: t.author_handle },
         at: new Date(t.created_at).toISOString(),
       };
     });
@@ -9050,7 +9052,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           title: r.title ?? String(r.body).slice(0, 80),
           preview: String(r.body).slice(0, 160),
           imageUrl: r.image_url, heartCount: Number(r.heart_count), replyCount: Number(r.reply_count),
-          author: { id: r.author_id, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
+          author: { id: user ? r.author_id : null, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
           pinned: !!r.pinned_at, locked: !!r.locked_at, hidden: !!r.hidden_at,
           isExample: Number(r.is_example ?? 0) === 1,
           eventStartsAt,
@@ -9207,8 +9209,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const [tagRows] = await getPool().query<any[]>("SELECT tag FROM forum_thread_tags WHERE thread_id = ?", [req.params.id]);
     const [authorRow] = await getPool().query<any[]>("SELECT name, handle FROM users WHERE id = ?", [thread.authorId]);
     res.json({
-      ...thread,
-      author: { id: thread.authorId, name: firstName(authorRow[0]?.name ?? "Member"), handle: authorRow[0]?.handle ?? null },
+      ...thread, ...(user ? {} : { authorId: null }), // R097: no internal id to a stranger
+      author: { id: user ? thread.authorId : null, name: firstName(authorRow[0]?.name ?? "Member"), handle: authorRow[0]?.handle ?? null },
       tags: tagRows.map((t) => t.tag),
       replies: replyRows
         .filter((r) => !r.hidden_at || mod)
@@ -9217,7 +9219,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           parentReplyId: r.parent_reply_id,
           body: r.hidden_at ? "[hidden by moderation]" : r.body,
           hidden: !!r.hidden_at,
-          author: { id: r.author_id, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
+          author: { id: user ? r.author_id : null, name: firstName(r.author_name ?? "Member"), handle: r.author_handle },
           createdAt: new Date(r.created_at).toISOString(),
           editedAt: r.edited_at ? new Date(r.edited_at).toISOString() : null,
         })),
@@ -19499,12 +19501,12 @@ ${inner}
    * your own home is private by you is absurd.
    */
   app.get("/api/profiles/:handle", async (req, res) => {
-    const targetId = await userIdForHandle(getPool(), req.params.handle);
+    const viewer = await authedUser(req);
+    const targetId = hiddenFromStranger(viewer, boolVar("org.public_people")) ? null : await userIdForHandle(getPool(), req.params.handle); // R097: the lock
     if (!targetId) return res.status(404).json({ error: "Not found" });
     const loaded = await loadProfile(getPool(), villageId(), targetId);
     if (!loaded) return res.status(404).json({ error: "Not found" });
 
-    const viewer = await authedUser(req);
     const { startsAt } = cycleWindow();
     const full = {
       ...loaded.view,
@@ -19515,7 +19517,7 @@ ${inner}
       return res.json({ ...full, party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null) });
     }
     res.json({
-      ...publicView(full, loaded.privacy),
+      ...publicView(full, loaded.privacy, viewer ? full.name : firstNameOf(full.name)), // a stranger reads a first name (R097)
       party: await partyFor(getPool(), villageId(), targetId, viewer?.id ?? null),
     });
   });
@@ -19566,7 +19568,7 @@ ${inner}
   });
 
   // The hero and the wall, both in server/routes/gratitudeVoices.ts.
-  registerGratitudeVoiceRoutes(app, { getPool, gratitudeLog: () => gratitudeRepo.all() });
+  registerGratitudeVoiceRoutes(app, { getPool, authedUser, gratitudeLog: () => gratitudeRepo.all() });
   registerGratitudeNudgeRoutes(app, { getPool, authedUser, members, notify, notifyDeps, remainingFor: async (u) => (await gratitudeBudget(u)).remaining });
 
   // Gratitude: my journal (received + sent, with amounts)
@@ -22883,8 +22885,8 @@ ${inner}
       tallies,
       unity: unityPctOf(tallies),
       quorum: quorumPctOf(tallies, b.totalWeight),
-      // Votes and weights are member-visible on purpose (the Hypha voter-list
-      // posture). This village does not run secret ballots, and the page says so.
+      // Votes and weights are member-visible on purpose (the Hypha voter-list posture, ruling 22
+      // staged); a stranger reads `ballotForViewer`'s counts only (R098, server/lib/peopleLock.ts).
       votes: await Promise.all(
         votes.map(async (v) => ({ name: await nameOf(v.userId), choice: v.choice, weight: v.weight, castAt: v.castAt })),
       ),
@@ -23279,7 +23281,7 @@ ${inner}
     const subjectRef = String(req.query.subjectRef ?? "").trim();
     if (subjectType && subjectRef) {
       const list = await ballotsFor(getPool(), subjectType, subjectRef);
-      return res.json(await Promise.all(list.map((b) => serveBallotCard(b, viewer?.id))));
+      return res.json(await Promise.all(list.map(async (b) => ballotCardForViewer(viewer, await serveBallotCard(b, viewer?.id)))));
     }
     const limit = Math.max(1, Math.min(200, Math.trunc(Number(req.query.limit)) || 100));
     const offset = Math.max(0, Math.trunc(Number(req.query.offset)) || 0);
@@ -23287,7 +23289,7 @@ ${inner}
       "SELECT * FROM ballots ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
       [limit, offset],
     );
-    res.json(await Promise.all(rows.map((r) => serveBallotCard(rowToBallot(r), viewer?.id))));
+    res.json(await Promise.all(rows.map(async (r) => ballotCardForViewer(viewer, await serveBallotCard(rowToBallot(r), viewer?.id)))));
   });
 
   /**
@@ -23322,7 +23324,7 @@ ${inner}
       amendedKeysFor(getPool(), b.id),
       ballotsFor(getPool(), b.subjectType, b.subjectRef),
     ]);
-    res.json({
+    res.json(ballotForViewer(viewer, {
       ...payload,
       appliedKeys,
       priorAttempts: chain
@@ -23335,7 +23337,7 @@ ${inner}
           opensAt: p.opensAt,
           closedAt: p.closedAt,
         })),
-    });
+    }));
   });
 
   /**

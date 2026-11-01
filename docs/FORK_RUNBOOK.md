@@ -1008,6 +1008,13 @@ variables and invariants are language-free by construction.
   map module off. Three tiers on that route now: anyone (a first name and
   nothing else), `map.viewPeople` (the holder rows, with focus and note), and
   admin (seating ids and the recruitment pack).
+  Since R097 the lock reaches every page: with it off, no
+  GET answered to a signed-out caller carries a member's name, handle, user id
+  or email (`server/lib/peopleLock.ts`, installed in front of every route), and
+  a profile or role card reached by handle is a 404 to them. With it on, a
+  stranger reads a first name and a handle at most, never a full name or an id.
+  No setting to change; a village that never touched the dial sees no change
+  beyond those last two.
 - Seed refresh: the `examples-refresh-featured-awards-and-members-product`
   runOnce reapplies the `badges` and `commerce` example rows. It exists
   because no example award carried `featured` (bylines render featured awards

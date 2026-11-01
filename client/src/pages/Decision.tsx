@@ -330,7 +330,9 @@ export default function Decision() {
   const open = ballot.status === "open";
   const expired = Date.parse(ballot.closesAt) <= Date.now();
   const inRoll = ballot.myWeight !== null;
-  const votedCount = ballot.votes.length;
+  // A stranger's roll arrives empty (R098), so the server's count is the count.
+  const stranger = ballot.viewerTier === "stranger";
+  const votedCount = stranger ? ballot.votedCount ?? 0 : ballot.votes.length;
 
   return (
     <Layout>
@@ -632,7 +634,17 @@ export default function Decision() {
               </section>
             )}
 
-            <VoterRoll votes={ballot.votes} silent={ballot.silent} live={open} />
+            {stranger ? (
+              <section className="rounded-xl border border-stone-200 bg-white p-4">
+                <h3 className="text-base font-bold text-stone-900">Who may vote</h3>
+                <p className="mt-1 text-sm text-stone-600">
+                  {ballot.electorateCount} {ballot.electorateCount === 1 ? "member" : "members"} may vote, and {votedCount}{" "}
+                  {votedCount === 1 ? "has" : "have"} spoken. Members who sign in read who they are and how each one voted.
+                </p>
+              </section>
+            ) : (
+              <VoterRoll votes={ballot.votes} silent={ballot.silent} live={open} />
+            )}
 
             {/* HOW THE PROPOSER SAYS THIS SERVES THE GOVERNING PURPOSE (0219).
 
@@ -672,6 +684,9 @@ export default function Decision() {
                   label="Why the document is frozen"
                 />
               </h2>
+              {stranger ? (
+                <p className="mt-2 text-sm text-stone-600">Members read the document once they sign in.</p>
+              ) : (
               <button
                 type="button"
                 aria-expanded={showDoc}
@@ -680,6 +695,7 @@ export default function Decision() {
               >
                 {showDoc ? "Hide the document" : "Read the document"}
               </button>
+              )}
               {showDoc && (
                 <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-lg bg-stone-50 p-4 font-sans text-sm leading-relaxed text-stone-800">
                   {ballot.docMarkdown}
@@ -687,7 +703,7 @@ export default function Decision() {
               )}
               {/* A seat application's ballot names seats only; members read
                   the application itself, terms and all, on its own page. */}
-              {ballot.subjectType === ROLE_APPLICATION && (
+              {ballot.subjectType === ROLE_APPLICATION && ballot.subjectRef && (
                 <Link
                   href={`/role-applications/${encodeURIComponent(ballot.subjectRef)}`}
                   className="mt-3 flex min-h-[44px] items-center text-sm font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
