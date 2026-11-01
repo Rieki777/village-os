@@ -75,7 +75,7 @@ export default function PlayersTab({ password }: { password: string }) {
   };
 
   const remove = async (id: string, email: string) => {
-    if (!confirm(`Delete player ${email}? This removes their account. Historical quest claims and gratitude entries are kept.`)) return;
+    if (!confirm(`Delete player ${email}? This removes their account. Their past quest claims and ledger entries are kept.`)) return;
     try {
       const res = await fetch(`${API_BASE}/admin/players/${id}`, {
         method: "DELETE",
