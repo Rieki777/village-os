@@ -154,7 +154,17 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     ...over,
   });
 
-  const tokenOf = (mail: OutgoingEmail) => new URL(mail.text.split("\n").find((l) => l.startsWith(ORIGIN)) as string).searchParams.get("token") as string;
+  /** The confirmation link's token: the line that parses as a link on this village's own origin, compared whole. */
+  const tokenOf = (mail: OutgoingEmail) => {
+    const line = mail.text.split("\n").find((l) => {
+      try {
+        return new URL(l).origin === ORIGIN;
+      } catch {
+        return false;
+      }
+    });
+    return new URL(line as string).searchParams.get("token") as string;
+  };
 
   /** Send a proposal, and answer the id of the row it wrote and the token its email carried. */
   const send = async (over: Record<string, unknown> = {}) => {
@@ -194,7 +204,8 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       expect((await call("PUT", "/api/admin/open-proposals/settings", { publicLink: false })).body).toMatchObject({ publicLink: false, message: OPEN_WORDS.publicOff });
       const made = await call("POST", "/api/admin/open-proposals/links", { label: "Sol from the market" });
       expect(made.status).toBe(200);
-      expect(made.body.url.startsWith(`${ORIGIN}/propose-a-role/`)).toBe(true);
+      const madeUrl = new URL(made.body.url);
+      expect([madeUrl.origin, madeUrl.pathname.startsWith("/propose-a-role/")]).toEqual([ORIGIN, true]);
       const token = decodeURIComponent(made.body.url.split("/propose-a-role/")[1]);
       state.viewer = null;
 
