@@ -182,6 +182,8 @@ describe("ResidentRights words", () => {
     // The founding village's land model, businesses and year thresholds (2026-10-23).
     expect(text).not.toMatch(/retreat cent|cafe|wellness center|artisan market|net-positive/i);
     expect(text).not.toMatch(/Year \d|Sage eligibility|Circle Representative|Children's Play Day/);
+    // The Good Neighbor page can rename its criteria and this page cannot follow, so it names the page.
+    expect(text).not.toMatch(/Good Neighbor Criteria/);
   });
 
   it("puts nothing where the transfer note goes when Legal has none", async () => {

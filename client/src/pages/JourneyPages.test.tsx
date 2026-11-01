@@ -486,10 +486,17 @@ describe("/resident", () => {
     expect(await screen.findByRole("link", { name: phrase(background.actionLabel) })).toHaveAttribute("href", "/apply");
   });
 
-  it("sends Good Neighbor Criteria to the good neighbor page", async () => {
+  it("sends the passage step's button to the good neighbor page", async () => {
+    show(ResidentJourney);
+    const passage = stepDefault("resident", "passage");
+    await open(passage.title);
+    expect(await screen.findByRole("link", { name: phrase(passage.actionLabel) })).toHaveAttribute("href", "/good-neighbor");
+  });
+
+  it("never names the criteria by a name this page cannot follow (the Good Neighbor page renames them)", async () => {
     show(ResidentJourney);
     await open(stepDefault("resident", "passage").title);
-    expect(await screen.findByRole("link", { name: /Good Neighbor Criteria/ })).toHaveAttribute("href", "/good-neighbor");
+    expect(document.body.textContent).not.toMatch(/Good Neighbor Criteria/);
   });
 
   it("fills the land share transfer note and the background check note from the legal settings", async () => {

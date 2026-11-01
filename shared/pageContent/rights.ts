@@ -332,7 +332,7 @@ export const RIGHTS_RESIDENT_PAGE: PageSpec = rightsPage({
           "Read the proposals that affect your home, have your say, and show up when the village gathers to decide.",
       },
       {
-        title: "Live by the Good Neighbor Criteria",
+        title: "Be a Good Neighbor",
         description:
           "The Good Neighbor page sets out how {village} shares space and works through conflict. Every resident agrees to live by it.",
       },
@@ -364,7 +364,7 @@ export const RIGHTS_RESIDENT_PAGE: PageSpec = rightsPage({
     body: "The Resident journey walks you through each step, from a first visit to moving in.",
     primaryLabel: "Return to Resident Journey",
     primaryWhere: "the Resident journey page",
-    secondaryLabel: "Read the Good Neighbor Criteria",
+    secondaryLabel: "Read the Good Neighbor Page",
     secondaryWhere: "the Good Neighbor page",
   },
 });
