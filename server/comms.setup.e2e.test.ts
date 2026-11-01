@@ -383,9 +383,14 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms setup, every item through the fou
     expect(sending.json.settings.keyRights).toBe("sending");
     expect(sending.json.settings.keyRightsFor).toContain(SEND_ONLY.slice(-4));
     expect(JSON.stringify(sending.json)).not.toContain(SEND_ONLY);
+    // The new key proves itself the way every key does: one test email, reported delivered.
+    const sent = await call("POST", "/api/admin/comms/settings/test", { body: {} });
+    expect(sent.status, JSON.stringify(sent.json)).toBe(200);
+    const proof = fake!.emails().at(-1)!;
+    expect((await fake!.deliverWebhook(WEBHOOK(), "delivered", { emailId: proof.id, svixId: "msg_trade_report" })).status).toBe(200);
     // Nothing the setup already did is lost with the narrower key.
     const c = await checklist();
-    expect(c.done.domain && c.done["delivery-reports"] && c.done["api-key"]).toBe(true);
+    expect(c.done.domain && c.done["delivery-reports"] && c.done["api-key"] && c.done["test-email"]).toBe(true);
     // And a stranger may not ask.
     expect((await call("POST", "/api/admin/comms/settings/key-rights", { body: {}, token: null })).status).toBe(403);
   });
