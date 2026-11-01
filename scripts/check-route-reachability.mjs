@@ -90,6 +90,9 @@ const ALLOWLIST = {
   // would be a link to an error message. /forgot-password keeps its one door
   // on the sign-in page, which is the only place a person wants it.
   "/set-password": "entered from a one-time email link; a site link has no token",
+  // The address-proof letter sign-up sends (R104). Same shape: a signed link
+  // that only the mailbox holds, and a page with nothing to do without it.
+  "/verify-email": "entered from the address-proof link sign-up mails; a site link has no token",
   // The three pages Village Comms emails link to (the comms build spec
   // 5.4). Each reads a signed `?t=` link that only an email carries, so a site
   // link would open a page with nothing to act on. A member changes the same

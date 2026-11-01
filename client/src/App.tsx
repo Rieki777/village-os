@@ -171,6 +171,7 @@ const Mint = lazyPage(() => import("./pages/Mint"));
 const PublicProfile = lazyPage(() => import("./pages/PublicProfile"));
 const Register = lazyPage(() => import("./pages/Register"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
+const VerifyEmail = lazyPage(() => import("./pages/VerifyEmail"));
 // Three pages an email links to, from ONE module: the bundler keeps one chunk.
 const EmailPreferences = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailPreferences })));
 const EmailUnsubscribe = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailUnsubscribe })));
@@ -360,6 +361,7 @@ function Router() {
       <Route path="/propose-a-role/:token" component={ProposeARole} />
       <Route path="/propose-a-role" component={ProposeARole} />
       <Route path="/set-password" component={SetPassword} />
+      <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/email/preferences" component={EmailPreferences} />
       <Route path="/email/unsubscribe" component={EmailUnsubscribe} />
       <Route path="/email/a" component={EmailAction} />
