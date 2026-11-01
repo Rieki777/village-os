@@ -230,7 +230,7 @@ describe("the rulings of 2026-10-13", () => {
 
   it("Q3: every seed that cannot yet turn green is listed, and the Resend key is not among them", () => {
     const notAlive = seedsNotYetAlive().map((s) => s.id);
-    // These five read presence until 2026-11-01. Their launch rows now read
+    // These five read presence until 2026-10-31. Their launch rows now read
     // evidence (server/lib/launchProofs.ts and villageSecretsLaunchCheck), so
     // they can turn green, and each still names the row that proves it.
     const proved: Record<string, string> = {
