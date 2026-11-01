@@ -188,6 +188,7 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
+import { forgetAsksForMember } from "../repos/memberAsks";
 import { forgetRewardMomentsOf } from "../repos/rewardMoment";
 import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
@@ -802,6 +803,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "companions",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S ASKS (0299): every ask they sent and every ask sent to
+       * them. A row is the two members on it and nobody else, so it goes
+       * whole. It runs again after the tombstone, as
+       * "member-asks-after-tombstone", because an ask can still be sent to
+       * them until then.
+       */
+      name: "member-asks",
+      run: async () => {
+        await forgetAsksForMember(pool, target.id);
       },
     },
     {
@@ -1609,6 +1623,13 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      // An ask can still reach them between the first pass and the tombstone.
+      name: "member-asks-after-tombstone",
+      run: async () => {
+        await forgetAsksForMember(pool, target.id);
+      },
+    },
+    {
       /*
        * Reward moment markers (0294): the baseline row says when the member
        * first opened the app, and each seen row which of their payments they
@@ -2141,6 +2162,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "session-cards-after-tombstone",
   "reward-moments-after-tombstone",
   "companions-after-tombstone",
+  "member-asks-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 
