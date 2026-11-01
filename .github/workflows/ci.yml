@@ -1141,16 +1141,22 @@ jobs:
           --reporter=default
           --reporter=github-actions
           --reporter=json
-          --outputFile.json=test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}.json
+          --outputFile.json=test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}-attempt-${{ github.run_attempt }}.json
 
       - name: Upload the shard report
         # Even when the suite failed: a failed shard's report is what tells
         # tests-ran-once which files failed, as against which never ran.
+        #
+        # The run attempt is in the name so `gh run rerun --failed` is enough.
+        # Under one name per shard, a re-run left two same-named artifacts and
+        # the download took attempt 1's red report (batch 75, 2026-11-01), so
+        # only a FULL re-run cleared a flake. tests-ran-once now reads the
+        # newest attempt per shard (latestAttempts in check-test-shards.mjs).
         if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-results-shard-${{ matrix.shard }}
-          path: test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}.json
+          name: test-results-shard-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}-attempt-${{ github.run_attempt }}.json
           if-no-files-found: error
           retention-days: 7
 

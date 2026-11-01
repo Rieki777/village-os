@@ -14,7 +14,7 @@
 import assert from "node:assert";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { judge, parseShardName, toRel } from "./check-test-shards.mjs";
+import { judge, latestAttempts, parseShardName, toRel } from "./check-test-shards.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let run = 0;
@@ -41,9 +41,50 @@ const clean = () => [
 ];
 
 check("a shard report name carries its index and count, and nothing else matches", () => {
-  assert.deepStrictEqual(parseShardName("shard-3-of-4.json"), { index: 3, count: 4 });
+  assert.deepStrictEqual(parseShardName("shard-3-of-4.json"), { index: 3, count: 4, attempt: 1 });
   assert.strictEqual(parseShardName("shard-3.json"), null);
   assert.strictEqual(parseShardName("notes.json"), null);
+});
+
+check("a report name may carry the run attempt that wrote it", () => {
+  assert.deepStrictEqual(parseShardName("shard-3-of-4-attempt-2.json"), { index: 3, count: 4, attempt: 2 });
+  assert.strictEqual(parseShardName("shard-3-of-4.json").attempt, 1);
+  assert.strictEqual(parseShardName("shard-3-of-4-attempt-.json"), null);
+});
+
+// Batch 75, 2026-11-01: shard 4 failed on a flake, `gh run rerun --failed`
+// passed it on attempt 2, and tests-ran-once still read attempt 1's report,
+// because the run then held two artifacts of the same name and the download
+// took the older one. A re-run must be judged on what it re-ran.
+const rerun = () => [
+  ...clean().map((s) => ({ ...s, attempt: 1 })),
+  { ...shard(2, 2, [file("server/b.e2e.test.ts", "failed", ["failed"]), file("client/src/d.test.tsx")]), attempt: 1 },
+];
+check("a re-run shard is judged on its newest attempt, whichever order the reports arrive in", () => {
+  const reports = rerun();
+  // attempt 1 failed shard 2; the clean shard 2 is the re-run.
+  reports[1].attempt = 2;
+  for (const order of [reports, [...reports].reverse()]) {
+    const kept = latestAttempts(order);
+    assert.deepStrictEqual(kept.map((s) => `${s.index}@${s.attempt}`).sort(), ["1@1", "2@2"]);
+    const v = judge({ expected: EXPECTED, shards: kept, want: 2 });
+    assert.deepStrictEqual(v.failures, []);
+    assert.deepStrictEqual(v.problems, []);
+  }
+});
+
+check("control: judging every attempt at once is red, so the selection is what turns it green", () => {
+  const reports = rerun();
+  reports[1].attempt = 2;
+  const v = judge({ expected: EXPECTED, shards: reports, want: 2 });
+  assert.ok(v.failures.length > 0);
+});
+
+check("a newest attempt that failed stays failed: re-running cannot launder a red", () => {
+  const reports = rerun(); // make the FAILED shard 2 report the newest attempt
+  reports[2].attempt = 3;
+  const v = judge({ expected: EXPECTED, shards: latestAttempts(reports), want: 2 });
+  assert.deepStrictEqual(v.failures, ["server/b.e2e.test.ts: failed in shard 2"]);
 });
 
 check("an absolute report path comes back repo-relative with forward slashes", () => {
