@@ -66,6 +66,14 @@ export type DraftKind = (typeof DRAFT_KINDS)[number];
  */
 export const MAX_QUESTIONS_PER_DAY = 3;
 
+/**
+ * The ceiling on questions a day for one member, across every companion they
+ * have (Rye, 2026-10-31 decision sheet: "3 a day per companion, max 6 a day
+ * per member"). A member with three companions still reads six at most; the
+ * rest wait, held, for a morning with room.
+ */
+export const MAX_QUESTIONS_PER_MEMBER_PER_DAY = 6;
+
 /** An unanswered question expires this many village days after it was shown. */
 export const QUESTION_EXPIRY_DAYS = 7;
 
