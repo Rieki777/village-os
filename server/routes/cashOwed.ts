@@ -33,16 +33,48 @@ import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { createHash } from "node:crypto";
 import { cashCsv, cashExportRows, cashOwedFor, cashQueue, claimCash, markCashPaid, memberCashYearCsv, paidCashFor, recordCashTransfer } from "../lib/cashOwed";
-import { cashTotalsByCurrency, type CashOwedEntry, type CashQueueEntry } from "../../shared/cashOwed";
+import { CASH_PAY_REQUIRED, cashKeyRefusalWords, cashTotalsByCurrency, type CashOwedEntry, type CashQueueEntry } from "../../shared/cashOwed";
 import { formatMoney } from "../../shared/money";
+import { roleWithHolders } from "../../shared/roleHolderLabel";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit"> & {
   /** Who holds `cash.pay` through a role or a badge, admins left out (`liveHoldersOf`, server/index.ts). */
   cashKeyHolders: () => Promise<string[]>;
+  /** The roles whose definition carries a power (`rolesCarrying`, server/index.ts). */
+  rolesCarrying: (capability: string) => Array<{ id: string; name: string }>;
+  /** Every role seating (`loadRoleHolders`, server/index.ts). */
+  roleHolders: () => Array<{ roleId: string; userId: string }>;
 };
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders } = deps;
+  const { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders, rolesCarrying, roleHolders } = deps;
+
+  /*
+   * THE KEY'S REFUSAL, IN WORDS (E7, 2026-10-31). Left to itself the gate
+   * answers a bare 401 `auth_required` to everybody, and /cash-payouts showed
+   * a signed-in member that code. Signed in, they now get a 403 naming each
+   * role that carries `cash.pay` with its LIVE holders' first names: a seat
+   * whose term ran out is in `roleHolders` but not in `cashKeyHolders`, and
+   * a role with nobody live in it is left out. Signed out, the 401 stays and
+   * the page asks them to sign in. The gate still decides who passes; this
+   * only words the no.
+   */
+  const keyRefusal = async () => {
+    const live = new Set((await cashKeyHolders().catch(() => [] as string[])).map(String));
+    const seats = roleHolders();
+    const keepers: string[] = [];
+    for (const role of rolesCarrying("cash.pay")) {
+      const names: Array<string | null> = [];
+      for (const s of seats) {
+        if (s.roleId !== role.id || !live.has(String(s.userId))) continue;
+        names.push((await members.byId(String(s.userId)).catch(() => null))?.name ?? null);
+      }
+      if (names.length) keepers.push(roleWithHolders(role.name, names));
+    }
+    return { status: 403, body: { error: CASH_PAY_REQUIRED, message: cashKeyRefusalWords(keepers) } };
+  };
+  const guardKey = async (req: Parameters<typeof guardCapability>[0], res: Parameters<typeof guardCapability>[1]) =>
+    guardCapability(req, res, "cash.pay", (await authedUser(req)) ? await keyRefusal() : undefined);
 
   app.get("/api/me/cash-owed", async (req, res) => {
     const user = await authedUser(req);
@@ -108,7 +140,7 @@ export function register(app: Express, deps: Deps): void {
   };
 
   app.get("/api/cash-owed/queue", async (req, res) => {
-    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    if (!(await guardKey(req, res))) return;
     // The Admin "Paid" tab asks for a longer history than the profile card shows.
     const { unpaid, paid } = await cashQueue(getPool(), req.query?.history === "1" ? 1000 : 100);
     res.json({ unpaid: await nameRows(unpaid), paid: await nameRows(paid) });
@@ -121,7 +153,7 @@ export function register(app: Express, deps: Deps): void {
    * gets the same `cash_paid` notice a single line sends, once per transfer.
    */
   app.post("/api/cash-owed/transfers", async (req, res) => {
-    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    if (!(await guardKey(req, res))) return;
     const actor = await authedUser(req);
     if (!actor) return res.status(401).json({ error: "auth_required" });
     const out = await recordCashTransfer(getPool(), String(actor.id), req.body);
@@ -152,7 +184,7 @@ export function register(app: Express, deps: Deps): void {
 
   /** The accounts' export: every line, paid and unpaid, as CSV. */
   app.get("/api/cash-owed/export.csv", async (req, res) => {
-    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    if (!(await guardKey(req, res))) return;
     const rows = await nameRows(await cashExportRows(getPool()));
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="cash-owed-${new Date().toISOString().slice(0, 10)}.csv"`);
@@ -160,7 +192,7 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.post("/api/cash-owed/:id/paid", async (req, res) => {
-    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    if (!(await guardKey(req, res))) return;
     const actor = await authedUser(req);
     if (!actor) return res.status(401).json({ error: "auth_required" });
     const id = String(req.params.id);
