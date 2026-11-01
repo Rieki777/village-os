@@ -390,6 +390,17 @@ describe("/investor", () => {
     expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
+  it("draws only the figures a village stated, under the sentence for stated figures", async () => {
+    state.settings = { landFacts: { appraisal: { value: "1.2M EUR", note: "March 2027" } } };
+    show(InvestorJourney);
+    expect(await screen.findByText("1.2M EUR")).toBeInTheDocument();
+    expect(screen.getByText(fieldDefault(INVESTOR_JOURNEY, "figures", "intro"))).toBeInTheDocument();
+    expect(screen.queryByText(fieldDefault(INVESTOR_JOURNEY, "figures", "empty"))).toBeNull();
+    const [appreciation, appraisal, projected, raise] = listDefault(INVESTOR_JOURNEY, "figures", "tiles");
+    expect(screen.getByText(appraisal.title)).toBeInTheDocument();
+    for (const unset of [appreciation, projected, raise]) expect(screen.queryByText(unset.title), unset.title).toBeNull();
+  });
+
   it("invents no figure: no amount, no rate and no count anywhere in its words", async () => {
     state.settings = { landFacts: {} };
     show(InvestorJourney);

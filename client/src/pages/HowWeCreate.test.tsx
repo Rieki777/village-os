@@ -164,6 +164,17 @@ describe("the token section (Rye, 2026-10-22)", () => {
     expect(screen.getByRole("heading", { name: "Thanks" })).toBeInTheDocument();
   });
 
+  it("draws the panel whole with no cards, since the starter list is empty (Rye, 2026-10-23)", async () => {
+    expect(listDefault("tokens", "cards")).toEqual([]);
+    renderPage();
+    await headline();
+    const panel = screen.getByRole("heading", { name: fieldDefault("tokens", "heading") }).closest("div.rounded-3xl") as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(panel.querySelectorAll("h3")).toHaveLength(0);
+    expect(panel.textContent).toContain(filled(fieldDefault("tokens", "intro")));
+    expect(panel.querySelector('a[href="/game-mechanics"]')).not.toBeNull();
+  });
+
   it("says nothing about what a token does", async () => {
     renderPage();
     await headline();

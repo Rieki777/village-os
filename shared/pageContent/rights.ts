@@ -324,7 +324,7 @@ export const RIGHTS_RESIDENT_PAGE: PageSpec = rightsPage({
       },
       {
         title: "Pay Your Village Dues",
-        description: "Village dues cover the shared costs of living here. Pay what you agreed, on time, and ask if anything about it is unclear.",
+        description: "Village dues cover the shared costs of living here. Keep up with them as agreed, and ask if anything about them is unclear.",
       },
       {
         title: "Take Part in Village Decisions",
