@@ -102,6 +102,12 @@ export async function roleNameRows(pool: Pool, seatIds: string[]): Promise<RowDa
   return rows;
 }
 
+/** Every marker a member left: their baseline and each arrival they were shown. For erasure. */
+export async function forgetRewardMomentsOf(pool: Pool, userId: string): Promise<ResultSetHeader> {
+  const [res] = await pool.query<ResultSetHeader>("DELETE FROM `reward_moment_seen` WHERE `user_id` = ?", [userId]);
+  return res;
+}
+
 /** The proposal behind each accepted submission, as the proposer wrote it. */
 export async function proposalDataRows(pool: Pool, submissionIds: string[]): Promise<RowDataPacket[]> {
   if (!submissionIds.length) return [];
