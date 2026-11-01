@@ -98,6 +98,42 @@ export function formatMoney(
 }
 
 /**
+ * A figure a village typed as free text (its dues: "250"), written with a
+ * currency: the symbol the village typed beside it when it typed one, else
+ * the symbol of its own fiat currency (Admin, Make This Yours), else none.
+ *
+ * Never an invented one. The dues fallback was a compiled "$", so a village
+ * pricing in colones or francs published dollars (audit, 2026-10-22). A
+ * symbol with letters in it ("CHF", "CRC", "R$") takes a space; "$" and "₡"
+ * sit against the number, as they are written.
+ */
+export function figureWithCurrency(amount: string, typedSymbol?: string | null, fiatCurrency?: string | null): string {
+  const figure = String(amount ?? "").trim();
+  if (!figure) return "";
+  const symbol = String(typedSymbol ?? "").trim() || currencySymbol(String(fiatCurrency ?? ""));
+  if (!symbol) return figure;
+  return /[A-Za-z]/.test(symbol) ? `${symbol} ${figure}` : `${symbol}${figure}`;
+}
+
+/**
+ * The symbol an ISO currency is written with: "$" for USD, "₡" for CRC, and
+ * the code itself where there is no narrower one ("CHF") or the code is
+ * unknown. Empty for an empty code.
+ */
+export function currencySymbol(currency: string): string {
+  const code = String(currency ?? "").trim().toUpperCase();
+  if (!code) return "";
+  try {
+    const part = new Intl.NumberFormat("en", { style: "currency", currency: code, currencyDisplay: "narrowSymbol" })
+      .formatToParts(0)
+      .find((p) => p.type === "currency");
+    return part?.value || code;
+  } catch {
+    return code;
+  }
+}
+
+/**
  * The display currency to start a viewer on (P8): the project's own fiat
  * currency, and CHF when the project has not said, the universal default the
  * ruling names. A per-member preference (`users.prefs.displayCurrency`)

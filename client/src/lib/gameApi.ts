@@ -8,6 +8,7 @@ import type { StageRule } from "@shared/gameConfig";
 import type { Capability } from "@shared/capabilities";
 import type { PlanWindowPayload } from "@shared/seasonPlans";
 import { removeStored, storedText } from "./safeStorage";
+import { villageWord, type CatalystLabel } from "@shared/villageWord";
 
 /**
  * The ONE localStorage key for the session token. Exported so nothing else
@@ -163,6 +164,30 @@ export function fetchConfigCached(): Promise<PublicGameConfig | null> {
   return _configCache;
 }
 
+/** Every mounted reader of the config, so a fresh one reaches them all at once. */
+const _configReaders = new Set<(c: PublicGameConfig) => void>();
+
+/**
+ * READ THE CONFIG AGAIN AND HAND IT TO EVERY READER ON THE PAGE.
+ *
+ * The cache above is filled once per page load, so a founder who saved a new
+ * name or new pictures in Admin went on seeing the old ones in their own tab,
+ * header and all, until a full reload, under a note saying the change shows
+ * instantly (audit item 24). A save that changes identity calls this after
+ * the server answers: the shell, every page hook and the brand images then
+ * repaint with what the server now serves. A failed read changes nothing.
+ */
+export async function refreshGameConfig(): Promise<PublicGameConfig | null> {
+  const fresh = await fetch("/api/game/config")
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  if (!fresh) return null;
+  _configNow = fresh;
+  _configCache = Promise.resolve(fresh);
+  _configReaders.forEach((read) => read(fresh));
+  return fresh;
+}
+
 /**
  * The whole live config, null until loaded. The shell (Layout) reads its
  * identity — logo, name, outside links, footer copy — from here rather than
@@ -175,7 +200,11 @@ export function useGameConfig(): PublicGameConfig | null {
   useEffect(() => {
     let alive = true;
     fetchConfigCached().then((c) => { if (alive && c) setConfig(c); });
-    return () => { alive = false; };
+    _configReaders.add(setConfig);
+    return () => {
+      alive = false;
+      _configReaders.delete(setConfig);
+    };
   }, []);
   return config;
 }
@@ -249,65 +278,8 @@ export const CATALYST_FALLBACK = "Catalyst";
 export const ROLE_FALLBACK = "Role";
 export const SEAT_FALLBACK = "Seat";
 
-/**
- * "a" or "an" for a word a founder typed, by its first letter.
- *
- * A HEURISTIC, and a knowingly imperfect one: it reads "Elder" correctly and
- * would read a hypothetical "Union" wrongly. The alternative was to write
- * every sentence around the article, which makes every render site read
- * stiffly to avoid a case no village has asked for. Exported and pinned by
- * `client/src/lib/catalystLabel.test.ts` rather than left to be inferred.
- */
-export function articleFor(word: string): string {
-  return /^[aeiou]/i.test(String(word ?? "").trim()) ? "an" : "a";
-}
-
-/**
- * The plural of a word a founder typed.
- *
- * English regular plurals only, which covers every word a village has plausibly
- * chosen for this: Catalysts, Founders, Stewards, Elders, Keepers, Weavers,
- * Guardians. The two irregular endings that do come up in practice are handled
- * (a trailing consonant plus y takes "ies", a sibilant takes "es"); a genuinely
- * irregular word would read wrongly, and rewriting every plural sentence to
- * dodge it made them all read worse than the one case that might be wrong.
- * Pinned by `client/src/lib/catalystLabel.test.ts`.
- */
-export function pluralFor(word: string): string {
-  const w = String(word ?? "").trim();
-  if (!w) return w;
-  if (/[^aeiou]y$/i.test(w)) return `${w.slice(0, -1)}ies`;
-  if (/(s|x|z|ch|sh)$/i.test(w)) return `${w}es`;
-  return `${w}s`;
-}
-
-export interface CatalystLabel {
-  /** The word itself, capitalised as the village typed it. */
-  name: string;
-  /** "a" or "an", whichever this word takes. */
-  a: string;
-  /** The two together, because nearly every site needs both. */
-  aName: string;
-  /** The same, capitalised, for the start of a sentence. */
-  aNameCap: string;
-  /** More than one of them. */
-  plural: string;
-}
-
-/**
- * One renameable word, with its article and its plural worked out once.
- *
- * `CatalystLabel` was always this shape and only ever had one caller. Three
- * villages' worth of words now ride it (whoever runs the place, the position
- * somebody holds, one person's occupancy of that position), so the derivation
- * lives here and the hooks below are three lines each. Copying the article and
- * plural logic per word is how two of them end up disagreeing about "an".
- */
-export function villageWord(typed: unknown, fallback: string): CatalystLabel {
-  const name = String(typed ?? "").trim() || fallback;
-  const a = articleFor(name);
-  return { name, a, aName: `${a} ${name}`, aNameCap: a === "an" ? `An ${name}` : `A ${name}`, plural: pluralFor(name) };
-}
+/** The article, the plural and the word together: shared/villageWord.ts, kept importable from here. */
+export { articleFor, pluralFor, villageWord, type CatalystLabel } from "@shared/villageWord";
 
 /** The label, live. Reads the platform default until the config arrives. */
 export function useCatalyst(): CatalystLabel {
@@ -341,6 +313,9 @@ export function useBrandImages(): BrandImages {
   const [images, setImages] = useState<BrandImages>(() => _configNow?.images ?? {});
   useEffect(() => {
     fetchConfigCached().then((c) => { if (c?.images) setImages(c.images); });
+    const read = (c: PublicGameConfig) => { if (c.images) setImages(c.images); };
+    _configReaders.add(read);
+    return () => { _configReaders.delete(read); };
   }, []);
   return images;
 }

@@ -61,7 +61,10 @@ export default function SeasonBanner() {
   // same window the season-end notifications open on
   // (server/lib/seasonReminders.ts).
   const daysLeft = season.daysLeft;
-  const turningSoon = daysLeft != null && daysLeft > 0 && daysLeft <= 14;
+  // The end-of-season reminder is an instruction to the people who run the
+  // governance, so a visitor never reads it: signed-in members only, the same
+  // rule as the plan line (audit item 28).
+  const turningSoon = !!user && daysLeft != null && daysLeft > 0 && daysLeft <= 14;
 
   return (
     <section className="bg-teal-band text-white py-4">

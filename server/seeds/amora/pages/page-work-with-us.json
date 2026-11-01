@@ -1,0 +1,13 @@
+{
+  "email": {
+    "body": "Thank you for offering your gifts. We read every Work With Us proposal with care. Please allow up to a month for a thoughtful response, and room for conversation and revision.",
+    "subject": "We've received your proposal"
+  },
+  "thanks": {
+    "body": "Thank you for offering your gifts to {village}. A reply can take up to a month, and there's room to talk it through and revise.",
+    "heading": "Your proposal is with us"
+  },
+  "reciprocity": {
+    "lede": "{village} is built on reciprocity, and there's more than one way to be valued here."
+  }
+}

@@ -174,7 +174,7 @@ export interface Asked {
  * The routes the steps call, answering as the server would. `extra` is laid
  * over every proposal it answers with; `card` is the preview's payload.
  */
-export function fakeServer(start: DraftBody, opts: { extra?: Partial<ProposalOut>; card?: unknown; comments?: unknown[] } = {}) {
+export function fakeServer(start: DraftBody, opts: { extra?: Partial<ProposalOut>; card?: unknown; comments?: unknown[]; whoApproves?: string } = {}) {
   let stored = start;
   let share: ShareOut = opts.extra?.share ?? OFF_SHARE;
   const asked: Asked[] = [];
@@ -192,7 +192,9 @@ export function fakeServer(start: DraftBody, opts: { extra?: Partial<ProposalOut
     if (url === BASE) return json({ proposal: now() });
     if (url === `${BASE}/card`) return json(opts.card ?? {});
     if (url === `${BASE}/comments`) return json({ comments: opts.comments ?? [] });
-    if (url === `${BASE}/words`) return json({ title: "Terms", body: "I hold Kitchen keeper on these terms.", money: false, intent: "x" });
+    if (url === `${BASE}/words`) {
+      return json({ title: "Terms", body: "I hold Kitchen keeper on these terms.", money: false, intent: "x", ...(opts.whoApproves ? { whoApproves: opts.whoApproves } : {}) });
+    }
     if (url === `${BASE}/share/regenerate`) {
       share = { ...share, on: true, audience: body?.audience ?? share.audience, token: "N".repeat(32), link: `/role-proposals/shared/${"N".repeat(32)}` };
       return json({ share });

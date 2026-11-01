@@ -134,7 +134,8 @@ export const RP_WORDS = {
   fromWho: (from: string, on: string) => `${from}, ${on}`,
   submitHeading: "Submit for next season",
   submit: "Submit for next season",
-  whoApproves: "The circle consents within 2 business days, or the founder, steward or organisation power adopts it.",
+  /** Only while the server names nobody: the server's own line names who adopts in this village (E8). */
+  whoApproves: "The circle consents within 2 business days, or a founder or steward role adopts it.",
   youAlign: "You align with these words when you submit:",
   confirm: "Yes, submit it",
   notYet: "Not yet",

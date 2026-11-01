@@ -1,28 +1,54 @@
 /**
- * WHAT QUESTS AND ROLES PAY, READ FROM THE WORK ITSELF (0265, Rye 2026-10-21).
+ * HOW MUCH WORK THERE IS, READ FROM THE WORK ITSELF.
  *
  * The Co-Creators Guide used to type its own payout figures ("40-300", "200-500
- * a month"), and nothing in the platform paid them. This reads what the board's
- * quests and the village's roles are actually set to, through the same `pay`
- * their cards render, so a general page stays true as values change.
+ * a month"), and nothing in the platform paid them. Then this said what the
+ * quests and roles were set to pay. Rye ruled on 2026-10-23 that no sentence
+ * restates pay, because each quest and role card already shows its value, so
+ * this now counts the open quests and the roles and links to them. The cards
+ * say the rest.
  *
- * Roles say what they pay only to a reader who may read their terms, the same
- * tier the role cards use (server/lib/seatProjection.ts), so a visitor is told
- * where to look and shown no figure.
+ * Example quests and example roles are not counted: they show what the work
+ * looks like until the village posts its own, and nobody can take them.
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { CheckCircle2 } from "lucide-react";
-import { gameFetch } from "@/lib/gameApi";
-import { paySummary, summaryWords, type WorkPay } from "@/lib/workPay";
+import { gameFetch, useGameConfig } from "@/lib/gameApi";
+import { villageWord, type CatalystLabel } from "@shared/villageWord";
+
+/** The platform's word for a role until the village names its own: `ROLE_FALLBACK` in gameApi. */
+const ROLE_WORD = "Role";
 
 interface Read {
-  quests: Array<WorkPay | null | undefined> | null;
-  /** Null when this reader is not shown what roles pay. */
-  roles: Array<WorkPay | null | undefined> | null;
+  /** Null when the board could not be read. */
+  quests: number | null;
+  /** Null when the roles could not be read. */
+  roles: number | null;
+}
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The quest line: a count, or what to do when there is none to give. */
+export function questLine(read: Read | null): string {
+  if (!read) return "Reading the quest board.";
+  if (read.quests === null) return "The quest board lists every open quest.";
+  if (read.quests === 0) return "No open quests yet.";
+  return count(read.quests, "open quest", "open quests");
+}
+
+/** The role line, the same way, in the village's own word for a role (Admin, Make This Yours). */
+export function roleLine(read: Read | null, role: CatalystLabel = villageWord("", ROLE_WORD)): string {
+  const one = role.name.toLowerCase();
+  const many = role.plural.toLowerCase();
+  if (!read) return `Reading the ${many}.`;
+  if (read.roles === null) return `The ${many} page lists every ${one}.`;
+  if (read.roles === 0) return `No ${many} yet.`;
+  return count(read.roles, one, many);
 }
 
 export default function EarningsFromTheWork() {
+  const role = villageWord(useGameConfig()?.project?.roleName, ROLE_WORD);
   const [read, setRead] = useState<Read | null>(null);
   useEffect(() => {
     let alive = true;
@@ -36,40 +62,19 @@ export default function EarningsFromTheWork() {
     ]).then(([quests, org]) => {
       if (!alive) return;
       const openQuests = Array.isArray(quests)
-        ? quests.filter((q: any) => !q?.isExample && String(q?.status ?? "").trim().toLowerCase() !== "closed")
+        ? quests.filter((q: any) => !q?.isExample && String(q?.status ?? "").trim().toLowerCase() !== "closed").length
         : null;
-      const roles = Array.isArray(org?.roles) ? org.roles.filter((r: any) => !r?.isExample && "pay" in r) : [];
-      setRead({
-        quests: openQuests ? openQuests.map((q: any) => q.pay) : null,
-        roles: roles.length ? roles.map((r: any) => r.pay) : null,
-      });
+      const roles = Array.isArray(org?.roles) ? org.roles.filter((r: any) => !r?.isExample).length : null;
+      setRead({ quests: openQuests, roles });
     });
     return () => {
       alive = false;
     };
   }, []);
 
-  const questLine = (() => {
-    if (!read) return "Reading what the board's quests pay.";
-    if (!read.quests) return "Every quest card says what it pays.";
-    const s = paySummary(read.quests);
-    const words = summaryWords(s);
-    if (!words) return "Every quest card says what it pays. None has a value set yet, so each says to inquire.";
-    return `${s.valued} of ${s.count} open quests carry a value, ${words}.`;
-  })();
-
-  const roleLine = (() => {
-    if (!read) return "Reading what roles pay.";
-    if (!read.roles) return "Each role says what it pays on its card, for members, and its agreement states any cash.";
-    const s = paySummary(read.roles);
-    const words = summaryWords(s);
-    if (!words) return "Each role says what it pays on its card. None has a value set yet, so each says to inquire.";
-    return `${s.valued} of ${s.count} roles carry a value, ${words} each cycle. Any cash is stated in the role's agreement.`;
-  })();
-
   const rows = [
-    { label: "Quests", line: questLine, href: "/quests", link: "See the quest board" },
-    { label: "Roles", line: roleLine, href: "/roles", link: "See the roles" },
+    { label: "Quests", line: questLine(read), href: "/quests", link: "See the quest board" },
+    { label: role.plural, line: roleLine(read, role), href: "/roles", link: `See the ${role.plural.toLowerCase()}` },
   ];
 
   return (
