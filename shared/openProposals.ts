@@ -141,6 +141,8 @@ export const OPEN_WORDS = {
   nameLabel: "Your name",
   emailLabel: "Your email",
   emailNote: "We'll only write to you about this proposal.",
+  /** The retention, in one plain line on the form (sheet 19i). */
+  keptFor: `If you don't confirm within ${OPEN_CONFIRM_HOURS} hours, we delete what you sent. If the village says no, we remove your name and email ${OPEN_ANONYMISE_DAYS} days later.`,
   send: "Send my proposal",
   sent: (email: string) => `Check ${email}. We sent a link to confirm it's you. Your proposal reaches the village once you open it.`,
   confirmed: "Confirmed. Your proposal is with the village now, and you'll hear back by email.",
