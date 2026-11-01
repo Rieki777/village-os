@@ -177,6 +177,7 @@ import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
 import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
+import { claimsAnnouncedHere } from "./lib/rewardMoment";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
@@ -11352,7 +11353,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     await attachWaitlistInfo(getPool(), [g], viewer.userId);
     res.json({
       event: g,
-      schemaOrg: toSchemaOrg(g, { siteUrl: mergedConfig().project.siteUrl }),
+      schemaOrg: toSchemaOrg(g),
       rsvpEnabled: boolVar("events.rsvp_enabled"),
     });
   });
@@ -19131,6 +19132,7 @@ ${inner}
     // disagree. Absent on claims that never posted (a zero grant, or a claim
     // still open), which is the client's signal to show the plain amount.
     const questCredits = await questCreditsFor(getPool(), user.id);
+    const announcedHere = await claimsAnnouncedHere(getPool(), user.id);
     // THE MOST RECENT RUNG THIS MEMBER CROSSED, and what it opened.
     //
     // `recordStageEvent` has computed this diff since item 8 and the only way
@@ -19158,9 +19160,11 @@ ${inner}
       stageIndex: stageIndex(stageId),
       stages: servedLadder(mergedConfig().project.commitmentName),
       gratitude: { balance: user.recognitionBalance ?? 0, decimals: tokenDef(PLATFORM_TOKEN)?.decimals ?? 0, budget: await gratitudeBudget(user) }, // `balance` is the cached MINOR-unit column; `decimals` is what turns it into the number on the card
-      quests: claims.map((c: any) =>
-        questCredits.has(c.id) ? { ...c, credited: questCredits.get(c.id) } : c,
-      ),
+      // A claim whose pay the reward moment names is celebrated there, once: server/lib/rewardMoment.ts.
+      quests: claims.map((c: any) => ({
+        ...(questCredits.has(c.id) ? { ...c, credited: questCredits.get(c.id) } : c),
+        ...(announcedHere.has(c.id) ? { announcedByRewardMoment: true } : {}),
+      })),
       journeys: user.journeys ?? {},
       membership: hasMembership(user),
       trainingComplete: trainingDoneHere(trained), training: trainingProgress(trainingRepo.all(), trained), // done/required, mandatory only

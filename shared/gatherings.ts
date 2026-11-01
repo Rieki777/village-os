@@ -253,11 +253,13 @@ export function isFull(capacity: number | null, goingCount: number): boolean {
  *
  * `eventStatus` and `eventAttendanceMode` take the full schema.org URLs
  * because the short forms are not valid outside a context that defines them.
+ *
+ * NO `url`. It read `<siteUrl>/events/<id>`, and no host serves that: the
+ * outside website has no event pages, and the app shows events only on its
+ * calendar, which is not this event's own page (sweep, 2026-10-31). schema.org
+ * reads `url` as the event's own page, so it is left out until one exists.
  */
-export function toSchemaOrg(
-  g: Gathering,
-  opts: { siteUrl?: string } = {},
-): Record<string, unknown> | null {
+export function toSchemaOrg(g: Gathering): Record<string, unknown> | null {
   if (g.status === "draft") return null;
   const S = "https://schema.org/";
   const statusUrl: Record<Exclude<EventStatus, "draft">, string> = {
@@ -289,6 +291,5 @@ export function toSchemaOrg(
     const virtual = { "@type": "VirtualLocation", url: g.onlineUrl };
     doc.location = doc.location ? [doc.location, virtual] : virtual;
   }
-  if (opts.siteUrl) doc.url = `${opts.siteUrl.replace(/\/$/, "")}/events/${g.id}`;
   return doc;
 }

@@ -36,6 +36,7 @@ import {
   insertBaselineRow,
   insertSeenRows,
   proposalDataRows,
+  questConsentRefsSince,
   questTitleRows,
   roleNameRows,
   seenKeyRows,
@@ -153,6 +154,30 @@ export async function pendingRewardMoment(pool: Pool, userId: string): Promise<R
     keys: [...fresh.map((r) => rewardKeys.ledger(r.id)), ...paid.map((r) => rewardKeys.cash(r.id))],
     lines,
   };
+}
+
+/**
+ * THE QUESTS WHOSE PAY THIS MOMENT ANNOUNCES, so the quest page does not
+ * announce it a second time.
+ *
+ * A consent used to be celebrated on the quest page alone (QuestActions'
+ * seeds moment, once per browser). Since 0294 the same pay is also named here,
+ * on whatever page the member opens next, so a consented quest was announced
+ * twice. This moment wins wherever it applies: it names what actually landed,
+ * by token, it is remembered on the server so a phone and a laptop agree, and
+ * it reaches the member without their going back to the quest.
+ *
+ * It applies to a claim whose consent credited an earnings token at or after
+ * the member's baseline: exactly the rows `pendingRewardMoment` reads. A
+ * consent from before the baseline, one that paid only Gratitude, or one that
+ * paid no tokens at all (nothing set, or cash only) is never announced here,
+ * so the quest page keeps its moment for those and nothing goes uncelebrated.
+ * Before a member's first look there is no baseline and the answer is empty.
+ */
+export async function claimsAnnouncedHere(pool: Pool, userId: string): Promise<Set<string>> {
+  if (!(await hasBaselineRow(pool, userId))) return new Set();
+  const rows = await questConsentRefsSince(pool, memberAccount(userId), userId);
+  return new Set(rows.filter((r) => r.source_ref && isEarningsToken(String(r.token_type))).map((r) => String(r.source_ref)));
 }
 
 /**
