@@ -58,6 +58,18 @@ export function register(app: Express, deps: Deps): void {
     const viewerId = String(viewer.id);
     const isSelf = viewerId === a.candidateUserId;
     const seat = await cardSeatTier(deps, req, viewer, { terms: true, isSelf });
+    /*
+     * THE SEASON THE APPLICATION IS FOR (E9): the one its term sits in, read
+     * by id now, so a renamed season reads by its new name. One taken off the
+     * calendar draws no season; an application with no season keeps the
+     * running one, as it always did.
+     */
+    const s = a.termSeasonId ? (deps.seasonState().seasons ?? []).find((x: any) => x && String(x.id) === a.termSeasonId) : undefined;
+    const season = a.termSeasonId
+      ? s
+        ? { id: String(s.id), name: s.name ? String(s.name) : null, startsOn: s.startsOn ? String(s.startsOn) : null, endsOn: s.endsOn ? String(s.endsOn) : null }
+        : null
+      : undefined;
     const cards = await buildPlayerCards(
       pool,
       [
@@ -69,6 +81,7 @@ export function register(app: Express, deps: Deps): void {
             seatIds: a.seatIds,
             settings: a.settings,
             termEndsAt: a.termEndsAt ? a.termEndsAt.toISOString() : null,
+            season,
           },
         },
       ],

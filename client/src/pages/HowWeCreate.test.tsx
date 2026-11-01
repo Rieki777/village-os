@@ -25,7 +25,18 @@ import { render, screen } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 import { HOW_WE_CREATE_PAGE } from "@shared/pageContent/howWeCreate";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
+import { pageVarsFrom } from "@shared/pageContent/vars";
+
+/*
+ * A village that saved nothing reads the spec's defaults, neutral starter
+ * text since 2026-10-23. These read them from the spec rather than typing
+ * them again, so a later wording change moves no test.
+ */
+const section = (id: string) => HOW_WE_CREATE_PAGE.sections.find((s) => s.id === id)!;
+const fieldDefault = (id: string, key: string) => section(id).fields.find((f) => f.key === key)!.default;
+const listDefault = (id: string, key: string) => section(id).lists!.find((l) => l.key === key)!.default;
+const filled = (text: string) => fillVars(text, pageVarsFrom(gameConfig ?? {}));
 
 let gameConfig: { project: Record<string, string>; currency: { name: string; value?: { name: string } } } | null;
 let eventsUrl: string;
@@ -96,32 +107,49 @@ describe("every field in the How We Create spec reaches the page", () => {
     renderPage();
     await headline();
 
-    expect(screen.queryByText("Our Governance Structure")).toBeNull();
+    expect(screen.queryByText(fieldDefault("governance", "heading"))).toBeNull();
     // "Seasonal Rhythm" is also a principle card's title, so the section is found by its own words.
-    expect(screen.queryByText(/Each season is its own chapter/)).toBeNull();
-    expect(screen.queryByText("Winter Season")).toBeNull();
-    expect(screen.queryByText("Flexible Governance with Hypha")).toBeNull();
-    expect(screen.getByText("Our Tokens")).toBeInTheDocument();
+    expect(screen.queryByText(filled(fieldDefault("seasons", "intro")))).toBeNull();
+    expect(screen.queryByText(listDefault("seasons", "seasons")[3].title)).toBeNull();
+    expect(screen.queryByText(fieldDefault("hypha", "heading"))).toBeNull();
+    expect(screen.getByText(fieldDefault("tokens", "heading"))).toBeInTheDocument();
   });
 });
 
 describe("the page with nothing saved", () => {
-  it("keeps today's words, the slogan and the circles count among them, as editable defaults", async () => {
+  it("draws the spec's starter words, filled with the village's name", async () => {
     renderPage();
 
-    expect(await headline()).toHaveTextContent("How We Create Together");
-    expect(screen.getByText(/designed to ensure all beings belong and thrive\./)).toBeInTheDocument();
-    expect(screen.getByText("8 Sociocratic Circles take active role")).toBeInTheDocument();
-    expect(screen.getByText("Community Advisory Council shapes culture")).toBeInTheDocument();
+    expect(await headline()).toHaveTextContent(fieldDefault("hero", "headline"));
+    expect(screen.getByText(filled(fieldDefault("hero", "intro")))).toBeInTheDocument();
+    const [first, second] = listDefault("governance", "phases");
+    expect(screen.getByText(first.item1)).toBeInTheDocument();
+    expect(screen.getByText(second.item1)).toBeInTheDocument();
   });
 
-  it("says what the village wrote under the headline instead of the slogan", async () => {
+  it("states none of the founding village's own choices as every village's (2026-10-23)", async () => {
+    hyphaConfigured = true;
+    renderPage();
+    await headline();
+    const said = document.body.textContent ?? "";
+
+    // Its slogan, its governance, its circle count, its board, its cadence.
+    expect(said).not.toMatch(/all beings belong and thrive/);
+    expect(said).not.toMatch(/sociocra/i);
+    expect(said).not.toMatch(/\bTeal\b/);
+    expect(said).not.toMatch(/\b8 \w+ Circles|Advisory Council|Development Board|Leadership Council/);
+    expect(said).not.toMatch(/Every 3 months|three months/i);
+    // The work's pay is on its cards (Rye, 2026-10-23).
+    expect(said).not.toMatch(/get paid/i);
+  });
+
+  it("says what the village wrote under the headline instead of the starter words", async () => {
     stored["page-how-we-create"] = { hero: { intro: "We decide together, slowly." } };
     renderPage();
     await headline();
 
     expect(screen.getByText("We decide together, slowly.")).toBeInTheDocument();
-    expect(screen.queryByText(/all beings belong and thrive/)).toBeNull();
+    expect(screen.queryByText(filled(fieldDefault("hero", "intro")))).toBeNull();
   });
 });
 
@@ -134,6 +162,17 @@ describe("the token section (Rye, 2026-10-22)", () => {
     expect(screen.getByText("Willowbrook keeps its own tokens, Thanks among them. Their rules are the community's to design.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /See how they work here/ })).toHaveAttribute("href", "/game-mechanics");
     expect(screen.getByRole("heading", { name: "Thanks" })).toBeInTheDocument();
+  });
+
+  it("draws the panel whole with no cards, since the starter list is empty (Rye, 2026-10-23)", async () => {
+    expect(listDefault("tokens", "cards")).toEqual([]);
+    renderPage();
+    await headline();
+    const panel = screen.getByRole("heading", { name: fieldDefault("tokens", "heading") }).closest("div.rounded-3xl") as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(panel.querySelectorAll("h3")).toHaveLength(0);
+    expect(panel.textContent).toContain(filled(fieldDefault("tokens", "intro")));
+    expect(panel.querySelector('a[href="/game-mechanics"]')).not.toBeNull();
   });
 
   it("says nothing about what a token does", async () => {
@@ -155,8 +194,8 @@ describe("the Hypha section follows the village's Hypha space", () => {
     renderPage();
     await headline();
 
-    expect(screen.queryByText("Flexible Governance with Hypha")).toBeNull();
-    expect(screen.queryByText("How Hypha Enables This")).toBeNull();
+    expect(screen.queryByText(fieldDefault("hypha", "heading"))).toBeNull();
+    expect(screen.queryByText(fieldDefault("hypha", "boxHeading"))).toBeNull();
   });
 
   it("is drawn, decision methods and all, once the link is set", async () => {
@@ -164,9 +203,9 @@ describe("the Hypha section follows the village's Hypha space", () => {
     renderPage();
     await headline();
 
-    expect(screen.getByText("Flexible Governance with Hypha")).toBeInTheDocument();
-    expect(screen.getByText("Advice Process")).toBeInTheDocument();
-    expect(screen.getByText("How Hypha Enables This")).toBeInTheDocument();
+    expect(screen.getByText(fieldDefault("hypha", "heading"))).toBeInTheDocument();
+    expect(screen.getByText(listDefault("hypha", "methods")[2].name)).toBeInTheDocument();
+    expect(screen.getByText(fieldDefault("hypha", "boxHeading"))).toBeInTheDocument();
   });
 
   it("tells an admin, and only an admin, why it is missing", async () => {

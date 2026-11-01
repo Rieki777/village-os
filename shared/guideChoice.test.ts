@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 import { GUIDE_WORDS, parseGuideId, resolveGuide, type GuideOption } from "./guideChoice";
 
 const both = (village: boolean, saberra: boolean): GuideOption[] => [
-  { id: "village", name: "Maia", available: village },
-  { id: "saberra", name: "Sera", available: saberra },
+  { id: "village", name: "Maia", named: true, available: village },
+  { id: "saberra", name: "Sera", named: true, available: saberra },
 ];
 
 describe("reading a stored choice", () => {

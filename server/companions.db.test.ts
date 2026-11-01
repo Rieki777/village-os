@@ -21,7 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { register } from "./routes/companions";
-import { landItem, planConfirm, claimForDoor, syncArmy, turnTheDay, armyView, type CompanionsEnv } from "./lib/companions";
+import { landItem, planConfirm, claimForDoor, syncArmy, turnTheDay, armyView, handOffPurchase, type CompanionsEnv } from "./lib/companions";
 import { companionsOf, itemById, forgetCompanionsForMember } from "./repos/companions";
 import { recordToLandInput } from "./lib/companionSera";
 import { CONSENT_PREFS_KEY, readConsents } from "./lib/companionConsent";
@@ -204,7 +204,7 @@ describe.skipIf(!configured)("companions against a real schema", () => {
   it("refuses at landing, never storing: no door, a fraction, an address, an unknown kind", async () => {
     const ana = (await companionsOf(pool, "u-ana")).find((c) => c.scope === "personal")!;
     const [[before]] = await pool.query<any[]>("SELECT COUNT(*) AS c FROM companion_items"); // module-review-ok: reading back the companion rows the route or the erasure changed; asserting they are gone or untouched needs no product reader
-    for (const kind of ["cash_payment", "purchase", "ask"] as const) {
+    for (const kind of ["cash_payment", "ask"] as const) {
       const r = await landItem(env(), ana, { type: "draft", kind, title: "Pay it", payload: {}, quote: "q", sourceRef: "s", origin: "maia" });
       expect(r).toEqual({ ok: false, error: DRAFT_DOORS[kind].refusal });
     }
@@ -258,6 +258,52 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     expect(moved.ownerUserId).toBe("u-ben");
     // Control: a decided item keeps its decision where it was made.
     expect((await itemById(pool, (decided as any).item.id))!.ownerUserId).toBe("u-rick");
+  });
+
+  it("pays a purchase back from the circle budget: the member's yes hands the spend to whoever speaks for the circle", async () => {
+    await pool.query("INSERT INTO circle_budgets (id, circle_id, amount_minor, unit) VALUES ('b-kitchen', 'c-kitchen', 0, 'credits'), ('b-lonely', 'c-lonely', 0, 'credits'), ('b-crowd', 'c-crowd', 0, 'credits'), ('b-anas', 'c-anas', 0, 'credits')"); // module-review-ok: fixture budgets on the scratch schema, one per case
+    await pool.query("INSERT INTO org_roles (id, circle_id, name, seats, active, represents_circle) VALUES ('r-kitchen-lead', 'c-kitchen', 'Kitchen lead', 1, 1, 1), ('r-crowd-a', 'c-crowd', 'Lead A', 1, 1, 1), ('r-crowd-b', 'c-crowd', 'Lead B', 1, 1, 1), ('r-anas-lead', 'c-anas', 'Lead', 1, 1, 1)"); // module-review-ok: fixture speaking roles, each flagged represents_circle
+    await pool.query("INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES ('a-k1', 'r-kitchen-lead', 'member', 'u-ben', 'member:u-ben'), ('a-c1', 'r-crowd-a', 'member', 'u-ben', 'member:u-ben'), ('a-c2', 'r-crowd-b', 'member', 'u-rick', 'member:u-rick'), ('a-n1', 'r-anas-lead', 'member', 'u-ana', 'member:u-ana')"); // module-review-ok: fixture seatings for the speaking roles
+    const ana = (await companionsOf(pool, "u-ana")).find((c) => c.scope === "personal")!;
+    const purchase = async (budgetId: string, title: string) => {
+      const r = await landItem(env(), ana, { type: "draft", kind: "purchase", title, payload: { budgetId, amountMinor: 4500, note: "Seed trays", toOutside: "Finca Verde, sales@fincaverde.example" }, quote: "I bought the seed trays", sourceRef: "chat:42", origin: "chat" });
+      expect(r.ok, title).toBe(true);
+      return (r as any).item.id as string;
+    };
+
+    // The yes plans a hand-off to Ben, who speaks for the kitchen, paying Ana.
+    const id = await purchase("b-kitchen", "Seed trays for the kitchen");
+    const planned = await planConfirm(pool, "u-ana", id, undefined);
+    expect(planned.ok).toBe(true);
+    const plan = (planned as any).plan;
+    expect(plan.way).toBe("payback");
+    expect(plan.holderId).toBe("u-ben");
+    expect(plan.spend).toMatchObject({ budgetId: "b-kitchen", amountMinor: 4500, toUserId: "u-ana" });
+
+    // The hand-off lands once on Ben's own companion, however many times it runs.
+    const first = await handOffPurchase(env(), (planned as any).item, plan);
+    const again = await handOffPurchase(env(), (planned as any).item, plan);
+    expect(first.ok && again.ok && first.landedId === again.landedId).toBe(true);
+    const spend = (await itemById(pool, (first as any).landedId))!;
+    expect(spend.ownerUserId).toBe("u-ben");
+    expect(spend.draftKind).toBe("budget_spend");
+    expect(spend.payload).toMatchObject({ budgetId: "b-kitchen", amountMinor: 4500, toUserId: "u-ana" });
+
+    // Ben's yes is the treasury's own spend door, paying Ana, so asker and payee differ.
+    const bens = await planConfirm(pool, "u-ben", spend.id, undefined);
+    expect(bens.ok).toBe(true);
+    expect((bens as any).plan.first).toMatchObject({ method: "POST", path: "/api/admin/resources/budgets/b-kitchen/spend" });
+    expect((bens as any).plan.first.body.toUserId).toBe("u-ana");
+
+    // Refusals, each by its sentence, and the draft stays open.
+    const refusal = async (budgetId: string) => {
+      const r = await planConfirm(pool, "u-ana", await purchase(budgetId, `Trays from ${budgetId}`), undefined);
+      return r.ok ? null : { status: r.status, error: r.error };
+    };
+    expect(await refusal("b-lonely")).toEqual({ status: 409, error: "Nobody speaks for this circle yet, so there is nobody to pay you back. Ask an admin." });
+    expect((await refusal("b-crowd"))?.error).toMatch(/More than one person speaks for this circle/);
+    expect((await refusal("b-anas"))?.error).toMatch(/You speak for this circle yourself/);
+    expect(await refusal("no-such-budget")).toEqual({ status: 404, error: "No such budget" });
   });
 
   it("opens a draft's door once: the second claim finds nothing to claim", async () => {

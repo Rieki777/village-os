@@ -439,6 +439,8 @@ export interface AppDeps {
     to: string[];
     subject: string;
     html: string;
+    /** The plain-text part, when the caller rendered one. */
+    text?: string;
     replyTo?: string;
     /** What made this email, for the ledger: `housing.request`, say. */
     origin?: string;
@@ -474,6 +476,13 @@ export interface AppDeps {
 
   /** What this village calls itself, for an email subject line. */
   projectName(): string;
+
+  /**
+   * The village's brand colour, one hex value, for the hand-written emails'
+   * band, buttons and links (`brandColour`, server/lib/themeCss.ts; read
+   * through `emailAccent` in server/lib/emailAccent.ts).
+   */
+  brandColour(): string;
 
   /**
    * What this village counts its money in, MERGED: the founder's Make This

@@ -43,6 +43,7 @@ import type { AppDeps } from "./appDeps";
 import { post } from "./comms/postOffice";
 import { effectiveLifecycle } from "./modules";
 import { emailShell, escapeHtml, resolveNotifyPrefs } from "./notify";
+import { emailAccent } from "./emailAccent";
 import { listOrgAssignments, listOrgRoles, type OrgAssignment } from "./orgChart";
 import { numberVar } from "./variables";
 import { villageTimezone } from "./villageReaders";
@@ -94,11 +95,15 @@ const ON_ITS_WAY: ReadonlySet<string> = new Set(["queued", "sending", "sent", "d
 // ── The email, as HTML ──────────────────────────────────────────────────────
 
 const INK = "#1f2937";
-const ACCENT = "#2D5A5A";
 const QUIET = "#9ca3af";
 
-/** The builder's blocks, escaped, in the shell every notice wears. The village's name comes from the caller. */
-export function taskEmailHtml(projectName: string, email: TaskEmail): string {
+/**
+ * The builder's blocks, escaped, in the shell every notice wears. The
+ * village's name and its brand colour come from the caller; the colour is the
+ * platform's neutral when none is given (server/lib/emailAccent.ts).
+ */
+export function taskEmailHtml(projectName: string, email: TaskEmail, brandColour?: string): string {
+  const accent = emailAccent(brandColour);
   const inner = email.blocks
     .map((b) => {
       switch (b.kind) {
@@ -108,7 +113,7 @@ export function taskEmailHtml(projectName: string, email: TaskEmail): string {
           return `<ul style="padding-left:18px;margin:0 0 14px">${b.items.map((i) => `<li style="margin:4px 0">${escapeHtml(i)}</li>`).join("")}</ul>`;
         case "button":
           return (
-            `<p style="margin:0 0 14px"><a href="${escapeHtml(b.href)}" style="display:inline-block;background:${ACCENT};color:#fff;` +
+            `<p style="margin:0 0 14px"><a href="${escapeHtml(b.href)}" style="display:inline-block;background:${accent};color:#fff;` +
             `border-radius:8px;padding:9px 16px;text-decoration:none;font-weight:600">${escapeHtml(b.label)}</a></p>`
           );
         case "note":
@@ -116,7 +121,7 @@ export function taskEmailHtml(projectName: string, email: TaskEmail): string {
       }
     })
     .join("");
-  return emailShell(escapeHtml(projectName), inner);
+  return emailShell(escapeHtml(projectName), inner, accent);
 }
 
 // ── Who holds what, now ─────────────────────────────────────────────────────
@@ -281,7 +286,7 @@ export async function sendTaskEmails(
         origin: "sessions.tasks",
         to: { email: String(member.email), name: firstName(member), userId },
         subject: email.subject,
-        html: taskEmailHtml(deps.projectName(), email),
+        html: taskEmailHtml(deps.projectName(), email, deps.notifyDeps.brandColour?.()),
         text: email.text,
         urgent: false,
         expiresAt: new Date(now.getTime() + TASK_MAIL_EXPIRY_MS),
@@ -412,7 +417,7 @@ export async function runTaskNotes(deps: TaskNoteDeps, now = new Date()): Promis
           origin: "sessions.tasks",
           to: { email: String(member.email), name: firstName(member), userId },
           subject: email.subject,
-          html: taskEmailHtml(deps.projectName(), email),
+          html: taskEmailHtml(deps.projectName(), email, deps.notifyDeps.brandColour?.()),
           text: email.text,
           urgent: false,
           expiresAt: new Date(now.getTime() + TASK_MAIL_EXPIRY_MS),

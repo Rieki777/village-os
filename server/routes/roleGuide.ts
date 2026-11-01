@@ -41,6 +41,7 @@ import { docFromBody } from "@shared/roleCardApply";
 import { readRoleCard, writeRoleCard } from "@shared/roleCardText";
 import { MAX_PROPOSAL_ROLES } from "@shared/roleProposals";
 import { guideStateFor } from "./guideChoice";
+import { guidePromptName } from "@shared/guideName";
 import type { GuideAnswer, RoleGuideStep } from "@shared/roleGuide";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "clientIp" | "overLimit" | "members" | "seasonState"> & {
@@ -113,7 +114,7 @@ export function register(app: Express, deps: Deps): void {
     if (!p || p.userId !== uid) return res.status(404).json({ error: "No draft of yours by that link." });
     if (p.status !== "draft") return res.status(409).json({ error: "This proposal has been submitted, so its words are settled." });
 
-    const state = guideStateFor(true, user.prefs?.guide, villageGuideName());
+    const state = guideStateFor(user, user.prefs?.guide, villageGuideName());
     if (!state.answering) return res.status(503).json({ error: "The guide can't answer right now. Your words are safe, and you can carry on by hand." });
 
     const memberKey = await resolveMemberKey(pool, uid);
@@ -140,7 +141,8 @@ export function register(app: Express, deps: Deps): void {
 
     const call = await callAssistant({
       mode: "roleGuide",
-      system: guideSystemPrompt(villageOption.name, villageName()),
+      // The prompt's own form of the name: "You are your village guide" is not a sentence.
+      system: guideSystemPrompt(guidePromptName(villageGuideName()), villageName()),
       messages: [{ role: "user", content: "Read what the village knows and suggest my card." }],
       model: DEFAULT_ASSISTANT_MODEL,
       clientIp: clientIp(req),

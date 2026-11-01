@@ -190,7 +190,9 @@ export const startFromCard = () => call<{ proposal: ProposalOut }>(`${PROPOSALS_
 export const fetchProposal = (id: string) => call<{ proposal: ProposalOut }>(one(id));
 export const saveProposal = (id: string, update: ProposalUpdate) => call<{ proposal: ProposalOut }>(one(id), "PUT", update);
 export const fetchProposalCard = (id: string) => call<PlayerCardPayload>(`${one(id)}/card`);
-export const fetchSubmitWords = (id: string) => call<{ title: string; body: string; money: boolean; intent: string }>(`${one(id)}/words`, "POST");
+/** `whoApproves` names who adopts it in this village, read from who holds the power (E8); an older server sends none. */
+export const fetchSubmitWords = (id: string) =>
+  call<{ title: string; body: string; money: boolean; intent: string; whoApproves?: string | null }>(`${one(id)}/words`, "POST");
 export const setShare = (id: string, audience: ShareAudience) => call<{ share: ShareOut }>(`${one(id)}/share`, "POST", { audience });
 export const regenerateShare = (id: string, audience: ShareAudience) => call<{ share: ShareOut }>(`${one(id)}/share/regenerate`, "POST", { audience });
 export const shareOff = (id: string) => call<{ share: ShareOut }>(`${one(id)}/share`, "DELETE");

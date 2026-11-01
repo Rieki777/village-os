@@ -39,6 +39,7 @@ import type { Pool } from "mysql2/promise";
 import type { PostResult } from "../../../shared/comms/contracts";
 import type { NoticeEmail, NoticeSendResult } from "../notify";
 import { numberVar } from "../variables";
+import { emailAccent } from "../emailAccent";
 import { post, type PostOfficeDeps } from "./postOffice";
 import { resendTransport, type Transport } from "./transport";
 
@@ -155,6 +156,8 @@ export interface MailerDeps {
   secretValue(key: "resend_api_key" | "assistant_api_key"): string;
   /** This village's own name, for the heading of a submission email. */
   projectName(): string;
+  /** The village's brand colour for a submission email's band and button (server/lib/emailAccent.ts). Absent: the neutral. */
+  brandColour?(): string;
   /** The pool the post office writes its ledger through. */
   getPool(): Pool;
   /** This village's absolute origin, for the one-click links in an email's headers. */
@@ -230,18 +233,19 @@ export function createMailer(deps: MailerDeps) {
    * is escaped because a village types its own name.
    */
   function buildSubmissionEmailHtml(type: string, data: Record<string, unknown>, adminUrl: string): string {
+    const accent = emailAccent(deps.brandColour?.());
     const rows = Object.entries(data)
       .map(
         ([k, v]) =>
-          `<tr><td style="padding:6px 12px;font-weight:600;color:#2D5A5A;background:#f4f7f7;border-bottom:1px solid #e5e7eb;vertical-align:top">${escapeHtml(k)}</td><td style="padding:6px 12px;color:#1f2937;border-bottom:1px solid #e5e7eb;white-space:pre-wrap">${escapeHtml(typeof v === "object" ? JSON.stringify(v) : String(v ?? ""))}</td></tr>`
+          `<tr><td style="padding:6px 12px;font-weight:600;color:${accent};background:#f4f7f7;border-bottom:1px solid #e5e7eb;vertical-align:top">${escapeHtml(k)}</td><td style="padding:6px 12px;color:#1f2937;border-bottom:1px solid #e5e7eb;white-space:pre-wrap">${escapeHtml(typeof v === "object" ? JSON.stringify(v) : String(v ?? ""))}</td></tr>`
       )
       .join("");
     return `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">
 <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
-  <div style="background:#2D5A5A;color:#fff;padding:20px 24px"><div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.7">New ${escapeHtml(type)} submission</div><div style="font-size:20px;font-weight:700;margin-top:4px">${escapeHtml(deps.projectName())}</div></div>
+  <div style="background:${accent};color:#fff;padding:20px 24px"><div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.7">New ${escapeHtml(type)} submission</div><div style="font-size:20px;font-weight:700;margin-top:4px">${escapeHtml(deps.projectName())}</div></div>
   <div style="padding:20px 24px">
     <table style="width:100%;border-collapse:collapse;font-size:14px">${rows}</table>
-    <div style="margin-top:24px"><a href="${escapeHtml(adminUrl)}" style="display:inline-block;background:#2D5A5A;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Open Admin</a></div>
+    <div style="margin-top:24px"><a href="${escapeHtml(adminUrl)}" style="display:inline-block;background:${accent};color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Open Admin</a></div>
   </div>
 </div></body></html>`;
   }
@@ -356,7 +360,7 @@ export function createMailer(deps: MailerDeps) {
    * of emails a route tried to send. The rows are still written, as `skipped`,
    * so Sent mail shows what would have gone.
    */
-  async function sendResendEmail(opts: { to: string[]; subject: string; html: string; replyTo?: string; origin?: string }): Promise<MailResult> {
+  async function sendResendEmail(opts: { to: string[]; subject: string; html: string; text?: string; replyTo?: string; origin?: string }): Promise<MailResult> {
     const gap = !postOffice.hasApiKey() ? "no_api_key" : !postOffice.sender() ? "no_sender" : null;
     if (gap === "no_api_key") console.log("[RESEND] API key not set, skipping email");
     if (gap === "no_sender") {
@@ -381,7 +385,8 @@ export function createMailer(deps: MailerDeps) {
           to: { email: address },
           subject: opts.subject,
           html: opts.html,
-          text: "",
+          // A plain-text part when the caller rendered one (the Words emails do).
+          text: opts.text ?? "",
           // The contact relay (S22) sets this to the SENDER's address so a
           // plain reply works, always with compose-screen disclosure.
           replyTo: opts.replyTo ?? null,
