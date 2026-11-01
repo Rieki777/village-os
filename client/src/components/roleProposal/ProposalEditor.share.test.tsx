@@ -126,7 +126,8 @@ describe("step 6, submit", () => {
     draw({ roles: [{ roleId: "r1" }] }, "share", { extra: { submitBlocked: null, readyToSubmit: true } });
     fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.submit }));
     const confirm = (await screen.findByText(RP_WORDS.whoApproves)).closest("[data-submit-confirm]") as HTMLElement;
-    expect(RP_WORDS.whoApproves).toBe("The circle consents within 2 business days, or the founder, steward or organisation power adopts it.");
+    // A server that names nobody (an older one) leaves the plain line, which promises no particular power.
+    expect(RP_WORDS.whoApproves).toBe("The circle consents within 2 business days, or a founder or steward role adopts it.");
     expect(within(confirm).getByText("I hold Kitchen keeper on these terms.")).toBeTruthy();
     expect(called("POST", "/submit")).toHaveLength(0);
 
@@ -135,6 +136,17 @@ describe("step 6, submit", () => {
     expect(called("POST", "/submit")[0].body).toEqual({ alignedWords: "I hold Kitchen keeper on these terms." });
     expect(screen.getByText("The circle is asked to consent or object by 6 November 2026.")).toBeTruthy();
     expect(screen.getByRole("link", { name: RP_WORDS.seeApplication }).getAttribute("href")).toBe("/role-applications/sa-00000000000000b1");
+  });
+
+  it("E8: names who adopts in this village, as the server read it from who holds the power, and never promises a power nobody holds", async () => {
+    const who = "The circle consents within 2 business days, or Steward Circle (Hal) adopts it.";
+    draw({ roles: [{ roleId: "r1" }] }, "share", { extra: { submitBlocked: null, readyToSubmit: true }, whoApproves: who });
+    fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.submit }));
+    const confirm = (await screen.findByText(who)).closest("[data-submit-confirm]") as HTMLElement;
+    expect(confirm).toBeTruthy();
+    expect(screen.queryByText(RP_WORDS.whoApproves)).toBeNull();
+    // The old line promised the founder, steward or organisation power whatever the village held.
+    expect(document.body.textContent).not.toContain("organisation power");
   });
 
   it("a draft that is not ready says the server's reason and cannot be submitted", async () => {
