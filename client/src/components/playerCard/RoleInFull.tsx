@@ -153,7 +153,11 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
   const timeChanged = ch("timeCommitment");
   const keyRole = role.chips[0] === W.keyRole;
   const otherChips = keyRole ? role.chips.slice(1) : role.chips;
-  const powers = role.powers.items.kind === "shown" ? role.powers.items.value : [];
+  // A10: a held power is a live chip; a "Suited to" reading is a quiet line
+  // under the chips, because nothing has been handed over yet.
+  const shownPowers = role.powers.items.kind === "shown" ? role.powers.items.value : [];
+  const powers = role.powers.note ? [] : shownPowers;
+  const suited = role.powers.note ? shownPowers : [];
 
   return (
     <article id={role.anchor} aria-labelledby={headingId} className="pc-rolecard">
@@ -195,6 +199,11 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
               ))
             : null}
         </ul>
+      ) : null}
+      {suited.length ? (
+        <p className="pc-dim" data-role-powers="suited">
+          {role.powers.heading}: {suited.join(", ")}. {role.powers.note}
+        </p>
       ) : null}
       {time.kind === "shown" ? <ChangedMark k="timeCommitment" /> : null}
       {editing && time.kind !== "unread" ? (

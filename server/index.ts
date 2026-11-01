@@ -3,7 +3,7 @@ import { FORMER_MEMBER_HOLD, resolveExit } from "./lib/exitResolve";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
-import { joiningOf, pickNextAction } from "./lib/nextAction";
+import { founderStepFor, joiningOf, pickNextAction } from "./lib/nextAction";
 import { ideaReceipt } from "./lib/questIdeaReceipt";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
@@ -123,6 +123,7 @@ import { seatFoundersAtLaunch } from "./lib/launchSeating";
 import { launchProposalDoc, launchSlateProblem } from "./lib/launchProposal";
 import { insertSlate } from "./repos/stewardSlate";
 import { freezeSeatTerm } from "./repos/ballotSeatTerms";
+import { roleHoldersNow } from "./repos/pathLadders";
 import { roleVoteDays, seatVoteLandsAt, termForCarriedSeat } from "./lib/seatTermLanding";
 import { raisedHandTerm } from "./lib/raisedHandTerm";
 import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
@@ -177,6 +178,8 @@ import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
 import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
+import { claimsAnnouncedHere } from "./lib/rewardMoment";
+import { feedOrigin as feedOriginOf, feedUidHost } from "./lib/feedOrigin";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
@@ -3835,24 +3838,24 @@ const trainingDoneHere = (done: readonly string[]): boolean =>
   trainingIsComplete(gatingModuleIds(trainingRepo.all()), done);
 
 /** Each rung's own rule, from one member's counts. The door above Member and every grant are `climbLadder`'s (lib/admission.ts). */
-const rungRule = (user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean) => (stage: LadderStage): boolean => {
+const rungRule = (user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean, holdsRole: boolean) => (stage: LadderStage): boolean => {
   switch (stage.rule.type) {
     case "default": case "account": return true; // having a user record implies an account
     case "training-complete": return trainingDoneHere(trainingDone);
     case "membership": return hasMembership(user);
     case "quests": return consentedQuests >= Math.max(1, numberVar(`progression.quests_for.${stage.id}`)); // the registry's, so speed is tunable
     case "tokens": return paidByVillage; // ever paid BY THE VILLAGE; see hasBeenPaidByVillage
-    default: return false;
+    case "role": return holdsRole; default: return false; // role: holds an org-chart role right now, see roleHoldersNow
   }
 };
 
-function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean): string {
-  return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage));
+function computeStage(user: any, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean, holdsRole: boolean): string {
+  return climbLadder(GAME_CONFIG.stages, user, rungRule(user, consentedQuests, trainingDone, paidByVillage, holdsRole));
 }
 
 /** The one-member form: fetch the consented count, then compute. */
 async function stageOf(user: any): Promise<string> {
-  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
+  return computeStage(user, await claimsRepo.consentedCount(user.id), await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()), (await roleHoldersNow(getPool(), lapseContext())).has(String(user.id)));
 }
 
 /**
@@ -4614,7 +4617,7 @@ async function nextActionFor(user: any): Promise<{ id: string; label: string; hr
  * another, which is how the two ladder serializers already diverged once.
  */
 async function servedNextAction(user: any): Promise<{ id: string; label: string; href: string }> {
-  const rule = await nextActionFor(user);
+  const rule = founderStepFor(user?.role, await founderPowerStands(getPool())) ?? (await nextActionFor(user));
   return { ...rule, label: withCommitmentName(rule.label, mergedConfig().project.commitmentName) };
 }
 
@@ -8778,7 +8781,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const trained = await completionsForMany(getPool(), (all as any[]).map((u) => String(u.id)));
     // Third read of the same shape, and for the same reason as the two above.
     const paid = await paidByVillageMany(getPool(), (all as any[]).map((u) => String(u.id)), contributionTokens());
-    const memberIdx = stageIndex("member");
+    const memberIdx = stageIndex("member"), holders = await roleHoldersNow(getPool(), lapseContext());
     const eligible = new Set<string>();
     for (const u of all as any[]) {
       // Standing-example identities carry member stages, so they would pass
@@ -8786,7 +8789,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if (u.isExample) continue;
       const count = consented.get(u.id) ?? 0;
       const done = trained.get(String(u.id)) ?? [];
-      if (count >= 1 || stageIndex(computeStage(u, count, done, paid.has(String(u.id)))) >= memberIdx) eligible.add(u.id);
+      if (count >= 1 || stageIndex(computeStage(u, count, done, paid.has(String(u.id)), holders.has(String(u.id)))) >= memberIdx) eligible.add(u.id);
     }
     return eligible;
   }
@@ -11026,12 +11029,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
    * is stored, and it is never written to a log line or a response. Rate
    * limited per address so a guessed token costs its guesser the hour.
    */
-  const feedOrigin = (req: any): string => {
-    const configured = String(mergedConfig().project.siteUrl ?? "").replace(/\/$/, "");
-    if (configured) return configured;
-    const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https").split(",")[0].trim();
-    return `${proto}://${req.get("host")}`;
-  };
+  // The app's own address, never the outside website's: server/lib/feedOrigin.ts.
+  const feedWhere = () => ({ frontendUrl: process.env.FRONTEND_URL, siteUrl: mergedConfig().project.siteUrl });
+  const feedOrigin = (req: any): string => feedOriginOf(feedWhere(), req);
 
   app.get("/api/events/calendar.ics", async (req, res) => {
     if (await overLimit(`ics:${clientIp(req)}`, 60, 60 * 60 * 1000)) {
@@ -11072,7 +11072,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       hemisphere: settings.hemisphere,
       names,
       moonOneCycle: await moonOneCycle(getPool()),
-      host: (() => { try { return new URL(origin).host; } catch { return "village"; } })(),
+      host: feedUidHost(feedWhere(), origin),
       siteUrl: origin,
       from, to, now,
     });
@@ -11352,7 +11352,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     await attachWaitlistInfo(getPool(), [g], viewer.userId);
     res.json({
       event: g,
-      schemaOrg: toSchemaOrg(g, { siteUrl: mergedConfig().project.siteUrl }),
+      schemaOrg: toSchemaOrg(g),
       rsvpEnabled: boolVar("events.rsvp_enabled"),
     });
   });
@@ -12218,7 +12218,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // zero that reads like an empty village.
       tooFew = `The roll could not be read: ${String(e?.message ?? e).slice(0, 160)}`;
     }
-    return {
+    return { governanceOn: LIFECYCLE_RANK[effectiveLifecycle("governance")] >= LIFECYCLE_RANK.members,
       onTheRoll,
       tooFew,
       unityPct: threshold?.minUnityPct ?? null,
@@ -13381,7 +13381,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const system = `You are ${assistantName}, helping an admin of ${villageName} build their village's game by talking it through. You propose structure; a human accepts it. You never create anything yourself.
 
 WHAT THIS VILLAGE HAS SAID ABOUT ITSELF (its own words, highest authority after live state):
-${brainIndex}
+${fenceForPrompt("brief.index", { index: brainIndex })}
 ${grounding.length ? fenceForPrompt("brief.sections", grounding.map((b) => ({
   section: b.section,
   status: b.status,
@@ -13389,7 +13389,7 @@ ${grounding.length ? fenceForPrompt("brief.sections", grounding.map((b) => ({
 }))) : "Nothing written yet. Ask about their work, their people, and their red lines before proposing anything."}
 
 WHAT EXISTS RIGHT NOW (the game, not the plan):
-${JSON.stringify({ members, roles: roles.map((r: any) => r.name), circles: circles.map((c: any) => c.name) })}
+${fenceForPrompt("village.structure", { members, roles: roles.map((r: any) => r.name), circles: circles.map((c: any) => c.name) })}
 
 ${shelf.length ? `REFERENCE, counsel only:\n${shelf.map((s) => `=== ${sectionCitation(s)} ===\n${s.body}`).join("\n\n")}\n` : ""}
 Rules:
@@ -17163,7 +17163,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // Where the member stands on each path they walk. Beside the profile routes
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
-  registerPathLadderRoutes(app, { authedUser, getPool, lapseContext });
+  registerPathLadderRoutes(app, { authedUser, getPool, lapseContext, isAdmin, members });
   registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
@@ -18342,7 +18342,7 @@ ${inner}
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
-  registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay") });
+  registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
   registerOwnHoldingsRoutes(app, { authedUser, getPool });
   registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
   registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
@@ -19106,7 +19106,6 @@ ${inner}
     consentActor, addActivity, dormantBadgeIds,
   });
 
-
   // My game state
   app.get("/api/game/me", async (req, res) => {
     const user = await authedUser(req);
@@ -19121,7 +19120,7 @@ ${inner}
     // single query stageOf was already paying.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
     const trained = await completionsFor(getPool(), user.id);
-    const stageId = computeStage(user, consentedQuests, trained, await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
+    const stageId = computeStage(user, consentedQuests, trained, await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()), (await roleHoldersNow(getPool(), lapseContext())).has(String(user.id)));
     const claims = await claimsRepo.forUser(user.id);
     const ctx = await capabilityCtx(user);
     // What each consented quest actually paid. `amount` is what the witness
@@ -19131,6 +19130,7 @@ ${inner}
     // disagree. Absent on claims that never posted (a zero grant, or a claim
     // still open), which is the client's signal to show the plain amount.
     const questCredits = await questCreditsFor(getPool(), user.id);
+    const announcedHere = await claimsAnnouncedHere(getPool(), user.id);
     // THE MOST RECENT RUNG THIS MEMBER CROSSED, and what it opened.
     //
     // `recordStageEvent` has computed this diff since item 8 and the only way
@@ -19158,9 +19158,11 @@ ${inner}
       stageIndex: stageIndex(stageId),
       stages: servedLadder(mergedConfig().project.commitmentName),
       gratitude: { balance: user.recognitionBalance ?? 0, decimals: tokenDef(PLATFORM_TOKEN)?.decimals ?? 0, budget: await gratitudeBudget(user) }, // `balance` is the cached MINOR-unit column; `decimals` is what turns it into the number on the card
-      quests: claims.map((c: any) =>
-        questCredits.has(c.id) ? { ...c, credited: questCredits.get(c.id) } : c,
-      ),
+      // A claim whose pay the reward moment names is celebrated there, once: server/lib/rewardMoment.ts.
+      quests: claims.map((c: any) => ({
+        ...(questCredits.has(c.id) ? { ...c, credited: questCredits.get(c.id) } : c),
+        ...(announcedHere.has(c.id) ? { announcedByRewardMoment: true } : {}),
+      })),
       journeys: user.journeys ?? {},
       membership: hasMembership(user),
       trainingComplete: trainingDoneHere(trained), training: trainingProgress(trainingRepo.all(), trained), // done/required, mandatory only
@@ -19838,7 +19840,7 @@ ${inner}
     // Same substitution as /api/game/me, same single query: the count the
     // ladder measures is kept instead of collapsed into a stage id.
     const consentedQuests = await claimsRepo.consentedCount(user.id);
-    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()));
+    const stageId = computeStage(user, consentedQuests, await completionsFor(getPool(), user.id), await hasBeenPaidByVillage(getPool(), user.id, contributionTokens()), (await roleHoldersNow(getPool(), lapseContext())).has(String(user.id)));
     const ctx = await capabilityCtx(user);
     const inbox: any[] = submissionsRepo.all(); // once, for both answers below: `all()` copies every row.
     res.json({
@@ -25832,7 +25834,7 @@ ${inner}
   // point its own routes used to sit. Express matches in registration order.
   registerPulseRoutes(app, { getPool });
   registerPlayersRoutes(app, {
-    isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent,
+    isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext,
     trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
     paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
   });
