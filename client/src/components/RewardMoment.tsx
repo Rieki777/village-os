@@ -32,6 +32,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import Celebration from "@/components/natural/Celebration";
 import { authToken } from "@/lib/gameApi";
+import { holdFloor } from "@/lib/onceDialogs";
 import { formatMoney } from "@shared/money";
 import type { RewardMomentView } from "@shared/rewardMoment";
 import { rewardAnnouncement, rewardHeadline, rewardSentence } from "@/lib/rewardMoment";
@@ -69,8 +70,14 @@ export default function RewardMoment() {
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
 
+  // Pay goes first: the floor is held from the first look until the moment
+  // turns out empty or is closed, so no other once dialog opens over it.
+  const release = useRef<() => void>(() => undefined);
+  const shown = useRef(false);
+
   useEffect(() => {
     let alive = true;
+    release.current = holdFloor("reward");
     (async () => {
       try {
         const moment: RewardMomentView | null = await send("/api/me/reward-moment");
@@ -80,15 +87,24 @@ export default function RewardMoment() {
         // Shown is seen, on every device, from the moment it is on screen.
         void send("/api/me/reward-moment/seen", { method: "POST", body: JSON.stringify({ keys: moment.keys }) }).catch(() => null);
         if (prefs?.notify?.celebrations === "off") return;
+        shown.current = true;
         setView(moment);
       } catch {
         // A moment that cannot load is a moment that did not happen. The bell still has the news.
       }
-    })();
+    })().then(() => {
+      if (alive && !shown.current) release.current();
+    });
     return () => {
       alive = false;
+      release.current();
     };
   }, []);
+
+  // Closed: the next once dialog may have the floor.
+  useEffect(() => {
+    if (!view && shown.current) release.current();
+  }, [view]);
 
   useEffect(() => {
     if (!view) return;

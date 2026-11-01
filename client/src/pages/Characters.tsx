@@ -34,7 +34,7 @@
  */
 import { Link } from "wouter";
 import Layout from "@/components/Layout";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { announceProfileChange } from "@/lib/profileRefresh";
@@ -123,6 +123,15 @@ export default function Characters() {
   /** The character whose Leave is armed, if any. An unconfirmed DELETE. */
   const [leaving, setLeaving] = useState<string | null>(null);
   const [studio, setStudio] = useState<StudioPayload | null>(null);
+  /**
+   * Whether the stage has its opening class yet. The first party read puts the
+   * member's own lead character there (the first in their party when none is
+   * marked), unless they already picked a class by hand; only a member with no
+   * party starts on the first class in the cast. It opened on the cast's first
+   * class for everyone, so "see roles that fit you" showed a stranger's class.
+   * Later party reads (after a join or a leave) never move the stage.
+   */
+  const stageSettled = useRef(false);
 
   const firstRun = useMemo(
     () => new URLSearchParams(window.location.search).get("first") === "1",
@@ -155,7 +164,11 @@ export default function Characters() {
         return r.json();
       })
       .then((d) => {
-        setParty(d?.party ?? []);
+        const own: Character[] = d?.party ?? [];
+        setParty(own);
+        const lead = own.find((c) => c.isPrimary) ?? own[0];
+        if (lead && !stageSettled.current) setActiveKey(lead.archetypeKey);
+        stageSettled.current = true;
         setPartyStatus("ready");
       })
       .catch(() => setPartyStatus("failed"));
@@ -530,6 +543,7 @@ export default function Characters() {
                       <button
                         type="button"
                         onClick={() => {
+                          stageSettled.current = true;
                           setActiveKey(a.key);
                           setSaid(`${a.name} is on the stage.`);
                         }}
