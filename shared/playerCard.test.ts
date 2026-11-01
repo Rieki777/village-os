@@ -227,7 +227,7 @@ describe("a role is its full title", () => {
     const card = buildPlayerCard(input());
     expect(value(card.roles[0].worksWith.items)).toEqual(["Operations & Platform Steward: the intake agent"]);
     expect(value(card.roles[0].powers.items)).toEqual(["Places people in roles, with Operations & Platform Steward"]);
-    expect(card.roles[0].powers.heading).toBe("Powers, shared");
+    expect(card.roles[0].powers.heading).toBe("Powers handed to this role, shared");
   });
 });
 
@@ -590,5 +590,58 @@ describe("old seatings with no application join Past", () => {
       href: "/roles?seat=r1",
     });
     expect(past[0].filed).toMatch(/^Held from .+ to .+$/);
+  });
+});
+
+/*
+ * A10 (2026-10-31): every role card lists the powers that role holds.
+ *
+ * A role holds a power only when the village has handed it over
+ * (capability_holding), and on a village that has handed none over every card
+ * said "No powers held". The card now names what IS true: the powers handed to
+ * the role, marked as such, and when there are none, the powers its classes
+ * suit by the village's own affinity map, worded as information. It changes no
+ * permission and never prompts anyone to hand anything over.
+ */
+describe("a role's powers", () => {
+  const SEAT = { key: "org.seat", label: "Places people in roles" };
+  const MODERATE = { key: "intake.moderate", label: "Moderates the intake" };
+
+  it("marks a handed-over power as handed to this role", () => {
+    const card = buildPlayerCard(input({ roles: [role(1, { powers: [SEAT] })] }));
+    expect(card.roles[0].powers.heading).toBe("Powers handed to this role");
+    expect(value(card.roles[0].powers.items)).toEqual(["Places people in roles"]);
+    expect(card.roles[0].powers.note).toBeNull();
+  });
+
+  it("names what a role with nothing handed over is suited to, as information", () => {
+    const card = buildPlayerCard(input({ roles: [role(1, { powers: [], suited: [SEAT, MODERATE] })] }));
+    expect(card.roles[0].powers.heading).toBe("Suited to");
+    expect(value(card.roles[0].powers.items)).toEqual(["Places people in roles", "Moderates the intake"]);
+    expect(card.roles[0].powers.note).toBe("The village has not handed these over.");
+    // Information, never a prompt to act.
+    expect(cardText(card)).not.toMatch(/hand (it|them|these) over now|ask the village|request/i);
+  });
+
+  it("control: a role with nothing handed over and nothing suited still says so", () => {
+    const card = buildPlayerCard(input({ roles: [role(1, { powers: [], suited: [] })] }));
+    expect(card.roles[0].powers.items).toEqual({ kind: "empty", words: "No powers held" });
+    expect(card.roles[0].powers.note).toBeNull();
+  });
+
+  it("a host that does not read suited powers behaves exactly as before", () => {
+    const card = buildPlayerCard(input({ roles: [role(1, { powers: [] })] }));
+    expect(card.roles[0].powers.items).toEqual({ kind: "empty", words: "No powers held" });
+  });
+
+  it("a power handed over is never also listed as suited, and two sources show it once", () => {
+    const card = buildPlayerCard(input({ roles: [role(1, { powers: [SEAT], suited: [SEAT, MODERATE] })] }));
+    expect(card.roles[0].powers.heading).toBe("Powers handed to this role");
+    expect(value(card.roles[0].powers.items)).toEqual(["Places people in roles"]);
+  });
+
+  it("a power suited through two classes is listed once", () => {
+    const card = buildPlayerCard(input({ roles: [role(1, { powers: [], suited: [SEAT, MODERATE, SEAT] })] }));
+    expect(value(card.roles[0].powers.items)).toEqual(["Places people in roles", "Moderates the intake"]);
   });
 });
