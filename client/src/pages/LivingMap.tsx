@@ -348,6 +348,8 @@ export default function LivingMap() {
       if (body?.skin) payload.skin = body.skin;
       Object.assign(payload, walkPush(body));
       if (body?.vocabulary) payload.vocabulary = body.vocabulary;
+      // The village's own name and its guide's, for the map's top bar and dock.
+      if (body?.village) payload.village = body.village;
       /*
        * The published land (0063), or the blank one when nothing is published:
        * the map's own seed is another village's land. The scene crosses the
