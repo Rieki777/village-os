@@ -929,8 +929,10 @@ html {
    never waits on a script. It was framer-motion, and framer renders an
    `initial` of opacity 0 inline until its engine runs; the engine now loads
    lazily (LazyMotion in App.tsx), which would have held the headline back
-   for one more request. `both` keeps the element at the first frame during
-   its delay, which is what `initial` did. Asking the system for less motion
+   for one more request. `backwards` keeps the element at the first frame
+   during its delay, which is what `initial` did, and lets go when it ends:
+   `both` held the finished transform, which kept the text on a compositor
+   layer and swapped its subpixel antialiasing for greyscale. Asking the system for less motion
    keeps the fade and drops the travel, the same split framer's
    reducedMotion="user" made. */
 @keyframes hero-fade {
@@ -944,11 +946,11 @@ html {
 }
 
 .hero-rise {
-  animation: fadeInUp 0.6s ease-out both;
+  animation: fadeInUp 0.6s ease-out backwards;
 }
 
 .hero-cue {
-  animation: hero-fade 0.3s ease-out 1s both;
+  animation: hero-fade 0.3s ease-out 1s backwards;
 }
 
 .hero-cue-dot {
