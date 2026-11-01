@@ -27,7 +27,7 @@
  * the routes behind it have their own server tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HUMAN_NEEDS, expressionsLine } from "@shared/needs";
 
@@ -140,7 +140,9 @@ describe("NeedsPanel", () => {
   beforeEach(() => {
     calls.length = 0;
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });

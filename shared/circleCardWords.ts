@@ -183,6 +183,10 @@ export const CIRCLE_CARD_WORDS = {
   noReviewDate: "No season is set, so there is no review date yet.",
   lastChanged: (day: string) => `Last changed by consent on ${day}.`,
 
+  // Below the card, for the circle's members and admins: Live Sessions' own sections, for this circle alone
+  decisionsLede: "What this circle decided by consent, newest first. Give one a review date, and it comes back as an agenda item when the time comes.",
+  pulseLede: "How this circle has been doing this season, from what its sessions already wrote down. Counts only, never a name.",
+
   // Loading
   failed: "This circle card did not load.",
   retry: "Retry",

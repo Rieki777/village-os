@@ -119,6 +119,8 @@ export interface LiveSessionPersonRow {
 export interface LiveSessionEntryRow {
   session_id: number;
   kind: string;
+  /** open, done or parked. A decision is `done` once the room consents to it, and only then is it one. */
+  status: string;
   created_at: Stamp;
 }
 
@@ -369,12 +371,13 @@ const DEFS: SignDef[] = [
   {
     key: "decisions-recorded",
     label: "Decisions recorded",
-    countedFrom: "Counted from decisions written into live session minutes.",
+    countedFrom: "Counted from decisions a live session agreed by consent.",
     window: "cycle",
     reads: ["live_session_entries"],
     count(rows, w) {
-      const n = rows.live_session_entries!.filter((e) => e.kind === "decision" && inWindow(e.created_at, w)).length;
-      return { n, source: "live_session_entries.kind, live_session_entries.created_at" };
+      // A proposal still open, or one set aside, is not a decision: the log and the season pulse count the same way.
+      const n = rows.live_session_entries!.filter((e) => e.kind === "decision" && e.status === "done" && inWindow(e.created_at, w)).length;
+      return { n, source: "live_session_entries.kind, live_session_entries.status, live_session_entries.created_at" };
     },
   },
 ];

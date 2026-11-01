@@ -9,7 +9,7 @@
  * facilitator's name, and the person sees Undo beside it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { cleanup, act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { ON_BEHALF_COPY } from "@shared/sessionOnBehalf";
 import { json, makeView, record, type Call } from "./__tests__/roomFixture";
 
@@ -71,7 +71,9 @@ describe("the doors while filling in", () => {
       }),
     );
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });

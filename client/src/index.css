@@ -1684,3 +1684,37 @@ html {
 .room-world {
   --room-display: var(--font-display);
 }
+
+/*
+ * ADMIN FITS A PHONE (E10, 2026-10-31). Ten admin tabs scrolled the whole page
+ * sideways at 390px, and nearly every one for the same two reasons: a form
+ * field in a flex row keeps its intrinsic width (min-width: auto) and will not
+ * shrink, and a <select> is as wide as its longest option. Both are fixed here
+ * once, for every admin tab, instead of tab by tab.
+ *
+ * `:where` keeps the specificity at zero, so a Tailwind width on the element
+ * still wins: this only removes the floor that made `flex-1` and `w-full`
+ * unable to do their job. Long unbroken strings (a webhook URL in a <code>)
+ * wrap instead of pushing the page. A wide table that should scroll belongs in
+ * an `overflow-x-auto` wrapper, which this leaves alone.
+ *
+ * Held by client/src/lib/adminFit.test.ts; measured by scripts/qa/admin-overflow.mjs.
+ */
+/* Not button: a button is short and must keep its label, and letting it shrink
+ * spilled "Save Changes" out of its own box. */
+.admin-fit :where(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+.admin-fit :where(code, pre, a, p, li, label, h1, h2, h3, h4, div, span, button, td, th, dt, dd, legend, summary) {
+  overflow-wrap: anywhere;
+}
+/* A grid item's floor is its content's min-content width, so one wide field
+ * widened a whole card column; a <fieldset> defaults to min-inline-size:
+ * min-content and did the same to the departure-steps list. */
+.admin-fit :where(.grid > *) {
+  min-width: 0;
+}
+.admin-fit :where(fieldset) {
+  min-inline-size: 0;
+}

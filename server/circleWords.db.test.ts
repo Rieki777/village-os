@@ -114,9 +114,10 @@ describe.skipIf(!configured)("a circle's words change by consent, on a real sche
       status: 403,
       body: { error: "not_holder", message: "Only someone who holds a role in this circle can propose its words from the card." },
     });
-    expect((await card("m-dee")).viewer).toEqual({ signedIn: true, mayPropose: false });
-    expect((await card("m-cai")).viewer).toEqual({ signedIn: true, mayPropose: true });
-    expect((await card("m-ana")).viewer).toEqual({ signedIn: true, mayPropose: true });
+    // Live Sessions is off in this village, so the card tells the page not to ask it.
+    expect((await card("m-dee")).viewer).toEqual({ signedIn: true, mayPropose: false, sessionsOn: false });
+    expect((await card("m-cai")).viewer).toEqual({ signedIn: true, mayPropose: true, sessionsOn: false });
+    expect((await card("m-ana")).viewer).toEqual({ signedIn: true, mayPropose: true, sessionsOn: false });
   });
 
   it("refuses words the parser refuses, an example circle and the bound, before anything is written", async () => {

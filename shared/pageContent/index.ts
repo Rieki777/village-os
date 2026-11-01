@@ -19,10 +19,11 @@ import { TEAM_PAGE } from "./team";
 import { MASTER_PLAN_PAGE } from "./masterPlan";
 import { LOVE_LETTER_PAGE } from "./loveLetter";
 import { JOURNEY_PAGES } from "./journeys";
+import { GOVERNANCE_PAGE } from "./governance";
 import { PAGE_SECTION_PREFIX, pageSectionKey, type PageSpec } from "./types";
 import { pageDocumentProblems } from "./resolve";
 
-export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, SITE_PAGE, RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE, HOUSING_PAGE, OPPORTUNITIES_PAGE, VISIT_PAGE, WORK_WITH_US_PAGE, GOOD_NEIGHBOR_PAGE, HOW_WE_CREATE_PAGE, CO_CREATORS_GUIDE_PAGE, TEAM_PAGE, MASTER_PLAN_PAGE, LOVE_LETTER_PAGE, ...JOURNEY_PAGES];
+export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, SITE_PAGE, RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE, HOUSING_PAGE, OPPORTUNITIES_PAGE, VISIT_PAGE, WORK_WITH_US_PAGE, GOOD_NEIGHBOR_PAGE, HOW_WE_CREATE_PAGE, CO_CREATORS_GUIDE_PAGE, TEAM_PAGE, MASTER_PLAN_PAGE, LOVE_LETTER_PAGE, ...JOURNEY_PAGES, GOVERNANCE_PAGE];
 
 export function pageSpecForSection(section: string): PageSpec | null {
   if (!section.startsWith(PAGE_SECTION_PREFIX)) return null;

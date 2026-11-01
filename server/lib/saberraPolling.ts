@@ -216,6 +216,7 @@ export function blankRun(at: Date, trigger: SyncTrigger, outcome: SyncOutcome, r
     refused: 0,
     superseded: 0,
     rebatched: 0,
+    gone: 0,
     held: 0,
     addresses: 0,
     skipped: [],
@@ -279,6 +280,7 @@ export function readRun(raw: unknown): SyncRun | null {
   run.refused = count(r.refused);
   run.superseded = count(r.superseded);
   run.rebatched = count(r.rebatched);
+  run.gone = count(r.gone);
   run.held = count(r.held);
   run.addresses = count(r.addresses);
   run.skipped = kinds(r.skipped);

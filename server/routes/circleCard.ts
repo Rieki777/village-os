@@ -19,6 +19,12 @@
  * three functions, `orgSeatTier`, `mapShowsStructureTo` and the `terms.read`
  * key, so a role on this card shows no more and no less than it does on /roles.
  *
+ * `viewer.sessionsOn` says whether Live Sessions is open to this reader, by the
+ * rule the card's live sections follow. The page asks Live Sessions for the
+ * circle's decision log and season pulse only when it is
+ * (client/src/components/sessions/CircleSessions.tsx), so a village with the
+ * module off, or a visitor, sends no request that could only be refused.
+ *
  * ── THE WRITE: A CIRCLE'S WORDS CHANGE BY CONSENT ─────────────────────────
  *
  * Rye, 2026-10-22: anyone holding a role in the circle may propose new words
@@ -107,6 +113,7 @@ export function register(app: Express, deps: Deps): void {
     const viewer = await deps.authedUser(req);
     const state = deps.seasonState();
     const admin = await deps.isAdmin(req);
+    const sessionsOn = sessionsOnFor(deps.sessionsLifecycle(), !!viewer, admin);
     const card = await buildCircleCardFor(deps.getPool(), circle, circles, {
       now: deps.now ? deps.now() : new Date(),
       timeZone: state.timezone || "UTC",
@@ -114,7 +121,7 @@ export function register(app: Express, deps: Deps): void {
       tier: await orgTierFor(deps, req),
       frameworkTerms: deps.boolVar("org.ccos_terms"),
       clock: (deps.clock ?? villageClock)(),
-      sessionsOn: sessionsOnFor(deps.sessionsLifecycle(), !!viewer, admin),
+      sessionsOn,
       reviewOn: state.current?.endsOn ?? null,
       viewer: viewer ? { userId: String(viewer.id), admin } : null,
       sessionsDeps: { circles: () => deps.circles().map((c) => ({ id: c.id, name: c.name })), lapseContext: deps.lapse },
@@ -123,7 +130,7 @@ export function register(app: Express, deps: Deps): void {
     res.json({
       circleId: circle.id,
       card,
-      viewer: { signedIn: !!viewer, mayPropose: await mayPropose(deps, req, viewer, circle) },
+      viewer: { signedIn: !!viewer, mayPropose: await mayPropose(deps, req, viewer, circle), sessionsOn },
     });
   });
 
