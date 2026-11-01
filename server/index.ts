@@ -744,6 +744,7 @@ import {
   seedExamples,
   wireExampleCaches,
 } from "./lib/examples";
+import { LEGACY_QUESTS_SEED, backfillQuestStories, repairRowCopy, repairSeededQuestCopy, sameWords } from "./lib/legacyQuestSeed";
 import {
   backfillOrgChart,
   listOrgAssignments,
@@ -898,67 +899,10 @@ const SEEDS_DIR = path.resolve(__dirname, "..", "server", "seeds");
 const CONTENT_SEED_FILE = path.join(SEEDS_DIR, "content-seed.json");
 // users.json retired in S6 — members live in MySQL (server/repos/users.ts).
 // quests.json / quest-claims.json retired in S10 (MySQL: server/repos/quests.ts).
-const QUESTS_SEED_FILE = path.join(SEEDS_DIR, "quests-seed.json");
+// FROZEN: read only by the two repair passes, never a seed. See server/lib/legacyQuestSeed.ts.
+const QUESTS_SEED_FILE = path.join(SEEDS_DIR, LEGACY_QUESTS_SEED);
 // OG_WIDTH and OG_HEIGHT moved to server/routes/quests.ts with the renderer
 // that draws the card, and are imported back above for the meta tags.
-
-/**
- * 0068 gave quests a story layer (subtitle, story, first step, steps,
- * deliverable, tips) and the seed file now carries it for the founding board.
- * Seeds land only on a genuinely empty table, so a village already running
- * would never see the new copy without this one-shot. It walks the CURRENT
- * seed file and fills each matching row's story fields ONLY where the live
- * value is empty: an admin who already wrote their own subtitle or story
- * keeps every word. Same precedent as the voice-sweep passes above.
- */
-async function backfillQuestStories(jobId: string) {
-  // Fail loud on a missing or unreadable seed. Returning quietly let runOnce
-  // record the job as applied while nothing had been filled: the story layer
-  // would never reach live rows, the job would never run again, and the boot
-  // log would still read as success. A throw leaves the id unrecorded, so the
-  // next boot tries again.
-  if (!fs.existsSync(QUESTS_SEED_FILE)) {
-    throw new Error(`quest seed file missing at ${QUESTS_SEED_FILE}`);
-  }
-  const seed = JSON.parse(fs.readFileSync(QUESTS_SEED_FILE, "utf-8"));
-  if (!Array.isArray(seed)) throw new Error("quest seed file is not an array");
-
-  const PROSE_FIELDS = ["subtitle", "story", "firstStep", "deliverable", "imageUrl"] as const;
-  const LIST_FIELDS = ["steps", "tips"] as const;
-  const seedHasProse = (v: unknown) => typeof v === "string" && v.trim() !== "";
-  const seedHasList = (v: unknown) => Array.isArray(v) && v.length > 0;
-  const liveProseEmpty = (v: unknown) => String(v ?? "").trim() === "";
-  const liveListEmpty = (v: unknown) => !(Array.isArray(v) && v.length > 0);
-
-  let filled = 0;
-  for (const s of seed) {
-    if (!s?.id) continue;
-    const live: any = await questsRepo.byId(String(s.id));
-    if (!live) continue;
-    // Nothing to fill is not a write. The first version opened a transaction
-    // and ran a full column UPDATE for every seeded quest either way.
-    const wanted =
-      PROSE_FIELDS.some((f) => seedHasProse(s[f]) && liveProseEmpty(live[f])) ||
-      LIST_FIELDS.some((f) => seedHasList(s[f]) && liveListEmpty(live[f]));
-    if (!wanted) continue;
-    await questsRepo.update(live.id, (q: any) => {
-      for (const f of PROSE_FIELDS) {
-        if (seedHasProse(s[f]) && liveProseEmpty(q[f])) q[f] = s[f];
-      }
-      for (const f of LIST_FIELDS) {
-        if (seedHasList(s[f]) && liveListEmpty(q[f])) q[f] = s[f].map((x: any) => String(x));
-      }
-    });
-    filled += 1;
-  }
-  // Both outcomes get a line, so "filled nothing" and "never ran" stop looking
-  // identical in the log.
-  console.log(
-    filled
-      ? `[MIGRATION] ${jobId} filled ${filled} quest(s) from the seed`
-      : `[MIGRATION] ${jobId} found nothing to fill`,
-  );
-}
 // gratitude-log.json retired in S8 — the domain lives in MySQL (server/repos/gratitude.ts).
 // activity.json + admin-audit.json retired in S11 (health_events, server/lib/events.ts).
 const ROLES_SEED_FILE = path.join(SEEDS_DIR, "roles-seed.json");
@@ -1984,46 +1928,10 @@ async function applyOrgRolesBackfill(): Promise<void> {
 }
 
 /**
- * The voice sweep (2026-08-01) rewrote the house writing rules through every
- * shipped string, seed files included. Seeds only land on a deployment's FIRST
- * boot, so a village already running kept the pre-sweep text in its database
- * where a code change cannot reach it: em-dashes in circle purposes and
- * milestone notes, en-dashes in quest ranges like "50-100" and "3-6 hrs".
- *
- * This repairs those rows from the current defaults, and ONLY where the stored
- * text is still word-for-word the seeded text. The comparison strips case and
- * every non-alphanumeric character, so it matches exactly the footprint the
- * sweep left (punctuation) and nothing else: the moment a human has changed a
- * word, the normalised forms differ and the row is left alone. Idempotent, and
- * silent when there is nothing to repair.
+ * The voice sweep (2026-08-01) repairs seeded rows ONLY where the stored text is the same
+ * words as the default with different punctuation. `sameWords` and `repairRowCopy` live in
+ * server/lib/legacyQuestSeed.ts, with the quest half of the pass.
  */
-function sameWords(a: string, b: string): boolean {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  return norm(a) === norm(b);
-}
-
-/**
- * The string fields of `row` that are the same words as the default and differ
- * only in punctuation. Empty when the row is already correct or has been
- * genuinely edited.
- */
-function copyRepairsFor(row: any, def: any): Array<[string, string]> {
-  const patches: Array<[string, string]> = [];
-  for (const [key, want] of Object.entries(def)) {
-    if (typeof want !== "string") continue;
-    const have = row?.[key];
-    if (typeof have !== "string" || have === want) continue;
-    if (sameWords(have, want)) patches.push([key, want]);
-  }
-  return patches;
-}
-
-/** Apply the repairs in place. Returns true if anything changed. */
-function repairRowCopy(row: any, def: any): boolean {
-  const patches = copyRepairsFor(row, def);
-  for (const [key, want] of patches) row[key] = want;
-  return patches.length > 0;
-}
 
 /**
  * The tail of the sweep: platform-authored copy where the rewrite changed
@@ -2285,20 +2193,7 @@ async function applyVoiceSweepToSeededRows(): Promise<void> {
   } catch { /* copy repair is best-effort; never block boot */ }
 
   try {
-    if (fs.existsSync(QUESTS_SEED_FILE)) {
-      const defaults = byId(JSON.parse(fs.readFileSync(QUESTS_SEED_FILE, "utf-8")));
-      for (const row of (await questsRepo.all()) as any[]) {
-        const def = defaults.get(String(row?.id));
-        if (!def) continue;
-        const patches = copyRepairsFor(row, def);
-        if (!patches.length) continue;
-        // questsRepo.update takes a MUTATOR, not a row.
-        await questsRepo.update(row.id, (q: any) => {
-          for (const [key, want] of patches) q[key] = want;
-        });
-        repaired++;
-      }
-    }
+    repaired += await repairSeededQuestCopy(questsRepo, QUESTS_SEED_FILE);
   } catch { /* same */ }
 
   try {
@@ -2381,9 +2276,9 @@ async function freezeEmailMatchedMemberships(): Promise<void> {
  * would have to toggle a module off and on again to ever see them.
  *
  * Runs AFTER ensureDataFiles() on purpose. Examples fill an empty table, and
- * seeding them first would make the real starter seeds (circles, roles,
- * quests) skip their own empty-checks — the village would get examples
- * INSTEAD of the content it shipped with, rather than as well as nothing.
+ * seeding them first would make the real starter seeds (circles, roles) skip
+ * their own empty-checks. Quests have no real starter seed: a fresh board's
+ * starters ARE these examples, kept or cleared by a founder.
  */
 async function seedExamplesAtBoot(): Promise<void> {
   try {
@@ -6185,26 +6080,7 @@ async function startServer() {
     },
   });
 
-  // S10: the quest library seeds into MySQL on an EMPTY table only — the seed
-  // file stays the fork-onboarding source, and a village that deleted quests
-  // on purpose never has them resurrected (INSERT IGNORE + the empty check).
-  {
-    const existing = await questsRepo.all();
-    if (existing.length === 0 && fs.existsSync(QUESTS_SEED_FILE)) {
-      try {
-        const seed = JSON.parse(fs.readFileSync(QUESTS_SEED_FILE, "utf-8"));
-        if (Array.isArray(seed)) {
-          for (const q of seed) {
-            if (q?.id && q?.title) await questsRepo.add({ tags: [], order: 0, status: "open", gratitude: "", ...q });
-          }
-          console.log(`[seed] quests table was empty, seeded ${seed.length} quest(s)`);
-        }
-      } catch (e) {
-        console.error("[seed] quests seed failed (continuing)", e);
-      }
-    }
-  }
-
+  // No live starter quests: a fresh board gets labelled starters from seedExamplesAtBoot (A8 / 19g).
   await ensureDataFiles();
   await seedExamplesAtBoot();
   // The 2026-08-02 seed revision: real timestamps, a stocked example market,
@@ -6226,12 +6102,12 @@ async function startServer() {
   // Projects category, the shelf item shown mid-loan, and the steward badge
   // lent for a season. A separate key because runOnce is permanent per id:
   // editing the body above would never re-run anywhere it already ran.
-  await runOnce("quest-story-2026-08-10", () => backfillQuestStories("quest-story-2026-08-10"));
+  await runOnce("quest-story-2026-08-10", () => backfillQuestStories(questsRepo, QUESTS_SEED_FILE, "quest-story-2026-08-10").then(() => undefined));
   // Poster paths joined the seed after the first job had already recorded
   // itself as applied, and runOnce never repeats an id. The fill is idempotent
   // (empty fields only), so a second id replays it and picks up image_url on
   // villages that already ran the first one.
-  await runOnce("quest-posters-2026-08-10", () => backfillQuestStories("quest-posters-2026-08-10"));
+  await runOnce("quest-posters-2026-08-10", () => backfillQuestStories(questsRepo, QUESTS_SEED_FILE, "quest-posters-2026-08-10").then(() => undefined));
 
   await runOnce("examples-refresh-2026-08-03", async () => {
     const seed = loadExampleSeed(SEEDS_DIR);

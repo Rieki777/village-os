@@ -173,6 +173,34 @@ export function projectCurrencyCheck(
       };
 }
 
+/**
+ * ARE ANY STARTER QUESTS STILL WAITING FOR A DECISION?
+ *
+ * A fresh village opens its board on starter quests that are standing
+ * examples (the `quests` section of server/seeds/examples-seed.json): written
+ * by the platform, labelled, and claimable by nobody. Rye, sheet A8 / 19g: "a
+ * new village starts with a neutral, fully editable starter set". The village
+ * decides each one: keep it as a real quest, or clear it.
+ *
+ * Answered from one number, the examples still on the board, because every
+ * way of deciding ends there. Keeping turns a row real, clearing deletes the
+ * rest, and a quest of the village's own (posted, or approved from a
+ * proposal) retires them all. A village seeded before starters were examples
+ * has none, so it reads as answered the day this ships, which is the point:
+ * a running board is not a template.
+ *
+ * RECOMMENDED, NEVER BLOCKING. Starters are inert and labelled, so a village
+ * that launches with some still standing has misled nobody.
+ */
+export function starterQuestsCheck(waiting: number): { state: "ok" | "missing"; detail: string } {
+  const n = Math.max(0, Math.trunc(Number(waiting) || 0));
+  if (n === 0) return { state: "ok", detail: "No starter quests are waiting. The board is the village's own" };
+  return {
+    state: "missing",
+    detail: `${n} starter quest${n === 1 ? " is" : "s are"} still waiting. Keep the ones that fit and clear the rest`,
+  };
+}
+
 /** The platform's own requirements. Listings add theirs below, from the registry. */
 const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
   // ── Identity: the shared-password exit is the platform's oldest debt ──────
@@ -278,6 +306,24 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     // The walk lives on the map, so a village that does not run the map has
     // nothing to write it on, and the link would land on a module gate.
     appliesWhenModule: "map",
+  },
+  {
+    id: "starter-quests",
+    group: "brand",
+    title: "Review the starter quests",
+    /*
+     * RYE, SHEET A8 / 19g: "a new village starts with a neutral, fully
+     * editable starter set". The set is the quests section of the examples
+     * seed, and this is where a founder is asked to make it theirs. The check
+     * is `starterQuestsCheck` above, read live from the board through
+     * `village:starter-quests` in server/lib/launch.ts. Quests is a core
+     * module, so this applies to every village.
+     */
+    why: "A new village opens with starter quests so the board is never empty, and nobody can claim them. Keep the ones that fit as real quests and set what each is worth, then clear the rest. Posting a quest of your own clears them too.",
+    severity: "recommended",
+    checkKey: "village:starter-quests",
+    fixAt: "/admin?tab=quests-admin",
+    fixLabel: "Open Quests",
   },
 
   // ── Integrations: keys, each honest about what stops without it ──────────
