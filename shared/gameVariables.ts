@@ -177,7 +177,26 @@ export interface VariableDef {
    * covered before somebody remembers to mark it.
    */
   withheld?: true;
+  /**
+   * THIS DIAL'S VALUE NOW LIVES IN THE SEALED INTEGRATION SECRETS, under the
+   * slot named here (server/lib/secrets.ts). The dial stays listed so the
+   * village can still see that the setting exists; its value is never stored
+   * as a game rule again.
+   *
+   * `tokens.base_rpc_url` is the case. A dedicated endpoint carries its key in
+   * the address, and as a plain variable it sat in every database dump, in the
+   * admin listing and in the amendment ledger. So `validateVariable` refuses
+   * any value but the default on every write path (an admin, a passed
+   * proposal, a change set), the admin listing reports the default instead of
+   * what is stored, and the boot pass in secrets.ts seals any value an older
+   * release left behind and then clears the row.
+   */
+  movedToSecret?: string;
 }
+
+/** The one refusal a dial whose value moved into the sealed store answers with. */
+export const MOVED_TO_SECRET_SENTENCE =
+  "This setting is kept under Admin, Integrations now, where it is sealed, because the address can carry a provider key. Save it there.";
 
 /**
  * Does this value look like it carries a credential? A provider key in the
@@ -1664,10 +1683,11 @@ export const VARIABLES: VariableDef[] = [
     category: "Tokens",
     label: "Base RPC endpoint",
     description:
-      "Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number.",
+      "Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number. Saved under Admin, Integrations, where it is sealed, because a dedicated endpoint carries its key in the address. The host variable BASE_RPC_URL works too.",
     type: "text",
     default: "https://mainnet.base.org",
     withheld: true,
+    movedToSecret: "base_rpc_url",
   },
 
   // ── Hypha (S13): the SINGLE home for the DHO URL. Everything share-like —
@@ -2248,7 +2268,7 @@ export const VARIABLES: VariableDef[] = [
     category: "The village's people",
     label: "Show who holds each role to visitors",
     description:
-      "On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.",
+      "On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages, and a visitor reads members by first name elsewhere. Off, a visitor who is not signed in reads no member's name, handle, address or portrait on any page: the pulse, the decisions, profiles and role cards included. Signed-in members whose role or badge grants map.viewPeople still read who holds each role, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.",
     type: "boolean",
     default: "true",
     ring: "founder",
@@ -3507,6 +3527,9 @@ export function governanceWindowSyntaxProblem(raw: string): string | null {
  * same message without a round trip.
  */
 export function validateVariable(def: VariableDef, raw: string): string | null {
+  // First, before any type rule: a dial whose value moved into the sealed
+  // store takes its default (which is how its old row is cleared) and nothing else.
+  if (def.movedToSecret && raw !== def.default) return MOVED_TO_SECRET_SENTENCE;
   if (def.type === "boolean") {
     return ["true", "false", "1", "0"].includes(raw) ? null : "Must be true or false.";
   }

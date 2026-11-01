@@ -142,7 +142,7 @@ describe.skipIf(!configured)("the season so far against a real schema", () => {
   it("a Monday's priorities each name the season priority they serve, and nothing else", async () => {
     monday = await open("m-ana", "Monday", (await template("Monday planning")).id);
     const view = await room("m-ana", monday);
-    expect(view.season?.goals).toEqual([WATER, WELCOME]);
+    expect(view.season?.goals.map((g) => g.text)).toEqual([WATER, WELCOME]);
     expect(view.template?.flow.some((s) => s.kind === "season_priorities")).toBe(true);
     const refused = await post("m-ana", monday, "/priorities", { text: "Fix the tank", servesGoal: "Grow mushrooms" });
     expect(refused.status).toBe(400);

@@ -373,6 +373,8 @@ interface EntryRec {
   dueOn: string | null;
   claimedAt: string | null;
   createdAt: string;
+  /** A win's season priority, by its id (0298, server/lib/sessionTemplates.ts). */
+  servesGoalId: string | null;
 }
 
 const mapEntry = (r: any): EntryRec => ({
@@ -388,6 +390,7 @@ const mapEntry = (r: any): EntryRec => ({
   dueOn: r.due_on == null ? null : String(r.due_on),
   claimedAt: toIso(r.claimed_at),
   createdAt: toIso(r.created_at) ?? new Date(0).toISOString(),
+  servesGoalId: r.serves_goal_id == null || r.serves_goal_id === "" ? null : String(r.serves_goal_id),
 });
 
 interface ResponseRec {
@@ -530,6 +533,8 @@ const entryOut = (e: EntryRec, names: Map<number, Named>, seats: SeatBook): Sess
   ...(seats.holdersOf && e.ownerSeatId ? { ownerSeatHolders: seats.holdersOf.get(e.ownerSeatId) ?? [] } : {}),
   dueOn: e.dueOn,
   createdAt: e.createdAt,
+  // Only a win serves the season, so only a win carries the field.
+  ...(e.kind === "win" ? { servesGoalId: e.servesGoalId } : {}),
 });
 
 // ── Roles in a room ─────────────────────────────────────────────────────────

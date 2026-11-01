@@ -55,6 +55,17 @@ describe("publicAmendment", () => {
     expect(out).toMatchObject({ from: "7", fromWasDefault: true, to: "10", toIsDefault: false, withheld: false, label: "Sensing days" });
   });
 
+  it("reads a value the ledger stored redacted as kept private, on any dial", async () => {
+    // The ledger stores "<origin> (key removed)" where a key was, and that
+    // string is no longer credential-shaped, so without its own check the
+    // feed would print a half-sentence where it used to say "kept private".
+    const { KEY_REMOVED } = await import("./credentialRedaction");
+    const def = { label: "Place line", default: "", withheld: undefined };
+    const out = publicAmendment(row({ config_key: "sessions.place_line", new_value: `https://feed.example.test ${KEY_REMOVED}` }), def, null);
+    expect(out.withheld).toBe(true);
+    expect(out.to).toBe("");
+  });
+
   it("falls back to the key when the registry no longer knows the dial", () => {
     const out = publicAmendment(row({ config_key: "retired.dial", old_value: "1", new_value: "2" }), undefined, null);
     expect(out).toMatchObject({ label: "retired.dial", from: "1", to: "2", withheld: false });
