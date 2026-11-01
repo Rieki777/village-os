@@ -300,3 +300,107 @@ describe.skipIf(!DB_CONFIGURED)("a power the village holds does not move on an a
     expect(String(back.json.error)).toContain("Handing a power back");
   });
 });
+
+/*
+ * SHEET 19 (Rye, 2026-10-31: "admin access only, for Founders Circle and
+ * steward roles"; coordinator, 2026-11-01: Power groups only, founders-circle
+ * and steward-circle ON, every other group OFF, no switch on the org seat).
+ *
+ * Holding a power group whose switch is on opens the admin panel, read live
+ * from the holding, and nothing more: the capability gate's admin short-circuit
+ * still reads the account's own role. These run last in the file because the
+ * final case starts the village's Game.
+ */
+describe.skipIf(!DB_CONFIGURED)("sheet 19: admin access through a power group", () => {
+  const PW = "GroupAdmin123!";
+  let sam = { id: "", token: "" };
+  let ola = { id: "", token: "" };
+  const join = async (name: string, email: string) => {
+    const r = await call("POST", "/api/auth/register", { name, email, password: PW, paths: ["resident"] }, "");
+    expect(r.status, r.text).toBe(200);
+    return { id: String(r.json?.user?.id ?? ""), token: String(r.json?.token ?? "") };
+  };
+  const hold = (group: string, userId: string, action: "add" | "remove") =>
+    call("POST", `/api/admin/roles/${group}/holders`, { userId, action });
+  const opensPanel = async (token: string) => (await call("GET", "/api/admin/players", undefined, token)).status === 200;
+
+  it("control: a plain member cannot open the panel, and the profile says so", async () => {
+    sam = await join("Sam Steward", "sam-group-admin@example.test");
+    ola = await join("Ola Founder", "ola-group-admin@example.test");
+    // Steward Circle asks for Member or above, so both are admitted first.
+    for (const id of [sam.id, ola.id]) expect((await call("PUT", `/api/admin/players/${id}/stage`, { stageId: "member" })).status).toBe(200);
+    expect(await opensPanel(sam.token)).toBe(false);
+    expect((await call("GET", "/api/profile", undefined, sam.token)).json?.adminAccess).toBe(false);
+  });
+
+  it("the two named groups ship with the switch on, and every other group off", async () => {
+    const groups = (await call("GET", "/api/roles")).json;
+    const on = (Array.isArray(groups) ? groups : groups?.roles ?? []).filter((g: any) => g.grantsAdmin).map((g: any) => g.id).sort();
+    expect(on).toEqual(["founders-circle", "steward-circle"]);
+  });
+
+  it("holding Steward Circle opens the panel, and the Players card names the group", async () => {
+    expect((await hold("steward-circle", sam.id, "add")).status).toBe(200);
+    expect(await opensPanel(sam.token)).toBe(true);
+    expect((await call("GET", "/api/profile", undefined, sam.token)).json?.adminAccess).toBe(true);
+    const row = (await call("GET", "/api/admin/players")).json.find((p: any) => p.id === sam.id);
+    expect(row.adminVia).toEqual(["Steward Circle"]);
+    // Admin ACCESS, never the account's role: nothing was written to it.
+    expect(row.role).toBe("member");
+  });
+
+  it("gives the panel and no power: the capability gate still reads the account's own role", async () => {
+    // Steward Circle carries no proposal.decide, and an admin account would pass it by short-circuit.
+    const me = (await call("GET", "/api/game/progression", undefined, sam.token)).json;
+    const decide = (me?.capabilityCatalogue ?? []).find((c: any) => c.key === "proposal.decide");
+    expect(decide?.held).toBe(false);
+  });
+
+  it("a holder of the steward ORG seat who is not in Steward Circle gets no admin access", async () => {
+    const made = await call("POST", "/api/admin/org/roles", { id: "steward", name: "Village Steward", aim: "Hold the village in trust." });
+    expect([200, 409]).toContain(made.status);
+    const seated = await call("POST", "/api/admin/org/roles/steward/holders", { userId: ola.id });
+    expect(seated.status, seated.text).toBeLessThan(300);
+    expect(await opensPanel(ola.token)).toBe(false);
+    expect((await call("GET", "/api/profile", undefined, ola.token)).json?.adminAccess).toBe(false);
+  });
+
+  it("two groups that both carry the switch are one way in, and losing one keeps the other", async () => {
+    expect((await hold("founders-circle", sam.id, "add")).status).toBe(200);
+    const row = (await call("GET", "/api/admin/players")).json.find((p: any) => p.id === sam.id);
+    expect(row.adminVia).toEqual(["Founders Circle", "Steward Circle"]);
+    expect((await hold("founders-circle", sam.id, "remove")).status).toBe(200);
+    expect(await opensPanel(sam.token)).toBe(true);
+  });
+
+  it("the role ending mid-session closes the panel on the very next request, same token", async () => {
+    expect((await hold("steward-circle", sam.id, "remove")).status).toBe(200);
+    expect(await opensPanel(sam.token)).toBe(false);
+  });
+
+  it("only a founder may switch a group on before launch, and a group admin is not one", async () => {
+    expect((await hold("steward-circle", sam.id, "add")).status).toBe(200);
+    // An earlier case in this file can leave the village launched, so put it back before launch for this one.
+    await pool.query("DELETE FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const byGroupAdmin = await call("PUT", "/api/admin/roles/treasury/admin-access", { on: true }, sam.token);
+    expect(byGroupAdmin.status, byGroupAdmin.text).toBe(403);
+  });
+
+  it("the last way in cannot switch its own group off or remove itself", async () => {
+    // Start the Game, so the founder role no longer stands and the founder may stand down.
+    await pool.query("INSERT IGNORE INTO app_config (config_key, value) VALUES ('game-start', ?)", [JSON.stringify({ startedAt: new Date().toISOString(), ballotId: "e2e", startedBy: "e2e", note: "" })]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const me = (await call("GET", "/api/profile")).json;
+    const down = await call("PUT", `/api/admin/users/${me.id}/role`, { role: "member" });
+    expect(down.status, down.text).toBe(200);
+    // Sam, through Steward Circle, is now the only account that can open the panel.
+    const off = await call("PUT", "/api/admin/roles/steward-circle/admin-access", { on: false }, sam.token);
+    expect(off.status, off.text).toBe(409);
+    expect(off.json.error).toContain("nobody able to open the admin panel");
+    // Removing a holder needs proposal.decide, which admin access through a group never gives,
+    // so Sam cannot take himself out at all; the founder, stood down, no longer reaches the route.
+    const self = await call("POST", "/api/admin/roles/steward-circle/holders", { userId: sam.id, action: "remove" }, sam.token);
+    expect(self.status).toBe(401);
+    expect((await hold("steward-circle", sam.id, "remove")).status).toBe(401);
+    expect(await opensPanel(sam.token)).toBe(true);
+  });
+});
