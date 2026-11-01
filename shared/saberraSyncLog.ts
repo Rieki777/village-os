@@ -85,6 +85,8 @@ export interface SyncRun {
   superseded: number;
   /** Waiting suggestions moved, unchanged, into this run's batch. */
   rebatched: number;
+  /** Waiting suggestions withdrawn because the service stopped sending their record. */
+  gone: number;
   /** Records held back from the queue (a kind it does not take, a record with no name). */
   held: number;
   /** Records where a field carrying an email address was dropped. */

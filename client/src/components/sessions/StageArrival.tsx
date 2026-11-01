@@ -20,7 +20,7 @@
  * them by giving them again (the server keeps one per person). The line under
  * the button says so once they have.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ARRIVAL_MAX,
   ARRIVAL_MIN,
@@ -62,15 +62,23 @@ export default function StageArrival({ view, actions }: StageProps) {
   const me = view.people.find((p) => p.userId === whom) ?? null;
   const [score, setScore] = useState<number | null>(me?.arrival ?? null);
   const [wish, setWish] = useState(me?.wish ?? "");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
   // A different person chosen: the form starts from what they gave, if anything.
+  // Only a real change of person resets it. The first render already started
+  // from the stored values, and a mount effect that ran again after a click
+  // (its passive flush can land after the click's update) put the stored
+  // number back over the one just chosen. A refetch keeps the same person, so
+  // it never resets the form either.
+  const shownFor = useRef(whom);
   useEffect(() => {
+    if (shownFor.current === whom) return;
+    shownFor.current = whom;
     setScore(me?.arrival ?? null);
     setWish(me?.wish ?? "");
     setSaved(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [whom]);
-  const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [roundBusy, setRoundBusy] = useState(false);
 
   const summary = arrivalSummary(view.people.map((p) => p.arrival));
@@ -80,11 +88,13 @@ export default function StageArrival({ view, actions }: StageProps) {
 
   const give = async () => {
     if (score == null || busy) return;
+    const givenFor = whom;
     setBusy(true);
     setSaved(false);
     try {
       const r = await actions.arrival(score, cleanLine(wish, SESSION_LIMITS.wish));
-      if (r.ok) setSaved(true);
+      // "Saved" speaks for the person on screen: a switch while the save was out leaves it unsaid.
+      if (r.ok && shownFor.current === givenFor) setSaved(true);
     } finally {
       setBusy(false);
     }

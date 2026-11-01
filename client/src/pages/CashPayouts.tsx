@@ -10,23 +10,19 @@
  * Permission is still the server's one gate: every read and write the tab
  * makes asks `guardCapability(..., "cash.pay")`, and a member without the key
  * sees the refusal sentence the tab already renders.
+ *
+ * Signed out or signed in, the tab renders the page's h1 and its sign-in
+ * prompt (E7, 2026-10-31), so there is one wording of each, not two.
  */
 import Layout from "@/components/Layout";
 import CashPayoutsTab from "@/components/admin/CashPayoutsTab";
 import { authToken } from "@/lib/gameApi";
 
 export default function CashPayouts() {
-  const token = authToken();
   return (
     <Layout>
       <div className="mx-auto max-w-5xl px-4 py-8">
-        {token ? (
-          <CashPayoutsTab password={token} />
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Sign in to read the cash the village owes. <a href="/login" className="underline">Sign in</a>
-          </p>
-        )}
+        <CashPayoutsTab password={authToken() ?? ""} asPage />
       </div>
     </Layout>
   );

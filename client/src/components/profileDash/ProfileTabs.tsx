@@ -34,6 +34,7 @@ export const phoneTab = (active: ProfileTab, mine: ProfileTab | readonly Profile
 /** Which tab an anchor in the address lives on, so /profile#cash-owed opens Treasury on a phone. */
 export const TAB_OF_ANCHOR: Record<string, ProfileTab> = {
   "my-tasks": "quests",
+  companions: "quests",
   treasury: "treasury",
   "cash-owed": "treasury",
   wallet: "treasury",

@@ -187,8 +187,9 @@ run is not a red, since `ci.yml` cancels superseded
 runs per ref. Full detail, with the traps, in the fleet ledger's section 27d (private, see the
 reading order above).
 
-Two CI budgets cap the client: main JS and total `dist/public`, both
-measured after `pnpm build`. Read the numbers off `MAX_MAIN_JS_KB` and `MAX_TOTAL_DIST_KB` in
+Three CI budgets cap the client: main JS, the first page's scripts (every `.js` file
+`index.html` loads, which does not move when code only changes chunk), and total `dist/public`, all
+measured after `pnpm build`. Read the numbers off `MAX_MAIN_JS_KB`, `MAX_BOOT_JS_KB` and `MAX_TOTAL_DIST_KB` in
 `.github/workflows/ci.yml`, which is the authority: this block said 6 MB for as long as the
 ceiling was 6000, and stayed at 6 MB when `dbb4f9c` raised it to 6600 for the catalog art.
 `node scripts/check-dist-budget.mjs` reproduces the CI measurement locally and CI runs the same

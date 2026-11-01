@@ -230,7 +230,10 @@ export default function CommsSettings({ password, openIntegrations }: { password
       <div>
         <h2 className="text-xl font-bold text-gray-900">Comms Settings</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Everything the village's email needs from you, in one place. Every item can be changed again later.
+          Everything the village's email needs from you, in one place. Every item can be changed again later.{" "}
+          <a href="/setup-game" className="text-teal-deep underline">
+            Or plant it step by step in the setup game.
+          </a>
         </p>
         <p
           className={`text-sm mt-3 rounded-lg px-3 py-2 border ${

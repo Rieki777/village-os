@@ -194,6 +194,28 @@ const LAPSE_WORDS: Record<"term" | "season", string> = {
   season: "The season you were seated in has turned, and the village has not re-chosen this role yet.",
 };
 
+/**
+ * Whether this member holds a role right now, by the steward ladder's own
+ * "Mandate current" test: a member seating, no example on either side, not
+ * ended and not lapsed. The stage ladder's Role Holder rung reads this
+ * (Rye, 2026-10-31: "we want this to work automatically"), so the stage and the
+ * steward rung can never disagree about the same person.
+ */
+export function holdsRoleNow(rows: readonly SeatingFacts[], ctx: LapseContext): boolean {
+  return rows.some(
+    (r) =>
+      r.holderKind === "member" &&
+      !r.isExample &&
+      !r.roleIsExample &&
+      r.endedAt === null &&
+      !isLapsed(
+        { termEndsAt: r.termEndsAt, seasonId: r.seasonId, endedAt: null },
+        { expiresEachSeason: r.roleExpiresEachSeason },
+        ctx,
+      ).lapsed,
+  );
+}
+
 export function stewardLadder(
   rows: readonly SeatingFacts[],
   ctx: LapseContext,
