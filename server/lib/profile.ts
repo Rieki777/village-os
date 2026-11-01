@@ -103,10 +103,15 @@ export function moonsSince(joinedAt: Date | string | null | undefined, now = new
  * public by default. This way a new field is private until somebody writes the
  * line that publishes it.
  */
-export function publicView(full: ProfileView, privacy: Privacy): ProfileView {
+/**
+ * `name` is what this reader may call the member. The route passes the full
+ * name to a signed-in reader and a first name to a stranger (R097: the public
+ * tier never carries a full display name); absent, it is the full name.
+ */
+export function publicView(full: ProfileView, privacy: Privacy, name: string = full.name): ProfileView {
   const out: ProfileView = {
     handle: full.handle,
-    name: full.name,
+    name,
     title: full.title,
     joinedAt: full.joinedAt,
     moonsOnTheLand: full.moonsOnTheLand,
