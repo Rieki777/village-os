@@ -192,7 +192,25 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
     }
   };
 
-  const tokenOf = (mail: OutgoingEmail) => new URL(mail.text.split("\n").find((l) => l.startsWith(ORIGIN)) as string).searchParams.get("token") as string;
+  /*
+   * The emailed link is found by comparing ORIGIN, not by prefix.
+   * `l.startsWith(ORIGIN)` also matches
+   * `https://village.example.test.somewhere-else.com/...`, because the origin
+   * can be followed by an arbitrary host. CodeQL refuses that as incomplete
+   * URL substring sanitization (alert 468) and it is the same
+   * startsWith-is-not-same-origin shape this repository has already been bitten
+   * by in product code. Parsing the line and comparing `origin` is exact, and a
+   * line that is not a URL is simply not the link.
+   */
+  const isLink = (line: string) => {
+    try {
+      return new URL(line.trim()).origin === new URL(ORIGIN).origin;
+    } catch {
+      return false;
+    }
+  };
+  const tokenOf = (mail: OutgoingEmail) =>
+    new URL((mail.text.split("\n").find(isLink) as string).trim()).searchParams.get("token") as string;
 
   /** Send a proposal as somebody with no account, and answer its id and the confirmation token. */
   const send = async (email: string, roles: string[] = [gate]) => {
