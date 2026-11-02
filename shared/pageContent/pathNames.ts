@@ -69,7 +69,7 @@ function swapWords(text: string, platform: { label: string; role: string }, vill
     [platform.role, village.role],
     [platform.label, village.label],
   ]);
-  const words = [...swaps.keys()].filter(Boolean).sort((a, b) => b.length - a.length);
+  const words = Array.from(swaps.keys()).filter(Boolean).sort((a, b) => b.length - a.length);
   if (!words.length) return text;
   return text.replace(new RegExp(words.map(escape).join("|"), "g"), (w) => swaps.get(w) ?? w);
 }
