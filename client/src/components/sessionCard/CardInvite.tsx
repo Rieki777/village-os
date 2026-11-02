@@ -22,8 +22,8 @@
  * Somebody with no lines yet is sent to find them (/profile/gene-keys) and
  * brought back to this room after (`?next=`). That page reads Gene Keys and,
  * from the same birth, the Human Design type, strategy and authority and the
- * member's own Sun and Moon signs (0309). It does not read a rising sign yet,
- * so the invitation promises the Sun and Moon by name and nothing more.
+ * member's own Sun and Moon signs (0309), and their rising sign when they give
+ * an exact birth time, so the invitation can promise astrology.
  */
 import { useState } from "react";
 import { Link } from "wouter";

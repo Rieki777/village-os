@@ -103,6 +103,13 @@ describe("the birth-town list", () => {
     expect(parsePlaces(TEXT.replace(/\r\n/g, "\n"))).toEqual(places);
   });
 
+  it("reads a town's coordinates when the list carries them, and none when it does not", () => {
+    const withCoords = TEXT.replace("Phoenix		US	1", "Phoenix		US	1	33.45	-112.07");
+    const places = parsePlaces(withCoords);
+    expect(places[0]).toMatchObject({ name: "Phoenix", lat: 33.45, lon: -112.07 });
+    expect(places[1]).toMatchObject({ name: "Denver", lat: null, lon: null });
+  });
+
   it("finds a town by its start or a word in it, accents folded, and waits for two letters", () => {
     const places = parsePlaces(TEXT);
     expect(searchPlaces(places, "san jo").map((p) => p.name)).toEqual(["San José"]);

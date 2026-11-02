@@ -10,19 +10,26 @@
  * kept only when every span agrees on it, so a Moon that changed sign that day
  * is sent as not known rather than guessed.
  *
- * The rising sign needs the birth town's latitude and longitude, which the town
- * list (server/assets/places/cities15000.txt) does not carry, so it is never
- * read here yet and is sent as not known.
+ * The rising sign changes about every two hours, so it is read only from an
+ * exact birth time (one span of one minute) and the birth town's coordinates
+ * (the GeoNames town list, CC BY 4.0). Otherwise it is sent as not known.
  */
-import { natalSigns, zonedToUtc } from "@shared/geneKeysSky";
+import { natalSigns, risingSign, zonedToUtc } from "@shared/geneKeysSky";
 import type { NatalSigns } from "@shared/geneKeys";
 
 type Day = { year: number; month: number; day: number };
 
-export function signsFor(day: Day, zone: string, spans: readonly (readonly [number, number])[]): NatalSigns {
+export function signsFor(
+  day: Day,
+  zone: string,
+  spans: readonly (readonly [number, number])[],
+  coords?: { lat: number | null; lon: number | null },
+): NatalSigns {
   if (!spans.length) return { sun: null, moon: null, rising: null };
   const at = (m: number) => zonedToUtc(day.year, day.month, day.day, Math.floor(m / 60), m % 60, zone);
   const each = spans.map(([from, to]) => natalSigns([at(from), at(to)]));
   const agree = (k: "sun" | "moon") => (each.every((s) => s[k] !== null && s[k] === each[0][k]) ? each[0][k] : null);
-  return { sun: agree("sun"), moon: agree("moon"), rising: null };
+  const exact = spans.length === 1 && spans[0][0] === spans[0][1];
+  const rising = exact && coords?.lat != null && coords.lon != null ? risingSign(at(spans[0][0]), coords.lat, coords.lon) : null;
+  return { sun: agree("sun"), moon: agree("moon"), rising };
 }

@@ -201,7 +201,7 @@ export default function GeneKeysPage() {
     try {
       const [year, month, day] = date.split("-").map(Number);
       // Only the sign numbers leave this device; the date, time and town never do.
-      const signs = place ? signsFor({ year, month, day }, place.zone, picked.spans) : undefined;
+      const signs = place ? signsFor({ year, month, day }, place.zone, picked.spans, { lat: place.lat, lon: place.lon }) : undefined;
       const saved = await saveMyGeneKeys({ chart: picked.chart, source: picked.chosen ? "chosen" : "exact", ...savePayload(choices, fromCard), signs });
       setMyGeneKeys(saved.mine);
       setBadge(saved.badgeEarned);
@@ -331,7 +331,7 @@ export default function GeneKeysPage() {
                   {next ? backWords : "Back to your profile"}
                 </Link>
               </div>
-              <p className="text-xs text-muted-foreground">Places from GeoNames.org</p>
+              <p className="text-xs text-muted-foreground">Town data: GeoNames (CC BY 4.0)</p>
             </section>
           ) : null}
 
