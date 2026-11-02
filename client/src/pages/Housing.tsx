@@ -28,6 +28,7 @@ import {
   Heart,
   type LucideIcon,
 } from "lucide-react";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 interface LegalContent {
   landShareTransferNote?: string;
@@ -93,6 +94,8 @@ function featureIcon(word: string | undefined): LucideIcon {
 export default function Housing() {
   // Blank hides the button rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   const villageName = useVillageName();
   // The page's words are the village's own, from Admin, Pages, Housing
   // (shared/pageContent/housing.ts). Null until the saved words have arrived,
@@ -347,13 +350,15 @@ export default function Housing() {
               </div>
               ))}
             </div>
-            <Link
-              href="/resident"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-teal-deep text-white rounded-lg font-semibold hover:bg-teal-deep-dark transition"
-            >
-              Learn About Residency
-              <ArrowRight className="w-5 h-5" />
-            </Link>
+            {!pageOff("/resident") && (
+              <Link
+                href="/resident"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-teal-deep text-white rounded-lg font-semibold hover:bg-teal-deep-dark transition"
+              >
+                Learn About Residency
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+            )}
           </div>
         </div>
       </section>
@@ -381,12 +386,14 @@ export default function Housing() {
                   Join Community Call
                 </a>
               )}
-              <Link
-                href="/resident"
-                className="px-8 py-4 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors"
-              >
-                Resident Journey
-              </Link>
+              {!pageOff("/resident") && (
+                <Link
+                  href="/resident"
+                  className="px-8 py-4 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors"
+                >
+                  Resident Journey
+                </Link>
+              )}
             </div>
           </div>
         </div>

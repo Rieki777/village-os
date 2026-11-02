@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   Calendar,
 } from "lucide-react";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /** Icons and tints for the criteria, handed out in order. The words are the village's (shared/pageContent/goodNeighbor.ts). */
 const CRITERION_LOOKS = [
@@ -53,6 +54,8 @@ function numberedLines(row: ResolvedItem, prefix: string): string[] {
 export default function GoodNeighbor() {
   // Blank hides the button rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   // Every word here is the village's own, from Admin, Pages, Good Neighbor.
   // `{good-neighbor}` is this page's own headline field, so renaming the
   // criteria renames every mention of them at once.
@@ -335,12 +338,14 @@ export default function GoodNeighbor() {
                 )}
 
                 <div className="flex flex-wrap justify-center gap-4">
-                  <Link href="/love-letter">
-                    <a className="px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg hover:bg-teal-deep-dark transition-all duration-200 flex items-center gap-2">
-                      {closing.fields.commitLabel}
-                      <ArrowRight className="w-5 h-5" />
-                    </a>
-                  </Link>
+                  {!pageOff("/love-letter") && (
+                    <Link href="/love-letter">
+                      <a className="px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg hover:bg-teal-deep-dark transition-all duration-200 flex items-center gap-2">
+                        {closing.fields.commitLabel}
+                        <ArrowRight className="w-5 h-5" />
+                      </a>
+                    </Link>
+                  )}
                   {eventsUrl && closing.fields.eventsLabel && (
                     <a
                       href={eventsUrl}

@@ -41,6 +41,7 @@ import {
   UserCheck,
   Vote,
 } from "lucide-react";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /*
  * Every word on this page is the village's own, from Admin, Pages,
@@ -172,6 +173,8 @@ const CTA_LOOK: Record<CtaId, { icon: typeof Heart; href: string; external: bool
 export default function CoCreatorsGuide() {
   const hypha = useHypha();
   const { eventsUrl } = useVillageLinks();
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   const resolved = usePageContent(CO_CREATORS_GUIDE_PAGE);
   // The name the village gave its criteria on the Good Neighbor page.
   const goodNeighborName = useGoodNeighborName();
@@ -218,7 +221,7 @@ export default function CoCreatorsGuide() {
         ? { ...look, id: card.id, title: card.title, description: card.description, href: look.external ? eventsUrl : look.href }
         : null;
     })
-    .filter((card): card is NonNullable<typeof card> => !!card && !!card.href);
+    .filter((card): card is NonNullable<typeof card> => !!card && !!card.href && !pageOff(card.href));
   const circles = ikigai.lists.circles;
 
   return (
@@ -819,12 +822,14 @@ export default function CoCreatorsGuide() {
                 <p className="text-muted-foreground mb-6">
                   <Emphasized text={goodNeighbor.fields.body} />
                 </p>
-                <Link href="/good-neighbor">
-                  <a className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
-                    {goodNeighbor.fields.buttonLabel}
-                    <ArrowRight className="w-4 h-4 flex-shrink-0" />
-                  </a>
-                </Link>
+                {!pageOff("/good-neighbor") && (
+                  <Link href="/good-neighbor">
+                    <a className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
+                      {goodNeighbor.fields.buttonLabel}
+                      <ArrowRight className="w-4 h-4 flex-shrink-0" />
+                    </a>
+                  </Link>
+                )}
               </m.div>
             </m.div>
           </div>

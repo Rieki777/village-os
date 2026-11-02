@@ -32,6 +32,7 @@ import { Emphasized, Highlighted } from "@/components/PageText";
 import { HOME_PAGE } from "@shared/pageContent/home";
 import { useModule } from "@/modules/ModuleProvider";
 import { scrollBehavior } from "@/components/natural/scrollBehavior";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 
 
@@ -128,6 +129,14 @@ export default function Home() {
   const hero = page?.hero.fields;
   const journey = page?.journey;
   const paths = page?.paths;
+  // A journey switched off on its own in Admin, Pages takes its card with it,
+  // and with no card left the section draws nothing, as if it were hidden.
+  const pageOff = useStoryPageOffAlone();
+  const pathCards = (paths?.lists.cards ?? []).filter((card) => {
+    const look = PATH_CARD_LOOK[card.id as keyof typeof PATH_CARD_LOOK];
+    return !!look && !pageOff(look.href);
+  });
+  const pathsShown = !!paths && !paths.hidden && pathCards.length > 0;
   const personas = page?.personas;
   const cta = page?.cta;
   // R47: the hero holds one door forward, plus the map when this village has
@@ -358,8 +367,8 @@ export default function Home() {
 
       {/* Choose Your Path. The section keeps its id when hidden so the
           hero's "Pick your path" anchor never points at nothing. */}
-      <section id="choose-path" className={paths && !paths.hidden ? "py-24 bg-background" : undefined}>
-        {paths && !paths.hidden && (
+      <section id="choose-path" className={pathsShown ? "py-24 bg-background" : undefined}>
+        {paths && pathsShown && (
         <div className="container">
           <div className="text-center mb-16">
             <m.span
@@ -390,7 +399,7 @@ export default function Home() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-8">
-            {paths.lists.cards.map((card, index) => {
+            {pathCards.map((card, index) => {
               const look = PATH_CARD_LOOK[card.id as keyof typeof PATH_CARD_LOOK];
               if (!look) return null;
               return (
