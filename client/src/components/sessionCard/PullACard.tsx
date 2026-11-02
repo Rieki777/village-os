@@ -60,8 +60,9 @@ export const CARD_WORDS = {
   // {name} is the village's own guide (shared/guideName.ts), filled where the card is drawn.
   maia: "Woven by {name} from today's sky and the lines of the people here.",
   plain: "Read from today's sky and the lines of the people here.",
+  readNext: "This card was read before you joined in. The next card reads you.",
   notRead: {
-    "no-lines": "Find your Gene Keys lines and the next card will read you too.",
+    "no-lines": "Find your Gene Keys, Human Design and astrology, and the next card will read you too.",
     hidden: "Your lines are hidden, so the card welcomes you by name and reads nothing of yours.",
     "no-maia": "Let {name} use your lines and the next card will read you too.",
     "left-out": "You asked to be left out of cards, so the card welcomes you by name.",
@@ -216,7 +217,8 @@ function CardFace({
           </>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
-            {fillGuideName(answer.notRead ? CARD_WORDS.notRead[answer.notRead] : CARD_WORDS.notRead["no-lines"], guide)}{" "}
+            {/* Read now but not on this card (a yes, or an arrival, after it was pulled): the next one reads them. */}
+            {answer.notRead === null ? CARD_WORDS.readNext : fillGuideName(CARD_WORDS.notRead[answer.notRead], guide)}{" "}
             {answer.notRead && answer.notRead !== "left-out" ? (
               <Link href="/profile/gene-keys" className="text-notice underline underline-offset-2">
                 Your Gene Keys

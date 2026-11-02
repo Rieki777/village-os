@@ -91,8 +91,12 @@ describe("the invitation to the card", () => {
     expect(dialog.textContent).not.toMatch(/Maia/);
     expect(dialog.textContent).toContain(INVITE_WORDS.consent.cards);
     expect(dialog.textContent).toContain(INVITE_WORDS.nextCard);
+    const readsBefore = api.read.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: INVITE_WORDS.yes }));
     await waitFor(() => expect(api.changed).toEqual([{ visibility: "show", maia: true, cards: true }]));
+    // The room's cards are read again at once (well inside the 5 s poll), so the card on the table
+    // stops saying why they were not read.
+    await waitFor(() => expect(api.read.mock.calls.length).toBe(readsBefore + 1), { timeout: 1000 });
   });
 
   it("asks only for what is still off: lines already shown and Maia allowed means the card's own yes alone", async () => {

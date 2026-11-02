@@ -36,10 +36,9 @@ import {
 
 // ── THE SKY OF THE DAY ──────────────────────────────────────────────────────
 
-export const SIGNS = [
-  "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces",
-] as const;
-export type SignName = (typeof SIGNS)[number];
+// The twelve signs live with a member's own signs in shared/geneKeys.ts; the card reads the same list.
+export { SIGNS, type SignName } from "./geneKeys";
+import { SIGNS, type SignName } from "./geneKeys";
 export type Element = "fire" | "earth" | "air" | "water";
 /** Aries fire, Taurus earth, Gemini air, Cancer water, and round again. */
 export const ELEMENTS: readonly Element[] = ["fire", "earth", "air", "water"];
