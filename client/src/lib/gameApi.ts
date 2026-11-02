@@ -167,6 +167,10 @@ let _configCache: Promise<PublicGameConfig | null> | null = null;
 // The resolved config, so a component mounting after it arrived starts with it
 // instead of rendering empty, painting, and rendering again in an effect.
 let _configNow: PublicGameConfig | null = null;
+/** The cached config as it stands, for code that is not a component (null before the first read). */
+export function configNow(): PublicGameConfig | null {
+  return _configNow;
+}
 export function fetchConfigCached(): Promise<PublicGameConfig | null> {
   if (!_configCache) {
     _configCache = fetch("/api/game/config")

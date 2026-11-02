@@ -1341,6 +1341,7 @@ const crowdpoolSnapshotsRepo = dbDocument(getPool(), "crowdpool-snapshots", {} a
 /** The crowdpool dialer is the house pinned dialer, nothing else. */
 const crowdpoolDeps: CrowdpoolDeps = {
   fetchJson: (url, timeoutMs) => guardedFetchJson(url, timeoutMs),
+  villageCurrency: () => String(mergedConfig().project.fiatCurrency ?? ""),
 };
 /** The hub default is ONE founder-held game variable, never a literal here. */
 const crowdpoolHubBase = () => stringVar("governance.hub_url").replace(/\/+$/, "");
