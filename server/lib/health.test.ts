@@ -19,10 +19,11 @@
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
-import { HEALTH_METRICS_BY_KEY, SNAPSHOT_METRICS } from "../../shared/healthMetrics";
+import { HEALTH_METRICS_BY_KEY, SNAPSHOT_METRICS, snapshotTileLabel } from "../../shared/healthMetrics";
 import { allowanceFor } from "./economy";
+import { loadTokenRegistry, tokenDef } from "./ledger";
 import { loadVariables } from "./variables";
-import { snapshotCycle, type SnapshotCycle } from "./health";
+import { snapshotCycle, snapshotSeries, thresholdAlerts, type SnapshotCycle } from "./health";
 
 const configured = testDbConfigured();
 if (!configured) {
@@ -324,5 +325,138 @@ describe.skipIf(!configured)("R9: the allowance a village left unused", () => {
       expect(blob, "no member id may ride in a key or in meta").not.toContain("gives-two");
       expect(blob).not.toContain("gives-all");
     }
+  });
+});
+
+/*
+ * THE TREASURY TILE (the coordinator's sweep, 2026-10-31, on main 97826cb).
+ * `treasury_balance` used to add every token `sys:treasury` held, in raw
+ * ledger minor units and across kinds, into one number printed with no unit:
+ * a village holding 1,234.56 credits and 500 stay-credit read 173456. It now
+ * freezes the one token `gratitude.pool_token` names, in whole tokens, the
+ * same reading the map's treasury chip makes (`treasuryReading`).
+ */
+describe("the treasury tile's label", () => {
+  it("names the token the figure is in", () => {
+    expect(snapshotTileLabel("treasury_balance", "Treasury holdings", { token: "credits", tokenName: "Credits" })).toBe("Credits in the treasury");
+  });
+  it("keeps the registry label when a row carries no token", () => {
+    expect(snapshotTileLabel("treasury_balance", "Treasury holdings", { perToken: { credits: 5 } })).toBe("Treasury holdings");
+    expect(snapshotTileLabel("members_total", "Members", null)).toBe("Members");
+  });
+});
+
+describe.skipIf(!configured)("the treasury snapshot reads one token, in whole tokens", () => {
+  let tdb: TestDb;
+  let tpool: mysql.Pool;
+  const setVar = async (key: string, value: string) => {
+    await tpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO `game_variables` (`config_key`,`value`,`value_type`) VALUES (?,?,'text') ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
+      [key, value],
+    );
+    await loadVariables(tpool);
+  };
+  const hold = async (token: string, units: number) => {
+    await tpool.query(
+      "INSERT INTO `token_balances` (`account_id`,`token_type`,`balance`) VALUES ('sys:treasury',?,?) ON DUPLICATE KEY UPDATE `balance` = VALUES(`balance`)", // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      [token, units],
+    );
+  };
+  const treasuryAt = async (cycleNumber: number) => {
+    const [rows] = await tpool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT value, meta FROM health_snapshots WHERE cycle_number = ? AND metric_key = 'treasury_balance'",
+      [cycleNumber],
+    );
+    if (!rows.length) return undefined;
+    return { value: Number(rows[0].value), meta: typeof rows[0].meta === "string" ? JSON.parse(rows[0].meta) : rows[0].meta };
+  };
+
+  beforeAll(async () => {
+    tdb = await provisionTestDb();
+    tpool = testPool(tdb, { connectionLimit: 5 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    // Stay credit comes from the runtime economy seed, never a migration, so a
+    // scratch schema lacks it. Both are pinned at two decimals, the scale 0202
+    // gives a credit token, so a ledger unit is a hundredth here.
+    await tpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT IGNORE INTO `tokens` (`slug`,`name`,`kind`,`governance`,`transferable`,`sort_order`) VALUES ('stay-credit','Stay Credit','credit','platform',0,5)",
+    );
+    await tpool.query("UPDATE `tokens` SET `decimals` = 2 WHERE `slug` IN ('credits','stay-credit')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await loadTokenRegistry(tpool);
+    await setVar("gratitude.pool_token", "credits");
+  }, 240_000);
+
+  afterAll(async () => {
+    await tpool?.end();
+    await tdb?.drop();
+    if (pool) await loadTokenRegistry(pool).catch(() => {});
+  });
+
+  beforeEach(async () => {
+    for (const t of ["health_snapshots", "token_balances"]) {
+      await tpool.query("DELETE FROM `" + t + "`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    }
+    await setVar("gratitude.pool_token", "credits");
+  });
+
+  it("counts only the pool token, in whole tokens, and never adds stay-credit to it", async () => {
+    await hold("credits", 123456);
+    await hold("stay-credit", 50000);
+    await snapshotCycle(tpool, cycleOf(40), new Set());
+    const row = await treasuryAt(40);
+    expect(row?.value, "1,234.56 credits shows as 1234, never 173456").toBe(1234);
+    expect(row?.meta.token).toBe("credits");
+    expect(row?.meta.tokenName).toBe(tokenDef("credits")!.name);
+    expect(row?.meta.perToken, "each token in its own units, side by side, never summed").toEqual({ credits: 1234.56, "stay-credit": 500 });
+  });
+
+  it("writes no treasury figure when the pool pays something that is not a token", async () => {
+    await hold("credits", 123456);
+    await setVar("gratitude.pool_token", "not-a-token");
+    await snapshotCycle(tpool, cycleOf(41), new Set());
+    expect(await treasuryAt(41)).toBeUndefined();
+  });
+
+  it("shows a treasury below zero as below zero", async () => {
+    await hold("credits", -2550);
+    await snapshotCycle(tpool, cycleOf(42), new Set());
+    expect((await treasuryAt(42))?.value).toBe(-25);
+  });
+
+  it("carries a renamed token's series on, under its new name", async () => {
+    const before = tokenDef("credits")!.name;
+    try {
+      await hold("credits", 100000);
+      await snapshotCycle(tpool, cycleOf(43), new Set());
+      await tpool.query("UPDATE `tokens` SET `name` = 'Village Hundredths' WHERE `slug` = 'credits'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await loadTokenRegistry(tpool);
+      await hold("credits", 150000);
+      await snapshotCycle(tpool, cycleOf(44), new Set());
+      const points = (await snapshotSeries(tpool)).series.treasury_balance;
+      expect(points.map((p) => p.value)).toEqual([1000, 1500]);
+      expect(points[1].meta.tokenName).toBe("Village Hundredths");
+    } finally {
+      await tpool.query("UPDATE `tokens` SET `name` = ? WHERE `slug` = 'credits'", [before]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await loadTokenRegistry(tpool);
+    }
+  });
+
+  it("leaves rows from before this fix out of the series, and starts again when the pool token changes", async () => {
+    // A row as the old close wrote it: every token summed in minor units.
+    await tpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO `health_snapshots` (`id`,`cycle_number`,`metric_key`,`value`,`meta`) VALUES ('old-45',45,'treasury_balance',173456,?)",
+      [JSON.stringify({ perToken: { credits: 123456, "stay-credit": 50000 } })],
+    );
+    await hold("credits", 123456);
+    await snapshotCycle(tpool, cycleOf(46), new Set());
+    let points = (await snapshotSeries(tpool)).series.treasury_balance;
+    expect(points.map((p) => p.cycleNumber), "a raw sum is never charted beside whole tokens").toEqual([46]);
+    expect((await thresholdAlerts(tpool, 10)).filter((a) => a.metricKey === "treasury_balance"), "no 99% fall invented from a change of unit").toEqual([]);
+
+    await setVar("gratitude.pool_token", "stay-credit");
+    await hold("stay-credit", 50000);
+    await snapshotCycle(tpool, cycleOf(47), new Set());
+    points = (await snapshotSeries(tpool)).series.treasury_balance;
+    expect(points.map((p) => p.cycleNumber), "credits and stay-credit are never one line").toEqual([47]);
+    expect((await thresholdAlerts(tpool, 10)).filter((a) => a.metricKey === "treasury_balance")).toEqual([]);
   });
 });
