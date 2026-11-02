@@ -35,6 +35,19 @@ export function powerInPlainWords(capability: string): PowerInPlainWords {
   return { title: entry?.title ?? capability, consequence: CAPABILITY_CONSEQUENCE[capability as Capability] ?? capability };
 }
 
+/**
+ * MATURE VILLAGES ONLY (Rye, 2026-11-01): "a village should be able to run
+ * without admins or stewards (only the most mature would)". These can always
+ * be handed over, and the hand-over asks a second, explicit confirm first:
+ * the veto that stops a carried decision, the money, the module switch and
+ * the village's dials.
+ */
+export const MATURE_ONLY: readonly Capability[] = ["steward.veto", "cash.pay", "exchange.manage", "module.switch", "dial.set"];
+
+export function isMatureOnly(capability: string): boolean {
+  return (MATURE_ONLY as readonly string[]).includes(capability);
+}
+
 export const LAUNCH_HANDOVER_KEY = "launch-handover";
 
 export interface LaunchSelection {
