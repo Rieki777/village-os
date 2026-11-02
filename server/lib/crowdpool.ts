@@ -126,6 +126,8 @@ export interface CrowdpoolDeps {
    *  local fixture so the whole path moves real bytes. */
   fetchJson(url: string, timeoutMs: number): Promise<any>;
   now?(): number;
+  /** The village's own currency, for a campaign the hub sent without one (readiness R154). */
+  villageCurrency?(): string;
 }
 
 // ── The wire shapes the page reads ───────────────────────────────────────────
@@ -446,7 +448,7 @@ export function normalizeCampaign(
   items: any,
   activity: any,
   partnerLinks: any,
-  opts: { baseUrl: string; slug?: string; now?: number; hubContract?: HubContract },
+  opts: { baseUrl: string; slug?: string; now?: number; hubContract?: HubContract; currency?: string },
 ): CrowdpoolCampaign {
   if (!byId || typeof byId !== "object") throw new Error("campaign not found on the hub");
   const started = iso(byId.startedAt);
@@ -485,7 +487,7 @@ export function normalizeCampaign(
     location: byId.location ? String(byId.location).slice(0, 200) : null,
     description: byId.description ? String(byId.description).slice(0, 2000) : null,
     status: String(byId.status ?? "active").toLowerCase().slice(0, 24),
-    currency: String(byId.currency ?? "USD").slice(0, 8),
+    currency: String(byId.currency || opts.currency || "").slice(0, 8),
     totalValue,
     pledgedTotal: num(byId.pledgedTotal),
     financialTarget: num(byId.financialTarget),
@@ -600,6 +602,7 @@ export async function fetchCampaignBundle(
     slug,
     now: deps.now?.(),
     hubContract,
+    currency: deps.villageCurrency?.(),
   });
 }
 
