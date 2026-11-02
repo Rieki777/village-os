@@ -5,14 +5,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import { LazyMotion, MotionConfig } from "framer-motion";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ScrollToTop from "./components/ScrollToTop";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
-import { brochurePage, useBrochurePages } from "./lib/brochure";
+import { brochurePage, storyPageShown, useBrochurePages } from "./lib/brochure";
 import { useGameConfig } from "./lib/gameApi";
 
 /**
@@ -82,6 +82,8 @@ function PageTitle() {
   const village = config?.project?.name ?? "";
   const commitment = config?.project?.commitmentName ?? "";
   const favicon = String(config?.images?.favicon ?? "").trim();
+  // Each story page's own switch rides the same config (Admin, Pages).
+  const switches = useMemo(() => (config ? { brochurePages: config.brochurePages, brochureHidden: config.brochureHidden } : null), [config]);
 
   // The tab ICON is identity too. index.html ships a neutral platform favicon
   // (a static file cannot know which village it serves); this swaps in the
@@ -101,8 +103,10 @@ function PageTitle() {
 
   useEffect(() => {
     if (!village) return;
-    document.title = documentTitle(location, village, { commitment });
-  }, [location, village, commitment]);
+    // A story page this village does not serve answers not found, so its tab
+    // names the village alone, the same as its share card (server/lib/pageMeta.ts).
+    document.title = documentTitle(storyPageShown(switches, location) ? location : "/", village, { commitment });
+  }, [location, village, commitment, switches]);
 
   return null;
 }

@@ -28,6 +28,7 @@ import {
   Heart,
   type LucideIcon,
 } from "lucide-react";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /*
  * EIGHT CAPITAL FIGURES LEFT THIS FILE (founder ruling, 2026-09-03).
@@ -95,6 +96,8 @@ const detailLines = (details: string | undefined) =>
 export default function Opportunities() {
   // Blank hides the button rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   const { content: money } = useVillageContent<MoneyContent>("money");
   // Whitespace is not a figure: a founder who clears a field publishes nothing.
   const investmentFor = (key: string | undefined) => (key ? money?.ventureInvestment?.[key]?.trim() || "" : "");
@@ -202,22 +205,24 @@ export default function Opportunities() {
             <p className="text-muted-foreground mb-8 break-words">
               <Emphasized text={revenue.fields.body} />
             </p>
-            <Link
-              href="/how-we-create"
-              // `text-teal-light` is `--tone-brand-mid`, which falls back to
-              // #737373 on an unbranded fork. That clears AA on white (4.74:1)
-              // and FAILS on this section's own `aqua-light` band: measured
-              // 3.73:1 against rgb(228,228,228) on the deployed build, all six
-              // viewports. `text-teal-deep` is safe by construction -
-              // shared/brandTokens.ts enforces contrastRatio(white, brand)
-              // >= 4.5 for every seed and contrast is symmetric - and measures
-              // 8.15:1 on this band under the neutral default. Same fix, and
-              // the same reasoning, as the Register path pills.
-              className="inline-flex items-center gap-2 text-teal-deep font-medium hover:gap-3 transition-all"
-            >
-              How we create together
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+            {!pageOff("/how-we-create") && (
+              <Link
+                href="/how-we-create"
+                // `text-teal-light` is `--tone-brand-mid`, which falls back to
+                // #737373 on an unbranded fork. That clears AA on white (4.74:1)
+                // and FAILS on this section's own `aqua-light` band: measured
+                // 3.73:1 against rgb(228,228,228) on the deployed build, all six
+                // viewports. `text-teal-deep` is safe by construction -
+                // shared/brandTokens.ts enforces contrastRatio(white, brand)
+                // >= 4.5 for every seed and contrast is symmetric - and measures
+                // 8.15:1 on this band under the neutral default. Same fix, and
+                // the same reasoning, as the Register path pills.
+                className="inline-flex items-center gap-2 text-teal-deep font-medium hover:gap-3 transition-all"
+              >
+                How we create together
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
           </div>
         </div>
       </section>
@@ -245,12 +250,14 @@ export default function Opportunities() {
                   Join Community Call
                 </a>
               )}
-              <Link
-                href="/prosperity"
-                className="px-8 py-4 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors"
-              >
-                Prosperity Journey
-              </Link>
+              {!pageOff("/prosperity") && (
+                <Link
+                  href="/prosperity"
+                  className="px-8 py-4 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors"
+                >
+                  Prosperity Journey
+                </Link>
+              )}
             </div>
           </div>
         </div>

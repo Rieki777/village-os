@@ -17,6 +17,7 @@ import { useVillageName } from "@/hooks/useVillageName";
 import { usePageVars } from "@/hooks/usePageContent";
 import { LETTER_PATH_IDS, LOVE_LETTER_PAGE } from "@shared/pageContent/loveLetter";
 import { resolvePage } from "@shared/pageContent/resolve";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /**
  * S2 brochure lane, 2026-08-30: this page used to state, nine times, that
@@ -234,6 +235,8 @@ export default function LoveLetter() {
   // flow, to write to strangers. With no published address the sentence stops
   // early rather than inventing a recipient.
   const { contactEmail } = useVillageLinks();
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   const emailFallback = contactEmail ? ` or email ${contactEmail}` : "";
 
   const togglePath = (pathId: string) => {
@@ -637,9 +640,15 @@ export default function LoveLetter() {
                   />
                   <span className="text-sm text-muted-foreground">
                     I have read and agree to the{" "}
-                    <a href="/good-neighbor" className="text-primary underline" target="_blank">
-                      {words.fields.standardsLabel}
-                    </a>{" "}
+                    {/* With the Good Neighbor page switched off on its own,
+                        the standards keep their name here and lose the link. */}
+                    {pageOff("/good-neighbor") ? (
+                      <span className="text-foreground">{words.fields.standardsLabel}</span>
+                    ) : (
+                      <a href="/good-neighbor" className="text-primary underline" target="_blank">
+                        {words.fields.standardsLabel}
+                      </a>
+                    )}{" "}
                     and understand the community standards expected of all members. <span className="text-destructive">*</span>
                   </span>
                 </label>

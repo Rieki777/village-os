@@ -48,7 +48,7 @@ import { usePathLadders } from "@/hooks/usePathLadders";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { onProfileRefresh } from "@/lib/profileRefresh";
-import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 import { roleWithHolders } from "@shared/roleHolderLabel";
 import type { StageAdvance } from "@/components/StageAdvanced";
 import StatRow from "@/components/profileDash/StatRow";
@@ -115,7 +115,7 @@ import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/d
  */
 
 export default function Profile() {
-  const brochureOn = useBrochurePages() === true;
+  const storyShown = useStoryPageShown();
   const [, navigate] = useLocation();
   const tokenName = useTokenName("Recognition");
   const { user, logout, loading, updateProfile } = useAuth();
@@ -345,7 +345,8 @@ export default function Profile() {
       id: p.id,
       label: p.label,
       role: p.role,
-      route: p.route,
+      // A path whose page is switched off keeps its tile and loses the link.
+      route: storyShown(p.route) ? p.route : "",
       offered: true,
     })),
     ...user.paths
@@ -755,7 +756,7 @@ export default function Profile() {
                 </h2>
                 {recentContributions.length === 0 ? (
                   /* R47: say what is missing, then point at the one door. */
-                  brochureOn ? (
+                  storyShown("/work-with-us") ? (
                     <p className="text-muted-foreground">
                       No contributions yet. Propose one through{" "}
                       <Link href="/work-with-us" className="font-medium text-foreground underline underline-offset-2">
@@ -870,7 +871,7 @@ export default function Profile() {
                   { href: "/circles", label: "Circles" },
                   { href: "/housing", label: "Housing" },
                 ]
-                  .filter((l) => brochureOn || !isBrochurePath(l.href))
+                  .filter((l) => storyShown(l.href))
                   .map((l) => (
                     <li key={l.href}>
                       <Link href={l.href} className="flex min-h-11 items-center justify-between rounded-lg p-3 hover:bg-muted">
