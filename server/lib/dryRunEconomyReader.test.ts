@@ -623,8 +623,10 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
       "rule-role.cycle-village-voice",
     ]);
     const voice = ruleById(snapshot.mintRules, "rule-role.cycle-village-voice");
-    expect(voice.amount).toBe(BigInt(50 * 10 ** VOICE_DECIMALS));
-    expect(voice.amountRaw).toBe("50.0000");
+    // No flat role mint (Rye, 2026-11-01): the seed's role rule is blank, so a
+    // role pays what its own list names. Its ceiling is still the seed's.
+    expect(voice.amount).toBeNull();
+    expect(voice.amountRaw).toBe("");
     expect(voice.ceiling).toBe(BigInt(200 * 10 ** VOICE_DECIMALS));
     expect(provenance.mintRules.source).toBe("seed");
     expect(provenance.mintRules.clause).toBe("mint rules: seed defaults (10 rows)");
@@ -720,7 +722,8 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
         id: String(r.id),
         trigger: String(r.trigger),
         tokenSlug: String(r.token_slug),
-        amountRaw: String(r.amount),
+        // A NULL amount reads "" here, as `readRuleRows` itself reads it.
+        amountRaw: r.amount === null ? "" : String(r.amount),
         ceilingRaw: String(r.ceiling),
         recipient: String(r.recipient),
         enabled: !!r.enabled,

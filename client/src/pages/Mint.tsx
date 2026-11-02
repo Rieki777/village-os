@@ -25,6 +25,7 @@ import { authToken } from "@/lib/gameApi";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 import { villageMoonSentence, type VillageMoon } from "@shared/villageMoon";
 import { ceilingBinds } from "@shared/workValue";
+import { ROLE_FLAT_AMOUNT_EXPLAINED, flatRoleAmountLine } from "@shared/duesDividend";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -66,7 +67,7 @@ interface View {
   moon: VillageMoon;
   rules: Rule[];
   supply: Array<{ token: string; source: string; issued: number }>;
-  settlementPreview: { seats: number; mints: Array<{ token: string; units: number; decimals: number }> };
+  settlementPreview: { seats: number; duesPayers: number; mints: Array<{ token: string; units: number; decimals: number }> };
 }
 
 /**
@@ -417,14 +418,19 @@ export default function Mint() {
                       pay"), so it says it pays in full and never shows one.
                     */}
                     <p className={ruleLine}>
-                      {r.amount === null
-                        ? ceilingBinds(r.trigger)
-                          ? `up to ${formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)} ${r.tokenName}, as much as the work was posted for`
-                          : `as much ${r.tokenName} as each piece of work names`
-                        : `${formatTokenAmount(r.pays.units ?? 0, r.pays.decimals)} ${r.tokenName}`}
-                      {" to each "}
-                      {r.recipient}
+                      {r.trigger === "role.cycle" && r.amount !== null
+                        ? flatRoleAmountLine(formatTokenAmount(r.pays.units ?? 0, r.pays.decimals), r.tokenName)
+                        : <>
+                            {r.amount === null
+                              ? ceilingBinds(r.trigger)
+                                ? `up to ${formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)} ${r.tokenName}, as much as the work was posted for`
+                                : `as much ${r.tokenName} as each piece of work names`
+                              : `${formatTokenAmount(r.pays.units ?? 0, r.pays.decimals)} ${r.tokenName}`}
+                            {" to each "}
+                            {r.recipient}
+                          </>}
                     </p>
+                    {r.trigger === "role.cycle" ? <p className={ruleLine}>{ROLE_FLAT_AMOUNT_EXPLAINED}</p> : null}
                     {ceilingBinds(r.trigger) ? (
                       <p className={ruleLine}>
                         The most one payment may be: {formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)}{" "}
@@ -609,7 +615,7 @@ export default function Mint() {
           {/* Settlement preview. */}
           <section className={`${card} mt-6`}>
             <h2 className={h2}>At the next moon</h2>
-            {view.settlementPreview.seats === 0 ? (
+            {view.settlementPreview.seats === 0 && view.settlementPreview.mints.length === 0 ? (
               <p className="text-gray-700">Nobody holds a role, so the settlement pays nothing.</p>
             ) : (
               <p className="text-gray-800">
@@ -620,6 +626,9 @@ export default function Mint() {
                       .map((m) => `${formatTokenAmount(m.units, m.decimals)} of ${m.token}`)
                       .join(", ")} minted.`
                   : "."}
+                {view.settlementPreview.duesPayers > 0
+                  ? ` ${view.settlementPreview.duesPayers} member${view.settlementPreview.duesPayers === 1 ? " has" : "s have"} paid dues by card this cycle so far.`
+                  : ""}
               </p>
             )}
             <p className="mt-3 text-sm text-gray-700">

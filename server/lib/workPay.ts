@@ -100,7 +100,10 @@ export function questPay(quest: ValuedWork & { stayCreditReward?: number | null 
 
 /** What a role pays each seat every cycle, for its card, with the cash its terms state. */
 export function rolePay(role: ValuedWork, rules: readonly MintRule[], cash: StatedCash | null): WorkPay {
-  const { lines, source } = linesOf(role, rules, "seat");
+  // A seat is paid its role's own list and never a flat amount (Rye,
+  // 2026-11-01): a flat role amount pays dues-paying members instead
+  // (`payDuesDividend`), so a card never promises it to a seat.
+  const { lines, source } = linesOf(role, rules.map((r) => ({ ...r, amount: null })), "seat");
   return { value: readWorkValue(role.valueMinor, role.valueCurrency), lines, source, cadence: "cycle", cash, cashPay: workCash(role) };
 }
 
@@ -129,7 +132,9 @@ export function payableTokens(rules: readonly MintRule[]): PayableToken[] {
     out.push({
       token: r.tokenSlug,
       name: def?.name ?? r.tokenSlug,
-      standard: r.amount,
+      // A role rule's flat amount is the dues dividend, never a role's standard
+      // pay (Rye, 2026-11-01), so a role's editor never opens on it.
+      standard: r.trigger === "role.cycle" ? null : r.amount,
       decimals: def?.decimals ?? 0,
     });
   }
