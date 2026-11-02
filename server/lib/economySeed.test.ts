@@ -135,11 +135,14 @@ describe.skipIf(!configured)("the rules a village is seeded with", () => {
     expect(Number(credits?.amount)).toBe(25);
   });
 
-  it("pays a seat holder each moon in voice and credits", async () => {
+  it("seeds the seat rules on for voice and credits, with no flat amount", async () => {
+    // No flat role mint (Rye, 2026-11-01). On, so a role's own list can pay
+    // these tokens; blank, so a role that names nothing is paid nothing.
     const rs = await rules();
     expect(find(rs, "role.cycle", VILLAGE_VOICE)?.enabled).toBe(1);
     expect(find(rs, "role.cycle", CREDITS)?.enabled).toBe(1);
-    expect(Number(find(rs, "role.cycle", CREDITS)?.amount)).toBe(25);
+    expect(find(rs, "role.cycle", VILLAGE_VOICE)?.amount).toBeNull();
+    expect(find(rs, "role.cycle", CREDITS)?.amount).toBeNull();
   });
 
   it("does not pay gratitude for holding a seat", async () => {
@@ -180,11 +183,17 @@ describe.skipIf(!configured)("the rules a village is seeded with", () => {
     // The end-to-end proof, and the one the seed tests above cannot give: a
     // rule row that says "credits" is worth nothing if the engine cannot mint
     // the token, which is exactly the state this build was in.
+    // The seat rules carry no flat amount, so the role names its own pay, as
+    // a valuation-model or Saberra package would.
     const u = await seatAMember("seed-seat-1");
+    await pool.query(
+      "UPDATE `org_roles` SET `value_tokens` = ? WHERE `id` = ?",
+      [JSON.stringify([{ token: CREDITS, amount: 25 }, { token: VILLAGE_VOICE, amount: 50 }]), `role-${u}`],
+    );
     const out = await runSettlement(pool);
     expect(out.unpayable).toHaveLength(0);
     expect(out.stewardsThanked).toBe(1);
-    // 25 credits and 50 voice are what the SEED promises; the ledger holds
+    // 25 credits and 50 voice are what the ROLE names; the ledger holds
     // each in its own token's minor units, and neither number below restates
     // a scale the registry owns. At decimals 0 these read 25 and 50; at 4 they
     // read 250000 and 500000; the assertion does not change either way.
