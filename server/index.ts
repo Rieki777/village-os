@@ -870,6 +870,7 @@ import { latestSettlementRefusals } from "./repos/settlementBallots";
 import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
 import { precompressedAssets } from "./lib/precompressedAssets";
+import { retireContentCopy } from "./lib/retiredContentCopy";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -2528,33 +2529,11 @@ async function retireBlendedTokenCopy() {
       await settingsRepo.put(settings);
     }
   } catch { /* same */ }
-  // The "Hearts" era survives inside the seeded content document (journey step
-  // details, circle focus lines). Deep-walk and swap exact strings only.
-  const CONTENT_SWAPS: Record<string, string> = {
-    "Earn Hearts for contributions": "Earn Gratitude for contributions",
-    "Learn about Hearts currency": "Learn how Gratitude and the value pool work",
-    "Hearts Economy": "Gratitude Economy",
-  };
+  // The seeded content document's retired strings: server/lib/retiredContentCopy.ts.
   try {
     const content = contentRepo.get();
     if (content && typeof content === "object") {
-      let changed = false;
-      const walk = (node: any) => {
-        if (Array.isArray(node)) {
-          node.forEach((v, i) => {
-            if (typeof v === "string") { if (CONTENT_SWAPS[v]) { node[i] = CONTENT_SWAPS[v]; changed = true; } }
-            else walk(v);
-          });
-        } else if (node && typeof node === "object") {
-          for (const k of Object.keys(node)) {
-            const v = node[k];
-            if (typeof v === "string") { if (CONTENT_SWAPS[v]) { node[k] = CONTENT_SWAPS[v]; changed = true; } }
-            else walk(v);
-          }
-        }
-      };
-      walk(content);
-      if (changed) await contentRepo.put(content);
+      if (retireContentCopy(content)) await contentRepo.put(content);
     }
   } catch { /* same */ }
 }
