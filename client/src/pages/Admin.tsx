@@ -73,6 +73,7 @@ import { IDENTITY_WIZARD_FIELDS, SETUP_CONTENT_EDITORS, SETUP_STEPS, contentEdit
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
+import BrandTextField from "@/components/admin/BrandTextField";
 import HandoverTab from "@/components/admin/HandoverTab";
 import AdminGate from "@/components/admin/AdminGate";
 import FailuresTab from "@/components/admin/FailuresTab";
@@ -921,7 +922,7 @@ export function IntegrationsTab({ password }: { password: string }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(refusal(d, "failed"));
-      toast.success(value.trim() ? "Key saved" : "Key cleared");
+      toast.success(d?.asked ? String(d.message) : value.trim() ? "Key saved" : "Key cleared");
       setDrafts((p) => ({ ...p, [key]: "" }));
       load();
     } catch (e: any) { toast.error(e?.message ?? "Failed"); }
@@ -5455,7 +5456,7 @@ function ExitsAdminTab({ password }: { password: string }) {
   const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
   if (loading && !data) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  const openExit = state?.exit;
+  const openExit = state?.exit, formerIds = new Set((data?.exits ?? []).filter((e: any) => e.formerMember).map((e: any) => e.userId)); // E4: a former member is named so, and offered no second exit
 
   return (
     <div className="space-y-8">
@@ -5474,7 +5475,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         <h3 className="font-semibold text-gray-900 mb-3">A member's open state</h3>
         <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} className={`${inputCls} mb-3`}>
           <option value="">Pick a member…</option>
-          {players.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {players.map((p: any) => <option key={p.id} value={p.id}>{formerIds.has(p.id) ? `${p.name} (former member)` : p.name}</option>)}
         </select>
         {state && (
           <>
@@ -5511,7 +5512,7 @@ function ExitsAdminTab({ password }: { password: string }) {
               }}
                   />
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-              {!openExit ? (
+              {!openExit && state.formerMember ? (<span data-former-member="" className="text-sm text-gray-600 self-center">They already left the village and are a former member, so there is no departure to open. Admitting them again is the only way back.</span>) : !openExit ? (
                 <>
                   <button onClick={async () => { const d = await call("/admin/exits", { userId: selectedUser, kind: "voluntary" }); if (d) { toast.success("Exit opened"); load(); loadState(selectedUser); } }}
                     className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium">Open exit</button>
@@ -5547,7 +5548,7 @@ function ExitsAdminTab({ password }: { password: string }) {
           {(data?.exits ?? []).map((e: any) => (
             <div key={e.id}>
               <p className="text-sm text-gray-600">
-                <b className="text-gray-900">{e.userName}</b>: {e.kind}, {e.status}
+                <b className="text-gray-900">{e.userName}</b>: {e.kind}, {e.status}{e.formerMember ? ", former member" : ""}
                 <span className="text-xs text-gray-400"> · opened {new Date(e.openedAt).toLocaleDateString()}{e.resolvedAt ? `, closed ${new Date(e.resolvedAt).toLocaleDateString()}` : ""}</span>
                 {e.agreementRef && <span className="text-xs text-teal-deep"> · agreement: {e.agreementRef}</span>}
               </p>
@@ -6440,7 +6441,7 @@ function CyclesTab({ password }: { password: string }) {
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
                     Split across everyone acknowledged that lunation, in proportion to what
-                    they received. Set by gratitude.pool_per_cycle, on its module card
+                    they received. Set by {"gratitude.pool_per_cycle"}, on its module card
                     under Modules.
                   </p>
                   {pending.pool.problem && (
@@ -7154,19 +7155,18 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   };
 
   /* `project` only. The two `currency` calls came out with the dead boxes, and
-     narrowing the type is what stops a third one going back in by hand. */
+     narrowing the type is what stops a third one going back in by hand. The box
+     itself, and the "Show nothing here" choice on the Tagline and the Footer
+     introduction (R088), are client/src/components/admin/BrandTextField.tsx. */
   const brandField = (group: "project", key: string, label: string, defaultVal: string) => (
-    <div key={key}>
-      <label className="text-xs font-medium text-gray-500 block mb-1">{label}</label>
-      <input
-        type="text"
-        value={brand[group][key] ?? ""}
-        onChange={(e) => setField(group, key, e.target.value)}
-        placeholder={defaultVal}
-        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
-      />
-      <p className="text-[11px] text-gray-400 mt-0.5">Platform default: {defaultVal}</p>
-    </div>
+    <BrandTextField
+      key={key}
+      fieldKey={key}
+      label={label}
+      defaultVal={defaultVal}
+      project={brand[group]}
+      onProject={(next) => setBrand((b: any) => ({ ...b, [group]: next }))}
+    />
   );
 
 
@@ -7281,7 +7281,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <button onClick={() => saveBrand("identity", { project: brand.project })} disabled={savingSection === "identity"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
           {savingSection === "identity" ? "Saving..." : "Save identity"}
         </button>
-        <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, gratitude, season banner, pulse). Page marketing copy is edited under Content below.</p>
+        <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, recognition, season banner, pulse). Page marketing copy is edited under Content below.</p>
       </SetupSection>
 
       {/* 0219: the sentence every later change is judged against, and the one

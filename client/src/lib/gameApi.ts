@@ -1,5 +1,6 @@
 // Platform game API client. All project-specific naming comes from /api/game/config.
 import { useEffect, useState } from "react";
+import { writeStored } from "./safeStorage";
 // Both type-only, so neither module reaches the bundle. The server serves
 // these two unions verbatim, and re-typing their members here would be the
 // hand-kept mirror the house rules warn about: a branch added in `shared/`
@@ -15,8 +16,17 @@ import { villageWord, type CatalystLabel } from "@shared/villageWord";
  * re-types the literal: eight hand-written copies is eight chances for a
  * fork's rename to miss one and split the session in half (a page reading a
  * key nothing writes reads as permanently signed out).
+ *
+ * "village-auth-token" since readiness R066: the key named the first village,
+ * in every village's browser. Nobody is signed out by the rename, because
+ * `authToken()` below moves a session still held under the old key the first
+ * time it reads, and `clearAuthToken()` drops both, so a sign-out can never
+ * be undone by the old key being moved back.
  */
-export const TOKEN_KEY = "amora-auth-token";
+export const TOKEN_KEY = "village-auth-token";
+
+/** Where the session lived until R066. Read only to move it; never written. */
+export const LEGACY_TOKEN_KEY = "amora-auth-token"; // brand-ok: the old session key, read once to move a member's session to TOKEN_KEY (R066)
 
 export interface BrandImages {
   hero?: string;
@@ -99,6 +109,9 @@ export interface PublicGameConfig {
      *  every page that mentions it. Recognition itself carries no financial
      *  value; this is the tracked value it steers each cycle. */
     value?: { slug: string; name: string };
+    /** Every registry token's name, by slug (readiness R084). Read through
+     *  `useTokenNameFor` (client/src/hooks/useTokenNameFor.ts). Older servers omit it. */
+    names?: Record<string, string>;
   };
   images: BrandImages;
   paths: { id: string; label: string; role: string; route: string }[];
@@ -411,7 +424,22 @@ export function authToken(): string | null {
   // throw on any page that fetched anything. A blocked store reads as no
   // session, which is true: it never held one. The member is told why when
   // they sign in (client/src/lib/signInStorage.ts).
-  return storedText("local", TOKEN_KEY);
+  return storedText("local", TOKEN_KEY) ?? movedLegacyToken();
+}
+
+/**
+ * A session still under the old key, moved to the new one (R066).
+ *
+ * Asked only when the new key holds nothing, so it runs once per browser and
+ * costs a single read after that. The token is returned whether or not the
+ * move lands: a store that refuses the write keeps the old key, and the member
+ * stays signed in on it rather than being signed out by a full disk.
+ */
+function movedLegacyToken(): string | null {
+  const old = storedText("local", LEGACY_TOKEN_KEY);
+  if (!old) return null;
+  if (writeStored("local", TOKEN_KEY, old).status === "saved") removeStored("local", LEGACY_TOKEN_KEY);
+  return old;
 }
 
 /**
@@ -420,8 +448,11 @@ export function authToken(): string | null {
  * left the notification bell and the module manifest permanently anonymous.
  */
 export function clearAuthToken(): void {
-  // Dropping a session never refuses. See AuthContext.logout.
+  // Dropping a session never refuses. See AuthContext.logout. BOTH keys: a
+  // session left under the old one would be moved straight back on the next
+  // read, which would undo the sign-out (R066).
   removeStored("local", TOKEN_KEY);
+  removeStored("local", LEGACY_TOKEN_KEY);
 }
 
 export async function gameFetch(path: string, init: RequestInit = {}): Promise<Response> {

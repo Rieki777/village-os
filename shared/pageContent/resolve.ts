@@ -227,6 +227,21 @@ export function pageDocumentProblems(spec: PageSpec, doc: unknown): string[] {
  * render a page from it and look for every marker: a field the page ignores is
  * a field that fails, which is how the Tagline bug gets caught next time.
  */
+/**
+ * A short fingerprint of one stored content section, so a save can name the
+ * words it was made from. The Pages editor sends it with every save and the
+ * content route refuses one whose words moved since (another admin, or a boot
+ * fixup such as server/lib/governanceWordsKept.ts). Absent and empty read the
+ * same, because the editor opens an unwritten section as `{}`.
+ */
+export function contentVersion(section: unknown): string {
+  const empty = section == null || (typeof section === "object" && !Array.isArray(section) && Object.keys(section as object).length === 0);
+  const text = empty ? "" : JSON.stringify(section);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, "0");
+}
+
 export function markerDocument(spec: PageSpec, mark = "ZQ"): Doc {
   const doc: Doc = {};
   let n = 0;

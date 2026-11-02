@@ -2851,6 +2851,37 @@ export const VARIABLES: VariableDef[] = [
     type: "boolean",
     default: "true",
   },
+  /*
+   * THE SETUP GAME'S CO-SIGN (migration 0306, server/lib/plantingRequests.ts).
+   * After launch a keystone key waits for a second admin, or, in a village with
+   * nobody else to co-sign, lands after a cooling-off the steward and founder
+   * role holders can object inside. Founder-held: they bound the safety of the
+   * village's own keys.
+   */
+  {
+    key: "platform.cosign_cooling_hours",
+    category: "Platform",
+    label: "Cooling-off before a key lands with nobody to co-sign",
+    description:
+      "After launch, saving a key that touches money, email or the hosting waits for a second admin. A village with only one admin waits this many hours instead, and the steward and founder role holders are told and can decline it in that time.",
+    type: "integer",
+    default: "48",
+    min: 1,
+    max: 336,
+    unit: "hours",
+  },
+  {
+    key: "platform.cosign_expiry_hours",
+    category: "Platform",
+    label: "How long a key waits for its co-sign",
+    description:
+      "After launch, a key that needs a second admin's co-sign waits this many hours. Unsigned by then, it is dropped and its value wiped, and the admin who asked can save it again.",
+    type: "integer",
+    default: "72",
+    min: 1,
+    max: 720,
+    unit: "hours",
+  },
 
   // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude
   // an accepted Work With Us proposal minted, 100 by default. Rye: "GRATITUDE is
@@ -2962,7 +2993,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Calendar",
     label: "Your village's own seasons",
     description:
-      "The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Dry: 12-01, Green: 05-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.",
+      "The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Planting: 03-01, Harvest: 09-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.",
     type: "text",
     default: "",
     unit: "list",

@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { cashWords, isFormerMember, leftTheVillage, unpaidCashOf, withoutFormerMembers } from "./formerMember";
+import { formatMoney } from "../../shared/money";
 import { createExit } from "./exit";
 import { markExitResolved } from "../repos/exitNotes";
 import { usersRepo } from "../repos/users";
@@ -49,9 +50,29 @@ describe("isFormerMember: the pure answer", () => {
 
 describe("cashWords: the cash in words that read the same everywhere", () => {
   it("prints each currency at its own scale, in currency order as handed", () => {
-    expect(cashWords([{ currency: "USD", amountMinor: 2500, rows: 1 }])).toBe("25.00 USD");
-    expect(cashWords([{ currency: "EUR", amountMinor: 1, rows: 1 }, { currency: "JPY", amountMinor: 500, rows: 2 }])).toBe("0.01 EUR, 500 JPY");
+    expect(cashWords([{ currency: "USD", amountMinor: 2500, rows: 1 }])).toBe("$25.00");
+    expect(cashWords([{ currency: "EUR", amountMinor: 1, rows: 1 }, { currency: "JPY", amountMinor: 500, rows: 2 }])).toBe("€0.01, ¥500");
     expect(cashWords([])).toBe("");
+  });
+
+  it("speaks the platform's one money format, so the exit desk says CHF 50.00 like every other page (e2e sweep, E11)", () => {
+    /*
+     * TWO ASSERTIONS, AND THE SEPARATOR IS WHY. `Intl.NumberFormat` puts a
+     * NON-BREAKING space (U+00A0) between the currency and the figure, so
+     * `formatMoney(5000, "CHF")` is `CHF 50.00` and a literal written with
+     * an ordinary space does not equal it — identically on screen, different in
+     * bytes, and the failure reads `expected 'CHF 50.00' to be 'CHF 50.00'`,
+     * which tells you nothing. So the exact value is compared against the
+     * formatter, and the readable claim is made on a copy with the separator
+     * normalised: that keeps "the exit desk says CHF 50.00" checkable by eye
+     * without pinning a byte Intl is free to change.
+     */
+    const chf = cashWords([{ currency: "CHF", amountMinor: 5000, rows: 1 }]);
+    expect(chf, "the exit desk said 50.00 CHF").toBe(formatMoney(5000, "CHF"));
+    expect(chf.replace(/ /g, " "), "the currency leads, then the figure").toBe("CHF 50.00");
+    for (const [currency, minor] of [["CHF", 5000], ["USD", 1234], ["JPY", 500], ["CRC", 300000]] as const) {
+      expect(cashWords([{ currency, amountMinor: minor, rows: 1 }])).toBe(formatMoney(minor, currency));
+    }
   });
 });
 

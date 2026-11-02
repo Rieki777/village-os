@@ -9,8 +9,9 @@
  * tick stands in, kept only in this browser.
  */
 import type { DomainPanel, SettingsPayload } from "@/components/admin/comms/commsSettingsApi";
+import { keyIsSendOnly } from "@shared/comms/settings";
 
-export type BeatId = "account" | "key" | "stones" | "reports" | "sign" | "nursery" | "transplant";
+export type BeatId = "account" | "key" | "stones" | "reports" | "sign" | "nursery" | "transplant" | "trade";
 
 export interface Beat {
   id: BeatId;
@@ -21,7 +22,7 @@ export interface Beat {
   keystone: boolean;
 }
 
-export const BEAT_ORDER: readonly BeatId[] = ["account", "key", "stones", "reports", "sign", "nursery", "transplant"];
+export const BEAT_ORDER: readonly BeatId[] = ["account", "key", "stones", "reports", "sign", "nursery", "transplant", "trade"];
 
 const SHORT: Record<BeatId, string> = {
   account: "Account",
@@ -31,7 +32,16 @@ const SHORT: Record<BeatId, string> = {
   sign: "Signature",
   nursery: "Nursery",
   transplant: "Transplant",
+  trade: "Trade",
 };
+
+/**
+ * THE LAST PLANTING: the full-access key the setup needed traded for one that
+ * can only send, and only from the village's domain (the catalog's
+ * `resend-api-key` seed). Done when Resend said THIS key may only send, so a
+ * key pasted afterwards through any door reads as not yet asked.
+ */
+export const keyTraded = (p: SettingsPayload | null): boolean => !!p && keyIsSendOnly(p.settings, p.key);
 
 const itemDone = (p: SettingsPayload | null, key: string): boolean => !!p?.checklist?.find((i) => i.key === key)?.done;
 
@@ -46,8 +56,9 @@ export function springBeats(p: SettingsPayload | null, local: { account: boolean
     sign: itemDone(p, "sender") && itemDone(p, "postal-address"),
     nursery: itemDone(p, "test-email"),
     transplant: commsIsOn(p),
+    trade: keyTraded(p),
   };
-  const beats = BEAT_ORDER.map((id, i) => ({ id, n: i + 1, short: SHORT[id], done: done[id], keystone: id === "transplant" }));
+  const beats = BEAT_ORDER.map((id, i) => ({ id, n: i + 1, short: SHORT[id], done: done[id], keystone: id === "transplant" || id === "trade" }));
   const open = beats.find((b) => !b.done);
   return { beats, current: open ? open.id : "done" };
 }

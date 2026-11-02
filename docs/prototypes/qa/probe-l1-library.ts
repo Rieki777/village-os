@@ -144,7 +144,7 @@ async function main() {
     const adminCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     await adminCtx.addInitScript(
       ([k, t]: string[]) => localStorage.setItem(k, t),
-      ["amora-auth-token", founderToken],
+      ["village-auth-token", founderToken],
     );
     const anonCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     for (const ctx of [adminCtx, anonCtx]) {
@@ -295,7 +295,7 @@ async function main() {
     await wkPage.waitForTimeout(3500);
     const landedAt = await wkPage.evaluate(() => location.pathname);
     check("H1b signing in returns to ?next=", landedAt === "/messages", `landed ${landedAt}`);
-    await wkPage.evaluate(() => localStorage.removeItem("amora-auth-token"));
+    await wkPage.evaluate(() => localStorage.removeItem("village-auth-token"));
     for (const route of ["/modules", "/modules/stays"]) {
       await wkPage.goto(`${BASE}${route}`, { waitUntil: "domcontentloaded" });
       await wkPage.waitForTimeout(3500);

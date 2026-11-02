@@ -1,6 +1,6 @@
 {
   "note": "Village facts welded into client copy, recorded per file and per rule. This list only ever shrinks. Read scripts/check-village-facts.mjs before editing it, and lower PENDING_CEILING in that file to match the total here.",
-  "total": 14,
+  "total": 10,
   "rules": {
     "money": {
       "what": "a currency amount in display text",
@@ -32,12 +32,9 @@
     "client/src/config/mobileNav.ts::token-name": 1,
     "client/src/config/nav.ts::token-name": 1,
     "client/src/pages/Admin.tsx::money": 3,
-    "client/src/pages/Admin.tsx::token-name": 2,
     "client/src/pages/Admin.tsx::unit": 2,
     "client/src/pages/Contribute.tsx::money": 1,
-    "client/src/pages/MasterPlan.tsx::unit": 1,
-    "client/src/pages/Stay.tsx::money": 1,
-    "client/src/pages/Wallet.tsx::money": 1
+    "client/src/pages/MasterPlan.tsx::unit": 1
   },
   "entries": {
     "client/src/components/SwapCard.tsx::money": {
@@ -53,10 +50,6 @@
     "client/src/pages/Admin.tsx::money": {
       "since": "2026-09-03"
     },
-    "client/src/pages/Admin.tsx::token-name": {
-      "since": "2026-09-03",
-      "note": "One of these five is a false positive and graduates by waiver rather than by substitution: the game-variable search hint at Admin.tsx:9198 (\"part of a key like 'gratitude'\") names the KEY a founder types into the box, so the configured display name would stop it matching any key. Left recorded rather than waived in place because Admin.tsx sits at its check-file-lines baseline and a comment line would fail that ratchet. Whoever burns this entry down: waive that one, read useTokenName() for the other four."
-    },
     "client/src/pages/Admin.tsx::unit": {
       "since": "2026-09-03",
       "note": "Admin-facing help text, both of them. Line 9946 offers the unit options and then states which one a blank field shows, which is the hardcoded default a hectares village inherits. Line 7624 describes the regeneration metrics in one village's unit."
@@ -67,12 +60,6 @@
     "client/src/pages/MasterPlan.tsx::unit": {
       "since": "2026-09-03",
       "note": "The land tile's label at line 36, which is the fallback when a village states no unit. A hectares village that leaves the note box empty publishes its land in acres."
-    },
-    "client/src/pages/Stay.tsx::money": {
-      "since": "2026-09-03"
-    },
-    "client/src/pages/Wallet.tsx::money": {
-      "since": "2026-09-03"
     }
   }
 }

@@ -2,7 +2,7 @@
  * Quests: the public board, the share card, crews, the admin CRUD, and the
  * two steps a member takes through a quest.
  *
- * Thirteen routes, lifted out of server/index.ts unchanged:
+ * Thirteen routes lifted out of server/index.ts unchanged, and the keep door added since:
  *
  *   board     GET  /api/quests
  *             GET  /api/quests/field
@@ -15,6 +15,7 @@
  *   admin     POST   /api/admin/quests
  *             PUT    /api/admin/quests/:id
  *             DELETE /api/admin/quests/:id
+ *             POST   /api/admin/quests/:id/keep   (a starter kept as real, 2026-10-31)
  *   the walk  POST /api/game/quests/:id/claim
  *             POST /api/game/quests/:id/submit
  *
@@ -62,7 +63,7 @@ import { getStage, stageIndex } from "../../shared/gameConfig";
 import { sceneStopsFor } from "../../shared/questScenes";
 import { cleanCrewName } from "../lib/crews";
 import { recordEvent } from "../lib/events";
-import { EXAMPLE_REFUSAL_BODY, isExampleRow, onRealItemPublished } from "../lib/examples";
+import { EXAMPLE_REFUSAL_BODY, afterExampleKept, isExampleRow, onRealItemPublished } from "../lib/examples";
 import {
   addMembers as addConversationMembers,
   createGroup,
@@ -70,7 +71,7 @@ import {
 } from "../lib/messaging";
 import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
-import { questClosed } from "../repos/quests";
+import { keepExampleQuest, questClosed } from "../repos/quests";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 import { payBadgeBoosts, payLineProblem, payableTokens, questPay, questPayRules, rolePayRules, withPayBadges } from "../lib/workPay";
 import { seasonallyDormantBadgeIds } from "../lib/seasonPatterns";
@@ -675,6 +676,50 @@ export function register(app: Express, deps: Deps): void {
     });
     if (!updated) return res.status(404).json({ error: "Not found" });
     res.json(updated);
+  });
+
+  /*
+   * KEEP A STARTER QUEST AS THE VILLAGE'S OWN (A8 / 19g, 2026-10-31).
+   *
+   * A fresh village opens on starter quests that are standing examples: the
+   * PUT above refuses them, so an edit can never launder one into a row the
+   * next retirement deletes, and the create route retires every one at once.
+   * Neither lets a founder keep the starter that already fits. This does, one
+   * row at a time, and leaves the starters nobody has decided on standing.
+   *
+   * It is a publish, so it holds everything the create route holds: an admin,
+   * a poster from the village's own upload, and a value, because every quest
+   * says what it is worth from the moment it is real (Rye, 2026-10-21). The
+   * founder's edits arrive with the press and land in the same write.
+   *
+   * It does NOT call onRealItemPublished. Keeping one starter is a decision
+   * about that starter, and retiring the rest on it would take away the next
+   * keep. `afterExampleKept` recounts the board instead, and stamps the
+   * tombstone when the last starter has been kept.
+   */
+  app.post("/api/admin/quests/:id/keep", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    if (rejectOffsiteImage(req.body?.imageUrl, res)) return;
+    const body: Record<string, unknown> = { ...(req.body ?? {}) };
+    const valued = await checkedQuestValue(body, res, { required: true });
+    if (!valued) return;
+    const kept = await keepExampleQuest(getPool(), String(req.params.id), (q: any) => {
+      Object.assign(q, body, valued, { id: q.id });
+    });
+    if (!kept.ok && kept.reason === "missing") return res.status(404).json({ error: "Not found" });
+    if (!kept.ok) {
+      return res.status(409).json({ error: "This quest is already the village's own. Edit it with Save." });
+    }
+    const actor = adminActor(req)?.id ?? null;
+    const { stillShowing } = await afterExampleKept(getPool(), "quests", actor);
+    // Real from this moment, so it belongs to the season it was kept in.
+    await captureIntoCurrentPattern(getPool(), currentPatternId(), "quest", kept.quest.id);
+    void recordEvent(getPool(), {
+      kind: "audit", text: `quest:kept:${kept.quest.id}`,
+      actorUserId: (await authedUser(req))?.id ?? actor,
+      entityType: "quest", entityRef: kept.quest.id, audience: "admin",
+    });
+    res.json({ ...kept.quest, startersLeft: stillShowing });
   });
 
   app.delete("/api/admin/quests/:id", async (req, res) => {

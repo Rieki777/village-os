@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 /**
- * A YES TO A REQUEST TO JOIN SAYS WHAT IT DID NOT DO.
+ * A YES TO A REQUEST TO JOIN SAYS WHAT IT DID.
  *
- * Accepting a `membership-request` moves the row and nothing else: a stranger
- * who asked has no account, so the bell cannot reach them, and nothing makes
- * the invitation they now need. The desk used to answer "Status updated",
- * which reads as the job being done. It now names the next step, and only for
- * that form and that move: every other row keeps the words it had. A request
- * from somebody signed in names their account and they are told, and the desk
- * hears that the yes admitted nobody.
+ * Accepting a `membership-request` used to move the row and nothing else, and
+ * the desk said so. Since sheet A5 the yes goes to its own door, which emails
+ * the invitation to the address the person typed and answers where it went
+ * (server/routes/joinAnswers.ts); the desk shows that sentence. A request from
+ * somebody signed in names their account: no invitation, and they are told.
+ * Every other row, and every other move, keeps the words it had.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -17,19 +16,32 @@ import { toast } from "sonner";
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { SubmissionsTab } from "./Admin";
+import { JOIN_ANSWER_WORDS } from "@shared/joinAnswers";
 
 const row = (type: string) => ({ id: "sub-1", type, status: "new", data: { name: "Jo Asker", email: "jo@example.test" }, submittedAt: "2026-10-14T20:50:00Z" });
 
 /**
  * The list answers with one row; the status move answers the way the route does
  * for a stranger's form, or, with `fromAccount`, for a row naming the account
- * that sent it, whose submitter the bell reaches.
+ * that sent it, whose submitter the bell reaches. A yes or a no to a request to
+ * join goes to its own door (server/routes/joinAnswers.ts, sheet A5), which
+ * answers in its own words; `calls` records where each move went.
  */
+let calls: string[] = [];
+const JOIN_ANSWER = "Accepted. The invitation went to jo@example.test. It works once and lasts 14 days.";
+
 function serve(type: string, fromAccount = false) {
+  calls = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (_url: string, init?: RequestInit) => {
-      const body = init?.method === "PUT" ? { success: true, rewarded: false, rewardRefused: null, notified: fromAccount, admitted: null } : [row(type)];
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method && init.method !== "GET") calls.push(`${init.method} ${url}`);
+      const join = String(url).includes("/admin/join-requests/");
+      const body = join
+        ? { success: true, emailed: !fromAccount, link: fromAccount ? null : "https://village.example.test/register?invite=abc", message: fromAccount ? JOIN_ANSWER_WORDS.acceptedAccount : JOIN_ANSWER }
+        : init?.method === "PUT"
+          ? { success: true, rewarded: false, rewardRefused: null, notified: fromAccount, admitted: null }
+          : [row(type)];
       return { ok: true, status: 200, json: async () => body };
     }),
   );
@@ -51,10 +63,10 @@ describe("moving a submission tells the desk what happened", () => {
   describe("a request to join", () => {
     beforeEach(() => serve("membership-request"));
 
-    it("accepted: says nobody was told and that an invitation is the next step", async () => {
+    it("accepted: goes to the door that emails the invitation, and says where it went (sheet A5)", async () => {
       const said = await move("accepted");
-      expect(said).toContain("nobody was told");
-      expect(said).toContain("Invite somebody");
+      expect(calls).toEqual(["POST /api/admin/join-requests/sub-1/accept"]);
+      expect(said).toBe(JOIN_ANSWER);
     });
 
     it("moved anywhere else: keeps the plain words", async () => {
@@ -71,12 +83,11 @@ describe("moving a submission tells the desk what happened", () => {
   describe("a request to join from somebody signed in", () => {
     beforeEach(() => serve("membership-request", true));
 
-    it("accepted: says they were told, that it admitted nobody, and what does admit", async () => {
+    it("accepted: says they were told, and that their account needed no invitation", async () => {
       const said = await move("accepted");
+      expect(calls).toEqual(["POST /api/admin/join-requests/sub-1/accept"]);
+      expect(said).toBe(JOIN_ANSWER_WORDS.acceptedAccount);
       expect(said).toContain("they have been told");
-      expect(said).toContain("admits nobody");
-      expect(said).toContain("enough vouches");
-      expect(said).not.toContain("Invite somebody");
     });
 
     it("moved anywhere else: says they were told, as every row naming an account does", async () => {

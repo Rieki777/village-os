@@ -384,7 +384,7 @@ function finish(lat: number, lon: number, format: CoordinateFormat): ParseResult
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     return fail(
       "unreadable",
-      "Those coordinates did not come out as numbers. Paste the pair straight from your map app, or type them as two decimals with a comma between them, for example 9.2345, -83.8412.",
+      "Those coordinates did not come out as numbers. Paste the pair straight from your map app, or type them as two decimals with a comma between them, for example 12.3456, -45.6789.",
     );
   }
   const graded = swapSuspicion(lat, lon);
@@ -458,13 +458,13 @@ export function parseCoordinates(input: string): ParseResult {
   if (/^-?\d+(?:\.\d+)?$/.test(raw)) {
     return fail(
       "one-number",
-      "That is one number, and a location needs two. Add the second with a comma between them, latitude first, for example 9.2345, -83.8412.",
+      "That is one number, and a location needs two. Add the second with a comma between them, latitude first, for example 12.3456, -45.6789.",
     );
   }
 
   return fail(
     "unreadable",
-    "That did not read as a location. Four shapes work here: two decimals such as 9.2345, -83.8412; degrees and minutes such as 9 14 04.2 N 83 50 28.3 W; a Google Maps link; or a full plus code. Long-pressing your land in Google Maps gives you the first one.",
+    "That did not read as a location. Four shapes work here: two decimals such as 12.3456, -45.6789; degrees and minutes such as 12 20 44.2 N 45 40 44.0 W; a Google Maps link; or a full plus code. Long-pressing your land in Google Maps gives you the first one.",
   );
 }
 
