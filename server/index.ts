@@ -148,6 +148,7 @@ import { register as registerJourneyRoutes } from "./routes/journey";
 import { keepFirstPlanIfUsed } from "./lib/commandCentrePlanDefault";
 import { keepVillagePathWords } from "./lib/pathWordsKept";
 import { keepGovernanceWords } from "./lib/governanceWordsKept";
+import { keepCirclesWords } from "./lib/circlesWordsKept";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
@@ -1883,6 +1884,8 @@ async function ensureDataFiles() {
   await runOnce("keep-path-words-2026-11-01", () => keepVillagePathWords(contentRepo).then(() => undefined));
   // How We Govern's defaults went neutral: a village that already holds its page words keeps this page's too.
   await runOnce("keep-governance-words-2026-11-01", () => keepGovernanceWords(contentRepo).then(() => undefined));
+  // Circles' defaults went neutral the same way: an established village keeps the words /circles shows today.
+  await runOnce("keep-circles-words-2026-11-01", () => keepCirclesWords(contentRepo).then(() => undefined));
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
