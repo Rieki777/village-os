@@ -14,10 +14,13 @@ import userEvent from "@testing-library/user-event";
 import ContentEditorTab from "./ContentEditorTab";
 import { PATHS_STAGES_TAB_KEY } from "./contentSections";
 import { PATH_LIMITS } from "@shared/villagePaths";
+import { contentVersion } from "@shared/pageContent/resolve";
 
-type Write = { path: string; body: any };
+type Write = { path: string; body: any; was?: string };
 
-function stubFetch(stored: Record<string, unknown> | "fail", writes: Write[]) {
+const MOVED = "These words changed since this page was opened. Reload it to see them, then make your change again.";
+
+function stubFetch(stored: Record<string, unknown> | "fail", writes: Write[], conflict = false) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: any, init?: any) => {
@@ -25,7 +28,8 @@ function stubFetch(stored: Record<string, unknown> | "fail", writes: Write[]) {
       if (!path.endsWith("/api/admin/village-paths")) return new Response("{}", { status: 404 });
       if (init?.method === "PUT") {
         const body = JSON.parse(init.body);
-        writes.push({ path, body });
+        writes.push({ path, body, was: new Headers(init.headers).get("x-content-was") ?? undefined });
+        if (conflict) return new Response(JSON.stringify({ error: MOVED }), { status: 409 });
         return new Response(JSON.stringify({ stored: body, words: {} }), { status: 200 });
       }
       if (stored === "fail") return new Response(JSON.stringify({ error: "boom" }), { status: 500 });
@@ -103,6 +107,20 @@ describe("Admin, Paths & Stages", () => {
     expect(put).toBeGreaterThanOrEqual(0);
     expect(calls().indexOf("/api/game/config"), "after the save, never before it").toBeGreaterThan(put);
     expect(writes).toHaveLength(1);
+  });
+
+  it("names the words it was opened on, and on a 409 tells the founder to reload and keeps what they typed", async () => {
+    const stored = { stages: { sage: { name: "Elder" } } };
+    stubFetch(stored, writes, true);
+    open();
+    const name = (await screen.findByLabelText("Name", { selector: "#ps-path-steward-label" })) as HTMLInputElement;
+    await userEvent.clear(name);
+    await userEvent.type(name, "Keeper");
+    await userEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].was).toBe(contentVersion(stored));
+    expect(await screen.findByRole("status")).toHaveTextContent(MOVED);
+    expect(name.value, "nothing typed is lost").toBe("Keeper");
   });
 
   it("keeps saving off when the saved words could not be read", async () => {

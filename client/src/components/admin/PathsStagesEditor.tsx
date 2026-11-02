@@ -17,7 +17,7 @@ import { RefreshCw, RotateCcw, Save } from "lucide-react";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { refreshGameConfig } from "@/lib/gameApi";
 import { GAME_CONFIG } from "@shared/gameConfig";
-import { charCount } from "@shared/pageContent/resolve";
+import { charCount, contentVersion } from "@shared/pageContent/resolve";
 import {
   LADDER_LIMITS,
   PATH_LIMITS,
@@ -160,7 +160,9 @@ export default function PathsStagesEditor({ password }: { password: string }) {
     try {
       const res = await fetch(`${API_BASE}/admin/village-paths`, {
         method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        // The words this editor was opened on: the server refuses the save
+        // (409, with a sentence asking for a reload) when they moved since.
+        headers: authHeaders(password, { "Content-Type": "application/json", "x-content-was": contentVersion(saved) }),
         body: JSON.stringify(draft),
       });
       const body = await res.json().catch(() => ({}));
