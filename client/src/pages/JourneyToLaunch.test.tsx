@@ -99,12 +99,25 @@ const STATUS = {
 
 /** Every call the page makes, so a test can read WHERE it went as well as what came back. */
 let calls: Array<{ url: string; init: any }>;
+/**
+ * The hand-over control asks its own route on every signed-in copy of the page
+ * (components/governance/HandOverPowers.tsx), and renders nothing unless the
+ * server says this person may use it. Answered here as nobody-may-act and kept
+ * apart from `calls`, so the cases below still read the page's own requests.
+ */
+const HAND_OVER = "/api/governance/powers/hand-to-village";
+let handOverAsks: string[];
 
 function answer(routes: Record<string, { status: number; body: unknown }>) {
   calls = [];
+  handOverAsks = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init: any) => {
+      if (String(url) === HAND_OVER && !routes[HAND_OVER]) {
+        handOverAsks.push(String(init?.headers?.Authorization ?? ""));
+        return { ok: true, status: 200, json: async () => ({ gameStarted: false, mayAct: false }) };
+      }
       calls.push({ url: String(url), init });
       const hit = routes[String(url)];
       if (!hit) throw new Error(`the page called ${url}, which this test does not answer`);
@@ -155,6 +168,14 @@ describe("who reaches the test run", () => {
     expect(screen.queryByText(/Readiness/i)).toBeNull();
     // And the page does not try to read a payload a member cannot have.
     expect(calls.map((c) => c.url), "no admin read on a member's page").toEqual([]);
+  });
+
+  it("asks the hand-over control's own route with a token, and shows nothing to somebody who may not use it", async () => {
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    draw();
+    await waitFor(() => expect(handOverAsks).toEqual(["Bearer a-token"]));
+    expect(screen.queryByText(/hands to the village/i)).toBeNull();
+    expect(screen.queryByText(/Hand powers to the village/i)).toBeNull();
   });
 
   it("still gives an admin the checklist and the run together", async () => {

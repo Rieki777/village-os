@@ -831,8 +831,9 @@ The retention sweep never deletes an unstamped row, at any age.
   (loans, stays, orders, debts block; balances, roles, warnings and
   recurring payments inform, the last because the erasure cancels them and
   no door lets a member do it first; on the exit desk and the departure page
-  a member who holds tokens is told instead that a former member's payments
-  keep renewing until an admin cancels them in Stripe);
+  a member who holds tokens is told instead that they stay on as a former
+  member, and that resolving the departure cancels the payments all the same,
+  Rye's ruling 8 of 2026-10-31);
   SETTLE through each domain's own terminals — exit adds exactly ONE move
   of its own, splitting each positive balance by the village's
   `exit.keep_pct.*` shares and sending the rest to

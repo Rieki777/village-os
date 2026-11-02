@@ -161,6 +161,8 @@ import { register as registerCircleCardRoutes } from "./routes/circleCard";
 import { register as registerApplicationCardRoutes, orgRoleExtras } from "./routes/applicationCard";
 import { register as registerRoleProposalRoutes } from "./routes/roleProposals";
 import { register as registerOpenProposalRoutes } from "./routes/openProposals";
+import { adminDoorRefusal, register as registerStewardHandoverRoutes } from "./routes/stewardHandover";
+import { powerInPlainWords, readLaunchSelection } from "./lib/launchHandover";
 import { register as registerRoleGuideRoutes } from "./routes/roleGuide";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
@@ -12969,6 +12971,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const cap = String(req.params.capability);
     const roleId = String(req.body?.roleId ?? "").trim();
     if (!roleId) return res.status(400).json({ error: "Name the role that will hold it." });
+    // After launch, handing a power over is the stewards' act (routes/stewardHandover.ts, `adminDoorRefusal`).
+    const closed = await adminDoorRefusal(getPool(), String(adminActor(req)?.id ?? ""), liveHoldersOf);
+    if (closed) return res.status(403).json({ error: closed });
     // A power the village ALREADY holds moves sideways only by its vote or the glass: MOVE_NEEDS_A_VOTE, lib/capabilityHolding.ts.
     const held = (await capabilityHoldings(getPool())).find((h) => h.capability === cap); // even the same role: the upsert nulls moved_by_ballot_id
     const verdict = held ? await mayAct(req, cap as Capability) : null;
@@ -13614,6 +13619,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       openedBy: firstName(user.name),
       openedOn: new Date().toISOString().slice(0, 10),
       slate: slate.members,
+      // Frozen here, in plain words: the hand-over control refuses to change it while this vote is open.
+      handover: (await readLaunchSelection(getPool())).capabilities.map(powerInPlainWords),
     });
 
     const result = await openBallot(getPool(), {
@@ -14134,7 +14141,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json({
       states,
       blocking: blockingStates(states),
-      exit: await openExitFor(getPool(), target.id),
+      exit: await openExitFor(getPool(), target.id), formerMember: await leftTheVillage(getPool(), target), // E4: the desk says they already left
     });
   });
 
@@ -14143,7 +14150,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const exits = await allExits(getPool());
     const withNames = [];
     for (const e of exits) {
-      withNames.push({ ...e, userName: (await members.byId(e.userId))?.name ?? "(anonymized)" });
+      const who = await members.byId(e.userId); withNames.push({ ...e, userName: who?.name ?? "(anonymized)", formerMember: e.status === "resolved" && (await leftTheVillage(getPool(), who)) });
     }
     // `defaults` and `terms` travel with the policy so the editor can mark each
     // term that is still the platform's without keeping a second copy of the
@@ -24600,6 +24607,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState, notify, notifyAdmins, members, stageOf, recordStageEvent, liveHoldersOf, rolesCarrying, loadRoleHolders, seatCalendar, lapse: lapseContext }); // a role proposal from somebody with no account (0305), and its decision
+  registerStewardHandoverRoutes(app, { getPool, overLimit, authedUser, liveHoldersOf }); // the launch selection, then every hand-over to the village (Rye, 2026-11-01)
   registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
