@@ -312,7 +312,11 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
     // path is dead code in every turn and the run looks fine anyway.
     const landings = r.json.turns.filter((t: any) => t.findings.some((f: any) => f.area === "rules"));
     expect(landings, "the queued rule change lands in one moon").toHaveLength(1);
-    expect(JSON.stringify(landings[0].findings)).toContain("25 becomes 45");
+    // The seeded seat rule is blank since Rye ended the flat role mint
+    // (2026-11-01, #776), so the queued change reads from blank to 45. The dry
+    // run does not model the dues dividend a flat amount now pays (named in
+    // #776), so this suite asserts DEFERRAL only: the change lands in one moon.
+    expect(JSON.stringify(landings[0].findings)).toContain("read from the work becomes 45");
     // Named by TOKEN, not by position. A village now pays a seat holder in
     // more than one token, so a turn carries several settlement findings and
     // `.find()` on the area alone returns whichever the rules query happened
@@ -322,12 +326,12 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
       r.json.turns[i].findings.find(
         (f: any) => f.area === "settlement" && f.outcome === "issued" && String(f.sentence).includes(token),
       )?.sentence ?? "";
-    expect(amountIn(0, "Village Credits")).toContain("25 Village Credits");
+    expect(amountIn(0, "Village Credits"), "nothing flat before the change lands").toBe("");
     expect(amountIn(1, "Village Credits")).toContain("45 Village Credits");
-    // The other default settles alongside it, and the deferred change does
-    // not disturb it.
-    expect(amountIn(0, "Village Voice")).toContain("50 Village Voice");
-    expect(amountIn(1, "Village Voice")).toContain("50 Village Voice");
+    // The Voice seat rule is blank too, and the deferred change does not
+    // touch it.
+    expect(amountIn(0, "Village Voice")).toBe("");
+    expect(amountIn(1, "Village Voice")).toBe("");
   });
 
   it("refuses a stranger", async () => {
@@ -352,13 +356,14 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
       r.json.turns.some((t: any) => t.findings.some((f: any) => f.area === "rules")),
       "a member reads no queued change",
     ).toBe(false);
-    expect(JSON.stringify(r.json)).not.toContain("25 becomes 45");
-    // Every moon settles at the amount the rule carries today.
+    expect(JSON.stringify(r.json)).not.toContain("becomes 45");
+    // Every moon settles at the amount the rule carries today, which is blank
+    // since the flat role mint ended (2026-11-01), so no moon pays Credits.
     for (const t of r.json.turns) {
       const paid = t.findings.find(
         (f: any) => f.area === "settlement" && f.outcome === "issued" && String(f.sentence).includes("Village Credits"),
       );
-      expect(paid?.sentence, `moon ${t.cycleNumber}`).toContain("25 Village Credits");
+      expect(paid?.sentence, `moon ${t.cycleNumber}`).toBeUndefined();
     }
   });
 
