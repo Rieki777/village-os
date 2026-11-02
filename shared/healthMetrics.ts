@@ -184,7 +184,7 @@ export const SNAPSHOT_METRICS = HEALTH_METRICS.filter((m) => m.kind === "snapsho
  * The name is the one stamped at that close, so a renamed token reads under
  * its new name from the next close on.
  */
-export function snapshotTileLabel(key: string, label: string, meta: { tokenName?: unknown } | null | undefined): string {
+export function snapshotTileLabel(key: string, label: string, meta: Readonly<Record<string, unknown>> | null | undefined): string {
   const name = typeof meta?.tokenName === "string" ? meta.tokenName.trim() : "";
   return key === "treasury_balance" && name ? `${name} in the treasury` : label;
 }

@@ -357,8 +357,8 @@ describe.skipIf(!configured)("the treasury snapshot reads one token, in whole to
     await loadVariables(tpool);
   };
   const hold = async (token: string, units: number) => {
-    await tpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "INSERT INTO `token_balances` (`account_id`,`token_type`,`balance`) VALUES ('sys:treasury',?,?) ON DUPLICATE KEY UPDATE `balance` = VALUES(`balance`)",
+    await tpool.query(
+      "INSERT INTO `token_balances` (`account_id`,`token_type`,`balance`) VALUES ('sys:treasury',?,?) ON DUPLICATE KEY UPDATE `balance` = VALUES(`balance`)", // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       [token, units],
     );
   };
