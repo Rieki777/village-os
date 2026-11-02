@@ -115,6 +115,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/decisions": "Decisions",
   "/propose": "Start a proposal",
   "/role-applications": "Role application",
+  "/open-proposals": "A proposed role", // somebody with no account proposed it (0305)
   "/seat-applications": "Role application",
   "/season-plans": "The village's season",
   "/season-plans/mine": "Your season",

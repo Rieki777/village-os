@@ -21,11 +21,15 @@
  *
  * "Record the adoption" is not here: it is the adopt click itself, so it sits
  * where a holder of the power adopts, on the application page's holder card.
+ *
+ * A role proposal from somebody with no account yet has no application (open
+ * proposals part B): its page hands in `answer`, which posts to the
+ * proposal's own consent route, and everything else here is the same.
  */
 import { useEffect, useId, useState } from "react";
 import { Check, MessageSquareWarning } from "lucide-react";
 import { CONSENT_WORDS, OBJECTION_MAX, TALLY_WORDS, tallyWords, type ConsentAnswer } from "@shared/roleProposalConsent";
-import { answerConsent, type ConsentOut } from "./proposalApi";
+import { answerConsent, type ConsentAnswerOut, type ConsentOut } from "./proposalApi";
 import { ADOPTED_HEADING, STATE_HEADINGS } from "./proposalWords";
 import { H2, INPUT, LEDE, PANEL, PRIMARY, SECONDARY } from "./parts";
 
@@ -90,10 +94,12 @@ export interface CircleConsentProps {
   waiting: boolean;
   /** After an answer lands, so the page can read the application again. */
   onAnswered?: () => void;
+  /** Where the answer goes, when it is not an application's consent route. */
+  answer?: (answer: ConsentAnswer, reason?: string) => Promise<{ ok: true; data: ConsentAnswerOut } | { ok: false; error: string }>;
 }
 
 /** The summary, and the asked holder's Consent and Object. */
-export default function CircleConsent({ applicationId, consent: given, decided, waiting, onAnswered }: CircleConsentProps) {
+export default function CircleConsent({ applicationId, consent: given, decided, waiting, onAnswered, answer: answerWith }: CircleConsentProps) {
   const [consent, setConsent] = useState(given);
   const [objecting, setObjecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -123,7 +129,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
     }
     setBusy(true);
     setError("");
-    const out = await answerConsent(applicationId, answer, answer === "object" ? said : undefined);
+    const out = await (answerWith ?? ((a: ConsentAnswer, r?: string) => answerConsent(applicationId, a, r)))(answer, answer === "object" ? said : undefined);
     setBusy(false);
     if (!out.ok) {
       setError(out.error || CONSENT_WORDS.failed);

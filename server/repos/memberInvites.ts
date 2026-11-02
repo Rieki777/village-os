@@ -186,3 +186,17 @@ export async function revokeOpenInvitesOf(pool: Pool, inviterUserId: string): Pr
   );
   return Number(result.affectedRows ?? 0);
 }
+
+/**
+ * The link one account was made with, or null. What the welcome step asks
+ * (server/lib/inviteDoor.ts), so a link named after something the village
+ * decided (an adopted role proposal) can finish that decision for the account
+ * it made, whichever sign-up door took it.
+ */
+export async function inviteTakenBy(pool: Pool, userId: string): Promise<string | null> {
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: one table, one row, no cache above it
+    "SELECT id FROM member_invites WHERE village_id = ? AND used_by_user_id = ? ORDER BY used_at DESC LIMIT 1",
+    [VILLAGE, userId],
+  );
+  return rows[0] ? String(rows[0].id) : null;
+}

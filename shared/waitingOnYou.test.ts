@@ -9,7 +9,7 @@ import { WAITING_COPY, readWaiting } from "./waitingOnYou";
 
 describe("readWaiting", () => {
   it("reads a payload with no toAccept as an empty group", () => {
-    expect(readWaiting({ applications: [], drafts: [] })).toEqual({ applications: [], drafts: [], toAccept: [], raisedWithYou: [], toConsent: [] });
+    expect(readWaiting({ applications: [], drafts: [] })).toEqual({ applications: [], drafts: [], toAccept: [], raisedWithYou: [], toConsent: [], openProposals: [] });
   });
 
   it("keeps the rows it can draw and drops the ones it cannot", () => {

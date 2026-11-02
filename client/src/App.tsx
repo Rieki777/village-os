@@ -216,6 +216,7 @@ const Introductions = lazyPage(() => import("./pages/Introductions"));
 const RequestMembership = lazyPage(() => import("./pages/RequestMembership"));
 const ProposeARole = lazyPage(() => import("./pages/ProposeARole"));
 const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) => ({ default: m.ConfirmProposal })));
+const OpenProposal = lazyPage(() => import("./pages/OpenProposal"));
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
@@ -382,6 +383,7 @@ function Router() {
       <Route path="/propose" component={Propose} />
       {/* One application to hold roles, on terms. Members only, behind terms.read. */}
       <Route path="/role-applications/:id" component={SeatApplication} />
+      <Route path="/open-proposals/:id" component={OpenProposal} />
       <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
       {/* Propose my roles for next season. /new and /shared/:token before /:id, which would take them. */}
       <Route path="/role-proposals/new" component={NewRoleProposal} />
