@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Lightbulb, ArrowLeft, CheckCircle2, Sparkles, MessageCircle, ClipboardList, Inbox } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchConfigCached } from "@/lib/gameApi";
-import { useTokenName } from "@/hooks/useTokenNames";
+import { useTokenNameFor } from "@/hooks/useTokenNameFor";
 import GuideChat from "@/components/GuideChat";
 import { useGuideName } from "@/hooks/useGuideName";
 import { sendProposal, assistantAvailable } from "@/lib/proposals";
@@ -55,7 +55,12 @@ const HELD_WHY: Record<IdeaHold, (held: Held, team: string) => string> = {
 
 export default function ProposeQuest() {
   const { user } = useAuth();
-  const tokenName = useTokenName("Recognition");
+  // The example compensation names the village's pay tokens, never the
+  // recognition token: Gratitude never pays work (Rye, 2026-11-01: "Gratitude
+  // ONLY for the recognition token and NOT for the credit or earned equity
+  // tokens"). Registry names by slug, so a village's rename reaches it.
+  const creditsName = useTokenNameFor("credits", "Credits");
+  const equityName = useTokenNameFor("earned-equity", "Equity");
   /*
    * A generic stand-in until /api/game/config answers, and on a village that
    * has not named itself yet. This read "Amora" on every instance, so the
@@ -413,7 +418,7 @@ export default function ProposeQuest() {
                 rows={2}
                 value={form.compensation}
                 onChange={(e) => set("compensation", e.target.value)}
-                placeholder={`${tokenName} only, cash, revenue share, a joint venture, or nothing. It's a gift, totally up to you.`}
+                placeholder={`${creditsName}, ${equityName}, cash, revenue share, a joint venture, or nothing. It's a gift, totally up to you.`}
                 className={`${field} resize-y`}
               />
             </div>
