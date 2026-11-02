@@ -28,7 +28,8 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { REGEN_METRICS, SNAPSHOT_METRICS } from "../../shared/healthMetrics";
 import { cycleBoundsFor } from "../../shared/lunar";
-import { villageId, type StageMultiplierFor } from "./economy";
+import { fromLedgerUnits, villageId, type StageMultiplierFor } from "./economy";
+import { treasuryReading } from "./treasuryReading";
 import { numberVar } from "./variables";
 import { activeClock } from "./gratitude-cycles";
 import { givenByRealMembersInWindow, reversedFromRealMembersInWindow } from "../repos/gratitude";
@@ -159,14 +160,28 @@ export async function snapshotCycle(
   } catch { /* stays never ran here */ }
 
   // Treasury + faucet issuance, straight from the ledger's own accounts.
+  //
+  // THE TREASURY IS ONE TOKEN, IN WHOLE TOKENS (2026-10-31). This used to add
+  // every token sys:treasury held, in raw ledger units and across kinds, so
+  // 1,234.56 credits and 500 stay-credit froze as 173456 and the tile printed
+  // it with no unit. The figure is now `treasuryReading`'s, the map chip's:
+  // the token `gratitude.pool_token` names, whole. A pool pointed at no token
+  // this ledger holds writes no row, an absence and never a made-up zero.
+  // `meta.token` stamps which token the figure is in, so the series never
+  // charts two tokens as one line (`TOKEN_STAMPED`). The other tokens ride in
+  // `meta.perToken`, each in its own units, side by side and never summed.
   try {
     const [treasury] = await pool.query<RowDataPacket[]>(
       "SELECT token_type, balance FROM token_balances WHERE account_id = 'sys:treasury' AND balance <> 0",
     );
     const perToken: Record<string, number> = {};
-    let total = 0;
-    for (const t of treasury) { perToken[String(t.token_type)] = Number(t.balance); total += Number(t.balance); }
-    await insertSnapshot(pool, cycle.cycleNumber, "treasury_balance", total, { perToken });
+    for (const t of treasury) perToken[String(t.token_type)] = fromLedgerUnits(String(t.token_type), Number(t.balance));
+    const reading = await treasuryReading(pool);
+    if ("n" in reading) {
+      await insertSnapshot(pool, cycle.cycleNumber, "treasury_balance", reading.n, {
+        token: reading.token, tokenName: reading.tokenName, perToken,
+      });
+    }
 
     // A faucet's NEGATIVE balance is issuance-to-date; report it positive.
     const [[poolRow]] = await pool.query<any[]>(
@@ -386,7 +401,27 @@ export async function snapshotSeries(pool: Pool): Promise<{ lunationsCollected: 
   // Every registry metric appears, even before its first point - the client
   // renders honest emptiness, not undefined.
   for (const m of SNAPSHOT_METRICS) series[m.key] ??= [];
+  for (const key of TOKEN_STAMPED) series[key] = latestTokenRun(series[key]);
   return { lunationsCollected: cycles.size, series };
+}
+
+/**
+ * METRICS FROZEN IN ONE NAMED TOKEN (2026-10-31). Their series is only the
+ * trailing run of points stamped with the latest point's `meta.token`. Rows
+ * written before the stamp existed (every token summed in raw ledger units,
+ * with no unit at all) and rows in a token the pool paid before stay in the
+ * table as history. They are never charted beside the current figure and
+ * never compared with it by `thresholdAlerts`, because a change of unit read
+ * as a change of value is a 99% fall nobody had.
+ */
+const TOKEN_STAMPED = ["treasury_balance"] as const;
+
+function latestTokenRun(points: SnapshotSeriesPoint[]): SnapshotSeriesPoint[] {
+  const token = points[points.length - 1]?.meta?.token;
+  if (typeof token !== "string" || !token) return [];
+  let from = points.length;
+  while (from > 0 && points[from - 1].meta?.token === token) from--;
+  return points.slice(from);
 }
 
 export interface RegenEntry {
