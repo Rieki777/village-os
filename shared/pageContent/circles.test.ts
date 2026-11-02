@@ -30,3 +30,37 @@ describe("the Circles spec", () => {
     for (const f of linked) expect(f.help, f.key).toContain(word);
   });
 });
+
+describe("the Circles starter words", () => {
+  /** A structure, a method or a count that belonged to one village's page, never every village's. */
+  const ONE_VILLAGE = [
+    /sociocra/i,
+    /consent/i,
+    /consensus/i,
+    /\bleads?\b/i,
+    /Finance/i,
+    /Business Circle/i,
+    /General Coordinating/i,
+    /double.link/i,
+    /representatives/i,
+    /elected/i,
+    /budget/i,
+    /tyranny/i,
+    /residents/i,
+    /being built/i,
+    /\d/,
+    /\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i,
+  ];
+
+  it("are true of any village: no method, no circle's name, no count", () => {
+    const text = defaults().map((d) => d.text).join(" \n ");
+    for (const claim of ONE_VILLAGE) expect(text, String(claim)).not.toMatch(claim);
+  });
+
+  it("name the village by its word and its top circle only by {coordinator}", () => {
+    const text = defaults().map((d) => d.text).join(" ");
+    expect(text).toContain("{village}");
+    expect(text).toContain(`{${COORDINATOR_WORD}}`);
+    expect(text).not.toMatch(/Circle\b|Council\b/);
+  });
+});

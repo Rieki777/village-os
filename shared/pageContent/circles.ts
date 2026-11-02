@@ -7,6 +7,18 @@
  * "Our Sociocratic Circles", a consent process, "the four leads" and a
  * Finance & Business Circle as its own facts.
  *
+ * THE DEFAULTS ARE A NEUTRAL STARTER, true of any village on this platform.
+ * They name no governance method, no circle and no count. They say only what
+ * the page itself shows: each circle looks after its own part of the work,
+ * its card says what it may decide alone, and where the circles nest under
+ * one top circle, which one that is. A village writes its own over them in
+ * Admin, Pages, Circles.
+ *
+ * The words the page typed until then are the established village's, kept at
+ * boot by server/lib/circlesWordsKept.ts from the snapshot in
+ * server/seeds/page-circles-before-neutral.json, so a village that already
+ * held its page words reads the same page with no save to remember.
+ *
  * WHAT IS A FIELD AND WHAT IS NOT. The circles, their names, purposes, roles
  * and holders are data and are never typed here. Only the words around them
  * are fields: the top of the page, the headings over the two groups of
@@ -41,14 +53,14 @@ export const CIRCLES_PAGE: PageSpec = {
       label: "Top of the page",
       shows: "The heading and paragraph above the circle map, with a button to the open roles.",
       fields: [
-        { key: "headline", label: "Headline", kind: "text", max: 48, default: "Our Sociocratic Circles" },
+        { key: "headline", label: "Headline", kind: "text", max: 48, default: "Our Circles" },
         {
           key: "intro",
           label: "Paragraph under the headline",
           kind: "long",
           max: 280,
           default:
-            "Circles are how the village thinks: each one tends its own domain the way a tree tends its own ground, and double links weave them into one canopy.",
+            "Circles are how {village} shares out its work. Each one looks after its own domain, and its roles say who does what.",
         },
         {
           key: "firstTerm",
@@ -64,7 +76,7 @@ export const CIRCLES_PAGE: PageSpec = {
           label: "Its explanation",
           kind: "long",
           max: 200,
-          default: "A domain is the ground a circle decides on without asking anyone above it. Real authority lives inside it.",
+          default: "A domain is the part of the village's work that one circle looks after.",
           optional: true,
         },
         {
@@ -73,7 +85,7 @@ export const CIRCLES_PAGE: PageSpec = {
           help: "Another word or phrase from the paragraph. Leave blank for none.",
           kind: "text",
           max: 32,
-          default: "double links",
+          default: "",
           optional: true,
         },
         {
@@ -81,8 +93,7 @@ export const CIRCLES_PAGE: PageSpec = {
           label: "Its explanation",
           kind: "long",
           max: 200,
-          default:
-            "Two people belong to both a circle and the circle above it, one chosen by each. News travels both ways, so no circle drifts alone.",
+          default: "",
           optional: true,
         },
         { key: "rolesLabel", label: "Button to the roles page", kind: "text", max: 28, default: "View Open Roles" },
@@ -100,7 +111,7 @@ export const CIRCLES_PAGE: PageSpec = {
           label: "Sentence under the heading",
           kind: "long",
           max: 160,
-          default: "How the team actually organizes right now, while the village is being built.",
+          default: "The circles at work in {village} right now.",
           optional: true,
         },
       ],
@@ -111,14 +122,13 @@ export const CIRCLES_PAGE: PageSpec = {
       shows: "The heading over the circles that are forming or resting. Hidden, the circles still show, without it.",
       hideable: true,
       fields: [
-        { key: "heading", label: "Heading", kind: "text", max: 40, default: "As the Village Matures" },
+        { key: "heading", label: "Heading", kind: "text", max: 40, default: "Forming and Resting" },
         {
           key: "intro",
           label: "Sentence under the heading",
           kind: "long",
           max: 200,
-          default:
-            "As residents arrive, today's team circles grow into resident-led councils like these: domain-specific circles connected through elected representatives.",
+          default: "Circles that are still forming, or resting for now.",
           optional: true,
         },
       ],
@@ -129,15 +139,14 @@ export const CIRCLES_PAGE: PageSpec = {
       shows: "The line at the foot of a circle's panel once a visitor opens it.",
       hideable: true,
       fields: [
-        { key: "label", label: "Bold words that start the line", kind: "text", max: 24, default: "How it works:" },
+        { key: "label", label: "Bold words that start the line", kind: "text", max: 24, default: "How it fits:" },
         {
           key: "linked",
           label: "The line in a circle under your top circle",
           help: LINKED_HELP,
           kind: "long",
           max: 220,
-          default:
-            "Each circle has autonomy within its domain and budget, uses consent-based decision-making, and is double-linked to the {coordinator} so information flows both ways.",
+          default: "This circle looks after its own part of the work and sits under the {coordinator}.",
           optional: true,
         },
         {
@@ -146,7 +155,7 @@ export const CIRCLES_PAGE: PageSpec = {
           help: "Shown in your top circle itself, and in every circle when your circles sit side by side. Leave blank for none.",
           kind: "long",
           max: 220,
-          default: "Each circle has autonomy within its domain and budget and uses consent-based decision-making.",
+          default: "This circle looks after its own part of the village's work.",
           optional: true,
         },
       ],
@@ -164,7 +173,7 @@ export const CIRCLES_PAGE: PageSpec = {
           help: "Wrap words in **double stars** to make them bold.",
           kind: "long",
           max: 200,
-          default: "Each circle has **a domain, a budget, and the authority** to make decisions within that domain.",
+          default: "Each circle looks after **its own part of the village's work**.",
         },
         {
           key: "acrossLinked",
@@ -172,8 +181,7 @@ export const CIRCLES_PAGE: PageSpec = {
           help: LINKED_HELP,
           kind: "long",
           max: 200,
-          default:
-            "When decisions affect multiple circles, the **{coordinator}**, the four leads and circle representatives, coordinates.",
+          default: "The other circles all sit under the **{coordinator}**.",
           optional: true,
         },
         {
@@ -182,7 +190,7 @@ export const CIRCLES_PAGE: PageSpec = {
           help: FLAT_HELP,
           kind: "long",
           max: 200,
-          default: "When decisions affect multiple circles, the circles involved decide together.",
+          default: "",
           optional: true,
         },
         {
@@ -191,7 +199,7 @@ export const CIRCLES_PAGE: PageSpec = {
           help: "Leave blank for none.",
           kind: "long",
           max: 200,
-          default: "The Finance & Business Circle provides budget stewardship, oversight, and alignment across all circles.",
+          default: "",
           optional: true,
         },
         {
@@ -200,8 +208,7 @@ export const CIRCLES_PAGE: PageSpec = {
           help: "Leave blank for none.",
           kind: "long",
           max: 320,
-          default:
-            "Circles use **consent-based decision-making**: a proposal moves forward unless someone has a reasoned objection that it would cause harm or prevent the circle from achieving its aim. This creates space for wisdom and prevents tyranny of the majority.",
+          default: "Open a circle to see its roles, and its card to see what it can decide on its own.",
           optional: true,
         },
         {
@@ -210,8 +217,7 @@ export const CIRCLES_PAGE: PageSpec = {
           help: LINKED_HELP,
           kind: "long",
           max: 280,
-          default:
-            "Every circle is **double-linked** to the {coordinator} by two people, so information flows both ways. Regular reporting, check-ins, and feedback keep the whole aligned and adaptable.",
+          default: "The map above shows how the circles nest under the {coordinator}, and which roles are still open.",
           optional: true,
         },
         {
@@ -220,7 +226,7 @@ export const CIRCLES_PAGE: PageSpec = {
           help: FLAT_HELP,
           kind: "long",
           max: 280,
-          default: "Regular reporting, check-ins, and feedback between circles keep the whole aligned and adaptable.",
+          default: "",
           optional: true,
         },
       ],

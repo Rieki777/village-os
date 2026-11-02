@@ -34,6 +34,13 @@ describe("the words Circles showed before its defaults went neutral", () => {
     }
   });
 
+  it("differ from today's defaults, which is the whole reason to keep them", () => {
+    const neutral = resolvePageRaw(CIRCLES_PAGE, {});
+    expect(neutral.hero.fields.headline).not.toBe(BEFORE.hero.headline);
+    expect(neutral.together.fields.after).not.toBe(BEFORE.together.after);
+    expect(neutral.together.fields.acrossLinked).not.toBe(BEFORE.together.acrossLinked);
+  });
+
   it("are the words the page typed until 2026-11-01", () => {
     expect(BEFORE.hero.headline).toBe("Our Sociocratic Circles");
     expect(BEFORE.together.acrossLinked).toContain("the four leads and circle representatives");

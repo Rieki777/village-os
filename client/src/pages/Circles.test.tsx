@@ -226,3 +226,30 @@ describe("every field in the Circles spec reaches the page", () => {
     expect(screen.getByRole("heading", { level: 2, name: said("together") }).parentElement!.querySelectorAll("p")).toHaveLength(1);
   });
 });
+
+describe("the page with nothing saved", () => {
+  /** What one village's page used to tell every village as its own. */
+  const THEIRS = [/sociocra/i, /consent/i, /four leads/i, /Finance & Business/, /double.link/i, /tyranny/i, /elected representatives/i, /\{coordinator\}/];
+
+  it("says the starter words, in the village's own name, and names its own top circle", async () => {
+    renderPage();
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(said("hero", "headline"));
+    await openCircle("Land & Water");
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(said("hero", "intro").replace("{village}", "Willowbrook").split(said("hero", "firstTerm"))[0]);
+    expect(text).toContain(said("card", "linked").replace("{coordinator}", "Hearth Council"));
+    for (const claim of THEIRS) expect(text, String(claim)).not.toMatch(claim);
+  });
+
+  it("names no circle where the circles sit side by side, and claims no method either", async () => {
+    org = FLAT;
+    renderPage();
+    await openCircle("Land & Water");
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(said("card", "flat"));
+    expect(text).not.toContain("Hearth Council");
+    for (const claim of THEIRS) expect(text, String(claim)).not.toMatch(claim);
+  });
+});
