@@ -146,7 +146,9 @@ import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/r
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { keepFirstPlanIfUsed } from "./lib/commandCentrePlanDefault";
+import { keepVillagePathWords } from "./lib/pathWordsKept";
 import { keepGovernanceWords } from "./lib/governanceWordsKept";
+import { keepCirclesWords } from "./lib/circlesWordsKept";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
@@ -1878,8 +1880,12 @@ async function ensureDataFiles() {
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
   await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
+  // The ladder's default sentences went neutral: a village that already holds its page words keeps its path and stage words.
+  await runOnce("keep-path-words-2026-11-01", () => keepVillagePathWords(contentRepo).then(() => undefined));
   // How We Govern's defaults went neutral: a village that already holds its page words keeps this page's too.
   await runOnce("keep-governance-words-2026-11-01", () => keepGovernanceWords(contentRepo).then(() => undefined));
+  // Circles' defaults went neutral the same way: an established village keeps the words /circles shows today.
+  await runOnce("keep-circles-words-2026-11-01", () => keepCirclesWords(contentRepo).then(() => undefined));
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
@@ -18182,9 +18188,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
-  registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members });
+  registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
-  registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: String(getWorkWithUs().assistantName || "Maia"), timeZone: getSeasonConfig().timezone }) });
+  registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: guidePromptName(getWorkWithUs().assistantName), timeZone: getSeasonConfig().timezone }) });
   registerMemberAskRoutes(app, { authedUser, getPool, members, notify, overLimit, firstName });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, seasonState, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });

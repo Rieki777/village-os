@@ -26,6 +26,12 @@
  * `villagePathsProblems` the editor asks before Save lights up: known path and
  * stage ids only, known fields only, text only, every word within its limit.
  *
+ * A SAVE NAMES THE WORDS IT WAS OPENED ON, the way a Pages save does (#732):
+ * the editor sends `x-content-was`, the `contentVersion` of the document it
+ * loaded, and when the stored words moved since (another admin, or a boot
+ * fixup such as server/lib/pathWordsKept.ts) the save is refused with 409
+ * rather than written over them. A save that names nothing is stored as before.
+ *
  * The module also re-exports what `server/index.ts` reads, so that file
  * imports it on the same line as the register binding: the boot load, the
  * served slice of the public config, and a stage's name.
@@ -35,6 +41,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { pageVarsFrom, type PageVarSource } from "../../shared/pageContent/vars";
 import { setVillageVars, saveVillagePaths, storedVillagePaths, villagePathWords } from "../lib/villagePaths";
 import { storableVillagePaths, villagePathsProblems } from "../../shared/villagePaths";
+import { contentVersion } from "../../shared/pageContent/resolve";
 
 export { loadVillagePaths, servedPathWords, stageName } from "../lib/villagePaths";
 
@@ -67,6 +74,10 @@ export function register(app: Express, deps: Deps): void {
     if (!(await guardCapability(req, res, "story.tell"))) return;
     const problems = villagePathsProblems(req.body);
     if (problems.length) return res.status(400).json({ error: problems[0], problems });
+    const was = req.get?.("x-content-was");
+    if (was && was !== contentVersion(storedVillagePaths())) {
+      return res.status(409).json({ error: "These words changed since this page was opened. Reload it to see them, then make your change again." });
+    }
     await saveVillagePaths(storableVillagePaths(req.body));
     res.json(view());
   });

@@ -8,6 +8,13 @@
  * pages. Each promise below has its known positive beside it: the village's
  * own top circle is named where its circles nest under one, and no circle is
  * named where they do not.
+ *
+ * /circles words (2026-11-01): the sentences that carry the name are page
+ * words now (shared/pageContent/circles.ts). The established village's words,
+ * which these assertions were written against, are the snapshot its boot
+ * fixup keeps (server/seeds/page-circles-before-neutral.json), so /circles is
+ * read here with that snapshot saved. A new village's starter words are read
+ * with nothing saved, beside them.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -38,6 +45,8 @@ vi.mock("@/components/natural/useReducedMotion", () => ({
 }));
 
 import Circles from "./Circles";
+import KEPT_CIRCLES_WORDS from "../../../server/seeds/page-circles-before-neutral.json";
+import { CIRCLES_PAGE } from "@shared/pageContent/circles";
 import Roles from "./Roles";
 
 class NoopIntersectionObserver {
@@ -99,9 +108,12 @@ const FLAT = {
 };
 
 let org: typeof NESTED;
+/** The village's saved /circles words: the established village's by default, nothing for a new one. */
+let circlesWords: unknown;
 
 beforeEach(() => {
   org = NESTED;
+  circlesWords = KEPT_CIRCLES_WORDS;
   vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
   vi.stubGlobal(
     "fetch",
@@ -109,6 +121,7 @@ beforeEach(() => {
       const u = String(url);
       const reply = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
       if (u === "/api/org") return reply(org);
+      if (u === "/api/content/page-circles") return circlesWords ? reply(circlesWords) : { ok: false, status: 404, json: async () => ({ error: "Section not found" }) };
       if (u === "/api/season") return reply({ current: { name: "Season of Foundations", endsOn: "2099-03-21" }, daysLeft: 171 });
       return reply([]);
     }),
@@ -149,6 +162,41 @@ describe("/circles", () => {
     expect(text).not.toContain("General Coordinating Circle");
     expect(text).not.toContain("double-linked to the");
     expect(text).toContain("When decisions affect multiple circles, the circles involved decide together.");
+  });
+});
+
+describe("/circles with nothing saved (a new village's starter words)", () => {
+  const said = (sectionId: string, key: string) =>
+    CIRCLES_PAGE.sections.find((s) => s.id === sectionId)!.fields.find((f) => f.key === key)!.default;
+
+  it("names the village's own top circle where its circles nest under one", async () => {
+    circlesWords = null;
+    page(<Circles />);
+    fireEvent.click((await screen.findByRole("heading", { level: 3, name: "Land & Water" })).closest("button")!);
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(said("card", "linked").replace("{coordinator}", "Hearth Council"));
+    expect(text).toContain(said("together", "acrossLinked").replace("{coordinator}", "Hearth Council").replace(/\*\*/g, ""));
+    expect(text).not.toContain("General Coordinating Circle");
+  });
+
+  it("never tells the top circle it sits under itself", async () => {
+    circlesWords = null;
+    page(<Circles />);
+    fireEvent.click((await screen.findByRole("heading", { level: 3, name: "Hearth Council" })).closest("button")!);
+
+    expect(document.body.textContent).not.toContain(said("card", "linked").replace("{coordinator}", "Hearth Council"));
+    expect(document.body.textContent).toContain(said("card", "flat"));
+  });
+
+  it("names no circle in a village whose circles are flat", async () => {
+    circlesWords = null;
+    org = FLAT;
+    page(<Circles />);
+    fireEvent.click((await screen.findByRole("heading", { level: 3, name: "Land & Water" })).closest("button")!);
+
+    expect(document.body.textContent).not.toContain("Hearth Council");
+    expect(document.body.textContent).not.toContain("{coordinator}");
   });
 });
 

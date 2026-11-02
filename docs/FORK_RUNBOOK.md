@@ -156,10 +156,19 @@ above the size of a gathering, not to the size of one person's usage.
   value) or clears; the Journey to Launch row `starter-quests` waits on that. Edit THAT section to
   change a fork's starters. `server/seeds/quests-seed.json` is frozen, seeds nothing, and is read
   only by the two repair passes below; a test pins its hash.
+- `server/seeds/village-paths-before-neutral.json` — every path and stage word as it read before
+  the ladder's default sentences went neutral (2026-11-01, readiness R061). Read once at boot by
+  the `keep-path-words-2026-11-01` runOnce (`server/lib/pathWordsKept.ts`), only for a village
+  that already holds its own `page-*` words or path and stage words, and written into its
+  `village-paths` document under what it saved; a new village never sees it.
 - `server/seeds/page-governance-before-neutral.json` — How We Govern as it read before its
   defaults went neutral (2026-11-01). Read once at boot by the `keep-governance-words-2026-11-01`
   runOnce (`server/lib/governanceWordsKept.ts`), only for a village that already holds its own
   `page-*` words; a new village never sees it.
+- `server/seeds/page-circles-before-neutral.json` — Circles as it read before its defaults went
+  neutral (2026-11-01). Read once at boot by the `keep-circles-words-2026-11-01` runOnce
+  (`server/lib/circlesWordsKept.ts`, on the rule in `server/lib/pageWordsKept.ts`), only for a
+  village that already holds its own `page-*` words; a new village never sees it.
 - `server/seeds/examples-seed.json` — STANDING EXAMPLES: platform-authored
   worked content revealed when a module is first enabled, so a founder meets a
   working module instead of "No items yet." Inert (every mutation refused) and
