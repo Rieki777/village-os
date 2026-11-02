@@ -96,3 +96,14 @@ export function fillGuideName(template: string, name: string): string {
 export function guidePromptName(source: unknown): string {
   return guideName(source, "public").name;
 }
+
+/**
+ * The guide introduced in a prompt: "Sol, the village guide" for a named
+ * guide, and "the village guide" alone for one still unnamed, which would
+ * otherwise read "the village guide, the village guide". Takes the name as
+ * `guidePromptName` gives it, so a caller that only holds that string can use it.
+ */
+export function asTheVillageGuide(promptName: string): string {
+  const name = String(promptName ?? "").trim();
+  return !name || name === UNNAMED_GUIDE.shared ? UNNAMED_GUIDE.shared : `${name}, ${UNNAMED_GUIDE.shared}`;
+}
