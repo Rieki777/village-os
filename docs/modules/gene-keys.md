@@ -59,6 +59,12 @@ Rulings it follows (Rye, 2026-10-22):
   reading replaces them, and one sent without signs clears them. They are member-pii (Module Library Contract
   clause 13): shown on the member's own controls only, never on a door that shows lines to anybody else
   (`shownGeneKeysFor` and `shownGeneKeysByHandle` do not select them), in the export, and gone with the row.
+- **The rising sign is read only from an exact birth time.** It changes about every two hours, so a birth time
+  given as a part of the day never gives one. It is read in the browser from that time and the birth town's
+  latitude and longitude (`risingSign` in `shared/geneKeysSky.ts`, the ascendant from local sidereal time,
+  Meeus ch. 13), checked against five published charts. The town list now carries each town's coordinates
+  (GeoNames, rounded to a hundredth of a degree); the list is public data, downloaded whole and searched on the
+  device, so the member's own town still never leaves it. The form credits it: "Town data: GeoNames (CC BY 4.0)".
 - **Erasure** deletes the row in the `gene-keys-after-tombstone` step, signs included. **Export** includes the
   stored row, signs included.
 
@@ -151,7 +157,3 @@ Every surface wears the profile's night world (`sheet-night`) and renders nothin
 - "Sleep on it" as a consent answer belongs to Live Sessions, whose files another lane holds; it was offered to
   that lane.
 - The city list is GeoNames `cities15000` (CC BY 4.0, credited on the form).
-- The rising sign. `rising_sign` (0309) is in the table, and stays NULL: the rising sign needs the birth town's
-  latitude and longitude, and the town list carries only a name, a country and a clock. Adding them means
-  regenerating the list from GeoNames, which is a download for Rye to agree to. It would also be read only from an
-  exact birth time.

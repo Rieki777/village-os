@@ -15,7 +15,7 @@
  * the 20th).
  */
 import { describe, expect, it } from "vitest";
-import { natalSigns, skyAt, zonedToUtc } from "./geneKeysSky";
+import { natalSigns, risingSign, skyAt, zonedToUtc } from "./geneKeysSky";
 import { SIGNS } from "./sessionCard";
 
 const at = (iso: string) => [new Date(iso)];
@@ -65,5 +65,34 @@ describe("a member's own Sun and Moon signs", () => {
 
   it("says nothing at all from no instants", () => {
     expect(natalSigns([])).toEqual({ sun: null, moon: null });
+  });
+});
+
+describe("a member's own rising sign", () => {
+  it("agrees with five published charts, from the exact time and the town's coordinates", () => {
+    const charts: [string, Date, number, number, string][] = [
+      // Princess Diana: 19:45 BST, Sandringham (52.83 N, 0.50 E). Sagittarius rising.
+      ["Diana", zonedToUtc(1961, 7, 1, 19, 45, "Europe/London"), 52.83, 0.5, "Sagittarius"],
+      // Albert Einstein: 11:30 local mean time at Ulm (48.40 N, 9.99 E), 10:50 UTC. Cancer rising.
+      ["Einstein", new Date("1879-03-14T10:50:00Z"), 48.4, 9.99, "Cancer"],
+      // Barack Obama: 19:24, Honolulu (21.31 N, 157.86 W). Aquarius rising.
+      ["Obama", zonedToUtc(1961, 8, 4, 19, 24, "Pacific/Honolulu"), 21.31, -157.86, "Aquarius"],
+      // Steve Jobs: 19:15, San Francisco (37.77 N, 122.42 W). Virgo rising.
+      ["Jobs", zonedToUtc(1955, 2, 24, 19, 15, "America/Los_Angeles"), 37.77, -122.42, "Virgo"],
+      // Marilyn Monroe: 09:30, Los Angeles (34.05 N, 118.24 W). Leo rising.
+      ["Monroe", zonedToUtc(1926, 6, 1, 9, 30, "America/Los_Angeles"), 34.05, -118.24, "Leo"],
+    ];
+    for (const [who, when, lat, lon, sign] of charts) expect(name(risingSign(when, lat, lon)), who).toBe(sign);
+  });
+
+  it("moves through all twelve signs in a day, about two hours each", () => {
+    const seen = new Set<number>();
+    for (let h = 0; h < 24; h++) seen.add(risingSign(new Date(Date.UTC(2024, 2, 20, h)), 51.5, -0.13)!);
+    expect(seen.size).toBeGreaterThanOrEqual(11);
+  });
+
+  it("gives nothing for a latitude it cannot read", () => {
+    expect(risingSign(new Date(), Number.NaN, 0)).toBeNull();
+    expect(risingSign(new Date(), 95, 0)).toBeNull();
   });
 });

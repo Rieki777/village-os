@@ -11,8 +11,14 @@ import { signsFor } from "./natal";
 const DIANA = { year: 1961, month: 7, day: 1 };
 
 describe("the signs the page sends", () => {
-  it("reads an exact time as one instant", () => {
+  it("reads an exact time as one instant, and the rising sign too when the town has coordinates", () => {
     expect(signsFor(DIANA, "Europe/London", [[19 * 60 + 45, 19 * 60 + 45]])).toEqual({ sun: 3, moon: 10, rising: null });
+    expect(signsFor(DIANA, "Europe/London", [[19 * 60 + 45, 19 * 60 + 45]], { lat: 52.83, lon: 0.5 })).toEqual({ sun: 3, moon: 10, rising: 8 });
+  });
+
+  it("never reads a rising sign without an exact time: it changes about every two hours", () => {
+    expect(signsFor(DIANA, "Europe/London", [[19 * 60, 20 * 60]], { lat: 52.83, lon: 0.5 }).rising).toBeNull();
+    expect(signsFor(DIANA, "Europe/London", [[300, 719]], { lat: 52.83, lon: 0.5 }).rising).toBeNull();
   });
 
   it("sends no Moon when it changed sign inside the part of the day the birth could be in, and keeps the Sun", () => {
