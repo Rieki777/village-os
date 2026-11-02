@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
 import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
+import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { useValueConversion } from "@/lib/moneyClaims";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
@@ -56,7 +57,7 @@ const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
   further: {
     title: "Further in",
     blurb:
-      "These open as you walk the Path of Growth or step into a role. Each one says what opens it.",
+      "These open as you walk the {ladder} or step into a role. Each one says what opens it.",
   },
 };
 
@@ -86,6 +87,8 @@ export default function Quests() {
   const villageName = cfg?.project?.name ?? "the village";
   const eventsUrl = cfg?.project?.eventsUrl ?? "";
   const stages = cfg?.stages ?? [];
+  // The ladder's name in this village's words (Admin, Paths & Stages).
+  const ladder = useLadderTitle();
   const [activeCircle, setActiveCircle] = useState<string>("All");
   const [activeDifficulty, setActiveDifficulty] = useState<Difficulty | "All">(
     "All"
@@ -430,9 +433,9 @@ export default function Quests() {
                       )}
                     </div>
                     <p className="text-muted-foreground mt-1 max-w-2xl">
-                      {meta.blurb}
+                      {meta.blurb.replace("{ladder}", ladder)}
                       {ring === "further" && (
-                        <InfoTip tip="The Path of Growth is the membership ladder on your profile. Walking it, or holding a role, opens these quests." label="What opens these quests" />
+                        <InfoTip tip={`The ${ladder} is the membership ladder on your profile. Walking it, or holding a role, opens these quests.`} label="What opens these quests" />
                       )}
                     </p>
                   </div>

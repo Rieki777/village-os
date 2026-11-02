@@ -19,7 +19,7 @@ import crypto from "crypto";
 import multer from "multer";
 import bcrypt from "bcrypt";
 import { securityHeaders } from "./lib/securityHeaders";
-import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
+import { claimPaths, GAME_CONFIG, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
 import { guidePromptName } from "../shared/guideName";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
@@ -77,6 +77,7 @@ import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, 
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerBrochurePagesRoutes } from "./routes/brochurePages";
+import { register as registerVillagePathsRoutes, loadVillagePaths, servedPathWords, stageName } from "./routes/villagePaths";
 import { register as registerPeopleLock, ballotCardForViewer, ballotForViewer, firstNameOf, hiddenFromStranger } from "./routes/peopleLock";
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
@@ -1496,7 +1497,7 @@ async function initStores(): Promise<void> {
     emailConfigRepo.load(),
     settingsRepo.load(),
     brandRepo.load(),
-    loadBrochurePages(getPool()),
+    loadBrochurePages(getPool()), loadVillagePaths(getPool()),
     mapVocabRepo.load(),
     mapWalkRepo.load(),
     workWithUsRepo.load(),
@@ -2899,11 +2900,11 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
     at: new Date().toISOString(),
   });
   commsSink.fire({ type: "stage_advanced", userId: user.id, stage: to });
-  await addActivity("stage", `${firstName(user.name)} advanced to ${getStage(to).name}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
+  await addActivity("stage", `${firstName(user.name)} advanced to ${stageName(to)}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
   await notify({
     userId: user.id,
     type: "stage_advanced",
-    title: `You advanced to ${getStage(to).name}`,
+    title: `You advanced to ${stageName(to)}`,
     body: unlocked.length ? `Newly unlocked: ${unlocked.join(", ")}` : null,
     link: "/profile",
     // One per stage, ever: re-computation can never re-celebrate.
@@ -18170,6 +18171,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   registerFaqRoutes(app, { isAdmin, guardCapability, faqsRepo });
   registerBrochurePagesRoutes(app, { isAdmin, guardCapability });
+  registerVillagePathsRoutes(app, { isAdmin, guardCapability, config: mergedConfig, valueTokenName: () => { const slug = String(stringVar("gratitude.pool_token")); return tokenDef(slug)?.name ?? slug; } });
 
   // â”€â”€ Milestones (NEW-3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -18515,7 +18517,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       project: m.project,
       currency: { ...m.currency, value: { slug: valueSlug, name: valueDef?.name ?? valueSlug }, names: Object.fromEntries(allTokens().map((t) => [t.slug, t.name])) },
       images: m.images,
-      paths: GAME_CONFIG.paths,
+      ...servedPathWords(), // paths, with their sentences, and the ladder's name: server/lib/villagePaths.ts
       stages: servedLadder(mergedConfig().project.commitmentName),
       season: seasonState(),
       ...brochureConfig(),
@@ -22041,7 +22043,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         const needed = stageIndex(role.minStage);
         if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
           out.held =
-            `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage ` +
+            `${firstName(member.name)} has not reached the ${stageName(role.minStage)} stage ` +
             `${role.name ?? asked.roleId} asks for, so nobody was seated. The village can ask again once they have.`;
           await notifyAdmins("governance", `A carried seating could not land: ${b.title}`, `bal:${b.id}:seat-held`);
           return out;
@@ -25650,7 +25652,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       const needed = stageIndex(role.minStage);
       if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
         return res.status(409).json({
-          error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
+          error: `${firstName(member.name)} has not reached the ${stageName(role.minStage)} stage this role asks for.`,
           minStage: role.minStage,
         });
       }

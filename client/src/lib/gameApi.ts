@@ -114,8 +114,11 @@ export interface PublicGameConfig {
     names?: Record<string, string>;
   };
   images: BrandImages;
-  paths: { id: string; label: string; role: string; route: string }[];
+  /** In the village's own words (Admin, Paths & Stages). `description` is absent on an older server. */
+  paths: { id: string; label: string; role: string; route: string; description?: string }[];
   stages: GameStagePublic[];
+  /** The stage ladder's name, in the village's words. Absent on an older server: read it through `useLadderTitle`. */
+  ladder?: { title: string };
   season: SeasonState;
   /** Whether this village serves the brochure pages (shared/brochure.ts).
    *  Absent on a server older than 1.2.0, which reads as off. */

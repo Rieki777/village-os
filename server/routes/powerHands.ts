@@ -94,7 +94,8 @@ import { capabilityCatalogue } from "../lib/progressionPayload";
 import type { DbCollection } from "../repos/store-db";
 import type { Request, Response } from "express";
 import type { CapabilityCtx } from "../../shared/capabilities";
-import { getStage, stageIndex } from "../../shared/gameConfig";
+import { stageIndex } from "../../shared/gameConfig";
+import { stageName } from "../lib/villagePaths";
 import type { BallotMethod } from "../../shared/governanceEngine";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import type { LandingDeps } from "../lib/applyDue";
@@ -637,7 +638,7 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): OpenSeatVote
       const needed = stageIndex(role.minStage);
       if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
         return no(409, {
-          error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
+          error: `${firstName(member.name)} has not reached the ${stageName(role.minStage)} stage this role asks for.`,
           minStage: role.minStage,
         });
       }

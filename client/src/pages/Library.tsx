@@ -8,7 +8,8 @@ import ModuleGate from "@/components/modules/ModuleGate";
 import { useEffect, useState } from "react";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useGameConfig } from "@/lib/gameApi";
+import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { Package, RotateCcw, Undo2, Wrench } from "lucide-react";
 import { Image } from "@/components/Image";
 import InfoTip from "@/components/InfoTip";
@@ -34,6 +35,10 @@ export default function Library() {
   // The village's own word for its library token (R084), from the registry.
   const libraryName = useTokenNameFor("library-credit");
   const { user } = useAuth();
+  // A floor is a stage id; members read it by the name this village gives it.
+  const stages = useGameConfig()?.stages ?? [];
+  const stageNameOf = (id: string) => stages.find((s) => s.id === id)?.name ?? id;
+  const ladder = useLadderTitle();
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -186,7 +191,7 @@ export default function Library() {
                       {i.minStage && (
                         <>
                           {" "}·{" "}
-                          <InfoTip tip={`This item opens at the ${i.minStage} stage of the Path of Growth. See where you stand on your profile.`}>from {i.minStage}</InfoTip>
+                          <InfoTip tip={`This item opens at the ${stageNameOf(i.minStage)} stage of the ${ladder}. See where you stand on your profile.`}>from {stageNameOf(i.minStage)}</InfoTip>
                         </>
                       )}
                     </p>
