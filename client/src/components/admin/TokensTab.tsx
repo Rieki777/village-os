@@ -36,6 +36,7 @@ import TokenMeaningField from "./TokenMeaningField";
 import VillageTokensWordField from "./VillageTokensWordField";
 import { formatTokenAmount, smallestUnit } from "@/lib/tokenAmount";
 import { takePrefill } from "@/lib/profilePrefill";
+import { MINT_CAP_SCOPE } from "@shared/mintCapWords";
 
 /**
  * THE ONE PAGE WHERE A TOKEN IS NAMED.
@@ -484,9 +485,9 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
             <p className="text-xs text-gray-500 mb-3">
               Issues from the dedicated mint faucet, with a reason, audited. This village
               can bring at most {mintCap.toLocaleString()} of a token into existence per
-              lunar cycle, counted across every door and not by hand alone, and counted
-              net of what comes back (ledger.admin_mint_cycle_cap). A busy month of stays
-              or quests can use it up before anyone mints anything here.
+              lunar cycle, counted net of what comes back (ledger.admin_mint_cycle_cap).
+              {" "}{MINT_CAP_SCOPE} A busy month of stays or work-exchange quests can use
+              it up before anyone mints anything here.
               {/* State what is true, then get out of the way (R56). Both of
                   these are facts about what the route will do, and neither
                   argues with the village about its own dials. */}

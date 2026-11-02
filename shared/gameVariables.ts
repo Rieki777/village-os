@@ -18,6 +18,7 @@
  * express "equal voice or mirror Hypha" or an ERC-20 address; this shape can.
  */
 
+import { MINT_CAP_SCOPE } from "./mintCapWords";
 import { GAME_CONFIG } from "./gameConfig";
 import { STAGE_UNLOCKS } from "./capabilities";
 import { NEED_DEPTHS, NEED_DEPTH_LABELS } from "./needs";
@@ -360,7 +361,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Issuance cap per lunar cycle",
     description:
-      "The most this village can bring into existence of one token in one lunar cycle, counted across every door and not by hand alone: hand-mints, co-signed grants, treasury stocking, stay-credit comps, purchases and adjustments, and the credits a work-exchange quest releases all spend the same number. COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door that issues this token, because a cap of zero means zero.",
+      "The most this village can bring into existence of one token in one lunar cycle. " +
+      `${MINT_CAP_SCOPE} ` +
+      "COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door of the mint faucet for this token, because a cap of zero means zero.",
     type: "integer",
     default: "10000",
     min: 0,

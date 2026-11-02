@@ -2,9 +2,15 @@
  * WHAT THE PER-CYCLE MINT CAP COUNTS.
  *
  * `ledger.admin_mint_cycle_cap` bounds ALL ISSUANCE of one token in one lunar
- * cycle, from every door, and not only the ones an admin opens by hand. That
- * is a ruling, so it is written here beside the arithmetic that carries it
- * out instead of being inferred from a WHERE clause.
+ * cycle FROM THE MINT FAUCET, from every door of it, and not only the ones an
+ * admin opens by hand. That is a ruling, so it is written here beside the
+ * arithmetic that carries it out instead of being inferred from a WHERE clause.
+ *
+ * Every door of THIS faucet, and no other faucet. Pay for work and the
+ * gratitude pool issue from faucets of their own (`faucetFor`, economy.ts) and
+ * are not counted, which is right: Rye, 2026-10-22, "we definitely can't have
+ * caps on what things pay". The dial and the panel said "every door" until
+ * 2026-11-01 and now say this (shared/mintCapWords.ts).
  *
  * ── WHAT THE COUNTER USED TO SAY, AND WHY IT WAS TWO DIFFERENT NUMBERS ─────
  *
