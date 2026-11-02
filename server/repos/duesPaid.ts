@@ -1,7 +1,8 @@
 /**
  * WHO PAID THEIR MEMBERSHIP DUES BY CARD, AND WHICH FLAT ROLE AMOUNTS ARE ON
  * THEIR WAY OUT (item 13, 2026-11-01). The two reads `runSettlement` makes
- * for the dues dividend (server/lib/economy.ts).
+ * for the dues dividend (server/lib/economy.ts), and the role rules
+ * `blankFlatRoleMint` reads to turn the automatic mint off.
  *
  * CARD DUES ONLY (Rye, 2026-11-01). A card payment for a `membership` payment
  * product writes one `fiat_charges` row per billed period, its `order_id` the
@@ -38,6 +39,15 @@ export async function cardDuesPayersBetween(pool: Pool, from: Date, to: Date): P
     membershipGranted: r.membership_granted,
     stageGranted: r.stage_granted,
   }));
+}
+
+/** Every `role.cycle` rule of one village, pending columns and all, for `blankFlatRoleMint`. */
+export async function roleCycleRuleRows(pool: Pool, villageId: string): Promise<RowDataPacket[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT * FROM `mint_rules` WHERE `village_id` = ? AND `trigger` = 'role.cycle'",
+    [villageId],
+  );
+  return rows;
 }
 
 /**

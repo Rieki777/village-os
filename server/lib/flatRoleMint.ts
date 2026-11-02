@@ -26,18 +26,16 @@
  * which SQL cannot compute. A village that sets a flat amount again afterwards
  * keeps it, because `runOnce` never replays.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
 import { currentCycleNumber } from "./gratitude-cycles";
 import { queueRuleChange, villageId } from "./economy";
+import { roleCycleRuleRows } from "../repos/duesPaid";
 
 /** Who queued it, on the rule's own `pending_by`. Nothing displays it. */
 export const FLAT_ROLE_MINT_OFF_BY = "platform:flat-role-mint-off-2026-11-01";
 
 export async function blankFlatRoleMint(pool: Pool, at: Date = new Date()): Promise<{ queued: string[] }> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM `mint_rules` WHERE `village_id` = ? AND `trigger` = 'role.cycle'",
-    [villageId()],
-  );
+  const rows = await roleCycleRuleRows(pool, villageId());
   const queued: string[] = [];
   for (const r of rows) {
     const pending = r.pending_from_cycle !== null && r.pending_from_cycle !== undefined;

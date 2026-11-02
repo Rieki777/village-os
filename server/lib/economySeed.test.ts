@@ -186,7 +186,7 @@ describe.skipIf(!configured)("the rules a village is seeded with", () => {
     // The seat rules carry no flat amount, so the role names its own pay, as
     // a valuation-model or Saberra package would.
     const u = await seatAMember("seed-seat-1");
-    await pool.query(
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "UPDATE `org_roles` SET `value_tokens` = ? WHERE `id` = ?",
       [JSON.stringify([{ token: CREDITS, amount: 25 }, { token: VILLAGE_VOICE, amount: 50 }]), `role-${u}`],
     );
