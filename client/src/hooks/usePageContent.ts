@@ -5,6 +5,8 @@ import { storyPageOffAlone } from "@/lib/brochure";
 import { pageSectionKey, type PageSpec, type PageVars, type ResolvedItem, type ResolvedPage } from "@shared/pageContent/types";
 import { resolvePage } from "@shared/pageContent/resolve";
 import { pageVarsFrom } from "@shared/pageContent/vars";
+import { withPathNames } from "@shared/pageContent/pathNames";
+import { servedPathsFrom } from "@/hooks/useVillagePaths";
 
 /**
  * The `{words}` a page field may use, from the village's own settings. The
@@ -67,8 +69,11 @@ export function usePageContent(spec: PageSpec): ResolvedPage | null {
       alive = false;
     };
   }, [spec]);
-  return useMemo(
-    () => (vars && stored ? withoutLinksToHiddenPages(spec, resolvePage(spec, stored.doc, vars), (href) => !storyPageOffAlone(config, href)) : null),
-    [spec, stored, vars, config],
-  );
+  // A box that names a path shows the village's path words (Admin, Paths &
+  // Stages) until the village writes its own (shared/pageContent/pathNames.ts).
+  return useMemo(() => {
+    if (!vars || !stored) return null;
+    const page = withPathNames(spec, stored.doc, resolvePage(spec, stored.doc, vars), servedPathsFrom(config));
+    return withoutLinksToHiddenPages(spec, page, (href) => !storyPageOffAlone(config, href));
+  }, [spec, stored, vars, config]);
 }

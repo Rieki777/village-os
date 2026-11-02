@@ -8,8 +8,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Pool } from "mysql2/promise";
 import { register } from "./villagePaths";
-import { loadVillagePaths, servedPathWords } from "../lib/villagePaths";
+import { loadVillagePaths, servedPathWords, storedVillagePaths, villagePathWords } from "../lib/villagePaths";
+import { keepVillagePathWords, PATH_WORDS_BEFORE_NEUTRAL } from "../lib/pathWordsKept";
 import { defaultVillagePathWords, PATH_LIMITS } from "../../shared/villagePaths";
+import { contentVersion } from "../../shared/pageContent/resolve";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
 
@@ -132,5 +134,57 @@ describe("saving them", () => {
     expect(out.status).toBe(403);
     expect(writes).toEqual([]);
     expect(servedPathWords().paths.find((p) => p.id === "steward")?.label).toBe("Village Steward");
+  });
+});
+
+describe("a save from an editor opened on other stored words", () => {
+  const GET = "GET /api/admin/village-paths";
+  const PUT = "PUT /api/admin/village-paths";
+  /** A request carrying a body and, when given, the fingerprint of the words its editor was opened on. */
+  const put = (body: unknown, was?: string) => ({ body, get: (h: string) => (h.toLowerCase() === "x-content-was" ? was : undefined) });
+  const KEPT = (PATH_WORDS_BEFORE_NEUTRAL as any).stages.initiate.description;
+  /** The editor opens, then boot's keep-path-words runOnce writes the kept words under it. */
+  async function openedBeforeTheFixup() {
+    const handlers = await wire(true);
+    const opened = makeRes();
+    await handlers.get(GET)!({}, opened.res);
+    const was = contentVersion(opened.out.body.stored);
+    expect(await keepVillagePathWords({ get: () => ({ "page-home": {} }) })).toBe(true);
+    const kept = storedVillagePaths();
+    expect(villagePathWords().stages.initiate.description).toBe(KEPT);
+    writes.length = 0;
+    return { handlers, was, kept };
+  }
+
+  it("CONTROL: an editor opened before the keep-path-words runOnce and saved after it is refused, and the kept words survive", async () => {
+    const { handlers, was, kept } = await openedBeforeTheFixup();
+    const { res, out } = makeRes();
+    await handlers.get(PUT)!(put({ paths: { steward: { label: "Keeper" } } }, was), res);
+    expect(out.status).toBe(409);
+    expect(out.body.error).toBe("These words changed since this page was opened. Reload it to see them, then make your change again.");
+    expect(writes).toEqual([]);
+    expect(storedVillagePaths()).toEqual(kept);
+    expect(villagePathWords().stages.initiate.description).toBe(KEPT);
+    expect(villagePathWords().paths.steward.label).toBe("Village Steward");
+  });
+
+  it("saves from an editor opened on the words still stored", async () => {
+    const { handlers, kept } = await openedBeforeTheFixup();
+    const reopened = makeRes();
+    await handlers.get(GET)!({}, reopened.res);
+    const { res, out } = makeRes();
+    const body = { ...kept, paths: { ...(kept as any).paths, steward: { ...(kept as any).paths.steward, label: "Keeper" } } };
+    await handlers.get(PUT)!(put(body, contentVersion(reopened.out.body.stored)), res);
+    expect(out.status).toBe(200);
+    expect(villagePathWords().paths.steward.label).toBe("Keeper");
+    expect(villagePathWords().stages.initiate.description).toBe(KEPT);
+  });
+
+  it("a save that names no words behaves as before: it is stored", async () => {
+    const { handlers } = await openedBeforeTheFixup();
+    const { res, out } = makeRes();
+    await handlers.get(PUT)!(put({ paths: { steward: { label: "Keeper" } } }), res);
+    expect(out.status).toBe(200);
+    expect(writes).toEqual([{ paths: { steward: { label: "Keeper" } } }]);
   });
 });

@@ -15,8 +15,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, RotateCcw, Save } from "lucide-react";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
+import { refreshGameConfig } from "@/lib/gameApi";
 import { GAME_CONFIG } from "@shared/gameConfig";
-import { charCount } from "@shared/pageContent/resolve";
+import { charCount, contentVersion } from "@shared/pageContent/resolve";
 import {
   LADDER_LIMITS,
   PATH_LIMITS,
@@ -33,8 +34,8 @@ type Group = "paths" | "stages" | "ladder";
 const DEFAULTS = defaultVillagePathWords();
 
 const PATH_BOXES: Array<{ field: PathField; label: string; shows: string; long?: boolean }> = [
-  { field: "label", label: "Name", shows: "Shows on the join form, on each member's profile, and in this path's emails." },
-  { field: "role", label: "Second line", shows: "Shows under the name in the Paths part of each member's profile." },
+  { field: "label", label: "Name", shows: "Shows on the join form, on each member's profile, and in this path's emails. The menu, the footer, the homepage card and the membership letter show it too, wherever you have not written your own words for this path in Pages." },
+  { field: "role", label: "Second line", shows: "Shows under the name in the Paths part of each member's profile, and under the name in the menu, on the homepage card and in the membership letter, wherever you have not written your own words there in Pages." },
   { field: "description", label: "Sentence", shows: "Shows under the name on the join form.", long: true },
 ];
 
@@ -159,7 +160,9 @@ export default function PathsStagesEditor({ password }: { password: string }) {
     try {
       const res = await fetch(`${API_BASE}/admin/village-paths`, {
         method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        // The words this editor was opened on: the server refuses the save
+        // (409, with a sentence asking for a reload) when they moved since.
+        headers: authHeaders(password, { "Content-Type": "application/json", "x-content-was": contentVersion(saved) }),
         body: JSON.stringify(draft),
       });
       const body = await res.json().catch(() => ({}));
@@ -168,6 +171,9 @@ export default function PathsStagesEditor({ password }: { password: string }) {
       setSaved(stored);
       setDraft(stored);
       setMessage({ kind: "ok", text: "Saved. New visitors see these words on their next page load." });
+      // The menu, the footer and any page open in this tab read the config
+      // once; read it again so a renamed path shows here now.
+      void refreshGameConfig();
     } catch (e) {
       setMessage({ kind: "error", text: e instanceof Error ? e.message : "Save failed. Nothing changed." });
     }

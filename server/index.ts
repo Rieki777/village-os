@@ -146,6 +146,7 @@ import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/r
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { keepFirstPlanIfUsed } from "./lib/commandCentrePlanDefault";
+import { keepVillagePathWords } from "./lib/pathWordsKept";
 import { keepGovernanceWords } from "./lib/governanceWordsKept";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
@@ -1878,6 +1879,8 @@ async function ensureDataFiles() {
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
   await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
+  // The ladder's default sentences went neutral: a village that already holds its page words keeps its path and stage words.
+  await runOnce("keep-path-words-2026-11-01", () => keepVillagePathWords(contentRepo).then(() => undefined));
   // How We Govern's defaults went neutral: a village that already holds its page words keeps this page's too.
   await runOnce("keep-governance-words-2026-11-01", () => keepGovernanceWords(contentRepo).then(() => undefined));
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
