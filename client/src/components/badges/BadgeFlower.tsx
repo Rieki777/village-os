@@ -24,7 +24,7 @@
  * kind already, which is the seam Rick's later idea (genres forming their own
  * sacred-geometry figures) plugs into.
  */
-import { useReducedMotion, motion } from "framer-motion";
+import { useReducedMotion, m } from "framer-motion";
 import { PORTRAIT_R, VIEW_R, capPetals, flowerLayout, petalPath } from "@shared/badgeFlower";
 
 export interface FlowerBadge {
@@ -67,7 +67,7 @@ function Petals({ badges, cap, className }: { badges: FlowerBadge[]; cap: number
     <span className={className}>
       <svg viewBox={`${-VIEW_R} ${-VIEW_R} ${2 * VIEW_R} ${2 * VIEW_R}`} className="h-full w-full overflow-visible" aria-hidden="true">
         {petals.map((p) => (
-          <motion.g
+          <m.g
             key={p.item.id}
             initial={still ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -83,7 +83,7 @@ function Petals({ badges, cap, className }: { badges: FlowerBadge[]; cap: number
             >
               <title>{p.item.name}</title>
             </path>
-          </motion.g>
+          </m.g>
         ))}
       </svg>
       {more > 0 ? (

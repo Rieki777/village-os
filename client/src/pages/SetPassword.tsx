@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { useState } from "react";
 import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { KeyRound, CheckCircle2 } from "lucide-react";
 import { TOKEN_KEY } from "@/lib/gameApi";
 import { writeStored } from "@/lib/safeStorage";
@@ -67,7 +67,7 @@ export default function SetPassword() {
     <Layout>
       <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[70vh]">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="max-w-md mx-auto bg-card border border-border rounded-2xl shadow-sm p-8"
@@ -144,7 +144,7 @@ export default function SetPassword() {
                 </form>
               </>
             )}
-          </motion.div>
+          </m.div>
         </div>
       </section>
     </Layout>

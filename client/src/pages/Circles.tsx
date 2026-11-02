@@ -1,6 +1,6 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { Users, ArrowRight, ChevronDown } from "lucide-react";
 import { iconFor } from "@/lib/circleIcons";
 import { useEffect, useState } from "react";
@@ -75,7 +75,7 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator
    */
   const hue = cssColourForCircle({ id: circle.id, color: circle.color ?? null });
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
@@ -118,7 +118,7 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator
 
       <AnimatePresence>
         {expanded && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -183,10 +183,10 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator
                 </p>
               </div>
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -332,7 +332,7 @@ export default function Circles() {
     <Layout>
       <section className="py-24 bg-background">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-16"
@@ -356,7 +356,7 @@ export default function Circles() {
               View Open Roles
               <ArrowRight className="w-4 h-4" />
             </Link>
-          </motion.div>
+          </m.div>
 
           <div className="max-w-4xl mx-auto">
             {/* Members-only people: the cards below still carry every circle
@@ -474,7 +474,7 @@ export default function Circles() {
             )}
           </div>
 
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -506,9 +506,9 @@ export default function Circles() {
                 <p>Regular reporting, check-ins, and feedback between circles keep the whole aligned and adaptable.</p>
               )}
             </div>
-          </motion.div>
+          </m.div>
 
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -520,7 +520,7 @@ export default function Circles() {
                 <ArrowRight className="w-4 h-4" />
               </a>
             </Link>
-          </motion.div>
+          </m.div>
         </div>
       </section>
     </Layout>

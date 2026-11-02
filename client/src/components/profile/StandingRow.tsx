@@ -32,7 +32,7 @@
  * MaturityLadder owns that logic and still renders it by default; this
  * component is handed the same sentence rather than deriving a second one.
  */
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 
 import Figure from "@/components/sheet/Figure";
 import { useTokenName } from "@/hooks/useTokenNames";
@@ -83,7 +83,7 @@ export default function StandingRow({ standing }: { standing: Standing }) {
   if (!worthShowing) return null;
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className="mt-6 flex flex-wrap gap-x-6 gap-y-4"
@@ -94,6 +94,6 @@ export default function StandingRow({ standing }: { standing: Standing }) {
       {n(powersOpen) !== null ? <Figure value={String(n(powersOpen))} label="Powers open" tone="living" /> : null}
       {n(pathsWalked) !== null ? <Figure value={String(n(pathsWalked))} label="Paths walked" /> : null}
       {n(questsDone) !== null ? <Figure value={String(n(questsDone))} label="Quests done" /> : null}
-    </motion.div>
+    </m.div>
   );
 }

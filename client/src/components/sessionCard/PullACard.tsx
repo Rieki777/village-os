@@ -23,7 +23,7 @@
  * without turning over.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Link } from "wouter";
 import { SYSTEM_LABELS, SIGNS, andList, moonPhaseName, type CardView, type CardsAnswer, type CardSystem } from "@shared/sessionCard";
 import type { SessionView } from "@shared/sessions";
@@ -314,7 +314,7 @@ export default function PullACard({ view, actions, className = "" }: { view: Ses
         {CARD_WORDS.title}
       </h3>
       {card && answer ? (
-        <motion.div
+        <m.div
           key={card.id}
           initial={reduced ? false : { rotateY: 90, opacity: 0 }}
           animate={{ rotateY: 0, opacity: 1 }}
@@ -322,7 +322,7 @@ export default function PullACard({ view, actions, className = "" }: { view: Ses
           style={{ transformPerspective: 900 }}
         >
           <CardFace card={card} answer={answer} view={view} actions={actions} busy={busy} onShare={(shared) => act(() => shareMyLine(view.id, card.id, shared))} />
-        </motion.div>
+        </m.div>
       ) : (
         <p className={HINT}>{CARD_WORDS.lede}</p>
       )}

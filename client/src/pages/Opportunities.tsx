@@ -10,7 +10,7 @@ import {
   type VentureIcon,
 } from "@shared/pageContent/opportunities";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { 
   Sparkles, 
   ArrowRight, 
@@ -112,7 +112,7 @@ export default function Opportunities() {
       <section className="py-24 bg-teal-light text-white">
         <div className="container">
           <div className="max-w-3xl">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
@@ -126,7 +126,7 @@ export default function Opportunities() {
               <p className={`text-xl text-white leading-relaxed break-words${hero ? "" : " invisible"}`}>
                 <Emphasized text={hero?.lede ?? "\u00a0"} />
               </p>
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>
@@ -141,7 +141,7 @@ export default function Opportunities() {
               const details = detailLines(opp.details);
               const range = investmentFor(opp.id);
               return (
-              <motion.div
+              <m.div
                 key={opp.id}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -181,7 +181,7 @@ export default function Opportunities() {
                   ))}
                 </ul>
                 )}
-              </motion.div>
+              </m.div>
               );
             })}
           </div>

@@ -38,7 +38,7 @@
  */
 import Layout from "@/components/Layout";
 import { useCallback, useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   Scale,
   SlidersHorizontal,
@@ -857,7 +857,7 @@ export default function GameMechanics() {
                 </p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {snapshot.constitution.map((law) => (
-                    <motion.div
+                    <m.div
                       key={law.title}
                       initial={{ opacity: 0, y: 8 }}
                       whileInView={{ opacity: 1, y: 0 }}
@@ -867,7 +867,7 @@ export default function GameMechanics() {
                       <h3 className="font-semibold text-stone-900 mb-1.5">{law.title}</h3>
                       <p className="text-sm text-stone-600 leading-relaxed">{law.plain}</p>
                       <p className="text-[11px] text-stone-500 mt-2 font-mono">{law.enforcedBy}</p>
-                    </motion.div>
+                    </m.div>
                   ))}
                 </div>
               </div>
