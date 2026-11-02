@@ -3306,6 +3306,9 @@ export async function runSettlement(
     for (const r of payable) {
       if (r.amount !== null) continue;
       if (quoted.some((q) => q.quote.lines.some((l) => l.token === r.tokenSlug))) continue;
+      // A role DID name it, and could not pay it: that seat's own reason is
+      // said below, and "no role names an amount" would be false.
+      if (quoted.some((q) => q.quote.unpayable.some((u) => u.token === r.tokenSlug))) continue;
       ruleProblems.push({
         token: r.tokenSlug,
         reason: "this rule reads its amount from the role, and no role anybody holds names an amount in this token",
@@ -4061,7 +4064,12 @@ export interface MintView {
    * decimals and 250000 at 4, for the same 25 the village promised. A client
    * could not have converted it if it had tried.
    */
-  settlementPreview: { seats: number; mints: Array<{ token: string; units: number; decimals: number }> };
+  settlementPreview: {
+    seats: number;
+    /** Members whose card dues for this cycle are paid so far: who a flat role amount pays (`payDuesDividend`). */
+    duesPayers: number;
+    mints: Array<{ token: string; units: number; decimals: number }>;
+  };
 }
 
 /** Everything the Mint panel shows, in one read. */
@@ -4069,11 +4077,18 @@ export interface MintView {
 function previewSeatMints(
   rules: readonly MintRule[],
   lists: Array<TokenAmount[] | null>,
+  dividendRules: readonly MintRule[] = [],
+  duesPayers = 0,
 ): Array<{ token: string; units: number; decimals: number }> {
   const payable = rules.filter((r) => r.tokenSlug !== HEARTS && !ruleCannotPay(r.tokenSlug));
+  const dividend = dividendRules.filter((r) => r.tokenSlug !== HEARTS && !ruleCannotPay(r.tokenSlug));
+  const quotes = [
+    ...lists.map((list) => quoteWorkPay(payable, list, "seat")),
+    ...Array.from({ length: duesPayers }, () => quoteWorkPay(dividend, null, "seat")),
+  ];
   const out: Array<{ token: string; units: number; decimals: number }> = [];
-  for (const list of lists) {
-    for (const line of quoteWorkPay(payable, list, "seat").lines) {
+  for (const quote of quotes) {
+    for (const line of quote.lines) {
       const row = out.find((m) => m.token === line.token);
       if (row) row.units += line.units;
       else out.push({ token: line.token, units: line.units, decimals: line.decimals });
@@ -4123,6 +4138,16 @@ export async function mintView(pool: Pool): Promise<MintView> {
   );
   const seatCount = seats.length;
   const cycleRules = await rulesFor(pool, "role.cycle");
+  // The same split `runSettlement` makes (Rye, 2026-11-01): a seat is priced
+  // with the flat amounts blank unless one is retiring, and a flat amount is
+  // previewed once for each member whose card dues for this cycle are paid.
+  const retiring = await retiringFlatRoleRuleIds(pool, villageId());
+  const seatRules = cycleRules.map((r) => (r.amount === null || retiring.has(r.id) ? r : { ...r, amount: null }));
+  const dividendRules = cycleRules.filter((r) => r.amount !== null && !retiring.has(r.id));
+  const window = cycleWindow(at);
+  const duesPayers = dividendRules.length
+    ? (await withoutFormerMembers(pool, (await cardDuesPayersBetween(pool, window.startsAt, window.endsAt)).filter((p) => !isTombstone({ email: p.email })))).length
+    : 0;
 
   return {
     cycleKey: key,
@@ -4193,11 +4218,12 @@ export async function mintView(pool: Pool): Promise<MintView> {
     // seats is three postings of 1 at 0 decimals and never `round(1.5)`.
     settlementPreview: {
       seats: seatCount,
+      duesPayers,
       // Seat by seat through `quoteWorkPay`, the function the settlement pays
       // from, so a role with its own list is previewed at its own amounts and
       // never also at the flat ones. Summed per token in minor units, which is
       // what the engine posts: one whole number of units per seat.
-      mints: previewSeatMints(cycleRules, seats.map((s) => readValueTokens(s.value_tokens))),
+      mints: previewSeatMints(seatRules, seats.map((s) => readValueTokens(s.value_tokens)), dividendRules, duesPayers),
     },
   };
 }

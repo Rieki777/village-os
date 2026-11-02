@@ -67,7 +67,7 @@ interface View {
   moon: VillageMoon;
   rules: Rule[];
   supply: Array<{ token: string; source: string; issued: number }>;
-  settlementPreview: { seats: number; mints: Array<{ token: string; units: number; decimals: number }> };
+  settlementPreview: { seats: number; duesPayers: number; mints: Array<{ token: string; units: number; decimals: number }> };
 }
 
 /**
@@ -615,7 +615,7 @@ export default function Mint() {
           {/* Settlement preview. */}
           <section className={`${card} mt-6`}>
             <h2 className={h2}>At the next moon</h2>
-            {view.settlementPreview.seats === 0 ? (
+            {view.settlementPreview.seats === 0 && view.settlementPreview.mints.length === 0 ? (
               <p className="text-gray-700">Nobody holds a role, so the settlement pays nothing.</p>
             ) : (
               <p className="text-gray-800">
@@ -626,6 +626,9 @@ export default function Mint() {
                       .map((m) => `${formatTokenAmount(m.units, m.decimals)} of ${m.token}`)
                       .join(", ")} minted.`
                   : "."}
+                {view.settlementPreview.duesPayers > 0
+                  ? ` ${view.settlementPreview.duesPayers} member${view.settlementPreview.duesPayers === 1 ? " has" : "s have"} paid dues by card this cycle so far.`
+                  : ""}
               </p>
             )}
             <p className="mt-3 text-sm text-gray-700">

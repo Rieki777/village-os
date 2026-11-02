@@ -288,7 +288,7 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       expect(Number(legs[0].n)).toBe(0);
     });
 
-    it("pays a role with its own list that list, and a role without one the flat amounts", async () => {
+    it("pays a role with its own list that list, and a role without one nothing flat", async () => {
       const own = await makeMember("wp-seat-own");
       const flat = await makeMember("wp-seat-flat");
       await role("wp-role-own", [{ token: CREDITS, amount: 100 }]);
@@ -301,11 +301,13 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
         flatCredits: await balanceOf(pool, memberAccount(flat), CREDITS),
       };
       const out = await runSettlement(pool);
-      expect(out.stewardsThanked).toBe(2);
+      // No flat role mint (Rye, 2026-11-01): a seat is paid its role's own list,
+      // and a flat amount pays dues-paying members instead (server/duesDividend.test.ts).
+      expect(out.stewardsThanked).toBe(1);
       expect((await balanceOf(pool, memberAccount(own), CREDITS)) - before.ownCredits).toBe(await unitsOf(CREDITS, 100));
       // The role's list did not name Voice, so it paid none: never the flat amount as well.
       expect((await balanceOf(pool, memberAccount(own), VILLAGE_VOICE)) - before.ownVoice).toBe(0);
-      expect((await balanceOf(pool, memberAccount(flat), CREDITS)) - before.flatCredits).toBe(await unitsOf(CREDITS, 25));
+      expect((await balanceOf(pool, memberAccount(flat), CREDITS)) - before.flatCredits, "a role naming nothing is paid nothing flat").toBe(0);
       // And again this cycle pays nobody twice.
       const again = await runSettlement(pool);
       expect(again.minted).toEqual([]);
@@ -363,10 +365,10 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       await seat("wp-s-p2", "wp-role-p2", await makeMember("wp-p2"));
       const view = await mintView(pool);
       expect(view.settlementPreview.seats).toBe(2);
+      // Each seat its role's own list, and nothing flat (Rye, 2026-11-01).
       const credits = view.settlementPreview.mints.find((m) => m.token === CREDITS);
-      expect(credits?.units).toBe((await unitsOf(CREDITS, 100)) + (await unitsOf(CREDITS, 25)));
-      const voice = view.settlementPreview.mints.find((m) => m.token === VILLAGE_VOICE);
-      expect(voice?.units).toBe(await unitsOf(VILLAGE_VOICE, 50));
+      expect(credits?.units).toBe(await unitsOf(CREDITS, 100));
+      expect(view.settlementPreview.mints.find((m) => m.token === VILLAGE_VOICE), "no role here names Voice").toBeUndefined();
     });
 
     it("prices a role's card the way it pays the seat", async () => {

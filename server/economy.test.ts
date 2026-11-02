@@ -1634,6 +1634,13 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // and this schema carries no foreign keys, so inventing a seat title
       // here would only be scenery.
       const u = await makeMember("econ-ceil-seat");
+      // The role names its own 25: a seat is paid its role's list, never a flat
+      // amount, since Rye ended the automatic role mint (2026-11-01).
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-ceiling-test','role-ceiling-test',?) " +
+          "ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: TOKEN, amount: 25 }])],
+      );
       await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) " +
           "VALUES ('seat-ceiling-test','role-ceiling-test','member',?,?,0) " +
@@ -1652,6 +1659,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(await posted(memberAccount(u))).toEqual({ rows: 1, units: 25 });
       await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-ceiling-seat'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await pool.query("DELETE FROM `org_role_assignments` WHERE `id` = 'seat-ceiling-test'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-ceiling-test'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     });
 
     it("leaves the shipped default alone: eleven quests at 25 under a ceiling of 250 issue 275", async () => {
@@ -2704,8 +2712,16 @@ describe.skipIf(!configured)("the village economy engine", () => {
       return rows.map((row) => Number(row.amount));
     }
 
-    /** A live seat for one member, and the rule that pays a seat 50 Voice a moon. */
+    /**
+     * A live seat for one member whose role names 50 Voice a moon, and the rule
+     * that lets a role pay Voice. The role names the figure because a seat is
+     * paid its role's own list, never a flat amount (Rye, 2026-11-01).
+     */
     async function seated(id: string): Promise<void> {
+      await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT IGNORE INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES (?,?,?)",
+        [`role-${id}`, `role-${id}`, JSON.stringify([{ token: VILLAGE_VOICE, amount: 50 }])],
+      );
       await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT IGNORE INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
           "VALUES ('decay-seat-rule', ?, 'role.cycle', ?, 50, 200, 'holder', 1)",
@@ -2869,9 +2885,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
         "INSERT IGNORE INTO `ledger_accounts` (`id`, `kind`, `user_id`, `label`, `faucet`) VALUES (?,?,?,?,0)",
         [memberAccount(id), "member", id, id],
       );
-      await dpool.query("INSERT IGNORE INTO `org_roles` (`id`, `name`, `is_example`) VALUES (?,?,0)", [
+      // The role names its 50 Voice: a seat is paid its role's own list, never a
+      // flat amount, since Rye ended the automatic role mint (2026-11-01).
+      await dpool.query("INSERT IGNORE INTO `org_roles` (`id`, `name`, `is_example`, `value_tokens`) VALUES (?,?,0,?)", [
         `role-${id}`,
         `Seat for ${id}`,
+        JSON.stringify([{ token: VILLAGE_VOICE, amount: 50 }]),
       ]);
       await dpool.query(
         "INSERT IGNORE INTO `org_role_assignments` " +
@@ -3417,6 +3436,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
     it("previews and settles the same number, and never a payout the run will not make", async () => {
       await atScale(0);
       await setSeatRule(25, 5);
+      // The role names its own 25: a seat is paid its role's list, never the
+      // flat amount (Rye, 2026-11-01). Taken off again at the end.
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-mx','role-mx',?) ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: TOKEN, amount: 25 }])],
+      );
       await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) " +
           "VALUES (?,'role-mx','member',?,?,0) ON DUPLICATE KEY UPDATE `user_id` = VALUES(`user_id`)",
@@ -3436,12 +3461,19 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const out = await runSettlement(pool);
       expect(out.minted.find((m) => m.token === TOKEN)).toEqual({ token: TOKEN, units: 25, decimals: 0 });
       expect(await heldBy("mx-seat-holder")).toBe(25);
+      await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-mx'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     });
 
     it("previews a seat rule at a ceiling of zero as paying, because it does", async () => {
       await atScale(0);
       await setSeatRule(25, 0);
+      // The role names its 25: a seat is paid its role's list (Rye, 2026-11-01).
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-mx','role-mx',?) ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: TOKEN, amount: 25 }])],
+      );
       const view = await mintView(pool);
+      await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-mx'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       expect(view.settlementPreview.mints.map((m) => m.token)).toContain(TOKEN);
       const card = view.rules.find((r) => r.id === SEAT_RULE);
       // No "paying nobody" badge over a rule that pays.
@@ -3455,7 +3487,18 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // rule, so the same path is walked with the reason that still can: an
       // amount smaller than the token can hold, at 0 decimals.
       await atScale(0);
-      await setSeatRule(0.4, 0);
+      await setSeatRule(null, 0);
+      // The ROLE names the amount too small to post: a seat is paid its role's
+      // list, never a flat amount (Rye, 2026-11-01), so that is where it lives now.
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-mx','role-mx',?) ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: TOKEN, amount: 0.4 }])],
+      );
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) " +
+          "VALUES (?,'role-mx','member',?,?,0) ON DUPLICATE KEY UPDATE `user_id` = VALUES(`user_id`)",
+        [SEAT, await makeMember("mx-seat-holder"), "mx-seat-holder"],
+      );
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       try {
         const out = await runSettlement(pool);
@@ -3470,6 +3513,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
         expect(logged).toHaveLength(1);
       } finally {
         errors.mockRestore();
+        await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-mx'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       }
     });
 
@@ -3487,8 +3531,18 @@ describe.skipIf(!configured)("the village economy engine", () => {
           "ON DUPLICATE KEY UPDATE `amount` = 50, `ceiling` = 200, `enabled` = 1, `effective_from_cycle` = 0",
         [villageId(), VILLAGE_VOICE],
       );
+      // The roles name their 50 Voice: a seat is paid its role's list, never a
+      // flat amount (Rye, 2026-11-01). Every seat here holds role-mx.
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-mx','role-mx',?) ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: VILLAGE_VOICE, amount: 50 }])],
+      );
       const view = await mintView(pool);
-      const seats = view.settlementPreview.seats;
+      await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-mx'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      const [[named]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) AS n FROM `org_role_assignments` WHERE `org_role_id` = 'role-mx' AND `active_holder_key` IS NOT NULL",
+      );
+      const seats = Number(named.n);
       const voice = view.settlementPreview.mints.find((m) => m.token === VILLAGE_VOICE);
       // The scale off the registry, never a literal here: the assertion holds
       // whatever a village has set this token to.
