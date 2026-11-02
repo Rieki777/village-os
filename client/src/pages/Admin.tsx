@@ -5456,7 +5456,7 @@ function ExitsAdminTab({ password }: { password: string }) {
   const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
   if (loading && !data) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  const openExit = state?.exit;
+  const openExit = state?.exit, formerIds = new Set((data?.exits ?? []).filter((e: any) => e.formerMember).map((e: any) => e.userId)); // E4: a former member is named so, and offered no second exit
 
   return (
     <div className="space-y-8">
@@ -5475,7 +5475,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         <h3 className="font-semibold text-gray-900 mb-3">A member's open state</h3>
         <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} className={`${inputCls} mb-3`}>
           <option value="">Pick a member…</option>
-          {players.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {players.map((p: any) => <option key={p.id} value={p.id}>{formerIds.has(p.id) ? `${p.name} (former member)` : p.name}</option>)}
         </select>
         {state && (
           <>
@@ -5512,7 +5512,7 @@ function ExitsAdminTab({ password }: { password: string }) {
               }}
                   />
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-              {!openExit ? (
+              {!openExit && state.formerMember ? (<span data-former-member="" className="text-sm text-gray-600 self-center">They already left the village and are a former member, so there is no departure to open. Admitting them again is the only way back.</span>) : !openExit ? (
                 <>
                   <button onClick={async () => { const d = await call("/admin/exits", { userId: selectedUser, kind: "voluntary" }); if (d) { toast.success("Exit opened"); load(); loadState(selectedUser); } }}
                     className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium">Open exit</button>
@@ -5548,7 +5548,7 @@ function ExitsAdminTab({ password }: { password: string }) {
           {(data?.exits ?? []).map((e: any) => (
             <div key={e.id}>
               <p className="text-sm text-gray-600">
-                <b className="text-gray-900">{e.userName}</b>: {e.kind}, {e.status}
+                <b className="text-gray-900">{e.userName}</b>: {e.kind}, {e.status}{e.formerMember ? ", former member" : ""}
                 <span className="text-xs text-gray-400"> · opened {new Date(e.openedAt).toLocaleDateString()}{e.resolvedAt ? `, closed ${new Date(e.resolvedAt).toLocaleDateString()}` : ""}</span>
                 {e.agreementRef && <span className="text-xs text-teal-deep"> · agreement: {e.agreementRef}</span>}
               </p>

@@ -64,6 +64,7 @@ export const CARD_WORDS = {
     hidden: "Your lines are hidden, so the card welcomes you by name and reads nothing of yours.",
     "no-maia": "Let {name} use your lines and the next card will read you too.",
     "left-out": "You asked to be left out of cards, so the card welcomes you by name.",
+    "not-asked": "Say yes to session cards in your Gene Keys controls and the next card will read you too.",
   },
 } as const;
 

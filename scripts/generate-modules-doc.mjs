@@ -303,6 +303,7 @@ const RENDERED = {
   variableKeys: "the Variable keys row",
   apiPrefixes: "the API prefixes row",
   guild: "the What a village plants row, by seed id from shared/guilds.ts",
+  setupNeeds: "the What it needs from you row: each need's title, kind and phase, from shared/setupNeeds.ts",
   hyphaLinks: "the Hypha links row",
   legalReview: "the Legal review row",
   hyphaOnly: "the Display only row",
@@ -522,6 +523,7 @@ export async function collectFacts(root = ROOT) {
     variableKeys: [...m.variableKeys],
     apiPrefixes: [...m.apiPrefixes],
     guild: m.guild ? [...m.guild] : null,
+    setupNeeds: (m.setupNeeds ?? []).map((n) => ({ id: n.id, kind: n.kind, title: n.title, phase: n.phase, need: n.need })),
     hyphaLinks: m.hyphaLinks ? [...m.hyphaLinks] : [],
     legalReview: !!m.legalReview,
     hyphaOnly: !!m.hyphaOnly,
@@ -648,6 +650,12 @@ function moduleSection(m, f) {
     ["Variable keys it owns", codeList(m.variableKeys, "none")],
     ["API prefixes", codeList(m.apiPrefixes, "none")],
     ["What a village plants", m.guild === null ? "not declared" : codeList(m.guild, "nothing beyond the platform's own layers")],
+    [
+      "What it needs from you",
+      m.setupNeeds.length
+        ? m.setupNeeds.map((n) => `${n.title} (${code(n.kind)}, ${code(n.phase)}${n.need === "required" ? "" : `, ${n.need}`})`).join("; ")
+        : "nothing beyond its seeds",
+    ],
     ["Contract doc", docCell(m)],
   ];
   if (m.requiredBy.length) {

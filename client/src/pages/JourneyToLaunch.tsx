@@ -40,6 +40,7 @@ import type { LaunchGroup } from "@shared/launchRequirements";
 import { villageMoonLabel, type VillageMoon } from "@shared/villageMoon";
 import { type StewardCandidate } from "@/components/governance/StewardSlatePicker";
 import StartTheGame, { type LaunchVote } from "@/components/launch/StartTheGame";
+import HandOverPowers from "@/components/governance/HandOverPowers";
 import { useBrochurePages } from "@/lib/brochure";
 
 /**
@@ -642,6 +643,8 @@ export default function JourneyToLaunch() {
         <div className="bg-stone-50 min-h-screen py-8">
           <div className="container max-w-3xl space-y-6">
             <TestRun />
+            {/* A steward who is not an admin hands powers over from here (Rye, 2026-11-01). */}
+            <HandOverPowers />
           </div>
         </div>
       </Layout>
@@ -836,6 +839,8 @@ export default function JourneyToLaunch() {
                 * to next season wants the same tool.
                 */}
               <TestRun />
+              {/* The launch selection before the Game starts, every hand-over after it (Rye, 2026-11-01). */}
+              <HandOverPowers />
               {!launched && (
                 <StartTheGame
                   status={status}

@@ -808,14 +808,26 @@ describe.skipIf(!DB_CONFIGURED)("resolving a departure: a former member, or a to
     const state = await call("GET", `/api/admin/players/${dee.id}/exit-state`);
     const cash = (state.json?.states ?? []).find((s: any) => s.domain === "cash");
     expect(cash, JSON.stringify(state.json)).toMatchObject({ count: 1, blocking: false });
-    expect(String(cash?.description)).toContain("is owed 25.00 USD in cash");
+    expect(String(cash?.description)).toContain("is owed $25.00 in cash");
 
     const resolved = await call("POST", `/api/admin/exits/${exitId}/resolve`, {});
     expect(resolved.status, `resolve: ${JSON.stringify(resolved.json)}`).toBe(200);
     expect(resolved.json?.outcome).toBe("former");
     expect(resolved.json?.held).toEqual([]);
     expect(resolved.json?.owed).toEqual([{ currency: "USD", amountMinor: 2500, rows: 1 }]);
-    expect(String((await exitRecord(exitId))?.resolution ?? "")).toContain("kept as a former member: is owed 25.00 USD in cash");
+    expect(String((await exitRecord(exitId))?.resolution ?? "")).toContain("kept as a former member: is owed $25.00 in cash");
+
+    // E4 of the e2e sweep: the desk showed Dee like anyone else, offered Open exit, and a second exit opened (200).
+    const after = await call("GET", `/api/admin/players/${dee.id}/exit-state`);
+    expect(after.json?.formerMember, "the desk must say they already left").toBe(true);
+    expect(after.json?.exit).toBeNull();
+    const desk = await call("GET", "/api/admin/exits");
+    expect((desk.json?.exits ?? []).find((e: any) => e.id === exitId)?.formerMember).toBe(true);
+    const again = await call("POST", "/api/admin/exits", { body: { userId: dee.id, kind: "voluntary" } });
+    expect(again.status, `a former member had a second exit opened: ${JSON.stringify(again.json)}`).toBe(409);
+    expect(String(again.json?.error)).toMatch(/former member/);
+    const own = await call("POST", "/api/profile/request-exit", { token: dee.token, body: { password: PASSWORD } });
+    expect(own.status, "nor may they open one themselves").not.toBe(200);
 
     // Still an account: a fresh sign-in, the delete screen's read, and the payment seen.
     const login = await call("POST", "/api/auth/login", { token: null, body: { email: dee.email, password: PASSWORD } });

@@ -505,5 +505,5 @@ export interface CardsAnswer {
   /** Whether this viewer may pull now: in the room and the session still open. */
   mayPull: boolean;
   /** Why the viewer is not read, when they are not: so the card can say how to be. */
-  notRead: "no-lines" | "hidden" | "no-maia" | "left-out" | null;
+  notRead: "no-lines" | "hidden" | "no-maia" | "left-out" | "not-asked" | null;
 }

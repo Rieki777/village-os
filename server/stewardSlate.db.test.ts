@@ -36,6 +36,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/t
 import { HANDOVER_SET } from "../shared/capabilities";
 import { loadVariables } from "./lib/variables";
 import { seatCatalystsAsStewards, STEWARD_ROLE_ID } from "./lib/stewardship";
+import { writeLaunchSelection } from "./lib/launchHandover";
 import { answerNomination, awaitingAnswer, insertSlate, slateFor } from "./repos/stewardSlate";
 import { launchSlateProblem } from "./lib/launchProposal";
 
@@ -253,7 +254,13 @@ describe.skipIf(!configured)("the slate a launch proposal names", () => {
     expect(String(rows[0].granted_by), "the village put them here").toBe(LAUNCH_BALLOT);
   });
 
-  it("moves ALL NINETEEN powers once one person holds the seat", async () => {
+  it("moves nothing the stewards did not select, and ALL NINETEEN once they select all of them", async () => {
+    // Rye, 2026-11-01: the selection may be none, some or all. Nothing was
+    // selected for the launches above, so nothing crossed.
+    expect(await crossed()).toEqual([]);
+    await writeLaunchSelection(pool, [...HANDOVER_SET], "cat-1");
+    const r = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
+    expect(r.holdingMoved).toBe(true);
     // Compared as whole sets: `toContain` on one key passes on a seat carrying
     // eighteen, and eighteen is the defect.
     expect(await crossed()).toEqual([...HANDOVER_SET].sort());

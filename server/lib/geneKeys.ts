@@ -23,7 +23,7 @@ import type { Pool } from "mysql2/promise";
 import { effectiveLifecycle } from "./modules";
 import { awardFirstTierNow } from "./badges";
 import {
-  BODIES, GENE_KEYS_CALC_VERSION, analyse, chartProblems, profileOf, viewOf, withArticle,
+  BODIES, GENE_KEYS_CALC_VERSION, analyse, chartProblems, inCardsBy, profileOf, viewOf, withArticle,
   type Chart, type Complement, type ComplementsAnswer, type GeneKeysView, type OwnGeneKeysView,
 } from "../../shared/geneKeys";
 import {
@@ -50,6 +50,8 @@ function ownViewOf(row: GeneKeysRow): OwnGeneKeysView | null {
     complement: row.complement,
     maiaPlain: row.maiaPlain,
     cardOut: row.cardOut,
+    cardIn: row.cardIn,
+    inCards: inCardsBy(row),
     source: row.source,
     stale: row.calcVersion < GENE_KEYS_CALC_VERSION,
   };
@@ -99,8 +101,8 @@ export function parseSettings(body: unknown): SettingsParse {
   if (b.maia !== undefined && typeof b.maia !== "boolean") return { ok: false, problem: "The guide's permission is a yes or a no." };
   if (b.complement !== undefined && typeof b.complement !== "boolean") return { ok: false, problem: "Who complements me is a yes or a no." };
   if (b.maiaPlain !== undefined && typeof b.maiaPlain !== "boolean") return { ok: false, problem: "Talking plainly is a yes or a no." };
-  if (b.cardOut !== undefined && typeof b.cardOut !== "boolean") return { ok: false, problem: "Session cards are a yes or a no." };
-  if (b.visibility === undefined && b.maia === undefined && b.complement === undefined && b.maiaPlain === undefined && b.cardOut === undefined) {
+  if (b.cards !== undefined && typeof b.cards !== "boolean") return { ok: false, problem: "Session cards are a yes or a no." };
+  if (b.visibility === undefined && b.maia === undefined && b.complement === undefined && b.maiaPlain === undefined && b.cards === undefined) {
     return { ok: false, problem: "Nothing to change." };
   }
   return {
@@ -109,7 +111,7 @@ export function parseSettings(body: unknown): SettingsParse {
     maia: b.maia as boolean | undefined,
     complement: b.complement as boolean | undefined,
     maiaPlain: b.maiaPlain as boolean | undefined,
-    cardOut: b.cardOut as boolean | undefined,
+    cards: b.cards as boolean | undefined,
   };
 }
 
@@ -293,12 +295,13 @@ export async function cardChartsFor(pool: Pool, ids: string[]): Promise<Map<stri
 }
 
 /** Why a card does not read this member, in the order they would fix it, or null when it does. */
-export async function cardStandingOf(pool: Pool, userId: string): Promise<"no-lines" | "hidden" | "no-maia" | "left-out" | null> {
+export async function cardStandingOf(pool: Pool, userId: string): Promise<"no-lines" | "hidden" | "no-maia" | "left-out" | "not-asked" | null> {
   const row = await readGeneKeys(pool, userId);
   if (!row || !chartOf(row)) return "no-lines";
   if (row.visibility !== "show") return "hidden";
   if (!row.maia) return "no-maia";
   if (row.cardOut) return "left-out";
+  if (!inCardsBy(row)) return "not-asked";
   return null;
 }
 

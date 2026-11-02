@@ -47,7 +47,7 @@ import GeneKeysSeal, { ABOVE_A_MODAL } from "./GeneKeysSeal";
 import CircleLines from "./CircleLines";
 import GeneKeysReveal from "./GeneKeysReveal";
 import { PARTS } from "@/pages/GeneKeys";
-import { GeneKeysLines } from "./GeneKeysLines";
+import { GeneKeysLines, GeneKeysOwnerControls } from "./GeneKeysLines";
 import GeneKeysComplements, { COMPLEMENTS_WORDS } from "./GeneKeysComplements";
 import CircleGlyph from "./CircleGlyph";
 import HolderGeneKeys from "./HolderGeneKeys";
@@ -217,7 +217,7 @@ describe("a circle's six lines", () => {
 });
 
 const own = (v: GeneKeysView, over: Partial<OwnGeneKeysView> = {}): OwnGeneKeysView => ({
-  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, cardOut: false, source: "exact", stale: false, ...over,
+  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, cardOut: false, cardIn: false, inCards: false, source: "exact", stale: false, ...over,
 });
 
 describe("Love and Prosperity on the lines card", () => {
@@ -314,6 +314,21 @@ describe("Maia speaks your type", () => {
       fetchSpy.mockRestore();
       setMyGeneKeys(null);
     }
+  });
+});
+
+describe("session cards are a yes of their own", () => {
+  it("asks for that yes even while the village has cards off, and saying it sends only that", async () => {
+    // The module mock answers off for session-card: the choice is still there to make.
+    inRouter(<GeneKeysOwnerControls mine={own(WREN, { maia: true })} />);
+    expect(screen.getByText(/has not turned session cards on/)).toBeTruthy();
+    expect(screen.getByText(/Session cards welcome you by name and leave your lines out/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Read me on session cards" }));
+    await waitFor(() => expect(api.changed).toContainEqual({ cards: true }));
+    cleanup();
+    inRouter(<GeneKeysOwnerControls mine={own(WREN, { maia: true, cardIn: true, inCards: true })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Leave me out of session cards" }));
+    await waitFor(() => expect(api.changed).toContainEqual({ cards: false }));
   });
 });
 
