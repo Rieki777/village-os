@@ -4,7 +4,7 @@ import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
-import { MotionConfig } from "framer-motion";
+import { LazyMotion, MotionConfig } from "framer-motion";
 import { lazy, Suspense, useEffect, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ScrollToTop from "./components/ScrollToTop";
@@ -130,6 +130,9 @@ function PageTitle() {
  */
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+
+// The animation engine, after the first page: see lib/motionFeatures.ts.
+const loadMotionFeatures = () => import("./lib/motionFeatures").then((mod) => mod.default);
 
 const lazyPage = (loader: () => Promise<{ default: React.ComponentType<any> }>) => lazy(loader);
 const VillageWelcome = lazyPage(() => import("./pages/VillageWelcome"));
@@ -425,6 +428,7 @@ function App() {
        * run `repeat: Infinity` and never stopped for anyone.
        */}
       <MotionConfig reducedMotion="user">
+      <LazyMotion features={loadMotionFeatures}>
         <AuthProvider>
         <ModuleProvider>
           <TooltipProvider>
@@ -440,6 +444,7 @@ function App() {
 
         </ModuleProvider>
         </AuthProvider>
+      </LazyMotion>
       </MotionConfig>
     </ThemeProvider>
   );

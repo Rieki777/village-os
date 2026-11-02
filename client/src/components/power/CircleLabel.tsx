@@ -18,7 +18,7 @@
  * the camera scales them, so a fixed width is a hairline on one circle and a
  * smear on the next.
  */
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { captionSize } from "./labelFit";
 import type { PowerSeat } from "./types";
 
@@ -92,7 +92,7 @@ export default function CircleLabel({
         );
       })()}
       {(show || hovered) && !drop && (
-        <motion.text
+        <m.text
           animate={{ x, y: labelTop }}
           initial={false}
           transition={morph}
@@ -126,7 +126,7 @@ export default function CircleLabel({
               {ln}
             </tspan>
           ))}
-        </motion.text>
+        </m.text>
       )}
 
       {forming && show && !drop && (

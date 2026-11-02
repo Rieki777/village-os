@@ -36,7 +36,7 @@
  * nothing that would show a stranger a term they cannot read.
  */
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { motion, useAnimate } from "framer-motion";
+import { m, useAnimate } from "framer-motion";
 import { SHEET_WORDS, seatSheet, type SeatInput, type SheetContext } from "@shared/roleSheet";
 import { useGlossGroup } from "@/components/sheet/GlossChip";
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
@@ -177,7 +177,7 @@ export default function SeatTradingCard({
             <div className="relative z-[1] flex flex-col gap-3 @min-[680px]:grid @min-[680px]:grid-cols-[260px_minmax(0,1fr)] @min-[680px]:items-start @min-[680px]:gap-6">
               {/* The profile's fade and rise, once: a new seat in the same card
                   does not re-run it. */}
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
@@ -195,7 +195,7 @@ export default function SeatTradingCard({
                   onFlip={() => void turn("back")}
                   flipRef={flipRef}
                 />
-              </motion.div>
+              </m.div>
               <div className={stacked ? "flex flex-col gap-4" : BACK_COLUMN}>
                 <SeatCharter
                   view={view}

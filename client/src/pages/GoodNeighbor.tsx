@@ -6,7 +6,7 @@ import { Emphasized } from "@/components/PageText";
 import { GOOD_NEIGHBOR_PAGE } from "@shared/pageContent/goodNeighbor";
 import { GOOD_NEIGHBOR_WORD } from "@shared/pageContent/goodNeighborName";
 import type { ResolvedItem } from "@shared/pageContent/types";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Link } from "wouter";
 import { useMemo } from "react";
 import {
@@ -81,32 +81,32 @@ export default function GoodNeighbor() {
         <div className="container relative z-10">
           <div className="max-w-3xl mx-auto text-center">
             {hero.fields.eyebrow && (
-              <motion.span
+              <m.span
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="inline-block px-4 py-1.5 bg-primary/10 rounded-full text-primary text-sm font-medium mb-6"
               >
                 {hero.fields.eyebrow}
-              </motion.span>
+              </m.span>
             )}
-            <motion.h1
+            <m.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
               className={`font-display ${nameSize(hero.fields.name)} font-bold text-foreground mb-6 break-words`}
             >
               {hero.fields.name}
-            </motion.h1>
-            <motion.p
+            </m.h1>
+            <m.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
               className="text-xl text-foreground leading-relaxed mb-8"
             >
               <Emphasized text={hero.fields.intro} />
-            </motion.p>
+            </m.p>
             {hero.fields.quote && (
-              <motion.p
+              <m.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
@@ -119,7 +119,7 @@ export default function GoodNeighbor() {
                     <span className="not-italic text-sm">- {hero.fields.quoteBy}</span>
                   </>
                 )}
-              </motion.p>
+              </m.p>
             )}
           </div>
         </div>
@@ -166,7 +166,7 @@ export default function GoodNeighbor() {
                 const look = CRITERION_LOOKS[index % CRITERION_LOOKS.length];
                 const practices = numberedLines(criterion, "practice");
                 return (
-                  <motion.div
+                  <m.div
                     key={`${index}-${criterion.title}`}
                     initial={{ opacity: 0, y: 24 }}
                     whileInView={{ opacity: 1, y: 0 }}
@@ -213,7 +213,7 @@ export default function GoodNeighbor() {
                         </div>
                       )}
                     </div>
-                  </motion.div>
+                  </m.div>
                 );
               })}
             </div>
@@ -268,7 +268,7 @@ export default function GoodNeighbor() {
               </p>
               <div className="space-y-4">
                 {process.lists.steps.map((item, i) => (
-                  <motion.div
+                  <m.div
                     key={`${i}-${item.title}`}
                     initial={{ opacity: 0, x: -16 }}
                     whileInView={{ opacity: 1, x: 0 }}
@@ -284,7 +284,7 @@ export default function GoodNeighbor() {
                         <Emphasized text={item.body} />
                       </p>
                     </div>
-                  </motion.div>
+                  </m.div>
                 ))}
               </div>
             </div>
@@ -321,7 +321,7 @@ export default function GoodNeighbor() {
         <section className="py-24 bg-background">
           <div className="container">
             <div className="max-w-3xl mx-auto text-center">
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+              <m.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
                 <h2 className="font-display text-4xl font-bold text-foreground mb-6 break-words">
                   {closing.fields.heading}
                 </h2>
@@ -353,7 +353,7 @@ export default function GoodNeighbor() {
                     </a>
                   )}
                 </div>
-              </motion.div>
+              </m.div>
             </div>
           </div>
         </section>
