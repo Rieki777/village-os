@@ -1,0 +1,37 @@
+{
+  "hero": {
+    "headline": "Our Sociocratic Circles",
+    "intro": "Circles are how the village thinks: each one tends its own domain the way a tree tends its own ground, and double links weave them into one canopy.",
+    "firstTerm": "domain",
+    "firstTip": "A domain is the ground a circle decides on without asking anyone above it. Real authority lives inside it.",
+    "secondTerm": "double links",
+    "secondTip": "Two people belong to both a circle and the circle above it, one chosen by each. News travels both ways, so no circle drifts alone.",
+    "rolesLabel": "View Open Roles"
+  },
+  "today": {
+    "heading": "The Circles Today",
+    "intro": "How the team actually organizes right now, while the village is being built."
+  },
+  "future": {
+    "heading": "As the Village Matures",
+    "intro": "As residents arrive, today's team circles grow into resident-led councils like these: domain-specific circles connected through elected representatives."
+  },
+  "card": {
+    "label": "How it works:",
+    "linked": "Each circle has autonomy within its domain and budget, uses consent-based decision-making, and is double-linked to the {coordinator} so information flows both ways.",
+    "flat": "Each circle has autonomy within its domain and budget and uses consent-based decision-making."
+  },
+  "together": {
+    "heading": "How Circles Work Together",
+    "first": "Each circle has **a domain, a budget, and the authority** to make decisions within that domain.",
+    "acrossLinked": "When decisions affect multiple circles, the **{coordinator}**, the four leads and circle representatives, coordinates.",
+    "acrossFlat": "When decisions affect multiple circles, the circles involved decide together.",
+    "after": "The Finance & Business Circle provides budget stewardship, oversight, and alignment across all circles.",
+    "second": "Circles use **consent-based decision-making**: a proposal moves forward unless someone has a reasoned objection that it would cause harm or prevent the circle from achieving its aim. This creates space for wisdom and prevents tyranny of the majority.",
+    "thirdLinked": "Every circle is **double-linked** to the {coordinator} by two people, so information flows both ways. Regular reporting, check-ins, and feedback keep the whole aligned and adaptable.",
+    "thirdFlat": "Regular reporting, check-ins, and feedback between circles keep the whole aligned and adaptable."
+  },
+  "closing": {
+    "label": "Learn About Roles & Leadership"
+  }
+}
