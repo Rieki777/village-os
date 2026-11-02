@@ -84,9 +84,9 @@ import { allocatedWeight } from "../repos/governanceWeightRows";
 import { elementRowsForBallot, upsertElementRow } from "../repos/governanceElementLedger";
 import { insertMechanicsChange } from "../repos/mechanicsChanges";
 import { markProposalApplied } from "../repos/mechanicsProposals";
-import { VARIABLES_BY_KEY, applyTimingOf, ringOf, validateVariable } from "../../shared/gameVariables";
+import { VARIABLES_BY_KEY, applyTimingOf, validateVariable } from "../../shared/gameVariables";
 import { isMintRuleKey } from "../../shared/mintRuleKeys";
-import { asChangeItem, type ChangeInput, type ChangeItem } from "./mechanics";
+import { WEIGHING_KEYS, asChangeItem, type ChangeInput, type ChangeItem } from "./mechanics";
 import { kindOfItem, kindOfSet, type GovernanceKind } from "../../shared/governanceKinds";
 import { keyIsVetoLocked } from "./stewardship";
 import { setVariable, variableSetRefusal, type SetResult } from "./variables";
@@ -204,7 +204,8 @@ export async function validateElements(
     if (item.kind === "dial") {
       const def = VARIABLES_BY_KEY[item.key];
       if (!def) return refuse(index, item.kind, "this dial no longer exists in the registry");
-      if (ringOf(def) !== "open") return refuse(index, item.kind, "this dial is no longer community-governable");
+      // Who adopts a founder-held dial is decided at the doors (./founderDials.ts); the weighing lands only as a mode switch.
+      if (WEIGHING_KEYS.has(item.key)) return refuse(index, item.kind, "how votes are counted lands only as a mode switch");
       // The registry's own bounds, here and not first in phase 2, where a
       // refusal lands after the elements before it were already written.
       const invalid = validateVariable(def, String(item.to).trim());

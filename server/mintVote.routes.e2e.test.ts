@@ -307,6 +307,38 @@ describe.skipIf(!DB_CONFIGURED)("the village votes on what it mints", () => {
     expect(Number(log[0]?.n), "a refused give writes nothing and spends nothing").toBe(0);
   });
 
+  it("BEFORE THE GAME STARTS a founder-held dial is proposed freely, kept off the vote, and adopted by a founder", async () => {
+    // Rye, 2026-09-25: anyone may propose any dial. Adoption follows the power: the founders hold it before the start.
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Loosen the sign-up guard for the open day",
+        rationale: "A hundred people sign up from one room on the open day, and the guard turns most of them away.",
+        changes: [{ key: "abuse.register_per_ip_hourly", to: "40" }],
+      },
+    });
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const id = String(made.json?.id);
+    const toVote = await call("POST", `/api/governance/mechanics/${id}/open-ballot`);
+    expect(toVote.status, JSON.stringify(toVote.json)).toBe(409);
+    expect(String(toVote.json?.error)).toContain("a founder adopts this proposal");
+    // A set may not mix founder-held dials with ones the village votes on before the start.
+    const mixed = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Two things at once",
+        rationale: "One of these the founders adopt and the other the village votes on.",
+        changes: [{ key: "abuse.register_per_ip_hourly", to: "45" }, { key: "gratitude.base_budget", to: "130" }],
+      },
+    });
+    expect(mixed.status, JSON.stringify(mixed.json)).toBe(400);
+    expect(JSON.stringify(mixed.json)).toContain("propose them separately");
+    // The founder adopts it, through the door that lands a change before the start.
+    const adopted = await call("POST", `/api/admin/mechanics/proposals/${id}/apply`);
+    expect(adopted.status, JSON.stringify(adopted.json)).toBe(200);
+    expect(adopted.json?.applied).toEqual(["abuse.register_per_ip_hourly"]);
+    const after = (await call("GET", "/api/game/mechanics/proposals")).json as any[];
+    expect(after.find((p) => p.id === id)?.status).toBe("applied");
+  });
+
   it("a proposal can NAME a minting rule, which is the thing no ballot could do", async () => {
     await startTheGame();
     // A quorum the ordinary vote would run at. The floor below is what proves
@@ -422,6 +454,24 @@ describe.skipIf(!DB_CONFIGURED)("the village votes on what it mints", () => {
     // Called off, so it cannot interfere with the minting vote's close below.
     await call("POST", `/api/governance/ballots/${String(opened.json?.ballot?.id)}/withdraw`, {
       body: { reason: "Opened only to show that an ordinary dial keeps the village's own quorum." },
+    });
+  });
+
+  it("AFTER THE START a founder-held dial goes to the vote like any other: governance adopts it", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Ease the investor documents guard",
+        rationale: "After the start the village decides its own guards.",
+        changes: [{ key: "abuse.investor_docs_per_ip_hourly", to: "52" }],
+      },
+    });
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${String(made.json?.id)}/open-ballot`);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    // And the founder's own hand no longer lands it: the apply door is closed after the start.
+    expect((await call("POST", `/api/admin/mechanics/proposals/${String(made.json?.id)}/apply`)).status).toBe(409);
+    await call("POST", `/api/governance/ballots/${String(opened.json?.ballot?.id)}/withdraw`, {
+      body: { reason: "Opened only to show that a founder-held dial goes to the vote after the start." },
     });
   });
 

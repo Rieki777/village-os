@@ -29,12 +29,12 @@ export const KEPT_PRIVATE = "(kept private)";
  * `GET /api/game/mechanics/proposals` serves each change's `from`, `to`, their
  * display forms and `currentValue`, the dial's LIVE value read at request
  * time; `/proposals/:id/document` and `/handoff` print the stored `from` and
- * `to` into markdown. None of the three asked this question. Today the one
- * flagged dial cannot reach them, because `validateChangeSet` refuses every
- * founder-held dial and `tokens.base_rpc_url` is one, so this is the second
- * lock and not the first: it holds the day a dial is flagged without being
- * founder-held, and for a credential-SHAPED value on an open dial, which is
- * the case `looksLikeCredential` exists for.
+ * `to` into markdown. None of the three asked this question. A founder-held
+ * dial takes proposals (Rye, 2026-09-25), and `tokens.base_rpc_url`, the one
+ * flagged dial, is a sealed integration secret now and refused as a change,
+ * so this is the lock for a credential-SHAPED value on any proposable dial
+ * (a key riding in `governance.hub_url`, say), which is the case
+ * `looksLikeCredential` exists for, and for any dial flagged in future.
  */
 export function changeIsWithheld(key: string, ...values: unknown[]): boolean {
   const def = VARIABLES_BY_KEY[key];
