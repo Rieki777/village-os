@@ -125,6 +125,21 @@ describe("pull a card", () => {
     expect(screen.getByText("Bo's own words.")).toBeTruthy();
   });
 
+  it("tells somebody who said yes after this card was pulled that the next one reads them, and sends them nowhere", async () => {
+    // Read now (notRead null), but not on this card: it was pulled before their yes.
+    api.read.mockResolvedValue(answer([cardOf({ mine: null })], { notRead: null }));
+    show(<PullACard view={makeView()} />);
+    expect(await screen.findByText(CARD_WORDS.readNext)).toBeTruthy();
+    expect(screen.queryByText(/Find your Gene Keys lines/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Your Gene Keys" })).toBeNull();
+  });
+
+  it("tells somebody with no lines yet that they can find their Gene Keys, Human Design and astrology", async () => {
+    api.read.mockResolvedValue(answer([cardOf({ mine: null })], { notRead: "no-lines" }));
+    show(<PullACard view={makeView()} />);
+    expect(await screen.findByText(/Find your Gene Keys, Human Design and astrology/)).toBeTruthy();
+  });
+
   it("lets the facilitator park an item when the card counsels holding a tension", async () => {
     const hold = { kind: "hold-conflict" as const, system: "western" as const, words: "The Moon is void of course." };
     api.read.mockResolvedValue(answer([cardOf({ suggestions: [hold] })]));

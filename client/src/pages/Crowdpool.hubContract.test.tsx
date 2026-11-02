@@ -30,7 +30,7 @@ vi.mock("@/modules/ModuleProvider", () => ({
   useModule: () => ({ id: "crowdpool", lifecycle: "public" }),
   useModules: () => ({ loaded: true }),
 }));
-vi.mock("@/lib/gameApi", () => ({ authToken: () => null }));
+vi.mock("@/lib/gameApi", () => ({ authToken: () => null, useGameConfig: () => null }));
 
 import Crowdpool from "./Crowdpool";
 

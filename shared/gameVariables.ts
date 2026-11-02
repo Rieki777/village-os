@@ -86,10 +86,12 @@ export function normaliseLongText(raw: string): string {
  *               domain of the Hypha proposal loop. The platform's min/max
  *               BOUNDS stay Ring 0: governance moves a value within its
  *               bounds, never the bounds.
- *   "founder" — Ring 1: tunable, but by the founder/admin only — legal
- *               posture, infrastructure, privacy windows, abuse guards.
- *               Shown on the public page (everything is visible) but marked
- *               founder-held and never proposable.
+ *   "founder" — Ring 1: held by the founders — legal posture,
+ *               infrastructure, privacy windows, abuse guards. Shown on the
+ *               public page (everything is visible) and marked founder-held.
+ *               Anyone may PROPOSE a change to one (Rye, 2026-09-25); before
+ *               the start a founder adopts it, and after it the village votes
+ *               (server/lib/founderDials.ts).
  *
  * The ring on a def is the PLATFORM CEILING. A founder can close an "open"
  * variable to their community; nothing can open a "founder" one to it.

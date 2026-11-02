@@ -38,7 +38,7 @@
  */
 import Layout from "@/components/Layout";
 import { useCallback, useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   Scale,
   SlidersHorizontal,
@@ -53,6 +53,7 @@ import {
 import { Link } from "wouter";
 import { useCatalyst, useGameConfig, authToken } from "@/lib/gameApi";
 import { ballotReturn } from "./gameMechanicsBallotCopy";
+import { APPLYABLE, WEIGHING_KEYS, founderAdoptable } from "./gameMechanicsAdoption";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFocusTarget } from "@/lib/useFocusTarget";
 import { dialFromSearch } from "@shared/comms/memberView";
@@ -152,7 +153,7 @@ interface ProposalChange {
 
 /** Every value `mechanics_proposals.status` can hold (0089 widened the enum to
  *  ten and this list carried eight, and 0172 added an eleventh; see STATUS_COPY). */
-type ProposalStatus =
+export type ProposalStatus =
   | "draft"
   | "open"
   | "withdrawn"
@@ -220,26 +221,6 @@ export const STATUS_COPY: Record<ProposalStatus, { label: string; cls: string }>
   vetoed: { label: "stopped by a steward, back with the proposer", cls: "bg-amber-50 text-amber-700" }, // 0172
   applied: { label: "applied", cls: "bg-teal-deep/10 text-teal-deep" },
 };
-
-/**
- * The statuses an admin may apply from, mirroring the ONE apply route
- * (`POST /api/admin/mechanics/proposals/:id/apply`, server/index.ts).
- *
- * `passed_onsite` shipped in that route's accepted set and NOT in this page's
- * button, so a proposal the village carried at its own vote and the brake was
- * holding had no way to be applied from the only surface that shows it. The
- * route's own comment already said a ballot-passed proposal is applied by the
- * same human hand as a Hypha-verified one; the button disagreed in silence.
- * gameMechanicsStates.test.ts reads the route's set out of the server source
- * and holds this to it, the same way it reads the status enum off the
- * migration instead of trusting a union kept by hand.
- */
-export const APPLYABLE: ReadonlySet<ProposalStatus> = new Set<ProposalStatus>([
-  "to_hypha",
-  "passed_claimed",
-  "passed_verified",
-  "passed_onsite",
-]);
 
 /**
  * The state chip, never undefined. `STATUS_COPY[p.status].cls` used to be read
@@ -857,7 +838,7 @@ export default function GameMechanics() {
                 </p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {snapshot.constitution.map((law) => (
-                    <motion.div
+                    <m.div
                       key={law.title}
                       initial={{ opacity: 0, y: 8 }}
                       whileInView={{ opacity: 1, y: 0 }}
@@ -867,7 +848,7 @@ export default function GameMechanics() {
                       <h3 className="font-semibold text-stone-900 mb-1.5">{law.title}</h3>
                       <p className="text-sm text-stone-600 leading-relaxed">{law.plain}</p>
                       <p className="text-[11px] text-stone-500 mt-2 font-mono">{law.enforcedBy}</p>
-                    </motion.div>
+                    </m.div>
                   ))}
                 </div>
               </div>
@@ -977,7 +958,7 @@ export default function GameMechanics() {
                           <ul className="divide-y divide-stone-100">
                             {vars.map((v) => {
                               const stagedValue = staged[v.key];
-                              const editable = !!user && v.ring === "open" && !standing?.denied;
+                              const editable = !!user && !WEIGHING_KEYS.has(v.key) && !standing?.denied;
                               return (
                                 <li key={v.key} className={`px-4 py-3 ${stagedValue !== undefined ? "bg-amber-50/40" : ""}`}>
                                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -1291,6 +1272,18 @@ export default function GameMechanics() {
                               className="text-sm bg-amber text-foreground rounded-lg px-3 py-1.5 font-medium"
                             >
                               {p.status === "passed_onsite" ? "Apply this" : "Verify & apply"}
+                            </button>
+                          )}
+                          {isAdminViewer && founderAdoptable(p, (key) => allDials.find((v) => v.key === key)?.ring) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Adopt "${p.title}"? These dials are founder-held, so before the Game starts a founder adopts them. Every change lands on the public ledger under this proposal's reference.`))
+                                  act(`/api/admin/mechanics/proposals/${p.id}/apply`);
+                              }}
+                              className="text-sm bg-amber text-foreground rounded-lg px-3 py-1.5 font-medium"
+                            >
+                              Adopt this
                             </button>
                           )}
                           {user && (p.status === "open" || p.status === "draft") && (

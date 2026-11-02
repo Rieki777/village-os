@@ -53,6 +53,7 @@
  * moons, a different argument.
  */
 import { GAME_CONFIG } from "../../shared/gameConfig";
+import { villageStageReader } from "./villagePaths";
 import { activeClock, boundsForNumber, formatCycleId } from "./gratitude-cycles";
 import type { VillageMoon } from "../../shared/villageMoon";
 import { villageMoonForCycle } from "./villageMoon";
@@ -336,7 +337,10 @@ function allowanceTable(feedOff: boolean): DryRunAllowance[] {
   const heart = numberVar("feed.heart_amount");
   const fullSends = Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle")));
   const tapCap = numberVar("feed.max_hearts_per_recipient_per_cycle");
-  return GAME_CONFIG.stages.map((s) => {
+  // Each rung named the way this village names it (Admin, Paths & Stages).
+  const words = villageStageReader();
+  return GAME_CONFIG.stages.map((config) => {
+    const s = { ...config, name: words(config.id).name };
     const multiplier = Math.max(0, numberVar(`progression.multiplier.${s.id}`));
     const allowance = Math.round(base * multiplier);
     const cap = shareCapFor(allowance);

@@ -23,6 +23,9 @@ import {
   resolvePageRaw,
 } from "@shared/pageContent/resolve";
 import { pageSectionKey, type FieldSpec, type ListSpec, type PageSpec, type SectionSpec } from "@shared/pageContent/types";
+import { BrochureSwitch, PageSwitch, useBrochureSwitches } from "./PageSwitches";
+import VisitProgramEditor from "./VisitProgramEditor";
+import { VISIT_PAGE } from "@shared/pageContent/visit";
 
 type Doc = Record<string, any>;
 
@@ -266,66 +269,6 @@ function SectionEditor({
 }
 
 /**
- * Whether visitors can see this village's story pages at all (the Home page,
- * the journeys, Team, Visit and the rest in shared/brochure.ts). It took a
- * database statement and a restart until 2026-10-22; it applies on the next
- * page load now.
- */
-function BrochureSwitch({ password }: { password: string }) {
-  const [on, setOn] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    let alive = true;
-    fetch(`${API_BASE}/admin/brochure-pages`, { headers: authHeaders(password) })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive && d && typeof d.enabled === "boolean") setOn(d.enabled); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [password]);
-  const flip = async () => {
-    if (on === null) return;
-    setBusy(true);
-    setError("");
-    try {
-      const res = await fetch(`${API_BASE}/admin/brochure-pages`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ enabled: !on }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(refusal(d, "That did not save."));
-      setOn(Boolean(d.enabled));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "That did not save.");
-    }
-    setBusy(false);
-  };
-  if (on === null) return null;
-  return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border border-gray-200 rounded-xl p-4 bg-card">
-      <div className="min-w-0 flex-1 basis-64">
-        <p className="text-sm font-bold text-foreground">{on ? "Your story pages are showing" : "Your story pages are hidden"}</p>
-        <p className="text-[11px] text-muted-foreground">
-          {on
-            ? "Visitors see your homepage, journeys, team, visit and the other pages edited here."
-            : "Visitors see the simple welcome page instead, and these pages answer not found. Turn them on when their words are yours."}
-        </p>
-        {error && <p role="alert" className="text-[11px] text-red-700 mt-1">{error}</p>}
-      </div>
-      <button
-        type="button"
-        onClick={flip}
-        disabled={busy}
-        className="shrink-0 px-3 py-1.5 text-xs font-medium border border-teal-deep text-teal-deep rounded-lg hover:bg-teal-deep/5 disabled:opacity-50"
-      >
-        {busy ? "Saving..." : on ? "Hide them" : "Show them"}
-      </button>
-    </div>
-  );
-}
-
-/**
  * What a blank box means, decided once, at save: a required box left blank
  * goes back to following the default, an optional one is a real "none".
  */
@@ -354,6 +297,10 @@ export default function PagesEditor({ password }: { password: string }) {
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const switches = useBrochureSwitches(password);
+  // The Visit page's program is its own document with its own Save, and the
+  // picker waits for it the same way it waits for the page's words.
+  const [programDirty, setProgramDirty] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -425,7 +372,7 @@ export default function PagesEditor({ password }: { password: string }) {
         </div>
       </div>
 
-      <BrochureSwitch password={password} />
+      <BrochureSwitch switches={switches} />
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <label htmlFor="pages-picker" className="text-xs font-medium text-foreground">Page</label>
@@ -433,8 +380,8 @@ export default function PagesEditor({ password }: { password: string }) {
           id="pages-picker"
           value={spec.id}
           onChange={(e) => setPageId(e.target.value)}
-          disabled={dirty}
-          title={dirty ? "Save or reload before switching pages" : undefined}
+          disabled={dirty || programDirty}
+          title={dirty || programDirty ? "Save or reload before switching pages" : undefined}
           className="px-3 py-2 text-sm border border-gray-200 rounded-lg"
         >
           {PAGE_SPECS.map((p) => (
@@ -445,6 +392,7 @@ export default function PagesEditor({ password }: { password: string }) {
           Open this page <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
         </a>
       </div>
+      <PageSwitch path={spec.path} switches={switches} />
 
       {message && (
         <p role="status" className={`mb-4 text-sm ${message.kind === "ok" ? "text-teal-deep" : "text-red-700"}`}>{message.text}</p>
@@ -474,6 +422,7 @@ export default function PagesEditor({ password }: { password: string }) {
           {spec.sections.map((section) => (
             <SectionEditor key={section.id} spec={spec} section={section} draft={draft} setDraft={setDraft} />
           ))}
+          {spec.id === VISIT_PAGE.id && <VisitProgramEditor password={password} onDirtyChange={setProgramDirty} />}
           <div className="border border-gray-200 rounded-xl p-4 bg-muted/20">
             <h3 className="text-sm font-bold text-foreground">Keep the words you see now</h3>
             <p className="text-[11px] text-muted-foreground mt-1">

@@ -85,9 +85,18 @@ describe("change-set validation", () => {
     ]);
   });
 
-  it("refuses founder-held dials — Ring 1 is not proposable", async () => {
-    const { problems } = await validateChangeSet(noPool, [{ key: "abuse.register_per_ip_hourly", to: "50" }], effective, 0);
-    expect(problems[0].problem).toContain("founder-held");
+  it("takes a proposal on a founder-held dial (Rye, 2026-09-25: anyone may propose any dial)", async () => {
+    const { problems, normalized } = await validateChangeSet(noPool, [{ key: "abuse.register_per_ip_hourly", to: "50" }], effective, 0);
+    expect(problems).toEqual([]);
+    expect(normalized.map((n) => n.key)).toEqual(["abuse.register_per_ip_hourly"]);
+  });
+
+  it("before the start, keeps founder-held dials apart from the rest, because a founder adopts them", async () => {
+    const mixed = [{ key: "abuse.register_per_ip_hourly", to: "50" }, { key: "gratitude.base_budget", to: "150" }];
+    const before = await validateChangeSet(noPool, mixed, effective, 0, undefined, { foundersHold: async () => true });
+    expect(before.problems.map((p) => p.problem).join(" ")).toContain("propose them separately");
+    const after = await validateChangeSet(noPool, mixed, effective, 0, undefined, { foundersHold: async () => false });
+    expect(after.problems).toEqual([]);
   });
 
   it("refuses out-of-bounds values — bounds are constitutional", async () => {
@@ -594,7 +603,7 @@ describe("the door governance.weight_mode travels through", () => {
     expect(problems[0].problem).toContain("constitutional");
   });
 
-  it("still refuses every other founder-held dial with the plain sentence", async () => {
+  it("sends the weighing token to the same door as the mode, since moving it alone reweighs every vote", async () => {
     const { problems } = await validateChangeSet(
       noPool,
       [{ key: "governance.weight_token", to: "village-voice" }],
@@ -602,7 +611,7 @@ describe("the door governance.weight_mode travels through", () => {
       0,
     );
     expect(problems.length).toBe(1);
-    expect(problems[0].problem).toContain("founder-held");
+    expect(problems[0].problem).toContain("mode switch");
   });
 });
 

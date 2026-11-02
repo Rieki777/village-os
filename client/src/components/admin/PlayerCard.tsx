@@ -2,6 +2,7 @@ import { CheckCircle2, Circle, LogOut, MinusCircle, Search, Trash2 } from "lucid
 import type { PathLadder } from "@shared/pathLadders";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 import { StageFloorPicker } from "./StageFloorPicker";
+import { useGameConfig } from "@/lib/gameApi";
 
 /**
  * The Players roster, one card per person, plus the key that sits above it
@@ -86,12 +87,14 @@ const ACCESS_ORDER: Access[] = ["member", "admin", "founder"];
 const accessOf = (role: string): Access => (role in ACCESS ? (role as Access) : "member");
 
 /**
- * The ladder's name. The stages config carries no title of its own, so it is
- * named after the rung the village's paths lead to, when the ladder has one.
- * Platform code names no village's stages, so a fork without that rung gets a
- * plain label.
+ * The ladder's name: the one the village gave it (Admin, Paths & Stages,
+ * served as `ladder.title` on /api/game/config) once the config has answered.
+ * Before that, or from a server too old to serve one, it is named after the
+ * rung the village's paths lead to, when the ladder has one. Platform code
+ * names no village's stages, so a fork without that rung gets a plain label.
  */
-export function ladderLabel(stages: LadderStage[]): string {
+export function ladderLabel(stages: LadderStage[], title?: string): string {
+  if (title?.trim()) return title.trim();
   const peak = stages.find((s) => s.id === "co-creator");
   return peak ? `${peak.name} path` : "Village path";
 }
@@ -274,6 +277,7 @@ export function PlayersKey({
 }) {
   const count = (a: Access) => players.filter((p) => accessOf(p.role) === a).length;
   const ceremony = stages.filter(isGranted);
+  const ladderTitle = useGameConfig()?.ladder?.title;
   return (
     <details open className="group mb-6 rounded-2xl border border-gray-200 bg-white">
       <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-sm font-medium text-gray-900">
@@ -303,7 +307,7 @@ export function PlayersKey({
           </p>
         </section>
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{ladderLabel(stages)}</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{ladderLabel(stages, ladderTitle)}</h3>
           <p className="mt-1 text-sm text-gray-600">
             Where they stand in village life. Most stages arrive on their own from real acts. The ceremony stages are granted here.
           </p>
@@ -357,6 +361,7 @@ export function PlayerCard({
   onDelete: () => void;
 }) {
   const access = accessOf(p.role);
+  const ladderTitle = useGameConfig()?.ladder?.title;
   const at = stages.findIndex((s) => s.id === p.stageComputed);
   const floor = p.stageGranted ? stages.findIndex((s) => s.id === p.stageGranted) : -1;
   const initial = (p.name || p.email).trim().charAt(0).toUpperCase();
@@ -424,9 +429,9 @@ export function PlayerCard({
           )}
         </section>
 
-        <section aria-label={ladderLabel(stages)} className="rounded-xl bg-gray-50 px-4 py-3">
+        <section aria-label={ladderLabel(stages, ladderTitle)} className="rounded-xl bg-gray-50 px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{ladderLabel(stages)}</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{ladderLabel(stages, ladderTitle)}</h4>
             <StageFloorPicker stages={stages} value={p.stageGranted} onChange={onStage} label="Change stage" />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">

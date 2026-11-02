@@ -54,7 +54,7 @@ export const SITE_PAGE: PageSpec = {
         {
           key: "pages",
           label: "Pages",
-          help: "One row per story page, in the order the menu shows them.",
+          help: "One row per story page, in the order the menu shows them. A journey row you leave as it is shows your path name from Paths & Stages.",
           itemLabel: "Page",
           titleKey: "label",
           fixed: BROCHURE_PATHS,

@@ -16,7 +16,7 @@ import {
 } from "@shared/pageContent/coCreatorsGuide";
 import { GOOD_NEIGHBOR_WORD } from "@shared/pageContent/goodNeighborName";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { useMemo } from "react";
 import {
   BookOpen,
@@ -41,6 +41,7 @@ import {
   UserCheck,
   Vote,
 } from "lucide-react";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /*
  * Every word on this page is the village's own, from Admin, Pages,
@@ -172,6 +173,8 @@ const CTA_LOOK: Record<CtaId, { icon: typeof Heart; href: string; external: bool
 export default function CoCreatorsGuide() {
   const hypha = useHypha();
   const { eventsUrl } = useVillageLinks();
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   const resolved = usePageContent(CO_CREATORS_GUIDE_PAGE);
   // The name the village gave its criteria on the Good Neighbor page.
   const goodNeighborName = useGoodNeighborName();
@@ -218,7 +221,7 @@ export default function CoCreatorsGuide() {
         ? { ...look, id: card.id, title: card.title, description: card.description, href: look.external ? eventsUrl : look.href }
         : null;
     })
-    .filter((card): card is NonNullable<typeof card> => !!card && !!card.href);
+    .filter((card): card is NonNullable<typeof card> => !!card && !!card.href && !pageOff(card.href));
   const circles = ikigai.lists.circles;
 
   return (
@@ -231,7 +234,7 @@ export default function CoCreatorsGuide() {
         </div>
         <div className="container relative z-10">
           <div className="max-w-3xl mx-auto text-center">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
@@ -244,7 +247,7 @@ export default function CoCreatorsGuide() {
                 <Emphasized text={hero.fields.intro} />
               </p>
               {hero.fields.alsoCalled && <p className="text-sm text-white mt-4">{hero.fields.alsoCalled}</p>}
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>
@@ -256,7 +259,7 @@ export default function CoCreatorsGuide() {
             <div className="overflow-x-auto scrollbar-hide">
               <div className="flex gap-2 min-w-min">
                 {navPills.map((pill) => (
-                  <motion.button
+                  <m.button
                     key={pill.id}
                     onClick={() => scrollToSection(pill.id)}
                     whileHover={{ scale: 1.05 }}
@@ -265,7 +268,7 @@ export default function CoCreatorsGuide() {
                       bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                   >
                     {pill.label}
-                  </motion.button>
+                  </m.button>
                 ))}
               </div>
             </div>
@@ -277,7 +280,7 @@ export default function CoCreatorsGuide() {
       {!ikigai.hidden && (
         <section id="r-ikigai" className="scroll-mt-40 py-20 bg-background">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -373,7 +376,7 @@ export default function CoCreatorsGuide() {
                   })}
                 </div>
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       )}
@@ -382,7 +385,7 @@ export default function CoCreatorsGuide() {
       {!recognition.hidden && (
         <section id="recognition" className="scroll-mt-40 py-20 bg-primary/5">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -406,7 +409,7 @@ export default function CoCreatorsGuide() {
                 )}
               </div>
 
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -419,8 +422,8 @@ export default function CoCreatorsGuide() {
                   <h3 className="font-bold text-xl text-foreground min-w-0 break-words">{recognition.fields.cardTitle}</h3>
                 </div>
                 <EarningsFromTheWork />
-              </motion.div>
-            </motion.div>
+              </m.div>
+            </m.div>
           </div>
         </section>
       )}
@@ -429,7 +432,7 @@ export default function CoCreatorsGuide() {
       {!voice.hidden && (
         <section id="voice" className="scroll-mt-40 py-20 bg-background overflow-x-clip">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -446,7 +449,7 @@ export default function CoCreatorsGuide() {
 
               <div className="grid md:grid-cols-2 gap-12">
                 {/* HOW PROPOSALS WORK */}
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
@@ -477,10 +480,10 @@ export default function CoCreatorsGuide() {
                       </p>
                     </div>
                   )}
-                </motion.div>
+                </m.div>
 
                 {/* KEY PRINCIPLES */}
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, x: 20 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
@@ -503,9 +506,9 @@ export default function CoCreatorsGuide() {
                       </div>
                     );
                   })}
-                </motion.div>
+                </m.div>
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       )}
@@ -514,7 +517,7 @@ export default function CoCreatorsGuide() {
       {showHypha && (
         <section id="hypha" className="scroll-mt-40 py-20 bg-teal-deep">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -577,7 +580,7 @@ export default function CoCreatorsGuide() {
                   if (!look) return null;
                   const Icon = look.icon;
                   return (
-                    <motion.div
+                    <m.div
                       key={action.id}
                       initial={{ opacity: 0, y: 20 }}
                       whileInView={{ opacity: 1, y: 0 }}
@@ -606,7 +609,7 @@ export default function CoCreatorsGuide() {
                         {action.cta}
                         <ExternalLink className="w-4 h-4 opacity-60" />
                       </a>
-                    </motion.div>
+                    </m.div>
                   );
                 })}
               </div>
@@ -628,7 +631,7 @@ export default function CoCreatorsGuide() {
                   ))}
                 </div>
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       )}
@@ -642,7 +645,7 @@ export default function CoCreatorsGuide() {
       {!spaces.hidden && (
         <section id="spaces" className="scroll-mt-40 py-20 bg-primary/5">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -661,7 +664,7 @@ export default function CoCreatorsGuide() {
                 {spaces.lists.items.map((space, idx) => {
                   const look = SPACE_LOOKS[idx % SPACE_LOOKS.length];
                   return (
-                    <motion.div
+                    <m.div
                       key={`${idx}-${space.title}`}
                       initial={{ opacity: 0, y: 20 }}
                       whileInView={{ opacity: 1, y: 0 }}
@@ -676,11 +679,11 @@ export default function CoCreatorsGuide() {
                         <h3 className={`font-bold text-xl min-w-0 break-words ${look.textColor}`}>{space.title}</h3>
                       </div>
                       <p className="text-foreground text-sm leading-relaxed break-words">{space.description}</p>
-                    </motion.div>
+                    </m.div>
                   );
                 })}
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       )}
@@ -689,7 +692,7 @@ export default function CoCreatorsGuide() {
       {!progression.hidden && (
         <section id="progression" className="scroll-mt-40 py-20 bg-background">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -711,7 +714,7 @@ export default function CoCreatorsGuide() {
                     {progression.lists.stages.map((stage, idx) => {
                       const tint = STAGE_TINTS[Math.min(idx, STAGE_TINTS.length - 1)];
                       return (
-                        <motion.div
+                        <m.div
                           key={`${idx}-${stage.label}`}
                           initial={{ opacity: 0, scale: 0.9 }}
                           whileInView={{ opacity: 1, scale: 1 }}
@@ -723,7 +726,7 @@ export default function CoCreatorsGuide() {
                             <p className={`text-xs md:text-sm font-semibold break-words ${tint.text}`}>{stage.label}</p>
                             {stage.note && <p className={`text-xs break-words ${tint.text}`}>{stage.note}</p>}
                           </div>
-                        </motion.div>
+                        </m.div>
                       );
                     })}
                   </div>
@@ -736,7 +739,7 @@ export default function CoCreatorsGuide() {
                   const look = ELDER_LOOK[elder.id as ElderId];
                   if (!look) return null;
                   return (
-                    <motion.div
+                    <m.div
                       key={elder.id}
                       initial={{ opacity: 0, y: 20 }}
                       whileInView={{ opacity: 1, y: 0 }}
@@ -756,11 +759,11 @@ export default function CoCreatorsGuide() {
                           <Emphasized text={elder.duties} strongClassName="font-semibold" />
                         </p>
                       )}
-                    </motion.div>
+                    </m.div>
                   );
                 })}
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       )}
@@ -769,7 +772,7 @@ export default function CoCreatorsGuide() {
       {!goodNeighbor.hidden && (
         <section id="good-neighbor" className="scroll-mt-40 py-20 bg-primary/5">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -790,7 +793,7 @@ export default function CoCreatorsGuide() {
                   {goodNeighbor.lists.pillars.map((pillar, idx) => {
                     const Icon = PILLAR_ICONS[idx % PILLAR_ICONS.length];
                     return (
-                      <motion.div
+                      <m.div
                         key={`${idx}-${pillar.title}`}
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
@@ -803,14 +806,14 @@ export default function CoCreatorsGuide() {
                         </div>
                         <h3 className="font-semibold text-foreground mb-2 break-words">{pillar.title}</h3>
                         <p className="text-sm text-muted-foreground break-words">{pillar.description}</p>
-                      </motion.div>
+                      </m.div>
                     );
                   })}
                 </div>
               )}
 
               {/* LINK TO FULL DOCUMENT */}
-              <motion.div
+              <m.div
                 initial={{ opacity: 0 }}
                 whileInView={{ opacity: 1 }}
                 viewport={{ once: true }}
@@ -819,14 +822,16 @@ export default function CoCreatorsGuide() {
                 <p className="text-muted-foreground mb-6">
                   <Emphasized text={goodNeighbor.fields.body} />
                 </p>
-                <Link href="/good-neighbor">
-                  <a className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
-                    {goodNeighbor.fields.buttonLabel}
-                    <ArrowRight className="w-4 h-4 flex-shrink-0" />
-                  </a>
-                </Link>
-              </motion.div>
-            </motion.div>
+                {!pageOff("/good-neighbor") && (
+                  <Link href="/good-neighbor">
+                    <a className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
+                      {goodNeighbor.fields.buttonLabel}
+                      <ArrowRight className="w-4 h-4 flex-shrink-0" />
+                    </a>
+                  </Link>
+                )}
+              </m.div>
+            </m.div>
           </div>
         </section>
       )}
@@ -835,7 +840,7 @@ export default function CoCreatorsGuide() {
       {!cta.hidden && (
         <section className="py-20 bg-background">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -868,7 +873,7 @@ export default function CoCreatorsGuide() {
                   const cardClass =
                     "h-full block bg-card rounded-xl p-8 border border-muted hover:border-primary hover:shadow-lg hover:translate-y-1 transition-all duration-300 cursor-pointer";
                   return (
-                    <motion.div
+                    <m.div
                       key={card.id}
                       initial={{ opacity: 0, y: 20 }}
                       whileInView={{ opacity: 1, y: 0 }}
@@ -885,11 +890,11 @@ export default function CoCreatorsGuide() {
                           <a className={cardClass}>{inner}</a>
                         </Link>
                       )}
-                    </motion.div>
+                    </m.div>
                   );
                 })}
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       )}

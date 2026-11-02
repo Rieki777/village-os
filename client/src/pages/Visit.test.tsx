@@ -213,3 +213,33 @@ describe("the cost of a visit", () => {
     await waitFor(() => expect(document.querySelector("svg.lucide-wallet")).toBeNull());
   });
 });
+
+describe("the ways to visit as the village arranged them (Admin, Pages, Visit)", () => {
+  it("offers them in the form in the order the cards show", async () => {
+    program.visit_types = [card({ id: "tour", title: "Land Tour", order: 2 }), card({ id: "call", title: "Community Call", order: 1 })];
+    render(<Visit />);
+    await programLoaded();
+    const cards = Array.from(document.querySelectorAll("h3")).map((h) => h.textContent);
+    expect(cards.slice(0, 2)).toEqual(["Community Call", "Land Tour"]);
+    const options = Array.from((screen.getByLabelText("Visit type") as HTMLSelectElement).options).map((o) => o.textContent);
+    expect(options).toEqual(["Choose one", "Community Call", "Land Tour"]);
+  });
+
+  it("draws no empty grid and no empty choice when the village offers none, and keeps the form", async () => {
+    program.visit_types = [];
+    render(<Visit />);
+    await screen.findByText("Getting there");
+    expect(screen.queryByText("Pick a way to visit")).toBeNull();
+    expect(screen.queryByLabelText("Visit type")).toBeNull();
+    expect(screen.getByRole("button", { name: "Send request" })).toBeTruthy();
+  });
+
+  it("draws no empty paragraph for a cleared description", async () => {
+    program.visit_types = [card({ description: "" })];
+    render(<Visit />);
+    const title = await programLoaded();
+    const cardBox = title.parentElement as HTMLElement;
+    expect(Array.from(cardBox.querySelectorAll("p")).some((p) => p.textContent === "")).toBe(false);
+    expect(screen.getByRole("link", { name: /Join the Next Call/ })).toBeTruthy();
+  });
+});

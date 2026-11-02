@@ -27,6 +27,11 @@
  *                 application row does (first name only), and opens the
  *                 application, where Consent and Object live. Answered, the
  *                 row is gone on the next read.
+ *   openProposals a role proposal from somebody with no account yet (open
+ *                 proposals part B): an `adopt` row in the main list for a
+ *                 holder of the power that seats people, a `consent` row under
+ *                 "Asked to consent" for a holder its circle asks. Each opens
+ *                 the proposal's own page, `/open-proposals/:id`.
  *
  * NO COUNTS on the heading, as the rest of the board. The group draws nothing
  * at all when nothing waits, and nothing when the read is closed to the
@@ -43,7 +48,7 @@ import { toast } from "sonner";
 import { gameFetch } from "@/lib/gameApi";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, INPUT, LABEL, LABEL_CAPS } from "@/components/sessions/roomUi";
 import { TASK_NOTE_MAX, taskAcceptUrl } from "@shared/sessionTasks";
-import { readWaiting, WAITING_COPY, WAITING_URL, type WaitingAcceptance, type WaitingPayload } from "@shared/waitingOnYou";
+import { readWaiting, WAITING_COPY, WAITING_URL, type WaitingAcceptance, type WaitingOpenProposal, type WaitingPayload } from "@shared/waitingOnYou";
 import { TENSION_COPY, type TensionAction } from "@shared/roleTensions";
 import TensionRespondRow from "@/components/roleTension/TensionRespondRow";
 
@@ -61,6 +66,24 @@ const refusalOf = (body: unknown): string => {
   const said = body && typeof body === "object" && typeof (body as { error?: unknown }).error === "string" ? (body as { error: string }).error.trim() : "";
   return said && /\s/.test(said) ? said : WAITING_COPY.acceptFailed;
 };
+
+/** One proposal from somebody with no account yet, opening its own page. Names the proposer by first name only. */
+function OpenProposalRow({ row }: { row: WaitingOpenProposal }) {
+  const where =
+    row.ask === "consent"
+      ? [WAITING_COPY.consentIn(row.circles[0] ?? ""), WAITING_COPY.consentCloses(row.closesOn ?? "")].filter(Boolean).join(" · ")
+      : [WAITING_COPY.openFrom, WAITING_COPY.inCircles(row.circles)].filter(Boolean).join(" · ");
+  return (
+    <Link href={`/open-proposals/${encodeURIComponent(row.id)}`} className={ROW} data-open-proposal-row={row.ask}>
+      <p className="font-semibold leading-snug">{WAITING_COPY.openLine(row.proposer, row.roles)}</p>
+      <p className={`${HINT} mt-0.5`}>{where}</p>
+      <span className={ROW_ACTION}>
+        {row.ask === "consent" ? WAITING_COPY.consentAction : WAITING_COPY.openAction}
+        <ArrowRight className={ROW_ARROW} aria-hidden="true" />
+      </span>
+    </Link>
+  );
+}
 
 /** One done task to accept: its words, where it sits, and the control, opened in place with an optional note. */
 export function AcceptRow({ task, onAccepted }: { task: WaitingAcceptance; onAccepted: (entryId: number) => void }) {
@@ -157,7 +180,7 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
     try {
       const res = await gameFetch(WAITING_URL, { cache: "no-store" });
       if (!live.current) return;
-      if (CLOSED.has(res.status)) return setData({ applications: [], drafts: [], toAccept: [], raisedWithYou: [], toConsent: [] });
+      if (CLOSED.has(res.status)) return setData({ applications: [], drafts: [], toAccept: [], raisedWithYou: [], toConsent: [], openProposals: [] });
       const next = res.ok ? readWaiting(await res.json().catch(() => null)) : null;
       if (!live.current) return;
       if (next) setData(next);
@@ -174,7 +197,11 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
   const toAccept = data?.toAccept ?? [];
   const raised = data?.raisedWithYou ?? [];
   const toConsent = data?.toConsent ?? [];
-  const has = !!data && (data.applications.length > 0 || data.drafts.length > 0 || toAccept.length > 0 || raised.length > 0 || toConsent.length > 0);
+  const openToDecide = (data?.openProposals ?? []).filter((o) => o.ask === "adopt");
+  const openToConsent = (data?.openProposals ?? []).filter((o) => o.ask === "consent");
+  const has =
+    !!data &&
+    (data.applications.length > 0 || data.drafts.length > 0 || toAccept.length > 0 || raised.length > 0 || toConsent.length > 0 || openToDecide.length > 0 || openToConsent.length > 0);
   const accepted = (entryId: number) =>
     setData((d) => (d ? { ...d, toAccept: (d.toAccept ?? []).filter((t) => t.entryId !== entryId) } : d));
   const responded = (id: string, action: TensionAction) =>
@@ -241,8 +268,13 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
             <AcceptRow task={t} onAccepted={accepted} />
           </li>
         ))}
+        {openToDecide.map((o) => (
+          <li key={`o-${o.id}`}>
+            <OpenProposalRow row={o} />
+          </li>
+        ))}
       </ul>
-      {toConsent.length > 0 && (
+      {(toConsent.length > 0 || openToConsent.length > 0) && (
         <div className="space-y-3 pt-2" data-to-consent-group="">
           <h4 id="task-board-consent" className={LABEL_CAPS}>
             {WAITING_COPY.consentHeading}
@@ -263,6 +295,11 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
                 </li>
               );
             })}
+            {openToConsent.map((o) => (
+              <li key={`oc-${o.id}`} data-to-consent={o.id}>
+                <OpenProposalRow row={o} />
+              </li>
+            ))}
           </ul>
         </div>
       )}

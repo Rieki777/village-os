@@ -69,6 +69,8 @@ interface Inboxes {
  */
 export function ReplyToEditor(props: EditorProps) {
   const { password } = props;
+  // Each path by the name this village gives it (Admin, Paths & Stages).
+  const pathName = (id: string, fallback: string) => props.data.paths.find((p) => p.id === id)?.label || fallback;
   const [cfg, setCfg] = useState<Inboxes>({ investor: "", steward: "", resident: "", prosperity: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -114,25 +116,25 @@ export function ReplyToEditor(props: EditorProps) {
         label="Business Inquiries (Prosperity / Contact)"
         value={cfg.prosperity}
         onChange={(v) => setCfg({ ...cfg, prosperity: v })}
-        hint="Receives business and contact form submissions, and replies to the Prosperity Creator path."
+        hint={`Receives business and contact form submissions, and replies to the ${pathName("prosperity-creator", "Prosperity Creator")} path.`}
       />
       <EmailField
         label="Investor"
         value={cfg.investor}
         onChange={(v) => setCfg({ ...cfg, investor: v })}
-        hint="Receives investor enquiries and document requests, and replies to the investor path."
+        hint={`Receives investor enquiries and document requests, and replies to the ${pathName("investor", "Investor")} path.`}
       />
       <EmailField
         label="Core Team (Steward)"
         value={cfg.steward}
         onChange={(v) => setCfg({ ...cfg, steward: v })}
-        hint="Receives Village Steward applications, and replies to the steward path."
+        hint={`Receives ${pathName("steward", "Village Steward")} applications, and replies to the ${pathName("steward", "Village Steward")} path.`}
       />
       <EmailField
         label="Resident"
         value={cfg.resident}
         onChange={(v) => setCfg({ ...cfg, resident: v })}
-        hint="Receives Resident applications and waitlist signups, and replies to the resident path."
+        hint={`Receives ${pathName("resident", "Resident")} applications and waitlist signups, and replies to the ${pathName("resident", "Resident")} path.`}
       />
       <button type="button" onClick={save} disabled={saving} className={primaryCls}>
         {saving ? "Saving..." : "Save inboxes"}

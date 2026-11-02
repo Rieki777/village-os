@@ -10,10 +10,10 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useModule } from "@/modules/ModuleProvider";
 import { CalendarDays, Sparkles } from "lucide-react";
-import { useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 
 export default function SeasonalFestivals() {
-  const brochureOn = useBrochurePages() === true;
+  const workWithUsOn = useStoryPageShown()("/work-with-us");
   const [season, setSeason] = useState<any>(null);
   /**
    * The calendar is the other half of this page: seasons say WHEN the year
@@ -140,7 +140,7 @@ export default function SeasonalFestivals() {
               Festival dates ride the season turnings above. To take part in
               shaping one, start at{" "}
               <Link href="/quests" className="text-teal-deep font-medium hover:underline">Quests</Link>
-              {brochureOn ? (
+              {workWithUsOn ? (
                 <>
                   {" "}or say hello through{" "}
                   <Link href="/work-with-us" className="text-teal-deep font-medium hover:underline">Work With Us</Link>

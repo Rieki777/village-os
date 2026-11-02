@@ -15,7 +15,7 @@
  * in both: from the glyph up close, and from that role's own segment of the arc
  * from afar, so the structure that holds the village together never disappears.
  */
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import type { MouseEvent as ReactMouseEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { NestedCircle } from "@shared/mapLayout";
 import SeatGlyph, { HitArea, seatStateWords } from "./SeatGlyph";
@@ -120,7 +120,7 @@ export default function SeatRing({
           const pass = seatPasses(seat);
           const words = seat ? seatStateWords(seat.state, seat.holderCount, seat.seats) : "";
           return (
-            <motion.g
+            <m.g
               key={rp.id}
               animate={{ x: rp.x, y: rp.y, opacity: pass ? 1 : 0.2 }}
               initial={false}
@@ -171,7 +171,7 @@ export default function SeatRing({
               {selected?.kind === "role" && selected.id === rp.id && (
                 <circle cx={0} cy={0} r={dotR + 3} fill="none" stroke="var(--color-teal-deep)" strokeWidth={1.6} />
               )}
-            </motion.g>
+            </m.g>
           );
         })}
 

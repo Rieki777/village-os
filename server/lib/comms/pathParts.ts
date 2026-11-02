@@ -56,7 +56,7 @@ import { guestPersonKey } from "../../../shared/comms/kinds";
 import { gatheringWhen, type MergeValues } from "../../../shared/comms/mergeFields";
 import { windowZone, nextInWindow } from "../../../shared/comms/quietHours";
 import { nextGatheringOrder, type NextCandidate } from "../../../shared/comms/recap";
-import { GAME_CONFIG } from "../../../shared/gameConfig";
+import { villagePathLabel } from "../villagePaths";
 import { AUTHORED_KINDS } from "../../../shared/gatherings";
 import type { ModuleLifecycle } from "../../../shared/modules";
 import { hasLadder, PATH_LADDERS } from "../../../shared/pathLadders";
@@ -118,9 +118,9 @@ const firstNameOf = (name: string | null | undefined): string | null => {
   return first ? first : null;
 };
 
-/** A path's name as the village shows it. */
+/** A path's name as the village shows it (Admin, Paths & Stages). */
 export function pathNameOf(pathId: string): string {
-  return GAME_CONFIG.paths.find((p) => p.id === pathId)?.label ?? pathTitle(pathId);
+  return villagePathLabel(pathId) ?? pathTitle(pathId);
 }
 
 /** The next step on each shipped path, in a few words, and where it is taken. A fork's own path falls back to its page. */

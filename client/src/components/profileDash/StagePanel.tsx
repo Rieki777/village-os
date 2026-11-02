@@ -16,6 +16,7 @@ import { Link } from "wouter";
 import { readStored, writeStored } from "@/lib/safeStorage";
 import { rungStates, type RungState } from "./dashModel";
 import { BTN_GOLD, CHIP, KICKER, LINK } from "./dashUi";
+import { DEFAULT_LADDER_TITLE } from "@shared/villagePaths";
 
 const RUNG_FILL: Record<RungState, string> = {
   reached: "bg-dash-gold",
@@ -40,6 +41,7 @@ export default function StagePanel({
   progress,
   progressUnit,
   nextRuleWords,
+  ladderTitle,
 }: {
   stages: ReadonlyArray<{ id: string; name: string }>;
   stageIndex: number;
@@ -50,7 +52,10 @@ export default function StagePanel({
   progressUnit: string;
   /** What opens the next rung when there are no steps to count. */
   nextRuleWords: string | null;
+  /** The ladder's name in this village's words (Admin, Paths & Stages). Absent reads as the platform's. */
+  ladderTitle?: string;
 }) {
+  const ladder = ladderTitle?.trim() || DEFAULT_LADDER_TITLE;
   const here = stages[stageIndex];
   const next = stages[stageIndex + 1] ?? null;
   const headingId = useId();
@@ -116,9 +121,9 @@ export default function StagePanel({
           </>
         ) : null}
 
-        <p className="m-0 mt-1.5 hidden text-[13px] uppercase tracking-[0.15em] text-muted-foreground sm:block">Path of Growth</p>
+        <p className="m-0 mt-1.5 hidden text-[13px] uppercase tracking-[0.15em] text-muted-foreground sm:block">{ladder}</p>
         <ol
-          aria-label={`Path of Growth, stage ${stageIndex + 1} of ${stages.length}`}
+          aria-label={`${ladder}, stage ${stageIndex + 1} of ${stages.length}`}
           className="m-0 hidden list-none gap-1 p-0 sm:grid"
           style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}
         >

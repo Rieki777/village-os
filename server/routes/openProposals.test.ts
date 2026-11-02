@@ -30,6 +30,7 @@ import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/
 import { escapeHtml } from "../lib/comms/mailer";
 import { createOrgRole } from "../lib/orgChart";
 import { readOpenProposal } from "../repos/openProposals";
+import { usersRepo } from "../repos/users";
 import { register, tidyOpenProposals } from "./openProposals";
 
 const configured = testDbConfigured();
@@ -108,6 +109,17 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       },
       governanceLifecycle: () => state.governance,
       now: () => state.clock ?? new Date(),
+      // What the confirm step reads to ask the circle (part B, server/routes/openProposalDecide.test.ts pins it).
+      notify: async () => ({ fresh: true }),
+      notifyAdmins: async () => undefined,
+      members: usersRepo(pool),
+      liveHoldersOf: async () => [],
+      rolesCarrying: () => [],
+      loadRoleHolders: () => [],
+      seatCalendar: () => ({ seasons: state.seasons, currentSeasonId: "s-now", timezone: "UTC" }),
+      lapse: () => ({ currentSeasonId: "s-now", cadence: "season_turn" }),
+      stageOf: async () => "guest",
+      recordStageEvent: async () => undefined,
     } as any);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

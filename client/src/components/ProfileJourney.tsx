@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { TrendingUp, Heart, ScrollText, ShieldCheck, Users } from "lucide-react";
 import { authToken, useGameConfig, useRoleWord } from "@/lib/gameApi";
 import { pageVarsFrom } from "@shared/pageContent/vars";
@@ -312,7 +312,7 @@ export default function ProfileJourney() {
       )}
       {/* Progression: capabilities, roles, and the history of stage turns */}
       {prog && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-card rounded-2xl shadow-lg p-8"
@@ -416,12 +416,12 @@ export default function ProfileJourney() {
               ))}
             </ol>
           )}
-        </motion.div>
+        </m.div>
       )}
 
       {/* Recognition flows: breadth over volume, and per-cycle settlements */}
       {flows && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
@@ -487,12 +487,12 @@ export default function ProfileJourney() {
               </div>
             </div>
           )}
-        </motion.div>
+        </m.div>
       )}
 
       {/* Ledger: where every point of value came from */}
       {ledger && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -549,7 +549,7 @@ export default function ProfileJourney() {
               ))}
             </div>
           )}
-        </motion.div>
+        </m.div>
       )}
     </div>
   );

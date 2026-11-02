@@ -282,6 +282,20 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} objections to your role proposals.",
     celebrate: false,
   },
+  // A role proposal from somebody with no account yet (open proposals part
+  // B), once its address confirmed it. Bell only, like the member pair above.
+  open_role_proposal_consent_ask: {
+    group: "decisions",
+    blurb: "Somebody from outside the village proposes to hold roles in a circle you hold a role in. Consent or object within 2 business days.",
+    many: "{n} role proposals from outside the village ask your circle to consent.",
+    celebrate: false,
+  },
+  open_role_proposal_waiting: {
+    group: "decisions",
+    blurb: "Somebody from outside the village proposes to hold roles. You hold the power that seats people, so it is yours to adopt or decline.",
+    many: "{n} role proposals from outside the village wait on you.",
+    celebrate: false,
+  },
   // The three nudges to propose roles for next season. Bell only; the
   // profile banner says the same thing for as long as it is true.
   role_proposal_window_open: {

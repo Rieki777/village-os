@@ -139,6 +139,32 @@ describe("a seat somebody holds on adopted terms (red team U2, U4)", () => {
     expect(container.textContent).toMatch(/Aligned/);
   });
 
+  it("a holder seated on terms they have not aligned to yet reads as not yet, with no Aligned stamp (open proposals part B)", () => {
+    session.token = "member-token";
+    // A newcomer whose role proposal the village adopted before they had an account: the village aligned, they have not.
+    const held = {
+      applicationId: "sa-0000000000000002",
+      href: "/role-applications/sa-0000000000000002",
+      holderName: "Bea",
+      settings: { v: 1 },
+      adoptedVia: "holder",
+      decidedOn: "2026-11-02",
+      alignment: {
+        state: "pending",
+        sealed: false,
+        parties: [
+          { partyKey: "user:u-bell", label: "Bea Bell", aligned: false, required: true },
+          { partyKey: "village", label: "The village", aligned: true, required: true },
+        ],
+      },
+    };
+    const { container } = mount({ ...BASE, holderCount: 1, state: "partial", termsOffer: null, heldTerms: [held] });
+    fireEvent.click(screen.getByRole("button", { name: /Settings/ }));
+    expect(screen.getByText("Bea Bell, not yet")).toBeTruthy();
+    expect(screen.getByText("The village, aligned")).toBeTruthy();
+    expect(container.querySelector("[data-aligned-stamp]")).toBeNull();
+  });
+
   it("offers no Propose terms on a seat somebody holds, and says why", () => {
     session.token = "member-token";
     mount({ ...BASE, holderCount: 1, state: "partial", termsOffer: null });

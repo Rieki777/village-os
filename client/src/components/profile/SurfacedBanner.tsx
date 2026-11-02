@@ -12,7 +12,7 @@
  * from, because using a thing is the strongest possible signal they have met
  * it.
  */
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Sparkles, ArrowDown } from "lucide-react";
 
 export default function SurfacedBanner({
@@ -26,7 +26,7 @@ export default function SurfacedBanner({
   onGo: () => void;
 }) {
   return (
-    <motion.aside
+    <m.aside
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       /*
@@ -59,6 +59,6 @@ export default function SurfacedBanner({
         Take a look
         <ArrowDown className="h-4 w-4" aria-hidden="true" />
       </button>
-    </motion.aside>
+    </m.aside>
   );
 }

@@ -37,7 +37,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { ROOM_COPY, SESSION_COPY, SESSION_DISCARD_COPY, STAGE_DEFS, type SessionStage } from "@shared/sessions";
 import Layout from "@/components/Layout";
@@ -64,6 +64,7 @@ import TensionCatcher from "@/components/sessions/TensionCatcher";
 import { leaveRoomGone } from "@/components/sessions/roomGone";
 import { BTN_QUIET, H2, STAGE_LEDE } from "@/components/sessions/roomUi";
 import { useRoomNow, useSessionRoom } from "@/components/sessions/useSessionRoom";
+import CardInvite from "@/components/sessionCard/CardInvite";
 
 const NAME = SESSION_COPY.listTitle;
 
@@ -241,7 +242,7 @@ export default function SessionRoom() {
                 {/* A session opened from a meeting template: its flow, and what the flow asks for (shared/sessionTemplates.ts). */}
                 <TemplatePanel sessionId={view.id} agenda={view.items} />
 
-                <motion.section
+                <m.section
                   key={shown}
                   aria-labelledby="stage-title"
                   className="space-y-6"
@@ -262,11 +263,14 @@ export default function SessionRoom() {
                   {shown === "items" && <StageItems {...stageProps} />}
                   {shown === "actions" && <StageActions {...stageProps} highlight={highlight} refusal={refusal} />}
                   {shown === "close" && <StageClose view={view} actions={actions} onRefused={onRefused} />}
-                </motion.section>
+                </m.section>
 
                 {view.me.facilitates && <NextStepBar view={view} now={now} actions={actions} shown={shown} onMoved={() => setBrowsing(null)} />}
 
                 <TensionCatcher view={view} actions={actions} />
+
+                {/* Beside the stages, so a card pulled in any stage invites everybody it does not read yet. */}
+                <CardInvite view={view} />
               </>
             )}
           </div>

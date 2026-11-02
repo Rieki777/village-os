@@ -34,6 +34,7 @@ import Layout from "@/components/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch, fetchGameMe, GameMe } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
+import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Send, Sparkles } from "lucide-react";
@@ -72,6 +73,7 @@ export default function GratitudeWall() {
    */
   const [peopleThanked, setPeopleThanked] = useState<number | null>(null);
   const currency = useTokenName("Recognition");
+  const ladder = useLadderTitle();
   // `to` carries whatever the member typed: an @handle, or an address for
   // anyone who still knows one. The server tells the two apart and looks the
   // handle up; see `recipientFor` in server/index.ts for why a handle is the
@@ -254,7 +256,7 @@ export default function GratitudeWall() {
                     <InfoTip tip="Your sending budget refills when the cycle turns. Sending moves it from your budget to their wall; it never costs you anything you earned." label="How the budget works" />
                   </span>
                 ) : budget && budget.total <= 0 ? (
-                  <span className="text-xs italic text-muted-foreground">Your sending budget opens as you walk the Path of Growth.</span>
+                  <span className="text-xs italic text-muted-foreground">Your sending budget opens as you walk the {ladder}.</span>
                 ) : (
                   <span className="text-xs italic text-muted-foreground">Your budget didn't load. Reload to see it.</span>
                 )}

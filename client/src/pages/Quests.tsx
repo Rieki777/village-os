@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   ArrowRight,
   Calendar,
@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
 import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
+import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { useValueConversion } from "@/lib/moneyClaims";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
@@ -33,7 +34,7 @@ import {
   type FieldSigns,
   type Ring,
 } from "@/lib/questBoard";
-import { useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 import MaiaTypeLine from "@/components/geneKeys/MaiaTypeLine";
 
 type Difficulty = "Beginner" | "Intermediate" | "Advanced";
@@ -56,7 +57,7 @@ const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
   further: {
     title: "Further in",
     blurb:
-      "These open as you walk the Path of Growth or step into a role. Each one says what opens it.",
+      "These open as you walk the {ladder} or step into a role. Each one says what opens it.",
   },
 };
 
@@ -75,7 +76,7 @@ const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
  * hardcoded list.
  */
 export default function Quests() {
-  const brochureOn = useBrochurePages() === true;
+  const letterOn = useStoryPageShown()("/love-letter");
   // The recognition and value tokens' live names (Admin → Tokens) — a fork's
   // rename reaches every line below without a code change.
   const cfg = useGameConfig();
@@ -86,6 +87,8 @@ export default function Quests() {
   const villageName = cfg?.project?.name ?? "the village";
   const eventsUrl = cfg?.project?.eventsUrl ?? "";
   const stages = cfg?.stages ?? [];
+  // The ladder's name in this village's words (Admin, Paths & Stages).
+  const ladder = useLadderTitle();
   const [activeCircle, setActiveCircle] = useState<string>("All");
   const [activeDifficulty, setActiveDifficulty] = useState<Difficulty | "All">(
     "All"
@@ -201,7 +204,7 @@ export default function Quests() {
       {/* Hero */}
       <section className="py-10 md:py-24 bg-gradient-to-b from-teal/10 to-background">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-6"
@@ -226,7 +229,7 @@ export default function Quests() {
               Real work, on real land, beside people becoming your people.
             </p>
 
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
@@ -430,15 +433,15 @@ export default function Quests() {
                       )}
                     </div>
                     <p className="text-muted-foreground mt-1 max-w-2xl">
-                      {meta.blurb}
+                      {meta.blurb.replace("{ladder}", ladder)}
                       {ring === "further" && (
-                        <InfoTip tip="The Path of Growth is the membership ladder on your profile. Walking it, or holding a role, opens these quests." label="What opens these quests" />
+                        <InfoTip tip={`The ${ladder} is the membership ladder on your profile. Walking it, or holding a role, opens these quests.`} label="What opens these quests" />
                       )}
                     </p>
                   </div>
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {shown.map((quest, index) => (
-                      <motion.div
+                      <m.div
                         key={quest.id}
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
@@ -453,7 +456,7 @@ export default function Quests() {
                           stages={stages}
                           priority={ring === RING_ORDER[0] && index === 0}
                         />
-                      </motion.div>
+                      </m.div>
                     ))}
                   </div>
                   {hidden > 0 && (
@@ -535,7 +538,7 @@ export default function Quests() {
                   Join a Community Call
                 </a>
               )}
-              {brochureOn && (
+              {letterOn && (
                 <Link href="/love-letter">
                   <a className="px-6 py-3 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors flex items-center gap-2">
                     <Heart className="w-5 h-5" />

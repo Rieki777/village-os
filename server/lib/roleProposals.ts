@@ -262,14 +262,49 @@ export async function answerConsent(
   roleNames: readonly string[],
   body: unknown,
 ): Promise<AnswerOutcome> {
-  const parsed = parseConsentAnswer(body);
-  const ask = await store.readAsk(deps.pool, p.id, userId);
-  if (!ask) return { ok: false, status: 404, error: CONSENT_WORDS.notAsked };
   // Answers close with the application (PR D): a withdrawn or decided proposal takes no answer,
   // so nothing reaches the circle's backlog for a proposal nobody is deciding any more.
   const [a] = p.applicationId ? await readApplications(deps.pool, [p.applicationId]) : [];
-  if (!a || a.status === "withdrawn") return { ok: false, status: 409, error: CONSENT_WORDS.withdrawn };
-  if (a.status !== "awaiting-holder") return { ok: false, status: 409, error: CONSENT_WORDS.decided };
+  const standing: AskStanding = !a || a.status === "withdrawn" ? "withdrawn" : a.status !== "awaiting-holder" ? "decided" : "open";
+  const out = await answerAsk(deps, p.id, standing, userId, roleNames, body);
+  if (out.ok && out.answer === "object") {
+    // The candidate hears that their proposal goes to the circle. Who objected is never said.
+    await deps.notify({
+      userId: p.userId,
+      type: "role_proposal_objection",
+      title: `A member of the circle objected to your role proposal: ${seatList(roleNames)}`,
+      body: out.carried ? "It goes to the circle's next meeting." : null,
+      link: p.applicationId ? `/role-applications/${encodeURIComponent(p.applicationId)}` : null,
+      actorUserId: null,
+      dedupeKey: `rp:${p.id}:objection:${userId}`,
+    });
+  }
+  return out;
+}
+
+/** Whether the proposal an ask is about still waits on a decision, and why not when it does not. */
+export type AskStanding = "open" | "withdrawn" | "decided";
+
+/**
+ * THE ANSWER ITSELF, for any proposal the circle was asked about: a member's
+ * (`answerConsent` above) or one from somebody with no account yet (open
+ * proposals part B, server/lib/openProposalDecide.ts). The caller says whether
+ * the proposal still waits on a decision; everything else is the ask's own.
+ * Tells nobody: the caller decides who hears.
+ */
+export async function answerAsk(
+  deps: AnswerDeps,
+  proposalId: string,
+  standing: AskStanding,
+  userId: string,
+  roleNames: readonly string[],
+  body: unknown,
+): Promise<AnswerOutcome> {
+  const parsed = parseConsentAnswer(body);
+  const ask = await store.readAsk(deps.pool, proposalId, userId);
+  if (!ask) return { ok: false, status: 404, error: CONSENT_WORDS.notAsked };
+  if (standing === "withdrawn") return { ok: false, status: 409, error: CONSENT_WORDS.withdrawn };
+  if (standing === "decided") return { ok: false, status: 409, error: CONSENT_WORDS.decided };
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error, field: parsed.field };
   if (ask.answer) return { ok: false, status: 409, error: CONSENT_WORDS.answered };
   if (deps.now.getTime() >= ask.closesAt.getTime()) return { ok: false, status: 409, error: CONSENT_WORDS.windowClosed };
@@ -293,7 +328,7 @@ export async function answerConsent(
         });
       }
     }
-    const written = await store.writeAnswer(conn, { proposalId: p.id, userId, answer: parsed.answer, reason: parsed.reason, circleEntryId: entryId, now: deps.now });
+    const written = await store.writeAnswer(conn, { proposalId, userId, answer: parsed.answer, reason: parsed.reason, circleEntryId: entryId, now: deps.now });
     // Answered a moment ago by another tab: the entry this transaction wrote goes back with it.
     if (!written) throw Object.assign(new Error("answered already"), { code: "RP_ANSWERED" });
     return { written, entryId };
@@ -302,18 +337,6 @@ export async function answerConsent(
     throw e;
   });
   if (!out) return { ok: false, status: 409, error: CONSENT_WORDS.answered };
-  if (objecting) {
-    // The candidate hears that their proposal goes to the circle. Who objected is never said.
-    await deps.notify({
-      userId: p.userId,
-      type: "role_proposal_objection",
-      title: `A member of the circle objected to your role proposal: ${seatList(roleNames)}`,
-      body: out.entryId ? "It goes to the circle's next meeting." : null,
-      link: p.applicationId ? `/role-applications/${encodeURIComponent(p.applicationId)}` : null,
-      actorUserId: null,
-      dedupeKey: `rp:${p.id}:objection:${userId}`,
-    });
-  }
   return {
     ok: true,
     answer: parsed.answer,

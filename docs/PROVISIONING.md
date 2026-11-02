@@ -368,6 +368,11 @@ village serves them:
   `drizzle/0225_a_village_keeps_the_pages_it_already_served.sql` wrote the
   document ON in every database that already had members when it ran, which
   is how Amora keeps its pages.
+- **One page at a time.** The same document carries `"hidden"`, a list of
+  page addresses switched off on their own (`{"enabled": true, "hidden":
+  ["/housing"]}`), set by "Show this page" in Admin, Make it yours, Pages. A
+  page in the list goes the same way as all of them with the switch off; the
+  rest stay.
 
 Do not turn them on for your village: they tell another village's story. A
 village that has rewritten them in its own fork turns them back on as

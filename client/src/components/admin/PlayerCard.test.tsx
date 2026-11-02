@@ -87,6 +87,9 @@ describe("ladderLabel", () => {
   it("names the ladder after the rung the paths lead to, and falls back on a fork without it", () => {
     expect(ladderLabel(STAGES)).toBe("Co-Creator path");
     expect(ladderLabel([{ id: "guest", name: "Guest" }])).toBe("Village path");
+    // The village's own name for its ladder (Admin, Paths & Stages) wins once it is served.
+    expect(ladderLabel(STAGES, "The Spiral")).toBe("The Spiral");
+    expect(ladderLabel(STAGES, "  ")).toBe("Co-Creator path");
   });
 });
 
