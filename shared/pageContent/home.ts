@@ -122,7 +122,7 @@ export const HOME_PAGE: PageSpec = {
         {
           key: "cards",
           label: "Cards",
-          help: "One per journey page, in this order. The pictures are set in Make This Yours, Pictures.",
+          help: "One per journey page, in this order. A title and second line you leave as they are show your path names from Paths & Stages. The pictures are set in Make This Yours, Pictures.",
           itemLabel: "Card",
           titleKey: "title",
           fixed: HOME_PATH_IDS,

@@ -64,7 +64,7 @@ describe("a village that never renamed a path", () => {
     }
   });
 
-  it("the first village's kept pages read exactly as before (its records in server/seeds/amora)", () => {
+  it("the first village's kept pages read exactly as before, from its records in the seeds", () => {
     const record = (f: string) => JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "server/seeds/amora/pages", f), "utf8")); // brand-ok: the first village's own records
     for (const [spec, file] of [[SITE_PAGE, "page-site.json"], [HOME_PAGE, "page-home.json"], [LOVE_LETTER_PAGE, "page-love-letter.json"]] as const) {
       const stored = record(file);

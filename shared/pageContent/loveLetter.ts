@@ -144,7 +144,7 @@ export const LOVE_LETTER_PAGE: PageSpec = {
         {
           key: "paths",
           label: "Paths",
-          help: "The four choices, in this order. What a signing records is the path, not these words.",
+          help: "The four choices, in this order. What a signing records is the path, not these words. A choice you leave as it is shows your path name from Paths & Stages.",
           itemLabel: "Path",
           titleKey: "label",
           fixed: LETTER_PATH_IDS,
