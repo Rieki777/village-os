@@ -37,7 +37,7 @@
  */
 import type { Express, Request, Response } from "express";
 import { DEFAULT_LETTERS_PER_DAY, LETTERS_EVERY_MS, LETTERS_JOB, readLetterDraft } from "../../shared/comms/letters";
-import { GAME_CONFIG } from "../../shared/gameConfig";
+import { villagePathChoices } from "../lib/villagePaths";
 import type { AppDeps } from "../lib/appDeps";
 import { journeyStatus } from "../lib/comms/journeyDefinitions";
 import {
@@ -129,7 +129,7 @@ export function register(app: Express, deps: Deps): void {
     res.json({
       letters: history,
       choices: {
-        paths: GAME_CONFIG.paths.map((p) => ({ id: p.id, label: p.label })),
+        paths: villagePathChoices(),
         gatherings,
       },
       limit: { perDay: perDayDial(), today: window.today, minutesSinceLast: window.minutesSinceLast },

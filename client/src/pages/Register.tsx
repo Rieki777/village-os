@@ -8,55 +8,40 @@ import { useEffect, useState } from "react";
 import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
 import { useLocation } from "wouter";
 import { useVillageName } from "@/hooks/useVillageName";
+import { useVillagePaths } from "@/hooks/useVillagePaths";
 import { ACCOUNT_WORDS, NAME_MAX, PASSWORD_MAX, PASSWORD_MIN } from "@shared/accountRules";
 
-// Parameterised the way HowWeCreate.tsx parameterises its recognition cards:
-// the copy names the village, so the list has to be built after the config
-// answers rather than frozen at module load.
-const paths = (villageName: string) => [
-  {
-    id: "investor",
-    label: "Investor",
-    description: "Plant capital in a project built to last.",
-    // text-amber-ink, not text-amber: --color-amber is derived only to carry
-    // ink AS a background chip, never checked as small foreground text on a
-    // light surface. This pill measured 1.43:1 with text-amber; amber-ink
-    // (index.css) measures 4.90:1 in the same spot. See index.css for the
-    // full measurement.
-    color: "bg-amber/10 border-amber/30 text-amber-ink hover:bg-amber/20",
-  },
-  {
-    id: "steward",
-    label: "Village Steward",
-    description: "Hold a role, join a circle, and keep the whole village running.",
-    // text-sage is already a static, measured-safe foreground colour
-    // (5.21:1 on this pill's tint) - unchanged.
-    color: "bg-sage/10 border-sage/30 text-sage hover:bg-sage/20",
-  },
-  {
-    id: "resident",
-    label: "Resident",
-    description: `Make ${villageName} your home. Find a place to live, join the waitlist, and belong.`,
-    // text-teal-deep, not text-teal (brand-soft): brand-soft is a decorative
-    // tint, never checked as foreground text. text-teal measured 2.33:1 here.
-    // teal-deep is safe by construction instead: shared/brandTokens.ts
-    // enforces contrastRatio(white, brand) >= 4.5 for every seed, and
-    // contrast is symmetric, so contrastRatio(brand, white) clears the same
-    // floor - proven down to 4.50:1 worst case across all 54 card x seed
-    // combinations in CHARACTER_CARDS, not just the neutral default (9.59:1
-    // here). See index.css for the neutral-default measurement.
-    color: "bg-teal/10 border-teal/30 text-teal-deep hover:bg-teal/20",
-  },
-  {
-    id: "prosperity-creator",
-    label: "Prosperity Creator",
-    description: "Launch or grow your business inside the village, and share in what you build.",
-    // Same fix as "resident": text-teal-light (brand-mid) measured 4.20:1,
-    // below AA. text-teal-deep is safe by construction (see above), 9.18:1
-    // in this specific tint under the neutral default.
-    color: "bg-teal-light/10 border-teal-light/30 text-teal-deep hover:bg-teal-light/20",
-  },
-];
+/**
+ * Each path's colours. The words are the village's own (Admin, Make it yours,
+ * Paths & Stages) and arrive with `useVillagePaths`; the look stays here,
+ * keyed by the path ids, which never change. An id with no look of its own
+ * takes NEUTRAL_LOOK.
+ */
+const PATH_LOOK: Record<string, string> = {
+  // text-amber-ink, not text-amber: --color-amber is derived only to carry
+  // ink AS a background chip, never checked as small foreground text on a
+  // light surface. This pill measured 1.43:1 with text-amber; amber-ink
+  // (index.css) measures 4.90:1 in the same spot. See index.css for the
+  // full measurement.
+  investor: "bg-amber/10 border-amber/30 text-amber-ink hover:bg-amber/20",
+  // text-sage is already a static, measured-safe foreground colour
+  // (5.21:1 on this pill's tint) - unchanged.
+  steward: "bg-sage/10 border-sage/30 text-sage hover:bg-sage/20",
+  // text-teal-deep, not text-teal (brand-soft): brand-soft is a decorative
+  // tint, never checked as foreground text. text-teal measured 2.33:1 here.
+  // teal-deep is safe by construction instead: shared/brandTokens.ts
+  // enforces contrastRatio(white, brand) >= 4.5 for every seed, and
+  // contrast is symmetric, so contrastRatio(brand, white) clears the same
+  // floor - proven down to 4.50:1 worst case across all 54 card x seed
+  // combinations in CHARACTER_CARDS, not just the neutral default (9.59:1
+  // here). See index.css for the neutral-default measurement.
+  resident: "bg-teal/10 border-teal/30 text-teal-deep hover:bg-teal/20",
+  // Same fix as "resident": text-teal-light (brand-mid) measured 4.20:1,
+  // below AA. text-teal-deep is safe by construction (see above), 9.18:1
+  // in this specific tint under the neutral default.
+  "prosperity-creator": "bg-teal-light/10 border-teal-light/30 text-teal-deep hover:bg-teal-light/20",
+};
+const NEUTRAL_LOOK = PATH_LOOK.resident;
 
 /** What the server said about the invitation link this page was opened with. */
 interface InviteCheck {
@@ -123,7 +108,9 @@ function InvitationNeeded({ villageName, reason }: { villageName: string; reason
 
 export default function Register() {
   const villageName = useVillageName();
-  const PATHS = paths(villageName);
+  // Null until the village's words have arrived, so the choice paints once,
+  // in this village's own names.
+  const PATHS = useVillagePaths();
   const [, navigate] = useLocation();
   const { register } = useAuth();
   const [name, setName] = useState("");
@@ -383,8 +370,8 @@ export default function Register() {
                 <label className="block text-sm font-semibold text-gray-700 mb-4">
                   Choose your path. Pick more than one if you like.
                 </label>
-                <div className="grid gap-3">
-                  {PATHS.map((path) => (
+                <div className="grid gap-3" aria-busy={PATHS === null}>
+                  {(PATHS ?? []).map((path) => (
                     <m.button
                       key={path.id}
                       type="button"
@@ -392,7 +379,7 @@ export default function Register() {
                       onClick={() => togglePath(path.id)}
                       className={`p-4 border-2 rounded-lg text-left transition-all ${
                         selectedPaths.includes(path.id)
-                          ? `${path.color} border-current`
+                          ? `${PATH_LOOK[path.id] ?? NEUTRAL_LOOK} border-current`
                           : "bg-gray-50 border-gray-200 hover:border-gray-300"
                       }`}
                     >
@@ -402,9 +389,9 @@ export default function Register() {
                         ) : (
                           <Circle className="w-5 h-5 mt-0.5 flex-shrink-0 text-gray-400" />
                         )}
-                        <div>
-                          <p className="font-semibold text-gray-900">{path.label}</p>
-                          <p className="text-sm text-gray-600">{path.description}</p>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 break-words">{path.label}</p>
+                          {path.description && <p className="text-sm text-gray-600 break-words">{path.description}</p>}
                         </div>
                       </div>
                     </m.button>

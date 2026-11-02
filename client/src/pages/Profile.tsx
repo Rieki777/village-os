@@ -503,6 +503,7 @@ export default function Profile() {
                   progress={progress}
                   progressUnit={nextRung?.rule.type === "training-complete" ? "lessons" : "quests consented"}
                   nextRuleWords={nextRung?.description ?? null}
+                  ladderTitle={config?.ladder?.title}
                 />
               </div>
             ) : null}
@@ -713,7 +714,7 @@ export default function Profile() {
               </div>
 
               {config && prog ? (
-                <MaturityLadder showNext={false} stages={config.stages} stageIndex={prog.stageIndex} consentedQuests={prog.consentedQuests} />
+                <MaturityLadder showNext={false} title={config.ladder?.title} stages={config.stages} stageIndex={prog.stageIndex} consentedQuests={prog.consentedQuests} />
               ) : null}
 
               {/* BORROWED AND BOOKED: loans, stays and homes asked about, live only.
@@ -736,7 +737,7 @@ export default function Profile() {
                   <QuietSection
                     key={sec.id}
                     title={label}
-                    quiet={sec.quiet}
+                    quiet={sec.quiet.replace("{path}", label)}
                     action={`Walk the ${label} path`}
                     busy={savingPath === sec.path}
                     onAction={() => sec.path && void togglePath(sec.path)}
@@ -892,6 +893,7 @@ export default function Profile() {
           stages={stages}
           name={user.name}
           portrait={null}
+          ladderTitle={config?.ladder?.title}
           onClose={() => setAdvance(null)}
         />
       ) : null}

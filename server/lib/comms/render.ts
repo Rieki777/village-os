@@ -31,6 +31,7 @@ import type { EmailKind } from "../../../shared/comms/kinds";
 import { kindForTemplate, type MergeValues } from "../../../shared/comms/mergeFields";
 import { GAME_CONFIG } from "../../../shared/gameConfig";
 import { readConfigDocument } from "../../repos/appConfigDocs";
+import { villagePaths } from "../villagePaths";
 import { tokenDef } from "../ledger";
 import { signLink } from "./links";
 import { readLiveWords, type TemplateWords } from "./templates";
@@ -90,11 +91,15 @@ export function preferencesLink(origin: string, contactId: string, now?: number)
   return `${bareOrigin(origin)}/email/preferences?t=${encodeURIComponent(token)}`;
 }
 
-/** The path a template key belongs to, from the identity plane's path list. */
+/**
+ * The path a template key belongs to, named the way this village names it
+ * (Admin, Paths & Stages, server/lib/villagePaths.ts): the same words the
+ * join form shows, read from the same cache.
+ */
 function pathOf(templateKey: string): { id: string; label: string; route: string } | null {
   const m = String(templateKey ?? "").match(/^path\.([a-z0-9-]+)\./);
   if (!m) return null;
-  const path = GAME_CONFIG.paths.find((p) => p.id === m[1]);
+  const path = villagePaths().find((p) => p.id === m[1]);
   return path ? { id: path.id, label: path.label, route: path.route } : { id: m[1], label: "", route: "" };
 }
 

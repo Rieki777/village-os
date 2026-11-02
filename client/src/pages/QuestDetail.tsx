@@ -29,6 +29,7 @@ import WorkChatButton from "@/components/messages/WorkChatButton";
 import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/QuestCard";
 import NeedChips, { type NeedTag } from "@/components/NeedChips";
 import NeedTagPicker from "@/components/admin/NeedTagPicker";
+import { useLadderTitle } from "@/hooks/useVillagePaths";
 import {
   currentClaims, gateFix, gateLabel, relativeWhen, statusIs,
   type BoardQuest, type FieldSigns,
@@ -39,6 +40,7 @@ export default function QuestDetail() {
   const questId = params?.id ?? "";
   const cfg = useGameConfig();
   const stages = cfg?.stages ?? [];
+  const ladder = useLadderTitle();
   const { user } = useAuth();
   const [quest, setQuest] = useState<BoardQuest | null>(null);
   const [related, setRelated] = useState<BoardQuest[]>([]);
@@ -445,7 +447,7 @@ export default function QuestDetail() {
                   {/* R47: the lock names its fix where the stage has one. */}
                   {quest.minStage
                     ? (gateFix(quest, stages, cfg?.project?.commitmentName) ??
-                      "Keep walking the Path of Growth and this opens on its own.")
+                      `Keep walking the ${ladder} and this opens on its own.`)
                     : `Ask ${catalyst.aName} or the circle about stepping into it.`}
                 </p>
               </div>
