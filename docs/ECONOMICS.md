@@ -107,13 +107,14 @@ subtlety in this system; see section 7.
 <!-- generated:triggers start -->
 A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is UNIQUE, so the shape of the key is what decides whether a second attempt pays again.
 
-`keys` in `server/lib/economy.ts` builds 12 of them. The angle brackets are that builder's own parameter names.
+`keys` in `server/lib/economy.ts` builds 13 of them. The angle brackets are that builder's own parameter names.
 
 | Builder | What the builder returns |
 | --- | --- |
 | `keys.questCompleted` | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` |
 | `keys.gratitudeGiven` | `gratitude.given:<esc(v)>:<esc(noteId)>` |
 | `keys.roleCycle` | `role.cycle:<esc(v)>:<esc(cycleKey)>:<esc(seatId)>:<esc(userId)>:<esc(tokenSlug)>` |
+| `keys.duesDividend` | `dues.dividend:<esc(v)>:<esc(cycleKey)>:<esc(userId)>:<esc(tokenSlug)>` |
 | `keys.journeyStage` | `journey.stage_reached:<esc(v)>:<esc(journeyId)>:<esc(stage)>:<esc(userId)>` |
 | `keys.welcomeAboard` | `welcome_aboard.quest:<esc(v)>:<esc(questNo)>:<esc(userId)>` |
 | `keys.voiceDecay` | `voice.decay:<esc(v)>:<esc(cycleKey)>:<esc(userId)>:<esc(tokenSlug)>` |
@@ -136,6 +137,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `circle_treasury:dormant:<circleId.slice(0, 40)>:<tokenSlug>:<day>:<balanceMinor>:<accountRows>` | `server/lib/circleTreasury.ts` |
 | `circle-bonus:<recordId>:<unit>` | `server/lib/circleBonus.ts` |
 | `comp-<Date.now()>-<Math.random().toString(36).slice(2, 6)>` | `server/routes/stays.ts` |
+| `dues.dividend:<esc(v)>:<esc(cycleKey)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
 | `equity-claim-debit:<villageId()>:<claimId>` | `server/lib/voiceClaim.ts` |
 | `equity-claim-settled:<villageId()>:<claimId>` | `server/lib/voiceClaim.ts` |
 | `exit:<exitId>:convert-credit:<token>` | `server/lib/exit.ts` |
@@ -181,7 +183,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `xstock-<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `xstock:<slug>:<body>` | `server/index.ts` |
 
-52 distinct shapes across 58 posting site(s), plus 8 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
+53 distinct shapes across 59 posting site(s), plus 8 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
 <!-- generated:triggers end -->
 
 ---
@@ -398,14 +400,14 @@ The mint rules a fresh village is seeded with:
 | --- | --- | --- | --- | --- | --- |
 | `quest.completed` | `village-voice` | 10 | 100 | claimant | yes |
 | `quest.completed` | `credits` | 25 | 250 | claimant | yes |
-| `role.cycle` | `village-voice` | 50 | 200 | holder | yes |
-| `role.cycle` | `credits` | 25 | 250 | holder | yes |
+| `role.cycle` | `village-voice` | read from the work | 200 | holder | yes |
+| `role.cycle` | `credits` | read from the work | 250 | holder | yes |
 | `role.cycle` | `gratitude` | 20 | 100 | holder | **no** |
 | `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
 | `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
 | `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | **no** |
 | `quest.completed` | `earned-equity` | 1 | 1 | claimant | **no** |
-| `role.cycle` | `earned-equity` | 1 | 1 | holder | **no** |
+| `role.cycle` | `earned-equity` | read from the work | 1 | holder | **no** |
 
 Seeded by `seedEconomy` in `server/lib/economySeed.ts` with `INSERT IGNORE` on (village, trigger, token), so an amount a village has edited is never restored by a redeploy.
 <!-- generated:mint-rules end -->
@@ -484,8 +486,23 @@ settlement preview sums it seat by seat, and the cards render from it
 | The work carries | What it is paid |
 |---|---|
 | its own list | each line it names, at its own amount, in full, on a token the village has an enabled rule for. A token it does not name pays nothing, so a valued quest is never also paid the flat amounts |
-| no list | every enabled rule's fixed amount, in full |
+| no list, a quest | every enabled rule's fixed amount, in full |
+| no list, a role | nothing from its rules. A seat is paid its role's own list and never a flat amount (below) |
 | a line on a token with no enabled rule | nothing. No rule lets that token pay this kind of work, so it is refused at the save and reported if it is ever reached |
+
+**No flat role mint, and the dues dividend** (Rye, 2026-11-01: "Yes send a lane to turn off the
+automatic mint - if this is turned on again it would be attached to those who are paying members,
+so that each cycle they're paying membership dues they're getting these tokens minted to them.").
+The `role.cycle` rules used to pay their flat 50 Voice and 25 Credits to every live seat. The seed
+now leaves them blank and still enabled, because an enabled rule is what lets a role's own list
+pay that token, and `blankFlatRoleMint` (`server/lib/flatRoleMint.ts`) queued the blank on running
+villages from the next cycle. A flat amount a village sets again is paid by `payDuesDividend`
+(`server/lib/economy.ts`): once a cycle to each member with a paid, unreversed card charge for a
+`membership` product in that cycle (`server/repos/duesPaid.ts`), per member and never per seat,
+role or no role, never to a former member or an erased account, with no badge multiplier. Card
+dues only, by Rye's ruling: dues paid through Zeffy or by hand leave no per-cycle record. The
+source is `dues_dividend`, which pays no contribution, and the cycle just closed is asked too, so
+dues paid in a cycle's last hour are paid for that cycle.
 | a line on Gratitude | nothing. Refused at the save, and a rule on Gratitude for quests or roles is reported and skipped |
 
 The refusal and the public rules feed state the rule ("Quests and roles are not paid in Gratitude", "no Gratitude for work") and never what the token does (Rye, 2026-10-22: "every community will design their own rules for these and other tokens so don't mention what it does anywhere"). Which token does which job is listed in one read model, `GET /api/admin/token-jobs` (`server/lib/tokenJobs.ts`), read from the places that decide each job.
@@ -3694,8 +3711,9 @@ cycle `lunar-000330`.
 | `runSettlement` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **5000** (50) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:village-voice` |
 | `runSettlement` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:credits` |
 
-The seeded `role.cycle` gratitude rule of 20 is `enabled: false`, so it writes
-nothing. Two seats would be two thanks, and the same seat next moon is another,
+Wren's role, the hearth, names 50 Voice and 25 Credits in its own list: since 2026-11-01 a seat
+is paid its role's own list and never a flat amount ("What a quest and a role pay"). The seeded `role.cycle`
+gratitude rule of 20 is `enabled: false`, so it writes nothing. Two seats would be two thanks, and the same seat next moon is another,
 because the key carries the cycle, the seat and the holder.
 
 A re-run is a no-op and a resumed partial run finishes, both for the same reason:
