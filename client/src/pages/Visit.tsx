@@ -63,6 +63,23 @@ export default function Visit() {
   const subtitle = (cfg?.hero_subtitle ?? `Experience the land, meet the people, and decide if ${villageName} is where you belong.`).trim();
   const contactNote = (cfg?.logistics?.contact_note ?? "Fill in the form below or email the team.").trim();
 
+  /*
+   * A PROGRAMME WITH NOTHING IN IT DRAWS NO HEADING. The platform's starter
+   * programme ships with no logistics (where the land is, where to sleep and
+   * what to bring are one village's facts), and a village may list no ways
+   * to visit. "Logistics" or "Pick a way to visit" over an empty grid reads as
+   * a page that failed to load, so each section waits for something to show;
+   * the form below still takes a visit request either way.
+   */
+  const visitTypes = Array.isArray(cfg?.visit_types) ? [...cfg.visit_types].sort((a, b) => a.order - b.order) : [];
+  const logistics = cfg
+    ? [
+        { Icon: Plane, title: "Getting there", body: cfg.logistics?.getting_there },
+        { Icon: HomeIcon, title: "Accommodation", body: cfg.logistics?.accommodation },
+        { Icon: Backpack, title: "What to bring", body: cfg.logistics?.what_to_bring },
+      ].filter((l) => String(l.body ?? "").trim())
+    : [];
+
   useEffect(() => {
     let alive = true;
     // A swallowed failure is why this section could sit on "Loading..." with no
@@ -118,6 +135,7 @@ export default function Visit() {
         </div>
       </section>
 
+      {!(cfg && visitTypes.length === 0) && (
       <section className="bg-stone-50 py-20">
         <div className="container max-w-5xl mx-auto px-4">
           <div className="text-center mb-12">
@@ -132,8 +150,10 @@ export default function Visit() {
           ) : !cfg ? (
             <div className="text-center text-stone-500">Opening the ways to visit…</div>
           ) : (
-            <div className="grid md:grid-cols-3 gap-5">
-              {[...cfg.visit_types].sort((a, b) => a.order - b.order).map((v) => (
+            // Fewer than three cards sit centred at their own width, so the
+            // starter programme's two do not leave a hole on the right.
+            <div className={`grid gap-5 ${visitTypes.length >= 3 ? "md:grid-cols-3" : visitTypes.length === 2 ? "md:grid-cols-2 max-w-3xl mx-auto" : "max-w-md mx-auto"}`}>
+              {visitTypes.map((v) => (
                 <div key={v.id} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col">
                   <h3 className="font-display text-xl font-semibold text-teal-deep mb-3">{v.title}</h3>
                   {/* The cost line carried a dollar sign beside every village's
@@ -174,19 +194,16 @@ export default function Visit() {
           )}
         </div>
       </section>
+      )}
 
+      {logistics.length > 0 && (
       <section className="bg-white py-20">
         <div className="container max-w-4xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep">Logistics</h2>
           </div>
-          {cfg && (
-            <div className="grid md:grid-cols-3 gap-4">
-              {[
-                { Icon: Plane, title: "Getting there", body: cfg.logistics?.getting_there },
-                { Icon: HomeIcon, title: "Accommodation", body: cfg.logistics?.accommodation },
-                { Icon: Backpack, title: "What to bring", body: cfg.logistics?.what_to_bring },
-              ].filter((l) => String(l.body ?? "").trim()).map((l) => {
+            <div className={`grid gap-4 ${logistics.length >= 3 ? "md:grid-cols-3" : logistics.length === 2 ? "md:grid-cols-2 max-w-3xl mx-auto" : "max-w-md mx-auto"}`}>
+              {logistics.map((l) => {
                 const Icon = l.Icon;
                 return (
                   <div key={l.title} className="bg-stone-50 rounded-2xl border border-stone-200 p-5">
@@ -199,9 +216,9 @@ export default function Visit() {
                 );
               })}
             </div>
-          )}
         </div>
       </section>
+      )}
 
       <section id="visit-form" className="bg-sage/15 py-20">
         <div className="container max-w-2xl mx-auto px-4">
@@ -246,6 +263,7 @@ export default function Visit() {
                   />
                 </div>
               </div>
+              {visitTypes.length > 0 && (
               <div>
                 <label htmlFor="visit-type" className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5">Visit type</label>
                 <select
@@ -255,11 +273,12 @@ export default function Visit() {
                   className="w-full px-3 py-2 border border-stone-200 rounded-lg outline-none focus:border-teal-deep bg-white"
                 >
                   <option value="">Choose one</option>
-                  {cfg?.visit_types?.map((v) => (
+                  {visitTypes.map((v) => (
                     <option key={v.id} value={v.id}>{v.title}</option>
                   ))}
                 </select>
               </div>
+              )}
               <div>
                 <label htmlFor="visit-message" className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5">Anything we should know?</label>
                 <textarea

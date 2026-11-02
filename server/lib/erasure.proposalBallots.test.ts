@@ -92,7 +92,7 @@ const mechanicsDoc = (id: string, proposerName: string) =>
 
 /** The launch door's document, exactly: server/index.ts, openedBy firstName(user.name), the slate's first names. */
 const launchDoc = (openedBy: string, slate: SlateMember[]) =>
-  launchProposalDoc({ villageName: "Village", quorumPct: 100, unityPct: 100, onTheRoll: 4, weightNote: "", openedBy, openedOn: "2026-10-05", slate });
+  launchProposalDoc({ villageName: "Village", quorumPct: 100, unityPct: 100, onTheRoll: 4, weightNote: "", openedBy, openedOn: "2026-10-05", slate, handover: [] });
 
 describe.skipIf(!configured)("round 4, 9: the proposal and launch ballots that name an erased member", () => {
   beforeAll(async () => {

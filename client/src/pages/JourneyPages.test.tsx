@@ -27,14 +27,44 @@ vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ComponentType, ReactNode } from "react";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
 import { pageSectionKey, type PageSpec } from "@shared/pageContent/types";
+import { pageVarsFrom } from "@shared/pageContent/vars";
 import {
   INVESTOR_JOURNEY,
+  JOURNEY_LEGACY_STEP_IDS,
   PROSPERITY_JOURNEY,
   RESIDENT_JOURNEY,
   STEWARD_JOURNEY,
+  type JourneyId,
 } from "@shared/pageContent/journeys";
+
+/*
+ * A village that saved nothing reads the spec's defaults, neutral starter
+ * text since 2026-10-23. The tests below read them from the spec rather than
+ * typing them again, so a later wording change moves no test; they pin the
+ * BEHAVIOUR (where a button goes, what a word becomes, what hides).
+ */
+const sectionOf = (spec: PageSpec, id: string) => spec.sections.find((s) => s.id === id)!;
+const fieldDefault = (spec: PageSpec, id: string, key: string) => sectionOf(spec, id).fields.find((f) => f.key === key)!.default;
+const listDefault = (spec: PageSpec, id: string, key: string) => sectionOf(spec, id).lists!.find((l) => l.key === key)!.default;
+const SPECS: Record<JourneyId, PageSpec> = {
+  investor: INVESTOR_JOURNEY,
+  steward: STEWARD_JOURNEY,
+  resident: RESIDENT_JOURNEY,
+  prosperity: PROSPERITY_JOURNEY,
+};
+/** One default step, found by the id it carried before the steps became a list. */
+const stepDefault = (journey: JourneyId, legacyId: string) =>
+  listDefault(SPECS[journey], "steps", "items")[JOURNEY_LEGACY_STEP_IDS[journey].indexOf(legacyId)];
+/** A default as this suite's village reads it (the config mocked below). */
+const filled = (text: string, more: Record<string, string> = {}) =>
+  fillVars(text, {
+    ...pageVarsFrom({ project: { name: "Willowbrook", commitmentName: "Village Pact" }, currency: { name: "Thanks", value: { name: "Seeds" } } }),
+    ...more,
+  });
+/** A literal phrase as a pattern. */
+const phrase = (text: string) => new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
 const state = vi.hoisted(() => ({
   pages: {} as Record<string, unknown>,
@@ -352,6 +382,33 @@ describe("/investor", () => {
     expect(await screen.findByText("Thanks, we answer within a week.")).toBeInTheDocument();
   });
 
+  it("draws no phases band until the village lists a phase, and states no phase of its own", async () => {
+    expect(listDefault(INVESTOR_JOURNEY, "phases", "items")).toEqual([]);
+    show(InvestorJourney);
+    await screen.findByText(fieldDefault(INVESTOR_JOURNEY, "steps", "heading"));
+    expect(screen.queryByText(fieldDefault(INVESTOR_JOURNEY, "phases", "heading"))).toBeNull();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("draws only the figures a village stated, under the sentence for stated figures", async () => {
+    state.settings = { landFacts: { appraisal: { value: "1.2M EUR", note: "March 2027" } } };
+    show(InvestorJourney);
+    expect(await screen.findByText("1.2M EUR")).toBeInTheDocument();
+    expect(screen.getByText(fieldDefault(INVESTOR_JOURNEY, "figures", "intro"))).toBeInTheDocument();
+    expect(screen.queryByText(fieldDefault(INVESTOR_JOURNEY, "figures", "empty"))).toBeNull();
+    const [appreciation, appraisal, projected, raise] = listDefault(INVESTOR_JOURNEY, "figures", "tiles");
+    expect(screen.getByText(appraisal.title)).toBeInTheDocument();
+    for (const unset of [appreciation, projected, raise]) expect(screen.queryByText(unset.title), unset.title).toBeNull();
+  });
+
+  it("invents no figure: no amount, no rate and no count anywhere in its words", async () => {
+    state.settings = { landFacts: {} };
+    show(InvestorJourney);
+    await screen.findByText(fieldDefault(INVESTOR_JOURNEY, "figures", "empty"));
+    const said = document.body.textContent ?? "";
+    expect(said).not.toMatch(/\d+\s*%|\$\s*\d|\d+\s*(keys|lots|homes|years?)\b|\d+K\b/i);
+  });
+
   it("emails the commitment with the village's own subject line, and hides it with no address", async () => {
     show(InvestorJourney);
     fireEvent.click(await screen.findByText("Make Your Commitment"));
@@ -368,16 +425,26 @@ describe("/steward", () => {
     expect(await screen.findByRole("link", { name: /Learn About Our Seasons/ })).toHaveAttribute("href", "/seasonal-festivals");
   });
 
-  it("keeps the token rows' words on the path of growth", async () => {
+  it("draws the path of growth with no token promise and no pay line", async () => {
     show(StewardJourney);
-    expect(await screen.findByText("Voice in your circle")).toBeInTheDocument();
-    expect(screen.getByText("Mentorship responsibilities")).toBeInTheDocument();
+    const [first, ...rest] = listDefault(STEWARD_JOURNEY, "ladder", "items");
+    expect(await screen.findByText(first.benefits)).toBeInTheDocument();
+    for (const level of rest) expect(screen.getByText(level.benefits)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/compensation/i);
+  });
+
+  it("says nowhere that a quest pays what its card says (Rye, 2026-10-23)", async () => {
+    show(StewardJourney);
+    fireEvent.click(await screen.findByText(stepDefault("steward", "quests").title));
+    await screen.findByText(stepDefault("steward", "quests").bullet1);
+    expect(document.body.textContent).not.toMatch(/get paid|what each quest's card says/i);
   });
 
   it("links the footnote's phrase to the events page", async () => {
     show(StewardJourney);
-    expect(await screen.findByRole("link", { name: "join our next community call" })).toHaveAttribute("href", "https://example.org/events");
+    expect(
+      await screen.findByRole("link", { name: fieldDefault(STEWARD_JOURNEY, "nextStep", "footnoteLink") }),
+    ).toHaveAttribute("href", "https://example.org/events");
   });
 
   it("says what the village wrote once the form is sent", async () => {
@@ -395,7 +462,9 @@ describe("/steward", () => {
 
   it("uses the village's commitment name where the page said Love Letter", async () => {
     show(StewardJourney);
-    fireEvent.click(await screen.findByText("Join the Willowbrook Family"));
+    const step = stepDefault("steward", "love-letter");
+    fireEvent.click(await screen.findByText(filled(step.title)));
+    expect(filled(step.actionLabel)).toBe("Read the Village Pact");
     expect(await screen.findByRole("link", { name: /Read the Village Pact/ })).toHaveAttribute("href", "/love-letter");
   });
 });
@@ -403,67 +472,92 @@ describe("/steward", () => {
 describe("/resident", () => {
   const open = async (title: string) => fireEvent.click(await screen.findByText(title));
 
+  /** The four steps whose buttons pointed at "#": blank "goes to" in the defaults now. */
+  const NOWHERE = ["background", "fireside", "land", "move-in"].map((id) => stepDefault("resident", id));
+
   it("draws none of the four buttons that went nowhere", async () => {
     show(ResidentJourney);
-    for (const [title, label] of [
-      ["Background Check", "Coming Soon"],
-      ["Fireside Dinner With the Founding Team", "By Invitation"],
-      ["Purchase Land Share Agreement", "Learn About Land Shares"],
-      ["Move In Celebration!", "Welcome Home"],
-    ]) {
-      await open(title);
-      expect(screen.queryByText(label), label).toBeNull();
+    for (const step of NOWHERE) {
+      expect(step.actionTarget, step.title).toBe("");
+      expect(step.actionLabel, step.title).not.toBe("");
+      await open(filled(step.title));
+      expect(screen.queryByText(step.actionLabel), step.actionLabel).toBeNull();
     }
     expect(document.querySelector('a[href="#"]')).toBeNull();
   });
 
   it("draws one once the village gives it somewhere to go", async () => {
     const steps = RESIDENT_JOURNEY.sections.find((s) => s.id === "steps")!.lists![0].default;
+    const background = stepDefault("resident", "background");
     state.pages[pageSectionKey(RESIDENT_JOURNEY)] = {
-      steps: { items: steps.map((row) => (row.title === "Background Check" ? { ...row, actionTarget: "/apply" } : row)) },
+      steps: { items: steps.map((row) => (row.title === background.title ? { ...row, actionTarget: "/apply" } : row)) },
     };
     show(ResidentJourney);
-    await open("Background Check");
-    expect(await screen.findByRole("link", { name: /Coming Soon/ })).toHaveAttribute("href", "/apply");
+    await open(background.title);
+    expect(await screen.findByRole("link", { name: phrase(background.actionLabel) })).toHaveAttribute("href", "/apply");
   });
 
-  it("sends Good Neighbor Criteria to the good neighbor page", async () => {
+  it("sends the passage step's button to the good neighbor page", async () => {
     show(ResidentJourney);
-    await open("Resident Right of Passage");
-    expect(await screen.findByRole("link", { name: /Good Neighbor Criteria/ })).toHaveAttribute("href", "/good-neighbor");
+    const passage = stepDefault("resident", "passage");
+    await open(passage.title);
+    expect(await screen.findByRole("link", { name: phrase(passage.actionLabel) })).toHaveAttribute("href", "/good-neighbor");
+  });
+
+  it("never names the criteria by a name this page cannot follow (the Good Neighbor page renames them)", async () => {
+    show(ResidentJourney);
+    await open(stepDefault("resident", "passage").title);
+    expect(document.body.textContent).not.toMatch(/Good Neighbor Criteria/);
   });
 
   it("fills the land share transfer note and the background check note from the legal settings", async () => {
     state.legal = { landShareTransferNote: "(within the family line)", membership: { backgroundCheckNote: "and it is free" } };
     show(ResidentJourney);
-    expect(await screen.findByText(/pass down to your children \(within the family line\)\./)).toBeInTheDocument();
-    await open("Background Check");
-    expect(screen.getAllByText(/community safety, and it is free\./).length).toBeGreaterThan(0);
+    const tenure = filled(fieldDefault(RESIDENT_JOURNEY, "tenure", "body"), { "transfer-note": " (within the family line)" });
+    expect(tenure).toContain("to your children (within the family line).");
+    expect(await screen.findByText(tenure)).toBeInTheDocument();
+    const background = stepDefault("resident", "background");
+    await open(background.title);
+    const sentence = filled(background.description, { "background-note": ", and it is free" });
+    expect(sentence).toContain(", and it is free.");
+    expect(screen.getAllByText(phrase(sentence)).length).toBeGreaterThan(0);
   });
 
-  it("says the token row's dues words, and links How we create together", async () => {
+  it("says the dues words with no token in them, and links How we create together", async () => {
     show(ResidentJourney);
-    expect(
-      await screen.findByText(
-        "As a resident, you'll pay Village Dues that cover utilities, maintenance, and community services. Together, we work to reduce costs and create surplus that benefits everyone.",
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(filled(fieldDefault(RESIDENT_JOURNEY, "dues", "fallback")))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /How we create together/ })).toHaveAttribute("href", "/how-we-create");
     expect(document.body.textContent).not.toMatch(/offset/i);
+  });
+
+  it("states none of the founding village's own facts or rituals as every village's (2026-10-23)", async () => {
+    show(ResidentJourney);
+    await screen.findByText(fieldDefault(RESIDENT_JOURNEY, "steps", "heading"));
+    // Only one step is open at a time, and the first opens by itself.
+    let said = document.body.textContent ?? "";
+    for (const step of listDefault(RESIDENT_JOURNEY, "steps", "items").slice(1)) {
+      await open(filled(step.title));
+      said += document.body.textContent ?? "";
+    }
+    expect(said).not.toMatch(/Founding Seeder|Fireside|founding team|Land Credits|Land Share Agreement|Children's Play Day/);
+    expect(said).not.toMatch(/Nonviolent Communication|fully refundable|potluck/i);
   });
 });
 
 describe("/prosperity", () => {
+  const stepsIntro = (count: string) => filled(fieldDefault(PROSPERITY_JOURNEY, "steps", "intro"), { count });
+
   it("counts its own steps in words", async () => {
+    expect(listDefault(PROSPERITY_JOURNEY, "steps", "items")).toHaveLength(7);
     show(ProsperityJourney);
-    expect(await screen.findByText("Follow these seven steps to launch your regenerative business at Willowbrook.")).toBeInTheDocument();
+    expect(await screen.findByText(stepsIntro("seven"))).toBeInTheDocument();
   });
 
   it("says three when the village keeps three", async () => {
     const steps = PROSPERITY_JOURNEY.sections.find((s) => s.id === "steps")!.lists![0].default;
     state.pages[pageSectionKey(PROSPERITY_JOURNEY)] = { steps: { items: steps.slice(0, 3) } };
     show(ProsperityJourney);
-    expect(await screen.findByText("Follow these three steps to launch your regenerative business at Willowbrook.")).toBeInTheDocument();
+    expect(await screen.findByText(stepsIntro("three"))).toBeInTheDocument();
   });
 
   it("names the tiers with the village's own words, never another village's name after the acronym", async () => {
@@ -475,18 +569,26 @@ describe("/prosperity", () => {
     expect(document.body.textContent).not.toMatch(/ARI/);
   });
 
-  it("keeps today's tier name by default", async () => {
+  /** The tier words as the defaults fill them. */
+  const tierWords = () => {
+    const acronym = fieldDefault(PROSPERITY_JOURNEY, "tiers", "acronym");
+    return { acronym, framework: filled(fieldDefault(PROSPERITY_JOURNEY, "tiers", "framework")) };
+  };
+
+  it("names its tiers with the spec's own starter words, never another village's acronym", async () => {
     show(ProsperityJourney);
-    expect(await screen.findByRole("heading", { name: "ARI Tiers: Willowbrook Regenerative Impact" })).toBeInTheDocument();
+    const words = tierWords();
+    expect(await screen.findByRole("heading", { name: filled(fieldDefault(PROSPERITY_JOURNEY, "tiers", "heading"), words) })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\bARI\b/);
   });
 
   it("says the token rows' words and nothing about what a token does", async () => {
     show(ProsperityJourney);
-    await screen.findByText("Shared Enterprise");
+    await screen.findByText(fieldDefault(PROSPERITY_JOURNEY, "economy", "firstHeading"));
     const said = document.body.textContent ?? "";
-    expect(said).toContain("Launch a business that serves the community and regenerates our ecosystem. Advance your impact through our ARI tiers.");
-    expect(said).toContain("Every business here agrees its revenue share with the village, business by business.");
-    expect(said).toContain("Community contributions per week");
+    expect(said).toContain(filled(fieldDefault(PROSPERITY_JOURNEY, "hero", "intro"), tierWords()));
+    expect(said).toContain(filled(fieldDefault(PROSPERITY_JOURNEY, "economy", "firstBody")));
+    expect(said).toContain(listDefault(PROSPERITY_JOURNEY, "tiers", "items")[0].metric2);
     expect(said).not.toMatch(/Thanks/);
     expect(said).not.toMatch(/pay in cash|tracked in|tracks contributions/i);
   });
@@ -494,30 +596,42 @@ describe("/prosperity", () => {
   it("names the village's guide in the proposal step", async () => {
     workWithUs = { assistantName: "Juniper" };
     show(ProsperityJourney);
-    fireEvent.click(await screen.findByText("Submit Business Proposal"));
-    await waitFor(() => expect(document.body.textContent).toContain("Juniper can help you shape it."));
+    const step = stepDefault("prosperity", "business-proposal");
+    fireEvent.click(await screen.findByText(step.title));
+    await waitFor(() => expect(document.body.textContent).toContain(filled(step.description, { guide: "Juniper" })));
+    expect(document.body.textContent).toContain("Juniper can help you shape it.");
   });
 
   it("says the village guide in the proposal step while the guide has no name", async () => {
     workWithUs = { assistantName: "" };
     show(ProsperityJourney);
-    fireEvent.click(await screen.findByText("Submit Business Proposal"));
-    await waitFor(() => expect(document.body.textContent).toContain("mission. The village guide can help you shape it."));
+    const step = stepDefault("prosperity", "business-proposal");
+    fireEvent.click(await screen.findByText(step.title));
+    // {guide} opens a sentence in the starter words, so the unnamed guide reads with a capital.
+    await waitFor(() => expect(document.body.textContent).toContain(filled(step.description, { guide: "The village guide" })));
+    expect(document.body.textContent).toContain(". The village guide can help you shape it.");
     expect(document.body.textContent).not.toContain("Maia");
   });
 
   it("emails the packet request with the village's own subject line", async () => {
     state.pages[pageSectionKey(PROSPERITY_JOURNEY)] = { hero: { contactSubject: "Business pack, please" } };
     show(ProsperityJourney);
-    const [heroButton] = await screen.findAllByRole("link", { name: /Request Prosperity Packet/ });
+    const [heroButton] = await screen.findAllByRole("link", { name: phrase(fieldDefault(PROSPERITY_JOURNEY, "hero", "primaryLabel")) });
     expect(heroButton).toHaveAttribute("href", "mailto:team@example.org?subject=Business%20pack%2C%20please");
   });
 
   it("hides the packet band and every packet button while the village has no contact address", async () => {
     state.contactEmail = "";
     show(ProsperityJourney);
-    await screen.findByText("Shared Enterprise");
-    expect(screen.queryByText("Ready to Explore Opportunities?")).toBeNull();
-    expect(screen.queryByRole("link", { name: /Packet/ })).toBeNull();
+    await screen.findByText(fieldDefault(PROSPERITY_JOURNEY, "economy", "firstHeading"));
+    expect(screen.queryByText(fieldDefault(PROSPERITY_JOURNEY, "packet", "heading"))).toBeNull();
+    for (const label of [
+      fieldDefault(PROSPERITY_JOURNEY, "hero", "primaryLabel"),
+      fieldDefault(PROSPERITY_JOURNEY, "packet", "ctaLabel"),
+      fieldDefault(PROSPERITY_JOURNEY, "closing", "secondaryLabel"),
+    ]) {
+      expect(screen.queryByRole("link", { name: phrase(label) }), label).toBeNull();
+    }
+    expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 });

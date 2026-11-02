@@ -43,21 +43,33 @@ afterEach(() => villageKeyed(false));
 describe("the guide doors, without a database", () => {
   it("offers a visitor the village guide only, under the name the village gave it", () => {
     villageKeyed(true);
-    const s = guideStateFor(false, "saberra", "Maia");
+    const s = guideStateFor(null, "saberra", "Maia");
     expect(s.options.map((o) => o.id)).toEqual(["village"]);
     expect(s.options[0].name).toBe("Maia");
     expect(s.choice).toBeNull();
     expect(s.answering).toBe("village");
   });
 
-  it("calls an unnamed village guide the village guide", () => {
+  it("words an unnamed village guide for its reader: the village guide, or your village guide to a founder or admin", () => {
     villageKeyed(true);
-    expect(guideStateFor(true, null, "  ").options[0].name).toBe("The village guide");
+    expect(guideStateFor({ role: "member" }, null, "  ").options[0]).toMatchObject({ name: "the village guide", named: false });
+    expect(guideStateFor(null, null, "").options[0]).toMatchObject({ name: "the village guide", named: false });
+    expect(guideStateFor({ role: "founder" }, null, "").options[0]).toMatchObject({ name: "your village guide", named: false });
+    expect(guideStateFor({ role: "admin" }, null, null).options[0]).toMatchObject({ name: "your village guide", named: false });
+    expect(guideStateFor({ role: "member" }, null, "Maia").options[0]).toMatchObject({ name: "Maia", named: true });
+  });
+
+  it("raises an unnamed guide's name to a capital only where it opens a sentence", () => {
+    villageKeyed(true);
+    const s = guideStateFor({ role: "member" }, "saberra", "");
+    expect(s.note).toBe("Sera can't answer right now, so the village guide is answering.");
+    expect(GUIDE_WORDS.answering(s.options[0].name)).toBe("The village guide is answering.");
+    expect(GUIDE_WORDS.switchTo(s.options[0].name)).toBe("Talk to the village guide");
   });
 
   it("offers a member both guides, and the outside agent cannot answer while its module is off", () => {
     villageKeyed(true);
-    const s = guideStateFor(true, "saberra", "Maia");
+    const s = guideStateFor({ role: "member" }, "saberra", "Maia");
     expect(s.options.map((o) => [o.id, o.available])).toEqual([["village", true], ["saberra", false]]);
     expect(s.answering).toBe("village");
     expect(s.note).toBe(GUIDE_WORDS.fellBack("Sera", "Maia"));
@@ -65,7 +77,7 @@ describe("the guide doors, without a database", () => {
   });
 
   it("answers with nobody when the village has no assistant key and the agent is unreachable", () => {
-    expect(guideStateFor(true, null, "Maia").answering).toBeNull();
+    expect(guideStateFor({ role: "member" }, null, "Maia").answering).toBeNull();
   });
 
   it("refuses a stranger's save, a guide that does not exist, and a member over the hour's limit", async () => {

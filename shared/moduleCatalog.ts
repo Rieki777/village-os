@@ -436,7 +436,7 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     ],
     forWhom: "Circles that like to open a working call by tuning in to each other first.",
     setupSummary: "Nothing to set up. Turn on Live Sessions and Gene Keys first; the card appears at drop in.",
-    dataSummary: "While a session is open: its cards and each person's line, private until they share it. Every card is deleted when its session closes.",
+    dataSummary: "While a session is open: its cards and the line for each person read, private until they share it. A card is deleted within an hour of its session closing or being discarded, at once when someone it read withdraws, and on erasure. With an assistant key, facts without names go to the assistant provider (Anthropic by default).",
     hue: 250,
     emblem: "Orbit",
   },

@@ -207,6 +207,13 @@ export interface CardProposal {
   /** `seat_applications.term_ends_at`. */
   termEndsAt: string | null;
   /**
+   * The season the proposal is for (E9): the card's eyebrow, its span and its
+   * moon cycle are drawn in it, never in the running season. Null is a
+   * proposal with no season to be for, which draws none. Left out, the card
+   * keeps the running season, as it did before.
+   */
+  season?: CardSeason | null;
+  /**
    * A role proposal's draft (role proposals PR A): the words it proposes,
    * drawn over the posted ones by field name, so a field a later release adds
    * to roles is drawn with no edit here; roles the village has not created
@@ -601,6 +608,8 @@ export async function buildPlayerCards(
       viewerMember: ctx.viewerMember === true,
       villageName: ctx.villageName,
       season: ctx.season,
+      // A proposal card is drawn in the season it is for (E9); "My applications" still reads the running one.
+      proposalSeason: proposal ? proposal.season : undefined,
       nextSeasonId: ctx.nextSeasonId,
       archetypeNames: ctx.archetypeNames,
       roles: rolesVisible ? roleIns : undefined,

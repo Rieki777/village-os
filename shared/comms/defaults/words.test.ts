@@ -31,6 +31,7 @@ const VILLAGE: EmailVillage = {
   seed: "#3b6e8f",
   character: "civic",
   postalAddress: "1 Sample Lane",
+  tokenName: "Thanks",
 };
 
 /** Every template there is: the platform's own, and the generic words a fork's path gets. */
@@ -175,7 +176,7 @@ describe("every default email", () => {
 
   it("leads every path and new-member email with its next step, and ends with at most one Lore line (R47)", () => {
     const paragraphs = (t: DefaultTemplate) => t.bodyMd.split("\n\n");
-    const rewritten = ALL.filter((t) => t.version === 2 && /^(path|member)\./.test(t.key));
+    const rewritten = ALL.filter((t) => t.version >= 2 && /^(path|member)\./.test(t.key));
     expect(rewritten.length).toBeGreaterThan(15);
     for (const t of rewritten) {
       const lead = paragraphs(t)[1];
@@ -195,6 +196,34 @@ describe("every default email", () => {
       expect(words, t.key).not.toMatch(/(?<!\/)\bquests?\b/);
       expect(words, t.key).not.toMatch(/\bgratitude wall\b/);
     }
+  });
+
+  it("names the token's wall by the village's own name for the token, never a fixed one", () => {
+    for (const t of ALL) {
+      const words = `${t.subject}\n${t.preheader ?? ""}\n${t.bodyMd}`;
+      expect(words, t.key).not.toMatch(/\bGratitude\b/);
+      if (words.includes("/gratitude")) expect(words, t.key).toContain("{{village.tokenName}} wall");
+    }
+    const email = render(platformTemplate("path.resident.stories")!);
+    expect(email.text).toContain("Read the Thanks wall: https://sample.example/gratitude");
+    expect(email.text).toContain("Spend ten minutes on the Thanks wall.");
+  });
+
+  it("keeps the investor packet receipt to information, and promises no time", () => {
+    const forbidden = [
+      /\breturns?\b/i, /\byields?\b/i, /\bprofits?\b/i, /\bguarantee/i, /\bopportunit/i, /\boffer/i,
+      /\bhurry\b/i, /\blimited\b/i, /\bexclusive\b/i, /\d+\s?%/, /\bearn/i,
+      /\bhours?\b/i, /\bdays?\b/i, /\bweeks?\b/i, /\bwithin\b/i, /\bshortly\b/i, /\bsoon\b/i, /\d/,
+    ];
+    for (const key of ["investor.packet", "investor.thanks"]) {
+      const t = platformTemplate(key)!;
+      const words = `${t.subject}\n${t.preheader}\n${t.bodyMd}`;
+      for (const re of forbidden) expect(words, `${key}: ${re}`).not.toMatch(re);
+    }
+    const packet = render(platformTemplate("investor.packet")!);
+    expect(packet.text).toContain("- Investor summary: https://sample.example/api/uploads/sample.pdf");
+    expect(packet.text).toContain("Someone from our team will be in touch to answer your questions.");
+    expect(packet.subject).toBe("Your Sample Village investor packet");
   });
 
   it("lists every default in exactly one group of the Words screen", () => {

@@ -225,6 +225,7 @@ beforeAll(async () => {
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "launchvote-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
+      VILLAGE_SECRETS_KEY: "1f".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
     },
@@ -305,6 +306,17 @@ beforeAll(async () => {
     body: { id: "backups-drilled", done: true },
   });
   expect(backups.status, JSON.stringify(backups.json)).toBe(200);
+
+  /*
+   * THE VILLAGE'S CLOCK, WHICH BLOCKS THE LAUNCH VOTE SINCE READINESS R059.
+   * The platform keeps UTC until a founder answers, and confirming the zone
+   * already showing is an answer, so this village keeps UTC and says so.
+   */
+  const zone = (await call("GET", "/api/admin/seasons")).json;
+  const confirmedZone = await call("PUT", "/api/admin/seasons", {
+    body: { seasons: zone.seasons, cadence: zone.cadence, timezone: zone.timezone, confirmTimezone: true },
+  });
+  expect(confirmedZone.status, JSON.stringify(confirmedZone.json)).toBe(200);
 
   /*
    * THE FOUNDER'S ANSWER ABOUT THE VILLAGE-WIDE ISSUANCE CAP, WHICH IS NEW AND
@@ -658,17 +670,10 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => 
     const [roles] = await pool.query<any[]>("SELECT capabilities FROM roles WHERE id = 'steward'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const caps = typeof roles[0]?.capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0]?.capabilities;
     expect([...caps].sort(), "the role carries every one of them").toEqual([...HANDOVER_SET].sort());
-    const [holdings] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "SELECT capability, holder_role_id, moved_by_ballot_id FROM capability_holding ORDER BY capability",
-    );
-    expect(
-      holdings.map((h: any) => String(h.capability)),
-      "and every one of them is the village's, from this vote",
-    ).toEqual([...HANDOVER_SET].sort());
-    for (const h of holdings) {
-      expect(String(h.holder_role_id)).toBe("steward");
-      expect(String(h.moved_by_ballot_id)).toBe(carried.id);
-    }
+    // Rye, 2026-11-01: the launch hands the village only what the stewards
+    // selected, and this village selected nothing.
+    const [holdings] = await pool.query<any[]>("SELECT capability FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(holdings, "and not one of them is the village's yet").toEqual([]);
 
     // And the founder was told, on the same spine every other seating uses.
     const [rung] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
@@ -728,6 +733,30 @@ describe.skipIf(!DB_CONFIGURED)("everybody answers and everybody agrees", () => 
     expect(after.launchedAt).toBe(before.launchedAt);
     expect(after.launchedByBallotId).toBe(before.launchedByBallotId);
     expect(after.gameStart?.started).toBe(true);
+  });
+
+  it("AFTER LAUNCH a keystone key waits for a second person, and nothing is saved until then", async () => {
+    // The setup game's co-sign (server/routes/plantingRequests.ts): the launch ballot carried above.
+    const KEY = "sk_live_launchvote_cosign_77aa";
+    const put = await call("PUT", "/api/admin/integrations/stripe_secret_key", { body: { value: KEY } });
+    expect(put.status, JSON.stringify(put.json)).toBe(202);
+    expect(put.json?.asked).toBe(true);
+    expect(JSON.stringify(put.json)).not.toContain(KEY);
+    const integrations = await call("GET", "/api/admin/integrations");
+    expect((integrations.json?.secrets as any[]).find((s) => s.key === "stripe_secret_key")?.configured).toBe(false);
+    const waiting = await call("GET", "/api/admin/planting-requests");
+    expect(waiting.status, JSON.stringify(waiting.json)).toBe(200);
+    const mine = (waiting.json?.waiting as any[]).find((w) => w.slot === "stripe_secret_key");
+    expect(mine?.last4).toBe("77aa");
+    expect(JSON.stringify(waiting.json)).not.toContain(KEY);
+    // The person who asked cannot be the second person, and a member who is not an admin cannot co-sign.
+    expect((await call("POST", `/api/admin/planting-requests/${mine.id}/cosign`)).status).toBe(409);
+    expect((await call("POST", `/api/admin/planting-requests/${mine.id}/cosign`, { token: wrenToken })).status).toBe(403);
+    // Clearing a key is never held: a leaked key can always be pulled at once.
+    expect((await call("PUT", "/api/admin/integrations/stripe_secret_key", { body: { value: "" } })).status).toBe(200);
+    // The asker withdraws, and the request leaves the list.
+    expect((await call("POST", `/api/admin/planting-requests/${mine.id}/decline`)).status).toBe(200);
+    expect(((await call("GET", "/api/admin/planting-requests")).json?.waiting as any[]).length).toBe(0);
   });
 
   it("cannot be started twice", async () => {

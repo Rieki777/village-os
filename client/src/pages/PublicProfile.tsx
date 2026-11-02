@@ -26,6 +26,8 @@ import { PersonGeneKeysCard, PersonGeneKeysSeal } from "@/components/geneKeys/Pr
 import { moonsOnLandPhrase } from "@shared/villageMoon";
 import BadgeFlower, { type FlowerBadge } from "@/components/badges/BadgeFlower";
 import BadgeRoster from "@/components/badges/BadgeRoster";
+import { InventoryList } from "@/components/profile/InventoryCard";
+import { isEmptyInventory, type Inventory } from "@shared/profileInventory";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -53,6 +55,8 @@ interface PublicSheet {
   homeStructureKey?: string | null;
   standing?: Array<{ token: string; name: string; balance: number; decimals: number }>;
   gratitude?: { receivedThisSeason: number; givenThisSeason: number; lifetime: number };
+  /** Present only when the member turned on showInventory. */
+  inventory?: Inventory;
   party?: Party[];
 }
 
@@ -326,6 +330,17 @@ export default function PublicProfile() {
                 ? "Has not thanked anyone yet this season."
                 : `Thanked ${sheet.gratitude.givenThisSeason} members in return.`}
             </p>
+          </section>
+        ) : null}
+
+        {/* Present only when the member chose to show it, and drawn only when
+            something is live: absent and empty both say nothing. */}
+        {sheet.inventory && !isEmptyInventory(sheet.inventory) ? (
+          <section className="mt-10" data-public-inventory="">
+            <h2 className="text-lg font-semibold text-sage">Borrowed and booked</h2>
+            <div className="mt-3">
+              <InventoryList inventory={sheet.inventory} />
+            </div>
           </section>
         ) : null}
 

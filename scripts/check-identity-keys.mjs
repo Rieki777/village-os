@@ -129,6 +129,10 @@ export const IDENTITY_KEYS = [
   "images.logo",
   "images.heartLogo",
   "images.favicon",
+  // Added 2026-10-31 (readiness R059). A clock is a place: "America/Costa_Rica"
+  // told every fork it lived where the first village does, and no word-matching
+  // guard could see it. The NEUTRAL entry below holds it to UTC.
+  "season.timezone",
 ];
 
 /**
@@ -172,6 +176,11 @@ export const NEUTRAL = {
   "currency.equity.name": ["Village Equity"],
   "currency.voice.symbol": ["VOICE"],
   "currency.voice.name": ["Village Voice"],
+  // Straight into NEUTRAL, with no pending stop, on 2026-10-31: the live
+  // village confirmed its own zone in its season document first, so the
+  // default moving cannot move its clock. UTC is nobody's home, and the
+  // Launch Plan's village-timezone row is blocking until a founder answers.
+  "season.timezone": ["UTC"],
 };
 
 /**
@@ -220,17 +229,12 @@ export const KNOWN_PENDING = [
  * NOT taken here, and the reason is a key this guard cannot see yet rather
  * than caution.
  *
- * `season.timezone` still ships "America/Costa_Rica" in shared/gameConfig.ts.
- * It is not in IDENTITY_KEYS, so nothing checks it: `auditIdentity` walks a
- * FIXED list, which catches a rename and can never catch an addition. Once
- * that hole is closed, the timezone has to land in one list or the other, and
- * nobody has confirmed the live village holds its own copy. That makes it a
- * pending entry by the same rule fiatCurrency just graduated under.
- *
- * So deleting this machinery today means rebuilding it within weeks, and a
- * ratchet rebuilt is a ratchet whose history was thrown away. Empty is the
- * correct reading right now: zero keys are waiting on the founder. Delete both
- * when the timezone question is settled and no key is left that needs them.
+ * `season.timezone` was that key. It shipped "America/Costa_Rica" and was not
+ * in IDENTITY_KEYS, so nothing checked it. On 2026-10-31 (readiness R059) the
+ * live village held its own zone in its season document, so the key went into
+ * IDENTITY_KEYS and NEUTRAL together, holding "UTC", and never needed a
+ * pending stop. Empty is the correct reading: zero keys are waiting on the
+ * founder. The machinery stays for the next key that does.
  */
 export const PENDING_CEILING = 0;
 

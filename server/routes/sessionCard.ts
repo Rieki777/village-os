@@ -20,6 +20,11 @@ type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "
 const HOUR_MS = 60 * 60 * 1000;
 /** Shares and unshares one member may make in an hour. */
 const SHARES_PER_HOUR = 120;
+/**
+ * Reads one member may make in an hour. The open card polls every 5 seconds
+ * (720 an hour), so two open tabs fit and a loop does not.
+ */
+const READS_PER_HOUR = 1500;
 export const CLEAR_JOB = "session-cards-clear-closed";
 
 const idOf = (raw: unknown): number | null => {
@@ -32,6 +37,7 @@ export function register(app: Express, deps: Deps): void {
   const card: CardDeps = {
     getPool,
     guideName: deps.guideName,
+    overLimit,
     nameOf: async (userId) => {
       const m = await members.byId(userId);
       return m && typeof m.name === "string" ? m.name : null;
@@ -50,6 +56,9 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/session-card/:sessionId", async (req, res) => {
     const me = await authedUser(req);
     if (!me) return res.status(401).json({ error: "auth_required" });
+    if (await overLimit(`session-card-read:${String(me.id)}`, READS_PER_HOUR, HOUR_MS)) {
+      return res.status(429).json({ error: "The card is being read very often. Try again in a little while." });
+    }
     const sessionId = idOf(req.params.sessionId);
     if (sessionId == null) return res.status(404).json({ error: "That session is not here." });
     res.setHeader("Cache-Control", "private, no-cache");

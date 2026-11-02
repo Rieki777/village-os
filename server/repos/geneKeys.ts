@@ -10,7 +10,7 @@ import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
 export type Queryable = Pool | PoolConnection;
 
-import type { GeneKeysSource, GeneKeysVisibility } from "../../shared/geneKeys";
+import { CARDS_ASK_THEIR_OWN_YES, type GeneKeysSource, type GeneKeysVisibility } from "../../shared/geneKeys";
 
 export type { GeneKeysSource, GeneKeysVisibility };
 
@@ -29,13 +29,15 @@ export interface GeneKeysRow {
   maiaPlain: boolean;
   /** "Leave me out of session cards" (0296): welcomed by name, never read. */
   cardOut: boolean;
+  /** "Read me on session cards" (0308): the member's own yes. */
+  cardIn: boolean;
   source: GeneKeysSource;
   calcVersion: number;
   updatedAt: string | null;
 }
 
 const COLUMNS =
-  "`user_id`, `chart`, `profile`, `hd_type`, `hd_authority`, `visibility`, `maia`, `complement`, `maia_plain`, `card_out`, `source`, `calc_version`, `updated_at`";
+  "`user_id`, `chart`, `profile`, `hd_type`, `hd_authority`, `visibility`, `maia`, `complement`, `maia_plain`, `card_out`, `card_in`, `source`, `calc_version`, `updated_at`";
 
 function parseChart(text: unknown): unknown {
   try {
@@ -57,6 +59,7 @@ function toRow(r: RowDataPacket): GeneKeysRow {
     complement: Number(r.complement) === 1,
     maiaPlain: Number(r.maia_plain) === 1,
     cardOut: Number(r.card_out) === 1,
+    cardIn: Number(r.card_in) === 1,
     source: r.source === "chosen" || r.source === "typed" ? r.source : "exact",
     calcVersion: Number(r.calc_version),
     updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
@@ -98,7 +101,8 @@ export interface GeneKeysSettingsPatch {
   maia?: boolean;
   complement?: boolean;
   maiaPlain?: boolean;
-  cardOut?: boolean;
+  /** Yes or no to session cards. Writes both `card_in` and `card_out`, so either ruling reads it. */
+  cards?: boolean;
 }
 
 /** Change who sees the lines, what Maia may do with them, "Who complements me", or session cards. Returns whether a row exists. */
@@ -109,7 +113,7 @@ export async function updateGeneKeysSettings(pool: Queryable, userId: string, pa
   if (typeof patch.maia === "boolean") { sets.push("`maia` = ?"); args.push(patch.maia ? 1 : 0); }
   if (typeof patch.complement === "boolean") { sets.push("`complement` = ?"); args.push(patch.complement ? 1 : 0); }
   if (typeof patch.maiaPlain === "boolean") { sets.push("`maia_plain` = ?"); args.push(patch.maiaPlain ? 1 : 0); }
-  if (typeof patch.cardOut === "boolean") { sets.push("`card_out` = ?"); args.push(patch.cardOut ? 1 : 0); }
+  if (typeof patch.cards === "boolean") { sets.push("`card_in` = ?", "`card_out` = ?"); args.push(patch.cards ? 1 : 0, patch.cards ? 0 : 1); }
   if (!sets.length) return (await readGeneKeys(pool, userId)) !== null;
   const [r] = await pool.query<any>(`UPDATE \`member_gene_keys\` SET ${sets.join(", ")} WHERE \`user_id\` = ?`, [...args, userId]);
   return Number(r?.affectedRows ?? 0) > 0;
@@ -134,7 +138,7 @@ export async function shownGeneKeysFor(pool: Queryable, ids: string[]): Promise<
 /** One member's shown row, found by the handle their public profile uses. */
 export async function shownGeneKeysByHandle(pool: Queryable, handle: string): Promise<GeneKeysRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT g.`user_id`, g.`chart`, g.`profile`, g.`hd_type`, g.`hd_authority`, g.`visibility`, g.`maia`, g.`complement`, g.`maia_plain`, g.`card_out`, g.`source`, g.`calc_version`, g.`updated_at` " +
+    "SELECT g.`user_id`, g.`chart`, g.`profile`, g.`hd_type`, g.`hd_authority`, g.`visibility`, g.`maia`, g.`complement`, g.`maia_plain`, g.`card_out`, g.`card_in`, g.`source`, g.`calc_version`, g.`updated_at` " +
       "FROM `member_gene_keys` g JOIN `users` u ON u.`id` = g.`user_id` " +
       "WHERE u.`handle` = ? AND u.`is_example` = 0 AND g.`visibility` = 'show' LIMIT 1",
     [handle],
@@ -160,7 +164,7 @@ export interface ComplementRow extends GeneKeysRow {
  */
 export async function complementCandidates(pool: Queryable, exceptUserId: string): Promise<ComplementRow[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT g.`user_id`, g.`chart`, g.`profile`, g.`hd_type`, g.`hd_authority`, g.`visibility`, g.`maia`, g.`complement`, g.`maia_plain`, g.`card_out`, " +
+    "SELECT g.`user_id`, g.`chart`, g.`profile`, g.`hd_type`, g.`hd_authority`, g.`visibility`, g.`maia`, g.`complement`, g.`maia_plain`, g.`card_out`, g.`card_in`, " +
       "g.`source`, g.`calc_version`, g.`updated_at`, u.`name`, u.`handle` " +
       "FROM `member_gene_keys` g JOIN `users` u ON u.`id` = g.`user_id` " +
       "WHERE g.`complement` = 1 AND g.`visibility` = 'show' AND u.`is_example` = 0 AND g.`user_id` <> ?",
@@ -177,7 +181,7 @@ export async function complementCandidates(pool: Queryable, exceptUserId: string
 export async function cardReadableGeneKeys(pool: Queryable, ids: string[]): Promise<GeneKeysRow[]> {
   if (!ids.length) return [];
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${COLUMNS} FROM \`member_gene_keys\` WHERE \`visibility\` = 'show' AND \`maia\` = 1 AND \`card_out\` = 0 AND \`user_id\` IN (?)`,
+    `SELECT ${COLUMNS} FROM \`member_gene_keys\` WHERE \`visibility\` = 'show' AND \`maia\` = 1 AND ${CARDS_ASK_THEIR_OWN_YES ? "\`card_in\` = 1 AND \`card_out\` = 0" : "\`card_out\` = 0"} AND \`user_id\` IN (?)`,
     [ids],
   );
   return rows.map(toRow);

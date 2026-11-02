@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SettingsPayload } from "@/components/admin/comms/commsSettingsApi";
 import { springBeats, springJournal, stoneWeather, suggestedDomain } from "./springModel";
+import { keyRightsFingerprint } from "@shared/comms/settings";
 
 const KEYS = ["api-key", "domain", "sender", "delivery-reports", "postal-address", "test-email"] as const;
 
@@ -37,11 +38,20 @@ describe("the Spring plot reads the comms checklist, and nothing else decides", 
     expect(half.current).toBe("sign");
   });
 
-  it("is done only when the test letter is delivered and the post office is on", () => {
+  it("is done only when the test letter is delivered, the post office is on, and the key can only send", () => {
     const all = { "api-key": true, domain: true, sender: true, "delivery-reports": true, "postal-address": true, "test-email": true };
     expect(springBeats(payload(all), { account: true }).current).toBe("transplant");
-    expect(springBeats(payload(all, { lifecycle: "members" }), { account: true }).current).toBe("done");
     expect(springBeats(payload(all, { lifecycle: "preview" }), { account: true }).current).toBe("transplant");
+    // The post office is open, and the setup key still has full access.
+    expect(springBeats(payload(all, { lifecycle: "members" }), { account: true }).current).toBe("trade");
+    const key = { configured: true, source: "admin", last4: "a9f2", setAt: "2026-10-31T10:00:00Z", setBy: null };
+    const traded = (rights: "full" | "sending", fingerprint: string) =>
+      payload(all, { lifecycle: "members", key, settings: { domain: "village.example", domainStatus: "verified", keyRights: rights, keyRightsFor: fingerprint } as SettingsPayload["settings"] });
+    const mine = keyRightsFingerprint(key);
+    expect(springBeats(traded("full", mine), { account: true }).current).toBe("trade");
+    expect(springBeats(traded("sending", mine), { account: true }).current).toBe("done");
+    // An answer about an earlier key never speaks for this one.
+    expect(springBeats(traded("sending", keyRightsFingerprint({ ...key, last4: "0000" })), { account: true }).current).toBe("trade");
   });
 
   it("shows a storm only while a named domain waits, counting what Resend has seen", () => {

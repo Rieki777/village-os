@@ -575,3 +575,43 @@ describe("the Welcome Walk, until the village writes one (Rye, 2026-10-01 and 20
     });
   });
 });
+
+describe("whose map, and whose guide (customizability, 2026-10-31)", () => {
+  const read = <T,>(b: Booted, js: string): T => evalIn<T>(b.window, js);
+  const text = (b: Booted, sel: string) => b.window.document.querySelector(sel)?.textContent ?? null;
+  const push = (b: Booted, village: { name: string; guide: string }) =>
+    b.window.dispatchEvent(new b.window.MessageEvent("message", { data: { type: "config", village }, origin: b.window.location.origin }));
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.window.close());
+
+  it("names no village and no guide before the shell says whose map it is", () => {
+    expect(text(b, "#villageName")).toBe("The living map");
+    expect(text(b, "#guideTitle")).toBe("The village guide");
+    expect((b.window.document.getElementById("maiaText") as HTMLInputElement).placeholder).toMatch(/^Ask the village guide\./);
+    expect(text(b, "#vitals") ?? "").not.toMatch(/Amora/); // brand-ok: asserts the founding village's name is absent
+    expect(text(b, "#maia") ?? "").not.toMatch(/Maia/);
+  });
+
+  it("takes the village's name from the push, and keeps the guide neutral while it is unnamed", () => {
+    push(b, { name: "Riverbend", guide: "" });
+    expect(text(b, "#villageName")).toBe("Riverbendthe living map");
+    expect(text(b, "#guideTitle")).toBe("The village guide");
+    expect(text(b, "#guideAsk")).toBe("ask the guide");
+    expect(b.window.document.title).toBe("Riverbend · The Living Map");
+    expect(b.uncaught).toEqual([]);
+  });
+
+  it("says the guide's own name once the village has given one, everywhere the dock speaks", () => {
+    push(b, { name: "Riverbend", guide: "Sol" });
+    expect(text(b, "#guideTitle")).toBe("Sol");
+    expect(text(b, "#guideAsk")).toBe("ask Sol");
+    expect((b.window.document.getElementById("maiaText") as HTMLInputElement).placeholder).toMatch(/^Ask Sol\./);
+    expect(b.window.document.getElementById("maiaMin")?.getAttribute("aria-label")).toMatch(/Sol$/);
+    expect(read<string>(b, "mapGuideCap()")).toBe("Sol");
+    expect(b.uncaught).toEqual([]);
+  });
+});

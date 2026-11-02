@@ -1708,7 +1708,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         const subs = await liveSubscriptionsOf(pool, target.id);
         if (!subs.length) return;
         if (!stripeConfigured()) {
-          await askAdminsToCancelByHand(pool, target.id, actorId, subs.map((s) => s.subscriptionId), deps);
+          await askAdminsToCancelByHand(pool, target.id, actorId, subs.map((s) => s.subscriptionId), deps, "erasure");
           return;
         }
         for (const sub of subs) {
@@ -1744,14 +1744,16 @@ async function askAdminsToCancelByHand(
   actorId: string | null,
   subscriptionIds: readonly string[],
   deps: ErasureDeps,
+  path: "erasure" | "exit",
 ): Promise<void> {
   const notify = deps.notify ?? ((input: NotifyInput) => insertNotification(bellOnly(pool, deps.members), input));
   const title =
-    `Cancel ${subscriptionIds.length} recurring payment(s) by hand in the Stripe dashboard. A departed member's erasure could not cancel them, ` +
+    `Cancel ${subscriptionIds.length} recurring payment(s) by hand in the Stripe dashboard. A departed member's ${path} could not cancel them, ` +
     "because Stripe is not connected, and Stripe may keep charging them.";
+  // A former member keeps their account, so no period was charged after it was deleted.
   const body =
     `Subscription ids to find in the Stripe dashboard: ${subscriptionIds.join(", ")}. ` +
-    "Cancel each one still active, and refund any period charged after the account was deleted.";
+    (path === "erasure" ? "Cancel each one still active, and refund any period charged after the account was deleted." : "Cancel each one still active.");
   const admins = (await usersRepo(pool).all()).filter(
     (u: any) => (u.role === "admin" || u.role === "founder") && String(u.id) !== userId && !isTombstone({ email: String(u.email ?? "") }),
   );
@@ -1762,7 +1764,7 @@ async function askAdminsToCancelByHand(
       title,
       body,
       link: "/admin",
-      dedupeKey: `erasure-subscriptions-by-hand:${userId}:${admin.id}`,
+      dedupeKey: `${path}-subscriptions-by-hand:${userId}:${admin.id}`,
     });
   }
   /*
@@ -1784,8 +1786,40 @@ async function askAdminsToCancelByHand(
    */
   await recordSubscriptionCancels(pool, { userId, kind: "by-hand", subscriptionIds, actorUserId: actorId });
   console.error(
-    `[erasure] Stripe is not connected, so ${subscriptionIds.length} subscription(s) of ${userId} were handed to the admins to cancel by hand`,
+    `[${path}] Stripe is not connected, so ${subscriptionIds.length} subscription(s) of ${userId} were handed to the admins to cancel by hand`,
   );
+}
+
+/**
+ * A FORMER MEMBER'S EXIT CANCELS THEIR SUBSCRIPTIONS (Rye, 2026-10-31, ruling
+ * 8). A leaver kept on as a former member is never erased, so the step above
+ * never runs for them and Stripe charged their card every period. Their
+ * resolve runs this as its `subscriptions` step (`keepAsFormerMember`,
+ * server/lib/exitResolve.ts): the same cancel, the same no-key hand-off and
+ * the same rows /review derives what is owed from (server/lib/owedCancels.ts).
+ *
+ * NEVER HOLDS THE DEPARTURE. The erasure's step throws on a Stripe failure,
+ * because its record resumes. A resolve has no record to resume, and a throw
+ * would leave the exit half resolved, so a failure writes the by-hand row
+ * instead and the hourly failed-actions job finishes it (`finishOwedCancels`).
+ * A failed write of that row does throw: the row is the obligation, and the
+ * admin pressing Resolve again writes it.
+ */
+export async function cancelFormerMembersSubscriptions(pool: Pool, userId: string, actorId: string | null, deps: ErasureDeps): Promise<void> {
+  const ids = (await liveSubscriptionsOf(pool, userId)).map((s) => s.subscriptionId);
+  if (!ids.length) return;
+  if (!stripeConfigured()) {
+    await askAdminsToCancelByHand(pool, userId, actorId, ids, deps, "exit");
+    return;
+  }
+  try {
+    for (const id of ids) await cancelSubscription(id);
+  } catch (err: any) {
+    console.error(`[exit] a former member's subscription cancel failed and is handed over: ${err?.message ?? err}`);
+    await recordSubscriptionCancels(pool, { userId, kind: "by-hand", subscriptionIds: ids, actorUserId: actorId });
+    return;
+  }
+  await recordSubscriptionCancels(pool, { userId, kind: "cancelled", subscriptionIds: ids, actorUserId: actorId });
 }
 
 /**

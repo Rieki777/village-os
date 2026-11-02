@@ -386,12 +386,85 @@ describe("dials that each read as a sane number and disagree with each other", (
       // Allowance 105 across 7 full sends, so 15 to one person: three hearts
       // of 5, and the feed dial claims twenty.
       expect(guest.shareCap).toBe(15);
-      expect(guest.note).toMatch(/3 hearts to one person, and the feed dial says 20/i);
+      expect(guest.note).toMatch(/3 feed taps to one person, and the feed dial says 20/i);
       expect(guest.note).toMatch(/the ceiling is the one they meet/i);
     } finally {
       await setDial("feed.heart_amount", "1");
       await setDial("feed.max_hearts_per_recipient_per_cycle", "3");
     }
+  });
+});
+
+/**
+ * THE VILLAGE'S OWN WORD FOR ITS RECOGNITION TOKEN (readiness R064).
+ *
+ * These notes said "a heart" and "one Gratitude", the first village's words,
+ * whatever the registry called the token. A village that renamed it read
+ * another village's vocabulary on its own launch report. Each case renames the
+ * token in the registry, drives the note it is about, and puts the row back.
+ */
+describe("the allowance notes name the village's own recognition token", () => {
+  const ROWS = [
+    { slug: "gratitude", name: "Gratitude", kind: "recognition", governance: "platform", transferable: 0, decimals: 0, active: 1, is_example: 0 },
+    { slug: "village-voice", name: "Village Voice", kind: "voice", governance: "platform", transferable: 0, decimals: 3, active: 1, is_example: 0 },
+    { slug: "voice", name: "Voice", kind: "voice", governance: "hypha", transferable: 0, decimals: 3, active: 1, is_example: 0 },
+    { slug: "credits", name: "Village Credits", kind: "credit", governance: "platform", transferable: 0, decimals: 4, active: 1, is_example: 0 },
+  ];
+  const registry = (recognition: string) =>
+    loadTokenRegistry({ query: async () => [ROWS.map((r) => (r.slug === "gratitude" ? { ...r, name: recognition } : r)), []] } as any);
+  const NOT_OURS = /\bhearts?\b|Gratitude/;
+
+  async function withSeeds(dials: Array<[string, string, string]>, read: (r: ReturnType<typeof dryRun>) => void) {
+    await registry("Seeds");
+    for (const [key, value] of dials) await setDial(key, value);
+    try {
+      read(dryRun(snapshot(), { moons: 1, from: FROM }));
+    } finally {
+      for (const [key, , back] of dials) await setDial(key, back);
+      await registry("Gratitude");
+    }
+  }
+
+  it("when a feed tap is worth more than the whole share", async () => {
+    await withSeeds([["gratitude.base_budget", "8", "105"], ["feed.heart_amount", "5", "1"]], (r) => {
+      const note = r.allowances.find((a) => a.stageId === "guest")!.note;
+      expect(note).toMatch(/A tap on the feed sends 5 Seeds/);
+      expect(note).not.toMatch(NOT_OURS);
+    });
+  });
+
+  it("when the share rounds below one whole token", async () => {
+    await withSeeds([["gratitude.base_budget", "3", "105"], ["gratitude.full_sends_per_cycle", "10", "7"]], (r) => {
+      const note = r.allowances.find((a) => a.stageId === "guest")!.note;
+      expect(note).toMatch(/under one Seeds/);
+      expect(note).not.toMatch(NOT_OURS);
+    });
+  });
+
+  it("when the share, and not the feed dial, is the ceiling a member meets", async () => {
+    await withSeeds([["feed.heart_amount", "5", "1"], ["feed.max_hearts_per_recipient_per_cycle", "20", "3"]], (r) => {
+      const note = r.allowances.find((a) => a.stageId === "guest")!.note;
+      expect(note).toMatch(/3 feed taps to one person/);
+      expect(note).not.toMatch(NOT_OURS);
+    });
+  });
+
+  it("when the feed is off", async () => {
+    await registry("Seeds");
+    try {
+      const r = dryRun(snapshot({ modulesOff: [{ id: "feed", name: "Feed" }] }), { moons: 1, from: FROM });
+      const off = r.runFindings.find((f) => f.area === "gratitude")!;
+      expect(off.sentence).toMatch(/nobody is sending Seeds from it/);
+      expect(off.sentence).not.toMatch(NOT_OURS);
+    } finally {
+      await registry("Gratitude");
+    }
+  });
+
+  it("and no allowance note on the default dials carries the first village's words", async () => {
+    await withSeeds([], (r) => {
+      for (const a of r.allowances) expect(a.note, a.stageId).not.toMatch(NOT_OURS);
+    });
   });
 });
 

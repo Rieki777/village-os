@@ -114,6 +114,15 @@ seeded or retired, and leaves the rest to `hasRealContent` — which is what
 keeps a village's own 14 live quests from ever being joined by examples. It
 runs AFTER the real starter seeds for the same reason.
 
+Since 2026-10-31 (Rye, sheet A8 / 19g) quests HAS no real starter seed: the
+`quests` section here is the starter board every fresh village opens on, and
+`server/seeds/quests-seed.json` is frozen. Quests is also the one module whose
+examples a founder can keep one at a time (`POST /api/admin/quests/:id/keep`,
+then `afterExampleKept`, which stamps the tombstone with `all_kept` when the
+last one is kept), and its `hasRealContent` counts any claim ever taken, so a
+village that emptied a worked board is never re-seeded. See
+`docs/modules/quests.md`, "What arrives at boot".
+
 ### Retirement
 
 `retireExamples(moduleId, reason)` deletes that module's `is_example = 1` rows
