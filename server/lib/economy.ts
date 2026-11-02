@@ -65,6 +65,8 @@ import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gr
 import { applyPendingModes } from "./circleTreasury";
 import { openExitFor } from "./exit";
 import { isTombstone } from "./oauthAccounts";
+import { withoutFormerMembers } from "./formerMember";
+import { cardDuesPayersBetween, retiringFlatRoleRuleIds } from "../repos/duesPaid";
 import { DEPARTED_RECIPIENT, departedById } from "./departed";
 import { attendeeEmail, clearCheckinNotes } from "../repos/eventCheckins";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
@@ -383,6 +385,9 @@ export const keys = {
    */
   roleCycle: (v: string, cycleKey: string, seatId: string, userId: string, tokenSlug: string) =>
     `role.cycle:${esc(v)}:${esc(cycleKey)}:${esc(seatId)}:${esc(userId)}:${esc(tokenSlug)}`,
+  /** One member's dues dividend for one cycle, in one token: once, whatever they hold. */
+  duesDividend: (v: string, cycleKey: string, userId: string, tokenSlug: string) =>
+    `dues.dividend:${esc(v)}:${esc(cycleKey)}:${esc(userId)}:${esc(tokenSlug)}`,
   journeyStage: (v: string, journeyId: string, stage: string, userId: string) =>
     `journey.stage_reached:${esc(v)}:${esc(journeyId)}:${esc(stage)}:${esc(userId)}`,
   welcomeAboard: (v: string, questNo: number | string, userId: string) =>
@@ -2771,6 +2776,8 @@ export interface SettlementResult {
   decay: VoiceDecaySummary;
   /** New rows of cash owed to role holders this run (0285). Zero on a rerun. */
   cashOwed?: number;
+  /** Members newly paid a dues dividend this run (`payDuesDividend`). Zero on a rerun. */
+  duesMembersPaid?: number;
 }
 
 /** What one cycle's waning did, in the token's own minor units. */
@@ -3276,17 +3283,32 @@ export async function runSettlement(
       "AND a.`user_id` IS NOT NULL AND a.`is_example` = 0",
   );
 
+  /*
+   * A SEAT IS PAID ITS ROLE'S OWN LIST, AND NEVER A FLAT AMOUNT (Rye,
+   * 2026-11-01). A flat amount on a role rule is the automatic mint he turned
+   * off, and turned back on it pays dues-paying members once a cycle
+   * (`payDuesDividend`, below), whatever role they hold. So each seat is
+   * priced with the flat amounts read as blank. One kind of flat amount still
+   * pays seats: one already queued to go blank, which keeps its old meaning
+   * until it lands, so the cycle the change arrives in pays what it promised.
+   */
+  const retiring = await retiringFlatRoleRuleIds(pool, villageId());
+  const seatRules = payable.map((r) => (r.amount === null || retiring.has(r.id) ? r : { ...r, amount: null }));
+
   // Each seat priced once, by the function the role cards read, so a card can
   // never promise a figure this loop would not post.
   const quoted: Array<{ seat: RowDataPacket; quote: WorkPayQuote }> = [];
   for (const seat of seats) {
     const boost = opts.boostFor ? await opts.boostFor(String(seat.user_id)) : undefined;
-    quoted.push({ seat, quote: quoteWorkPay(payable, readValueTokens(seat.value_tokens), "seat", boost) });
+    quoted.push({ seat, quote: quoteWorkPay(seatRules, readValueTokens(seat.value_tokens), "seat", boost) });
   }
   if (seats.length > 0) {
     for (const r of payable) {
       if (r.amount !== null) continue;
       if (quoted.some((q) => q.quote.lines.some((l) => l.token === r.tokenSlug))) continue;
+      // A role DID name it, and could not pay it: that seat's own reason is
+      // said below, and "no role names an amount" would be false.
+      if (quoted.some((q) => q.quote.unpayable.some((u) => u.token === r.tokenSlug))) continue;
       ruleProblems.push({
         token: r.tokenSlug,
         reason: "this rule reads its amount from the role, and no role anybody holds names an amount in this token",
@@ -3334,6 +3356,7 @@ export async function runSettlement(
     }
   }
   out.stewardsThanked = paid.size;
+  out.duesMembersPaid = await payDuesDividend(pool, at, retiring, out);
   /*
    * Nothing new to pay means this cycle was already settled, which is the only
    * honest way to know: the ledger is the record, not a flag beside it.
@@ -3365,6 +3388,57 @@ export async function runSettlement(
   const wouldPay = quoted.some((q) => q.quote.lines.length > 0);
   out.alreadyRun = out.minted.length === 0 && wouldPay;
   return out;
+}
+
+/**
+ * THE DUES DIVIDEND (Rye, 2026-11-01): "if this is turned on again it would be
+ * attached to those who are paying members, so that each cycle they're paying
+ * membership dues they're getting these tokens minted to them."
+ *
+ * A flat amount on a `role.cycle` rule, once a village sets one again after
+ * the automatic mint went blank, is paid ONCE A CYCLE TO EACH MEMBER WHOSE
+ * MEMBERSHIP DUES WERE PAID BY CARD IN THAT CYCLE: per member and never per
+ * seat, role or no role (decided by the coordinator from his words). Card
+ * only, by his ruling: `cardDuesPayersBetween` says why the rest cannot be
+ * seen. A reversed charge, a donation, a former member and an erased account
+ * are paid nothing. No badge multiplies it, because dues are not work.
+ *
+ * THE CYCLE JUST CLOSED IS ASKED TOO. Settlement runs hourly, so dues paid in
+ * a cycle's last hour are first seen by a run in the next one; asking both
+ * windows, each under its own cycle's key and its own cycle's rules, pays them
+ * for the cycle they were paid in. The key makes a second asking a no-op.
+ */
+async function payDuesDividend(pool: Pool, at: Date, retiring: Set<string>, out: SettlementResult): Promise<number> {
+  const here = cycleWindow(at);
+  const before = cycleWindow(new Date(here.startsAt.getTime() - 1));
+  const paid = new Set<string>();
+  for (const w of [before, here]) {
+    const flat = (await rulesFor(pool, "role.cycle", currentCycleNumber(w.startsAt)))
+      .filter((r) => r.amount !== null && !retiring.has(r.id) && r.tokenSlug !== HEARTS && !ruleCannotPay(r.tokenSlug));
+    if (!flat.length) continue;
+    const { lines } = quoteWorkPay(flat, null, "seat");
+    if (!lines.length) continue;
+    const payers = (await cardDuesPayersBetween(pool, w.startsAt, w.endsAt)).filter((p) => !isTombstone({ email: p.email }));
+    for (const p of await withoutFormerMembers(pool, payers)) {
+      for (const line of lines) {
+        const res = await mint(pool, {
+          toUserId: p.id,
+          tokenSlug: line.token,
+          amount: line.units,
+          from: faucetFor(line.token)!,
+          source: "dues_dividend",
+          sourceRef: p.id,
+          description: `For your membership dues, paid in ${w.key}`,
+          idempotencyKey: keys.duesDividend(villageId(), w.key, p.id, line.token),
+        });
+        if (res.ok && !res.duplicate) {
+          paid.add(p.id);
+          out.minted.push({ token: line.token, units: line.units, decimals: line.decimals });
+        }
+      }
+    }
+  }
+  return paid.size;
 }
 
 // ── Two-party consent ───────────────────────────────────────────────────────
@@ -3990,7 +4064,12 @@ export interface MintView {
    * decimals and 250000 at 4, for the same 25 the village promised. A client
    * could not have converted it if it had tried.
    */
-  settlementPreview: { seats: number; mints: Array<{ token: string; units: number; decimals: number }> };
+  settlementPreview: {
+    seats: number;
+    /** Members whose card dues for this cycle are paid so far: who a flat role amount pays (`payDuesDividend`). */
+    duesPayers: number;
+    mints: Array<{ token: string; units: number; decimals: number }>;
+  };
 }
 
 /** Everything the Mint panel shows, in one read. */
@@ -3998,11 +4077,18 @@ export interface MintView {
 function previewSeatMints(
   rules: readonly MintRule[],
   lists: Array<TokenAmount[] | null>,
+  dividendRules: readonly MintRule[] = [],
+  duesPayers = 0,
 ): Array<{ token: string; units: number; decimals: number }> {
   const payable = rules.filter((r) => r.tokenSlug !== HEARTS && !ruleCannotPay(r.tokenSlug));
+  const dividend = dividendRules.filter((r) => r.tokenSlug !== HEARTS && !ruleCannotPay(r.tokenSlug));
+  const quotes = [
+    ...lists.map((list) => quoteWorkPay(payable, list, "seat")),
+    ...Array.from({ length: duesPayers }, () => quoteWorkPay(dividend, null, "seat")),
+  ];
   const out: Array<{ token: string; units: number; decimals: number }> = [];
-  for (const list of lists) {
-    for (const line of quoteWorkPay(payable, list, "seat").lines) {
+  for (const quote of quotes) {
+    for (const line of quote.lines) {
       const row = out.find((m) => m.token === line.token);
       if (row) row.units += line.units;
       else out.push({ token: line.token, units: line.units, decimals: line.decimals });
@@ -4052,6 +4138,16 @@ export async function mintView(pool: Pool): Promise<MintView> {
   );
   const seatCount = seats.length;
   const cycleRules = await rulesFor(pool, "role.cycle");
+  // The same split `runSettlement` makes (Rye, 2026-11-01): a seat is priced
+  // with the flat amounts blank unless one is retiring, and a flat amount is
+  // previewed once for each member whose card dues for this cycle are paid.
+  const retiring = await retiringFlatRoleRuleIds(pool, villageId());
+  const seatRules = cycleRules.map((r) => (r.amount === null || retiring.has(r.id) ? r : { ...r, amount: null }));
+  const dividendRules = cycleRules.filter((r) => r.amount !== null && !retiring.has(r.id));
+  const window = cycleWindow(at);
+  const duesPayers = dividendRules.length
+    ? (await withoutFormerMembers(pool, (await cardDuesPayersBetween(pool, window.startsAt, window.endsAt)).filter((p) => !isTombstone({ email: p.email })))).length
+    : 0;
 
   return {
     cycleKey: key,
@@ -4122,11 +4218,12 @@ export async function mintView(pool: Pool): Promise<MintView> {
     // seats is three postings of 1 at 0 decimals and never `round(1.5)`.
     settlementPreview: {
       seats: seatCount,
+      duesPayers,
       // Seat by seat through `quoteWorkPay`, the function the settlement pays
       // from, so a role with its own list is previewed at its own amounts and
       // never also at the flat ones. Summed per token in minor units, which is
       // what the engine posts: one whole number of units per seat.
-      mints: previewSeatMints(cycleRules, seats.map((s) => readValueTokens(s.value_tokens))),
+      mints: previewSeatMints(seatRules, seats.map((s) => readValueTokens(s.value_tokens)), dividendRules, duesPayers),
     },
   };
 }
