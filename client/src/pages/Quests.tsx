@@ -17,7 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
 import { pageVarsFrom } from "@shared/pageContent/vars";
-import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
+import { useTokenName, useTokensWord, useValueTokenName } from "@/hooks/useTokenNames";
 import { useValueConversion } from "@/lib/moneyClaims";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
@@ -81,6 +81,9 @@ export default function Quests() {
   const cfg = useGameConfig();
   const currencyName = useTokenName("Recognition");
   const valueName = useValueTokenName();
+  // The umbrella word heads the section that names every token (Rye,
+  // 2026-11-01: Gratitude is the recognition token's name and nothing else's).
+  const tokensWord = useTokensWord("Tokens");
   // Same rule for the village's own name and its events page: this page is
   // platform code, so it asks the config rather than naming anybody.
   const villageName = cfg?.project?.name ?? "the village";
@@ -559,7 +562,7 @@ export default function Quests() {
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="font-display text-3xl font-bold text-foreground mb-4">
-              About {currencyName}
+              About {tokensWord}
             </h2>
             <p className="text-muted-foreground">
               {villageName} sets its own rules for {currencyName}, {valueName} and its other tokens.

@@ -1639,8 +1639,11 @@ export function render(f) {
   );
   p();
   p(
-    "A confirmed quest also mints recognition from the consent route itself, with its own range and cap, which is not " +
-      "a mint rule and does not appear in that table. A contribution pays nothing at all: " +
+    // Written by a person, and true since 2026-10-21: a consent posts no
+    // Gratitude, and the word belongs to the recognition token alone (Rye,
+    // 2026-11-01). It said a confirmed quest minted recognition until then.
+    "A confirmed quest mints no recognition: a steward's consent is a yes and moves no Gratitude (Rye, 2026-10-21), " +
+      "and Gratitude is only ever sent from one member to another. A contribution pays nothing at all: " +
       "`POST /api/profile/contribution` is a journal entry, and it is one deliberately, after a version of it that " +
       "added a caller-supplied amount straight onto a member's balance was removed.",
   );

@@ -88,6 +88,8 @@ vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }
 vi.mock("@/hooks/useTokenNames", () => ({
   useTokenName: () => "Gratitude",
   useValueTokenName: () => "Seeds",
+  // The umbrella word for every token together (Rye, 2026-10-23), its platform default.
+  useTokensWord: () => "Village Tokens",
 }));
 
 const moneySection = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
@@ -150,7 +152,8 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const PAGES = [
-  { name: "Quests", render: () => render(<Router><Quests /></Router>), anchor: /About Gratitude/, publishesConversion: true, names: /Seeds/ },
+  // 2026-11-01: "About {token}" became "About {tokens}", the umbrella word.
+  { name: "Quests", render: () => render(<Router><Quests /></Router>), anchor: /About Village Tokens/, publishesConversion: true, names: /Seeds/ },
   {
     name: "ProsperityJourney",
     render: () => render(<Router><ProsperityJourney /></Router>),
@@ -178,6 +181,23 @@ const PAGES = [
     names: /Gratitude/,
   },
 ] as const;
+
+describe("Quests, the heading over every token the village keeps", () => {
+  // Rye, 2026-11-01: "Gratitude ONLY for the recognition token and NOT for the
+  // credit or earned equity tokens". The section names the value token and
+  // carries the founder's conversion wording for it, so its heading is the
+  // umbrella word and never the recognition token's name.
+  it("is the umbrella word, never Gratitude, with the founder's conversion wording under it", async () => {
+    moneySection.current = {
+      valueConversion: "Converting {value} to cash or equity is arranged directly with {village}, off the platform.",
+    };
+    render(<Router><Quests /></Router>);
+    const heading = await screen.findByRole("heading", { level: 2, name: /^About / });
+    expect(heading.textContent).toBe("About Village Tokens");
+    expect(heading.textContent).not.toMatch(/gratitude/i);
+    expect(heading.parentElement?.textContent ?? "").toContain("Converting Seeds to cash or equity");
+  });
+});
 
 describe("StewardRights, after the token ruling of 2026-10-22", () => {
   const renderSteward = () => render(<Router><StewardRights /></Router>);
