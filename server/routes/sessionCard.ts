@@ -15,7 +15,7 @@ import { registerJob } from "../lib/scheduler";
 import { clearClosedCards, pullCard, readCards, shareLine, type CardDeps, type CardOutcome } from "../lib/sessionCard";
 import { CARD_LIMITS } from "../../shared/sessionCard";
 
-type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "members">;
+type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "members"> & { guideName?(): string };
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Shares and unshares one member may make in an hour. */
@@ -36,6 +36,7 @@ export function register(app: Express, deps: Deps): void {
   const { authedUser, isAdmin, getPool, overLimit, members } = deps;
   const card: CardDeps = {
     getPool,
+    guideName: deps.guideName,
     overLimit,
     nameOf: async (userId) => {
       const m = await members.byId(userId);
