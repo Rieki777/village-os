@@ -28,20 +28,26 @@ export function useVillagePaths(): ServedPath[] | null {
       alive = false;
     };
   }, []);
-  return useMemo(() => {
-    if (!answer) return null;
-    const config = answer.config;
-    const fallback = servedPaths(defaultVillagePathWords(), pageVarsFrom(config ?? {}));
-    const served = Array.isArray(config?.paths) ? config.paths : [];
-    if (served.length === 0) return fallback;
-    return served.map((p) => ({
-      id: p.id,
-      label: p.label,
-      role: p.role ?? "",
-      description: typeof p.description === "string" ? p.description : (fallback.find((f) => f.id === p.id)?.description ?? ""),
-      route: p.route,
-    }));
-  }, [answer]);
+  return useMemo(() => (answer ? servedPathsFrom(answer.config) : null), [answer]);
+}
+
+/**
+ * The paths a config serves, read the way the join form reads them: today's
+ * words when the config is missing or serves none, and today's sentence for a
+ * path an older server sends without one. Pure, so a page that already holds
+ * the config (usePageContent, the membership letter) reads the same names.
+ */
+export function servedPathsFrom(config: PublicGameConfig | null | undefined): ServedPath[] {
+  const fallback = servedPaths(defaultVillagePathWords(), pageVarsFrom(config ?? {}));
+  const served = Array.isArray(config?.paths) ? config.paths : [];
+  if (served.length === 0) return fallback;
+  return served.map((p) => ({
+    id: p.id,
+    label: p.label,
+    role: p.role ?? "",
+    description: typeof p.description === "string" ? p.description : (fallback.find((f) => f.id === p.id)?.description ?? ""),
+    route: p.route,
+  }));
 }
 
 /**

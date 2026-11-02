@@ -88,6 +88,23 @@ describe("Admin, Paths & Stages", () => {
     expect(screen.getByText(`${PATH_LIMITS.label} / ${PATH_LIMITS.label}`)).toBeInTheDocument();
   });
 
+  it("reads the public config again after a save, so the menu and pages open in this tab show a renamed path at once", async () => {
+    stubFetch({}, writes);
+    open();
+    const name = (await screen.findByLabelText("Name", { selector: "#ps-path-investor-label" })) as HTMLInputElement;
+    await userEvent.clear(name);
+    await userEvent.type(name, "Backer");
+    const raw = () => (fetch as unknown as { mock: { calls: Array<[unknown, { method?: string }?]> } }).mock.calls;
+    const calls = () => raw().map((c) => String(c[0]));
+    expect(calls()).not.toContain("/api/game/config");
+    await userEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    await waitFor(() => expect(calls()).toContain("/api/game/config"));
+    const put = raw().findIndex((c) => c[1]?.method === "PUT");
+    expect(put).toBeGreaterThanOrEqual(0);
+    expect(calls().indexOf("/api/game/config"), "after the save, never before it").toBeGreaterThan(put);
+    expect(writes).toHaveLength(1);
+  });
+
   it("keeps saving off when the saved words could not be read", async () => {
     stubFetch("fail", writes);
     open();

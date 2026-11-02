@@ -17,6 +17,8 @@ import { useVillageName } from "@/hooks/useVillageName";
 import { usePageVars } from "@/hooks/usePageContent";
 import { LETTER_PATH_IDS, LOVE_LETTER_PAGE } from "@shared/pageContent/loveLetter";
 import { resolvePage } from "@shared/pageContent/resolve";
+import { withPathNames } from "@shared/pageContent/pathNames";
+import { servedPathsFrom } from "@/hooks/useVillagePaths";
 import { useStoryPageOffAlone } from "@/lib/brochure";
 
 /**
@@ -163,10 +165,15 @@ export default function LoveLetter() {
     membership?.footerNote?.trim() ||
     "Ask your community how membership contributions are structured, and whether any part is tax-deductible where you live.";
   // This page's words, `{entity}` included. Null until the saved words have
-  // arrived, so the defaults never flash first.
+  // arrived, so the defaults never flash first. A path choice the village left
+  // as the platform's words carries its path name (Admin, Paths & Stages); the
+  // choices are no part of the letter, so its version never moves with them.
   const page = useMemo(
-    () => (pageVars && !pageLoading ? resolvePage(LOVE_LETTER_PAGE, pageDoc, { ...pageVars, entity: entityName }) : null),
-    [pageVars, pageLoading, pageDoc, entityName],
+    () =>
+      pageVars && !pageLoading
+        ? withPathNames(LOVE_LETTER_PAGE, pageDoc, resolvePage(LOVE_LETTER_PAGE, pageDoc, { ...pageVars, entity: entityName }), servedPathsFrom(cfg))
+        : null,
+    [pageVars, pageLoading, pageDoc, entityName, cfg],
   );
   const hero = page?.hero.fields;
   const words = page?.form;
