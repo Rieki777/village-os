@@ -65,8 +65,13 @@ const RULES = [
   // erring low is the cheaper mistake: raising a payout later costs one PATCH,
   // while credits already issued at the wrong rate are in people's hands.
   { trigger: "quest.completed", token: CREDITS, amount: 25, ceiling: 250, recipient: "claimant", enabled: true },
-  { trigger: "role.cycle", token: VILLAGE_VOICE, amount: 50, ceiling: 200, recipient: "holder", enabled: true },
-  { trigger: "role.cycle", token: CREDITS, amount: 25, ceiling: 250, recipient: "holder", enabled: true },
+  // NO FLAT ROLE MINT (Rye, 2026-11-01: "Yes send a lane to turn off the
+  // automatic mint"). These two paid 50 Voice and 25 Credits to every seat
+  // every cycle. The amount is blank, so a role pays what its own list names
+  // and nothing otherwise; the rule stays ON because an enabled role rule is
+  // what lets a role's own list pay that token (server/lib/flatRoleMint.ts).
+  { trigger: "role.cycle", token: VILLAGE_VOICE, amount: null, ceiling: 200, recipient: "holder", enabled: true },
+  { trigger: "role.cycle", token: CREDITS, amount: null, ceiling: 250, recipient: "holder", enabled: true },
   // Off, and it pays nobody if switched on. See the block comment above.
   { trigger: "role.cycle", token: HEARTS, amount: 20, ceiling: 100, recipient: "holder", enabled: false },
   // AN ACCEPTED PROPOSAL IS WORK (Rye, 2026-10-23: "definitely a work token"),
@@ -82,7 +87,9 @@ const RULES = [
   // edit, chosen low because equity already in people's hands cannot be
   // un-issued. Turning either on is one PATCH before launch or one vote after.
   { trigger: "quest.completed", token: EARNED_EQUITY, amount: 1, ceiling: 1, recipient: "claimant", enabled: false },
-  { trigger: "role.cycle", token: EARNED_EQUITY, amount: 1, ceiling: 1, recipient: "holder", enabled: false },
+  // Blank on a role, for the same reason as the two role rules above: a flat
+  // unit to every seat would be the automatic mint again, in equity.
+  { trigger: "role.cycle", token: EARNED_EQUITY, amount: null, ceiling: 1, recipient: "holder", enabled: false },
 ];
 
 export interface SeedReport {
