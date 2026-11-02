@@ -195,7 +195,7 @@ import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { claimsAnnouncedHere } from "./lib/rewardMoment";
 import { feedOrigin as feedOriginOf, feedUidHost } from "./lib/feedOrigin";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
-import { register as registerModuleLibraryRoutes, moduleChangeReaders, plantingDoor } from "./routes/moduleLibrary";
+import { register as registerModuleLibraryRoutes, moduleChangeReaders, founderAdoptable, founderHeldVoteProblem, plantingDoor } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
@@ -20832,6 +20832,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(403).json({ error: "Only the proposer takes their proposal to the vote" });
     }
     if (p.status !== "open") return res.status(409).json({ error: `This proposal is ${p.status.replace("_", " ")}, not open` });
+    const heldByFounders = await founderHeldVoteProblem(p.changeSet, () => founderPowerStands(getPool())); if (heldByFounders) return res.status(409).json({ error: heldByFounders });
     const threshold = Math.max(0, numberVar("governance.proposal_support_threshold"));
     const backers = await backerCounts(getPool(), [p.id]);
     const supports = backers.get(p.id)?.supports ?? 0;
@@ -20994,7 +20995,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // passed_onsite joins the applyable set: a ballot-passed proposal held by
     // the auto-apply brake (or by a cycle-timed dial) is applied by the same
     // human hand as a Hypha-verified one.
-    if (p.status !== "to_hypha" && p.status !== "passed_claimed" && p.status !== "passed_verified" && p.status !== "passed_onsite") {
+    if (p.status !== "to_hypha" && p.status !== "passed_claimed" && p.status !== "passed_verified" && p.status !== "passed_onsite" && !founderAdoptable(p)) {
       return res.status(409).json({ error: `A ${p.status.replace(/_/g, " ")} proposal cannot be applied` });
     }
     /*
@@ -22869,6 +22870,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (p.status !== "open") {
       return res.status(409).json({ error: `This proposal is ${p.status.replace(/_/g, " ")}, not open for a ballot` });
     }
+    const heldByFounders = await founderHeldVoteProblem(p.changeSet, () => founderPowerStands(getPool())); if (heldByFounders) return res.status(409).json({ error: heldByFounders });
     const ctx = await capabilityCtx(user);
     if (p.proposerUserId !== user.id && !hasCapability("proposal.open", ctx)) {
       return res.status(403).json({ error: "Taking a proposal to the vote is for its proposer or a proposal.open holder" });

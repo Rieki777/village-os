@@ -47,7 +47,8 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
-import { STATUS_COPY, APPLYABLE, dialMatches } from "./GameMechanics";
+import { STATUS_COPY, dialMatches } from "./GameMechanics";
+import { APPLYABLE } from "./gameMechanicsAdoption";
 import { ballotReturn } from "./gameMechanicsBallotCopy";
 
 /*
