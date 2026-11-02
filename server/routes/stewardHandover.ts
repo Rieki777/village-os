@@ -38,6 +38,11 @@
  * `moveCapabilityToVillage` would rewrite its holder and null the ballot that
  * moved it, which is the defect `MOVE_NEEDS_A_VOTE` names.
  *
+ * TWO SIGNATURES WHEN TWO CAN SIGN (Rye, 2026-11-01). With two or more people
+ * able to sign, the act is held as a pending request until a second, different
+ * signer sends the same list (server/lib/handoverCosign.ts, #747's co-sign
+ * shape). The person who asked can never be the second signature.
+ *
  * RECORDED. A launch selection writes who chose it and when, and both stages
  * write a line on the village's record and an audit event; a crossing also
  * puts the steward's id on the row.
@@ -51,7 +56,9 @@ import { openBallotFor } from "../lib/ballots";
 import { capabilityHoldings, moveCapabilityToVillage, STEWARD_ROLE_ID } from "../lib/capabilityHolding";
 import { recordEvent } from "../lib/events";
 import { founderPowerStands } from "../lib/gameStart";
-import { powerInPlainWords as plainWords, readLaunchSelection, writeLaunchSelection } from "../lib/launchHandover";
+import { askForCosign, clearPendingHandover, needsCosign, readPendingHandover, sameList } from "../lib/handoverCosign";
+import { isMatureOnly, powerInPlainWords as plainWords, readLaunchSelection, writeLaunchSelection } from "../lib/launchHandover";
+import { catalystUserIds } from "../repos/users";
 
 export const HAND_OVER_PATH = "/api/governance/powers/hand-to-village";
 
@@ -66,6 +73,9 @@ export const HAND_OVER_WORDS = {
   tooMany: "That is a lot of hand-overs at once. Wait a few minutes and try again.",
   frozen:
     "The launch vote is open, and this list is written into it. To change what the launch hands over, withdraw that vote and open a new one.",
+  matureUnconfirmed: (titles: readonly string[]) =>
+    `${titles.join("; ")}: for mature villages only. Confirm that this village is ready to hold ${titles.length === 1 ? "it" : "them"}, and send the hand-over again.`,
+  signedAlready: "You signed this already. It waits for a second steward to sign the same list.",
   adminDoorClosed:
     "Since the Game started, the stewards decide which powers the village holds. A steward hands one over from the hand-over checklist on the Journey to Launch page.",
 } as const;
@@ -105,28 +115,39 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit"> & {
 };
 
 export function register(app: Express, deps: Deps): void {
-  /** May this person use the control, and which stage are we in. */
-  async function standing(user: any): Promise<{ started: boolean; mayAct: boolean }> {
+  /** May this person use the control, which stage are we in, and who else may sign. */
+  async function standing(user: any): Promise<{ started: boolean; mayAct: boolean; signers: string[] }> {
     const started = !(await founderPowerStands(deps.getPool()));
-    const steward = (await deps.liveHoldersOf(BREAK_GLASS_SEAT)).includes(String(user.id));
-    return { started, mayAct: steward || (!started && String(user.role ?? "") === "founder") };
+    const stewards = await deps.liveHoldersOf(BREAK_GLASS_SEAT);
+    const steward = stewards.includes(String(user.id));
+    // Before launch the founders sign beside any steward; after it, the stewards alone.
+    const signers = started ? stewards : Array.from(new Set([...stewards, ...(await catalystUserIds(deps.getPool()))]));
+    return { started, mayAct: steward || (!started && String(user.role ?? "") === "founder"), signers };
   }
 
   app.get(HAND_OVER_PATH, async (req, res) => {
     const user = await deps.authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    const { started, mayAct } = await standing(user);
+    const { started, mayAct, signers } = await standing(user);
     if (!mayAct) return res.json({ gameStarted: started, mayAct: false });
     const pool = deps.getPool();
     const held = new Set((await capabilityHoldings(pool)).map((h) => h.capability));
     const selected = started ? [] : (await readLaunchSelection(pool)).capabilities;
     const frozen = !started && !!(await openBallotFor(pool, VILLAGE_LAUNCH, LAUNCH_SUBJECT_REF));
+    const waiting = await readPendingHandover(pool, started ? "now" : "launch");
     res.json({
       gameStarted: started,
       mayAct: true,
       selected,
       frozen,
-      powers: HANDOVER_SET.map((capability) => ({ capability, ...plainWords(capability), held: held.has(capability) })),
+      twoSign: needsCosign(signers),
+      pending: waiting ? { capabilities: waiting.capabilities, mine: waiting.requestedBy === String(user.id) } : null,
+      powers: HANDOVER_SET.map((capability) => ({
+        capability,
+        ...plainWords(capability),
+        held: held.has(capability),
+        matureOnly: isMatureOnly(capability),
+      })),
     });
   });
 
@@ -138,7 +159,7 @@ export function register(app: Express, deps: Deps): void {
       return res.status(429).json({ error: HAND_OVER_WORDS.tooMany });
     }
     // Who may act first, so somebody who may not learns nothing about the rest of the request.
-    const { started, mayAct } = await standing(user);
+    const { started, mayAct, signers } = await standing(user);
     if (!mayAct) return res.status(403).json({ error: HAND_OVER_WORDS.notSteward });
     const asked = req.body?.capabilities;
     if (!Array.isArray(asked)) return res.status(400).json({ error: HAND_OVER_WORDS.notAList });
@@ -148,13 +169,47 @@ export function register(app: Express, deps: Deps): void {
     const stray = named.find((c) => !(HANDOVER_SET as readonly string[]).includes(c));
     if (stray) return res.status(400).json({ error: HAND_OVER_WORDS.notAPower(stray) });
     if (req.body?.confirm !== true) return res.status(400).json({ error: HAND_OVER_WORDS.unconfirmed });
+    // Never blocked: a mature-only power asks a second, explicit confirm, from each signer.
+    const mature = named.filter(isMatureOnly);
+    if (mature.length > 0 && req.body?.confirmMature !== true) {
+      return res.status(400).json({ error: HAND_OVER_WORDS.matureUnconfirmed(mature.map((c) => plainWords(c).title)), matureOnly: mature });
+    }
     const pool = deps.getPool();
+    const stage = started ? "now" : "launch";
+    // Frozen while the launch vote is open: members are voting on the list its document carries.
+    if (!started && (await openBallotFor(pool, VILLAGE_LAUNCH, LAUNCH_SUBJECT_REF))) {
+      return res.status(409).json({ error: HAND_OVER_WORDS.frozen });
+    }
+
+    /*
+     * TWO SIGNATURES WHEN TWO CAN SIGN. The first signature of a list is held;
+     * the same list from somebody else completes it; the same person twice is
+     * refused. A different list is a new request in place of the old one.
+     */
+    let firstSigner: string | null = null;
+    if (needsCosign(signers)) {
+      const waiting = await readPendingHandover(pool, stage);
+      if (!waiting || !sameList(waiting.capabilities, named)) {
+        const asked = await askForCosign(pool, stage, named, actorId);
+        const titles = asked.capabilities.map((c) => plainWords(c).title);
+        await recordEvent(pool, {
+          kind: "governance",
+          text:
+            stage === "launch"
+              ? `A founder signed what the launch hands to the village (${titles.join("; ") || "none of its powers"}). It waits for a second signature.`
+              : `A steward signed to hand the village ${titles.join("; ")}. It waits for a second signature.`,
+          actorUserId: actorId,
+          entityType: "launch-handover",
+        });
+        return res.status(202).json({ stage, pending: true, capabilities: asked.capabilities });
+      }
+      if (waiting.requestedBy === actorId) return res.status(409).json({ error: HAND_OVER_WORDS.signedAlready });
+      firstSigner = waiting.requestedBy;
+      await clearPendingHandover(pool);
+    }
+    const signedBy = firstSigner ? `${firstSigner}+${actorId}` : actorId;
 
     if (!started) {
-      // Frozen while the launch vote is open: members are voting on the list its document carries.
-      if (await openBallotFor(pool, VILLAGE_LAUNCH, LAUNCH_SUBJECT_REF)) {
-        return res.status(409).json({ error: HAND_OVER_WORDS.frozen });
-      }
       const selection = await writeLaunchSelection(pool, named, actorId);
       const titles = selection.capabilities.map((c) => plainWords(c).title);
       await recordEvent(pool, {
@@ -168,7 +223,7 @@ export function register(app: Express, deps: Deps): void {
       });
       await recordEvent(pool, {
         kind: "audit",
-        text: `capability:launch-selection:${selection.capabilities.join(",") || "none"}`,
+        text: `capability:launch-selection:${selection.capabilities.join(",") || "none"}:signed:${signedBy}`,
         actorUserId: actorId,
         entityType: "launch-handover",
         audience: "admin",
@@ -189,7 +244,7 @@ export function register(app: Express, deps: Deps): void {
         capability,
         holderRoleId: STEWARD_ROLE_ID,
         movedByUserId: actorId,
-        note: "Handed to the village by its stewards.",
+        note: firstSigner ? `Handed to the village by its stewards, signed by ${signedBy}.` : "Handed to the village by its stewards.",
       });
       if (!r.ok) {
         refused.push({ capability, error: r.error });
@@ -205,7 +260,7 @@ export function register(app: Express, deps: Deps): void {
       });
       await recordEvent(pool, {
         kind: "audit",
-        text: `capability:handed-to-village:${capability}`,
+        text: `capability:handed-to-village:${capability}:signed:${signedBy}`,
         actorUserId: actorId,
         entityType: "capability",
         entityRef: capability,
