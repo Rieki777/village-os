@@ -21,7 +21,7 @@ import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { loadModuleSettings, setModuleLifecycle } from "../lib/modules";
 import { ensureMemberNo, joinSession, startSession } from "../lib/liveSessions";
-import { cardLinesFor, clearClosedCards, forgetMemberCards, weaveReading, type CardDeps } from "../lib/sessionCard";
+import { cardLinesFor, clearClosedCards, forgetMemberCards, pullCard, weaveReading, type CardDeps } from "../lib/sessionCard";
 import { updateGeneKeysSettings, writeGeneKeys } from "../repos/geneKeys";
 import { analyse, CARDS_ASK_THEIR_OWN_YES, profileOf, type Chart } from "../../shared/geneKeys";
 import { chartAt, skyAt, zonedToUtc } from "../../shared/geneKeysSky";
@@ -356,6 +356,41 @@ describe.skipIf(!configured)("session cards against a real schema", () => {
     const third = await pull();
     expect(third.status).toBe(200);
     expect(third.body.cards.map((c: any) => c.n)).toEqual([3, 2]);
+  });
+
+  it("reads somebody who says yes from the next card, never the one on the table, even mid-weave", async () => {
+    await updateGeneKeysSettings(pool, "m-juno", { cards: false });
+    await updateGeneKeysSettings(pool, "m-kai", { cards: false });
+    // Juno and Kai both say yes while Maia is still weaving the card Wren pulled.
+    const weaving: CardDeps = {
+      getPool: () => pool,
+      nameOf: async (id) => NAMES[id] ?? null,
+      ready: () => true,
+      keyOwner: () => "own",
+      call: async () => {
+        await Promise.all([
+          updateGeneKeysSettings(pool, "m-juno", { cards: true }),
+          updateGeneKeysSettings(pool, "m-kai", { cards: true, maia: true }),
+        ]);
+        return { ok: false, status: 503, error: "assistant-unavailable" } as any;
+      },
+    };
+    const first = await pullCard(weaving, sessionId, "m-wren", { sky: skyNow() });
+    expect(first.ok).toBe(true);
+    const onTable = first.ok ? first.value.cards[0] : null;
+    expect(onTable?.welcomed).toEqual(expect.arrayContaining(["Juno", "Kai"]));
+    // The card on the table stays as it was pulled, and is not taken back.
+    expect((await read()).body.cards.map((c: any) => c.id)).toEqual([onTable?.id]);
+    as("m-juno");
+    expect((await read()).body.cards[0].mine).toBeNull();
+    // The next card reads them both.
+    await q("UPDATE `session_cards` SET `created_at` = DATE_SUB(`created_at`, INTERVAL 1 MINUTE)"); // module-review-ok: fixture SQL against the S5 scratch schema
+    as("m-wren");
+    const next = (await pull()).body.cards[0];
+    expect(next.welcomed).not.toContain("Juno");
+    expect(next.welcomed).not.toContain("Kai");
+    as("m-juno");
+    expect((await read()).body.cards[0].mine).toBeTruthy();
   });
 
   it("keeps each person's line theirs until they share it", async () => {

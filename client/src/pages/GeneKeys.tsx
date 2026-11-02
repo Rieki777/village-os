@@ -20,7 +20,7 @@
  * The page wears the profile's night world, like the seal and the card.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { GENE_KEYS_SITE, viewOf, type Chart, type GeneKeysView } from "@shared/geneKeys";
 import { resultsAcross, type TimeWindow } from "@shared/geneKeysSky";
 import Layout from "@/components/Layout";
@@ -29,10 +29,12 @@ import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import { saveMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
+import { internalPath } from "@/lib/internalPath";
 import { GeneKeysLines } from "@/components/geneKeys/GeneKeysLines";
 import GeneKeysReveal from "@/components/geneKeys/GeneKeysReveal";
 import RolesForYourLines from "@/components/geneKeys/RolesForYourLines";
-import { setMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
+import { setMyGeneKeys, useMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
+import ShareChoices, { savePayload, seedChoices, type Choices } from "@/components/geneKeys/ShareChoices";
 import { countryName, loadPlaces, searchPlaces, zoneName, type Place } from "@/components/geneKeys/places";
 import { BTN_GOLD, BTN_LINK, BTN_PLAIN, EYEBROW, HINT, INPUT } from "@/components/geneKeys/ui";
 import { useGuideName } from "@/hooks/useGuideName";
@@ -94,10 +96,23 @@ export default function GeneKeysPage() {
   const [windows, setWindows] = useState<TimeWindow[]>([]);
   const [mine, setMine] = useState<number | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
-  const [visibility, setVisibility] = useState<"show" | "hide">("show");
-  const [maia, setMaia] = useState(false);
   // The village's own guide, or "the village guide" while it has no name.
   const guide = useGuideName().name;
+  // Where to go after (`?next=`, an internal path only): the session card's invitation sends a member here
+  // from a live room and brings them back to it.
+  const next = internalPath(new URLSearchParams(useSearch()).get("next"));
+  const backWords = next?.startsWith("/sessions/") ? "Back to the session" : "Back where you were";
+  // Reached from a session card's invitation, the last step also asks the card's own yes (ShareChoices).
+  const fromCard = !!next?.startsWith("/sessions/");
+  // Every box starts as the member left it last time; nothing is ticked for somebody new.
+  const { mine: before } = useMyGeneKeys();
+  const [choices, setChoices] = useState<Choices>(() => seedChoices(null));
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || before === undefined) return;
+    seeded.current = true;
+    setChoices(seedChoices(before));
+  }, [before]);
 
   useEffect(() => {
     if (!on || !user) return;
@@ -179,7 +194,7 @@ export default function GeneKeysPage() {
     setWorking(true);
     setProblem(null);
     try {
-      const saved = await saveMyGeneKeys({ chart: picked.chart, source: picked.chosen ? "chosen" : "exact", visibility, maia });
+      const saved = await saveMyGeneKeys({ chart: picked.chart, source: picked.chosen ? "chosen" : "exact", ...savePayload(choices, fromCard) });
       setMyGeneKeys(saved.mine);
       setBadge(saved.badgeEarned);
       setStep("done");
@@ -304,8 +319,8 @@ export default function GeneKeysPage() {
                 <button type="button" className={BTN_GOLD} disabled={working} onClick={read}>
                   {working ? "Reading the sky" : "Show my lines"}
                 </button>
-                <Link href="/profile" className={BTN_PLAIN}>
-                  Back to your profile
+                <Link href={next ?? "/profile"} className={BTN_PLAIN}>
+                  {next ? backWords : "Back to your profile"}
                 </Link>
               </div>
               <p className="text-xs text-muted-foreground">Places from GeoNames.org</p>
@@ -382,37 +397,8 @@ export default function GeneKeysPage() {
               <h1 id="gk-share-h" tabIndex={-1} className="font-display text-4xl focus:outline-none">
                 Who sees your lines?
               </h1>
-              <fieldset className="flex flex-col gap-2">
-                <legend className="sr-only">Who sees your lines</legend>
-                {(
-                  [
-                    ["show", "Show them on my profile", "Your seal sits by your portrait. Your circle sees your lines."],
-                    ["hide", "Keep them to me", "Only you see them. Nobody else, anywhere."],
-                  ] as const
-                ).map(([value, title, line]) => (
-                  <label key={value} className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-4">
-                    <input
-                      type="radio"
-                      name="gk-visibility"
-                      className="mt-1 h-5 w-5 accent-notice"
-                      checked={visibility === value}
-                      onChange={() => setVisibility(value)}
-                    />
-                    <span className="flex flex-col">
-                      <span className="font-medium">{title}</span>
-                      <span className="text-sm text-muted-foreground">{line}</span>
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
-              <label className="flex min-h-11 cursor-pointer items-start gap-3">
-                <input type="checkbox" className="mt-1 h-5 w-5 accent-notice" checked={maia} onChange={(e) => setMaia(e.target.checked)} />
-                <span className="flex flex-col">
-                  <span className="font-medium">Let {guide} use my lines to guide me</span>
-                  <span className="text-sm text-muted-foreground">{guideNameAtSentenceStart(guide)} shapes quest and role suggestions to how you work best.</span>
-                </span>
-              </label>
-              <p className={HINT}>You can change both any time on your profile.</p>
+              <ShareChoices fromCard={fromCard} choices={choices} onChange={setChoices} guide={guide} />
+              <p className={HINT}>{fromCard ? "You can change each of these any time on your profile." : "You can change both any time on your profile."}</p>
               {problem ? (
                 <p role="alert" className="text-sm text-destructive">
                   {problem}
@@ -436,7 +422,7 @@ export default function GeneKeysPage() {
                 {picked.view.names}
               </h1>
               <p className="text-base text-muted-foreground">
-                {visibility === "show" ? "Your seal now sits by your portrait." : "Your lines are saved and kept to you."}
+                {choices.visibility === "show" ? "Your seal now sits by your portrait." : "Your lines are saved and kept to you."}
               </p>
               {badge ? (
                 <p role="status" className="rounded-full border border-notice/60 bg-notice/15 px-4 py-2 text-sm font-semibold text-notice">
@@ -445,7 +431,12 @@ export default function GeneKeysPage() {
               ) : null}
               <RolesForYourLines me={user.id} lines={picked.view.lines} />
               <div className="flex flex-wrap gap-2">
-                <Link href="/profile#gene-keys" className={BTN_GOLD}>
+                {next ? (
+                  <Link href={next} className={BTN_GOLD}>
+                    {backWords}
+                  </Link>
+                ) : null}
+                <Link href="/profile#gene-keys" className={next ? BTN_PLAIN : BTN_GOLD}>
                   See them on your profile
                 </Link>
               </div>
