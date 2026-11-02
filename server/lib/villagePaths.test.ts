@@ -11,7 +11,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Pool } from "mysql2/promise";
 import { defaultTemplate } from "../../shared/comms/defaults/templates";
-import { GAME_CONFIG } from "../../shared/gameConfig";
+import { GAME_CONFIG, getStage } from "../../shared/gameConfig";
 import { pageVarsFrom } from "../../shared/pageContent/vars";
 import { VILLAGE_PATHS_DOCUMENT } from "../../shared/villagePaths";
 import { derivedValues, renderTemplate } from "./comms/render";
@@ -118,7 +118,7 @@ describe("a village's ladder", () => {
     expect(ladder.map((s) => s.id)).toEqual(GAME_CONFIG.stages.map((s) => s.id));
     const member = ladder.find((s) => s.id === "member")!;
     expect(member).toMatchObject({ name: "Kin", description: "Signed the Pact with Riverbend.", rule: { type: "membership" } });
-    expect(ladder.find((s) => s.id === "sage")).toMatchObject({ name: "Elder", description: "Twenty-one or more years of stewardship." });
+    expect(ladder.find((s) => s.id === "sage")).toMatchObject({ name: "Elder", description: getStage("sage").description });
     expect(ladder.find((s) => s.id === "guest")?.name).toBe("Guest");
   });
 
@@ -141,7 +141,7 @@ describe("a sparse save: one stage renamed and nothing else", () => {
 
   it("renames that rung alone, keeps its line, and leaves every other word as it was", () => {
     const ladder = servedLadder("Pact");
-    expect(ladder.find((s) => s.id === "initiate")).toMatchObject({ name: "Apprentice", description: "Walking the Co-Creator Right of Passage." });
+    expect(ladder.find((s) => s.id === "initiate")).toMatchObject({ name: "Apprentice", description: getStage("initiate").description });
     for (const s of GAME_CONFIG.stages.filter((x) => x.id !== "initiate")) {
       expect(ladder.find((x) => x.id === s.id)?.name, s.id).toBe(s.name);
     }
