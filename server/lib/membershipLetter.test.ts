@@ -40,8 +40,6 @@ import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
 import type { SeatCalendar } from "../../shared/seatTerms";
 import { userParty, VILLAGE_PARTY } from "../../shared/alignments";
 import {
-  DEFAULT_GOVERNANCE,
-  DEFAULT_OPENING,
   letterBody,
   LETTER_PAGE_SECTION,
   letterParts,
@@ -137,7 +135,7 @@ describe("the letter's words: one rendering for the page and the store", () => {
     let rest = body;
     for (const p of order) rest = rest.replace(p, "");
     expect(rest.trim()).toBe("");
-    expect(parts.greeting).toBe("Dear Future Fernhollow Family Member,");
+    expect(parts.greeting).toBe("Dear friend of Fernhollow,");
     expect(parts.commitLead).toBe("As a member of Fernhollow Commons, you commit to:");
     // Rye, 2026-10-22: the letter names no token's economy any more.
     expect(parts.inReturn).not.toMatch(/economy/);
@@ -176,25 +174,39 @@ describe("the letter's words: one rendering for the page and the store", () => {
 });
 
 /**
- * THE LETTER'S WORDS BECAME PAGE FIELDS (2026-10-22), AND NO MEMBER'S LETTER MOVED.
+ * THE LETTER'S WORDS BECAME PAGE FIELDS (2026-10-22), AND A VILLAGE THAT KEPT
+ * THEM KEEPS ITS LETTER VERSION (2026-10-23).
  *
- * The greeting, the joining paragraph, the eight commitments, "In return...",
- * the closing and the signature are now fields of Admin, Pages, Membership
- * letter (shared/pageContent/loveLetter.ts), read by the server from the
- * stored `page-love-letter` section. A member aligns with a fingerprint of the
- * words, so for a village that calls its letter "Love Letter" and has written
- * none of the fields, the words must be byte for byte the ones the old code
- * rendered, or every such village would silently serve a new letter version.
+ * The greeting, the joining paragraph, the commitments, "In return...", the
+ * closing and the signature are fields of Admin, Pages, Membership letter
+ * (shared/pageContent/loveLetter.ts), read by the server from the stored
+ * `page-love-letter` section. A member aligns with a fingerprint of the words.
  *
- * BEFORE is two things taken from the code as it stood at 1698f40, before this
- * change: the fingerprints themselves, computed by running the old
- * `currentLetter` over each source below, and the old rendering, kept here
- * verbatim as `oldParts`. Both are compared, so a drift in the fingerprint
- * function cannot hide a drift in the words, nor the other way round.
+ * On 2026-10-23 the defaults became a neutral starter letter, so every village
+ * that had written none of these fields got a new letter version. The first
+ * village did not: it adopted its words first, so its `page-love-letter` and
+ * `covenant` sections hold the old letter. That is what this block proves,
+ * with the first village's own record (server/seeds/amora/pages/) standing in
+ * for its database: fed the adopted page and the old covenant paragraphs, the
+ * letter comes out byte for byte as the code rendered it at 1698f40, under the
+ * fingerprints taken from that code then.
+ *
+ * BEFORE is two things taken from the code as it stood at 1698f40: the
+ * fingerprints themselves, computed by running the old `currentLetter` over
+ * each source below, and the old rendering, kept here verbatim as `oldParts`.
+ * Both are compared, so a drift in the fingerprint function cannot hide a
+ * drift in the words, nor the other way round.
  */
-describe("the letter's words as page fields keep every Love Letter's version", () => {
+describe("a village that kept its letter's words keeps every member's letter version", () => {
+  // The first village's adopted page, read from its record in the repository.
+  const ADOPTED = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "server/seeds/amora/pages/page-love-letter.json"), "utf8")); // brand-ok: the first village's own record, read to prove its letter version held
+  /** The covenant paragraphs the platform supplied until 2026-10-23, which a village that adopted its letter also kept. */
+  const OLD_OPENING =
+    "Something in you called you here. Maybe it was the land itself, alive with possibility. Maybe it was the vision of a village where all beings belong and thrive. Maybe it was simply the feeling that the world you want to live in needs to be built.";
+  const OLD_GOVERNANCE =
+    "How residents govern themselves, and how we steward this land together, will be co-created by the first residents. Nothing here is handed down. You are not joining a finished system; you are helping write it.";
   const LL = (name: string, token = "Seeds") => ({ project: { name, commitmentName: "Love Letter" }, currency: { name: token } });
-  const CASES: Array<[string, unknown, Record<string, unknown> | null, string]> = [
+  const CASES: Array<[string, unknown, Record<string, any> | null, string]> = [
     ["covenant, entity and contribution", LL("Fernhollow"), CONTENT, "lv-6c3a84231463c518"],
     ["nothing written", LL("Fernhollow"), null, "lv-325212c91db9e647"],
     ["an entity only", LL("Willowbrook", "Thanks"), { legal: { membership: { entityLabel: "Willowbrook Land Trust" } } }, "lv-25cfd7db11e5c2ed"],
@@ -209,6 +221,16 @@ describe("the letter's words as page fields keep every Love Letter's version", (
     ["the letter's name with spaces around it", { project: { name: "Fernhollow", commitmentName: "  Love Letter " }, currency: { name: "Seeds" } }, null, "lv-325212c91db9e647"],
   ];
 
+  /** What the village holds once it kept its words: the adopted page, and the covenant it was reading. */
+  const kept = (content: Record<string, any> | null) => ({
+    ...(content ?? {}),
+    covenant: {
+      opening: content?.covenant?.opening ?? OLD_OPENING,
+      governance: content?.covenant?.governance ?? OLD_GOVERNANCE,
+    },
+    [LETTER_PAGE_SECTION]: ADOPTED,
+  });
+
   /** The letter as the old code wrote it, kept verbatim so the comparison is with the code, never with a memory of it. */
   const oldParts = (src: LetterSource) => {
     const t = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -216,7 +238,7 @@ describe("the letter's words as page fields keep every Love Letter's version", (
     const entity = t(src.legal?.membership?.entityLabel) || village;
     return {
       greeting: `Dear Future ${village} Family Member,`,
-      opening: t(src.covenant?.opening) || DEFAULT_OPENING,
+      opening: t(src.covenant?.opening) || OLD_OPENING,
       joining:
         "By signing this Love Letter, you are not just joining a community. You are becoming a co-creator of the most beautiful village we can imagine together. You are saying yes to regeneration, of the land, of community, of yourself.",
       commitLead: `As a member of ${entity}, you commit to:`,
@@ -233,7 +255,7 @@ describe("the letter's words as page fields keep every Love Letter's version", (
       // The ONE sentence that changed on purpose: Rye, 2026-10-22, "remove token
       // economy" (copy never says what a token does). Every other word is the old code's.
       inReturn: `In return, you become a full member of ${entity}, gaining access to community spaces, governance participation, and the opportunity to deepen your involvement through roles, residency, or business creation.`,
-      governance: t(src.covenant?.governance) || DEFAULT_GOVERNANCE,
+      governance: t(src.covenant?.governance) || OLD_GOVERNANCE,
       contribution: t(src.legal?.membership?.contributionParagraph) || null,
       closing: "With love and anticipation,",
       signature: `The ${village} Community`,
@@ -241,25 +263,110 @@ describe("the letter's words as page fields keep every Love Letter's version", (
   };
 
   it.each(CASES)("%s: the old code's words, less the one token sentence Rye ruled out, and a pinned fingerprint", (_label, config, content, before) => {
-    const src = letterSourceFrom(config, content);
+    const src = letterSourceFrom(config, kept(content));
     const now = currentLetter(src);
     expect(now.version).toBe(before);
     expect(letterParts(src)).toEqual(oldParts(src));
     expect(now.body).toBe(letterBody(oldParts(src)));
   });
 
+  it("the first village's own letter, rendered from its records here, is the version it serves (read 2026-10-31)", () => {
+    // Its kept page, its covenant and its legal membership section, as the
+    // repository records them; production served lv-a14aa38acde23a57 on
+    // 2026-10-31, and this branch renders the same words to the same version.
+    const record = (f: string) => JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "server/seeds/amora", f), "utf8")); // brand-ok: the first village's own records
+    const config = { project: { name: "Amora", commitmentName: "Love Letter", memberName: "Amorian" }, currency: { name: "Gratitude" } }; // brand-ok: the first village's settings as production serves them
+    const src = letterSourceFrom(config, {
+      covenant: record("pages-covenant-seed.json"),
+      legal: record("brochure-legal-seed.json"),
+      [LETTER_PAGE_SECTION]: record("pages/page-love-letter.json"),
+    });
+    expect(currentLetter(src).version).toBe("lv-a14aa38acde23a57");
+  });
+
+  it("CONTROL: the same village without its kept words reads the starter letter, under a new version", () => {
+    const [, config, content, before] = CASES[1];
+    const starter = currentLetter(letterSourceFrom(config, content));
+    expect(starter.version).not.toBe(before);
+    expect(starter.parts.greeting).not.toBe(oldParts(letterSourceFrom(config, kept(content))).greeting);
+  });
+
   it("CONTROL: the fingerprint does move when the stored page changes one word of the letter", () => {
     const [, config, content, before] = CASES[0];
-    const edited = letterSourceFrom(config, { ...content, [LETTER_PAGE_SECTION]: { letter: { closing: "With love," } } });
+    const edited = letterSourceFrom(config, { ...kept(content), [LETTER_PAGE_SECTION]: { ...ADOPTED, letter: { ...ADOPTED.letter, closing: "With love," } } });
     expect(currentLetter(edited).version).not.toBe(before);
     expect(currentLetter(edited).parts.closing).toBe("With love,");
     // A part the page does not store (the covenant's opening) is untouched.
-    expect(currentLetter(edited).parts.opening).toBe(currentLetter(letterSourceFrom(config, content)).parts.opening);
+    expect(currentLetter(edited).parts.opening).toBe(currentLetter(letterSourceFrom(config, kept(content))).parts.opening);
+  });
+});
+
+/**
+ * THE STARTER LETTER (2026-10-23): what every village reads, and aligns with,
+ * until it writes its own. Neutral words, true of any village, claiming
+ * nothing about its land, its prices or how it decides. Pinned word for word
+ * and by fingerprint, so a reworded default is a decision somebody makes on
+ * purpose: it is a new letter version for every village that has not written
+ * its own.
+ */
+describe("the starter letter", () => {
+  const LL = (name: string, token = "Seeds") => ({ project: { name, commitmentName: "Love Letter" }, currency: { name: token } });
+  const CASES: Array<[string, unknown, Record<string, unknown> | null, string]> = [
+    ["covenant, entity and contribution", LL("Fernhollow"), CONTENT, "lv-3865b9aefb4d42e1"],
+    ["nothing written", LL("Fernhollow"), null, "lv-8b2b6eb8ed0075a0"],
+    ["an entity only", LL("Willowbrook", "Thanks"), { legal: { membership: { entityLabel: "Willowbrook Land Trust" } } }, "lv-cf82ed27eeb4dc5c"],
+    ["no name for the letter", { project: { name: "Fernhollow" }, currency: { name: "Seeds" } }, null, "lv-444b9d49125ed882"],
+  ];
+
+  const starterParts = (src: LetterSource) => {
+    const t = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const village = src.villageName;
+    const entity = t(src.legal?.membership?.entityLabel) || village;
+    return {
+      greeting: `Dear friend of ${village},`,
+      opening:
+        t(src.covenant?.opening) ||
+        "Something in you called you here. Maybe it was the land, or the people you met. Maybe it was simply the feeling that the world you want to live in needs to be built, and that you could help build it.",
+      joining: `By signing this ${src.commitmentName}, you become part of ${village}. You are saying yes to the people here, to caring for this place, and to building the village together.`,
+      commitLead: `As a member of ${entity}, you commit to:`,
+      commitments: [
+        "Treat everyone here with respect, care, and honest communication",
+        `Take part in how ${village} makes its decisions`,
+        "Care for the land and the places we share",
+        "Support the people around you in their growth and wellbeing",
+        `Honor the values and agreements of the ${village} community`,
+        "Meet financial obligations as agreed with the community",
+        "Show up for community life, celebrations, and shared care",
+      ],
+      inReturn: `In return, you become a full member of ${entity}, gaining access to community spaces, governance participation, and the opportunity to deepen your involvement through roles, residency, or business creation.`,
+      governance:
+        t(src.covenant?.governance) ||
+        "How we govern ourselves, and how we care for this place together, is decided by the people who live and work here. Nothing here is handed down, and you will help shape what comes next.",
+      contribution: t(src.legal?.membership?.contributionParagraph) || null,
+      closing: "With a warm welcome,",
+      signature: `The ${village} Community`,
+    };
+  };
+
+  it.each(CASES)("%s: the starter words, and a pinned fingerprint", (_label, config, content, version) => {
+    const src = letterSourceFrom(config, content);
+    const now = currentLetter(src);
+    expect(letterParts(src)).toEqual(starterParts(src));
+    expect(now.body).toBe(letterBody(starterParts(src)));
+    expect(now.version).toBe(version);
   });
 
-  it("CONTROL: a village with no name for its letter now reads the platform's name where the letter said Love Letter", () => {
+  it("names no place, price, person or way of deciding that belongs to one village", () => {
+    const body = currentLetter(letterSourceFrom(LL("Fernhollow"), null)).body;
+    expect(body).not.toMatch(/\d|\$|%/);
+    for (const word of ["Costa Rica", "jungle", "sociocra", "Nonviolent", "all beings", "most beautiful", "Family Member"]) {
+      expect(body, word).not.toContain(word);
+    }
+  });
+
+  it("CONTROL: a village with no name for its letter reads the platform's name where the letter says it", () => {
     const parts = letterParts(letterSourceFrom({ project: { name: "Fernhollow" }, currency: { name: "Seeds" } }, null));
-    expect(parts.joining.startsWith("By signing this membership agreement, you are")).toBe(true);
+    expect(parts.joining.startsWith("By signing this membership agreement, you become")).toBe(true);
   });
 });
 

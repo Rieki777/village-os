@@ -243,8 +243,11 @@ badge that 0063 seeds. A warning badge's deny suspends publishing on its own,
 because the gate is the one gate.
 
 **The gate is the server's, always.** `grounds-v0.html` is a static file at a
-URL anyone can open, so its Build button is decoration. Every route asks
-`hasCapability` itself; what the artifact is told only decides what it draws.
+URL anyone can open while the map is on, so its Build button is decoration.
+Every route asks `hasCapability` itself; what the artifact is told only decides
+what it draws. While the map module is off, `/grounds/*` answers 404 like
+`/api/map` does, and the presence probe `/grounds/manifest.json` takes the
+module's full gate (`server/routes/grounds.ts` says why the pages cannot).
 
 **Silence means local only.** With no shell there is no village to ask, so the
 artifact keeps the founder's full hand and stays the standalone design tool it

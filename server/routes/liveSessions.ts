@@ -18,6 +18,7 @@
  *   POST   /api/sessions/:id/entries              { kind, text, itemId?, ownerSeatId?, dueOn? } -> { id }
  *   PATCH  /api/sessions/:id/entries/:entryId     { claim?, release?, ownerSeatId?, text?, dueOn?, status? } -> { ok }
  *   DELETE /api/sessions/:id/entries/:entryId     { ok }
+ *   POST   /api/sessions/:id/entries/:entryId/check   {} -> { ok }: the facilitator or the proposer checks a proposal (0297)
  *   POST   /api/sessions/:id/respond              { target, value, text? } -> { ok }, never for someone else
  *   POST   /api/sessions/:id/on-behalf/:fillId/undo   {} -> { ok }
  *   POST   /api/sessions/:id/act                  { action } -> { ok, state }
@@ -80,6 +81,7 @@ import {
   answerAfterNight,
   addItem,
   buildView,
+  checkEntry,
   cleanStart,
   closeSession,
   closeStaleRooms,
@@ -122,7 +124,9 @@ import { registerJob } from "../lib/scheduler";
 import { libraryFor, noticesAfterTakes, reconcileLibrary } from "../lib/sessionLibrary";
 import { noticesAfterFills } from "../lib/sessionOnBehalf";
 import { comingUpFor } from "../lib/sessionRhythm";
-import { linkSession, templateForStart } from "../lib/sessionTemplates";
+import { linkSession, seasonRefOf, templateForStart } from "../lib/sessionTemplates";
+import { saberraAgentName, saberraOpenToMembers } from "../lib/saberraGuide";
+import { CHECK_REFUSALS } from "../../shared/sessionCheck";
 import { queueCloseMail } from "../lib/sessionTaskMail";
 import {
   SESSION_COPY,
@@ -150,7 +154,8 @@ export { exportMemberSessions } from "../lib/liveSessions";
  * person in a room. Nothing here writes a member. `circlesRepo` answers which
  * circles exist and what they are called. `notify` and `notifyAdmins` carry
  * the two notices a close sends. `overLimit` bounds the doors that write.
- * `lapseContext` reads which seat holders' terms still run. The post office,
+ * `lapseContext` reads which seat holders' terms still run. `seasonState` gives
+ * a proposal's check the running season's priorities (0297). The post office,
  * the spine's member reader, the origin and the village's name are for the
  * task emails a close starts (server/lib/sessionTaskMail.ts).
  */
@@ -165,6 +170,7 @@ type Deps = Pick<
   | "notifyAdmins"
   | "circlesRepo"
   | "lapseContext"
+  | "seasonState"
   | "notifyDeps"
   | "commsPostOffice"
   | "deploymentOrigin"
@@ -188,6 +194,8 @@ const DISCARDS_PER_HOUR = 30;
 const TOOL_IDEAS_PER_HOUR = 10;
 /** Answers after a night and decisions marked from a record (0281): a person answers a handful at most. */
 const NIGHT_WRITES_PER_HOUR = 60;
+/** Proposal checks in an hour (0297): a facilitator checking each proposal of a long call, and again after a reword. */
+const CHECKS_PER_HOUR = 120;
 /** How long a person's name is remembered between polls. */
 const NAME_TTL_MS = 30_000;
 
@@ -243,7 +251,9 @@ export function register(app: Express, deps: Deps): void {
     const c = (circlesRepo.all() as Array<{ id?: unknown; name?: unknown }>).find((x) => x?.id === id);
     return c ? String(c.name ?? id) : null;
   };
-  const ctx = { lookup, circleName, lapseContext: deps.lapseContext, circles };
+  /** A proposal's check (0297) is offered while the module that names its agent is open to members. */
+  const checkOffer = () => (saberraOpenToMembers() ? { agent: saberraAgentName() } : null);
+  const ctx = { lookup, circleName, lapseContext: deps.lapseContext, circles, check: checkOffer };
   /** The close's task emails, started and left. Absent when the post office is not wired, as in a suite. */
   const closeMail = deps.commsPostOffice
     ? (sessionId: number) => {
@@ -500,6 +510,20 @@ export function register(app: Express, deps: Deps): void {
     const entryId = parseId(req.params?.entryId);
     if (entryId == null) return res.status(404).json({ error: R.entryUnknown });
     answer(res, await removeEntry(w.pool, w.id, w.actor, entryId), () => ({ ok: true }));
+  });
+
+  /** Check a proposal (0297, shared/sessionCheck.ts): its facilitator or its proposer, while it is open. */
+  app.post("/api/sessions/:id/entries/:entryId/check", async (req, res) => {
+    // Who is asking comes first, as on every door: a stranger hears 401 and never what the village offers.
+    const w = await writer(req, res, { key: "sessions-check", max: CHECKS_PER_HOUR });
+    if (!w) return;
+    if (!checkOffer()) return res.status(404).json({ error: CHECK_REFUSALS.off });
+    const entryId = parseId(req.params?.entryId);
+    if (entryId == null) return res.status(404).json({ error: R.entryUnknown });
+    // A check reads the season's goals as words (0298 gave them ids): only the words cross, as the bridge rulings say.
+    const ref = seasonRefOf(deps.seasonState?.().current ?? null);
+    const season = ref ? { name: ref.name, goals: ref.goals.map((g) => g.text) } : null;
+    answer(res, await checkEntry(w.pool, w.id, w.actor, entryId, { season, lapseContext: deps.lapseContext }), () => ({ ok: true }));
   });
 
   app.post("/api/sessions/:id/respond", async (req, res) => {

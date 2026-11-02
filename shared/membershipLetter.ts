@@ -41,6 +41,7 @@ import { LOVE_LETTER_PAGE } from "./pageContent/loveLetter";
 import { resolvePage } from "./pageContent/resolve";
 import { pageSectionKey, type PageVars } from "./pageContent/types";
 import { pageVarsFrom } from "./pageContent/vars";
+import { articleFor } from "./villageWord";
 
 /**
  * The subject type a membership letter's text is stored under. Typed against
@@ -74,13 +75,18 @@ export function readMembershipRef(ref: string): { letterVersion: string; signing
   return LETTER_VERSION.test(letterVersion) && signingId ? { letterVersion, signingId } : null;
 }
 
-/** The opening, for a village that has not written its own (LoveLetter.tsx carried it until PR9). */
+/**
+ * The opening, for a village that has not written its own (LoveLetter.tsx
+ * carried it until PR9). Neutral starter words since 2026-10-23: the first
+ * village's slogan came out, and that village keeps its own opening in its
+ * `covenant` section (record: server/seeds/amora/pages-covenant-seed.json).
+ */
 export const DEFAULT_OPENING =
-  "Something in you called you here. Maybe it was the land itself, alive with possibility. Maybe it was the vision of a village where all beings belong and thrive. Maybe it was simply the feeling that the world you want to live in needs to be built.";
+  "Something in you called you here. Maybe it was the land, or the people you met. Maybe it was simply the feeling that the world you want to live in needs to be built, and that you could help build it.";
 
 /** How the village will govern itself, for a village that has not written its own. */
 export const DEFAULT_GOVERNANCE =
-  "How residents govern themselves, and how we steward this land together, will be co-created by the first residents. Nothing here is handed down. You are not joining a finished system; you are helping write it.";
+  "How we govern ourselves, and how we care for this place together, is decided by the people who live and work here. Nothing here is handed down, and you will help shape what comes next.";
 
 export interface LetterSource {
   /** The village's name. Never blank: the caller passes its own fallback. */
@@ -238,13 +244,21 @@ export function renderMembershipLetter(src: LetterSource): Omit<ServedLetter, "v
   return { title, body: letterBody(parts), parts, intent: letterIntent(title) };
 }
 
-/** What the page says to a member about aligning with the letter. Never "sign": that word is the letter's own. */
+/**
+ * What the page says to a member about aligning with the letter. Never "sign": that word is the letter's own.
+ *
+ * `member` is the village's word for a member (Admin, Make This Yours, "What
+ * a member is called"). These said "join the {village} Family", one village's
+ * own word for its members, under every village's name, while the setting
+ * that names them was read nowhere (audit, 2026-10-22).
+ */
 export const LETTER_WORDS = {
   readReflect: "Read. Reflect. Align.",
   heading: (title: string) => `Align with the ${title}`,
-  lede: (village: string) => `Read the letter above, add a few words about yourself, and align from your account to join the ${village} Family.`,
+  lede: (village: string, member: string) =>
+    `Read the letter above, add a few words about yourself, and align from your account to join ${village} as ${articleFor(member)} ${member}.`,
   asYou: (name: string) => `Aligning as ${name}, from your account. No typed name.`,
-  button: (village: string) => `Align and join the ${village} Family`,
+  button: (village: string) => `Align and join ${village}`,
   busy: "Aligning…",
   kept: "Your alignment is kept under What you have aligned with, on your profile.",
   changed: "The letter changed while you were reading it. Read it again, then align.",

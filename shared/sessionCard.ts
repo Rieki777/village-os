@@ -373,13 +373,20 @@ function roomLine(f: RoomFacts): string | null {
   const kinds = order
     .filter((t) => f.types[t])
     .map((t) => (f.types[t] === 1 ? withArticle(t) : `${countWord(f.types[t]!)} ${TYPE_PLURAL[t]}`));
-  const parts = [`Here today: ${andList(f.people.map((p) => p.name))}. Between you, ${andList(kinds)}.`];
+  // Everyone present is named here, the people read and the people welcomed,
+  // so nobody in the room reads a "here today" that leaves them out. What
+  // follows is about the people read, and says so when that is not everyone.
+  const read = f.people.map((p) => p.name);
+  const parts = f.welcomed.length
+    ? [`Here today: ${andList([...read, ...f.welcomed.map((w) => w.name)])}. Read from their own lines: ${andList(read)}, ${andList(kinds)}.`]
+    : [`Here today: ${andList(read)}. Between you, ${andList(kinds)}.`];
+  const nobody = f.welcomed.length ? "nobody read today" : "nobody here";
   if (f.openCenters.length) {
     const open = f.openCenters.map((c) => CENTER_WORDS[c].carries);
     parts.push(
       f.openCenters.length === 1
-        ? `Even with today's sky, nobody here defines the ${CENTER_WORDS[f.openCenters[0]].name}, so ${open[0]} will come from outside the circle today. Notice whose is whose.`
-        : `Even with today's sky, the room is open in ${andList(f.openCenters.map((c) => CENTER_WORDS[c].name))}: ${andList(open)} will come from outside the circle today.`,
+        ? `Even with today's sky, ${nobody} defines the ${CENTER_WORDS[f.openCenters[0]].name}, so ${open[0]} will come from outside the circle today. Notice whose is whose.`
+        : `Even with today's sky, ${f.welcomed.length ? "the people read are" : "the room is"} open in ${andList(f.openCenters.map((c) => CENTER_WORDS[c].name))}: ${andList(open)} will come from outside the circle today.`,
     );
   } else {
     parts.push("Together, and with today's sky, every centre is defined: the room carries a whole chart between you.");
@@ -498,5 +505,5 @@ export interface CardsAnswer {
   /** Whether this viewer may pull now: in the room and the session still open. */
   mayPull: boolean;
   /** Why the viewer is not read, when they are not: so the card can say how to be. */
-  notRead: "no-lines" | "hidden" | "no-maia" | "left-out" | null;
+  notRead: "no-lines" | "hidden" | "no-maia" | "left-out" | "not-asked" | null;
 }

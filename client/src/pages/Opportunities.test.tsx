@@ -55,7 +55,7 @@ vi.mock("@/hooks/useVillageContent", () => ({
 
 import Opportunities from "./Opportunities";
 import { OPPORTUNITIES_PAGE, VENTURE_IDS } from "@shared/pageContent/opportunities";
-import { markerDocument } from "@shared/pageContent/resolve";
+import { fillVars, markerDocument } from "@shared/pageContent/resolve";
 
 const renderPage = () =>
   render(
@@ -64,8 +64,14 @@ const renderPage = () =>
     </Router>,
   );
 
+/** A field's default as the spec holds it, filled with this file's village. The words are the spec's to choose. */
+const word = (sectionId: string, key: string) =>
+  fillVars(OPPORTUNITIES_PAGE.sections.find((s) => s.id === sectionId)!.fields.find((f) => f.key === key)!.default, {
+    village: "Willowbrook",
+  });
+
 /** The page's words arrive after one read, so a test waits for them before it asks. */
-const loaded = () => screen.findByText(/^Join our thriving village economy/);
+const loaded = () => screen.findByText(word("hero", "lede"));
 
 /** The eight titles as the spec writes them, so a reworded default moves the test with it. */
 const DEFAULT_TITLES = OPPORTUNITIES_PAGE.sections
@@ -203,11 +209,10 @@ describe("the page says nothing about what a token does", () => {
     await loaded();
     const text = document.body.textContent ?? "";
     expect(text).not.toContain("Gratitude");
-    expect(text).toContain("align business success with community prosperity through shared revenue.");
-    expect(screen.getByRole("heading", { level: 2, name: "Revenue Sharing" })).toBeTruthy();
-    expect(text).toContain(
-      "All businesses at Willowbrook share a percentage of revenue with the community. This creates alignment",
-    );
+    expect(text).not.toContain("Seeds");
+    expect(text).toContain(word("hero", "lede"));
+    expect(screen.getByRole("heading", { level: 2, name: word("revenue", "heading") })).toBeTruthy();
+    expect(text).toContain(word("revenue", "body"));
     expect(screen.getByRole("link", { name: /How we create together/ })).toHaveAttribute("href", "/how-we-create");
   });
 });
@@ -255,11 +260,15 @@ describe("every field in the Business Opportunities spec reaches the page", () =
     expect(card.querySelector("svg.lucide-hammer")).toBeTruthy();
   });
 
-  it("draws no badge for a status the village cleared", async () => {
-    pageSection.current = { ventures: { cards: [{ id: "artisan-market", status: "" }] } };
+  it("draws a badge only for a status the village wrote: the starter cards claim no progress", async () => {
+    const statuses = OPPORTUNITIES_PAGE.sections.find((s) => s.id === "ventures")!.lists![0].default.map((row) => row.status);
+    expect(statuses.every((s) => s === "")).toBe(true);
+    pageSection.current = { ventures: { cards: [{ id: "artisan-market", status: "Opening soon" }] } };
     renderPage();
     const card = (await screen.findByText("Artisan Market")).closest(".rounded-2xl") as HTMLElement;
-    expect(card.textContent).not.toContain("Future");
+    expect(card.textContent).toContain("Opening soon");
+    const other = screen.getByText("Retreat Center").closest(".rounded-2xl") as HTMLElement;
+    expect(other.querySelector("span.rounded-lg")).toBeNull();
   });
 
   it("draws nothing of a section the village hid", async () => {
@@ -267,7 +276,7 @@ describe("every field in the Business Opportunities spec reaches the page", () =
     renderPage();
     await loaded();
     expect(screen.queryByText("Retreat Center")).toBeNull();
-    expect(screen.queryByText("Revenue Sharing")).toBeNull();
+    expect(screen.queryByText(word("revenue", "heading"))).toBeNull();
     expect(screen.queryByRole("link", { name: /How we create together/ })).toBeNull();
     expect(screen.getByText("Interested in an Opportunity?")).toBeTruthy();
   });

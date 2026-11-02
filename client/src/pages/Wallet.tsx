@@ -19,7 +19,9 @@ import { useEffect, useState } from "react";
 import { useModule, useModules, useHypha } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken, useGameConfig } from "@/lib/gameApi";
-import { useTokenName } from "@/hooks/useTokenNames";
+import { useTokenName, useTokensWord } from "@/hooks/useTokenNames";
+import { formatMoney } from "@shared/money";
+import { useTokenNameMap } from "@/hooks/useTokenNameFor";
 import { Coins, CreditCard, ExternalLink, ReceiptText, Wallet as WalletIcon } from "lucide-react";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import { ExampleRefusal, readRefusal } from "@/components/ExampleRefusal";
@@ -27,33 +29,31 @@ import InfoTip from "@/components/InfoTip";
 import { decimalsOf, formatTokenAmount } from "@/lib/tokenAmount";
 
 /**
- * The plain mechanics behind a balance row, keyed on the token's slug. The
- * slugs are each village's own, so this matches on the platform families and
- * falls back to the one truth every token shares: the ledger.
+ * The one truth every token shares, behind a balance row: the ledger.
+ *
+ * It used to match the slug against three platform families and say what
+ * each token DOES ("Thanks for work, never pay", "Nights at the village,
+ * earned through work exchange", "The Material Library's deposit token").
+ * Every village designs its own rules for its tokens, and the 2026-10-22
+ * ruling is that no shipped sentence says what a token does (readiness R084),
+ * so the row names the token and this says only where its movements live.
  */
-const tokenTip = (slug: string): string => {
-  const s = slug.toLowerCase();
-  if (s.includes("gratitude") || s.includes("heart")) {
-    return "Thanks for work, never pay. Earned when someone appreciates a real contribution; it cannot be bought.";
-  }
-  if (s.includes("stay")) {
-    return "Nights at the village, earned through work exchange and spent when you book a stay.";
-  }
-  if (s.includes("library")) {
-    return "The Material Library's deposit token. Set aside while you borrow, returned when the item comes home.";
-  }
-  return "A village token. Every movement it makes is written on the shared ledger.";
-};
+const tokenTip = (): string => "A village token. Every movement it makes is written on the shared ledger.";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
   return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 };
 
-const usd = (minor: number) => `$${(Number(minor || 0) / 100).toFixed(2)}`;
+/** The exchange charges in US dollars (Stripe is sent `usd`), so a price is shown in the currency it is charged in. */
+const usd = (minor: number) => formatMoney(Number(minor || 0), "USD");
 
 export default function Wallet() {
   const tokenName = useTokenName("Recognition");
+  const tokensWord = useTokensWord();
+  // Every registry name by slug (R084), for a token an order names that the
+  // member no longer holds, which `mine.tokenNames` cannot carry.
+  const registryNames = useTokenNameMap();
   const modules = useModules();
   const exchangeModule = useModule("exchange");
   // Redemption is its own module (ruling 22). Read above the early return
@@ -211,21 +211,19 @@ export default function Wallet() {
    * wrong on the server first: that is why the ruling tells the economics
    * session to do the caller sweep and the display pass BEFORE the column.
    */
-  const tokenOf = (slug: string): string => tokenNames[slug] ?? slug;
+  const tokenOf = (slug: string): string => tokenNames[slug] ?? registryNames[slug] ?? slug;
 
   return (
     <Layout>
       <section className="py-12 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
           <h1 className="font-display text-4xl font-bold text-foreground mb-3">The Exchange</h1>
-          {/* R47: the Trail line leads and the tooltips define the three
-              token words. The roots line is the Lore, last and quiet. */}
+          {/* R47: the Trail line leads. It used to define three token words
+              in tooltips, by what each one does; it names the umbrella word
+              now (R084, the 2026-10-22 token ruling). The roots line is the
+              Lore, last and quiet. */}
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Buy credits and check your balances.{" "}
-            <InfoTip tip={`${tokenName}: thanks for work, never pay. Earned when someone appreciates a real contribution, and never bought.`}>{tokenName}</InfoTip>,{" "}
-            <InfoTip tip="Stay credits are nights at the village, earned through work exchange and spent when you book a stay.">stay credits</InfoTip> and{" "}
-            <InfoTip tip="Library credits pay the Material Library's deposit: set aside while you borrow, back when the tool comes home.">library credits</InfoTip>{" "}
-            all show here and on{" "}
+            Buy {tokensWord} and check your balances. Everything you hold shows here and on{" "}
             <a href="/profile#wallet" className="text-teal-deep font-medium hover:underline">your profile</a>.
           </p>
           <ExamplesBanner moduleId="exchange" noun="listing" />
@@ -267,7 +265,7 @@ export default function Wallet() {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {tokenNames[slug] ?? slug}
-                        <InfoTip tip={tokenTip(slug)} label={`What ${tokenNames[slug] ?? slug} is`} />
+                        <InfoTip tip={tokenTip()} label={`What ${tokenNames[slug] ?? slug} is`} />
                       </p>
                     </div>
                   ))}

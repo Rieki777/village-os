@@ -29,6 +29,12 @@ describe("AI help", () => {
     expect(s.configured && s.guide).toBe("Maia");
   });
 
+  it("gives an unnamed guide's name as it opens a sentence, for the upload's line", async () => {
+    answers({ choice: null, options: [{ id: "village", name: "the village guide", named: false, available: true }], answering: "village", note: null, canChoose: false });
+    const s = await aiHelpStatus("words");
+    expect(s.configured && s.guide).toBe("The village guide");
+  });
+
   it("hands a document to the panel on its own step only", async () => {
     answers({ choice: null, options: [{ id: "village", name: "Maia", available: true }], answering: "village", note: null, canChoose: false });
     const words: string[] = [];

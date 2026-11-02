@@ -201,6 +201,9 @@ describe.skipIf(!configured)("the rung the village pays you onto reaches every s
       hasMembership: (u: any) => !!u.membershipGranted,
       stageOf: async () => "",
       recordStageEvent: async () => {},
+      getPool: () => pool,
+      lapseContext: () => ({ cadence: "never", currentSeasonId: null }),
+      adminGroupsFor: () => [],
     });
     const { res, out } = makeRes();
     await handler({}, res);
@@ -228,6 +231,9 @@ describe.skipIf(!configured)("the rung the village pays you onto reaches every s
       hasMembership: (u: any) => !!u.membershipGranted,
       stageOf: async () => "",
       recordStageEvent: async () => {},
+      getPool: () => pool,
+      lapseContext: () => ({ cadence: "never", currentSeasonId: null }),
+      adminGroupsFor: () => [],
     });
     const { res, out } = makeRes();
     await handler({}, res);
@@ -258,6 +264,9 @@ describe.skipIf(!configured)("the rung the village pays you onto reaches every s
       hasMembership: (u: any) => !!u.membershipGranted,
       stageOf: async () => "",
       recordStageEvent: async () => {},
+      getPool: () => pool,
+      lapseContext: () => ({ cadence: "never", currentSeasonId: null }),
+      adminGroupsFor: () => [],
     });
     const { res, out } = makeRes();
     await handler({}, res);

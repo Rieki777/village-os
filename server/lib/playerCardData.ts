@@ -100,6 +100,7 @@ import { endedSeasons } from "../../shared/applicationGroups";
 import { isLapsed, rowToAssignment, rowToRole, type LapseContext, type OrgAssignment, type OrgRole } from "./orgChart";
 import { coveredSeatIds, type Relation, type RelationType } from "./orgRelations";
 import { projectSeat, type SeatTier } from "./seatProjection";
+import { firstNameOf } from "./peopleLock";
 import { readCardRows, readCharacters, readProposalRows, readSignTables, type SignTable } from "../repos/playerCard";
 import { portraitsVisibleTo } from "../repos/characterPortraits";
 import { avatarFor } from "./characters";
@@ -108,6 +109,8 @@ import { applicationsOfCandidates, pastSeatingsWithoutApplication } from "../rep
 import { latestCardWordsFor, moonLoadsFor } from "../repos/seasonPlans";
 import { accomplishmentsOfMany } from "./sessionTasks";
 import { tensionsForRoles } from "./roleTensions";
+import { powersByClass } from "./powerAffinity";
+import { villageHeldCapabilities } from "./capabilityHolding";
 import { CARD_WORD_LABELS, servedGoalsOf, type CardWordKey, type CardWords, type SeasonalGoal, type ServedGoal } from "../../shared/seasonPlanWords";
 
 import type { CardLevel, PlayerCardPayload, SignSheetOut } from "../../shared/playerCardPayload";
@@ -203,6 +206,13 @@ export interface CardProposal {
   settings: unknown;
   /** `seat_applications.term_ends_at`. */
   termEndsAt: string | null;
+  /**
+   * The season the proposal is for (E9): the card's eyebrow, its span and its
+   * moon cycle are drawn in it, never in the running season. Null is a
+   * proposal with no season to be for, which draws none. Left out, the card
+   * keeps the running season, as it did before.
+   */
+  season?: CardSeason | null;
   /**
    * A role proposal's draft (role proposals PR A): the words it proposes,
    * drawn over the posted ones by field name, so a field a later release adds
@@ -378,7 +388,7 @@ export async function buildPlayerCards(
   const selfIds = owners.filter((o) => o.tier.level === "self").map((o) => o.userId);
   // Accomplishments are a live card's: a proposal card reads none.
   const liveMemberIds = owners.filter((o) => o.tier.level !== "stranger" && !o.proposal).map((o) => o.userId);
-  const [rows, prop, ownApps, pastHeld, accomplished, cardWords, loads, avatars] = await Promise.all([
+  const [rows, prop, ownApps, pastHeld, accomplished, cardWords, loads, avatars, suitedByClass, heldAnywhere] = await Promise.all([
     readCardRows(pool, owners.map((o) => o.userId), { moonFrom, threeMoonsFrom: moonStart(ctx.now, 2) }),
     readProposalRows(pool, owners.flatMap((o) => o.proposal?.seatIds ?? [])),
     applicationsOfCandidates(pool, memberIds),
@@ -390,7 +400,14 @@ export async function buildPlayerCards(
     latestCardWordsFor(pool, memberIds),
     ctx.moonId ? moonLoadsFor(pool, memberIds, ctx.moonId) : Promise.resolve(new Map<string, { level: number }>()),
     ownerAvatars(pool, ctx.villageId, owners.map((o) => o.userId), ctx.viewerUserId),
+    // A10: what each class suits, and every power the village has handed to any
+    // role. A power held anywhere is never listed as "suited" on a card.
+    ctx.villageId ? powersByClass(pool, ctx.villageId) : Promise.resolve(null),
+    villageHeldCapabilities(pool),
   ]);
+  const held = new Set(heldAnywhere);
+  const suitedFor = (classes: readonly string[]) =>
+    suitedByClass ? classes.flatMap((k) => suitedByClass.get(k) ?? []).filter((p) => !held.has(p.key)) : undefined;
 
   const roles = new Map<string, OrgRole & { archetypesSuggested: boolean }>(
     [...rows.roles, ...prop.roles].map((r) => [String(r.id), { ...rowToRole(r), archetypesSuggested: !!r.archetypes_suggested }]),
@@ -527,6 +544,8 @@ export async function buildPlayerCards(
               label: CAPABILITY_LABELS[g.capability as Capability] ?? String(g.capability),
             }))
           : undefined,
+        // Unread wherever the structure is, or when the map could not be read.
+        suited: seat.structure ? suitedFor((p.archetypes as string[]) ?? []) : undefined,
         // A role missing from the map (a reader who is not a member) is unread, never empty.
         tensions: memberUp ? (proposal ? [] : tensionsByRole.get(id)?.tensions) : undefined,
         viewerHolds: viewerHolds(id),
@@ -579,11 +598,18 @@ export async function buildPlayerCards(
     const input: PlayerCardInput = {
       now: ctx.now,
       timeZone: ctx.timeZone,
-      owner: { userId: owner.userId, displayName: String(user.name ?? ""), avatar: avatars.get(owner.userId) ?? null },
+      // A signed-out reader reads the owner by first name and never by their
+      // internal id (R097's public tier); the route has already refused them
+      // the card outright while the village keeps its people for members.
+      owner: ctx.viewerUserId
+        ? { userId: owner.userId, displayName: String(user.name ?? ""), avatar: avatars.get(owner.userId) ?? null }
+        : { userId: "", displayName: firstNameOf(user.name), avatar: avatars.get(owner.userId) ?? null },
       viewerUserId: ctx.viewerUserId,
       viewerMember: ctx.viewerMember === true,
       villageName: ctx.villageName,
       season: ctx.season,
+      // A proposal card is drawn in the season it is for (E9); "My applications" still reads the running one.
+      proposalSeason: proposal ? proposal.season : undefined,
       nextSeasonId: ctx.nextSeasonId,
       archetypeNames: ctx.archetypeNames,
       roles: rolesVisible ? roleIns : undefined,

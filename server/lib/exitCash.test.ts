@@ -105,7 +105,7 @@ describe.skipIf(!configured)("cash the village owes a leaver keeps them on, and 
     expect(cash, "one cash line on the exit desk, not two").toHaveLength(1);
     expect(cash[0].count, "owed and claimed count, paid does not").toBe(2);
     expect(cash[0].blocking).toBe(false);
-    expect(cash[0].description).toContain("is owed 400.00 USD in cash the village has not paid yet");
+    expect(cash[0].description).toContain("is owed $400.00 in cash the village has not paid yet");
     // The amount, never the work.
     expect(cash[0].description).not.toContain("east fence");
     expect(blockingStates(states).map((s) => s.domain)).not.toContain("cash");
@@ -132,7 +132,7 @@ describe.skipIf(!configured)("cash the village owes a leaver keeps them on, and 
     expect(u.membershipGranted).toBe(false);
     const exit = (await exitById(pool, exitId))!;
     expect(exit.status).toBe("resolved");
-    expect(String(exit.resolution)).toContain("kept as a former member: is owed 200.00 USD in cash");
+    expect(String(exit.resolution)).toContain("kept as a former member: is owed $200.00 in cash");
     expect(String(exit.resolution)).not.toContain("east fence");
     // The row is still there for the treasurer to pay.
     expect(await unpaidCashOf(pool, id)).toBe(1);

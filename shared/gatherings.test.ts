@@ -101,6 +101,16 @@ describe("toSchemaOrg", () => {
     expect(doc.location).toEqual({ "@type": "Place", name: "The greenhouse" });
   });
 
+  it("names no page for the event, because no host serves one", () => {
+    // It read `<siteUrl>/events/<id>`: the outside website has no such page and
+    // the app shows events only on its calendar, `/events`, which is not this
+    // event's page (sweep, 2026-10-31). A url schema.org reads as the event's
+    // own page is left out until one exists. `as any` passes what the server
+    // used to, to prove it is ignored.
+    const doc = (toSchemaOrg as any)(gathering(), { siteUrl: "https://village.example" });
+    expect(doc).not.toHaveProperty("url");
+  });
+
   it("refuses to mark up a draft", () => {
     // An unpublished gathering must never reach a search index.
     expect(toSchemaOrg(gathering({ status: "draft" }))).toBeNull();
@@ -138,11 +148,4 @@ describe("toSchemaOrg", () => {
     expect(doc).not.toHaveProperty("location");
   });
 
-  it("builds a canonical url only when the village has a site url", () => {
-    // The trailing slash is the bug this guards: two slashes in a canonical
-    // URL is a different URL.
-    expect(toSchemaOrg(gathering(), { siteUrl: "https://example.test/" })!.url)
-      .toBe("https://example.test/events/ev-1");
-    expect(toSchemaOrg(gathering())).not.toHaveProperty("url");
-  });
 });

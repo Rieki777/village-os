@@ -174,10 +174,27 @@ const worst = files
 const mainCandidates = files.filter((f) => /^assets\/index-[^/]*\.js$/.test(f.path)).sort((a, b) => b.bytes - a.bytes);
 const mainBytes = mainCandidates.length ? mainCandidates[0].bytes : 0;
 
+/**
+ * THE FIRST PAGE'S SCRIPTS, every `.js` file index.html names (the entry
+ * script, its modulepreloads, the route preloader), in real bytes. Main JS
+ * reads one file, and how rollup spreads the boot modules over files is a
+ * chunking choice: on 2026-10-31 the small-module groups in vite.config.ts
+ * moved react and the shared boot modules out of the entry chunk, and main JS
+ * fell from 620 KB to 362 KB while the first page loaded the same code. This
+ * number does not move when code only changes file, so it is the one that
+ * says what a visitor fetches before anything renders.
+ */
+const indexHtml = fs.existsSync(path.join(DIST, "index.html")) ? fs.readFileSync(path.join(DIST, "index.html"), "utf8") : "";
+const bootPaths = new Set(Array.from(indexHtml.matchAll(/(?:src|href)="\/?(assets\/[^"]+\.js)"/g), (m) => m[1]));
+const bootFiles = files.filter((f) => bootPaths.has(f.path));
+const bootBytes = bootFiles.reduce((sum, f) => sum + f.bytes, 0);
+
 const MAX_MAIN = budgetFromWorkflow("MAX_MAIN_JS_KB", 700);
+const MAX_BOOT = budgetFromWorkflow("MAX_BOOT_JS_KB", 750);
 const MAX_TOTAL = budgetFromWorkflow("MAX_TOTAL_DIST_KB", 6600);
 
 const mainKb = kb(mainBytes);
+const bootKb = kb(bootBytes);
 const totalKb = kb(blockBytes);
 const realKb = kb(realBytes);
 
@@ -191,6 +208,9 @@ const result = {
   subBlockPaddingKb: kb(subBlockPadding),
   mainJsKb: mainKb,
   maxMainJsKb: MAX_MAIN.value,
+  bootJsKb: bootKb,
+  bootJsFiles: bootFiles.length,
+  maxBootJsKb: MAX_BOOT.value,
   maxTotalDistKb: MAX_TOTAL.value,
   histogram: histogram.map((h) => ({ label: h.label, count: h.count, paddingKb: kb(h.paddingBytes) })),
   worstPadding: worst.map((w) => ({ path: w.path, bytes: w.bytes, paddingBytes: w.padding })),
@@ -224,6 +244,7 @@ for (const w of worst) {
 }
 say("");
 say(`Main JS: ${mainKb} KB of ${MAX_MAIN.value} KB, measured in REAL bytes (${MAX_MAIN.source})`);
+say(`First-page JS: ${bootKb} KB of ${MAX_BOOT.value} KB across the ${bootFiles.length} scripts index.html loads, in REAL bytes (${MAX_BOOT.source})`);
 say(`Total dist/public: ${totalKb} KB of ${MAX_TOTAL.value} KB, measured in BLOCK-CHARGED bytes (${MAX_TOTAL.source})`);
 say(`  the same tree is ${realKb} KB in real bytes, so ${kb(overheadBytes)} KB of the ceiling pays for 4 KB block rounding`);
 say("");
@@ -244,6 +265,16 @@ if (!mainCandidates.length) {
 if (mainKb > MAX_MAIN.value) {
   console.error(
     `::error::Main JS bundle is ${mainKb} KB, over the ${MAX_MAIN.value} KB budget. Split a route instead of raising the budget. Note that splitting adds a 4 KB block to the total below.`,
+  );
+  fail = 1;
+}
+if (!bootFiles.length) {
+  console.error("::error::dist/public/index.html names no assets/*.js script. The build did not produce a first page to measure.");
+  fail = 1;
+}
+if (bootKb > MAX_BOOT.value) {
+  console.error(
+    `::error::The first page loads ${bootKb} KB of scripts across ${bootFiles.length} files, over the ${MAX_BOOT.value} KB budget. Something the entry imports statically grew or joined it; make it lazy instead of raising the budget.`,
   );
   fail = 1;
 }

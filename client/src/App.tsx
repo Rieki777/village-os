@@ -13,6 +13,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
 import { brochurePage, useBrochurePages } from "./lib/brochure";
+import { useGameConfig } from "./lib/gameApi";
 
 /**
  * "/" means the welcome page, for everyone, every time. The map was going to
@@ -75,37 +76,28 @@ function SeatApplicationsAlias() {
 
 function PageTitle() {
   const [location] = useLocation();
-  const [village, setVillage] = useState<string>("");
-  const [commitment, setCommitment] = useState<string>("");
+  // The one cached config every page reads, so a save in Admin that calls
+  // refreshGameConfig() renames the tab too, with no reload (audit item 24).
+  const config = useGameConfig();
+  const village = config?.project?.name ?? "";
+  const commitment = config?.project?.commitmentName ?? "";
+  const favicon = String(config?.images?.favicon ?? "").trim();
 
+  // The tab ICON is identity too. index.html ships a neutral platform favicon
+  // (a static file cannot know which village it serves); this swaps in the
+  // village's own the moment config arrives, same pattern as the title below.
   useEffect(() => {
-    let alive = true;
-    fetch("/api/game/config")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!alive) return;
-        setVillage(d?.project?.name ?? "");
-        setCommitment(d?.project?.commitmentName ?? "");
-        // The tab ICON is identity too. index.html ships a neutral platform
-        // favicon (a static file cannot know which village it serves); this
-        // swaps in the village's own the moment config arrives, same
-        // pattern as the title below.
-        const favicon = String(d?.images?.favicon ?? "").trim();
-        if (favicon) {
-          for (const rel of ["icon", "apple-touch-icon"]) {
-            let link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
-            if (!link) {
-              link = document.createElement("link");
-              link.rel = rel;
-              document.head.appendChild(link);
-            }
-            link.href = favicon;
-          }
-        }
-      })
-      .catch(() => { /* keep whatever index.html shipped */ });
-    return () => { alive = false; };
-  }, []);
+    if (!favicon) return;
+    for (const rel of ["icon", "apple-touch-icon"]) {
+      let link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = rel;
+        document.head.appendChild(link);
+      }
+      link.href = favicon;
+    }
+  }, [favicon]);
 
   useEffect(() => {
     if (!village) return;
@@ -171,6 +163,7 @@ const Mint = lazyPage(() => import("./pages/Mint"));
 const PublicProfile = lazyPage(() => import("./pages/PublicProfile"));
 const Register = lazyPage(() => import("./pages/Register"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
+const VerifyEmail = lazyPage(() => import("./pages/VerifyEmail"));
 // Three pages an email links to, from ONE module: the bundler keeps one chunk.
 const EmailPreferences = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailPreferences })));
 const EmailUnsubscribe = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailUnsubscribe })));
@@ -180,6 +173,7 @@ const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
 const VillageEmail = lazyPage(() => import("./pages/VillageEmail"));
 const GoodNeighbor = brochurePage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
+const SetupGame = lazyPage(() => import("./pages/SetupGame"));
 const ProjectHistory = brochurePage(() => import("./pages/ProjectHistory"));
 const Bootstrap = lazyPage(() => import("./pages/Bootstrap"));
 const Feedback = lazyPage(() => import("./pages/Feedback"));
@@ -213,6 +207,8 @@ const Forum = lazyPage(() => import("./pages/Forum"));
 const Messages = lazyPage(() => import("./pages/Messages"));
 const Introductions = lazyPage(() => import("./pages/Introductions"));
 const RequestMembership = lazyPage(() => import("./pages/RequestMembership"));
+const ProposeARole = lazyPage(() => import("./pages/ProposeARole"));
+const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) => ({ default: m.ConfirmProposal })));
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
@@ -262,6 +258,7 @@ function Router() {
     <Switch>
       <Route path="/" component={LandingRoute} />
       <Route path="/journey-to-launch" component={JourneyToLaunch} />
+      <Route path="/setup-game" component={SetupGame} />
       <Route path="/project-history" component={ProjectHistory} />
       <Route path="/claim" component={Bootstrap} />
       <Route path="/feedback" component={Feedback} />
@@ -351,7 +348,12 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/request-membership" component={RequestMembership} />
+      {/* Confirm before :token, so the email's link is never read as a link made for one person. */}
+      <Route path="/propose-a-role/confirm" component={ConfirmProposal} />
+      <Route path="/propose-a-role/:token" component={ProposeARole} />
+      <Route path="/propose-a-role" component={ProposeARole} />
       <Route path="/set-password" component={SetPassword} />
+      <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/email/preferences" component={EmailPreferences} />
       <Route path="/email/unsubscribe" component={EmailUnsubscribe} />
       <Route path="/email/a" component={EmailAction} />

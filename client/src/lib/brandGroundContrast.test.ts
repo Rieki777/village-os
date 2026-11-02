@@ -669,8 +669,8 @@ describe("under the pointer, a brand button stays readable and visibly moves, li
     });
   }
 
-  // The platform button's legacy class name, which index.css flags for a coordinated rename.
-  const LEGACY_BUTTON = "btn-amora"; // brand-ok: the stylesheet's legacy class name, read here to measure it
+  // The platform button's class, `btn-village` since readiness R066 (it carried the first village's name).
+  const LEGACY_BUTTON = "btn-village";
   it(`.${LEGACY_BUTTON} keeps white readable under the pointer, and visibly moves`, () => {
     const below: string[] = [];
     const flat: string[] = [];

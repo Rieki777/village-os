@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
 import { useLocation } from "wouter";
 import { useVillageName } from "@/hooks/useVillageName";
+import { ACCOUNT_WORDS, NAME_MAX, PASSWORD_MAX, PASSWORD_MIN } from "@shared/accountRules";
 
 // Parameterised the way HowWeCreate.tsx parameterises its recognition cards:
 // the copy names the village, so the list has to be built after the config
@@ -191,6 +192,11 @@ export default function Register() {
     e.preventDefault();
     setError("");
 
+    // The server's own rules (shared/accountRules.ts), said before anything is sent.
+    if (password.trim().length < PASSWORD_MIN) {
+      setError(ACCOUNT_WORDS.passwordShort);
+      return;
+    }
     if (password !== confirmPassword) {
       setError("Passwords don't match.");
       return;
@@ -301,6 +307,7 @@ export default function Register() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Your name"
+                      maxLength={NAME_MAX}
                       className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       required
                     />
@@ -337,11 +344,17 @@ export default function Register() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
+                      minLength={PASSWORD_MIN}
+                      maxLength={PASSWORD_MAX}
+                      aria-describedby="register-password-rule"
                       className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       required
                     />
                     <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
                   </div>
+                  <p id="register-password-rule" className="mt-1 text-xs text-muted-foreground">
+                    At least {PASSWORD_MIN} characters.
+                  </p>
                 </div>
 
                 <div>

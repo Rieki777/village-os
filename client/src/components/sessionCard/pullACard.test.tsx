@@ -121,7 +121,7 @@ describe("pull a card", () => {
   it("tells somebody the card did not read how to be read, and shows the lines others shared", async () => {
     api.read.mockResolvedValue(answer([cardOf({ mine: null, shared: [{ name: "Bo", line: "Bo's own words." }] })], { notRead: "no-maia" }));
     show(<PullACard view={makeView()} />);
-    await waitFor(() => expect(screen.getByText(CARD_WORDS.notRead["no-maia"], { exact: false })).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Let the village guide use your lines and the next card will read you too.", { exact: false })).toBeTruthy());
     expect(screen.getByText("Bo's own words.")).toBeTruthy();
   });
 

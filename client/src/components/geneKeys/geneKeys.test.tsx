@@ -47,7 +47,7 @@ import GeneKeysSeal, { ABOVE_A_MODAL } from "./GeneKeysSeal";
 import CircleLines from "./CircleLines";
 import GeneKeysReveal from "./GeneKeysReveal";
 import { PARTS } from "@/pages/GeneKeys";
-import { GeneKeysLines } from "./GeneKeysLines";
+import { GeneKeysLines, GeneKeysOwnerControls } from "./GeneKeysLines";
 import GeneKeysComplements, { COMPLEMENTS_WORDS } from "./GeneKeysComplements";
 import CircleGlyph from "./CircleGlyph";
 import HolderGeneKeys from "./HolderGeneKeys";
@@ -121,7 +121,8 @@ describe("roughly when", () => {
 });
 
 describe("the reveal", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("ends with the profile as the heading's neighbour, the names as the heading, and the two lines marked", () => {
     // Reduced motion draws the finished state at once, which is the state this pins.
@@ -216,7 +217,7 @@ describe("a circle's six lines", () => {
 });
 
 const own = (v: GeneKeysView, over: Partial<OwnGeneKeysView> = {}): OwnGeneKeysView => ({
-  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, cardOut: false, source: "exact", stale: false, ...over,
+  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, cardOut: false, cardIn: false, inCards: false, source: "exact", stale: false, ...over,
 });
 
 describe("Love and Prosperity on the lines card", () => {
@@ -288,17 +289,46 @@ describe("Maia speaks your type", () => {
     expect(maiaTypeLine({ type: "Manifestor", authority: "Splenic" })).toMatch(/heads up first/);
   });
 
-  it("speaks only with Maia's yes, and never once the member asked her to talk plainly", () => {
+  it("speaks only with the guide's yes, and never once the member asked it to talk plainly", () => {
     setMyGeneKeys(own(KAI, { maia: false }));
     const { container, rerender } = inRouter(<MaiaTypeLine />);
     expect(container.innerHTML).toBe("");
     setMyGeneKeys(own(KAI, { maia: true }));
     rerender(<Router hook={memoryLocation({ path: "/" }).hook}><MaiaTypeLine /></Router>);
-    expect(screen.getByText("From Maia:")).toBeTruthy();
+    // No village has named its guide here, so the line says who it is without borrowing a name.
+    expect(screen.getByText("From the village guide:")).toBeTruthy();
     setMyGeneKeys(own(KAI, { maia: true, maiaPlain: true }));
     rerender(<Router hook={memoryLocation({ path: "/" }).hook}><MaiaTypeLine /></Router>);
-    expect(screen.queryByText("From Maia:")).toBeNull();
+    expect(screen.queryByText("From the village guide:")).toBeNull();
     setMyGeneKeys(null);
+  });
+
+  it("says the village's own name for its guide once the village has given one", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ assistantName: "Sol" }), { status: 200 }));
+    try {
+      setMyGeneKeys(own(KAI, { maia: true }));
+      inRouter(<MaiaTypeLine />);
+      expect(await screen.findByText("From Sol:")).toBeTruthy();
+      expect(screen.queryByText(/Maia/)).toBeNull();
+    } finally {
+      fetchSpy.mockRestore();
+      setMyGeneKeys(null);
+    }
+  });
+});
+
+describe("session cards are a yes of their own", () => {
+  it("asks for that yes even while the village has cards off, and saying it sends only that", async () => {
+    // The module mock answers off for session-card: the choice is still there to make.
+    inRouter(<GeneKeysOwnerControls mine={own(WREN, { maia: true })} />);
+    expect(screen.getByText(/has not turned session cards on/)).toBeTruthy();
+    expect(screen.getByText(/Session cards welcome you by name and leave your lines out/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Read me on session cards" }));
+    await waitFor(() => expect(api.changed).toContainEqual({ cards: true }));
+    cleanup();
+    inRouter(<GeneKeysOwnerControls mine={own(WREN, { maia: true, cardIn: true, inCards: true })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Leave me out of session cards" }));
+    await waitFor(() => expect(api.changed).toContainEqual({ cards: false }));
   });
 });
 

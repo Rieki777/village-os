@@ -169,7 +169,15 @@ export interface PlayerRoleIn {
   stepBack?: Read<string | null>;
   timeCommitment?: Read<string | null>;
   worksWith: Read<WorksWithIn[]>;
+  /** What the village has handed to this role (`capability_holding`). */
   powers: Read<PowerIn[]>;
+  /**
+   * A10: the powers this role's classes suit, by the village's own affinity
+   * map, with every power held anywhere already taken out. Shown only when
+   * nothing is handed over, and only as information. Optional, so a host that
+   * does not read it draws the card exactly as before.
+   */
+  suited?: Read<PowerIn[]>;
   tensions: Read<TensionIn[]>;
   /**
    * The reader holds this role too. A holder reads its open words and answers
@@ -253,6 +261,15 @@ export interface PlayerCardInput {
   /** The village's own name, from the brand overlay. */
   villageName: Read<string | null>;
   season: Read<{ id: string; name: string | null; startsOn: string | null; endsOn: string | null } | null>;
+  /**
+   * THE SEASON A PROPOSAL IS FOR (E9). In proposal mode the hero (eyebrow,
+   * span, moon pill) and "My moon cycle" are drawn in it, so a proposal for
+   * next season is never headed with this season's name and dates. Null is a
+   * proposal with no season to be for, and draws none. Left out, the card
+   * draws the running `season`. "My applications" always reads `season`,
+   * because past, this season and next season are told from today.
+   */
+  proposalSeason?: { id: string; name: string | null; startsOn: string | null; endsOn: string | null } | null;
   nextSeasonId: Read<string | null>;
   /** The village's class names from /api/archetypes, keyed by class key. */
   archetypeNames: Read<Record<string, string> | null>;
@@ -413,7 +430,8 @@ export interface RoleOut {
   holdingWell: HoldingWellOut;
   notMine: { heading: string; term: string | null; items: Slot<string[]> };
   runbook: { heading: string; text: Slot<string> };
-  powers: { heading: string; items: Slot<string[]> };
+  /** `note` is set only on the "Suited to" reading, and says nothing was handed over. */
+  powers: { heading: string; items: Slot<string[]>; note: string | null };
   tensions: Slot<TensionsOut>;
   /**
    * What this reader can do about a tension here: "raise" for a member who
@@ -550,6 +568,11 @@ function portraitOf(owner: PlayerCardInput["owner"]): PortraitOut {
   return { kind: "sigil", letter: (Array.from(owner.displayName.trim())[0] ?? "").toUpperCase() };
 }
 
+/** The season the card is drawn in: a proposal's own when the host names one (E9), else the running one. */
+function seasonDrawn(input: PlayerCardInput): PlayerCardInput["season"] {
+  return input.mode === "proposal" && input.proposalSeason !== undefined ? input.proposalSeason : input.season;
+}
+
 function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): HeaderOut {
   const rolesLine =
     roles === undefined
@@ -580,7 +603,7 @@ function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): Head
     timeZone: input.timeZone,
     ownerUserId: input.owner.userId,
     villageName: input.villageName,
-    season: input.season,
+    season: seasonDrawn(input),
     roles,
     applications: input.applications,
     proposal: input.mode === "proposal",
@@ -718,6 +741,14 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
           )
         : empty(W.noPowers);
   const anyShared = !!role.powers?.some((p) => p.sharedWith?.length);
+  // A10: nothing handed over, so say what the role suits, once per power and
+  // never a power it already holds. An unread or empty list leaves the card
+  // saying "No powers held", which is still true.
+  const heldKeys = new Set((role.powers ?? []).map((p) => p.key));
+  const suited = (role.suited ?? []).filter(
+    (p, i, all) => !heldKeys.has(p.key) && all.findIndex((q) => q.key === p.key) === i,
+  );
+  const showSuited = role.powers !== undefined && role.powers.length === 0 && suited.length > 0;
 
   return {
     id: role.id,
@@ -753,7 +784,9 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     holdingWell: ccos.holdingWell,
     notMine: { heading: W.notMine, term: roleTerm("notMine", terms), items: wordsSlot(role.notMine, W.notWritten) },
     runbook: { heading: W.runbook, text: textSlot(role.runbook, W.notWritten) },
-    powers: { heading: anyShared ? W.powersShared : W.powers, items: powers },
+    powers: showSuited
+      ? { heading: W.suitedTo, items: shown(suited.map((p) => p.label)), note: W.suitedNote }
+      : { heading: anyShared ? W.powersShared : W.powers, items: powers, note: null },
     tensions: tensionsFor(role, input),
     tensionDoor: tensionDoorFor(role, input),
     handover: roleHandover(role),
@@ -860,8 +893,9 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
 
 function timeline(input: PlayerCardInput, roles: PlayerRoleIn[]): TimelineOut {
   const tz = input.timeZone;
-  const seasonStart = input.season ? instantOf(input.season.startsOn, tz) : null;
-  const seasonEnd = input.season ? instantOf(input.season.endsOn, tz) : null;
+  const season = seasonDrawn(input);
+  const seasonStart = season ? instantOf(season.startsOn, tz) : null;
+  const seasonEnd = season ? instantOf(season.endsOn, tz) : null;
   const from = seasonStart ?? LUNAR_CLOCK.boundsFor(input.now).startsAt;
   const to = seasonEnd ?? LUNAR_CLOCK.boundsFor(new Date(LUNAR_CLOCK.boundsFor(input.now).endsAt.getTime() + 1)).endsAt;
 

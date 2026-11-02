@@ -463,11 +463,11 @@ describe("Maia's minimise control and her inline links take the keyboard", () =>
     await settle(0);
     expect(maia.classList.contains("min"), "one press minimises, once").toBe(true);
     expect(min.getAttribute("aria-expanded")).toBe("false");
-    expect(min.getAttribute("aria-label")).toBe("Show Maia");
+    expect(min.getAttribute("aria-label"), "no village has named its guide here").toBe("Show the village guide");
     // .min is also cleared by code that never touches the button.
     maia.classList.remove("min");
     await settle(0);
-    expect(min.getAttribute("aria-label")).toBe("Minimise Maia");
+    expect(min.getAttribute("aria-label")).toBe("Minimise the village guide");
   });
 
   it("writes Claim it as a button the keyboard can reach, with its handler kept", async () => {

@@ -436,7 +436,7 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
       body:
         `The launch proposal named you for this role, you accepted, and the village started its Game, so you hold it. ` +
         `You can stop a decision the village has already carried, inside the window before it lands, and you have to say why. ` +
-        `The role also holds every power this village has to give, until it hands them on. ` +
+        `The role also holds every power this village has to give, apart from any the stewards chose to hand to the village at launch, until it hands them on. ` +
         `The role ends on ${term.endsOn}, with the season, and after that the village votes on who holds it.`,
       link: "/roles",
       actorUserId: deps.actorId ?? null,

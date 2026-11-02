@@ -188,6 +188,8 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
+import { forgetAsksForMember } from "../repos/memberAsks";
+import { forgetRewardMomentsOf } from "../repos/rewardMoment";
 import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
 import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
@@ -211,6 +213,7 @@ import { recordSubscriptionCancels } from "../repos/subscriptionCancels";
 import { cancelSubscription, stripeConfigured } from "./payments";
 import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
 import { leaveEveryCrewOf } from "../repos/questCrewErasure";
+import { releaseOpenClaimsOf } from "../repos/questClaimErasure";
 import { forgetReportReasonsOf } from "../repos/placePhotos";
 import { heldByAnotherAccount, usersRepo } from "../repos/users";
 import { forgetPulseLinesNaming } from "../repos/pulseLines";
@@ -452,6 +455,7 @@ async function writeTombstone(members: ErasureDeps["members"], id: string): Prom
       u.membershipGranted = false;
       u.walletAddress = null;
       u.walletVerifiedAt = null;
+      u.emailVerifiedAt = null; // the proof was of the address that just went
     }, { erasure: true });
   try {
     await close(tombstoneAddress(id));
@@ -800,6 +804,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "companions",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S ASKS (0299): every ask they sent and every ask sent to
+       * them. A row is the two members on it and nobody else, so it goes
+       * whole. It runs again after the tombstone, as
+       * "member-asks-after-tombstone", because an ask can still be sent to
+       * them until then.
+       */
+      name: "member-asks",
+      run: async () => {
+        await forgetAsksForMember(pool, target.id);
       },
     },
     {
@@ -1561,6 +1578,24 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * Their open quest claims (Rye, 2026-10-31, item 9). Nobody can work
+       * one now: the tombstone cannot sign in and consent refuses to pay it.
+       * Kept, each counted as somebody working the quest, sat in the
+       * steward's queue, and held the quest against its delete. A `claimed`
+       * one goes, the way a member puts a quest back; a `submitted` one is
+       * declined, so the work handed in stays on the record. Consented and
+       * declined claims are history and stay (server/repos/questClaimErasure.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the claim
+       * doors write for anybody signed in until the sessions die.
+       */
+      name: "quest-claims-after-tombstone",
+      run: async () => {
+        await releaseOpenClaimsOf(pool, target.id);
+      },
+    },
+    {
+      /*
        * Place-photo reports (0093): the words they typed go, the reports stay.
        * The curators' queue serves them to every holder of `map.curatePhotos`,
        * a role or badge power, and a subject request often names the person.
@@ -1589,10 +1624,38 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      // An ask can still reach them between the first pass and the tombstone.
+      name: "member-asks-after-tombstone",
+      run: async () => {
+        await forgetAsksForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Reward moment markers (0294): the baseline row says when the member
+       * first opened the app, and each seen row which of their payments they
+       * were shown. Personal data about them, deleted whole. A debt is kept
+       * through an erasure (`cash_owed`, Rye, 2026-10-31); a marker of what
+       * somebody saw is not one.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: a moment
+       * shown in the last seconds before it is still caught. Keyed on the
+       * member, so a resume or a second run finds nothing.
+       */
+      name: "reward-moments-after-tombstone",
+      run: async () => {
+        await forgetRewardMomentsOf(pool, target.id);
+      },
+    },
+    {
       // A chat or a draft can still land between the first pass and the
-      // tombstone, so it runs again last, after every other
-      // after-tombstone step. DELETEs keyed on the member, so this matches nothing when
-      // nothing was written in between.
+      // tombstone, so it runs again, as the last step that deletes the
+      // member's own data. Two steps follow it on purpose and touch none:
+      // "audit", which writes the sweep's own line, and
+      // "product-subscriptions-after-tombstone", which asks Stripe and so
+      // waits for the local sweep to finish (its comment says why). A new
+      // member-data step goes above this one. DELETEs keyed on the member,
+      // so this matches nothing when nothing was written in between.
       name: "companions-after-tombstone",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
@@ -1645,7 +1708,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         const subs = await liveSubscriptionsOf(pool, target.id);
         if (!subs.length) return;
         if (!stripeConfigured()) {
-          await askAdminsToCancelByHand(pool, target.id, actorId, subs.map((s) => s.subscriptionId), deps);
+          await askAdminsToCancelByHand(pool, target.id, actorId, subs.map((s) => s.subscriptionId), deps, "erasure");
           return;
         }
         for (const sub of subs) {
@@ -1681,14 +1744,16 @@ async function askAdminsToCancelByHand(
   actorId: string | null,
   subscriptionIds: readonly string[],
   deps: ErasureDeps,
+  path: "erasure" | "exit",
 ): Promise<void> {
   const notify = deps.notify ?? ((input: NotifyInput) => insertNotification(bellOnly(pool, deps.members), input));
   const title =
-    `Cancel ${subscriptionIds.length} recurring payment(s) by hand in the Stripe dashboard. A departed member's erasure could not cancel them, ` +
+    `Cancel ${subscriptionIds.length} recurring payment(s) by hand in the Stripe dashboard. A departed member's ${path} could not cancel them, ` +
     "because Stripe is not connected, and Stripe may keep charging them.";
+  // A former member keeps their account, so no period was charged after it was deleted.
   const body =
     `Subscription ids to find in the Stripe dashboard: ${subscriptionIds.join(", ")}. ` +
-    "Cancel each one still active, and refund any period charged after the account was deleted.";
+    (path === "erasure" ? "Cancel each one still active, and refund any period charged after the account was deleted." : "Cancel each one still active.");
   const admins = (await usersRepo(pool).all()).filter(
     (u: any) => (u.role === "admin" || u.role === "founder") && String(u.id) !== userId && !isTombstone({ email: String(u.email ?? "") }),
   );
@@ -1699,7 +1764,7 @@ async function askAdminsToCancelByHand(
       title,
       body,
       link: "/admin",
-      dedupeKey: `erasure-subscriptions-by-hand:${userId}:${admin.id}`,
+      dedupeKey: `${path}-subscriptions-by-hand:${userId}:${admin.id}`,
     });
   }
   /*
@@ -1721,8 +1786,40 @@ async function askAdminsToCancelByHand(
    */
   await recordSubscriptionCancels(pool, { userId, kind: "by-hand", subscriptionIds, actorUserId: actorId });
   console.error(
-    `[erasure] Stripe is not connected, so ${subscriptionIds.length} subscription(s) of ${userId} were handed to the admins to cancel by hand`,
+    `[${path}] Stripe is not connected, so ${subscriptionIds.length} subscription(s) of ${userId} were handed to the admins to cancel by hand`,
   );
+}
+
+/**
+ * A FORMER MEMBER'S EXIT CANCELS THEIR SUBSCRIPTIONS (Rye, 2026-10-31, ruling
+ * 8). A leaver kept on as a former member is never erased, so the step above
+ * never runs for them and Stripe charged their card every period. Their
+ * resolve runs this as its `subscriptions` step (`keepAsFormerMember`,
+ * server/lib/exitResolve.ts): the same cancel, the same no-key hand-off and
+ * the same rows /review derives what is owed from (server/lib/owedCancels.ts).
+ *
+ * NEVER HOLDS THE DEPARTURE. The erasure's step throws on a Stripe failure,
+ * because its record resumes. A resolve has no record to resume, and a throw
+ * would leave the exit half resolved, so a failure writes the by-hand row
+ * instead and the hourly failed-actions job finishes it (`finishOwedCancels`).
+ * A failed write of that row does throw: the row is the obligation, and the
+ * admin pressing Resolve again writes it.
+ */
+export async function cancelFormerMembersSubscriptions(pool: Pool, userId: string, actorId: string | null, deps: ErasureDeps): Promise<void> {
+  const ids = (await liveSubscriptionsOf(pool, userId)).map((s) => s.subscriptionId);
+  if (!ids.length) return;
+  if (!stripeConfigured()) {
+    await askAdminsToCancelByHand(pool, userId, actorId, ids, deps, "exit");
+    return;
+  }
+  try {
+    for (const id of ids) await cancelSubscription(id);
+  } catch (err: any) {
+    console.error(`[exit] a former member's subscription cancel failed and is handed over: ${err?.message ?? err}`);
+    await recordSubscriptionCancels(pool, { userId, kind: "by-hand", subscriptionIds: ids, actorUserId: actorId });
+    return;
+  }
+  await recordSubscriptionCancels(pool, { userId, kind: "cancelled", subscriptionIds: ids, actorUserId: actorId });
 }
 
 /**
@@ -2099,9 +2196,12 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "sessions-after-tombstone",
   "gene-keys-after-tombstone",
   "quest-crews-after-tombstone",
+  "quest-claims-after-tombstone",
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
+  "reward-moments-after-tombstone",
   "companions-after-tombstone",
+  "member-asks-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 

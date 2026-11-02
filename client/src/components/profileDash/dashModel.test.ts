@@ -101,15 +101,39 @@ describe("treasury arithmetic", () => {
       { amountMinor: 500, currency: "CRC", state: "owed" },
     ]).currency).toBeNull();
   });
-  it("pickTokens finds Voice and the village token, never recognition", () => {
-    const rows = [
-      { token: "gratitude", kind: "recognition", role: "gratitude" },
-      { token: "voice", kind: "voice", role: "claimable" },
-      { token: "credit", kind: "equity", role: "claimable" },
-    ];
-    const got = pickTokens(rows);
-    expect(got.voice?.token).toBe("voice");
-    expect(got.village?.token).toBe("credit");
+  /** The rows in the order /api/me/wallet really returns them (E2E finding E6, 2026-10-31). */
+  const realWallet = [
+    { token: "earned-equity", kind: "equity", role: "claimable" },
+    { token: "village-voice", kind: "voice", role: "claimable" },
+    { token: "library-credit", kind: "credit", role: "village" },
+    { token: "stay-credit", kind: "credit", role: "village" },
+    { token: "credits", kind: "credit", role: "village" },
+    { token: "gratitude", kind: "recognition", role: "gratitude" },
+  ];
+  it("pickTokens finds the village's value token by its slug, whatever the wallet's order", () => {
+    const got = pickTokens(realWallet, "credits");
+    expect(got.village?.token).toBe("credits");
+    expect(got.voice?.token).toBe("village-voice");
+  });
+  it("pickTokens still reads right when the value token is the first row", () => {
+    const first = [realWallet[4], ...realWallet.slice(0, 4), realWallet[5]];
+    expect(pickTokens(first, "credits").village?.token).toBe("credits");
+  });
+  it("pickTokens follows a village that renamed or repointed its value token", () => {
+    const renamed = realWallet.map((r) => (r.token === "credits" ? { ...r, token: "seeds" } : r));
+    expect(pickTokens(renamed, "seeds").village?.token).toBe("seeds");
+    expect(pickTokens(realWallet, "stay-credit").village?.token).toBe("stay-credit");
+  });
+  it("pickTokens draws nothing, never another token, when the value token is missing", () => {
+    const without = realWallet.filter((r) => r.token !== "credits");
+    expect(pickTokens(without, "credits").village).toBeNull();
+    // The config has not answered yet.
+    expect(pickTokens(realWallet, null).village).toBeNull();
+    expect(pickTokens(realWallet, undefined).village).toBeNull();
+    expect(pickTokens([], "credits")).toEqual({ village: null, voice: null });
+  });
+  it("pickTokens never takes the recognition row as the value token", () => {
+    expect(pickTokens(realWallet, "gratitude").village).toBeNull();
   });
   it("wholeMoney prints whole units of the currency, never cents", () => {
     expect(wholeMoney(4_500_000, "CRC")).not.toMatch(/[.,]00/);
@@ -152,5 +176,13 @@ describe("todayCards", () => {
   it("leaves out a card with nothing in it", () => {
     const cards = todayCards({ consents: [], tasks: { waiting: 0, nextDue: null }, messages: { unreadTotal: 0, top: null, parties: [] }, session: null }, now);
     expect(cards).toEqual([]);
+    expect(todayCards({ consents: null, tasks: null, messages: null, session: null, asks: { waiting: 0, blocking: 0 } }, now)).toEqual([]);
+  });
+  it("leads with the asks waiting on the member, and says when someone is stuck", () => {
+    const stuck = todayCards({ consents: null, tasks: { waiting: 1, nextDue: null }, messages: null, session: null, asks: { waiting: 3, blocking: 1 } }, now);
+    expect(stuck.map((c) => c.key)).toEqual(["asks", "tasks"]);
+    expect(stuck[0]).toMatchObject({ kicker: "Someone is stuck on you", title: "3 asks waiting on you", meta: "1 blocking · Open your asks", href: "/profile#waiting" });
+    const calm = todayCards({ consents: null, tasks: null, messages: null, session: null, asks: { waiting: 1, blocking: 0 } }, now);
+    expect(calm[0]).toMatchObject({ kicker: "Asked of you", title: "One ask waiting on you", meta: "Open your asks" });
   });
 });

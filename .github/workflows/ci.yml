@@ -13,13 +13,54 @@ name: ci
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main", "wt/*-integration*"]
   pull_request:
 
-# A branch push with an open PR fires this workflow TWICE: once for the push
-# (the branch as it stands) and once for the pull_request (the branch already
-# merged with main). Both are worth having and they test different trees, so
-# neither trigger is removed. What IS waste is a superseded run: push twice in
+# WHICH BRANCHES GET A PUSH RUN, and why most do not (Rye, 2026-11-01:
+# "Yes, free fix").
+#
+# A branch push with an open PR used to fire this workflow TWICE, once for the
+# push (the branch as it stands) and once for the pull_request (the branch
+# already merged with main). On the free plan that is 20 concurrent jobs against
+# a fleet of lanes: at 04:35Z on 2026-11-01 about 50 runs were queued behind 5
+# running, with each run taking 16 to 60 minutes. Half of that queue was testing
+# a tree nobody lands.
+#
+# So `push` is now limited to `main` and integration branches
+# (`wt/*-integration*`, which may have no pull request to run on). A lane PR
+# branch, and a batch branch, gets the pull_request run alone, which is the
+# more informative of the two anyway because it tests the branch ALREADY
+# MERGED with main, which is nearer to what lands.
+#
+# BATCHES TOO, since 2026-11-01. A batch is composed on current main, so
+# main is usually already inside it, and then GitHub's merge ref has exactly
+# the batch head's tree: the push run and the pull_request run tested the
+# same bytes. Measured on batches 73, 74, neutral and 76, all four. When main
+# HAS moved, the pull_request run tests batch plus main, which is what
+# `gh pr merge --merge` lands, and the push run tests a tree that never lands.
+# The three base-reading gates (migration numbers, migration compatibility,
+# economics narrative) compare with main on both events for a PR based on
+# main. What the push run alone gave: a second roll of the dice on a flake,
+# which DOUBLED the chance a flake blocked a batch (batch 75 flaked on both),
+# and a run for a batch whose PR conflicts, which cannot land anyway. It cost
+# a full cycle, about 48 runner-minutes, per batch push. main still gets its
+# push run after every landing.
+#
+# WHAT THIS MOVED, for whoever reads the merge gate next. A COMPONENT is ready
+# when its pull_request run is green at its frozen SHA, and so is a BATCH: its
+# pull_request run, every job, at the frozen head, is the gate standing between
+# a tree and production. Open the batch's PR when you push it, because until
+# then it has no run at all. Two consequences worth knowing:
+#
+#   - A CONFLICTING pull request gets no pull_request run, so a conflicted lane
+#     branch now has NO run at all rather than a push run. Its lane has to merge
+#     main before anybody can verify it, even though the generated-doc conflict
+#     every batch landing causes is the integrator's to resolve, never a lane's.
+#   - A lane can no longer read a dist-budget number off its own branch alone.
+#     The pull_request number includes what has landed since it branched, which
+#     is the number that matters at landing anyway.
+#
+# What IS waste is a superseded run: push twice in
 # a minute and the first job keeps a runner for its full length while its
 # result can no longer matter. The group keys on the event name as well as the
 # ref so a push run never cancels the merge-with-main run that is the more
@@ -196,6 +237,31 @@ jobs:
         # exits 1 and says so rather than printing the same line as "found
         # nothing".
         run: node scripts/check-migration-numbers.mjs
+
+      - name: Migration SQL calls only functions production has run
+        # WHY THIS IS A SEPARATE STEP FROM THE TWO BELOW, and what it cost to
+        # learn. On 2026-11-01 batch 74 merged with 0298, which computed a
+        # derived id in SQL with SHA1(). Every gate in this workflow was green,
+        # the compat gate included, because that gate applies migrations to the
+        # mysql:8 service container above and mysql:8 has SHA1 built in. The
+        # production engine does not. The deploy failed after 15.5 minutes with
+        #
+        #     FAIL: 0298_a_season_goal_keeps_its_name.sql
+        #       -> FUNCTION railway.SHA1 does not exist (statement 7 of 8)
+        #
+        # and left the instance with six of eight statements applied and no
+        # version of the app that would boot. So RUNNING a migration on CI's
+        # database proves it runs on CI's database, and nothing more. This step
+        # is the text rule that closes the gap: an ALLOW-LIST of every function
+        # name a migration already applied on production carries, which fails
+        # closed on a new one. A deny-list could not have caught SHA1, because
+        # nobody had written SHA1 down.
+        #
+        # Reads drizzle/ only. No node_modules, no database, well under a
+        # second. Its own self-test runs in the self-tests step below and
+        # includes the control: 0298's original statement 7 goes red with SHA1
+        # named and the Railway log line quoted.
+        run: node scripts/check-migration-sql.mjs
 
       - name: Migration compatibility (expand, never contract)
         # The gate above asks whether a migration can be TOLD APART from
@@ -920,8 +986,17 @@ jobs:
         # a lane can run the identical measurement before pushing. The budget
         # numbers still live here, and the script reads them from this file
         # when the environment does not supply them, so there is one authority.
+        #
+        # MAX_BOOT_JS_KB is every script index.html loads, in real bytes, and
+        # it is the number a visitor pays before the first page renders. Main
+        # JS reads one file, so it fell from 620 to 362 KB on 2026-10-31 when
+        # the small-module groups in vite.config.ts moved react and the shared
+        # boot modules into their own boot chunks, while the first page loaded
+        # the same 731 KB. So main JS came DOWN to 400 at the same time, and
+        # this ceiling sits at that day's figure plus a little.
         env:
-          MAX_MAIN_JS_KB: 700
+          MAX_MAIN_JS_KB: 400
+          MAX_BOOT_JS_KB: 750
           MAX_TOTAL_DIST_KB: 6600
           MAX_SINGLE_IMAGE_KB: 400
         run: |
@@ -983,6 +1058,53 @@ jobs:
         # or an explicit ignore with a dated reason. Do not re-add
         # continue-on-error: it cannot tell the two cases apart either.
         run: node scripts/dependency-audit.mjs
+
+      - name: Gate summary
+        # ONE TABLE, so nobody reads 60 step logs to learn which gate went red.
+        # It lists every step of this job with its outcome, failures first, on
+        # the run's summary page next to the bundle sizes above and the shard
+        # report tests-ran-once writes.
+        #
+        # A gate that never ran is shown as NOT RUN, not as passed: steps stop
+        # at the first red one, so everything after a failure is skipped, and a
+        # skipped gate has proved nothing.
+        #
+        # Reporting only. `always()` so it reports a red job, and
+        # continue-on-error so a GitHub API hiccup here can never turn a green
+        # job red or a red one green; the job's verdict is the steps above.
+        # The default token is read-all on this repository, which covers the
+        # actions API.
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100"             --jq '.jobs[] | select(.name == "verify") | .steps[]
+                  | select(.name | test("^(Set up job|Initialize containers|Run actions/|Run pnpm/|Post |Stop containers|Complete job|Gate summary$)") | not)
+                  | [(.conclusion // .status), .name] | @tsv' > "$RUNNER_TEMP/gates.tsv"
+          total=$(wc -l < "$RUNNER_TEMP/gates.tsv")
+          passed=$(awk -F'\t' '$1 == "success"' "$RUNNER_TEMP/gates.tsv" | wc -l)
+          failed=$(awk -F'\t' '$1 == "failure"' "$RUNNER_TEMP/gates.tsv" | wc -l)
+          notrun=$(( total - passed - failed ))
+          {
+            if [ "$failed" -eq 0 ] && [ "$notrun" -eq 0 ]; then
+              echo "## Gates: all ${total} passed"
+            else
+              echo "## Gates: ${failed} FAILED, ${notrun} not run, ${passed} of ${total} passed"
+              echo
+              awk -F'\t' '$1 == "failure" { print "- :x: **" $2 "**" }' "$RUNNER_TEMP/gates.tsv"
+              awk -F'\t' '$1 != "failure" && $1 != "success" { print "- :white_circle: " $2 " (not run: " $1 ")" }' "$RUNNER_TEMP/gates.tsv"
+            fi
+            echo
+            echo "<details><summary>Every step of verify</summary>"
+            echo
+            echo "| | Step |"
+            echo "|---|---|"
+            awk -F'\t' '{ icon = ($1 == "success") ? ":white_check_mark:" : ($1 == "failure") ? ":x:" : ":white_circle:"; print "| " icon " | " $2 " |" }' "$RUNNER_TEMP/gates.tsv"
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "gates: ${passed} passed, ${failed} failed, ${notrun} not run, of ${total}"
 
   # THE SUITE, IN SHARDS. Split out of `verify` on 2026-10-21 by Rye's ruling
   # ("split the tests"). Measured on b878eaf, the last single-job run: Test was
@@ -1081,16 +1203,22 @@ jobs:
           --reporter=default
           --reporter=github-actions
           --reporter=json
-          --outputFile.json=test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}.json
+          --outputFile.json=test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}-attempt-${{ github.run_attempt }}.json
 
       - name: Upload the shard report
         # Even when the suite failed: a failed shard's report is what tells
         # tests-ran-once which files failed, as against which never ran.
+        #
+        # The run attempt is in the name so `gh run rerun --failed` is enough.
+        # Under one name per shard, a re-run left two same-named artifacts and
+        # the download took attempt 1's red report (batch 75, 2026-11-01), so
+        # only a FULL re-run cleared a flake. tests-ran-once now reads the
+        # newest attempt per shard (latestAttempts in check-test-shards.mjs).
         if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-results-shard-${{ matrix.shard }}
-          path: test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}.json
+          name: test-results-shard-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}-attempt-${{ github.run_attempt }}.json
           if-no-files-found: error
           retention-days: 7
 

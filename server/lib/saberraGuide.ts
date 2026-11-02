@@ -38,13 +38,28 @@ export interface SaberraGuideReach {
   name: string;
 }
 
+/** The name the agent answers under: the module's own `agentName`, or the default. */
+export function saberraAgentName(): string {
+  const cfg = (moduleConfig(MODULE_ID) as Record<string, unknown> | null) ?? {};
+  return typeof cfg.agentName === "string" && cfg.agentName.trim() ? cfg.agentName.trim() : SABERRA_AGENT_NAME;
+}
+
+/**
+ * Whether the module is open to members, the first of the four things above.
+ * A live session's proposal check (0297, shared/sessionCheck.ts) is offered
+ * on this alone: its own read needs no call to the service.
+ */
+export function saberraOpenToMembers(): boolean {
+  const life = effectiveLifecycle(MODULE_ID);
+  return life === "members" || life === "public";
+}
+
 /** Whether the agent can answer a signed-in member right now. */
 export function saberraGuideReach(): SaberraGuideReach {
   const cfg = (moduleConfig(MODULE_ID) as Record<string, unknown> | null) ?? {};
-  const name = typeof cfg.agentName === "string" && cfg.agentName.trim() ? cfg.agentName.trim() : SABERRA_AGENT_NAME;
-  const life = effectiveLifecycle(MODULE_ID);
+  const name = saberraAgentName();
   const gap: SaberraGuideGap | null =
-    life !== "members" && life !== "public"
+    !saberraOpenToMembers()
       ? "module-off"
       : !readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem()).mayCall
         ? "not-connected"

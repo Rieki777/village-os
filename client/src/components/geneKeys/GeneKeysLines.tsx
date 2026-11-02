@@ -9,9 +9,9 @@
  * Amora using Gene Keys naming, and every card sends people to genekeys.com to
  * go deeper (Rye, 2026-10-22).
  *
- * The owner's copy adds their controls: show or hide, Maia's yes and whether
- * she talks plainly, share, find again, remove. Somebody else's copy never
- * shows a control.
+ * The owner's copy adds their controls: show or hide, the guide's yes and
+ * whether it talks plainly, share, find again, remove. Somebody else's copy
+ * never shows a control.
  */
 import { useState } from "react";
 import { Link } from "wouter";
@@ -19,6 +19,8 @@ import { GENE_KEYS_SITE, MOON_SPHERES, withArticle, type GeneKeysView, type OwnG
 import { changeMyGeneKeys, removeMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { setMyGeneKeys } from "./useMyGeneKeys";
+import { useGuideName } from "@/hooks/useGuideName";
+import { guideNameAtSentenceStart } from "@shared/guideName";
 import ShareLines from "./ShareLines";
 import { BTN_LINK, BTN_PLAIN, EYEBROW, HINT, TILE } from "./ui";
 
@@ -87,6 +89,8 @@ export function GeneKeysLines({ view, whose }: { view: GeneKeysView; whose: stri
 export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // The village's own guide, or "the village guide" while it has no name.
+  const guide = useGuideName().name;
 
   const act = async (fn: () => Promise<OwnGeneKeysView | null>) => {
     setBusy(true);
@@ -108,10 +112,15 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
         {shown ? "Shown on your profile, in your circle and on your role applications." : "Hidden. Only you see your lines."}{" "}
         {mine.maia
           ? mine.maiaPlain
-            ? "Maia uses your lines to choose what she suggests, and talks to you plainly."
-            : "Maia uses your lines to shape what she suggests, and says when she does."
-          : "Maia does not use your lines."}
-        {cards ? (mine.cardOut ? " Session cards welcome you by name and leave your lines out." : mine.maia && shown ? " Session cards can read your lines." : "") : ""}
+            ? `${guideNameAtSentenceStart(guide)} uses your lines to choose its suggestions, and talks to you plainly.`
+            : `${guideNameAtSentenceStart(guide)} uses your lines to shape its suggestions, and says when it does.`
+          : `${guideNameAtSentenceStart(guide)} does not use your lines.`}
+        {mine.inCards
+          ? mine.maia && shown
+            ? " Session cards can read your lines."
+            : ` Session cards read your lines only while they are shown and ${guide} may use them.`
+          : " Session cards welcome you by name and leave your lines out."}
+        {cards ? "" : " Your village has not turned session cards on, so this choice waits for when it does."}
       </p>
       {mine.stale ? (
         <p className="text-sm text-notice">Your lines were found with an older calculator. Find them again to be sure they are right.</p>
@@ -121,18 +130,17 @@ export function GeneKeysOwnerControls({ mine }: { mine: OwnGeneKeysView }) {
           {shown ? "Hide my lines" : "Show my lines"}
         </button>
         <button type="button" className={BTN_PLAIN} disabled={busy} onClick={() => act(() => changeMyGeneKeys({ maia: !mine.maia }))}>
-          {mine.maia ? "Stop Maia using them" : "Let Maia use them"}
+          {mine.maia ? `Stop ${guide} using them` : `Let ${guide} use them`}
         </button>
         {mine.maia ? (
           <button type="button" className={BTN_PLAIN} disabled={busy} onClick={() => act(() => changeMyGeneKeys({ maiaPlain: !mine.maiaPlain }))}>
-            {mine.maiaPlain ? "Let Maia speak to my type" : "Talk to me plainly"}
+            {mine.maiaPlain ? `Let ${guide} speak to my type` : "Talk to me plainly"}
           </button>
         ) : null}
-        {cards ? (
-          <button type="button" className={BTN_PLAIN} disabled={busy} onClick={() => act(() => changeMyGeneKeys({ cardOut: !mine.cardOut }))}>
-            {mine.cardOut ? "Include me in session cards" : "Leave me out of session cards"}
-          </button>
-        ) : null}
+        {/* Shown whether or not the village has session cards on, so a member decides before a card ever reads them. */}
+        <button type="button" className={BTN_PLAIN} disabled={busy} onClick={() => act(() => changeMyGeneKeys({ cards: !mine.inCards }))}>
+          {mine.inCards ? "Leave me out of session cards" : "Read me on session cards"}
+        </button>
         <ShareLines view={mine} />
         <Link href="/profile/gene-keys" className={BTN_PLAIN}>
           Find them again

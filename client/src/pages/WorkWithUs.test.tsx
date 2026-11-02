@@ -20,7 +20,9 @@ vi.mock("@/lib/gameApi", () => ({
   fetchConfigCached: () => Promise.resolve({ project: { name: "Willowbrook" } }),
   useGameConfig: () => ({ project: { name: "Willowbrook" }, currency: { name: "Thanks" } }),
 }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
+// Who is looking: null is a signed-out visitor. Reset before every test.
+const viewer = vi.hoisted(() => ({ user: null as null | { name: string; email: string; role?: string } }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: viewer.user }) }));
 vi.mock("@/components/GuideChat", () => ({ default: () => null }));
 vi.mock("@/components/comms/PathConsentBox", () => ({ default: () => null, FORM_CONSENT_FIELD: "commsConsent" }));
 const sent = vi.hoisted(() => ({ calls: [] as unknown[] }));
@@ -41,8 +43,11 @@ import { WORK_WITH_US_PAGE } from "@shared/pageContent/workWithUs";
 import { markerDocument } from "@shared/pageContent/resolve";
 
 let config: { ok: boolean; body: Record<string, unknown> };
+let assistantOn = false;
 
 beforeEach(() => {
+  viewer.user = null;
+  assistantOn = false;
   saved.page = null;
   sent.calls = [];
   localStorage.clear();
@@ -61,7 +66,7 @@ beforeEach(() => {
       if (String(url).includes("/api/work-with-us-config")) {
         return { ok: config.ok, status: config.ok ? 200 : 500, json: async () => config.body };
       }
-      if (String(url).includes("/api/assistant/status")) return { ok: true, status: 200, json: async () => ({ available: false }) };
+      if (String(url).includes("/api/assistant/status")) return { ok: true, status: 200, json: async () => ({ available: assistantOn }) };
       return { ok: false, status: 404, json: async () => ({}) };
     }) as unknown as typeof fetch,
   );
@@ -107,11 +112,10 @@ describe("every field in the Work With Us spec reaches the page", () => {
     fireEvent.click(screen.getByRole("button", { name: /Barter/ }));
     send();
     expect(await screen.findByRole("heading", { level: 1, name: "Your proposal is with us" })).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Thank you for offering your gifts to Willowbrook. A reply can take up to a month, and there's room to talk it through and revise.",
-      ),
-    ).toBeTruthy();
+    const thanks = WORK_WITH_US_PAGE.sections.find((s) => s.id === "thanks")!.fields.find((f) => f.key === "body")!.default;
+    expect(screen.getByText(thanks.replace("{village}", "Willowbrook"))).toBeTruthy();
+    // A reply time is a promise only a village can make, so the starter makes none.
+    expect(thanks).not.toMatch(/month|week|day|hour/i);
   });
 });
 
@@ -153,5 +157,68 @@ describe("a village that lists options", () => {
     send();
     expect(await screen.findByRole("alert")).toHaveTextContent("Choose at least one form of reciprocity that fits.");
     expect(sent.calls).toHaveLength(0);
+  });
+});
+
+/*
+ * THE VILLAGE'S OWN GUIDE, or a neutral label. "Maia" is one village's guide,
+ * and this page used to fall back to it for every village that had not named
+ * its own (Rye, 2026-10-22). An unnamed guide is never hidden: "the village
+ * guide" to visitors and members, "your village guide" to a founder or admin,
+ * and only a founder is asked to name it.
+ */
+describe("the guide's name on Work With Us", () => {
+  const talkButton = () => screen.findByRole("button", { name: /Talk it through with/ });
+  const prompt = () => screen.queryByRole("link", { name: /Name your guide/ });
+
+  beforeEach(() => {
+    assistantOn = true;
+    config.body.assistantName = "";
+  });
+
+  it("calls an unnamed guide 'the village guide' on the public page, and asks a visitor nothing", async () => {
+    render(<WorkWithUs />);
+    expect((await talkButton()).textContent?.trim()).toBe("Talk it through with the village guide");
+    expect(document.body.textContent).not.toContain("Maia");
+    expect(prompt()).toBeNull();
+  });
+
+  it("says the same to a signed-in member", async () => {
+    viewer.user = { name: "Ana", email: "ana@example.test", role: "member" };
+    render(<WorkWithUs />);
+    expect((await talkButton()).textContent?.trim()).toBe("Talk it through with the village guide");
+    expect(prompt()).toBeNull();
+  });
+
+  it("says 'your village guide' to an admin, without the founder's prompt", async () => {
+    viewer.user = { name: "Ana", email: "ana@example.test", role: "admin" };
+    render(<WorkWithUs />);
+    expect((await talkButton()).textContent?.trim()).toBe("Talk it through with your village guide");
+    expect(prompt()).toBeNull();
+  });
+
+  it("asks a founder to name the guide, and links to the field that does it", async () => {
+    viewer.user = { name: "Ana", email: "ana@example.test", role: "founder" };
+    render(<WorkWithUs />);
+    expect((await talkButton()).textContent?.trim()).toBe("Talk it through with your village guide");
+    expect(await screen.findByText("Your village guide has no name yet")).toBeTruthy();
+    expect(prompt()).toHaveAttribute("href", "/admin?tab=work-with-us");
+  });
+
+  it("uses the village's own name once it has one, and stops asking", async () => {
+    config.body.assistantName = "Juniper";
+    viewer.user = { name: "Ana", email: "ana@example.test", role: "founder" };
+    render(<WorkWithUs />);
+    expect((await talkButton()).textContent?.trim()).toBe("Talk it through with Juniper");
+    expect(prompt()).toBeNull();
+  });
+
+  it("does not ask while the guide is not on the page at all", async () => {
+    assistantOn = false;
+    viewer.user = { name: "Ana", email: "ana@example.test", role: "founder" };
+    render(<WorkWithUs />);
+    await screen.findByText(/is built on reciprocity/);
+    expect(screen.queryByText(/Talk it through with/)).toBeNull();
+    expect(prompt()).toBeNull();
   });
 });

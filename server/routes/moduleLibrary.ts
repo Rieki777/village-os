@@ -90,6 +90,10 @@ import { effectiveLifecycle, moduleConfig, moduleDemotions, setModuleLifecycle, 
 import { launchBallotCarried } from "../lib/launch";
 import { recordEvent } from "../lib/events";
 import { getPool } from "../db/pool";
+import { register as registerSetupGame } from "./setupGame";
+import { register as registerPlantingRequests, type PlantingDeps } from "./plantingRequests";
+// Re-exported so server/index.ts takes it on its route-module import line (the ratchet exempts that line).
+export { plantingDoor } from "./plantingRequests";
 import { liveModuleProposal, moduleLifecycleRows, moduleVoteWrites } from "../repos/moduleHistory";
 import { moduleNeeds } from "../../shared/moduleNeeds";
 
@@ -103,7 +107,7 @@ export const moduleChangeReaders: ValidateChangeSetOptions = {
   openModuleProposal: async (id) => (await liveModuleProposal(getPool(), id))?.id ?? null,
 };
 
-type Deps = Pick<AppDeps, "isAdmin" | "authedUser" | "firstName" | "projectName"> & {
+type Deps = Pick<AppDeps, "isAdmin" | "authedUser" | "firstName" | "projectName"> & Pick<PlantingDeps, "notify" | "plantingAdmins" | "plantingObjectors"> & {
   buildMarker: string;
   /** Every live holder of a capability, counted without the admin short-circuit. */
   liveHoldersOf: (capability: string) => Promise<string[]>;
@@ -120,6 +124,12 @@ const visibleToMembers = (lc: string | null | undefined) =>
 
 export function register(app: Express, deps: Deps): void {
   const { isAdmin, authedUser, firstName } = deps;
+
+  // The setup game's map reads the same registry this page does, so it rides
+  // this module's registration and server/index.ts does not grow.
+  registerSetupGame(app, { isAdmin, projectName: deps.projectName });
+  // The setup game's co-sign, after launch (server/routes/plantingRequests.ts).
+  registerPlantingRequests(app, { isAdmin, authedUser, notify: deps.notify, plantingAdmins: deps.plantingAdmins, plantingObjectors: deps.plantingObjectors });
 
   /** Who is asking, in the three facts every route here reads. */
   const whoIs = async (req: Request) => {

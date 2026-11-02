@@ -100,6 +100,7 @@ const REQUIREMENT: Record<Exclude<StageRule["type"], "quests">, string> = {
   "training-complete": "Finish community training",
   membership: "Sign the membership covenant",
   tokens: "Be paid for something you brought",
+  role: "Hold a role on the org chart",
   granted: "The village grants this one",
 };
 

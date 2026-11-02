@@ -3152,7 +3152,8 @@ forever. Re-running it moves nothing.
   delete stops charging; with no key, or a failing Stripe, the cancel is owed
   on `/review` until Finish, the hourly job or a person settles it. On the exit
   path a member who holds tokens, or is owed cash, reads that resolving keeps them a former
-  member and the payments keep renewing until an admin cancels them.
+  member, and that resolving cancels the payments all the same (Rye, 2026-10-31, ruling 8:
+  the resolve's `subscriptions` step runs the erasure's cancel and its no-key hand-off).
 - **The exit desk shows the cash the village still owes them** as a
   NON-blocking `cash` domain: the `cash_owed` rows (0285) in state `owed` or
   `claimed`, totalled per currency, with the sentence `is owed <amount> in cash
@@ -3287,6 +3288,15 @@ steward signs, so a grant asked for while a member was here mints nothing once
 they have left; it stays pending, and a steward can decline it. A former member
 can still be minted to. Pinned by `server/lib/gratitude.tombstone.test.ts` and
 `server/needsTombstone.routes.e2e.test.ts`.
+
+**A donation waiting on its second sign-off.** `approveIntake` in
+`server/lib/library.ts` awards a former member as normal: the account was kept,
+so the credits go to it. A donor whose account was erased while the item waited
+is awarded nothing, since no credit goes into an account nobody holds, and the
+item still joins the library. The figure is not dropped (Rye, 2026-10-31:
+"still a debt owed"): the item's `intake_approved` event records the credits
+left unpaid, for a steward settling it by hand. Pinned by
+`server/lib/departedPayments.test.ts`.
 
 ### What the village owes
 

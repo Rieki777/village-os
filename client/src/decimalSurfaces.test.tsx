@@ -47,7 +47,7 @@ vi.mock("@/modules/ModuleProvider", () => ({
   useModules: () => ({ loaded: true }),
   useHypha: () => ({ configured: false, links: {} }),
 }));
-vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: () => "Cob Credit" }));
+vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: () => "Cob Credit", useTokensWord: () => "Village Tokens" }));
 vi.mock("@/components/SwapCard", () => ({ default: () => null }));
 vi.mock("@/components/InfoTip", () => ({ default: () => null }));
 vi.mock("@/contexts/AuthContext", () => ({
@@ -152,7 +152,7 @@ describe("/stay prints a nightly rate in the units the balance above it is in", 
   it("prints the village-token rate the route sends, at its scale and undivided", async () => {
     render(<Router><Stay /></Router>);
     // The route sends 3, already human, for a token at decimals 3.
-    await waitFor(() => expect(screen.getByText(/· 3 Cob Credit\/night/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/· 3 Cob Credit a night/)).toBeInTheDocument());
     // Both wrong renders, asserted absent: the raw row, and the second
     // division that 3 at decimals 3 turns into.
     expect(screen.queryByText(/3000 Cob Credit/)).not.toBeInTheDocument();
@@ -161,7 +161,8 @@ describe("/stay prints a nightly rate in the units the balance above it is in", 
 
   it("names the token from the payload's own registry and not from the slug", async () => {
     render(<Router><Stay /></Router>);
-    await waitFor(() => expect(screen.getByText(/Cob Credit\/night/)).toBeInTheDocument());
+    // Twice now: the room's rate and the active stay, which names its token too (R084).
+    await waitFor(() => expect(screen.getAllByText(/Cob Credit a night/).length).toBeGreaterThan(0));
     expect(screen.queryByText(/cob-credit/)).not.toBeInTheDocument();
   });
 
@@ -170,7 +171,8 @@ describe("/stay prints a nightly rate in the units the balance above it is in", 
     // rateSnapshotToken is cob-credit, NOT stay credits, so this line has to
     // divide by 3 and not by the balance line's 0.
     await waitFor(() => expect(screen.getByText(/Your stay is active at/)).toBeInTheDocument());
-    expect(screen.getByText(/Your stay is active at/).textContent).toContain("3 credit(s)/night");
+    // Named as the registry names that token (R084), never "credit(s)".
+    expect(screen.getByText(/Your stay is active at/).textContent).toContain("3 Cob Credit a night");
   });
 
   it("reads a stay's rate at the scale sent with it, even when no room still posts that token", async () => {
@@ -189,7 +191,7 @@ describe("/stay prints a nightly rate in the units the balance above it is in", 
     );
     render(<Router><Stay /></Router>);
     await waitFor(() => expect(screen.getByText(/Your stay is active at/)).toBeInTheDocument());
-    expect(screen.getByText(/Your stay is active at/).textContent).toContain("at 8.5 credit(s)/night");
+    expect(screen.getByText(/Your stay is active at/).textContent).toMatch(/at 8\.5 \S+ a night/);
     expect(screen.getByText(/Your stay is active at/).textContent).not.toContain("850");
   });
 });
@@ -238,7 +240,7 @@ describe("/stay reads the scale it is sent, on every line and not just one", () 
     // The route sends 1.5, already human, for a member.
     await waitFor(() => expect(screen.getByText(/1\.5/)).toBeInTheDocument());
     // The other tier, on the line below, which a visitor and a member both see.
-    expect(screen.getByText(/Visitors pay 2\.5 credit\(s\)\/night\./)).toBeInTheDocument();
+    expect(screen.getByText(/Visitors pay 2\.5 Stay credit a night\./)).toBeInTheDocument();
     // A second division turns 2.5 at decimals 2 into 0.03 (or 0.02).
     expect(screen.queryByText(/Visitors pay 0\.0/)).not.toBeInTheDocument();
   });
@@ -249,10 +251,11 @@ describe("/stay reads the scale it is sent, on every line and not just one", () 
     // The title sits in its own span inside the link; the reward is the link's
     // next text node, so the assertion has to be on the row and not the span.
     const row = screen.getByText(/Plaster the north wall/).closest("a");
-    // Anchored on the colon: "0.04 stay credit(s)" CONTAINS "4 stay credit(s)",
-    // so an unanchored match would pass on the divided render.
-    expect(row?.textContent).toContain(": 4 stay credit(s) on consent");
-    expect(row?.textContent).not.toContain("0.04 stay credit");
+    // Anchored on the colon: "0.04 Stay credit" CONTAINS "4 Stay credit", so
+    // an unanchored match would pass on the divided render. The word is the
+    // registry's (R084), from `priceTokens`.
+    expect(row?.textContent).toContain(": 4 Stay credit on consent");
+    expect(row?.textContent).not.toContain("0.04 Stay credit");
   });
 });
 

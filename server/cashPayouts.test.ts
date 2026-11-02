@@ -11,6 +11,7 @@
  * defends:
  *
  *   a member holding no `cash.pay` reads nothing and pays nothing
+ *   ...and is told, in a sentence, which role pays cash out and who sits there (E7)
  *   a transfer pays the picked lines and leaves the rest owed (partial)
  *   a second submit of the same transfer pays nothing twice, and says so
  *   two transfers racing on one line: exactly one wins
@@ -57,6 +58,9 @@ describe.skipIf(!configured)("recording a bank transfer against the cash owed", 
     return { status: res.status, body: json, text };
   };
   const as = (id: string | null) => { viewer.id = id; };
+  /** Who the gate says holds the key now. `lapsed` sits in the role with a term that ran out. */
+  let liveKeyHolders = ["treasurer", "second"];
+  let carryingRoles: Array<{ id: string; name: string }> = [{ id: "role-treasury", name: "Treasurer" }];
 
   const owe = async (id: string, userId: string, amountMinor: number, currency = "CRC", state = "owed") => {
     await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
@@ -77,11 +81,19 @@ describe.skipIf(!configured)("recording a bank transfer against the cash owed", 
     pool = testPool(db, { connectionLimit: 6 });
     const app = express();
     app.use(express.json());
-    const guardCapability = async (_req: any, res: any, cap: any) => {
+    /*
+     * The refusal half copies `guardCapability` in server/index.ts: the route's
+     * own refusal when it passes one, else a bare 401 `auth_required` for
+     * EVERYBODY, signed in or not. This stand-in used to answer 403 to a
+     * signed-in member by itself, which the real gate never did, so these
+     * cases passed while /cash-payouts showed a member "auth_required" (E7).
+     */
+    const guardCapability = async (_req: any, res: any, cap: any, refusal?: { status: number; body: Record<string, unknown> }) => {
       const who = viewer.id ? PEOPLE[viewer.id] : null;
       const ctx = { stageIndex: 0, stageIndexOf: () => 99, roleCapabilities: who?.caps ?? [] } as unknown as CapabilityCtx;
       if (who && hasCapability(cap, ctx)) return true;
-      res.status(who ? 403 : 401).json({ error: who ? "forbidden" : "auth_required" });
+      if (refusal) res.status(refusal.status).json(refusal.body);
+      else res.status(401).json({ error: "auth_required" });
       return false;
     };
     registerCashOwed(app, {
@@ -91,7 +103,14 @@ describe.skipIf(!configured)("recording a bank transfer against the cash owed", 
       members: { byId: async (id: string) => PEOPLE[id] ?? null } as any,
       notify: async (n: any) => { notices.push(n); return { inserted: true } as any; },
       overLimit: async () => false,
-      cashKeyHolders: async () => ["treasurer", "second"],
+      cashKeyHolders: async () => liveKeyHolders,
+      rolesCarrying: (cap: string) => (cap === "cash.pay" ? carryingRoles : []),
+      roleHolders: () => [
+        { roleId: "role-treasury", userId: "treasurer" },
+        { roleId: "role-treasury", userId: "second" },
+        { roleId: "role-treasury", userId: "lapsed" },
+        { roleId: "role-gardener", userId: "ora" },
+      ],
     } as any);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -124,6 +143,56 @@ describe.skipIf(!configured)("recording a bank transfer against the cash owed", 
     expect((await call("POST", "/api/cash-owed/transfers", transfer())).status).toBe(401);
     expect((await stateOf("c1")).state, "a refused transfer touched no row").toBe("owed");
     expect(notices).toEqual([]);
+  });
+
+  /*
+   * E7 (2026-10-31): a member without the key read the raw code
+   * "auth_required" on /cash-payouts. Signed in, they are told who pays cash
+   * out, by role and then the live holders' first names; signed out, the
+   * code stays the curl answer and the page shows its own sign-in prompt.
+   */
+  it("tells a signed-in member without the key who pays cash out, on every door", async () => {
+    as("ben");
+    const doors = [
+      await call("GET", "/api/cash-owed/queue"),
+      await call("GET", "/api/cash-owed/export.csv"),
+      await call("POST", "/api/cash-owed/transfers", transfer()),
+      await call("POST", "/api/cash-owed/c1/paid", { note: "x" }),
+    ];
+    for (const res of doors) {
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("cash_pay_required");
+      expect(res.body.message).toBe("Paying cash out is the work of Treasurer (Tara, Sol). Write to them if you are waiting on a payment.");
+    }
+    expect((await stateOf("c1")).state).toBe("owed");
+  });
+
+  it("names only the live holders, and points at admin when nobody live sits in a role", async () => {
+    const ADMIN = "Paying cash out is the work of whoever holds the treasurer's key, or an admin. Ask an admin if you are waiting on a payment.";
+    as("ben");
+    try {
+      liveKeyHolders = ["treasurer"];
+      expect((await call("GET", "/api/cash-owed/queue")).body.message).toContain("work of Treasurer (Tara).");
+      liveKeyHolders = [];
+      expect((await call("GET", "/api/cash-owed/queue")).body.message, "a vacant role reaches nobody").toBe(ADMIN);
+      carryingRoles = [];
+      expect((await call("GET", "/api/cash-owed/queue")).body.message).toBe(ADMIN);
+      carryingRoles = [{ id: "role-treasury", name: "Treasurer" }, { id: "role-books", name: "Bookkeeper" }];
+      liveKeyHolders = ["treasurer", "ora"];
+      expect((await call("GET", "/api/cash-owed/queue")).body.message, "a holder of another role is not a treasurer").toContain("work of Treasurer (Tara).");
+    } finally {
+      liveKeyHolders = ["treasurer", "second"];
+      carryingRoles = [{ id: "role-treasury", name: "Treasurer" }];
+    }
+  });
+
+  it("keeps the bare 401 for somebody signed out, and still lets a holder in", async () => {
+    as(null);
+    expect((await call("GET", "/api/cash-owed/queue")).body).toEqual({ error: "auth_required" });
+    as("treasurer");
+    const ok = await call("GET", "/api/cash-owed/queue");
+    expect(ok.status).toBe(200);
+    expect(ok.body.unpaid.length).toBe(4);
   });
 
   it("pays the picked lines and leaves the rest owed, recording who, when and the reference", async () => {

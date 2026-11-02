@@ -16,6 +16,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toastMock }));
+// The registry's names come off the shared config read, which would be one more
+// fetch on every count below. The renamed-token case is pinned in
+// client/src/pages/tokenRenames.test.tsx; here the names are empty, so the
+// rows read the way they always have.
+vi.mock("@/hooks/useTokenNameFor", () => ({ useTokenNameMap: () => ({}) }));
 
 import OwedPostings from "./OwedPostings";
 

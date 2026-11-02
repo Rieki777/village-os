@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `3446a6b99f176af6`, which regenerating reproduces.
+It describes the sources at fingerprint `754b1a99f40b65db`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -521,7 +521,7 @@ What a village publishes, read from the route registrations. The door on each ro
 
 64 routes: 50 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
-The routes that answer a stranger are the village's public record. At the module's `public` lifecycle they serve the ballot list, one decision in full and the objection lineage to anybody on the internet, which includes each voter's first name, their choice and their frozen weight. Ruling 22 changes that and is staged.
+The routes that answer a stranger are the village's public record. At the module's `public` lifecycle a stranger reads the ballot list, one decision and the objection lineage as titles, counts, tallies, dials and status. Who voted, how, who has not voted yet, who objected and the document itself are for signed-in members, and ruling 22, still staged, is about what members read.
 
 ## The cycle
 
@@ -554,7 +554,6 @@ The hub address is `governance.hub_url`, a `founder`-ring dial that ships blank,
 What is broken today, by name. A document that only described the parts that work would be the same kind of check this repository has spent weeks removing: green about the wrong thing.
 
 - **A close and its executor are not one transaction.** The ballot is closed by one guarded update and the executor runs after it. An executor that throws leaves a ballot closed and passed with nothing applied, and only the mechanics subject has a second door to apply by hand.
-- **4 reads under the governance prefix answer a stranger**, and at the module's `public` lifecycle that means the whole voter roll with names, choices and weights is served to the internet.
 - **A weight in token mode is displayed in ledger units.** A holding a member reads as 0.1 weighs 100 in the tally, and the hand-mint form takes raw units with no hint, so typing 1 for a 3-decimal token mints a thousandth.
 - **Two tokens are called Voice**, the platform's own and the mirror of what lives on Base, and only the first can weigh a vote. The default weight token is neither of them.
 - **A stored reason on a no vote is shown to nobody.** The widget invites a member to say why and the reader that serves votes drops it.
@@ -838,7 +837,7 @@ Every setting carries a criticality tier now, defaulting to routine, and the tie
 > How about the name who participates is visible but by default we hide how they voted (and we only expose faces once 50% of the required vote count happens (so you can't really tell who voted what) but we don't say what they voted by default - but in settings this can be changed to public voting.
 
 <!-- written by a person: ruling-22 -->
-Votes are named on purpose today: the decision page says this village does not run secret ballots, and the roll serves each voter's name, choice and frozen weight. No secrecy setting exists. The ruling supersedes the earlier one that closed this question in the other direction. Counts and shares of weight stay visible under every setting, so the people-and-weight sentence is unaffected.
+Votes are named on purpose today: the decision page says this village does not run secret ballots, and the roll serves each voter's name, choice and frozen weight to a signed-in member. A stranger reads the counts, tallies and status alone, and never the roll. No secrecy setting exists. The ruling supersedes the earlier one that closed this question in the other direction. Counts and shares of weight stay visible under every setting, so the people-and-weight sentence is unaffected.
 
 ### 23. How this document gets built and proven
 
@@ -1056,7 +1055,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "3446a6b99f176af6",
+  "commit": "754b1a99f40b65db",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -2866,7 +2865,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 210 migration files in `drizzle/`.
+Checked against the 218 migration files in `drizzle/`.
 
 ## What this file is made from
 

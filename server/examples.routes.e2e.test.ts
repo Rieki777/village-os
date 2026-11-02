@@ -226,11 +226,10 @@ describe.skipIf(!DB_CONFIGURED)("standing examples: every guard, over HTTP", () 
   });
 
   /**
-   * Quests is core and ships with a real starter board, so hasRealContent
-   * correctly suppresses example quests on this instance — which would make
-   * a seeded-row probe a silent pass. The guard still has to hold for the
-   * forks whose board IS empty, so the row is written here directly, exactly
-   * as the module would have seeded it.
+   * Since 2026-10-31 a fresh board's starters ARE example quests (A8 / 19g),
+   * so this instance carries them. The probe row is still written here
+   * directly: its id is this test's own, and the submit half below needs a
+   * claim seeded against it that no starter should ever carry.
    */
   it("refuses to claim an example quest, and mints nothing", async () => {
     await pool.query(

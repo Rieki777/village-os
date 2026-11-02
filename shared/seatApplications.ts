@@ -18,6 +18,16 @@
  * candidate who is the only live holder falls through to a ballot, and a
  * candidate who is one of several holders waits for one of the others.
  *
+ * Rye confirmed it for role proposals on 2026-10-31 (sheet item 24a): "The
+ * default for adopting a role proposal is those in founder roles until they
+ * give that power to the community to use governance to do", "Founder/steward
+ * roles". So an admin holding no such role does not adopt, and neither does
+ * the holder of any other role; once the village holds `org.seat`, nobody
+ * adopts at the door and the village decides. `adoptRefusal` is that rule, as
+ * it was. E8 (found end to end on main e1c5eb6) was the WORDS: the submit
+ * confirm promised "the founder, steward or organisation power" in a village
+ * where nobody held it. `adoptsClause` below reads who does.
+ *
  * ── WHAT A BALLOT MAY SAY ──────────────────────────────────────────────────
  *
  * A ballot's title and document are as public as the governance module: the
@@ -31,6 +41,7 @@
  */
 import { looksLikePaymentDetails, PAYMENT_DETAIL_MESSAGE, parseSeatSettings, type SeatSettings } from "./seatSettings";
 import type { HandOpenerRule } from "./powerHands";
+import { roleWithHolders } from "./roleHolderLabel";
 
 /** The ballot subject an application is voted under. 16 characters, inside varchar(24). */
 export const ROLE_APPLICATION = "role_application";
@@ -196,6 +207,75 @@ export function putToVillageRefusal(rule: HandOpenerRule, actorId: string): Door
     error: "not_a_holder",
     message: "Sending an application to the village is for a live holder of the power that seats people.",
   };
+}
+
+// ── Who adopts, in words (E8) ────────────────────────────────────────────────
+
+/**
+ * What the sentence naming who adopts is read from, all of it off the same
+ * state `adoptRefusal` reads, never typed: so the words cannot promise a power
+ * nobody holds.
+ */
+export interface AdopterFacts {
+  /** The village holds `org.seat` (`capability_holding`): nobody adopts at the door, the village decides. */
+  villageHolds: boolean;
+  /** Somebody holds it live, the candidate included. */
+  heldLive: boolean;
+  /**
+   * The roles that carry it (`rolesCarrying`), each with the names of who
+   * holds it live through that role, the candidate LEFT OUT: nobody is named
+   * as adopting their own terms.
+   */
+  groups: ReadonlyArray<{ name: string; holders: readonly string[] }>;
+  /** It comes from a role proposal that changes roles, which is never put to a vote (Rye, 2026-10-22). */
+  changesRoles?: boolean;
+}
+
+/** The power, said the way a member reads it. */
+const PLACING_POWER = "the power to place people in roles";
+
+/** Once the village holds the power: what happens, as a whole sentence. */
+export const VOTE_DECIDES_WORDS = "The village holds the power to place people in roles, so the village decides it by vote.";
+/** The same, for a role proposal that changes roles, which never goes to a vote. */
+export const VOTE_CANNOT_WORDS =
+  "The village holds the power to place people in roles, and a proposal that changes roles never goes to a vote, so nobody can adopt it yet.";
+
+/** "A", "A or B", "A, B or C". */
+function orList(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
+}
+
+/** The whole sentence once the village holds the power, or null while a role does. PURE. */
+export function voteWords(f: AdopterFacts): string | null {
+  if (!f.villageHolds) return null;
+  return f.changesRoles ? VOTE_CANNOT_WORDS : VOTE_DECIDES_WORDS;
+}
+
+/**
+ * Who adopts, while a role holds the power, as the end of a sentence that
+ * starts in the middle: "Steward Circle (Rye, Rick) adopts it." PURE.
+ *
+ * A role is named as "Role (FirstName)" by `roleWithHolders` (Rye,
+ * 2026-10-30), so this is for signed-in views only, never a public page or a
+ * vendor. With nobody in it, the sentence says what has to happen first,
+ * because a proposal there waits for somebody who does not exist yet.
+ */
+export function adoptsClause(f: AdopterFacts): string {
+  const live = f.groups.filter((g) => g.holders.some((h) => String(h ?? "").trim())).map((g) => roleWithHolders(g.name, g.holders));
+  if (live.length) return `${orList(live)} adopts it.`;
+  const names = f.groups.map((g) => String(g.name ?? "").trim()).filter(Boolean);
+  if (!names.length) return `a founder or steward role adopts it. No role here carries ${PLACING_POWER} yet, so an admin gives it to one first.`;
+  const nobody = f.heldLive ? "Nobody else holds it yet" : "Nobody holds it yet";
+  return `whoever holds ${orList(names)} adopts it. ${nobody}, so an admin places someone in it first.`;
+}
+
+/** Who adopts it, as a sentence of its own, for the application page. PURE. */
+export function whoAdoptsWords(f: AdopterFacts): string {
+  const vote = voteWords(f);
+  if (vote) return vote;
+  const clause = adoptsClause(f);
+  return clause.charAt(0).toUpperCase() + clause.slice(1);
 }
 
 // ── The ballot's words ───────────────────────────────────────────────────────

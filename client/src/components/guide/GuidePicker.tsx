@@ -21,7 +21,8 @@ export default function GuidePicker({ state, onChange }: { state: GuideState; on
   const answering = state.options.find((o) => o.id === state.answering);
   if (!answering) return null;
   const other = state.canChoose ? state.options.find((o) => o.id !== answering.id && o.available) : undefined;
-  const about = answering.id === "village" ? GUIDE_WORDS.village(answering.name) : GUIDE_WORDS.saberra(answering.name);
+  // An unnamed village guide needs no second line saying it is the village's guide.
+  const about = answering.id === "saberra" ? GUIDE_WORDS.saberra(answering.name) : answering.named ? GUIDE_WORDS.village(answering.name) : null;
 
   const switchTo = async () => {
     if (!other) return;
@@ -44,7 +45,7 @@ export default function GuidePicker({ state, onChange }: { state: GuideState; on
           </button>
         )}
       </div>
-      <p className="text-stone-600">{about}</p>
+      {about && <p className="text-stone-600">{about}</p>}
       {state.note && (
         <p className="text-stone-700" role="status">
           {state.note}

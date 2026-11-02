@@ -468,20 +468,33 @@ permanently: nothing recomputes it afterwards.
 
 ## What arrives at boot
 
-**A village with an empty `quests` table is seeded with fourteen real quests.** The block in
-`server/index.ts` guards on `existing.length === 0 && fs.existsSync(QUESTS_SEED_FILE)` and loops
-`questsRepo.add` over `server/seeds/quests-seed.json`. `QUEST_COLS` omits `is_example`, whose
-column default is 0, so all fourteen are **real** rows: claimable, consentable and payable from the
-faucet. They advertise 40 to 300 recognition apiece (`50-100`, `40-80`, `100-200`, `80-200`,
-`100-300` and so on), one carries `minStage: "member"`, one carries
-`requiresRole: "practitioners"`, and one ships `status: "Seasonal"`. Reviewing those fourteen reward
-labels is the first thing a fork operator does before go-live, because on the day the village opens
-they are the contract.
+**A fresh village opens on starter quests that are standing examples** (Rye, sheet A8 / 19g,
+2026-10-31: "a new village starts with a neutral, fully editable starter set"). They come from the
+`quests` section of `server/seeds/examples-seed.json`, which is the ONE source of truth for what a
+new village starts with, and `seedExamplesAtBoot` writes them because quests is a core module. They
+are inert like every example: nobody can claim one, and the admin save and delete refuse them. They
+carry the whole story layer and no value, because a quest's value is set on its card by the village.
+One carries `minStage: "member"` and one `requiresRole: "practitioners"`, so the board's rings are
+there to read.
 
-Two things the code comment beside that block gets wrong, and a reader should not inherit. It says
-"INSERT IGNORE + the empty check", and `questsRepo.add` uses a plain `INSERT INTO`. It says "a
-village that deleted quests on purpose never has them resurrected", and the guard is
-table-emptiness: a village that deletes every quest gets all fourteen back on the next restart.
+They seed only where the village has no quest and **no claim** of its own (`villageHasOwnQuests`,
+`server/repos/questExamples.ts`), so a village that worked its board and then emptied it is never
+talked over. A founder decides each starter in Admin, Quests:
+
+- **Keep** (`POST /api/admin/quests/:id/keep`, `keepExampleQuest` in `server/repos/quests.ts`)
+  turns that one row real, with the founder's edits and a required value, in one write under the
+  row lock. The other starters stay. Keeping the last one stamps the tombstone (`all_kept`).
+- **Clear** (`POST /api/admin/modules/quests/examples/clear`) retires the rest.
+- **Posting a quest of the village's own**, or accepting a quest proposal, retires them all.
+
+The Journey to Launch row `starter-quests` reads the count of example quests still on the board and
+is done at zero. A village seeded before 2026-10-31 holds none, so it reads as done.
+
+**`server/seeds/quests-seed.json` is FROZEN and seeds nothing.** Until 2026-10-31 the boot looped
+`questsRepo.add` over it onto any empty table, writing fourteen live, claimable, payable quests
+that nobody reviewed (and writing them back after a village deleted them all). Villages seeded that
+way are running today, and the two passes below still match their rows to it by id, so its words
+never change: `server/lib/legacyQuestSeed.test.ts` pins its hash.
 
 Three more boot paths write `quests`:
 
@@ -489,13 +502,13 @@ Three more boot paths write `quests`:
   `archetypes` and `archetypes_suggested` for every real quest `WHERE archetypes IS NULL`, so a tag
   a human confirmed or cleared is never overwritten and a fresh village is never left with classes
   that appear to open nothing.
-- **`backfillQuestStories`** fills subtitle, story, first step, deliverable, poster, steps and tips
-  from the seed file into live rows, and only where the live value is empty. It is a `runOnce`
+- **`backfillQuestStories`** (`server/lib/legacyQuestSeed.ts`) fills subtitle, story, first step,
+  deliverable, poster, steps and tips from the frozen seed file into live rows, and only where the live value is empty. It is a `runOnce`
   one-shot, twice (`quest-story-2026-08-10`, `quest-posters-2026-08-10`). It **throws** when the
   seed file is missing, which deliberately leaves the id unrecorded so the next boot retries rather
   than recording a job that filled nothing.
-- **The voice sweep** (`voice-sweep-2026-08-01-part-2`, also a `runOnce`) walks
-  `questsRepo.all()`, matches rows against the seed file by id, and rewrites a string field only
+- **The voice sweep** (`voice-sweep-2026-08-01`, also a `runOnce`; the quest half is
+  `repairSeededQuestCopy`) walks `questsRepo.all()`, matches rows against the frozen seed file by id, and rewrites a string field only
   where `sameWords(have, want)` holds: same words, different punctuation. An edit that changed a
   word is left alone by construction. A fork that repunctuated seeded quest prose can have that
   repunctuation reverted; a fork that rewrote it cannot.

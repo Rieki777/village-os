@@ -20,6 +20,7 @@
 export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/": "", // the home page is the village itself; no prefix
   "/journey-to-launch": "Journey to launch",
+  "/setup-game": "The Setup Game",
   "/project-history": "Command Centre",
   "/feedback": "Feedback",
   "/network": "Village network",
@@ -65,6 +66,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/profile": "My profile",
   "/login": "Sign in",
   "/set-password": "Choose a password",
+  "/verify-email": "Confirm your address",
   "/forgot-password": "Set a new password",
   "/game-mechanics": "Game Mechanics",
   "/exit-policy": "Leaving well",
@@ -100,6 +102,25 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/how-we-create": "How we create",
   "/resident-rights": "Resident rights",
   "/steward-rights": "Steward rights",
+  // Untitled until a production sweep found them (2026-10-31); each name is
+  // the page's own heading. shared/pageTitles.test.ts now reads App.tsx and
+  // fails on any route left without one.
+  "/claim": "Claim this village",
+  "/register": "Join",
+  "/reserve": "Reserve your home",
+  "/email": "Your email",
+  "/village-email": "How the village emails",
+  "/training": "Training",
+  "/governance": "Governance",
+  "/decisions": "Decisions",
+  "/propose": "Start a proposal",
+  "/role-applications": "Role application",
+  "/seat-applications": "Role application",
+  "/season-plans": "The village's season",
+  "/season-plans/mine": "Your season",
+  "/aligned": "Aligned",
+  "/gratitude": "Gratitude",
+  "/404": "Page not found",
 };
 
 /**

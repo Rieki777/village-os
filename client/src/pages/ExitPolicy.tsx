@@ -33,8 +33,8 @@ export default function ExitPolicy() {
   const endingTerms = useTermsLeavingEnds(!!user);
   // Cash the village still owes keeps a leaver on as a former member (round 4, R4-4). Signed in only.
   const cashOwed = useUnpaidCash(!!user);
-  // And their recurring payments: cancelled when the departure erases the account, still
-  // renewing when holding tokens or being owed cash keeps them a former member. The server says which. Signed in only.
+  // And their recurring payments: cancelled whether the departure erases the account or keeps them
+  // a former member (Rye, 2026-10-31, ruling 8). The server says which act cancels them. Signed in only.
   const leavingNotices = useLeavingNotices(!!user, "exit");
 
   useEffect(() => {

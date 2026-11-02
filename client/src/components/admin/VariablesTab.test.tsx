@@ -28,7 +28,7 @@
  * tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -109,7 +109,9 @@ describe("VariablesTab", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => answer(String(url))));
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });

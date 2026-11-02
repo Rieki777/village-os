@@ -13,10 +13,25 @@ import {
   villageDayKey,
 } from "./companionItems";
 
+describe("a purchase draft", () => {
+  const ok = { budgetId: "b-kitchen", amountMinor: 4500, note: "Seed trays" };
+  it("takes a budget, a whole amount and an optional note, and names no recipient", () => {
+    expect(validateCompanionPayload("purchase", ok)).toBeNull();
+    expect(validateCompanionPayload("purchase", { ...ok, toUserId: "u-ben" })).toMatch(/no field called toUserId/);
+    expect(validateCompanionPayload("purchase", { ...ok, amountMinor: 45.5 })).toMatch(/whole number/);
+    expect(validateCompanionPayload("purchase", { amountMinor: 4500 })).toMatch(/budgetId/);
+  });
+  it("lets a vendor's address sit in toOutside, and nowhere else", () => {
+    expect(validateCompanionPayload("purchase", { ...ok, toOutside: "Finca Verde, sales@fincaverde.example, +506 8888 1234" })).toBeNull();
+    expect(validateCompanionPayload("purchase", { ...ok, note: "from sales@fincaverde.example" })).toMatch(/email address or a phone number/);
+    expect(validateCompanionPayload("budget_spend", { budgetId: "b", amountMinor: 1, toUserId: "u", toOutside: "x" })).toMatch(/no field called toOutside/);
+  });
+});
+
 describe("which kinds have a door", () => {
-  it("refuses exactly the three with no door, each by its own sentence", () => {
+  it("refuses exactly the two with no door, each by its own sentence", () => {
     const none = DRAFT_KINDS.filter((k) => DRAFT_DOORS[k].way === "none");
-    expect(none).toEqual(["cash_payment", "purchase", "ask"]);
+    expect(none).toEqual(["cash_payment", "ask"]);
     for (const k of none) expect(validateCompanionPayload(k, {})).toBe(DRAFT_DOORS[k].refusal);
   });
 

@@ -65,6 +65,8 @@ capabilities  keys added to the ONE gate in shared/capabilities.ts
 variableKeys  the namespaced game variables your module owns
 apiPrefixes   the route prefixes mounted behind requireModule(id)
 guild         seed ids from shared/guilds.ts: everything a village plants first. [] if none
+setupNeeds    everything else it waits for: dials, words, content, people, live checks.
+              Required (at least one required need, or a seed) when setup is not "none"
 ```
 
 And the optional ones that matter:
@@ -88,6 +90,28 @@ Every module names its guild, the secrets, OAuth clients, DNS records and hostin
 setup game plants before the module works. The seeds and their consent text live in the closed
 catalog in `shared/guilds.ts`, and intake refuses a module without a guild. The full guide is
 `docs/modules/GUILD_MANIFEST.md`.
+
+### Setup needs: everything else a village must do
+
+Keys are not the whole of standing a module up. `setupNeeds` declares the rest, one entry per
+thing a founder does, from `shared/setupNeeds.ts`:
+
+```
+kind       decision (a dial key) | words (a field) | content (made on your own screen;
+           ref is your module id, seen by your readiness reader) | hands (a capability
+           someone must hold) | check (a live check)
+scope      village | member
+phase      before-enable | before-launch | after-launch | later
+need       required | recommended | optional
+fixAt      an app route where it is done, such as /admin?tab=… or /modules/<id>#setting-<key>
+since      the release that added it, such as 1.2.0
+```
+
+Only the `before-launch` needs of the modules a village chose block its launch vote (Rye,
+2026-11-01). Never repeat a seed here; it lives in the guild. `since` is how a village that is
+already live learns that your module gained a need. Intake refuses a module whose setup is not
+"none" with neither a required need nor a seed, and `shared/setupNeeds.test.ts` resolves every
+dial and capability you name.
 
 ### Copy in this file is shipped copy
 

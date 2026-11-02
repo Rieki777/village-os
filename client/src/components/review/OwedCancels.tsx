@@ -90,7 +90,7 @@ export default function OwedCancels({
           : `${summary.count} departed members' recurring payments still need cancelling in Stripe`}
       </h2>
       <p className="text-sm text-muted-foreground mt-2">
-        Their erasure could not cancel it, because Stripe was not connected or did not answer{aged}. The admins'
+        Their erasure, or their exit as a former member, could not cancel it, because Stripe was not connected or did not answer{aged}. The admins'
         notices list each subscription id. With Stripe connected, Finish them cancels each one here. If you
         cancelled them in the Stripe dashboard yourself, say so and the village stops asking.
       </p>

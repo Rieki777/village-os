@@ -97,6 +97,9 @@ import { exportAdviceFor, forgetAdviceFor } from "./sessionAdvice";
 import { fillFor, filledInOut, fillKey, keepFills, latestStanding, mapFill, mayUndo, readFor, recordFill, standingFills } from "./sessionOnBehalf";
 import * as fillsRepo from "../repos/sessionOnBehalf";
 import * as votesRepo from "../repos/sessionVotes";
+import * as checksRepo from "../repos/sessionChecks";
+import { CHECK_REFUSALS as CR, instantRead, readCheckRead, seatsNamed, type CheckView, type EntryCheck, type HolderPlace } from "../../shared/sessionCheck";
+import { governingPurpose } from "./governingPurpose";
 import { mapVote, noVotes, sortByVotes, talliesFor } from "./sessionVotes";
 import { VOTE_REFUSALS as VR, isAgendaVote } from "../../shared/sessionVotes";
 import { ON_BEHALF_REFUSALS as OB } from "../../shared/sessionOnBehalf";
@@ -370,6 +373,8 @@ interface EntryRec {
   dueOn: string | null;
   claimedAt: string | null;
   createdAt: string;
+  /** A win's season priority, by its id (0298, server/lib/sessionTemplates.ts). */
+  servesGoalId: string | null;
 }
 
 const mapEntry = (r: any): EntryRec => ({
@@ -385,6 +390,7 @@ const mapEntry = (r: any): EntryRec => ({
   dueOn: r.due_on == null ? null : String(r.due_on),
   claimedAt: toIso(r.claimed_at),
   createdAt: toIso(r.created_at) ?? new Date(0).toISOString(),
+  servesGoalId: r.serves_goal_id == null || r.serves_goal_id === "" ? null : String(r.serves_goal_id),
 });
 
 interface ResponseRec {
@@ -527,6 +533,8 @@ const entryOut = (e: EntryRec, names: Map<number, Named>, seats: SeatBook): Sess
   ...(seats.holdersOf && e.ownerSeatId ? { ownerSeatHolders: seats.holdersOf.get(e.ownerSeatId) ?? [] } : {}),
   dueOn: e.dueOn,
   createdAt: e.createdAt,
+  // Only a win serves the season, so only a win carries the field.
+  ...(e.kind === "win" ? { servesGoalId: e.servesGoalId } : {}),
 });
 
 // ── Roles in a room ─────────────────────────────────────────────────────────
@@ -1535,6 +1543,68 @@ export async function removeEntry(pool: Pool, sessionId: number, actor: Actor, e
   });
 }
 
+// ── Checking a proposal (0297) ──────────────────────────────────────────────
+
+/** The words a check read, kept as a hash so the check holds no earlier draft of them. */
+const wordsHash = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
+
+/** What a check reads besides the room: the running season, and whose terms still run. */
+export interface CheckContext {
+  season: { name: string; goals: readonly string[] } | null;
+  lapseContext?: () => LapseContext;
+}
+
+/**
+ * Check an open proposal (shared/sessionCheck.ts): the facilitator, or the
+ * person who proposed it, asks for the village's own read, and everybody in
+ * the room sees the same read. A second check replaces the first. The read
+ * holds no person: a named role's holder is a place, never a name.
+ */
+export async function checkEntry(
+  pool: Pool,
+  sessionId: number,
+  actor: Actor,
+  entryId: number,
+  ctx: CheckContext,
+  now = new Date(),
+): Promise<Outcome<null>> {
+  // Read before the room's lock: the transaction holds the session row on one
+  // of the pool's few connections, and a read that reached back to the pool
+  // from inside it could wait behind writers queued on that same row.
+  const purpose = await governingPurpose(pool);
+  const seatings = await listOrgAssignments(pool, ctx.lapseContext?.());
+  return inRoom(pool, sessionId, actor, async ({ conn, s, roles }) => {
+    const rows = await repo.entryRow(conn, sessionId, entryId);
+    if (!rows.length) return refuse(404, R.entryUnknown);
+    const e = mapEntry(rows[0]);
+    if (e.kind !== "decision") return refuse(409, CR.notAProposal);
+    if (!roles.runs && e.authorNo !== actor.no) return refuse(403, CR.notYours);
+    if (e.status === "done") return refuse(409, CR.decided);
+    if (e.status !== "open") return refuse(409, CR.notOpen);
+    const seats = (await seatBook(conn, s.circleId)).options;
+    const nowMs = now.getTime();
+    const here = new Set((await repo.peopleRows(conn, sessionId)).map(mapPerson).filter((p) => isPresentAt(p, nowMs)).map((p) => p.no));
+    // Only the roles the words name are asked after: one read of who sits where, and a number per holder.
+    const places = new Map<string, HolderPlace>();
+    for (const seat of seatsNamed(e.text, seats, e.ownerSeatId)) {
+      const holders = liveHoldersOf(seatings, seat.id);
+      if (!holders.length) continue;
+      const nos = await Promise.all(holders.map((u) => memberNo(conn, u)));
+      places.set(seat.id, nos.some((n) => n != null && here.has(n)) ? "here" : "away");
+    }
+    const read = instantRead({
+      text: e.text,
+      season: ctx.season,
+      seats,
+      ownerSeatId: e.ownerSeatId,
+      holderOf: (id) => places.get(id) ?? "open",
+      purpose: { statement: purpose.statement ?? "", writtenAt: purpose.writtenAt ?? "" },
+    });
+    await checksRepo.writeCheck(conn, { entryId: e.id, sessionId, hash: wordsHash(e.text), read: JSON.stringify(read), now });
+    return done(null);
+  });
+}
+
 // ── Filled in for somebody: the undo (0288) ─────────────────────────────────
 
 /**
@@ -2391,7 +2461,14 @@ export async function buildView(
   s: SessionRec,
   viewer: Viewer,
   joined: boolean,
-  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null; lapseContext?: () => LapseContext; circles?: () => { id: string; name: string }[] },
+  ctx: {
+    lookup: MemberLookup;
+    circleName: (id: string | null) => string | null;
+    lapseContext?: () => LapseContext;
+    circles?: () => { id: string; name: string }[];
+    /** Checks on proposals (0297): the agent's name while the module that offers them is open, null otherwise. */
+    check?: () => { agent: string } | null;
+  },
   now = Date.now(),
 ): Promise<SessionView> {
   const roles = rolesIn(s, viewer);
@@ -2508,6 +2585,33 @@ export async function buildView(
   // Every open task of the circle's earlier sessions, as this viewer may see it.
   const circle = await circleTasksFor(pool, s, viewer, ctx);
 
+  // Each checked proposal's read (0297), for everybody who sees the room. The purpose is read only when a check exists.
+  const offer = ctx.check?.() ?? null;
+  let check: CheckView | null = null;
+  if (offer) {
+    const byEntry: Record<string, EntryCheck> = {};
+    let purpose: string | null = null;
+    const checkRaw = await checksRepo.checkRows(pool, s.id);
+    if (checkRaw.length) {
+      const gps = await governingPurpose(pool);
+      purpose = gps.statement.trim() ? gps.statement : null;
+      const textOf = new Map(entries.map((e) => [e.id, e.text]));
+      for (const r of checkRaw) {
+        const entryId = Number(r.entry_id);
+        const read = readCheckRead(r.read_json);
+        const text = textOf.get(entryId);
+        if (!read || text === undefined) continue;
+        byEntry[String(entryId)] = {
+          at: toIso(r.checked_at) ?? new Date(0).toISOString(),
+          read,
+          changed: wordsHash(text) !== String(r.checked_hash),
+          purposeChanged: read.purposeWrittenAt !== gps.writtenAt,
+        };
+      }
+    }
+    check = { agent: offer.agent, purpose, byEntry };
+  }
+
   return {
     id: s.id,
     title: s.title,
@@ -2541,6 +2645,7 @@ export async function buildView(
     circleOptions: joined || viewer.admin || carriedFrom != null ? (ctx.circles?.() ?? []) : [],
     circleTasks: circle.cards,
     circleLastMetAt: circle.lastMetAt,
+    check,
     me: { userId: viewer.no ?? 0, joined, facilitates: roles.facilitates, secretary: roles.secretary, admin: viewer.admin },
   };
 }

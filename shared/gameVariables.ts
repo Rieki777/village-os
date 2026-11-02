@@ -177,7 +177,26 @@ export interface VariableDef {
    * covered before somebody remembers to mark it.
    */
   withheld?: true;
+  /**
+   * THIS DIAL'S VALUE NOW LIVES IN THE SEALED INTEGRATION SECRETS, under the
+   * slot named here (server/lib/secrets.ts). The dial stays listed so the
+   * village can still see that the setting exists; its value is never stored
+   * as a game rule again.
+   *
+   * `tokens.base_rpc_url` is the case. A dedicated endpoint carries its key in
+   * the address, and as a plain variable it sat in every database dump, in the
+   * admin listing and in the amendment ledger. So `validateVariable` refuses
+   * any value but the default on every write path (an admin, a passed
+   * proposal, a change set), the admin listing reports the default instead of
+   * what is stored, and the boot pass in secrets.ts seals any value an older
+   * release left behind and then clears the row.
+   */
+  movedToSecret?: string;
 }
+
+/** The one refusal a dial whose value moved into the sealed store answers with. */
+export const MOVED_TO_SECRET_SENTENCE =
+  "This setting is kept under Admin, Integrations now, where it is sealed, because the address can carry a provider key. Save it there.";
 
 /**
  * Does this value look like it carries a credential? A provider key in the
@@ -1664,10 +1683,11 @@ export const VARIABLES: VariableDef[] = [
     category: "Tokens",
     label: "Base RPC endpoint",
     description:
-      "Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number.",
+      "Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number. Saved under Admin, Integrations, where it is sealed, because a dedicated endpoint carries its key in the address. The host variable BASE_RPC_URL works too.",
     type: "text",
     default: "https://mainnet.base.org",
     withheld: true,
+    movedToSecret: "base_rpc_url",
   },
 
   // ── Hypha (S13): the SINGLE home for the DHO URL. Everything share-like —
@@ -2248,7 +2268,7 @@ export const VARIABLES: VariableDef[] = [
     category: "The village's people",
     label: "Show who holds each role to visitors",
     description:
-      "On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.",
+      "On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages, and a visitor reads members by first name elsewhere. Off, a visitor who is not signed in reads no member's name, handle, address or portrait on any page: the pulse, the decisions, profiles and role cards included. Signed-in members whose role or badge grants map.viewPeople still read who holds each role, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.",
     type: "boolean",
     default: "true",
     ring: "founder",
@@ -2831,6 +2851,37 @@ export const VARIABLES: VariableDef[] = [
     type: "boolean",
     default: "true",
   },
+  /*
+   * THE SETUP GAME'S CO-SIGN (migration 0306, server/lib/plantingRequests.ts).
+   * After launch a keystone key waits for a second admin, or, in a village with
+   * nobody else to co-sign, lands after a cooling-off the steward and founder
+   * role holders can object inside. Founder-held: they bound the safety of the
+   * village's own keys.
+   */
+  {
+    key: "platform.cosign_cooling_hours",
+    category: "Platform",
+    label: "Cooling-off before a key lands with nobody to co-sign",
+    description:
+      "After launch, saving a key that touches money, email or the hosting waits for a second admin. A village with only one admin waits this many hours instead, and the steward and founder role holders are told and can decline it in that time.",
+    type: "integer",
+    default: "48",
+    min: 1,
+    max: 336,
+    unit: "hours",
+  },
+  {
+    key: "platform.cosign_expiry_hours",
+    category: "Platform",
+    label: "How long a key waits for its co-sign",
+    description:
+      "After launch, a key that needs a second admin's co-sign waits this many hours. Unsigned by then, it is dropped and its value wiped, and the admin who asked can save it again.",
+    type: "integer",
+    default: "72",
+    min: 1,
+    max: 720,
+    unit: "hours",
+  },
 
   // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude
   // an accepted Work With Us proposal minted, 100 by default. Rye: "GRATITUDE is
@@ -2942,7 +2993,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Calendar",
     label: "Your village's own seasons",
     description:
-      "The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Dry: 12-01, Green: 05-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.",
+      "The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Planting: 03-01, Harvest: 09-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.",
     type: "text",
     default: "",
     unit: "list",
@@ -3507,6 +3558,9 @@ export function governanceWindowSyntaxProblem(raw: string): string | null {
  * same message without a round trip.
  */
 export function validateVariable(def: VariableDef, raw: string): string | null {
+  // First, before any type rule: a dial whose value moved into the sealed
+  // store takes its default (which is how its old row is cleared) and nothing else.
+  if (def.movedToSecret && raw !== def.default) return MOVED_TO_SECRET_SENTENCE;
   if (def.type === "boolean") {
     return ["true", "false", "1", "0"].includes(raw) ? null : "Must be true or false.";
   }

@@ -14,6 +14,7 @@ import {
   LAUNCH_REQUIREMENTS,
   projectCurrencyCheck,
   recognitionNameCheck,
+  starterQuestsCheck,
   timezoneAnswerCheck,
 } from "./launchRequirements";
 
@@ -108,16 +109,29 @@ describe("the village's own facts", () => {
     }
   });
 
-  it("carries both as recommended, never blocking, and links to the control", () => {
-    const ids = ["village-timezone", "village-currency"];
-    for (const id of ids) {
+  it("carries the currency as recommended and the timezone as blocking, both linking to the control", () => {
+    const severity: Record<string, string> = {
+      // A village may launch on the platform's currency.
+      "village-currency": "recommended",
+      // Readiness R059: the platform keeps UTC, which is nobody's home, so a
+      // village answers (confirming UTC counts) before its launch vote.
+      "village-timezone": "blocking",
+    };
+    for (const [id, want] of Object.entries(severity)) {
       const req = LAUNCH_REQUIREMENTS.find((r) => r.id === id);
       expect(req, `no launch requirement "${id}"`).toBeTruthy();
-      // A warning warns. A village that means to launch on the defaults may.
-      expect(req!.severity).toBe("recommended");
+      expect(req!.severity, id).toBe(want);
       // The address names the control, not just the screen it sits on.
       expect(req!.fixAt).toContain("setting=");
     }
+  });
+
+  it("tells a founder why the timezone matters, and names no village's clock", () => {
+    const req = LAUNCH_REQUIREMENTS.find((r) => r.id === "village-timezone")!;
+    expect(req.why).toContain("UTC");
+    expect(req.why).toMatch(/Season turns, role terms/);
+    expect(req.why).toMatch(/confirm UTC/i);
+    expect(req.why).not.toMatch(/Costa Rica|America\//);
   });
 });
 
@@ -166,5 +180,52 @@ describe("the welcome-and-walk requirement", () => {
       expect(words).not.toMatch(/\b(she|her|hers)\b/i);
       expect(words).not.toMatch(/[\u2013\u2014]/);
     }
+  });
+});
+
+/**
+ * THE STARTER QUESTS, ON THE JOURNEY (Rye, sheet A8 / 19g: "a new village
+ * starts with a neutral, fully editable starter set"). The row asks a founder
+ * to keep the starters that fit and clear the rest. Its live behaviour on a
+ * real schema is in server/starterQuests.test.ts; this pins the row and the
+ * sentence it reads from the count.
+ */
+describe("the starter-quests requirement", () => {
+  const item = LAUNCH_REQUIREMENTS.find((r) => r.id === "starter-quests");
+
+  it("is on the journey for every village, recommended and never blocking", () => {
+    expect(item, "no launch requirement \"starter-quests\"").toBeTruthy();
+    expect(item!.severity).toBe("recommended");
+    expect(item!.group).toBe("brand");
+    // Quests is a core module: every village has a board to review.
+    expect(item!.appliesWhenModule).toBeUndefined();
+  });
+
+  it("is read live from the board, never a box a founder ticks", () => {
+    expect(item!.checkKey).toBe("village:starter-quests");
+    expect(item!.declinable).toBeFalsy();
+  });
+
+  it("links to the admin Quests tab, where Keep and Clear are", () => {
+    expect(item!.fixAt).toBe("/admin?tab=quests-admin");
+    expect(item!.fixLabel).toBe("Open Quests");
+  });
+
+  it("says what to do in its own words, with no dash, no persona and no token", () => {
+    expect(item!.title).toBe("Review the starter quests");
+    expect(item!.why).toContain("Keep the ones that fit");
+    expect(item!.why).toContain("clear the rest");
+    for (const words of [item!.title, item!.why, item!.fixLabel]) {
+      expect(words).not.toMatch(/[–—]/);
+      expect(words).not.toMatch(/(she|her|hers|token|tokens|paid|pays|earn)/i);
+    }
+  });
+
+  it("reads open while any starter waits, and done when none does", () => {
+    expect(starterQuestsCheck(0)).toEqual({ state: "ok", detail: "No starter quests are waiting. The board is the village's own" });
+    expect(starterQuestsCheck(1)).toEqual({ state: "missing", detail: "1 starter quest is still waiting. Keep the ones that fit and clear the rest" });
+    expect(starterQuestsCheck(11).detail).toContain("11 starter quests are still waiting");
+    // Junk never reads as waiting work.
+    for (const v of [NaN, -3, undefined as any, null as any]) expect(starterQuestsCheck(v).state).toBe("ok");
   });
 });

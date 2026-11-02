@@ -529,7 +529,7 @@ const READINESS_HINTS: Record<string, string> = {
  * routes are behind requireModule), which the link builder knows; a `setting`
  * or `config` target is on the module card and works at every lifecycle.
  */
-const READINESS_TARGETS: Record<string, SetupTarget> = {
+export const READINESS_TARGETS: Record<string, SetupTarget> = {
   map: { kind: "tab", tab: "circles-map", label: "the living map" },
   tools: { kind: "tab", tab: "tools-admin", label: "Tools Hub" },
   badges: { kind: "tab", tab: "badges-admin", label: "Badges & Skills" },

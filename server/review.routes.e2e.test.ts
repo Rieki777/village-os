@@ -160,6 +160,13 @@ beforeAll(async () => {
   // The seeded Steward Circle asks for the Member stage, so a fresh account
   // cannot be seated in it. Same step the handover suite takes, and the
   // refusal it produces is a real product rule rather than a fixture problem.
+  // Sheet 19 (0307): Steward Circle ships with admin access ON, so its holders can open the admin
+  // panel. This suite uses the group as a carrier of capabilities and tests a steward who is NOT an admin, so it
+  // pins the default and then switches it off. The group's admin access itself is pinned in
+  // server/authzRound.routes.e2e.test.ts.
+  expect(steward.grantsAdmin).toBe(true);
+  const off = await call("PUT", "/api/admin/roles/steward-circle/admin-access", { on: false });
+  expect(off.status, off.text).toBe(200);
   await call("PUT", `/api/admin/players/${kiraId}/stage`, { stageId: "member" });
   const seated = await call("POST", "/api/admin/roles/steward-circle/holders", { userId: kiraId, action: "add" });
   expect(seated.status, seated.text).toBe(200);
