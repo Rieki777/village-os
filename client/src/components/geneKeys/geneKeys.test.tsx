@@ -216,7 +216,7 @@ describe("a circle's six lines", () => {
 });
 
 const own = (v: GeneKeysView, over: Partial<OwnGeneKeysView> = {}): OwnGeneKeysView => ({
-  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, source: "exact", stale: false, ...over,
+  ...v, visibility: "show", maia: false, complement: false, maiaPlain: false, cardOut: false, source: "exact", stale: false, ...over,
 });
 
 describe("Love and Prosperity on the lines card", () => {
