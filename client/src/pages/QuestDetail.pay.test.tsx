@@ -95,10 +95,17 @@ describe("a quest's page says what the quest pays", () => {
     };
     // 500 colones and 1.1 dollars to the euro: 25,000 colones is about $55.
     serve({ CRC: 500, USD: 1.1 });
-    render(<QuestDetail />);
-    await waitFor(() => expect(screen.getByText(/^Worth/)).toBeTruthy());
-    await waitFor(() => expect(screen.getByText(/^Worth/).textContent).toContain("about $55.00"));
-    expect(screen.getByText(/^Worth/).textContent).toContain("25,000");
+    // The viewer chose to see dollars. With no choice and no currency the village
+    // named, the value stays as it is: no borrowed dollar (readiness R154).
+    localStorage.setItem("power-display-currency", "USD");
+    try {
+      render(<QuestDetail />);
+      await waitFor(() => expect(screen.getByText(/^Worth/)).toBeTruthy());
+      await waitFor(() => expect(screen.getByText(/^Worth/).textContent).toContain("about $55.00"));
+      expect(screen.getByText(/^Worth/).textContent).toContain("25,000");
+    } finally {
+      localStorage.removeItem("power-display-currency");
+    }
     expect(screen.getAllByText("40 Village Credits").length).toBeGreaterThan(0);
     // The value block says it; no sentence restates that the work is paid (Rye, 2026-10-23).
     expect(document.body.textContent).not.toContain("the quest pays what it says here");

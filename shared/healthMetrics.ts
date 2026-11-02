@@ -153,7 +153,7 @@ export const HEALTH_METRICS: HealthMetricDef[] = [
     kind: "snapshot",
     label: "Treasury holdings",
     unit: "tokens",
-    description: "What sys:treasury held at close, summed across tokens; the per-token split rides in meta. A time series here is how a village sees its own reserves move.",
+    description: "What sys:treasury held at close of the token the cycle pool pays (gratitude.pool_token), in whole tokens, the same figure as the map's treasury chip. Every token the treasury holds rides in meta.perToken, each in its own units and never added together. Rows written before 2026-10-31 summed every token in raw ledger units; they stay in the table and are left out of the series. A time series here is how a village sees its own reserves move.",
   },
   {
     key: "gratitude_pool_issued",
@@ -176,6 +176,18 @@ export const HEALTH_METRICS_BY_KEY: Record<string, HealthMetricDef> = Object.fro
 );
 
 export const SNAPSHOT_METRICS = HEALTH_METRICS.filter((m) => m.kind === "snapshot");
+
+/**
+ * The words under a snapshot tile's number. A figure frozen in one named
+ * token says which (2026-10-31): the treasury tile printed a bare number, so
+ * nobody could tell credits from stay-credit, or either from a raw ledger sum.
+ * The name is the one stamped at that close, so a renamed token reads under
+ * its new name from the next close on.
+ */
+export function snapshotTileLabel(key: string, label: string, meta: Readonly<Record<string, unknown>> | null | undefined): string {
+  const name = typeof meta?.tokenName === "string" ? meta.tokenName.trim() : "";
+  return key === "treasury_balance" && name ? `${name} in the treasury` : label;
+}
 export const REGEN_METRICS = HEALTH_METRICS.filter((m) => m.kind === "regen");
 
 /** How many lunations of snapshots the dashboard needs before trends render. */

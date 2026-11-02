@@ -265,6 +265,13 @@ describe("normalizeCampaign", () => {
     expect(bare.percentDelivered).toBe(0);
   });
 
+  it("takes a campaign's currency from the hub, else the village's own, and never invents one (readiness R154)", () => {
+    const { currency: _hubs, ...unnamed } = HUB_BY_ID as Record<string, unknown>;
+    expect(normalizeCampaign(unnamed, [], [], [], { baseUrl: BASE, now: NOW, currency: "CHF" }).currency).toBe("CHF");
+    expect(normalizeCampaign(unnamed, [], [], [], { baseUrl: BASE, now: NOW }).currency).toBe("");
+    expect(normalizeCampaign({ ...HUB_BY_ID, currency: "EUR" }, [], [], [], { baseUrl: BASE, now: NOW, currency: "CHF" }).currency).toBe("EUR");
+  });
+
   it("refuses a null campaign instead of normalizing garbage", () => {
     expect(() => normalizeCampaign(null, [], [], [], { baseUrl: BASE })).toThrow(/not found/);
   });

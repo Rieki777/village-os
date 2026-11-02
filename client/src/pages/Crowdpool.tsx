@@ -10,7 +10,7 @@ import ModuleGate from "@/components/modules/ModuleGate";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useModule, useModules } from "@/modules/ModuleProvider";
-import { authToken } from "@/lib/gameApi";
+import { authToken, useGameConfig } from "@/lib/gameApi";
 import { ExampleChip } from "@/components/ExamplesBanner";
 import { Users } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
@@ -56,6 +56,8 @@ export default function Crowdpool() {
   const modules = useModules();
   const crowdpool = useModule("crowdpool");
   const [cards, setCards] = useState<CampaignCard[] | null>(null);
+  // A campaign that names no currency is shown in the village's own (readiness R154).
+  const villageCurrency = String(useGameConfig()?.project?.fiatCurrency ?? "");
 
   useEffect(() => {
     if (!crowdpool) return;
@@ -121,7 +123,7 @@ export default function Crowdpool() {
                     <p className="text-sm mt-1.5" style={{ color: "#e4d3ae" }}>
                       {/* The floor qualifier lives in `pooledLine` so this card
                           and the campaign page cannot drift apart on it. */}
-                      {pooledLine(c.pledgedTotal ?? 0, c.totalValue ?? 0, c.currency ?? "USD", pledgedIsFloor(c.hubContract))} pooled
+                      {pooledLine(c.pledgedTotal ?? 0, c.totalValue ?? 0, c.currency || villageCurrency, pledgedIsFloor(c.hubContract))} pooled
                       {typeof c.daysRemaining === "number" && c.daysRemaining > 0
                         ? `, ${c.daysRemaining} ${c.daysRemaining === 1 ? "day" : "days"} left`
                         : ""}
