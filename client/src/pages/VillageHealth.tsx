@@ -20,7 +20,7 @@ import { authToken } from "@/lib/gameApi";
  * names through the same arithmetic and fails on the old viewBox.
  */
 import { DOUGHNUT, DOUGHNUT_VIEWBOX, TAU, outerLabelPlacement } from "@/lib/doughnutLayout";
-import { SNAPSHOT_METRICS } from "@shared/healthMetrics";
+import { SNAPSHOT_METRICS, snapshotTileLabel } from "@shared/healthMetrics";
 import { Activity, CheckCircle2, Circle, Leaf, Moon, Sprout, Users } from "lucide-react";
 import { ExampleChip, ExamplesBanner } from "@/components/ExamplesBanner";
 
@@ -206,7 +206,7 @@ export default function VillageHealth() {
                   return (
                     <div key={key} className="border border-border rounded-lg px-3 py-2.5">
                       <p className="text-xl font-bold text-foreground">{latest.value}</p>
-                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p className="text-xs text-muted-foreground">{snapshotTileLabel(key, label, latest.meta)}</p>
                       {data.trendsUnlocked && points.length >= 2 && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           {points.slice(-data.trendMinLunations).map((p: any) => p.value).join(" → ")} over recent cycles

@@ -36,9 +36,8 @@ import { MODULES } from "../../shared/modules";
 import { zonedTimeToUtc } from "../../shared/lunar";
 import { effectiveLifecycle } from "./modules";
 import { currentCycle } from "./gratitude-cycles";
-import { fromLedgerUnits, villageId } from "./economy";
-import { TREASURY, balanceOf, tokenDef } from "./ledger";
-import { stringVar } from "./variables";
+import { villageId } from "./economy";
+import { treasuryReading } from "./treasuryReading";
 import { listOrgAssignments, listOrgRoles, seatState, type LapseContext } from "./orgChart";
 import { listGatherings } from "./gatherings";
 import { regenTotals } from "./health";
@@ -117,45 +116,6 @@ export function openPlaces(
   const seats = Math.max(1, Math.floor(Number(role.seats) || 1));
   const current = holders.filter((h) => !h.lapsed).length;
   return Math.max(1, seats - current);
-}
-
-/**
- * What the village treasury holds of the village's value token, in WHOLE tokens.
- *
- * ONE ACCOUNT, ONE TOKEN, never a sum. The account is `sys:treasury`
- * (`TREASURY`), the one the exchange sells from and seat fees settle into. The
- * token is the one `gratitude.pool_token` names, the same rule the cycle
- * close, `/api/game/config` (`currency.value`) and the launch check
- * `pool-token-spendable` read for "the value token". The health snapshot's
- * `treasury_balance` is not reused: it adds every token in this account
- * together, kinds and scales mixed.
- *
- * READ THROUGH THE LEDGER. `balanceOf` is the ledger's own read of the
- * `token_balances` cache, which postings recompute and nothing here writes.
- * It answers MINOR units; `fromLedgerUnits` scales them by the registry's
- * `decimals` for this token, so no number of places is assumed here. The
- * fraction is then left off (truncated toward zero), so the chip shows whole
- * tokens and never more than the account holds.
- *
- * A dial pointed at something that is not a platform token this ledger
- * moves, or at recognition, has no treasury balance a chip could honestly
- * show, and says why for the founder's editor.
- */
-export async function treasuryReading(pool: Pool): Promise<{ n: number; sub: string } | { why: string }> {
-  const slug = String(stringVar("gratitude.pool_token") ?? "").trim();
-  const def = slug ? tokenDef(slug) : undefined;
-  if (!def) {
-    return { why: `The cycle pool is set to pay "${slug}", which is not a token this village issues, so there is no treasury balance to show.` };
-  }
-  if (def.governance !== "platform") {
-    return { why: `${def.name} is kept on another ledger, so this village's treasury holds none of it here.` };
-  }
-  if (def.kind === "recognition") {
-    return { why: `${def.name} is recognition, which carries no value of its own, so there is no treasury balance to show.` };
-  }
-  const units = await balanceOf(pool, TREASURY, def.slug);
-  const whole = Math.trunc(fromLedgerUnits(def.slug, units)) || 0;
-  return { n: whole, sub: `${def.name} held in the treasury` };
 }
 
 /** Count one source. Throws when the data cannot be read; the cache turns that into a reason. */
