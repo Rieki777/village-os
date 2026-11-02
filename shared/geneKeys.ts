@@ -401,7 +401,7 @@ export interface OwnGeneKeysView extends GeneKeysView {
   cardIn: boolean;
   /** Whether their own choice puts them on cards (`inCardsBy`). Lines shown and Maia allowed are asked as well. */
   inCards: boolean;
-  /** Their own Western signs (0303), 0 Aries to 11 Pisces, each null when not known. Shown to them alone. */
+  /** Their own Western signs (0309), 0 Aries to 11 Pisces, each null when not known. Shown to them alone. */
   signs: NatalSigns;
   source: GeneKeysSource;
   /** Computed by an older calculator than this release runs: ask the member to read the sky again. */

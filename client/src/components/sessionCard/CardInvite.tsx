@@ -22,7 +22,7 @@
  * Somebody with no lines yet is sent to find them (/profile/gene-keys) and
  * brought back to this room after (`?next=`). That page reads Gene Keys and,
  * from the same birth, the Human Design type, strategy and authority and the
- * member's own Sun and Moon signs (0303). It does not read a rising sign yet,
+ * member's own Sun and Moon signs (0309). It does not read a rising sign yet,
  * so the invitation promises the Sun and Moon by name and nothing more.
  */
 import { useState } from "react";
@@ -35,7 +35,8 @@ import { useModuleOn } from "@/modules/ModuleProvider";
 import { changeMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
 import { setMyGeneKeys, useMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT } from "@/components/sessions/roomUi";
-import { useSharedCards } from "./sharedCards";
+import { publishCards, useSharedCards } from "./sharedCards";
+import { readCards } from "@/lib/sessionCardApi";
 import { useGuideName } from "@/hooks/useGuideName";
 import { fillGuideName } from "@shared/guideName";
 
@@ -126,6 +127,8 @@ export default function CardInvite({ view }: { view: SessionView }) {
       if (saved) setMyGeneKeys(saved);
       markAnswered(view.id);
       setDone(true);
+      // Read the room's cards again now, not at the next poll, so the card on the table stops saying why they were not read.
+      readCards(view.id).then((a) => publishCards(view.id, a), () => {});
     } catch (e) {
       setProblem(e instanceof GeneKeysRefusal ? e.message : "That did not save. Try again.");
     } finally {

@@ -29,6 +29,23 @@ describe("a member's own Sun and Moon signs", () => {
     expect([name(einstein.sun), name(einstein.moon)]).toEqual(["Pisces", "Sagittarius"]);
   });
 
+  it("agrees with four more published charts, read through each town's own clock that day", () => {
+    const charts: [string, Date, string, string][] = [
+      // Barack Obama: 4 August 1961, 19:24, Honolulu.
+      ["Obama", zonedToUtc(1961, 8, 4, 19, 24, "Pacific/Honolulu"), "Leo", "Gemini"],
+      // Steve Jobs: 24 February 1955, 19:15, San Francisco.
+      ["Jobs", zonedToUtc(1955, 2, 24, 19, 15, "America/Los_Angeles"), "Pisces", "Aries"],
+      // Marilyn Monroe: 1 June 1926, 09:30, Los Angeles.
+      ["Monroe", zonedToUtc(1926, 6, 1, 9, 30, "America/Los_Angeles"), "Gemini", "Aquarius"],
+      // John Lennon: 9 October 1940, 18:30, Liverpool.
+      ["Lennon", zonedToUtc(1940, 10, 9, 18, 30, "Europe/London"), "Libra", "Aquarius"],
+    ];
+    for (const [who, when, sun, moon] of charts) {
+      const s = natalSigns([when]);
+      expect([name(s.sun), name(s.moon)], who).toEqual([sun, moon]);
+    }
+  });
+
   it("knows the Sun on either side of a sign boundary, and says nothing when the birth could be on both", () => {
     expect(name(natalSigns(at("2024-03-20T02:55:00Z")).sun)).toBe("Pisces");
     expect(name(natalSigns(at("2024-03-20T03:20:00Z")).sun)).toBe("Aries");

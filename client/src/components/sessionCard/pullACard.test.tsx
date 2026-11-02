@@ -134,6 +134,12 @@ describe("pull a card", () => {
     expect(screen.queryByRole("link", { name: "Your Gene Keys" })).toBeNull();
   });
 
+  it("tells somebody with no lines yet that they can find their Gene Keys, Human Design and astrology", async () => {
+    api.read.mockResolvedValue(answer([cardOf({ mine: null })], { notRead: "no-lines" }));
+    show(<PullACard view={makeView()} />);
+    expect(await screen.findByText(/Find your Gene Keys, Human Design and astrology/)).toBeTruthy();
+  });
+
   it("lets the facilitator park an item when the card counsels holding a tension", async () => {
     const hold = { kind: "hold-conflict" as const, system: "western" as const, words: "The Moon is void of course." };
     api.read.mockResolvedValue(answer([cardOf({ suggestions: [hold] })]));

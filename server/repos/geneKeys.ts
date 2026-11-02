@@ -31,7 +31,7 @@ export interface GeneKeysRow {
   cardOut: boolean;
   /** "Read me on session cards" (0308): the member's own yes. */
   cardIn: boolean;
-  /** Their own Western signs (0303), 0 to 11, or null when not known. */
+  /** Their own Western signs (0309), 0 to 11, or null when not known. */
   sunSign: number | null;
   moonSign: number | null;
   risingSign: number | null;
@@ -89,7 +89,7 @@ export interface GeneKeysWrite {
   hdAuthority: string;
   visibility: GeneKeysVisibility;
   maia: boolean;
-  /** Their own Western signs (0303); absent or null, not known. */
+  /** Their own Western signs (0309); absent or null, not known. */
   signs?: NatalSigns;
   source: GeneKeysSource;
   calcVersion: number;

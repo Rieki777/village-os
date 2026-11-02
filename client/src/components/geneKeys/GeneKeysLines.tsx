@@ -87,7 +87,7 @@ export function GeneKeysLines({ view, whose }: { view: GeneKeysView; whose: stri
 
 /** The owner's own controls, under their card. */
 /**
- * A member's own Western signs, in words, for them alone (0303): the Sun and
+ * A member's own Western signs, in words, for them alone (0309): the Sun and
  * Moon of their birth, read on their device when they found their lines. A sign
  * the page could not be sure of (the Moon changed sign that day and no birth
  * time was given) is said to be unknown, not guessed.

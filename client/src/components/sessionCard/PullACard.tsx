@@ -62,7 +62,7 @@ export const CARD_WORDS = {
   plain: "Read from today's sky and the lines of the people here.",
   readNext: "This card was read before you joined in. The next card reads you.",
   notRead: {
-    "no-lines": "Find your Gene Keys lines and the next card will read you too.",
+    "no-lines": "Find your Gene Keys, Human Design and astrology, and the next card will read you too.",
     hidden: "Your lines are hidden, so the card welcomes you by name and reads nothing of yours.",
     "no-maia": "Let {name} use your lines and the next card will read you too.",
     "left-out": "You asked to be left out of cards, so the card welcomes you by name.",
