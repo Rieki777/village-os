@@ -576,6 +576,9 @@ export const GAME_CONFIG: GameConfig = {
     favicon: "",
   },
 
+  // The platform's words for the four paths. A village's own name, second line
+  // and sentence for each come from Admin, Paths & Stages (shared/villagePaths.ts),
+  // back-filled from these. The ids and routes are fixed.
   paths: [
     { id: "investor", label: "Investor", role: "Capital Contributor", route: "/investor" },
     { id: "steward", label: "Village Steward", role: "Co-Creator", route: "/steward" },
@@ -583,7 +586,10 @@ export const GAME_CONFIG: GameConfig = {
     { id: "prosperity-creator", label: "Prosperity Creator", role: "Business Builder", route: "/prosperity" },
   ],
 
-  // Amora's Path of Growth (from the Game Guide). Stages are earned by real
+  // The ladder, in order; its default name, "Path of Growth", is in
+  // shared/villagePaths.ts. A village renames and re-describes each stage in
+  // Admin, Paths & Stages; the ids, the order and the rules stay here, because
+  // quests, roles and the game variables key on them. Stages are earned by real
   // acts, never abstract points. "granted" stages are recognized by the team.
   stages: [
     { id: "visitor", name: "Visitor", description: "Discovering what this village is.", rule: { type: "default" }, gratitudeMultiplier: 0 },

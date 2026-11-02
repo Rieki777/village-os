@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { TreePine, Menu, X, User, LogOut, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +17,7 @@ import MobileTabBar, { isBareRoute } from "./mobile/MobileTabBar";
 import MobileFab from "./mobile/MobileFab";
 import NextStepTrail from "./NextStepTrail";
 import { SITE_FOOTER_SIGNOFF } from "@shared/pageContent/site";
+import { storyPageShown } from "@/lib/brochure";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -57,12 +58,14 @@ export default function Layout({ children }: LayoutProps) {
   const role = user?.role;
   // The brochure pages are the first village's own story (shared/brochure.ts).
   // A village that does not serve them gets none of their menu entries or
-  // footer links; while the config loads they stay out rather than flash in.
-  const brochureOn = cfg?.brochurePages === true;
+  // footer links, and a page it switched off on its own (Admin, Pages, "Show
+  // this page") loses its entry and its link the same way. While the config
+  // loads they stay out rather than flash in.
+  const storyShown = (href: string) => storyPageShown(cfg, href);
   const visible = (item: NavLink) =>
     moduleOn(item.module) &&
     (!item.unlessModule || !moduleOn(item.unlessModule)) &&
-    (!item.brochure || brochureOn) &&
+    (!item.brochure || storyShown(item.href)) &&
     (!item.roles || (!!role && item.roles.includes(role)));
 
   // An entry named after a token carries the village's word for it, and its
@@ -303,7 +306,7 @@ export default function Layout({ children }: LayoutProps) {
                   </button>
                   <AnimatePresence>
                     {accountOpen && (
-                      <motion.div
+                      <m.div
                         id="account-menu"
                         initial={{ opacity: 0, y: -6 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -335,7 +338,7 @@ export default function Layout({ children }: LayoutProps) {
                           <LogOut className="w-4 h-4" />
                           Sign out everywhere
                         </button>
-                      </motion.div>
+                      </m.div>
                     )}
                   </AnimatePresence>
                 </div>
@@ -380,7 +383,7 @@ export default function Layout({ children }: LayoutProps) {
         {/* Mobile Menu */}
         <AnimatePresence>
           {mobileMenuOpen && (
-            <motion.div
+            <m.div
               id="mobile-menu"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -413,7 +416,7 @@ export default function Layout({ children }: LayoutProps) {
                       </button>
                       <AnimatePresence>
                         {openMobileGroup === entry.label && (
-                          <motion.div
+                          <m.div
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
@@ -430,7 +433,7 @@ export default function Layout({ children }: LayoutProps) {
                                 {lifecycleOf(item.module) === "preview" ? " (preview)" : ""}
                               </Link>
                             ))}
-                          </motion.div>
+                          </m.div>
                         )}
                       </AnimatePresence>
                     </div>
@@ -495,7 +498,7 @@ export default function Layout({ children }: LayoutProps) {
                   </a>
                 )}
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </nav>
@@ -543,42 +546,42 @@ export default function Layout({ children }: LayoutProps) {
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Your Journey</h2>
               <ul className="space-y-2">
-                {brochureOn && (
+                {storyShown("/investor") && (
                   <li>
                     <Link href="/investor" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/investor", "Investor")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/steward") && (
                   <li>
                     <Link href="/steward" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/steward", "Village Steward")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/resident") && (
                   <li>
                     <Link href="/resident" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/resident", "Resident")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/prosperity") && (
                   <li>
                     <Link href="/prosperity" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/prosperity", "Prosperity Creator")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/love-letter") && (
                   <li>
                     <Link href="/love-letter" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {storyName("/love-letter")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/visit") && (
                   <li>
                     <Link href="/visit" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/visit", "Plan a Visit")}
@@ -590,7 +593,7 @@ export default function Layout({ children }: LayoutProps) {
                     {tokenName} Wall
                   </Link>
                 </li>
-                {brochureOn && (
+                {storyShown("/work-with-us") && (
                   <li>
                     <Link href="/work-with-us" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/work-with-us", "Work With Us")}
@@ -619,21 +622,21 @@ export default function Layout({ children }: LayoutProps) {
                     Roles & Leadership
                   </Link>
                 </li>
-                {brochureOn && (
+                {storyShown("/how-we-create") && (
                   <li>
                     <Link href="/how-we-create" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/how-we-create", "How We Create")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/good-neighbor") && (
                   <li>
                     <Link href="/good-neighbor" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/good-neighbor", "Good Neighbor Criteria")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/team") && (
                   <li>
                     <Link href="/team" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/team", "Our Team")}
@@ -693,7 +696,7 @@ export default function Layout({ children }: LayoutProps) {
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Resources</h2>
               <ul className="space-y-2">
-                {brochureOn && (
+                {storyShown("/co-creators-guide") && (
                   <li>
                     <Link href="/co-creators-guide" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/co-creators-guide", "Co-Creators Guide")}
@@ -749,21 +752,21 @@ export default function Layout({ children }: LayoutProps) {
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/housing") && (
                   <li>
                     <Link href="/housing" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/housing", "Housing")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/opportunities") && (
                   <li>
                     <Link href="/opportunities" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/opportunities", "Business Opportunities")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/master-plan") && (
                   <li>
                     <Link href="/master-plan" className="text-white hover:underline transition-colors text-sm block py-1.5">
                       {footerName("/master-plan", "Master Plan")}
@@ -896,7 +899,7 @@ function NavDropdown({
       </button>
       <AnimatePresence>
         {open && (
-          <motion.div
+          <m.div
             id={menuId}
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -929,7 +932,7 @@ function NavDropdown({
                 </span>
               </Link>
             ))}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

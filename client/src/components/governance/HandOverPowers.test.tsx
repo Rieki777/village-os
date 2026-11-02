@@ -68,6 +68,29 @@ describe("the hand-over control", () => {
     expect(screen.queryByRole("button", { name: /Save what the launch hands over/ })).toBeNull();
   });
 
+  it("asks a second steward to sign the list that waits, ticked for them", async () => {
+    serve({ gameStarted: true, mayAct: true, twoSign: true, pending: { capabilities: ["story.tell"], mine: false }, powers: POWERS });
+    render(<HandOverPowers />);
+    await waitFor(() => expect(screen.getByText(/waits for your signature/)).toBeTruthy());
+    expect((screen.getByRole("checkbox", { name: /The village's story/ }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /Hand over 1/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(posts).toEqual([{ capabilities: ["story.tell"], confirm: true }]));
+  });
+
+  it("asks a second tick for a mature-only power before Confirm opens, and sends it", async () => {
+    const veto = { capability: "steward.veto", title: "Stop a carried decision", consequence: "stop a decision", held: false, matureOnly: true };
+    serve({ gameStarted: true, mayAct: true, powers: [veto] });
+    render(<HandOverPowers />);
+    await waitFor(() => expect(screen.getByText("For mature villages only")).toBeTruthy());
+    fireEvent.click(screen.getByRole("checkbox", { name: /Stop a carried decision/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Hand over 1/ }));
+    expect((screen.getByRole("button", { name: "Confirm" }) as HTMLButtonElement).disabled, "not before the second tick").toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /mature enough to hold/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(posts).toEqual([{ capabilities: ["steward.veto"], confirm: true, confirmMature: true }]));
+  });
+
   it("after launch, shows a held power as held and sends only the newly ticked one", async () => {
     serve({ gameStarted: true, mayAct: true, powers: [{ ...POWERS[0], held: true }, POWERS[1]] });
     render(<HandOverPowers />);

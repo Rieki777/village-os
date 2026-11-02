@@ -97,7 +97,7 @@ import {
   type LetterRow,
 } from "../../repos/commsLetters";
 import type { ContactRow } from "../../repos/commsContacts";
-import { GAME_CONFIG } from "../../../shared/gameConfig";
+import { villagePathLabel } from "../villagePaths";
 import { emailKeyOf } from "../../../shared/comms/address";
 import { contactIdOfGuestKey } from "../../../shared/comms/kinds";
 import { numberVar } from "../variables";
@@ -305,7 +305,7 @@ export async function resolveAudience(deps: LettersDeps, a: LetterAudience): Pro
 /** The audience in one line, with its path or gathering named. */
 export async function labelOf(deps: Pick<LettersDeps, "getPool">, a: LetterAudience | null): Promise<string> {
   if (!a) return "An audience this village no longer has";
-  if (a.kind === "path") return audienceLabel(a, { path: GAME_CONFIG.paths.find((p) => p.id === a.pathId)?.label ?? null });
+  if (a.kind === "path") return audienceLabel(a, { path: villagePathLabel(a.pathId) });
   if (a.kind === "gathering") return audienceLabel(a, { gathering: await gatheringTitle(deps.getPool(), a.eventId) });
   return audienceLabel(a);
 }

@@ -11,8 +11,9 @@
  *    the deny but not the bar can still DRAFT — a qualified member's
  *    sponsorship opens the draft, so proposing is an on-ramp, not a wall.
  *
- *  - CHANGE-SET VALIDATION. A proposal may only touch Ring-2 ("open")
- *    variables, every value must pass the same validation the admin write
+ *  - CHANGE-SET VALIDATION. A proposal may touch any dial (Rye, 2026-09-25),
+ *    and who adopts a founder-held one is decided at the doors
+ *    (./founderDials.ts). Every value must pass the same validation the admin write
  *    path runs, every change must actually change something, and a dial
  *    recently moved by governance may be under a cooldown. Validated as a
  *    WHOLE at creation: a set with one bad change is refused entirely,
@@ -458,6 +459,9 @@ export const EXECUTABLE_ITEM_KINDS: ReadonlySet<ChangeItemKind> = new Set<Change
 /** The cap a change set may not pass. A proposal is read before it is voted on. */
 export const CHANGE_SET_CAP = 12;
 
+/** How votes are weighed. These land only as a mode switch, never as a plain dial. */
+export const WEIGHING_KEYS: ReadonlySet<string> = new Set(["governance.weight_mode", "governance.weight_token"]);
+
 export interface ValidateChangeSetOptions {
   /** Override what this build can execute. Defaults to `EXECUTABLE_ITEM_KINDS`. */
   executableKinds?: ReadonlySet<ChangeItemKind>;
@@ -474,6 +478,13 @@ export interface ValidateChangeSetOptions {
    * kept now the vote is binding).
    */
   openModuleProposal?: (moduleId: string) => Promise<string | null>;
+  /**
+   * True before the start, when the founders hold founder-held dials and a
+   * founder adopts a proposal on them by hand (./founderDials.ts). A set may
+   * not mix those with changes the village votes on, since one set cannot go
+   * two ways.
+   */
+  foundersHold?: () => Promise<boolean>;
 }
 
 export async function validateChangeSet(
@@ -598,18 +609,18 @@ export async function validateChangeSet(
       continue;
     }
     seen.add(key);
-    if (ringOf(def) !== "open") {
+    if (WEIGHING_KEYS.has(key)) {
       /*
        * `governance.weight_mode` is votable now (Q8) and this is not its
-       * door. Naming the door is the difference between a refusal a member
-       * can act on and a wall.
+       * door, and neither is the token it weighs by, which the mode switch
+       * carries. Naming the door is the difference between a refusal a member
+       * can act on and a wall. Every other founder-held dial is proposable
+       * (Rye, 2026-09-25), and ./founderDials.ts decides who adopts it.
        */
       problems.push({
         key,
         problem:
-          key === "governance.weight_mode"
-            ? "How votes are counted is not an ordinary dial change. It goes up as a mode switch, which the whole village decides at the constitutional bar"
-            : "This dial is founder-held and cannot be moved by proposal",
+          "How votes are counted is not an ordinary dial change. It goes up as a mode switch, which the whole village decides at the constitutional bar",
       });
       continue;
     }
@@ -645,6 +656,16 @@ export async function validateChangeSet(
   }
 
   problems.push(...mintCeilingProblems(normalized, mintRules));
+  const founderHeld = normalized.filter((n) => {
+    const d = VARIABLES_BY_KEY[n.key];
+    return !!d && ringOf(d) !== "open";
+  }).length;
+  if (founderHeld > 0 && founderHeld < items.length && (await options?.foundersHold?.())) {
+    problems.push({
+      key: "*",
+      problem: "Before the Game starts a founder adopts founder-held dials, and the village votes on the rest, so propose them separately",
+    });
+  }
   return { problems, normalized, items };
 }
 

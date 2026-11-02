@@ -32,7 +32,7 @@
  * of them changeable by the village that had to live with it.
  */
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Heart } from "lucide-react";
 
 import { useTokenName } from "@/hooks/useTokenNames";
@@ -180,7 +180,7 @@ export default function TheVessel({
   };
 
   return (
-    <motion.section
+    <m.section
       aria-labelledby="vessel-h"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -361,6 +361,6 @@ export default function TheVessel({
           {said?.text ?? ""}
         </p>
       </form>
-    </motion.section>
+    </m.section>
   );
 }

@@ -50,7 +50,7 @@ import { X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import { FAB_ACTIONS, FabTriggerIcon, type FabAction } from "@/config/mobileNav";
-import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 import { haptic } from "@/lib/haptics";
 import { isBareRoute, normalisePath } from "./MobileTabBar";
 
@@ -106,14 +106,15 @@ export default function MobileFab() {
   const moduleOn = (id?: string) =>
     !id || (Array.isArray(modules) && modules.some((m) => m.id === id && m.lifecycle !== "off"));
   const currentPath = normalisePath(location);
-  // A shortcut into a brochure page goes with the pages (shared/brochure.ts).
-  const brochureOn = useBrochurePages() === true;
+  // A shortcut into a brochure page goes with the pages (shared/brochure.ts),
+  // and with its own page when that one is switched off alone.
+  const storyShown = useStoryPageShown();
   // BOTH sides of this line, which is what #404 asked for: keep #406's brochure
   // filter on the list, and take #404's `moduleOn` as the fourth argument. The
   // two are independent questions about the same shortcut row - whether a page
   // exists on this village at all, and whether the module behind it is on.
   const actions = resolve(
-    FAB_ACTIONS.filter((a) => brochureOn || !a.href || !isBrochurePath(a.href)),
+    FAB_ACTIONS.filter((a) => !a.href || storyShown(a.href)),
     currentPath,
     !!user,
     moduleOn,

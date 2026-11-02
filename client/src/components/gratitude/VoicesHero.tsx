@@ -35,7 +35,7 @@
  * claim needs a payload behind it.
  */
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import type { VoicesAnswer } from "@shared/gratitudeVoices";
@@ -114,7 +114,7 @@ export default function VoicesHero() {
 
       <div className="columns-1 gap-x-10 sm:columns-2 [&>*]:break-inside-avoid">
         {answer.voices.map((v, i) => (
-          <motion.figure
+          <m.figure
             key={v.id}
             className="mb-8"
             // Visible at rest, always. The breath is an oscillation around
@@ -161,7 +161,7 @@ export default function VoicesHero() {
                 </span>
               </figcaption>
             )}
-          </motion.figure>
+          </m.figure>
         ))}
       </div>
 

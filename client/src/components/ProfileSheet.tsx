@@ -17,7 +17,7 @@
  * nobody has asked. It arrives when the read does.
  */
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { authToken } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -76,7 +76,7 @@ export default function ProfileSheet() {
           A member's characters are the first thing the sheet should answer,
           and having them here as well would be the same row twice. */}
       {standing.length > 0 ? (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={card}>
+        <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={card}>
           <h2 className={heading}>Standing</h2>
           <ul className="flex flex-wrap gap-2">
             {standing.map((s) => (
@@ -91,11 +91,11 @@ export default function ProfileSheet() {
           <p className="mt-4 text-sm text-muted-foreground">
             {tokenName}: held, never spent. A record of what the village noticed.
           </p>
-        </motion.div>
+        </m.div>
       ) : null}
 
       {g ? (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={card}>
+        <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={card}>
           <h2 className={heading}>{tokenName}</h2>
           <p className="text-card-foreground">
             {g.receivedThisSeason === 0
@@ -114,7 +114,7 @@ export default function ProfileSheet() {
               scale. This line printed `lifetime` raw, the same minor-unit
               defect the 5xl figure had, and two cards showing one balance was
               half of what made six gratitude sections feel like six. */}
-        </motion.div>
+        </m.div>
       ) : null}
 
       {/*

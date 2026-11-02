@@ -375,7 +375,6 @@ export function register(app: Express, deps: Deps): void {
       guideName: engine,
       villageName: e.villageName,
       companionName: c.name,
-      scopeLine: roleName ? `${roleName} companion` : "Personal companion",
       roleName,
       never: NEVER_INVENT,
     });

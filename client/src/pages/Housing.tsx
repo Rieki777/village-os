@@ -3,7 +3,7 @@ import Layout from "@/components/Layout";
 import { useVillageLinks } from "@/lib/gameApi";
 import { homeChoices, type PublicHome } from "@/lib/housingForm";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { useVillageContent } from "@/hooks/useVillageContent";
 import { useVillageName } from "@/hooks/useVillageName";
 import { usePageContent } from "@/hooks/usePageContent";
@@ -28,6 +28,7 @@ import {
   Heart,
   type LucideIcon,
 } from "lucide-react";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 interface LegalContent {
   landShareTransferNote?: string;
@@ -93,6 +94,8 @@ function featureIcon(word: string | undefined): LucideIcon {
 export default function Housing() {
   // Blank hides the button rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
+  // A link to a story page switched off on its own in Admin, Pages is left out.
+  const pageOff = useStoryPageOffAlone();
   const villageName = useVillageName();
   // The page's words are the village's own, from Admin, Pages, Housing
   // (shared/pageContent/housing.ts). Null until the saved words have arrived,
@@ -178,7 +181,7 @@ export default function Housing() {
       <section className="py-24 bg-teal-band text-white">
         <div className="container">
           <div className="max-w-3xl">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
@@ -199,7 +202,7 @@ export default function Housing() {
               <p className={`text-xl text-white leading-relaxed break-words${hero ? "" : " invisible"}`}>
                 <Emphasized text={hero?.lede ?? "\u00a0"} />
               </p>
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>
@@ -213,7 +216,7 @@ export default function Housing() {
             {features.lists.items.map((feature, index) => {
               const Icon = featureIcon(feature.icon);
               return (
-              <motion.div
+              <m.div
                 key={`${index}-${feature.title}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -230,7 +233,7 @@ export default function Housing() {
                 <p className="text-sm text-muted-foreground break-words">
                   {feature.body}
                 </p>
-              </motion.div>
+              </m.div>
               );
             })}
           </div>
@@ -267,7 +270,7 @@ export default function Housing() {
 
             <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
               {choices.homes.map((home, index) => (
-                <motion.div
+                <m.div
                   key={home.homeType}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -318,7 +321,7 @@ export default function Housing() {
                       <ArrowRight className="w-4 h-4" />
                     </span>
                   </Link>
-                </motion.div>
+                </m.div>
               ))}
             </div>
           </div>
@@ -347,13 +350,15 @@ export default function Housing() {
               </div>
               ))}
             </div>
-            <Link
-              href="/resident"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-teal-deep text-white rounded-lg font-semibold hover:bg-teal-deep-dark transition"
-            >
-              Learn About Residency
-              <ArrowRight className="w-5 h-5" />
-            </Link>
+            {!pageOff("/resident") && (
+              <Link
+                href="/resident"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-teal-deep text-white rounded-lg font-semibold hover:bg-teal-deep-dark transition"
+              >
+                Learn About Residency
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+            )}
           </div>
         </div>
       </section>
@@ -381,12 +386,14 @@ export default function Housing() {
                   Join Community Call
                 </a>
               )}
-              <Link
-                href="/resident"
-                className="px-8 py-4 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors"
-              >
-                Resident Journey
-              </Link>
+              {!pageOff("/resident") && (
+                <Link
+                  href="/resident"
+                  className="px-8 py-4 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors"
+                >
+                  Resident Journey
+                </Link>
+              )}
             </div>
           </div>
         </div>

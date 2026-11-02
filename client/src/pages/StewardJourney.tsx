@@ -10,7 +10,7 @@ import { buttonAction, stepPoints, type TargetContext } from "@/lib/journeyPage"
 import { JOURNEY_LEGACY_STEP_IDS, STEWARD_JOURNEY } from "@shared/pageContent/journeys";
 import type { ResolvedSection } from "@shared/pageContent/types";
 import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import {
   Users,
   ArrowRight,
@@ -70,7 +70,7 @@ export default function StewardJourney() {
               a broken image too. No picture is the honest state, and the gradient
               below carries the section on its own. */}
           {brand.stewardHero ? (
-            <motion.img
+            <m.img
               src={brand.stewardHero}
               alt={altOr(brand.stewardHeroAlt, "Stewards meeting in a circle")}
               className="w-full h-full object-cover"
@@ -84,22 +84,22 @@ export default function StewardJourney() {
 
         <div className="container relative z-10">
           <div className="max-w-2xl">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center gap-3 mb-6"
             >
-              <motion.div
+              <m.div
                 className="w-12 h-12 shrink-0 rounded-xl bg-sage flex items-center justify-center"
                 animate={{ rotate: [0, 5, -5, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
                 <Users className="w-6 h-6 text-white" />
-              </motion.div>
+              </m.div>
               <span className={`text-sage font-medium tracking-wide uppercase text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
-            </motion.div>
+            </m.div>
 
-            <motion.h1
+            <m.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
@@ -110,18 +110,18 @@ export default function StewardJourney() {
                 phrase={hero?.highlight ?? ""}
                 render={(phrase) => <span className="text-sage italic">{phrase}</span>}
               />
-            </motion.h1>
+            </m.h1>
 
-            <motion.p
+            <m.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
               className={`text-xl text-muted-foreground leading-relaxed mb-8 break-words${waiting}`}
             >
               <Emphasized text={hero?.intro ?? ""} />
-            </motion.p>
+            </m.p>
 
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
@@ -141,7 +141,7 @@ export default function StewardJourney() {
                   {heroSecondary.label}
                 </JourneyLink>
               )}
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>
@@ -150,7 +150,7 @@ export default function StewardJourney() {
       {page && steps && (
       <section className="py-20 bg-background">
         <div className="container">
-          <motion.div
+          <m.div
             className="text-center mb-8"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -166,7 +166,7 @@ export default function StewardJourney() {
             {/* Progress Bar */}
             <div className="max-w-md mx-auto">
               <div className="relative h-3 bg-muted rounded-full overflow-hidden mb-2">
-                <motion.div
+                <m.div
                   className="absolute inset-y-0 left-0 bg-gradient-to-r from-sage to-coral rounded-full"
                   initial={{ width: 0 }}
                   animate={{ width: `${progress.progress}%` }}
@@ -177,7 +177,7 @@ export default function StewardJourney() {
                 {progress.doneCount} of {progress.total} steps completed
               </p>
             </div>
-          </motion.div>
+          </m.div>
 
           <div className="max-w-3xl mx-auto">
             <div className="space-y-3">
@@ -188,7 +188,7 @@ export default function StewardJourney() {
                 const action = buttonAction(step.actionLabel, step.actionTarget, targets);
 
                 return (
-                  <motion.div
+                  <m.div
                     key={`${index}-${step.title}`}
                     initial={{ opacity: 0, x: -20 }}
                     whileInView={{ opacity: 1, x: 0 }}
@@ -216,13 +216,13 @@ export default function StewardJourney() {
                           }}
                           className="flex-shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-sage"
                         >
-                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+                          <m.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
                             {isCompleted ? (
                               <CheckCircle2 className="w-6 h-6 text-sage" />
                             ) : (
                               <Circle className="w-6 h-6 text-muted-foreground hover:text-teal-deep transition-colors" />
                             )}
-                          </motion.div>
+                          </m.div>
                         </button>
 
                         {/* Icon */}
@@ -250,9 +250,9 @@ export default function StewardJourney() {
                                 {step.title}
                               </h3>
                             </div>
-                            <motion.div className="shrink-0" animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                            <m.div className="shrink-0" animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
                               <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                            </motion.div>
+                            </m.div>
                           </div>
                           <p className="text-sm text-muted-foreground mt-1 break-words">
                             {step.description}
@@ -264,7 +264,7 @@ export default function StewardJourney() {
                     {/* Expanded Details */}
                     <AnimatePresence>
                       {isExpanded && (
-                        <motion.div
+                        <m.div
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: "auto", opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
@@ -275,7 +275,7 @@ export default function StewardJourney() {
                             <div className="bg-muted/50 rounded-lg p-4 mb-4">
                               <ul className="grid grid-cols-2 gap-2">
                                 {stepPoints(step).map((detail, i) => (
-                                  <motion.li
+                                  <m.li
                                     key={i}
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
@@ -284,7 +284,7 @@ export default function StewardJourney() {
                                   >
                                     <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-sage" />
                                     <span className="min-w-0 break-words">{detail}</span>
-                                  </motion.li>
+                                  </m.li>
                                 ))}
                               </ul>
                             </div>
@@ -298,10 +298,10 @@ export default function StewardJourney() {
                               </JourneyLink>
                             )}
                           </div>
-                        </motion.div>
+                        </m.div>
                       )}
                     </AnimatePresence>
-                  </motion.div>
+                  </m.div>
                 );
               })}
             </div>
@@ -314,7 +314,7 @@ export default function StewardJourney() {
       {page && !page.ladder.hidden && (
       <section className="py-20 bg-sage text-white">
         <div className="container">
-          <motion.div
+          <m.div
             className="text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -329,13 +329,13 @@ export default function StewardJourney() {
             <p className="text-white max-w-2xl mx-auto">
               <Emphasized text={page.ladder.fields.intro} />
             </p>
-          </motion.div>
+          </m.div>
 
           <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {page.ladder.lists.items.map((level, index) => {
               const LevelIcon = LADDER_ICONS[index % LADDER_ICONS.length];
               return (
-              <motion.div
+              <m.div
                 key={`${index}-${level.level}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -344,13 +344,13 @@ export default function StewardJourney() {
                 whileHover={{ y: -8, scale: 1.02 }}
                 className="bg-white/10 p-6 rounded-xl text-center backdrop-blur-sm min-w-0"
               >
-                <motion.div
+                <m.div
                   className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4"
                   whileHover={{ rotate: 360 }}
                   transition={{ duration: 0.5 }}
                 >
                   <LevelIcon className="w-8 h-8" />
-                </motion.div>
+                </m.div>
                 <h3 className="font-display text-xl font-semibold mb-2 break-words">
                   {level.level}
                 </h3>
@@ -369,7 +369,7 @@ export default function StewardJourney() {
                 <p className="text-white text-sm font-medium break-words">
                   {level.benefits}
                 </p>
-              </motion.div>
+              </m.div>
               );
             })}
           </div>
@@ -381,7 +381,7 @@ export default function StewardJourney() {
       {page && !page.arc.hidden && (
       <section className="py-20 bg-sage/5">
         <div className="container">
-          <motion.div
+          <m.div
             className="text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -393,13 +393,13 @@ export default function StewardJourney() {
             <p className="text-muted-foreground max-w-2xl mx-auto">
               <Emphasized text={page.arc.fields.intro} />
             </p>
-          </motion.div>
+          </m.div>
 
           <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
             {page.arc.lists.items.map((level, index) => {
               const LevelIcon = ARC_ICONS[index % ARC_ICONS.length];
               return (
-              <motion.div
+              <m.div
                 key={`${index}-${level.level}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -408,20 +408,20 @@ export default function StewardJourney() {
                 whileHover={{ y: -8, scale: 1.02 }}
                 className="bg-card p-6 rounded-xl shadow-sm border border-sage/20 min-w-0"
               >
-                <motion.div
+                <m.div
                   className="w-14 h-14 rounded-full bg-sage/10 flex items-center justify-center mx-auto mb-4"
                   whileHover={{ rotate: 360 }}
                   transition={{ duration: 0.5 }}
                 >
                   <LevelIcon className="w-7 h-7 text-sage" />
-                </motion.div>
+                </m.div>
                 <h3 className="font-display text-xl font-semibold text-foreground text-center mb-2 break-words">
                   {level.level}
                 </h3>
                 <p className="text-center text-muted-foreground text-sm break-words">
                   {level.description}
                 </p>
-              </motion.div>
+              </m.div>
               );
             })}
           </div>
@@ -433,18 +433,18 @@ export default function StewardJourney() {
       {page && !page.seasons.hidden && (
       <section className="py-20 bg-cream">
         <div className="container">
-          <motion.div
+          <m.div
             className="max-w-3xl mx-auto text-center"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <motion.div
+            <m.div
               animate={{ y: [0, -10, 0] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
               <Sparkles className="w-12 h-12 text-sage mx-auto mb-6" />
-            </motion.div>
+            </m.div>
             <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
               {page.seasons.fields.heading}
             </h2>
@@ -452,7 +452,7 @@ export default function StewardJourney() {
               <Emphasized text={page.seasons.fields.body} />
             </p>
             <BandButton section={page.seasons} targets={targets} />
-          </motion.div>
+          </m.div>
         </div>
       </section>
       )}
@@ -461,7 +461,7 @@ export default function StewardJourney() {
       {page && !page.rights.hidden && (
       <section className="py-16 bg-background">
         <div className="container">
-          <motion.div
+          <m.div
             className="max-w-3xl mx-auto text-center"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -474,7 +474,7 @@ export default function StewardJourney() {
               <Emphasized text={page.rights.fields.body} />
             </p>
             <BandButton section={page.rights} targets={targets} />
-          </motion.div>
+          </m.div>
         </div>
       </section>
       )}
@@ -483,7 +483,7 @@ export default function StewardJourney() {
       {page && !page.nextStep.hidden && (
       <section className="py-20 bg-sage/10">
         <div className="container">
-          <motion.div
+          <m.div
             className="max-w-2xl mx-auto"
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
@@ -499,7 +499,7 @@ export default function StewardJourney() {
             </div>
 
             <StewardNextStepForm words={page.nextStep.fields} />
-          </motion.div>
+          </m.div>
         </div>
       </section>
       )}
@@ -558,7 +558,7 @@ function StewardNextStepForm({ words }: { words: Readonly<Record<string, string>
 
   if (submitted) {
     return (
-      <motion.div
+      <m.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         className="bg-card rounded-2xl p-10 shadow-sm text-center"
@@ -583,7 +583,7 @@ function StewardNextStepForm({ words }: { words: Readonly<Record<string, string>
             {words.thanksCta}
           </a>
         )}
-      </motion.div>
+      </m.div>
     );
   }
 
@@ -657,7 +657,7 @@ function StewardNextStepForm({ words }: { words: Readonly<Record<string, string>
 
       <AnimatePresence>
         {error && (
-          <motion.p
+          <m.p
             role="alert"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -665,7 +665,7 @@ function StewardNextStepForm({ words }: { words: Readonly<Record<string, string>
             className="text-sm text-destructive"
           >
             {error}
-          </motion.p>
+          </m.p>
         )}
       </AnimatePresence>
 

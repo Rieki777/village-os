@@ -19,7 +19,7 @@ import crypto from "crypto";
 import multer from "multer";
 import bcrypt from "bcrypt";
 import { securityHeaders } from "./lib/securityHeaders";
-import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
+import { claimPaths, GAME_CONFIG, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
 import { guidePromptName } from "../shared/guideName";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
@@ -59,6 +59,7 @@ import { pageContentProblem } from "../shared/pageContent";
 import { contentVersion } from "../shared/pageContent/resolve";
 import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
 import { pageVarsFrom } from "../shared/pageContent/vars";
+import { visitProgramProblem } from "../shared/visitProgram";
 import { workWithUsAckEmail } from "./lib/workWithUsAck";
 import { investorPacketEmail } from "./lib/investorPacketMail";
 import { emailAccent } from "./lib/emailAccent";
@@ -76,6 +77,7 @@ import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, 
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerBrochurePagesRoutes } from "./routes/brochurePages";
+import { register as registerVillagePathsRoutes, loadVillagePaths, servedPathWords, stageName } from "./routes/villagePaths";
 import { register as registerPeopleLock, ballotCardForViewer, ballotForViewer, firstNameOf, hiddenFromStranger } from "./routes/peopleLock";
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
@@ -195,7 +197,7 @@ import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { claimsAnnouncedHere } from "./lib/rewardMoment";
 import { feedOrigin as feedOriginOf, feedUidHost } from "./lib/feedOrigin";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
-import { register as registerModuleLibraryRoutes, moduleChangeReaders, plantingDoor } from "./routes/moduleLibrary";
+import { register as registerModuleLibraryRoutes, moduleChangeReaders, founderAdoptable, founderHeldVoteProblem, plantingDoor } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
@@ -469,7 +471,7 @@ import {
   transcriptFor,
   videoIdsFromRss,
 } from "./lib/recordings";
-import { chapterCandidates, synthesisSystemPrompt } from "./lib/callSynthesis";
+import { chapterCandidates, synthesisSystemPrompt, synthesisUserContent } from "./lib/callSynthesis";
 // ── K2 ZONE START: synthesis through the batch API ──────────────────────────
 import {
   MAX_BATCH_SIZE,
@@ -585,7 +587,7 @@ import {
   type Candidate,
 } from "./lib/map";
 import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION, PRODUCT_NAME } from "./lib/identity";
-import { brochurePagesOn, isBrochurePath, loadBrochurePages } from "./lib/brochurePages";
+import { brochureConfig, brochurePageServed, loadBrochurePages } from "./lib/brochurePages";
 import { listDrafts, measureVisionMetrics, tierDraftWords, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
 import { noteSeen, readSeen } from "./lib/sheetSeen"; import { displayCurrencyProblem } from "../shared/money";
@@ -1495,7 +1497,7 @@ async function initStores(): Promise<void> {
     emailConfigRepo.load(),
     settingsRepo.load(),
     brandRepo.load(),
-    loadBrochurePages(getPool()),
+    loadBrochurePages(getPool()), loadVillagePaths(getPool()),
     mapVocabRepo.load(),
     mapWalkRepo.load(),
     workWithUsRepo.load(),
@@ -2898,11 +2900,11 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
     at: new Date().toISOString(),
   });
   commsSink.fire({ type: "stage_advanced", userId: user.id, stage: to });
-  await addActivity("stage", `${firstName(user.name)} advanced to ${getStage(to).name}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
+  await addActivity("stage", `${firstName(user.name)} advanced to ${stageName(to)}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
   await notify({
     userId: user.id,
     type: "stage_advanced",
-    title: `You advanced to ${getStage(to).name}`,
+    title: `You advanced to ${stageName(to)}`,
     body: unlocked.length ? `Newly unlocked: ${unlocked.join(", ")}` : null,
     link: "/profile",
     // One per stage, ever: re-computation can never re-celebrate.
@@ -4522,7 +4524,7 @@ async function runRetentionSweep(): Promise<string> {
 
 async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
   // The letter is a guest's step only where the village serves it; a signing it has not answered is its own step (lib/nextAction.ts).
-  const joining = brochurePagesOn() && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
+  const joining = brochurePageServed("/love-letter") && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
   return pickNextAction(GAME_CONFIG.nextActions, {
     trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)),
   });
@@ -13851,14 +13853,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
           model: SYNTHESIS_MODEL,
           max_tokens: SYNTHESIS_MAX_TOKENS,
           system: synthesisSystemPrompt(roleCandidates),
-          messages: [{
-            role: "user",
-            content: JSON.stringify({
-              title: rec.title,
-              chapterMarks,
-              segments: transcript.segments.slice(0, 400).map((s) => ({ startMs: s.startMs, text: s.text.slice(0, 400) })),
-            }).slice(0, 100000),
-          }],
+          messages: [{ role: "user", content: synthesisUserContent({ title: rec.title, chapterMarks, segments: transcript.segments }) }],
         }),
       });
       if (!resp.ok) {
@@ -18176,6 +18171,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   registerFaqRoutes(app, { isAdmin, guardCapability, faqsRepo });
   registerBrochurePagesRoutes(app, { isAdmin, guardCapability });
+  registerVillagePathsRoutes(app, { isAdmin, guardCapability, config: mergedConfig, valueTokenName: () => { const slug = String(stringVar("gratitude.pool_token")); return tokenDef(slug)?.name ?? slug; } });
 
   // â”€â”€ Milestones (NEW-3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -18476,7 +18472,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.put("/api/admin/visit-config", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    const problem = ctaLinkProblemIn(req.body);
+    const problem = ctaLinkProblemIn(req.body) ?? visitProgramProblem(req.body);
     if (problem) return res.status(400).json({ error: problem });
     await visitConfigRepo.put(req.body);
     res.json({ success: true });
@@ -18521,10 +18517,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       project: m.project,
       currency: { ...m.currency, value: { slug: valueSlug, name: valueDef?.name ?? valueSlug }, names: Object.fromEntries(allTokens().map((t) => [t.slug, t.name])) },
       images: m.images,
-      paths: GAME_CONFIG.paths,
+      ...servedPathWords(), // paths, with their sentences, and the ladder's name: server/lib/villagePaths.ts
       stages: servedLadder(mergedConfig().project.commitmentName),
       season: seasonState(),
-      brochurePages: brochurePagesOn(),
+      ...brochureConfig(),
       site: siteWords(contentRepo.get() ?? null, m),
     });
   });
@@ -20839,6 +20835,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(403).json({ error: "Only the proposer takes their proposal to the vote" });
     }
     if (p.status !== "open") return res.status(409).json({ error: `This proposal is ${p.status.replace("_", " ")}, not open` });
+    const heldByFounders = await founderHeldVoteProblem(p.changeSet, () => founderPowerStands(getPool())); if (heldByFounders) return res.status(409).json({ error: heldByFounders });
     const threshold = Math.max(0, numberVar("governance.proposal_support_threshold"));
     const backers = await backerCounts(getPool(), [p.id]);
     const supports = backers.get(p.id)?.supports ?? 0;
@@ -21001,7 +20998,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // passed_onsite joins the applyable set: a ballot-passed proposal held by
     // the auto-apply brake (or by a cycle-timed dial) is applied by the same
     // human hand as a Hypha-verified one.
-    if (p.status !== "to_hypha" && p.status !== "passed_claimed" && p.status !== "passed_verified" && p.status !== "passed_onsite") {
+    if (p.status !== "to_hypha" && p.status !== "passed_claimed" && p.status !== "passed_verified" && p.status !== "passed_onsite" && !founderAdoptable(p)) {
       return res.status(409).json({ error: `A ${p.status.replace(/_/g, " ")} proposal cannot be applied` });
     }
     /*
@@ -22046,7 +22043,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         const needed = stageIndex(role.minStage);
         if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
           out.held =
-            `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage ` +
+            `${firstName(member.name)} has not reached the ${stageName(role.minStage)} stage ` +
             `${role.name ?? asked.roleId} asks for, so nobody was seated. The village can ask again once they have.`;
           await notifyAdmins("governance", `A carried seating could not land: ${b.title}`, `bal:${b.id}:seat-held`);
           return out;
@@ -22876,6 +22873,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (p.status !== "open") {
       return res.status(409).json({ error: `This proposal is ${p.status.replace(/_/g, " ")}, not open for a ballot` });
     }
+    const heldByFounders = await founderHeldVoteProblem(p.changeSet, () => founderPowerStands(getPool())); if (heldByFounders) return res.status(409).json({ error: heldByFounders });
     const ctx = await capabilityCtx(user);
     if (p.proposerUserId !== user.id && !hasCapability("proposal.open", ctx)) {
       return res.status(403).json({ error: "Taking a proposal to the vote is for its proposer or a proposal.open holder" });
@@ -24606,7 +24604,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
-  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState }); // a role proposal from somebody with no account (0305)
+  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState, notify, notifyAdmins, members, stageOf, recordStageEvent, liveHoldersOf, rolesCarrying, loadRoleHolders, seatCalendar, lapse: lapseContext }); // a role proposal from somebody with no account (0305), and its decision
   registerStewardHandoverRoutes(app, { getPool, overLimit, authedUser, liveHoldersOf }); // the launch selection, then every hand-over to the village (Rye, 2026-11-01)
   registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
@@ -25654,7 +25652,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       const needed = stageIndex(role.minStage);
       if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
         return res.status(409).json({
-          error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
+          error: `${firstName(member.name)} has not reached the ${stageName(role.minStage)} stage this role asks for.`,
           minStage: role.minStage,
         });
       }
@@ -26014,7 +26012,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.get("/sitemap.xml", (req, res) => {
     const origin = requestOrigin(req);
     const paths = [
-      ...PUBLIC_PATHS.filter((p) => brochurePagesOn() || !isBrochurePath(p)),
+      ...PUBLIC_PATHS.filter((p) => brochurePageServed(p)),
       ...GATED_PATHS.filter(([, id]) => effectiveLifecycle(id) === "public").map(([p]) => p),
     ];
     const urls = paths
@@ -26187,7 +26185,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       console.error(`[sendFile error] ${indexPath}: the shell is missing`);
       return res.status(500).send(`Server error: could not serve index.html from ${indexPath}`);
     }
-    const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null);
+    const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null, !brochurePageServed(req.path));
     res.type("html").set("Cache-Control", "no-cache").send(spliceMeta(shellWithTheme(shell, getBrand), meta));
   });
 

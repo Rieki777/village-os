@@ -5,11 +5,13 @@
  *
  * A link's address is shown once, when it is made: only its hash is kept.
  * Unconfirmed proposals never show here, because nothing unconfirmed reaches
- * a person. Asking the circle and adopting are the next change.
+ * a person. Each confirmed proposal opens its members' page, where the circle
+ * answers and a holder of the power that seats people adopts or declines it
+ * (open proposals part B, client/src/pages/OpenProposal.tsx).
  */
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Copy, Link2 } from "lucide-react";
+import { ArrowRight, Copy, Link2 } from "lucide-react";
 import { API_BASE, authHeaders } from "@/components/admin/adminApi";
 import { OPEN_WORDS } from "@shared/openProposals";
 
@@ -199,6 +201,10 @@ export default function OpenProposalsPanel({ password }: { password: string }) {
                 </ul>
                 <p className="whitespace-pre-line break-words text-gray-800">{p.why}</p>
                 {p.aim && <p className="break-words text-gray-600">Aim: {p.aim}</p>}
+                <a href={`/open-proposals/${encodeURIComponent(p.id)}`} className="inline-flex min-h-10 items-center gap-1.5 font-medium text-teal-deep underline underline-offset-2">
+                  Open its page, where the circle answers and it is decided
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </a>
               </article>
             ))
           )}

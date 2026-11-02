@@ -16,7 +16,7 @@ vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/modules/ModuleProvider", () => ({ useModule: () => null }));
-vi.mock("@/lib/brochure", () => ({ useBrochurePages: () => false }));
+vi.mock("@/lib/brochure", () => ({ useBrochurePages: () => false, useStoryPageShown: () => () => false }));
 
 import SeasonalFestivals from "./SeasonalFestivals";
 

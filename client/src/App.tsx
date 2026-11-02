@@ -4,15 +4,15 @@ import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
-import { MotionConfig } from "framer-motion";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { LazyMotion, MotionConfig } from "framer-motion";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ScrollToTop from "./components/ScrollToTop";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
-import { brochurePage, useBrochurePages } from "./lib/brochure";
+import { brochurePage, storyPageShown, useBrochurePages } from "./lib/brochure";
 import { useGameConfig } from "./lib/gameApi";
 
 /**
@@ -82,6 +82,8 @@ function PageTitle() {
   const village = config?.project?.name ?? "";
   const commitment = config?.project?.commitmentName ?? "";
   const favicon = String(config?.images?.favicon ?? "").trim();
+  // Each story page's own switch rides the same config (Admin, Pages).
+  const switches = useMemo(() => (config ? { brochurePages: config.brochurePages, brochureHidden: config.brochureHidden } : null), [config]);
 
   // The tab ICON is identity too. index.html ships a neutral platform favicon
   // (a static file cannot know which village it serves); this swaps in the
@@ -101,8 +103,10 @@ function PageTitle() {
 
   useEffect(() => {
     if (!village) return;
-    document.title = documentTitle(location, village, { commitment });
-  }, [location, village, commitment]);
+    // A story page this village does not serve answers not found, so its tab
+    // names the village alone, the same as its share card (server/lib/pageMeta.ts).
+    document.title = documentTitle(storyPageShown(switches, location) ? location : "/", village, { commitment });
+  }, [location, village, commitment, switches]);
 
   return null;
 }
@@ -130,6 +134,9 @@ function PageTitle() {
  */
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+
+// The animation engine, after the first page: see lib/motionFeatures.ts.
+const loadMotionFeatures = () => import("./lib/motionFeatures").then((mod) => mod.default);
 
 const lazyPage = (loader: () => Promise<{ default: React.ComponentType<any> }>) => lazy(loader);
 const VillageWelcome = lazyPage(() => import("./pages/VillageWelcome"));
@@ -209,6 +216,7 @@ const Introductions = lazyPage(() => import("./pages/Introductions"));
 const RequestMembership = lazyPage(() => import("./pages/RequestMembership"));
 const ProposeARole = lazyPage(() => import("./pages/ProposeARole"));
 const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) => ({ default: m.ConfirmProposal })));
+const OpenProposal = lazyPage(() => import("./pages/OpenProposal"));
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
@@ -375,6 +383,7 @@ function Router() {
       <Route path="/propose" component={Propose} />
       {/* One application to hold roles, on terms. Members only, behind terms.read. */}
       <Route path="/role-applications/:id" component={SeatApplication} />
+      <Route path="/open-proposals/:id" component={OpenProposal} />
       <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
       {/* Propose my roles for next season. /new and /shared/:token before /:id, which would take them. */}
       <Route path="/role-proposals/new" component={NewRoleProposal} />
@@ -425,6 +434,7 @@ function App() {
        * run `repeat: Infinity` and never stopped for anyone.
        */}
       <MotionConfig reducedMotion="user">
+      <LazyMotion features={loadMotionFeatures}>
         <AuthProvider>
         <ModuleProvider>
           <TooltipProvider>
@@ -440,6 +450,7 @@ function App() {
 
         </ModuleProvider>
         </AuthProvider>
+      </LazyMotion>
       </MotionConfig>
     </ThemeProvider>
   );
