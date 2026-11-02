@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Users, ArrowRight, ChevronDown } from "lucide-react";
 import { iconFor } from "@/lib/circleIcons";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import CircleScene from "@/components/CircleScene";
 import CirclesMiniMap from "@/components/CirclesMiniMap";
 import { cssColourForCircle } from "@shared/circleView";
@@ -20,9 +20,59 @@ import { useModule } from "@/modules/ModuleProvider";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 import CircleLines, { type CircleHolder } from "@/components/geneKeys/CircleLines";
 import { coordinatingCircle } from "@shared/coordinatingCircle";
+import { usePageContent } from "@/hooks/usePageContent";
+import { Emphasized } from "@/components/PageText";
+import { fillVars } from "@shared/pageContent/resolve";
+import { CIRCLES_PAGE, COORDINATOR_WORD } from "@shared/pageContent/circles";
 
 /** The link from a circle's panel to its own card (`/circles/:id`). */
 const OPEN_CARD = "Open this circle's card";
+
+/** Sentences a village left blank are not drawn. */
+const filled = (...texts: string[]) => texts.filter((t) => t.trim() !== "");
+
+/**
+ * A paragraph with up to two of its words given an explanation. Each word is
+ * found as typed, its first time in the paragraph, and becomes an InfoTip
+ * trigger; a word the paragraph does not contain, or one with no explanation,
+ * is simply not given one.
+ */
+function Tipped({ text, tips }: { text: string; tips: Array<{ term: string; tip: string }> }) {
+  const live = tips.filter((t) => t.term.trim() !== "" && t.tip.trim() !== "");
+  const out: ReactNode[] = [];
+  const used = new Set<number>();
+  let rest = text;
+  while (rest) {
+    let best = -1;
+    let at = -1;
+    live.forEach((t, i) => {
+      const found = used.has(i) ? -1 : rest.indexOf(t.term);
+      if (found >= 0 && (at < 0 || found < at)) [best, at] = [i, found];
+    });
+    if (best < 0) {
+      out.push(<Fragment key={out.length}>{rest}</Fragment>);
+      break;
+    }
+    used.add(best);
+    out.push(<Fragment key={out.length}>{rest.slice(0, at)}</Fragment>);
+    out.push(
+      <InfoTip key={out.length} tip={live[best].tip}>
+        {live[best].term}
+      </InfoTip>,
+    );
+    rest = rest.slice(at + live[best].term.length);
+  }
+  return <>{out}</>;
+}
+
+/** The line at the foot of an opened circle's panel, or null when the village hid it. */
+interface CardWords {
+  label: string;
+  /** For a circle under the top circle, its name already filled in. */
+  linked: string;
+  /** For the top circle itself, and every circle in a village with none. */
+  flat: string;
+}
 
 interface CircleEntry {
   id: string;
@@ -42,7 +92,7 @@ interface CircleEntry {
   holders: CircleHolder[];
 }
 
-function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator }: {
+function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator, words }: {
   circle: CircleEntry;
   expanded: boolean;
   onToggle: () => void;
@@ -51,8 +101,12 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator
   onOpenSeat: (seatId: string) => void;
   /** The circle the others link back to, from the village's own rows, or null. */
   coordinator: { id: string; name: string } | null;
+  /** The village's words for the foot of the panel (Admin, Pages, Circles), or null when hidden. */
+  words: CardWords | null;
 }) {
   const Icon = iconFor(circle.icon);
+  // A circle under the top circle reads the linked line; the top circle itself never reads that it links to itself.
+  const footLine = words ? (coordinator && coordinator.id !== circle.id ? words.linked : words.flat) : "";
   /*
    * THE CARD WEARS THE SAME COLOUR THE MAP DRAWS.
    *
@@ -174,14 +228,13 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator
                 </div>
               )}
 
-              <div className="pt-4 border-t border-border">
-                <p className="text-xs text-muted-foreground">
-                  <strong>How it works:</strong>{" "}
-                  {coordinator && coordinator.id !== circle.id
-                    ? `Each circle has autonomy within its domain and budget, uses consent-based decision-making, and is double-linked to the ${coordinator.name} so information flows both ways.`
-                    : "Each circle has autonomy within its domain and budget and uses consent-based decision-making."}
-                </p>
-              </div>
+              {words && footLine.trim() !== "" && (
+                <div className="pt-4 border-t border-border">
+                  <p className="text-xs text-muted-foreground break-words">
+                    <strong>{words.label}</strong> {footLine}
+                  </p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -210,6 +263,11 @@ export default function Circles() {
   // The contact relay is the map's alone and is never offered here.
   const map = useModule("map");
   const raiseHand = !!map && map.lifecycle !== "off";
+  // Every word around the circles is the village's own, from Admin, Pages,
+  // Circles (shared/pageContent/circles.ts). Null until the saved words have
+  // arrived, so the defaults never flash first. The circles are not words:
+  // they are the village's rows, read below.
+  const page = usePageContent(CIRCLES_PAGE);
 
   // Circles are rows now (0049). What a circle IS and who is in it are read
   // from its seats rather than from hand-typed prose, so the page cannot go
@@ -328,6 +386,28 @@ export default function Circles() {
   const top = coordinatingCircle(raw.circles);
   const coordinator = top ? { id: String(top.id), name: String(top.name) } : null;
 
+  if (!page) {
+    return (
+      <Layout>
+        <section className="min-h-[70vh]" aria-busy="true" />
+      </Layout>
+    );
+  }
+  const { hero, card, together, closing } = page;
+  const groupToday = page.today;
+  const groupFuture = page.future;
+  // `{coordinator}` is the village's own top circle, filled here and never
+  // typed. Only the linked words use it, and they only draw when there is one.
+  const linked = (text: string) => (coordinator ? fillVars(text, { [COORDINATOR_WORD]: coordinator.name }) : text);
+  const cardWords: CardWords | null = card.hidden
+    ? null
+    : { label: card.fields.label, linked: linked(card.fields.linked), flat: card.fields.flat };
+  const togetherParagraphs = filled(
+    filled(together.fields.first, coordinator ? linked(together.fields.acrossLinked) : together.fields.acrossFlat, together.fields.after).join(" "),
+    together.fields.second,
+    coordinator ? linked(together.fields.thirdLinked) : together.fields.thirdFlat,
+  );
+
   return (
     <Layout>
       <section className="py-24 bg-background">
@@ -340,20 +420,22 @@ export default function Circles() {
             <div className="w-16 h-16 rounded-full bg-sage/10 flex items-center justify-center mx-auto mb-6">
               <Users className="w-8 h-8 text-sage" />
             </div>
-            <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-              Our Sociocratic Circles
+            <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4 break-words">
+              {hero.fields.headline}
             </h1>
-            {/* R46 enchant-first: the canopy image carries the surface; the
-                sociocracy mechanics live in the tooltips. */}
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-6">
-              Circles are how the village thinks: each one tends its own{" "}
-              <InfoTip tip="A domain is the ground a circle decides on without asking anyone above it. Real authority lives inside it.">domain</InfoTip>{" "}
-              the way a tree tends its own ground, and{" "}
-              <InfoTip tip="Two people belong to both a circle and the circle above it, one chosen by each. News travels both ways, so no circle drifts alone.">double links</InfoTip>{" "}
-              weave them into one canopy.
+            {/* R46 enchant-first: the surface line stays short and the
+                mechanics live in the tooltips, which the village writes too. */}
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-6 break-words">
+              <Tipped
+                text={hero.fields.intro}
+                tips={[
+                  { term: hero.fields.firstTerm, tip: hero.fields.firstTip },
+                  { term: hero.fields.secondTerm, tip: hero.fields.secondTip },
+                ]}
+              />
             </p>
             <Link href="/roles" className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium">
-              View Open Roles
+              {hero.fields.rolesLabel}
               <ArrowRight className="w-4 h-4" />
             </Link>
           </motion.div>
@@ -375,7 +457,7 @@ export default function Circles() {
                 news, not an interruption of something the member was doing. */}
             <div role="status">
               {/* The loading line holds 60vh. It was 150px tall, so the
-                  "How Circles Work Together" box below sat on screen until the
+                  box on how circles work together sat on screen until the
                   list landed (5,000px of circles on this village) and then got
                   pushed off it: a 0.16 layout shift at 1280 wide, cold. At 60vh
                   the box starts below the fold, so the list arrives out of
@@ -402,12 +484,15 @@ export default function Circles() {
 
             {today.length > 0 && (
               <div className="mb-16">
-                <div className="mb-6">
-                  <h2 className="font-display text-2xl font-bold text-foreground mb-1">The Circles Today</h2>
-                  <p className="text-muted-foreground text-sm">
-                    How the team actually organizes right now, while the village is being built.
-                  </p>
-                </div>
+                {/* A hidden heading hides only the words: the circles are the village's own and always show. */}
+                {!groupToday.hidden && (
+                  <div className="mb-6">
+                    <h2 className="font-display text-2xl font-bold text-foreground mb-1 break-words">{groupToday.fields.heading}</h2>
+                    {groupToday.fields.intro && (
+                      <p className="text-muted-foreground text-sm break-words">{groupToday.fields.intro}</p>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-4">
                   {today.map((circle, index) => (
                     <CircleCard
@@ -418,6 +503,7 @@ export default function Circles() {
                       index={index}
                       onOpenSeat={setOpenSeat}
                       coordinator={coordinator}
+                      words={cardWords}
                     />
                   ))}
                 </div>
@@ -426,12 +512,14 @@ export default function Circles() {
 
             {future.length > 0 && (
               <div className="mb-4">
-                <div className="mb-6">
-                  <h2 className="font-display text-2xl font-bold text-foreground mb-1">As the Village Matures</h2>
-                  <p className="text-muted-foreground text-sm">
-                    As residents arrive, today's team circles grow into resident-led councils like these: domain-specific circles connected through elected representatives.
-                  </p>
-                </div>
+                {!groupFuture.hidden && (
+                  <div className="mb-6">
+                    <h2 className="font-display text-2xl font-bold text-foreground mb-1 break-words">{groupFuture.fields.heading}</h2>
+                    {groupFuture.fields.intro && (
+                      <p className="text-muted-foreground text-sm break-words">{groupFuture.fields.intro}</p>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-4">
                   {future.map((circle, index) => (
                     <CircleCard
@@ -442,6 +530,7 @@ export default function Circles() {
                       index={index}
                       onOpenSeat={setOpenSeat}
                       coordinator={coordinator}
+                      words={cardWords}
                     />
                   ))}
                 </div>
@@ -474,40 +563,27 @@ export default function Circles() {
             )}
           </div>
 
+          {!together.hidden && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="mt-16 bg-sage/5 p-8 rounded-2xl border border-sage/20"
           >
-            <h2 className="font-display text-2xl font-bold text-foreground mb-4">
-              How Circles Work Together
+            <h2 className="font-display text-2xl font-bold text-foreground mb-4 break-words">
+              {together.fields.heading}
             </h2>
             <div className="space-y-4 text-muted-foreground">
-              <p>
-                Each circle has <strong>a domain, a budget, and the authority</strong> to make decisions within that domain.{" "}
-                {coordinator ? (
-                  <>
-                    When decisions affect multiple circles, the <strong>{coordinator.name}</strong>, the four leads and circle representatives, coordinates.
-                  </>
-                ) : (
-                  "When decisions affect multiple circles, the circles involved decide together."
-                )}{" "}
-                The Finance & Business Circle provides budget stewardship, oversight, and alignment across all circles.
-              </p>
-              <p>
-                Circles use <strong>consent-based decision-making</strong>: a proposal moves forward unless someone has a reasoned objection that it would cause harm or prevent the circle from achieving its aim. This creates space for wisdom and prevents tyranny of the majority.
-              </p>
-              {coordinator ? (
-                <p>
-                  Every circle is <strong>double-linked</strong> to the {coordinator.name} by two people, so information flows both ways. Regular reporting, check-ins, and feedback keep the whole aligned and adaptable.
+              {togetherParagraphs.map((text, i) => (
+                <p key={i} className="break-words">
+                  <Emphasized text={text} />
                 </p>
-              ) : (
-                <p>Regular reporting, check-ins, and feedback between circles keep the whole aligned and adaptable.</p>
-              )}
+              ))}
             </div>
           </motion.div>
+          )}
 
+          {!closing.hidden && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -516,11 +592,12 @@ export default function Circles() {
           >
             <Link href="/roles">
               <a className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium">
-                Learn About Roles & Leadership
+                {closing.fields.label}
                 <ArrowRight className="w-4 h-4" />
               </a>
             </Link>
           </motion.div>
+          )}
         </div>
       </section>
     </Layout>

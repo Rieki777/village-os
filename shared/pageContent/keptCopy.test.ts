@@ -17,7 +17,10 @@
  * that village reads its defaults there. Listed by name, so a page added later
  * is a decision somebody sees (re-read 2026-10-31: How We Govern, whose
  * defaults are still that village's words, so it reads the same until they
- * change).
+ * change). Circles (2026-11-01) is the same: its first defaults were the words
+ * the page had always typed, and the boot fixup in
+ * server/lib/circlesWordsKept.ts keeps them for a village that already holds
+ * its page words.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -25,7 +28,7 @@ import { describe, expect, it } from "vitest";
 import { adoptedDocument, pageDocumentProblems, pageSectionKey, PAGE_SPECS } from "./index";
 
 /** Page sections the first village holds no copy of, because their spec arrived after it adopted the rest. */
-const NOT_HELD = ["page-governance"];
+const NOT_HELD = ["page-governance", "page-circles"];
 const HELD = PAGE_SPECS.filter((spec) => !NOT_HELD.includes(pageSectionKey(spec)));
 
 const RECORD_DIR = path.resolve(import.meta.dirname, "..", "..", "server", "seeds", "amora", "pages"); // brand-ok: the first village's own record, read to prove the defaults cannot reach it
