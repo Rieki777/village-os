@@ -38,6 +38,7 @@ import {
 import { fieldsForTemplate, kindForTemplate, MERGE_GROUP_LABELS, sampleValues } from "../../shared/comms/mergeFields";
 import { voiceLintWords } from "../../shared/comms/voiceLint";
 import { GAME_CONFIG } from "../../shared/gameConfig";
+import { villagePathLabel } from "../lib/villagePaths";
 import type { AppDeps } from "../lib/appDeps";
 import { post } from "../lib/comms/postOffice";
 import { derivedValues, loadEmailVillage, renderTemplate, type RenderedEmail } from "../lib/comms/render";
@@ -70,8 +71,8 @@ function pathIds(): string[] {
 /** The groups the Words list shows, with each path titled by its own name. */
 function groups() {
   return templateGroups(pathIds()).map((g) => {
-    const path = g.id.startsWith("path.") ? GAME_CONFIG.paths.find((p) => `path.${p.id}` === g.id) : undefined;
-    return { ...g, title: path ? `${path.label} path` : g.title };
+    const label = g.id.startsWith("path.") ? villagePathLabel(g.id.slice("path.".length)) : null;
+    return { ...g, title: label ? `${label} path` : g.title };
   });
 }
 

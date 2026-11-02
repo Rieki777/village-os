@@ -155,7 +155,7 @@ export default function Visit() {
             <div className={`grid gap-5 ${visitTypes.length >= 3 ? "md:grid-cols-3" : visitTypes.length === 2 ? "md:grid-cols-2 max-w-3xl mx-auto" : "max-w-md mx-auto"}`}>
               {visitTypes.map((v) => (
                 <div key={v.id} className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col">
-                  <h3 className="font-display text-xl font-semibold text-teal-deep mb-3">{v.title}</h3>
+                  {v.title?.trim() && <h3 className="font-display text-xl font-semibold text-teal-deep mb-3">{v.title}</h3>}
                   {/* The cost line carried a dollar sign beside every village's
                       price, whatever its currency, and beside "Free". The
                       wallet says "what it costs" in no currency at all. A
@@ -165,7 +165,13 @@ export default function Visit() {
                     {v.format?.trim() && <p className="flex items-center gap-2"><MapPin className="w-4 h-4 shrink-0 text-stone-400" /> {v.format}</p>}
                     {v.cost?.trim() && <p className="flex items-center gap-2"><Wallet className="w-4 h-4 shrink-0 text-stone-400" /> {v.cost}</p>}
                   </div>
-                  <p className="text-sm text-stone-600 leading-relaxed mb-5 flex-1">{v.description}</p>
+                  {/* A cleared description draws no empty paragraph; the space
+                      it held still pushes the button to the card's foot. */}
+                  {v.description?.trim() ? (
+                    <p className="text-sm text-stone-600 leading-relaxed mb-5 flex-1">{v.description}</p>
+                  ) : (
+                    <div className="flex-1" />
+                  )}
                   {v.cta_url ? (
                     <a
                       href={v.cta_url}

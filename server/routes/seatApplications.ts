@@ -60,7 +60,6 @@
  * ratchet on that file holds. MOUNTED BELOW requireModule("governance") for the
  * /api/governance prefix, which is what keeps the module's gate in front of it.
  */
-import crypto from "node:crypto";
 import type { Express } from "express";
 import type { PoolConnection } from "mysql2/promise";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
@@ -84,9 +83,9 @@ import {
   ROLE_APPLICATION,
   STATUS_WORDS,
 } from "../../shared/seatApplications";
-import { civilDateInstant, resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
-import { settingsHash, type SeatSettings } from "../../shared/seatSettings";
-import { civilDateKey, SYNODIC_MONTH_MS } from "../../shared/lunar";
+import { civilDateInstant, type SeatCalendar } from "../../shared/seatTerms";
+import type { SeatSettings } from "../../shared/seatSettings";
+import { civilDateKey } from "../../shared/lunar";
 import type { BallotMethod } from "../../shared/governanceEngine";
 import type { AppDeps } from "../lib/appDeps";
 import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
@@ -97,25 +96,21 @@ import type { WeightModeSnapshot } from "../lib/governanceWeights";
 import type { LapseContext } from "../lib/orgChart";
 import { seatVoteLandsAt } from "../lib/seatTermLanding";
 import { adoptApplication, seatApplicationCloser, settleDepsOf, tellOutcome } from "../lib/seatApplicationCloser";
+import { prepareApplication, writeApplicationOn } from "../lib/seatApplicationWrite";
+import { openProposalsWaitingOn } from "../lib/openProposalDecide";
 import { carriesMoney, intentSentence, noticeDaysOf, RECONFIRM_FRESH_MS, userParty, ALIGN_WORDS } from "../../shared/alignments";
 import {
-  prepareSeatTermsText,
   presentView,
-  recordAlignment,
   seatTermsWords,
   settleText,
   viewText,
   viewTexts,
-  writePreparedText,
-  type PreparedText,
   type TextView,
 } from "../lib/alignmentSubjects";
 import { confirmedWithin } from "../lib/identityConfirm";
 import {
   applicationsOfCandidates,
-  holdingApplicationsLocked,
   inApplicationTransaction,
-  insertApplication,
   latestBallotsFor,
   listApplications,
   liveSeatingsOf,
@@ -240,17 +235,6 @@ let adopters: AdoptersReader | null = null;
  */
 export function roleAdoptersReader(): AdoptersReader | null {
   return adopters;
-}
-
-/** A seat's term as a civil date, from the terms' own length when no date is written. */
-function requestedEndsOn(settings: SeatSettings, startsAt: Date, timezone: string): string | null {
-  const t = settings.term;
-  if (!t) return null;
-  if (typeof t.endsOn === "string" && t.endsOn.trim()) return t.endsOn.trim();
-  if (typeof t.lengthMoons === "number" && t.lengthMoons > 0) {
-    return civilDateKey(new Date(startsAt.getTime() + t.lengthMoons * SYNODIC_MONTH_MS), timezone || "UTC");
-  }
-  return null;
 }
 
 export function register(app: Express, deps: Deps): void {
@@ -629,35 +613,15 @@ export function register(app: Express, deps: Deps): void {
 
     // The term, decided now and frozen. Counted from the latest the seats could be
     // taken up, so it stays good if a holder later sends the application to a vote.
+    // The term, the row and the words are server/lib/seatApplicationWrite.ts, which an adopted open proposal writes through too.
     const setup = await roleBallotSetup();
     const landsAt = seatVoteLandsAt(landingDeps(), setup.durationDays, now);
     const startsNoEarlierThan = startsAt && startsAt.getTime() > landsAt.getTime() ? startsAt : landsAt;
-    const term = resolveSeatTerm({
-      requestedEndsOn: requestedEndsOn(input.settings, startsNoEarlierThan, tz),
-      calendar,
-      capAtSeasonEnd: false,
-      now,
-      startsNoEarlierThan,
-    });
-    if (!term.ok) return answer(term.code === "unreadable_date" ? 400 : 409, { error: term.error, code: term.code, field: "seatSettings" });
-
-    const id = `sa-${crypto.randomBytes(8).toString("hex")}`;
-    const row = {
-      id,
-      candidateUserId: userId,
-      proposedBy: userId,
-      seatIds: input.seatIds,
-      note: input.note,
-      deliverables: input.deliverables,
-      settings: input.settings,
-      settingsHash: await settingsHash(input.settings),
-      termEndsAt: term.endsAt,
-      termSeasonId: term.seasonId,
-      termFollowsSeason: term.followsSeason,
-      startsAt,
-      supersedesId: input.supersedesId,
-    };
     const seatNames = input.seatIds.map((sid) => seats.find((s) => s.id === sid)?.name ?? pending.get(sid) ?? sid);
+    const made = await prepareApplication({ candidateUserId: userId, proposedBy: userId, input, startsAt, startsNoEarlierThan, seatNames, calendar, now, supersedes });
+    if (!made.ok) return answer(made.status, made.body);
+    const { row, prepared } = made.app;
+    const id = row.id;
 
     /*
      * THE WORDS THE CANDIDATE ALIGNS WITH (PR5). The Review step showed the
@@ -665,37 +629,19 @@ export function register(app: Express, deps: Deps): void {
      * longer match, because a seat was renamed or the terms moved, are refused
      * before anything is written. Money asks the re-confirm first.
      */
-    const prepared: PreparedText = prepareSeatTermsText({ ...row }, seatNames, userId, tz, supersedes);
     const aligned = (body as { alignedWords?: unknown } | null)?.alignedWords;
     if (aligned !== undefined && String(aligned) !== prepared.text.body) {
       return answer(409, { error: "words_changed", message: ALIGN_WORDS.wordsChanged, title: prepared.text.title, body: prepared.text.body });
     }
     const money = moneyRefusal(user, input.settings);
     if (money) return answer(403, money);
-    const stored = { ...row, textId: prepared.text.id, textHash: prepared.text.contentHash };
-    /** The application, its text, its parties and the candidate's alignment: one transaction, so the candidate never clicks twice. */
+    /**
+     * The application, its text, its parties and the candidate's alignment: one
+     * transaction, so the candidate never clicks twice. The check above reads
+     * without a lock; `writeApplicationOn` asks again under it (red team G6).
+     */
     const writeAll = async (conn: PoolConnection, status: "awaiting-holder" | "voting") => {
-      /*
-       * ONE APPLICATION PER SEAT AT A TIME, UNDER THE LOCK (red team G6). The
-       * check above reads without a lock, so two applies at once both passed
-       * it and both landed, and the second took the seating from the first.
-       * Here the seat rows are locked and the member's applications holding
-       * any of them (held-full and adopted-not-yet-seated included) are read
-       * with a locking read, in the transaction that writes this one.
-       */
-      const holding = await holdingApplicationsLocked(conn, userId, input.seatIds);
-      if (holding.length > 0) throw Object.assign(new Error(PENDING_MESSAGE), { code: "SA_PENDING", applicationId: holding[0].id });
-      await insertApplication(conn, { ...stored, status });
-      await writePreparedText(conn, prepared);
-      await recordAlignment(conn, {
-        textId: prepared.text.id,
-        partyKey: userParty(userId),
-        userId,
-        contentHash: prepared.text.contentHash,
-        intent: intentSentence(seatNames),
-        method: "click",
-        authorityRef: null,
-      });
+      await writeApplicationOn(conn, made.app, status, { candidateAligns: true });
       // A proposal stamps itself submitted in the same transaction, so the two never disagree.
       if (opts.alsoWrite) await opts.alsoWrite(conn, id);
     };
@@ -730,7 +676,7 @@ export function register(app: Express, deps: Deps): void {
           dedupeKey: `sa:${id}:waiting:${holder}`,
         });
       }
-      return answer(201, { success: true, id, url: applicationHref(id), status: "awaiting-holder", textId: prepared.text.id, caution: term.caution ?? null });
+      return answer(201, { success: true, id, url: applicationHref(id), status: "awaiting-holder", textId: prepared.text.id, caution: made.app.caution });
     }
 
     /*
@@ -761,7 +707,7 @@ export function register(app: Express, deps: Deps): void {
       status: "voting",
       textId: prepared.text.id,
       ballot: { id: opened.ballotId, closesAt: opened.closesAt },
-      caution: term.caution ?? null,
+      caution: made.app.caution,
     });
   }
   door = applyFor;
@@ -900,10 +846,11 @@ export function register(app: Express, deps: Deps): void {
     const viewerId = String(viewer.id);
     const ctx = await capabilityCtx(viewer);
     const pool = getPool();
+    const rule = await adoptionRule(viewer, ctx);
     const payload: WaitingPayload = {
       applications: await applicationsWaitingOn(
         { pool, allMembers: () => members.all(), firstName, timezone: seatCalendar().timezone || "UTC" },
-        await adoptionRule(viewer, ctx),
+        rule,
         viewerId,
       ),
       drafts: (await publishDoorFor(pool, { userId: viewerId, isAdmin: ctx.isAdmin === true }, await liveHoldersOf(ORG_DECIDE)))
@@ -915,6 +862,13 @@ export function register(app: Express, deps: Deps): void {
       toConsent: await consentAsksWaitingOn(
         { pool, allMembers: () => members.all(), firstName, timezone: seatCalendar().timezone || "UTC", now: new Date() },
         viewerId,
+      ),
+      // Proposals from somebody with no account yet: asked of the reader's circle, or the reader's to decide (open proposals part B).
+      openProposals: await openProposalsWaitingOn(
+        { pool, timezone: seatCalendar().timezone || "UTC", now: new Date() },
+        rule,
+        viewerId,
+        typeof viewer.email === "string" ? viewer.email : null,
       ),
     };
     res.set("Cache-Control", "no-store").json(payload);

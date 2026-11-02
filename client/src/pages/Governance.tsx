@@ -14,7 +14,7 @@ import {
   Scale,
   ShieldCheck,
 } from "lucide-react";
-import { useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 import { useHypha } from "@/modules/ModuleProvider";
 import { HyphaAdminNote } from "@/components/HyphaAdminNote";
 import { usePageContent } from "@/hooks/usePageContent";
@@ -31,7 +31,8 @@ const STEP_ICONS = [Lightbulb, MessageSquare, Users, CheckCircle2, Eye];
 const paragraphs = (...texts: string[]) => texts.filter((t) => t.trim() !== "");
 
 export default function Governance() {
-  const brochureOn = useBrochurePages() === true;
+  // Each story page has its own switch now; a door goes with its page.
+  const storyShown = useStoryPageShown();
   // A Hypha section needs a Hypha space to describe: the village's switch AND its DHO link.
   const hypha = useHypha();
   // Every word on this page is the village's own, from Admin, Pages, How We
@@ -269,7 +270,7 @@ export default function Governance() {
           <p className="text-stone-700 leading-relaxed mb-4 break-words">
             <Emphasized text={hyphaSection.fields.body} />
           </p>
-          {brochureOn && (
+          {storyShown("/co-creators-guide") && (
             <Link
               href="/co-creators-guide"
               className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
@@ -282,8 +283,9 @@ export default function Governance() {
       )}
       {!hyphaSection.hidden && <HyphaAdminNote />}
 
-      {/* CTA. Both of its doors are brochure pages, so it goes with them. */}
-      {brochureOn && !cta.hidden && (
+      {/* CTA. Both of its doors are brochure pages, so it goes with them,
+          and each door goes with its own page when that one is off alone. */}
+      {(storyShown("/steward") || storyShown("/love-letter")) && !cta.hidden && (
       <section className="bg-teal-deep text-white py-20">
         <div className="container max-w-3xl mx-auto px-4 text-center">
           <h2 className="font-display text-3xl md:text-4xl font-bold mb-4 break-words">
@@ -295,18 +297,22 @@ export default function Governance() {
           </p>
           )}
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href="/steward"
-              className="inline-flex items-center gap-2 bg-amber text-foreground font-semibold px-6 py-3 rounded-xl hover:bg-amber/90 transition-colors"
-            >
-              {cta.fields.stewardLabel} <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/love-letter"
-              className="inline-flex items-center gap-2 bg-white/10 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/20 transition-colors border border-white/20"
-            >
-              {cta.fields.commitmentLabel}
-            </Link>
+            {storyShown("/steward") && (
+              <Link
+                href="/steward"
+                className="inline-flex items-center gap-2 bg-amber text-foreground font-semibold px-6 py-3 rounded-xl hover:bg-amber/90 transition-colors"
+              >
+                {cta.fields.stewardLabel} <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
+            {storyShown("/love-letter") && (
+              <Link
+                href="/love-letter"
+                className="inline-flex items-center gap-2 bg-white/10 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/20 transition-colors border border-white/20"
+              >
+                {cta.fields.commitmentLabel}
+              </Link>
+            )}
           </div>
         </div>
       </section>

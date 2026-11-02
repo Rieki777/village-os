@@ -210,6 +210,26 @@ describe("waiting on you", () => {
     for (const h of screen.getAllByRole("heading")) expect(h.textContent).not.toMatch(/\d/);
   });
 
+  it("draws a proposal from outside the village: an adopt row for a decider, a consent row under Asked to consent, each opening its page", async () => {
+    const openProposals = [
+      { id: "op-0000000000000000000a", href: "/open-proposals/op-0000000000000000000a", roles: ["Gate keeper"], circles: ["Land circle"], proposer: "Rowan", ask: "adopt", closesOn: null, confirmedOn: "2026-11-01" },
+      { id: "op-0000000000000000000b", href: "/open-proposals/op-0000000000000000000b", roles: ["Well keeper"], circles: ["Land circle"], proposer: "Sol", ask: "consent", closesOn: "2026-11-04", confirmedOn: "2026-11-02" },
+    ];
+    waitingMock.mockImplementation(async () => reply(200, { applications: [], drafts: [], openProposals }));
+    fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
+    render(<TaskBoard />);
+    const group = await screen.findByRole("region", { name: WAITING_COPY.heading });
+    const decide = within(group).getByText("Rowan proposes to hold Gate keeper next season").closest("a");
+    expect(decide?.getAttribute("href")).toBe("/open-proposals/op-0000000000000000000a");
+    expect(within(group).getByText(`${WAITING_COPY.openFrom} · In Land circle`)).toBeInTheDocument();
+    expect(within(group).getByText(WAITING_COPY.openAction)).toBeInTheDocument();
+    const asks = within(group).getByRole("list", { name: WAITING_COPY.consentHeading });
+    const consent = within(asks).getByText("Sol proposes to hold Well keeper next season").closest("a");
+    expect(consent?.getAttribute("href")).toBe("/open-proposals/op-0000000000000000000b");
+    expect(within(asks).getByText("In Land circle · Closes on 4 November 2026")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(TASK_COPY.empty)).toBeNull());
+  });
+
   it("reads a server from before the consent group as no asks", async () => {
     waitingMock.mockImplementation(async () => reply(200, { applications: WAITING.applications, drafts: [] }));
     fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));

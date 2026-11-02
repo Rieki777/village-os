@@ -34,7 +34,7 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { recordAssistantUsage } from "./assistantUsage";
-import { synthesisSystemPrompt } from "./callSynthesis";
+import { synthesisSystemPrompt, synthesisUserContent } from "./callSynthesis";
 import { transcriptFor } from "./recordings";
 import type { TranscriptSegment } from "./recordings";
 import { writeSynthesis } from "./synthesisWriter";
@@ -77,13 +77,9 @@ function headers(opts: BatchOptions): Record<string, string> {
   };
 }
 
-/** The user turn, byte-identical in shape to the synchronous route's. */
+/** The user turn, from the same builder the synchronous route uses. */
 function userContent(rec: BatchRecordingInput): string {
-  return JSON.stringify({
-    title: rec.title,
-    chapterMarks: rec.chapterMarks,
-    segments: rec.segments.slice(0, 400).map((s) => ({ startMs: s.startMs, text: s.text.slice(0, 400) })),
-  }).slice(0, 100000);
+  return synthesisUserContent({ title: rec.title, chapterMarks: rec.chapterMarks, segments: rec.segments });
 }
 
 // ── Selection ────────────────────────────────────────────────────────────────

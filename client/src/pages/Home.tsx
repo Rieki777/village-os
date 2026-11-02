@@ -5,7 +5,7 @@ import VillagePulse from "@/components/VillagePulse";
 import MapPeek from "@/components/MapPeek";
 import { altOr, useBrandImages, useVillageLinks } from "@/lib/gameApi";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   TrendingUp,
   Users,
@@ -32,6 +32,7 @@ import { Emphasized, Highlighted } from "@/components/PageText";
 import { HOME_PAGE } from "@shared/pageContent/home";
 import { useModule } from "@/modules/ModuleProvider";
 import { scrollBehavior } from "@/components/natural/scrollBehavior";
+import { useStoryPageOffAlone } from "@/lib/brochure";
 
 
 
@@ -128,6 +129,14 @@ export default function Home() {
   const hero = page?.hero.fields;
   const journey = page?.journey;
   const paths = page?.paths;
+  // A journey switched off on its own in Admin, Pages takes its card with it,
+  // and with no card left the section draws nothing, as if it were hidden.
+  const pageOff = useStoryPageOffAlone();
+  const pathCards = (paths?.lists.cards ?? []).filter((card) => {
+    const look = PATH_CARD_LOOK[card.id as keyof typeof PATH_CARD_LOOK];
+    return !!look && !pageOff(look.href);
+  });
+  const pathsShown = !!paths && !paths.hidden && pathCards.length > 0;
   const personas = page?.personas;
   const cta = page?.cta;
   // R47: the hero holds one door forward, plus the map when this village has
@@ -217,11 +226,9 @@ export default function Home() {
                 {hero.badge}
               </span>
             ) : null}
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className={`relative font-display ${headlineSize(hero?.headline ?? "")} font-bold text-white leading-tight mb-6 break-words${hero ? "" : " invisible"}`}
+            <h1
+              style={{ animationDelay: "0.1s" }}
+              className={`hero-rise relative font-display ${headlineSize(hero?.headline ?? "")} font-bold text-white leading-tight mb-6 break-words${hero ? "" : " invisible"}`}
             >
               {/* text-amber-on-band, not text-primary. --primary is the seed
                   colour derived to clear 4.5:1 against WHITE, and the phrase
@@ -236,22 +243,18 @@ export default function Home() {
                 phrase={hero?.highlight ?? ""}
                 render={(phrase) => <span className="text-amber-on-band">{phrase}</span>}
               />
-            </motion.h1>
+            </h1>
 
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className={`relative text-xl text-white/80 leading-relaxed mb-8${hero ? "" : " invisible"}`}
+            <p
+              style={{ animationDelay: "0.2s" }}
+              className={`hero-rise relative text-xl text-white/80 leading-relaxed mb-8${hero ? "" : " invisible"}`}
             >
               <Emphasized text={hero?.subline ?? ""} strongClassName="font-semibold text-white" />
-            </motion.p>
+            </p>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="relative flex flex-wrap gap-4"
+            <div
+              style={{ animationDelay: "0.3s" }}
+              className="hero-rise relative flex flex-wrap gap-4"
             >
               {/* THE TWO CONTROLS ARE DRAWN AGAINST THE BAND, NOT AGAINST A
                   SCRIM. WCAG 1.4.11 asks 3:1 for the boundary that tells a
@@ -294,25 +297,16 @@ export default function Home() {
                   Walk the map
                 </Link>
               )}
-            </motion.div>
+            </div>
           </div>
         </div>
 
-        {/* Scroll indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10"
-        >
+        {/* Scroll indicator. CSS like the hero above it (index.css). */}
+        <div className="hero-cue absolute bottom-8 left-1/2 -translate-x-1/2 z-10">
           <div className="w-6 h-10 border-2 border-white/50 rounded-full flex justify-center">
-            <motion.div
-              animate={{ y: [0, 12, 0] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="w-1.5 h-1.5 bg-white rounded-full mt-2"
-            />
+            <div className="hero-cue-dot w-1.5 h-1.5 bg-white rounded-full mt-2" />
           </div>
-        </motion.div>
+        </div>
       </section>
 
       {/* Journey Stages */}
@@ -333,7 +327,7 @@ export default function Home() {
               const Icon = STAGE_ICONS[index % STAGE_ICONS.length];
               return (
               <div key={`${index}-${item.name}`} className="flex items-center">
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
@@ -349,7 +343,7 @@ export default function Home() {
                   <span className="text-sm text-muted-foreground">
                     {item.description}
                   </span>
-                </motion.div>
+                </m.div>
                 {index < all.length - 1 && (
                   <ArrowRight className="w-5 h-5 text-muted-foreground hidden md:block" />
                 )}
@@ -373,27 +367,27 @@ export default function Home() {
 
       {/* Choose Your Path. The section keeps its id when hidden so the
           hero's "Pick your path" anchor never points at nothing. */}
-      <section id="choose-path" className={paths && !paths.hidden ? "py-24 bg-background" : undefined}>
-        {paths && !paths.hidden && (
+      <section id="choose-path" className={pathsShown ? "py-24 bg-background" : undefined}>
+        {paths && pathsShown && (
         <div className="container">
           <div className="text-center mb-16">
-            <motion.span
+            <m.span
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="inline-block px-4 py-1.5 bg-primary/10 rounded-full text-primary text-sm font-medium mb-4"
             >
               {paths.fields.eyebrow}
-            </motion.span>
-            <motion.h2
+            </m.span>
+            <m.h2
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4"
             >
               {paths.fields.heading}
-            </motion.h2>
-            <motion.p
+            </m.h2>
+            <m.p
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -401,15 +395,15 @@ export default function Home() {
               className="text-xl text-muted-foreground max-w-2xl mx-auto"
             >
               <Emphasized text={paths.fields.intro} />
-            </motion.p>
+            </m.p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8">
-            {paths.lists.cards.map((card, index) => {
+            {pathCards.map((card, index) => {
               const look = PATH_CARD_LOOK[card.id as keyof typeof PATH_CARD_LOOK];
               if (!look) return null;
               return (
-              <motion.div
+              <m.div
                 key={card.id}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -449,7 +443,7 @@ export default function Home() {
                     </div>
                   </div>
                 </Link>
-              </motion.div>
+              </m.div>
               );
             })}
           </div>
@@ -463,7 +457,7 @@ export default function Home() {
       <section className="py-24 bg-background">
         <div className="container">
           <div className="text-center mb-16">
-            <motion.span
+            <m.span
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -472,16 +466,16 @@ export default function Home() {
               className="inline-block px-4 py-1.5 bg-sage-light rounded-full text-sage text-sm font-medium mb-4"
             >
               {personas.fields.eyebrow}
-            </motion.span>
-            <motion.h2
+            </m.span>
+            <m.h2
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4"
             >
               {personas.fields.heading}
-            </motion.h2>
-            <motion.p
+            </m.h2>
+            <m.p
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -489,14 +483,14 @@ export default function Home() {
               className="text-xl text-muted-foreground max-w-2xl mx-auto"
             >
               <Emphasized text={personas.fields.intro} />
-            </motion.p>
+            </m.p>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
             {personas.lists.items.map((persona, index) => {
               const look = PERSONA_LOOKS[index % PERSONA_LOOKS.length];
               return (
-              <motion.div
+              <m.div
                 key={`${index}-${persona.label}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -520,7 +514,7 @@ export default function Home() {
                 <p className="text-muted-foreground text-sm leading-relaxed">
                   {persona.body}
                 </p>
-              </motion.div>
+              </m.div>
               );
             })}
           </div>
@@ -551,15 +545,15 @@ export default function Home() {
       <section className="py-24 bg-primary/5">
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
-            <motion.h2
+            <m.h2
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               className="font-display text-4xl md:text-5xl font-bold text-foreground mb-6"
             >
               {cta.fields.heading}
-            </motion.h2>
-            <motion.p
+            </m.h2>
+            <m.p
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -567,8 +561,8 @@ export default function Home() {
               className="text-xl text-muted-foreground mb-8"
             >
               <Emphasized text={cta.fields.body} />
-            </motion.p>
-            <motion.div
+            </m.p>
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -596,7 +590,7 @@ export default function Home() {
                   {cta.fields.secondaryLabel}
                 </a>
               )}
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </section>

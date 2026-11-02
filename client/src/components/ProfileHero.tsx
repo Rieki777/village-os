@@ -13,7 +13,7 @@
  * server answered.
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { authToken, useGameConfig } from "@/lib/gameApi";
 import { Link } from "wouter";
 import { announceProfileChange, onProfileRefresh } from "@/lib/profileRefresh";
@@ -239,7 +239,7 @@ export default function ProfileHero({
     );
 
   return (
-    <motion.section aria-labelledby="hero-name" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+    <m.section aria-labelledby="hero-name" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:gap-9 sm:text-left">
         {/*
           THE PORTRAIT, ROUND, INSIDE THE LADDER (approved design, 2026-10-30).
@@ -400,6 +400,6 @@ export default function ProfileHero({
         editable
         onChanged={announceProfileChange}
       />
-    </motion.section>
+    </m.section>
   );
 }

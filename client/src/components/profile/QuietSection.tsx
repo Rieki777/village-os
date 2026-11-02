@@ -10,7 +10,7 @@
  * It says what would open it, and where that is done. A locked thing that does
  * not say what unlocks it is just an absence with a border.
  */
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Lock } from "lucide-react";
 
 export default function QuietSection({
@@ -29,7 +29,7 @@ export default function QuietSection({
   busy?: boolean;
 }) {
   return (
-    <motion.section
+    <m.section
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       aria-label={title}
@@ -50,6 +50,6 @@ export default function QuietSection({
           {busy ? "Opening…" : action}
         </button>
       ) : null}
-    </motion.section>
+    </m.section>
   );
 }
