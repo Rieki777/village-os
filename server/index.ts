@@ -870,7 +870,7 @@ import { latestSettlementRefusals } from "./repos/settlementBallots";
 import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
 import { precompressedAssets } from "./lib/precompressedAssets";
-import { retireContentCopy } from "./lib/retiredContentCopy";
+import { GRATITUDE_PAY_COPY_RETIRED, retireContentCopy } from "./lib/retiredContentCopy";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -1874,6 +1874,7 @@ async function ensureDataFiles() {
   await runOnce("canonicalize-regen-units", canonicalizeRegenUnits);
   await runOnce("retire-legacy-peg-copy", retireLegacyPegCopy);
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
+  await runOnce("retire-gratitude-pay-copy-2026-11-01", async () => { const c = contentRepo.get(); if (c && typeof c === "object" && retireContentCopy(c, GRATITUDE_PAY_COPY_RETIRED)) await contentRepo.put(c); }); // Rye, 2026-11-01: Gratitude names only the recognition token
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
   await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
   // How We Govern's defaults went neutral: a village that already holds its page words keeps this page's too.

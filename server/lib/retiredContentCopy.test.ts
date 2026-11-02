@@ -12,7 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { RETIRED_CONTENT_COPY, retireContentCopy } from "./retiredContentCopy";
+import { GRATITUDE_PAY_COPY_RETIRED, RETIRED_CONTENT_COPY, retireContentCopy } from "./retiredContentCopy";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 
@@ -60,5 +60,32 @@ describe("retiring seeded strings in a content document", () => {
   it("turns the old contribution line into the one a fresh village ships", () => {
     expect(RETIRED_CONTENT_COPY.get("Earn Hearts for contributions")).toBe("See what each quest pays");
     expect(seededStrings().has("See what each quest pays")).toBe(true);
+  });
+});
+
+/*
+ * THE LINES AN EARLIER BOOT ALREADY WROTE. `retire-blended-token-copy` ran once
+ * on every live village and left "Earn Gratitude for contributions" and
+ * "Gratitude Economy" in its content document. A second once-only step
+ * (server/index.ts, `retire-gratitude-pay-copy-2026-11-01`) swaps exactly
+ * those strings and nothing a person wrote around them.
+ */
+describe("the Gratitude-as-pay lines already in live content", () => {
+  it("are swapped character for character, and a person's own sentence is left alone", () => {
+    const doc = {
+      steps: ["Earn Gratitude for contributions", "Earn Gratitude for contributions, said our steward"],
+      focus: "Gratitude Economy",
+      notes: "Gratitude Economy notes",
+    };
+    expect(retireContentCopy(doc, GRATITUDE_PAY_COPY_RETIRED)).toBe(true);
+    expect(doc).toEqual({
+      steps: ["See what each quest pays", "Earn Gratitude for contributions, said our steward"],
+      focus: "Village Economy",
+      notes: "Gratitude Economy notes",
+    });
+  });
+
+  it("never write Gratitude back in", () => {
+    for (const to of GRATITUDE_PAY_COPY_RETIRED.values()) expect(to).not.toMatch(/gratitude/i);
   });
 });

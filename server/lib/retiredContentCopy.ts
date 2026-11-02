@@ -23,6 +23,17 @@ export const RETIRED_CONTENT_COPY: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * What `retire-blended-token-copy` itself wrote before 2026-11-01, which every
+ * live village already ran once and so still holds. Swapped by its own
+ * once-only step, `retire-gratitude-pay-copy-2026-11-01` (server/index.ts),
+ * character for character, so a sentence a person wrote is never touched.
+ */
+export const GRATITUDE_PAY_COPY_RETIRED: ReadonlyMap<string, string> = new Map([
+  ["Earn Gratitude for contributions", "See what each quest pays"],
+  ["Gratitude Economy", "Village Economy"],
+]);
+
+/**
  * Swap every retired string in `content`, in place, at any depth. Returns
  * whether anything changed, so the caller writes the document only then.
  */
