@@ -324,7 +324,7 @@ What a fresh village is actually seeded to pay today, read from `server/lib/econ
 | `quest.completed` | `earned-equity` | 1 | 1 | claimant | no, seeded off |
 | `role.cycle` | `earned-equity` | 1 | 1 | holder | no, seeded off |
 
-A confirmed quest also mints recognition from the consent route itself, with its own range and cap, which is not a mint rule and does not appear in that table. A contribution pays nothing at all: `POST /api/profile/contribution` is a journal entry, and it is one deliberately, after a version of it that added a caller-supplied amount straight onto a member's balance was removed.
+A confirmed quest mints no recognition: a steward's consent is a yes and moves no Gratitude (Rye, 2026-10-21), and Gratitude is only ever sent from one member to another. A contribution pays nothing at all: `POST /api/profile/contribution` is a journal entry, and it is one deliberately, after a version of it that added a caller-supplied amount straight onto a member's balance was removed.
 
 Staged: the freedom. The rule engine can pay `gratitude`, `earned-equity`, `credits`, `library-credit`, `stay-credit`, `village-voice`. A village also has no route that creates a mint rule, so today it can edit the amounts on the rules it was seeded with and cannot add a token to a payout.
 
