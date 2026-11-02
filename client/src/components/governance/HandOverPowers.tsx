@@ -19,6 +19,8 @@ interface Power {
   title: string;
   consequence: string;
   held: boolean;
+  /** For mature villages only: never blocked, and it asks a second confirm. */
+  matureOnly?: boolean;
 }
 interface Standing {
   gameStarted: boolean;
@@ -26,6 +28,10 @@ interface Standing {
   selected?: string[];
   /** Before launch, while the launch vote is open: the list is written into it. */
   frozen?: boolean;
+  /** Two or more people may sign, so the act waits for a second signature. */
+  twoSign?: boolean;
+  /** The list waiting for its second signature, and whether this person signed it. */
+  pending?: { capabilities: string[]; mine: boolean } | null;
   powers?: Power[];
 }
 
@@ -40,13 +46,15 @@ export default function HandOverPowers() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
+  const [matureOk, setMatureOk] = useState(false);
 
   const load = () =>
     fetch(PATH, { headers: headers() })
       .then((r) => (r.ok ? r.json() : null))
       .then((s: Standing | null) => {
         setStanding(s);
-        setTicked(s && !s.gameStarted ? s.selected ?? [] : []);
+        // A list waiting for a signature is what a second signer is asked to sign.
+        setTicked(s?.pending ? s.pending.capabilities : s && !s.gameStarted ? s.selected ?? [] : []);
       })
       .catch(() => setStanding(null));
   useEffect(() => {
@@ -56,17 +64,24 @@ export default function HandOverPowers() {
   if (!standing?.mayAct || !standing.powers) return null;
   const atLaunch = !standing.gameStarted;
   const frozen = atLaunch && !!standing.frozen;
+  const matureTicked = standing.powers.filter((p) => p.matureOnly && !p.held && ticked.includes(p.capability));
   const toggle = (c: string) => {
     setConfirming(false);
+    setMatureOk(false);
     setTicked((t) => (t.includes(c) ? t.filter((x) => x !== c) : [...t, c]));
   };
   const send = () => {
     setBusy(true);
     setSaid(null);
-    fetch(PATH, { method: "POST", headers: headers(), body: JSON.stringify({ capabilities: ticked, confirm: true }) })
+    fetch(PATH, { method: "POST", headers: headers(), body: JSON.stringify({ capabilities: ticked, confirm: true, ...(matureTicked.length > 0 ? { confirmMature: matureOk } : {}) }) })
       .then(async (r) => {
         const body = await r.json().catch(() => ({}));
         if (!r.ok) return setSaid(String(body.error ?? "That did not go through. Try again."));
+        if (body.pending) {
+          setConfirming(false);
+          await load();
+          return setSaid("Signed. It waits for a second signature.");
+        }
         setSaid(
           atLaunch
             ? body.selected.length === 0
@@ -107,11 +122,22 @@ export default function HandOverPowers() {
             <span>
               <span className="font-medium">{p.title}</span>
               {p.consequence && <span className="block text-xs text-stone-600">Lets whoever holds it {p.consequence}.</span>}
+              {p.matureOnly && <span className="block text-xs font-semibold text-amber-800">For mature villages only</span>}
               {p.held && <span className="block text-xs text-teal-deep">The village holds this.</span>}
             </span>
           </label>
         ))}
       </div>
+      {standing.pending && !frozen && (
+        <p className="mt-3 text-xs text-stone-700 max-w-lg">
+          {standing.pending.mine
+            ? "You signed the ticked list. It waits for a second signature."
+            : "The ticked list waits for your signature. Confirm it to complete the hand-over, or tick a different list to start a new one."}
+        </p>
+      )}
+      {standing.twoSign && !standing.pending && !frozen && (
+        <p className="mt-3 text-xs text-stone-600 max-w-lg">Two of you can sign, so this takes two signatures.</p>
+      )}
       {frozen && (
         <p className="mt-3 text-xs text-stone-700 max-w-lg">
           The launch vote is open, and this list is written into it. To change it, withdraw that vote and open a new one.
@@ -137,9 +163,20 @@ export default function HandOverPowers() {
                     : `The launch will hand the village ${ticked.length} of its powers. Confirm?`
                   : `The village will hold ${ticked.length} more of its powers, and only a village vote hands one back. Confirm?`}
               </span>
+              {matureTicked.length > 0 && (
+                <label className="flex min-h-[44px] w-full items-center gap-2 text-xs text-stone-800">
+                  <input
+                    type="checkbox"
+                    checked={matureOk}
+                    onChange={() => setMatureOk((v) => !v)}
+                    className="h-5 w-5 shrink-0 rounded border-stone-400 text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                  />
+                  This village is mature enough to hold {matureTicked.map((p) => p.title).join(", ")}.
+                </label>
+              )}
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || (matureTicked.length > 0 && !matureOk)}
                 onClick={send}
                 className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white disabled:opacity-50"
               >
