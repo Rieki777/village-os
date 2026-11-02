@@ -65,6 +65,8 @@ import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gr
 import { applyPendingModes } from "./circleTreasury";
 import { openExitFor } from "./exit";
 import { isTombstone } from "./oauthAccounts";
+import { withoutFormerMembers } from "./formerMember";
+import { cardDuesPayersBetween, retiringFlatRoleRuleIds } from "../repos/duesPaid";
 import { DEPARTED_RECIPIENT, departedById } from "./departed";
 import { attendeeEmail, clearCheckinNotes } from "../repos/eventCheckins";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
@@ -383,6 +385,9 @@ export const keys = {
    */
   roleCycle: (v: string, cycleKey: string, seatId: string, userId: string, tokenSlug: string) =>
     `role.cycle:${esc(v)}:${esc(cycleKey)}:${esc(seatId)}:${esc(userId)}:${esc(tokenSlug)}`,
+  /** One member's dues dividend for one cycle, in one token: once, whatever they hold. */
+  duesDividend: (v: string, cycleKey: string, userId: string, tokenSlug: string) =>
+    `dues.dividend:${esc(v)}:${esc(cycleKey)}:${esc(userId)}:${esc(tokenSlug)}`,
   journeyStage: (v: string, journeyId: string, stage: string, userId: string) =>
     `journey.stage_reached:${esc(v)}:${esc(journeyId)}:${esc(stage)}:${esc(userId)}`,
   welcomeAboard: (v: string, questNo: number | string, userId: string) =>
@@ -2771,6 +2776,8 @@ export interface SettlementResult {
   decay: VoiceDecaySummary;
   /** New rows of cash owed to role holders this run (0285). Zero on a rerun. */
   cashOwed?: number;
+  /** Members newly paid a dues dividend this run (`payDuesDividend`). Zero on a rerun. */
+  duesMembersPaid?: number;
 }
 
 /** What one cycle's waning did, in the token's own minor units. */
@@ -3276,12 +3283,24 @@ export async function runSettlement(
       "AND a.`user_id` IS NOT NULL AND a.`is_example` = 0",
   );
 
+  /*
+   * A SEAT IS PAID ITS ROLE'S OWN LIST, AND NEVER A FLAT AMOUNT (Rye,
+   * 2026-11-01). A flat amount on a role rule is the automatic mint he turned
+   * off, and turned back on it pays dues-paying members once a cycle
+   * (`payDuesDividend`, below), whatever role they hold. So each seat is
+   * priced with the flat amounts read as blank. One kind of flat amount still
+   * pays seats: one already queued to go blank, which keeps its old meaning
+   * until it lands, so the cycle the change arrives in pays what it promised.
+   */
+  const retiring = await retiringFlatRoleRuleIds(pool, villageId());
+  const seatRules = payable.map((r) => (r.amount === null || retiring.has(r.id) ? r : { ...r, amount: null }));
+
   // Each seat priced once, by the function the role cards read, so a card can
   // never promise a figure this loop would not post.
   const quoted: Array<{ seat: RowDataPacket; quote: WorkPayQuote }> = [];
   for (const seat of seats) {
     const boost = opts.boostFor ? await opts.boostFor(String(seat.user_id)) : undefined;
-    quoted.push({ seat, quote: quoteWorkPay(payable, readValueTokens(seat.value_tokens), "seat", boost) });
+    quoted.push({ seat, quote: quoteWorkPay(seatRules, readValueTokens(seat.value_tokens), "seat", boost) });
   }
   if (seats.length > 0) {
     for (const r of payable) {
@@ -3334,6 +3353,7 @@ export async function runSettlement(
     }
   }
   out.stewardsThanked = paid.size;
+  out.duesMembersPaid = await payDuesDividend(pool, at, retiring, out);
   /*
    * Nothing new to pay means this cycle was already settled, which is the only
    * honest way to know: the ledger is the record, not a flag beside it.
@@ -3365,6 +3385,57 @@ export async function runSettlement(
   const wouldPay = quoted.some((q) => q.quote.lines.length > 0);
   out.alreadyRun = out.minted.length === 0 && wouldPay;
   return out;
+}
+
+/**
+ * THE DUES DIVIDEND (Rye, 2026-11-01): "if this is turned on again it would be
+ * attached to those who are paying members, so that each cycle they're paying
+ * membership dues they're getting these tokens minted to them."
+ *
+ * A flat amount on a `role.cycle` rule, once a village sets one again after
+ * the automatic mint went blank, is paid ONCE A CYCLE TO EACH MEMBER WHOSE
+ * MEMBERSHIP DUES WERE PAID BY CARD IN THAT CYCLE: per member and never per
+ * seat, role or no role (decided by the coordinator from his words). Card
+ * only, by his ruling: `cardDuesPayersBetween` says why the rest cannot be
+ * seen. A reversed charge, a donation, a former member and an erased account
+ * are paid nothing. No badge multiplies it, because dues are not work.
+ *
+ * THE CYCLE JUST CLOSED IS ASKED TOO. Settlement runs hourly, so dues paid in
+ * a cycle's last hour are first seen by a run in the next one; asking both
+ * windows, each under its own cycle's key and its own cycle's rules, pays them
+ * for the cycle they were paid in. The key makes a second asking a no-op.
+ */
+async function payDuesDividend(pool: Pool, at: Date, retiring: Set<string>, out: SettlementResult): Promise<number> {
+  const here = cycleWindow(at);
+  const before = cycleWindow(new Date(here.startsAt.getTime() - 1));
+  const paid = new Set<string>();
+  for (const w of [before, here]) {
+    const flat = (await rulesFor(pool, "role.cycle", currentCycleNumber(w.startsAt)))
+      .filter((r) => r.amount !== null && !retiring.has(r.id) && r.tokenSlug !== HEARTS && !ruleCannotPay(r.tokenSlug));
+    if (!flat.length) continue;
+    const { lines } = quoteWorkPay(flat, null, "seat");
+    if (!lines.length) continue;
+    const payers = (await cardDuesPayersBetween(pool, w.startsAt, w.endsAt)).filter((p) => !isTombstone({ email: p.email }));
+    for (const p of await withoutFormerMembers(pool, payers)) {
+      for (const line of lines) {
+        const res = await mint(pool, {
+          toUserId: p.id,
+          tokenSlug: line.token,
+          amount: line.units,
+          from: faucetFor(line.token)!,
+          source: "dues_dividend",
+          sourceRef: p.id,
+          description: `For your membership dues, paid in ${w.key}`,
+          idempotencyKey: keys.duesDividend(villageId(), w.key, p.id, line.token),
+        });
+        if (res.ok && !res.duplicate) {
+          paid.add(p.id);
+          out.minted.push({ token: line.token, units: line.units, decimals: line.decimals });
+        }
+      }
+    }
+  }
+  return paid.size;
 }
 
 // ── Two-party consent ───────────────────────────────────────────────────────

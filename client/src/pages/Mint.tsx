@@ -25,6 +25,7 @@ import { authToken } from "@/lib/gameApi";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 import { villageMoonSentence, type VillageMoon } from "@shared/villageMoon";
 import { ceilingBinds } from "@shared/workValue";
+import { ROLE_FLAT_AMOUNT_EXPLAINED, flatRoleAmountLine } from "@shared/duesDividend";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -417,14 +418,19 @@ export default function Mint() {
                       pay"), so it says it pays in full and never shows one.
                     */}
                     <p className={ruleLine}>
-                      {r.amount === null
-                        ? ceilingBinds(r.trigger)
-                          ? `up to ${formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)} ${r.tokenName}, as much as the work was posted for`
-                          : `as much ${r.tokenName} as each piece of work names`
-                        : `${formatTokenAmount(r.pays.units ?? 0, r.pays.decimals)} ${r.tokenName}`}
-                      {" to each "}
-                      {r.recipient}
+                      {r.trigger === "role.cycle" && r.amount !== null
+                        ? flatRoleAmountLine(formatTokenAmount(r.pays.units ?? 0, r.pays.decimals), r.tokenName)
+                        : <>
+                            {r.amount === null
+                              ? ceilingBinds(r.trigger)
+                                ? `up to ${formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)} ${r.tokenName}, as much as the work was posted for`
+                                : `as much ${r.tokenName} as each piece of work names`
+                              : `${formatTokenAmount(r.pays.units ?? 0, r.pays.decimals)} ${r.tokenName}`}
+                            {" to each "}
+                            {r.recipient}
+                          </>}
                     </p>
+                    {r.trigger === "role.cycle" ? <p className={ruleLine}>{ROLE_FLAT_AMOUNT_EXPLAINED}</p> : null}
                     {ceilingBinds(r.trigger) ? (
                       <p className={ruleLine}>
                         The most one payment may be: {formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)}{" "}
