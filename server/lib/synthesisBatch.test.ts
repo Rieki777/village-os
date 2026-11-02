@@ -23,6 +23,7 @@ import type { AddressInfo } from "net";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { HOSTILE, expectSealed, fencedValue } from "../testkit/promptFence";
 import {
   MAX_ATTEMPTS,
   enqueueSynthesis,
@@ -184,6 +185,25 @@ describe.skipIf(!configured)("call synthesis through the batch API", () => {
     const [items] = await pool.query<any[]>("SELECT * FROM synthesis_batch_items ORDER BY custom_id");
     expect(items).toHaveLength(2);
     expect(items.every((i: any) => i.status === "pending" && i.attempt === 1)).toBe(true);
+  });
+
+  it("sends a hostile meeting to the Batches API with its transcript and role candidates sealed in fences", async () => {
+    await addRecording("rec-hostile", HOSTILE, HOSTILE);
+    const rec: BatchRecordingInput = {
+      ...input("rec-hostile", HOSTILE, HOSTILE),
+      roleCandidates: [{ id: "role-steward", name: HOSTILE, purpose: HOSTILE }],
+    };
+    expect((await enqueueSynthesis(pool, [rec], opts())).requested).toBe(1);
+
+    const params = state.submitted[0].requests[0].params;
+    expectSealed(params.system, ["call.role_candidates"]);
+    expect(fencedValue(params.system, "call.role_candidates")).toEqual(rec.roleCandidates);
+    expectSealed(params.messages[0].content, ["call.transcript"]);
+    expect(fencedValue(params.messages[0].content, "call.transcript")).toEqual({
+      title: HOSTILE,
+      chapterMarks: [{ startMs: 0 }],
+      segments: [{ startMs: 0, text: HOSTILE }],
+    });
   });
 
   it("never touches a standing example, however long it has had a transcript", async () => {
