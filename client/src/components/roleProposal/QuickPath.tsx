@@ -74,7 +74,7 @@ export function WelcomeScreen({ org, onStart }: { org: OrgView | null | "failed"
   const who = guideName(org && org !== "failed" ? org.roles : []);
   return (
     <div className="grid gap-4">
-      <h2 className={H2}>{RP_WORDS.welcomeTitle}</h2>
+      <h2 id="rp-welcome" tabIndex={-1} className={`${H2} outline-none`}>{RP_WORDS.welcomeTitle}</h2>
       <p className={LEDE}>{RP_WORDS.welcomeLede}</p>
       <p className={LEDE}>{RP_WORDS.guideHere(who)}</p>
       <button type="button" className={PRIMARY} onClick={onStart}>
@@ -103,7 +103,7 @@ export function YourWordsScreen({
   return (
     <div className="grid gap-4">
       <div>
-        <h2 className={H2}>{RP_WORDS.yourWordsTitle}</h2>
+        <h2 id="rp-your-words" tabIndex={-1} className={`${H2} outline-none`}>{RP_WORDS.yourWordsTitle}</h2>
         <p className={`${LEDE} mt-1`}>{RP_WORDS.yourWordsLede}</p>
       </div>
       <p className="text-sm font-semibold text-notice" data-words-kept="">
