@@ -5,12 +5,15 @@
  * without growing a file that sits at its line ratchet. The card and the key
  * live in ./PlayerCard.tsx.
  */
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { BulkStageGrant } from "./StageFloorPicker";
 import PersonalListsPanel from "@/components/yourList/PersonalListsPanel";
+
+// Only opened when a steward goes to delete someone, so it loads then.
+const ErasePrepPanel = lazy(() => import("@/components/yourList/ErasePrepPanel"));
 import { NO_FILTER, PlayerCard, PlayersFilters, PlayersKey, filterPlayers, type LadderStage, type PathOption, type Player, type PlayerDetail } from "./PlayerCard";
 
 export default function PlayersTab({ password }: { password: string }) {
@@ -75,6 +78,7 @@ export default function PlayersTab({ password }: { password: string }) {
     } catch { toast.error("Update failed"); }
   };
 
+  const [erasing, setErasing] = useState<{ id: string; email: string } | null>(null);
   const remove = async (id: string, email: string) => {
     if (!confirm(`Delete player ${email}? This removes their account. Their past quest claims and ledger entries are kept.`)) return;
     try {
@@ -127,6 +131,20 @@ export default function PlayersTab({ password }: { password: string }) {
 
   return (
     <div>
+      {erasing && (
+        <div className="mb-4 rounded-lg border border-border bg-card p-4">
+          <Suspense fallback={<p className="text-sm text-muted-foreground">Loading...</p>}>
+            <ErasePrepPanel
+              key={erasing.id}
+              password={password}
+              players={players}
+              initialUserId={erasing.id}
+              onContinue={() => { const e = erasing; setErasing(null); remove(e.id, e.email); }}
+              onCancel={() => setErasing(null)}
+            />
+          </Suspense>
+        </div>
+      )}
       <div className="mb-4">
         <h2 className="text-xl font-bold text-gray-900">Players</h2>
         <p className="text-sm text-gray-500 mt-1">
@@ -156,7 +174,7 @@ export default function PlayersTab({ password }: { password: string }) {
                 onAccess={(role) => setRole(p.id, role, p.name)}
                 onStage={(id) => grant(p.id, id ?? "")}
                 onSignOut={() => revokeSessions(p.id, p.name)}
-                onDelete={() => remove(p.id, p.email)}
+                onDelete={() => { setErasing({ id: p.id, email: p.email }); window.scrollTo({ top: 0, behavior: "smooth" }); }}
               />
             ))}
           </div>
