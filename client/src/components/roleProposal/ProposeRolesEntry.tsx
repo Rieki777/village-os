@@ -71,11 +71,6 @@ export default function ProposeRolesEntry() {
         goalCount: draft?.season?.seasonalGoals?.length ?? 0,
       })
     : null;
-  const href = draftId
-    ? `/role-proposals/${encodeURIComponent(draftId)}`
-    : standing
-      ? `/role-proposals/${encodeURIComponent(standing.id)}`
-      : "/role-proposals/new";
   const title = draftId ? RP_WORDS.profileContinue : standing ? RP_WORDS.profileSubmitted : RP_WORDS.profilePropose;
   const line = fill ? fill.line : standing ? standingLine(standing) : RP_WORDS.profileProposeLine;
   const action = draftId ? RP_WORDS.profileContinue : standing ? RP_WORDS.profileSee : RP_WORDS.profilePropose;
@@ -103,7 +98,16 @@ export default function ProposeRolesEntry() {
       )}
       {mine.nextSeasonWords && <p className="mt-2 text-sm text-muted-foreground">{mine.nextSeasonWords}</p>}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Link href={href} className={BTN_GOLD}>
+        <Link
+          href={
+            draftId
+              ? `/role-proposals/${encodeURIComponent(draftId)}`
+              : standing
+                ? `/role-proposals/${encodeURIComponent(standing.id)}`
+                : "/role-proposals/new"
+          }
+          className={BTN_GOLD}
+        >
           {action}
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
