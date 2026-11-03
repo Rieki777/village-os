@@ -38,7 +38,18 @@ import { RC_WORDS } from "./roleCardWords";
 
 const absolute = (link: string) => (typeof window !== "undefined" ? `${window.location.origin}${link}` : link);
 
-function SharePanel({ proposal, onShare }: { proposal: ProposalOut; onShare: (share: ShareOut) => void }) {
+function SharePanel({
+  proposal,
+  onShare,
+  termsOpen = false,
+  partner = "",
+}: {
+  proposal: ProposalOut;
+  onShare: (share: ShareOut) => void;
+  /** The terms rows are all still open, so the operations role is the natural reader. */
+  termsOpen?: boolean;
+  partner?: string;
+}) {
   const share = proposal.share;
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
@@ -82,8 +93,15 @@ function SharePanel({ proposal, onShare }: { proposal: ProposalOut; onShare: (sh
       {!share.on ? (
         <>
           <p className="text-sm text-stone-700">{RP_WORDS.shareOff}</p>
-          <div>
-            <button type="button" disabled={busy} onClick={() => void run(() => setShare(proposal.id, share.audience))} className={PRIMARY}>
+          {termsOpen && partner && <p className={LEDE}>{RP_WORDS.sendOpsLine(partner)}</p>}
+          <div className="flex flex-wrap gap-2">
+            {termsOpen && partner && (
+              <button type="button" disabled={busy} onClick={() => void run(() => setShare(proposal.id, "members"), RP_WORDS.sentToOps(partner))} className={PRIMARY}>
+                <Send className="h-4 w-4" aria-hidden="true" />
+                {RP_WORDS.sendToOps(partner)}
+              </button>
+            )}
+            <button type="button" disabled={busy} onClick={() => void run(() => setShare(proposal.id, share.audience))} className={termsOpen && partner ? SECONDARY : PRIMARY}>
               <Link2 className="h-4 w-4" aria-hidden="true" />
               {RP_WORDS.makeLink}
             </button>
@@ -272,11 +290,16 @@ export default function StepShare({
   onShare,
   beforeSubmit,
   onSubmitted,
+  termsOpen = false,
+  partner = "",
 }: {
   proposal: ProposalOut;
   onShare: (share: ShareOut) => void;
   beforeSubmit: () => Promise<boolean>;
   onSubmitted: (p: ProposalOut | null) => void;
+  /** Terms left open. The server still decides whether submit is ready. */
+  termsOpen?: boolean;
+  partner?: string;
 }) {
   const [comments, setComments] = useState<CommentOut[] | null>(null);
   useEffect(() => {
@@ -290,7 +313,7 @@ export default function StepShare({
   }, [proposal.id]);
   return (
     <div className="grid gap-4">
-      <SharePanel proposal={proposal} onShare={onShare} />
+      <SharePanel proposal={proposal} onShare={onShare} termsOpen={termsOpen} partner={partner} />
       <section aria-label={RC_WORDS.download} className={`${PANEL} grid gap-2`} data-card-text="">
         <p className={LEDE}>{RC_WORDS.downloadLine}</p>
         <div>

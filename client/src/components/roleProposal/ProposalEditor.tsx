@@ -34,7 +34,7 @@ import { servedBody, servedRows, seasonalBody } from "@/components/seasonPlans/S
 import type { PlayerCardPayload } from "@shared/playerCardPayload";
 import { operationsRoleName, opsPartner } from "@shared/roleProposalHonesty";
 import { civilDayWords } from "@shared/seasonPlans";
-import { parseSeatSettings, type SeatSettings } from "@shared/seatSettings";
+import { parseSeatSettings, settingsWords, type SeatSettings } from "@shared/seatSettings";
 import { PROPOSAL_WORDS } from "@shared/roleProposals";
 import {
   fetchApplicationsForCounts,
@@ -462,6 +462,8 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             onShare={(share: ShareOut) => setProposal((p) => ({ ...p, share }))}
             beforeSubmit={save.flush}
             onSubmitted={(p) => p && setProposal(p)}
+            termsOpen={settingsWords(settings).every((row) => !row.set)}
+            partner={opsPartner(operationsRoleName(org && org !== "failed" ? org.roles : []))}
           />
         )}
       </section>
