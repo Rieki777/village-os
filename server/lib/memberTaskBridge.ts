@@ -26,6 +26,7 @@ import { boolVar } from "./variables";
 import type { Pool } from "mysql2/promise";
 import { callToolJson, listTools, openSession, type ClientOptions, type ToolInfo } from "./saberraClient";
 import { preflight } from "./saberraSync";
+import { callPrivacyTool } from "./saberraPrivacy";
 import { effectiveLifecycle } from "./modules";
 import {
   libraryCode, reviewOf, stripContact, type FeedbackAction, type FeedbackInput,
@@ -168,6 +169,13 @@ export function planSend(tools: Map<string, ToolInfo>, row: Pick<OutboxRow, "kin
 }
 
 async function sendOne(client: ClientOptions, session: string, tools: Map<string, ToolInfo>, row: OutboxRow): Promise<Sent> {
+  // Forgetting a person is a privacy act: it goes over the privacy connection only, never the sync key.
+  if (row.kind === "forget_person") {
+    let r = await callPrivacyTool("delete_feedback_for_person", { owner_id: row.payload.owner_id });
+    if (!r.ok && !r.needsFullScope) return { ok: false, error: r.error };
+    if (!r.ok) r = await callPrivacyTool("delete_owner_feedback", { owner_id: row.payload.owner_id });
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
   const plan = planSend(tools, row);
   if (plan.tool === null) return { ok: false, error: plan.error, drop: plan.drop };
   const { tool, args, minimal } = plan;

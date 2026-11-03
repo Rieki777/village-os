@@ -98,6 +98,11 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
         <QuestCard title="Connection" state={st(conn, 3)} steps={{ done: conn, of: 3 }}>
           <p>Key {a.connection.mayCall ? "set" : "not set"}, address {a.connection.addressSet ? "set" : "not set"}.</p>
           <p>{plural(a.connection.held, "fact")} held.</p>
+          <p>
+            {a.connection.privacySet
+              ? "Privacy connection set: a steward can remove a member's tasks in Sera."
+              : "Removing a member's tasks in Sera needs a full-scope connection (not set)."}
+          </p>
         </QuestCard>
 
         <QuestCard title="Members' lists from Sera" state={a.lists.ready ? st(list, 3) : "building"} steps={a.lists.ready ? { done: list, of: 3 } : undefined}>

@@ -7,7 +7,7 @@ Provenance: platform
 > summary, and the request and response shapes of every route). Every SQL statement for its tables is in
 > `server/repos/moonRecaps.ts`; the schema is `drizzle/0313_a_member_reviews_their_moon.sql`,
 > `drizzle/0314_a_member_tags_a_task_to_a_role.sql`, `drizzle/0315_an_approval_can_be_the_members_own.sql`,
-> `drizzle/0316_a_member_sets_the_next_moons_goals.sql` and `drizzle/0317_a_moon_keeps_its_rhythm.sql`. The dates are
+> `drizzle/0317_a_member_sets_the_next_moons_goals.sql` and `drizzle/0318_a_moon_keeps_its_rhythm.sql`. The dates are
 > `shared/moonRhythm.ts`.
 
 **Once a moon, each member who holds a role gathers what they delivered, checks it against their role cards and

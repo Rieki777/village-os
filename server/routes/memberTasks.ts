@@ -53,7 +53,7 @@ export function taskOut(t: MemberTaskRow) {
   return {
     id: t.id, title: t.title, privateDetail: t.privateDetail, tier: t.tier, horizon: t.horizon, dueOn: t.dueOn,
     minutes: t.minutes, status: t.status, pinned: t.pinned, memberPinned: t.memberPinned, externalId: t.source === "sera" ? t.externalId : null, source: t.source, version: t.version,
-    createdOn: t.createdOn, doneAt: t.doneAt, removedAt: t.removedAt, removeReason: t.removeReason,
+    createdOn: t.createdOn, requestedBy: t.requestedBy ?? null, doneAt: t.doneAt, removedAt: t.removedAt, removeReason: t.removeReason,
   };
 }
 
