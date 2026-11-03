@@ -32,6 +32,7 @@ import { PlayerRoleCardView } from "@/components/playerCard/PlayerRoleCard";
 import { BreathingLoader } from "@/components/natural";
 import { servedBody, servedRows, seasonalBody } from "@/components/seasonPlans/SeasonGoalsFields";
 import type { PlayerCardPayload } from "@shared/playerCardPayload";
+import { operationsRoleName, opsPartner } from "@shared/roleProposalHonesty";
 import { civilDayWords } from "@shared/seasonPlans";
 import { parseSeatSettings, type SeatSettings } from "@shared/seatSettings";
 import { PROPOSAL_WORDS } from "@shared/roleProposals";
@@ -360,6 +361,8 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
               setSettings(next);
               save.touch("settings");
             }}
+            partner={opsPartner(operationsRoleName(org && org !== "failed" ? org.roles : []))}
+            onOpenWords={() => void go("words")}
           />
         )}
         {step === "preview" && (

@@ -1,0 +1,84 @@
+import { describe, expect, it } from "vitest";
+import { GROUP_PLAIN, honestyLine, operationsRoleName, OPS_FALLBACK, opsPartner, seasonHeading } from "./roleProposalHonesty";
+import { SETTINGS_GROUPS } from "./seatSettings";
+
+describe("season heading", () => {
+  it("names the season and the day it starts", () => {
+    expect(seasonHeading("Season of Roots", "1 January 2027")).toBe("For Season of Roots, starting 1 January 2027.");
+  });
+
+  it("does not print an empty name", () => {
+    expect(seasonHeading("", "1 January 2027")).toBe("For next season, starting 1 January 2027.");
+    expect(seasonHeading("   ", "1 January 2027")).toBe("For next season, starting 1 January 2027.");
+    expect(seasonHeading(null, "1 January 2027")).toBe("For next season, starting 1 January 2027.");
+  });
+
+  it("drops a blank start day", () => {
+    expect(seasonHeading("Roots", "")).toBe("For Roots.");
+    expect(seasonHeading("", "")).toBe("For next season.");
+  });
+});
+
+describe("the operations role", () => {
+  it("falls back when the chart has no operations role", () => {
+    expect(operationsRoleName([])).toBeNull();
+    expect(operationsRoleName([{ name: "Kitchen keeper" }])).toBeNull();
+    expect(operationsRoleName(null)).toBeNull();
+    expect(opsPartner(null)).toBe(OPS_FALLBACK);
+    expect(opsPartner("")).toBe(OPS_FALLBACK);
+    expect(OPS_FALLBACK.includes("@")).toBe(false);
+  });
+
+  it("uses the shortest live role whose name says operation", () => {
+    expect(
+      operationsRoleName([
+        { name: "Human Operations and Onboarding Lead", active: true },
+        { name: "Operations Steward", active: true },
+        { name: "Example Operations", isExample: true },
+        { name: "Old Operations", active: false },
+      ]),
+    ).toBe("Operations Steward");
+  });
+
+  it("drops an email-shaped name and never needs a village name", () => {
+    expect(operationsRoleName([{ name: "operations@example.org" }])).toBeNull();
+    expect(opsPartner("Operations Steward")).toBe("Operations Steward");
+  });
+});
+
+describe("a terms row", () => {
+  it("leaves an open row for the operations role", () => {
+    expect(honestyLine({ set: false, presetLabel: null, customised: false, partner: "Operations Steward", money: false })).toBe(
+      "We'll fill this together with Operations Steward.",
+    );
+    expect(honestyLine({ set: false, presetLabel: null, customised: false, partner: "", money: true })).toBe(
+      `We'll fill this together with ${OPS_FALLBACK}.`,
+    );
+  });
+
+  it("names the preset a suggestion came from", () => {
+    expect(honestyLine({ set: true, presetLabel: "Volunteer role", customised: false, partner: "Operations Steward", money: false })).toBe(
+      "Suggested from Volunteer role.",
+    );
+  });
+
+  it("says a money row is a proposal, confirmed with the operations role", () => {
+    expect(honestyLine({ set: true, presetLabel: "Unpaid", customised: false, partner: "Operations Steward", money: true })).toBe(
+      "Suggested from Unpaid. A proposal, confirmed with Operations Steward.",
+    );
+  });
+
+  it("says when the member changed a suggestion, and when they wrote it themselves", () => {
+    expect(honestyLine({ set: true, presetLabel: "Weekly", customised: true, partner: "Operations Steward", money: false })).toBe(
+      "You changed this. It started from Weekly.",
+    );
+    expect(honestyLine({ set: true, presetLabel: null, customised: false, partner: "Operations Steward", money: false })).toBe("Written by you.");
+  });
+
+  it("has one plain line for every terms group", () => {
+    for (const group of SETTINGS_GROUPS) {
+      expect(GROUP_PLAIN[group].length).toBeGreaterThan(8);
+      expect(GROUP_PLAIN[group].includes("@")).toBe(false);
+    }
+  });
+});
