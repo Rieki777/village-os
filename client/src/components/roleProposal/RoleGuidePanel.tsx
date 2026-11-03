@@ -135,7 +135,7 @@ export default function RoleGuidePanel({
       {flags.length > 0 && (
         <ul className="grid gap-1 text-sm text-muted-foreground" data-guide-flags>
           {flags.map((f, i) => (
-            <li key={`${f.kind}-${i}`} className="rounded-lg bg-amber-50 px-3 py-2">
+            <li key={`${f.kind}-${i}`} className="rounded-lg border border-notice bg-notice/10 px-3 py-2 text-foreground">
               {f.sentence}
             </li>
           ))}

@@ -28,10 +28,10 @@ import {
 } from "@shared/seatSettings";
 
 const input =
-  "w-full min-h-[44px] rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep";
-const labelClass = "block text-xs font-semibold text-stone-700";
+  "w-full min-h-[44px] rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const labelClass = "block text-xs font-semibold text-foreground";
 const smallButton =
-  "inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-stone-300 px-3 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -228,8 +228,8 @@ function RhythmFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
     <>
       <div className="space-y-3 sm:col-span-2">
         {gatherings.map((row, i) => (
-          <fieldset key={i} className="grid gap-2 rounded-lg border border-stone-200 p-3 sm:grid-cols-2">
-            <legend className="px-1 text-xs font-semibold text-stone-700">Gathering {i + 1}</legend>
+          <fieldset key={i} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
+            <legend className="px-1 text-xs font-semibold text-foreground">Gathering {i + 1}</legend>
             <Words label="Name" max={LIMITS.labelChars} wide={false} value={row.label} onChange={(v) => setRow(i, put(row, "label", v))} />
             <Field label="Day">
               {(id) => (
@@ -269,7 +269,7 @@ function RhythmFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
         <legend className={labelClass}>Quiet days</legend>
         <div className="mt-1 flex flex-wrap gap-2">
           {WEEKDAYS.map((d, n) => (
-            <label key={d} className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-200 px-3 text-sm text-stone-800">
+            <label key={d} className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-3 text-sm text-foreground">
               <input
                 type="checkbox"
                 checked={quiet.includes(n)}
@@ -338,7 +338,7 @@ function QuestFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
       <Whole label="Fewest quests a moon" min={1} max={LIMITS.questsPerMoon} value={g.perMoonMin} onChange={(v) => set({ ...put(g, "perMoonMin", v), doneWhenRequired: true })} />
       <Whole label="Most quests a moon" min={1} max={LIMITS.questsPerMoon} value={g.perMoonMax} onChange={(v) => set({ ...put(g, "perMoonMax", v), doneWhenRequired: true })} />
       <Words label="How quests are agreed" max={LIMITS.wordsChars} value={g.agreedHow} onChange={(v) => set({ ...put(g, "agreedHow", v), doneWhenRequired: true })} />
-      <p className="text-xs text-stone-600 sm:col-span-2">Every quest has a done when. That part is always on.</p>
+      <p className="text-xs text-muted-foreground sm:col-span-2">Every quest has a done when. That part is always on.</p>
     </>
   );
 }
@@ -348,10 +348,10 @@ function ScoreboardFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
   const setRow = (i: number, row: Obj) => set({ ...g, measures: measures.map((x, j) => (j === i ? row : x)) });
   return (
     <div className="space-y-3 sm:col-span-2">
-      <p className="text-xs text-stone-600">A scoreboard measures the work. It never ranks people.</p>
+      <p className="text-xs text-muted-foreground">A scoreboard measures the work. It never ranks people.</p>
       {measures.map((row, i) => (
-        <fieldset key={i} className="grid gap-2 rounded-lg border border-stone-200 p-3 sm:grid-cols-2">
-          <legend className="px-1 text-xs font-semibold text-stone-700">Measure {i + 1}</legend>
+        <fieldset key={i} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
+          <legend className="px-1 text-xs font-semibold text-foreground">Measure {i + 1}</legend>
           <Words label="What is measured" max={LIMITS.measureChars} value={row.measure} onChange={(v) => setRow(i, put(row, "measure", v))} />
           <Words label="Target, in words" max={LIMITS.measureChars} wide={false} value={row.target} onChange={(v) => setRow(i, put(row, "target", v))} />
           <Words label="Read from" max={LIMITS.measureChars} wide={false} value={row.readFrom} onChange={(v) => setRow(i, put(row, "readFrom", v))} />
@@ -382,7 +382,7 @@ function EndingFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
     <>
       <Whole label="Notice, in days" max={LIMITS.noticeDays} value={g.noticeDays} onChange={(v) => set(put(g, "noticeDays", v))} />
       <div className="flex items-end">
-        <label htmlFor={id} className="inline-flex min-h-[44px] items-center gap-2 text-sm text-stone-800">
+        <label htmlFor={id} className="inline-flex min-h-[44px] items-center gap-2 text-sm text-foreground">
           <input id={id} type="checkbox" checked={g.payThroughNotice === true} onChange={(e) => set({ ...g, payThroughNotice: e.target.checked })} />
           Pay runs through the notice
         </label>

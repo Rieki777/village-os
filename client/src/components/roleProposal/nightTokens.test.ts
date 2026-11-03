@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const LIGHT_ONLY = /\b(?:text|bg|border|from|to)-stone-|\b(?:text|bg|border)-gray-|\bbg-white\b/;
+const LIGHT_ONLY = /\b(?:text|bg|border|from|to|ring)-stone-|\b(?:text|bg|border)-gray-|\bbg-white\b|\bbg-amber-\d+\b|\btext-white\b|\bborder-teal-deep\b|\bbg-teal-deep\b/;
 
 describe("role proposal steps use the night sheet's tokens", () => {
   const files = readdirSync(here).filter((n) => n.endsWith(".tsx") && !n.includes(".test."));
