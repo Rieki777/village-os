@@ -440,6 +440,20 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 250,
     emblem: "Orbit",
   },
+  "moon-review": {
+    promise: "Once a moon, each member says what they delivered for their roles, and the village approves it and records the pay.",
+    benefits: [
+      "Tasks from the profile and the rooms come in on their own, and Sera drafts the rest",
+      "Each item is read against the role card and the season goals, so unseen work shows up",
+      "A role audit sends each role that should grow, shrink or exist to its circle",
+      "Two different people approve, neither of them the member, and amounts stay with the member and Finance",
+    ],
+    forWhom: "Villages that pay their core team for deliverables and want one honest record of the moon's work.",
+    setupSummary: "Seat someone in a power group that approves the work, choose who holds the cash power, and fill in the payers document before the first invoice.",
+    dataSummary: "Each member's recap and items; their pay route, legal name and address; their invoices and every approval. Amounts, routes and invoices are read by the member and the cash power holders only. Erasure clears the words and keeps amounts, dates, numbers and events.",
+    hue: 40,
+    emblem: "NotebookPen",
+  },
   sessions: {
     promise: "A circle's working call, held together live, from the first breath to the last action claimed.",
     benefits: [

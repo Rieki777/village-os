@@ -23,6 +23,7 @@
  * launches, because `cash.pay` is in the handover set.
  */
 import fs from "fs";
+import { APPROVE_ALONE_CAPABILITY, APPROVE_ALONE_GROUPS, APPROVE_OWN_CAPABILITY, APPROVE_OWN_GROUPS } from "../../shared/moonRecap";
 
 /** The id `server/seeds/roles-seed.json` gives the finance role. */
 export const TREASURY_ROLE_ID = "treasury";
@@ -67,3 +68,48 @@ export async function grantCashPayToTreasury<T extends { id: string; capabilitie
   console.log("[roles] the Treasury role now grants cash.pay (Rye, 2026-10-30)");
   return true;
 }
+
+/**
+ * THE END-OF-MOON REVIEW'S TWO HELD-BACK KEYS, granted to named power groups
+ * (decisions 18 and 19, 3 November 2026).
+ *
+ * `moon.approve_alone` goes to the founders' and stewards' power groups, the
+ * same two ids 0307 gave admin access to; `moon.approve_own` goes to the
+ * Treasury power group only. The ids are in shared/moonRecap.ts.
+ *
+ * WHY TYPESCRIPT AND NOT A MIGRATION. `roles.capabilities` is JSON, and
+ * appending to a JSON array in SQL needs a function that has never run on
+ * production (scripts/check-migration-sql.mjs). server/lib/seasonGoalIds.ts
+ * is the worked example of the same choice.
+ *
+ * SCOPED BY ID, IDEMPOTENT BY ITS OWN CHECK. Only a role whose id is named
+ * here is touched, a role that already carries the key is left alone, and
+ * nothing else on the role changes. It runs once through `runOnce`, so a
+ * village that later takes a key off either group keeps it off: the grant
+ * never comes back on a later boot. A village with none of these roles gets
+ * nothing. Returns the number of roles it wrote.
+ */
+export async function grantMoonReviewKeys<T extends { id: string; capabilities?: string[] }>(
+  repo: RolesStore<T>,
+  grants: ReadonlyArray<{ capability: string; roleIds: readonly string[] }>,
+): Promise<number> {
+  const all = repo.all();
+  let written = 0;
+  const next = all.map((r) => {
+    const caps = Array.isArray(r.capabilities) ? r.capabilities : [];
+    const add = grants.filter((g) => g.roleIds.includes(r.id) && !caps.includes(g.capability)).map((g) => g.capability);
+    if (add.length === 0) return r;
+    written += 1;
+    return { ...r, capabilities: [...caps, ...add] };
+  });
+  if (written === 0) return 0;
+  await repo.replaceAll(next);
+  console.log(`[roles] the end-of-moon review's approval keys reached ${written} power group(s) (decisions 18 and 19)`);
+  return written;
+}
+
+/** The two grants, as decisions 18 and 19 name them. */
+export const MOON_REVIEW_GRANTS = [
+  { capability: APPROVE_ALONE_CAPABILITY, roleIds: APPROVE_ALONE_GROUPS },
+  { capability: APPROVE_OWN_CAPABILITY, roleIds: APPROVE_OWN_GROUPS },
+] as const;

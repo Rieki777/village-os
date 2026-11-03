@@ -662,7 +662,7 @@ import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
-import { grantCashPayToTreasury, seedStarterRoles } from "./lib/starterRoles";
+import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
@@ -1911,6 +1911,7 @@ async function ensureDataFiles() {
   await runOnce("currency-name-into-tokens-2026-08-14", migrateCurrencyNameIntoTokens);
   await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
   await runOnce("cash-pay-to-treasury-2026-10-30", () => grantCashPayToTreasury(rolesRepo).then(() => undefined)); // Rye, 2026-10-30
+  await runOnce("moon-review-keys-2026-11-03", () => grantMoonReviewKeys(rolesRepo, MOON_REVIEW_GRANTS).then(() => undefined)); // decisions 18 and 19
   await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same

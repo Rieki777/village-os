@@ -72,7 +72,8 @@ describe("module images", () => {
   // Orbit), no file, and `gene-keys` (Sparkles) after them.
   // `session-card` (0296) joined last on those same terms: hue 250 and Orbit,
   // which the emblem map already carries for `sessions`, and no file of its own.
-  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "comms", "journal", "sessions", "gene-keys", "session-card"]);
+  // `moon-review` (0313) joined on the same terms: hue 40 and NotebookPen, no file.
+  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "comms", "journal", "sessions", "gene-keys", "session-card", "moon-review"]);
 
   it("keeps the fallback list pointed at real modules", () => {
     const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));

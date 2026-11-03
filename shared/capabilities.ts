@@ -168,7 +168,27 @@ export type Capability =
   // to what they draft (0295, shared/companionItems.ts). A yes always opens the
   // draft's own door, which asks for its own power, so this key opens the
   // conversation and nothing it could move.
-  | "companion.use"; // keep companions, answer them and decide their drafts
+  | "companion.use" // keep companions, answer them and decide their drafts
+  //
+  // Approve the work in a member's end-of-moon recap (module moon-review,
+  // 0313). The first of the review's two approvals; a `cash.pay` holder gives
+  // the second, and the two are always different people, neither of them the
+  // member (shared/moonRecap.ts). Approving the work confirms the items are
+  // real and belong to the role. It grades nothing and moves no money. It
+  // lives on a power group, never on an org-chart role.
+  | "moon.approve" // approve the work in a member's moon recap
+  //
+  // Decision 18 (3 November): give BOTH approvals of a moon recap by
+  // oneself, singly or in bulk, never on one's own recap. Granted once to the
+  // founders' and stewards' power groups (server/lib/starterRoles.ts), and a
+  // village can take it off either. The rule is `approvalDecision` in
+  // shared/moonRecap.ts; every approval still runs every check.
+  | "moon.approve_alone" // give both approvals of a moon recap by oneself
+  //
+  // Decision 19 (3 November, an interim step): approve one's OWN moon recap
+  // and invoice, marked "Approved by the member themselves" for review after
+  // the fact. Granted once to the Treasury power group only.
+  | "moon.approve_own"; // approve one's own moon recap and invoice
 
 /**
  * The canonical list, as a VALUE: badge validation and unlock diffs iterate
@@ -217,6 +237,9 @@ export const ALL_CAPABILITIES: Capability[] = [
   "comms.manage",
   "session.template",
   "companion.use",
+  "moon.approve",
+  "moon.approve_alone",
+  "moon.approve_own",
 ];
 
 /**
@@ -281,6 +304,9 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "comms.manage": "Run the village's email: its automations, their words, and letters",
   "session.template": "Keep the village's meeting templates",
   "companion.use": "Keep AI companions, answer their questions and decide their drafts",
+  "moon.approve": "Approve the work in a member's end-of-moon recap",
+  "moon.approve_alone": "Give both approvals of a member's end-of-moon recap by yourself",
+  "moon.approve_own": "Approve your own end-of-moon recap and invoice, marked for review",
 };
 
 /**
@@ -574,6 +600,15 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "session.template": false,
   // Talking to your own companion is a personal act, like a message.
   "companion.use": false,
+  // Born held back (0313), the way `cash.pay` was: an approval of other
+  // people's work toward their pay, given by whoever the village seats in its
+  // approving power group. Not in the founders' launch set until a ruling
+  // moves it there.
+  "moon.approve": false,
+  // Born held back on the same terms (decisions 18 and 19): granted to named
+  // power groups once, never handed over with the founders' set.
+  "moon.approve_alone": false,
+  "moon.approve_own": false,
 
   // ── FALSE: a power with no act to reach past ────────────────────────────
   //
@@ -628,7 +663,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
  * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 23 keys
- * today. The other 18 are not withheld from anybody: they are personal acts
+ * today. The other 21 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
@@ -659,8 +694,11 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * 2026-10-30, a reclassification, which moved both, to 23 and 16.
  * `session.template` (0291) was born held back, a member-rung act, which moved
  * only the second: 23 and 17. `companion.use` (0295) was born a personal act,
- * talking to your own companion, which moved only the second again: the pair
- * today is 23 and 18.
+ * talking to your own companion, which moved only the second again: 23 and
+ * 18. `moon.approve` (0313) was born held back, which moved only the second
+ * once more: 23 and 19. `moon.approve_alone` and `moon.approve_own` (the same
+ * build, decision 18 and decision 19) were born held back too, and the pair
+ * today is 23 and 21.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -873,6 +911,12 @@ export const DENIABLE: Record<Capability, boolean> = {
   // A warning can pause it, the same as messages: the companions go quiet and
   // nothing the member holds is taken.
   "companion.use": true,
+  // A job: pausing it stops somebody approving other people's moon recaps,
+  // and takes nothing from their own recap or their own pay.
+  "moon.approve": true,
+  // Jobs as well: a warning pauses them and takes nothing the member holds.
+  "moon.approve_alone": true,
+  "moon.approve_own": true,
 };
 
 /**
@@ -950,6 +994,16 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
    * carrying the veto grants nothing and opens no override.
    */
   "steward.veto": false,
+  /*
+   * FALSE: an approval of other people's work toward their pay sits on a
+   * power group the village seats, so an admin cannot mint a badge and
+   * approve the work on their own say (spec, 3 November).
+   */
+  "moon.approve": false,
+  // FALSE for the same reason: approving alone and approving one's own come
+  // from a seat in a named power group, never a badge (decisions 18 and 19).
+  "moon.approve_alone": false,
+  "moon.approve_own": false,
 
   // ── TRUE: every other key. A badge is an ordinary way to hand out a power
   // nobody should have to climb to, and the Cartographer badge over the
