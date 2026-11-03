@@ -37,6 +37,8 @@ import {
 
 /** The moon-review Invoices view (decision 16), its own chunk. It draws a refusal's sentence when the module is off. */
 const InvoicesDesk = lazy(() => import("@/components/myMoon/InvoicesDesk"));
+/** The moon review's village settings (decision 22), its own chunk: the desk's first page carries none of it. */
+const MoonReviewSettingsPanel = lazy(() => import("./moonReview/MoonReviewSettingsPanel"));
 
 type View = "unpaid" | "paid";
 type ClaimFilter = "all" | "claimed" | "unclaimed";
@@ -475,6 +477,10 @@ export default function CashPayoutsTab({ password, asPage = false }: {
           })}
         </ul>
       )}
+
+      <Suspense fallback={null}>
+        <MoonReviewSettingsPanel password={password} />
+      </Suspense>
     </div>
   );
 }

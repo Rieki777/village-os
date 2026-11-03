@@ -207,6 +207,21 @@ describe("a body update", () => {
     expect(read.season.ownWords).toEqual({ love, offer: "loaves on Fridays", why: "" });
   });
 
+  it("keeps an answer in any language exactly, spaces included", () => {
+    const love = "Me encanta el horno, パンと窯";
+    const offer = "Je tiens le four  ";
+    const why = "لماذا هنا";
+    const first = parseBodyUpdate({ season: { ownWords: { love, offer, why } } }, emptyBody(), ctx());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value.season.ownWords).toEqual({ love, offer, why });
+    const aim = "El dominio es la cocina";
+    const words = parseBodyUpdate({ roles: [{ roleId: "role-garden", words: { aim } }] }, emptyBody(), ctx());
+    expect(words.ok).toBe(true);
+    if (!words.ok) return;
+    expect(words.value.roles[0]?.words.aim).toBe(aim);
+  });
+
   it(`holds at most ${MAX_SEATS} roles across those the village has and new ones`, () => {
     expect(MAX_PROPOSAL_ROLES).toBe(MAX_SEATS);
     const five = ["role-garden", "role-kitchen", "role-water", "role-paths", "role-tools"].map((roleId) => ({ roleId }));
