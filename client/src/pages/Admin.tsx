@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 // Nineteen icons left this list when navGroups and CONTENT_SECTIONS moved to
 // client/src/components/admin/: they were the nav's icons, not this file's.
-import { Inbox, Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { linesToList, listToLines } from "@/lib/questBoard";
@@ -50,6 +50,9 @@ import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
+import AdminMobileNav from "@/components/admin/AdminMobileNav";
+import AdminQueueState from "@/components/admin/AdminQueueState";
+import { loadSubmissionRows } from "@/components/admin/adminQueueState";
 import { FORM_TYPES, putSubmissionStatus } from "@/components/admin/submissionStatus";
 import SubmissionHandling from "@/components/admin/SubmissionHandling";
 import OpenProposalsPanel from "@/components/admin/OpenProposalsPanel";
@@ -580,7 +583,7 @@ function AdminNav({
       {hint && (
         <button
           onClick={dismissHint}
-          className="fixed z-50 left-16 bottom-6 max-w-[15rem] rounded-xl bg-gray-900 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-xl"
+          className="fixed z-50 left-16 bottom-6 hidden max-w-[15rem] rounded-xl bg-gray-900 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-xl lg:block"
         >
           Hold an icon to see its name, or swipe right to slide the whole menu
           out.
@@ -609,7 +612,7 @@ function AdminNav({
         onTouchStart={swipeStart}
         onTouchEnd={swipeEnd}
         className={`${open ? "fixed z-40 top-0 bottom-0 left-0 w-64 shadow-2xl lg:static lg:shadow-none lg:w-56" : "w-14"} ` +
-          "min-h-[calc(100vh-60px)] bg-white border-r border-gray-200 py-3 flex-shrink-0 overflow-y-auto transition-[width] duration-150"}
+          "max-lg:hidden min-h-[calc(100vh-60px)] bg-white border-r border-gray-200 py-3 flex-shrink-0 overflow-y-auto transition-[width] duration-150"}
       >
         <button
           onClick={() => {
@@ -717,20 +720,14 @@ export function SubmissionsTab({ password }: { password: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [problem, setProblem] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const url = filter === "all"
-        ? `${API_BASE}/admin/submissions`
-        : `${API_BASE}/admin/submissions?type=${filter}`;
-      const res = await fetch(url, { headers: authHeaders(password) });
-      const data = await res.json();
-      setSubmissions(Array.isArray(data) ? data : []);
-    } catch {
-      setSubmissions([]);
-    }
+    const result = await loadSubmissionRows(password, filter);
+    setSubmissions(result.rows);
+    setProblem(result.problem);
     setLoading(false);
   }, [password, filter]);
 
@@ -755,7 +752,7 @@ export function SubmissionsTab({ password }: { password: string }) {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             aria-label="Form type"
-            className="min-w-0 flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
+            className="min-h-[44px] min-w-0 flex-1 sm:flex-none text-base sm:text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
           >
             <option value="all">All types</option>
             {FORM_TYPES.map((t) => (
@@ -767,7 +764,7 @@ export function SubmissionsTab({ password }: { password: string }) {
             onClick={load}
             aria-label="Look again for new submissions"
             title="Look again"
-            className="shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -777,11 +774,10 @@ export function SubmissionsTab({ password }: { password: string }) {
       <OpenProposalsPanel password={password} />
       {loading ? (
         <div className="text-center py-12 text-gray-400">Loading...</div>
+      ) : problem ? (
+        <AdminQueueState kind="error" message={problem} onRetry={load} />
       ) : submissions.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Inbox className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>No submissions yet</p>
-        </div>
+        <AdminQueueState kind="empty" />
       ) : (
         <div className="space-y-3">
           {submissions.map((s) => (
@@ -7934,6 +7930,11 @@ export default function Admin() {
           onSelect={setActiveTab}
           open={navOpen}
           setOpen={setNavOpen}
+        />
+        <AdminMobileNav
+          groups={filterNavByModules(navGroups(setupComplete), moduleLifecycles)}
+          activeTab={activeTab}
+          onSelect={setActiveTab}
         />
 
         {/* min-w-0 lets a flex child actually shrink — without it a wide
