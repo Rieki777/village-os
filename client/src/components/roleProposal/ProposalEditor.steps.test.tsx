@@ -172,6 +172,9 @@ describe("step 2, each role's words", () => {
 describe("step 3, your season", () => {
   it("ties the season to the village's goals for that season, each with how it helps", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "season");
+    expect((await screen.findByText("Seasonal goals")).className).toContain("text-foreground");
+    expect(screen.getByText("One to three bigger goals for the whole season. Each moon's tasks build toward them.").className).toContain("text-muted-foreground");
+    expect(screen.getByRole("button", { name: "Add a seasonal goal" }).className).toContain("text-notice");
     fireEvent.click(await screen.findByLabelText("Grow the orchard"));
     fireEvent.change(screen.getByLabelText("How it helps: Grow the orchard"), { target: { value: "Fruit for the kitchen." } });
     fireEvent.change(screen.getByLabelText(new RegExp(RP_WORDS.aim)), { target: { value: "Every meal from our own land." } });
