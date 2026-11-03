@@ -2523,12 +2523,18 @@ export async function buildView(
   if (s.secretaryNo) nos.add(s.secretaryNo);
   for (const e of [...entries, ...(carriedFrom?.entries ?? [])]) if (e.ownerNo != null) nos.add(e.ownerNo);
   const owningSeats = [...entries, ...(carriedFrom?.entries ?? [])].map((e) => e.ownerSeatId).filter((id): id is string => !!id);
-  const [names, book, holdersOf] = await Promise.all([
+  // One roster read covers the actions already named AND every role the picker
+  // offers, so a dropdown can say "Visionary Lead (Rye)" (Rye, 2026-11-03).
+  const book = await seatBook(pool, s.circleId);
+  const [names, holdersOf] = await Promise.all([
     namesFor(pool, nos, ctx.lookup),
-    seatBook(pool, s.circleId),
-    seatHoldersFor(pool, owningSeats, ctx.lookup, ctx.lapseContext),
+    seatHoldersFor(pool, [...owningSeats, ...book.options.map((o) => o.id)], ctx.lookup, ctx.lapseContext),
   ]);
-  const seats: SeatBook = { ...book, holdersOf };
+  const seats: SeatBook = {
+    ...book,
+    holdersOf,
+    options: book.options.map((o) => ({ ...o, holders: holdersOf.get(o.id) ?? [] })),
+  };
   const faces = await facesFor(pool, people.map((p) => names.get(p.no)?.userId ?? null));
 
   const open = s.status === "open";

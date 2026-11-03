@@ -31,6 +31,7 @@
  * date shared one row with the box, and the box was squeezed to one letter.
  */
 import { useEffect, useRef, useState } from "react";
+import { roleWithHolders } from "@shared/roleHolderLabel";
 import { ON_BEHALF_COPY } from "@shared/sessionOnBehalf";
 import {
   ROOM_COPY,
@@ -179,7 +180,7 @@ export function ActionRow({
                 <option value="">{ROOM_COPY.noSeat}</option>
                 {seats.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {roleWithHolders(s.name, s.holders)}
                   </option>
                 ))}
               </select>
@@ -290,7 +291,7 @@ export function AddAction({ view, actions, itemId }: Omit<StageProps, "now"> & {
               <option value="">{ROOM_COPY.noSeat}</option>
               {seats.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {roleWithHolders(s.name, s.holders)}
                 </option>
               ))}
             </select>

@@ -958,6 +958,12 @@ export interface SeatOption {
   id: string;
   name: string;
   circleId: string | null;
+  /**
+   * First names of who sits here now, for a signed-in room's role picker
+   * ("Visionary Lead (Rye)"). Absent on an older payload, and never filled
+   * for a public page. An empty list is a role nobody holds.
+   */
+  holders?: string[];
 }
 
 export interface SessionView {

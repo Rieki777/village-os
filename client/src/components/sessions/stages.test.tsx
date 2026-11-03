@@ -612,6 +612,25 @@ describe("an action's date and seat while a save is out", () => {
     await waitFor(() => expect(dueField()).toHaveValue("2026-10-20"));
   });
 
+  it("a role picker names who holds the role, first name only, and never an email", () => {
+    const seats = [
+      { id: "seat1", name: "Visionary Lead", circleId: "water", holders: ["Rye"] },
+      { id: "seat2", name: "Advisory Board", circleId: "water", holders: [] },
+      { id: "seat3", name: "Finance Lead", circleId: "water", holders: ["ada@example.org"] },
+    ];
+    const view = makeView({ seats, items: [item()], entries: [entry({ authorUserId: 2 })] });
+    render(<StageActions view={view} now={T0} actions={doors()} />);
+    for (const label of [SESSION_COPY.nameSeat, ROOM_COPY.actionHolderLabel]) {
+      const seat = screen.getByLabelText(label);
+      expect(seat).toHaveTextContent("Visionary Lead (Rye)");
+      expect(seat).toHaveTextContent("Advisory Board");
+      expect(seat).not.toHaveTextContent("Finance Lead (");
+      expect(seat).toHaveTextContent("Finance Lead");
+      expect(seat.textContent).not.toContain("@");
+      expect(seat.textContent).not.toContain("ada");
+    }
+  });
+
   it("the seat picker shows the seat on its way, stays usable, and ignores a second choice until the room answers", async () => {
     const seats = [
       { id: "seat1", name: "Water steward", circleId: "water" },

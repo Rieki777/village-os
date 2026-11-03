@@ -168,7 +168,9 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     expect(SESSION_SEASONS).toContain(v.body.stamp.season);
     expect(v.body.state.stage).toBe("dropin");
     // The garden circle's own seat comes first, and neither a retired seat nor an example seat is offered.
+    // The picker names who sits there now, first name only, on every offered role.
     expect(v.body.seats.map((s: any) => s.id)).toEqual(["seat-water"]);
+    expect(v.body.seats[0]).toMatchObject({ name: "Water keeper", holders: ["Cai"] });
   });
 
   it("lets members join, once each, and answers 304 until something moves", async () => {
