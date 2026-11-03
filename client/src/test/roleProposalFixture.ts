@@ -46,7 +46,12 @@ export interface DraftBody {
   roles: Array<{ roleId: string; words?: RoleWords; reviewOn?: string | null }>;
   newRoles?: Array<{ id: string; circleId: string; seats?: number; words: RoleWords; reviewOn?: string | null }>;
   settings?: SeatSettings;
-  season?: { aim: string | null; seasonalGoals: Array<{ title: string; doneWhen: string | null }>; servesGoals: Array<{ goal: string; howItHelps: string | null }> };
+  season?: {
+    aim: string | null;
+    seasonalGoals: Array<{ title: string; doneWhen: string | null }>;
+    servesGoals: Array<{ goal: string; howItHelps: string | null }>;
+    ownWords?: { love: string; offer: string; why: string };
+  };
 }
 
 export const OFF_SHARE: ShareOut = { on: false, audience: "members", link: null, token: null, anyoneReaches: true, anyoneNote: null };

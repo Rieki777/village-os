@@ -386,6 +386,13 @@ export default function Profile() {
         <div className="relative mx-auto max-w-[1300px] px-4 sm:px-10">
           <ProfileTabs tab={tab} onTab={setTab} />
           <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
+            {/* The role proposal, first under the tabs. On a phone it is on
+                Today and on Roles, so it is the first thing on either tab.
+                A desktop shows it here, above the hero. */}
+            <div className={`flex flex-col gap-4 ${tabOf(["today", "roles"])}`}>
+              <ProposeBanner />
+              <ProposeRolesEntry />
+            </div>
             {/* WHO YOU ARE PLAYING, FIRST. The ladder position comes from the
                 page's own reads (`prog.stageIndex`, `config.stages`), never a
                 second fetch inside the hero. */}
@@ -591,8 +598,6 @@ export default function Profile() {
                 </div>
                 <div id="roles" className={`scroll-mt-28 flex flex-col gap-6 ${tabOf("roles")}`}>
                   <YourRolesSection />
-                  <ProposeBanner />
-                  <ProposeRolesEntry />
                   <PlayerRoleCard />
                   <SeasonPlanSection />
                 </div>
