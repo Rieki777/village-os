@@ -20,6 +20,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { registerJob } from "../lib/scheduler";
+import { runListNudges } from "../lib/memberTaskNudges";
 import { villageDayKey } from "../../shared/companionItems";
 import { REDIRECT_CHOICES, parseFeedback, type ScreenReason } from "../../shared/memberTaskFeedback";
 import { heldFromLibrary } from "../repos/memberTaskImport";
@@ -31,7 +32,7 @@ import {
 } from "../repos/memberTaskFeedback";
 import { taskOut } from "./memberTasks";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "isAdmin" | "adminActor"> & { timeZone: () => string };
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "isAdmin" | "adminActor"> & { timeZone: () => string; notify?: AppDeps["notify"] };
 
 const HOUR_MS = 60 * 60 * 1000;
 const WRITES_PER_HOUR = 600;
@@ -41,6 +42,9 @@ export function register(app: Express, deps: Deps): void {
   const today = () => villageDayKey(new Date(), timeZone());
 
   registerJob("member-task-bridge", 15 * 60 * 1000, () => drainOutbox(getPool()));
+  // Due-soon and asked-for notes on the bell, hourly, inside the daytime window.
+  registerJob("member-task-nudges", HOUR_MS, () =>
+    deps.notify ? runListNudges({ pool: getPool(), notify: deps.notify, zone: timeZone(), today: today() }) : Promise.resolve("no notifier"));
   registerJob("member-task-sync", 6 * HOUR_MS, async () => {
     const r = await syncLinked(getPool(), today());
     return `${r.status}: ${r.members} member(s), ${r.created} new, ${r.updated} refreshed, ${r.closed} closed${r.errors.length ? `, ${r.errors.length} error(s)` : ""}`;

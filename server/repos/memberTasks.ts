@@ -36,6 +36,8 @@ export interface MemberTaskRow {
   importBatch: string | null;
   memberEdited: boolean;
   confidence: number | null;
+  /** Who asked for it, from the library (display only). */
+  requestedBy: string | null;
   notNowCount: number;
   version: number;
   createdOn: string;
@@ -45,7 +47,7 @@ export interface MemberTaskRow {
 }
 
 const COLUMNS =
-  "`id`, `user_id`, `title`, `private_detail`, `tier`, `horizon`, DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `minutes`, `status`, `remove_reason`, `pinned`, `member_pinned`, `source`, `external_id`, `import_batch`, `member_edited`, `confidence`, `not_now_count`, `version`, DATE_FORMAT(`created_on`, '%Y-%m-%d') AS `created_on`, `done_at`, `removed_at`, `updated_at`";
+  "`id`, `user_id`, `title`, `private_detail`, `tier`, `horizon`, DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `minutes`, `status`, `remove_reason`, `pinned`, `member_pinned`, `source`, `external_id`, `import_batch`, `member_edited`, `confidence`, `requested_by`, `not_now_count`, `version`, DATE_FORMAT(`created_on`, '%Y-%m-%d') AS `created_on`, `done_at`, `removed_at`, `updated_at`";
 
 const iso = (v: unknown): string | null => (v == null ? null : v instanceof Date ? v.toISOString() : String(v));
 
@@ -68,6 +70,7 @@ function toRow(r: RowDataPacket): MemberTaskRow {
     importBatch: r.import_batch == null ? null : String(r.import_batch),
     memberEdited: Number(r.member_edited) === 1,
     confidence: r.confidence == null ? null : Number(r.confidence),
+    requestedBy: r.requested_by == null ? null : String(r.requested_by),
     notNowCount: Number(r.not_now_count ?? 0),
     version: Number(r.version ?? 1),
     createdOn: String(r.created_on),
@@ -276,4 +279,25 @@ export async function forgetMemberTasks(db: Queryable, userId: string): Promise<
   await db.query("DELETE FROM `sera_person_links` WHERE `user_id` = ?", [uid]);
   await db.query("UPDATE `sera_person_links` SET `linked_by_user_id` = NULL WHERE `linked_by_user_id` = ?", [uid]);
   return e.affectedRows + t.affectedRows + a.affectedRows;
+}
+
+// ── Nudges ────────────────────────────────────────────────────────────────
+
+/** Open tasks due in [from, to] for members whose list is on. Only what a bell needs. */
+export async function dueSoonTasks(db: Queryable, from: string, to: string): Promise<{ id: string; userId: string; title: string; dueOn: string }[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT t.`id`, t.`user_id`, t.`title`, DATE_FORMAT(t.`due_on`, '%Y-%m-%d') AS `due_on` FROM `member_tasks` t JOIN `member_task_access` a ON a.`user_id` = t.`user_id` AND a.`list_on` = 1 " +
+      "WHERE t.`status` = 'open' AND t.`due_on` BETWEEN ? AND ? LIMIT 2000",
+    [from, to],
+  );
+  return rows.map((r) => ({ id: String(r.id), userId: String(r.user_id), title: String(r.title ?? ""), dueOn: String(r.due_on) }));
+}
+
+/** Open library tasks someone asked for, landed in the last week, for members whose list is on. */
+export async function askedForTasks(db: Queryable): Promise<{ id: string; userId: string; title: string; requestedBy: string }[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT t.`id`, t.`user_id`, t.`title`, t.`requested_by` FROM `member_tasks` t JOIN `member_task_access` a ON a.`user_id` = t.`user_id` AND a.`list_on` = 1 " +
+      "WHERE t.`status` = 'open' AND t.`requested_by` IS NOT NULL AND t.`created_at` > NOW() - INTERVAL 7 DAY LIMIT 2000",
+  );
+  return rows.map((r) => ({ id: String(r.id), userId: String(r.user_id), title: String(r.title ?? ""), requestedBy: String(r.requested_by) }));
 }
