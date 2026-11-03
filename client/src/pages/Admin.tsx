@@ -45,6 +45,8 @@ import HealthStrip from "@/components/admin/HealthStrip";
 import AdminHelp from "@/components/admin/AdminHelp";
 import UndoBar from "@/components/admin/UndoBar";
 import { isSnoozed } from "@/components/admin/adminSnooze";
+import { limitNav, simpleNav } from "@/components/admin/adminFeel";
+import { TourCard } from "@/components/admin/AdminFeel";
 
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
 import { TIER_PILL } from "@shared/moduleCatalog";
@@ -7820,6 +7822,7 @@ function LaunchBanner({ password }: { password: string }) {
 
 export default function Admin() {
   const [password, setPassword] = useState<string | null>(null);
+  const { user } = useAuth();
   // Live config, same hook the rest of the app already reads its identity
   // from. The panel header used to hardcode "Amora Admin" over
   // "game.amora.cr" — the first screen a founder on a fresh instance opens,
@@ -7887,6 +7890,7 @@ export default function Admin() {
 
   // The retired Module Library tab, and every old link to it, land on the
   // library itself. Before the gate: the library is public.
+  const shownGroups = limitNav(filterNavByModules(navGroups(setupComplete), moduleLifecycles), simpleNav(user?.role));
   if (activeTab === "modules" && new URLSearchParams(window.location.search).get("module") !== "saberra") {
     return <Redirect to={legacyModulesTabTarget(window.location.search) ?? "/modules"} replace />;
   }
@@ -7911,7 +7915,7 @@ export default function Admin() {
 
       <div className="flex">
         <AdminNav
-          groups={filterNavByModules(navGroups(setupComplete), moduleLifecycles)}
+          groups={shownGroups}
           activeTab={activeTab}
           onSelect={setActiveTab}
           open={navOpen}
@@ -7919,7 +7923,7 @@ export default function Admin() {
         />
         <UndoBar />
         <AdminMobileNav
-          groups={filterNavByModules(navGroups(setupComplete), moduleLifecycles)}
+          groups={shownGroups}
           activeTab={activeTab}
           onSelect={setActiveTab}
         />
@@ -7932,9 +7936,10 @@ export default function Admin() {
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
+          <TourCard />
           <HealthStrip password={password} onOpen={setActiveTab} />
           <AdminHelp tab={activeTab} />
-          {activeTab === "home" && <Suspense fallback={null}><HomeBase password={password} onOpenTab={setActiveTab} groups={filterNavByModules(navGroups(setupComplete), moduleLifecycles)} /></Suspense>}
+          {activeTab === "home" && <Suspense fallback={null}><HomeBase password={password} onOpenTab={setActiveTab} groups={shownGroups} role={user?.role} /></Suspense>}
           {activeTab === "modules" && <SeraAdminHome />}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />

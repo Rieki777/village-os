@@ -11,6 +11,7 @@ import type { NavGroup } from "@/components/admin/adminNavGroups";
 import { ADMIN_AREAS, setHomeBaseOn, tabsInArea, type AreaId } from "./adminAreas";
 import { connectionRows, glanceSentence, readLastGlance, rememberGlance, sinceLastVisit } from "./todayGlance";
 import UnifiedInbox from "./UnifiedInbox";
+import { AllClear, FeelSettings, GentleQuests, WeekRecap } from "./AdminFeel";
 
 interface Needs {
   sentence: string;
@@ -38,11 +39,12 @@ function Mark({ shape }: { shape: Needs["shape"] }) {
 }
 
 export default function HomeBase({
-  password, onOpenTab, groups,
+  password, onOpenTab, groups, role,
 }: {
   password: string;
   onOpenTab: (tab: string) => void;
   groups: NavGroup[];
+  role?: string;
 }) {
   const [needs, setNeeds] = useState<Needs | null>(null);
   const [glance, setGlance] = useState<string | null>(null);
@@ -80,6 +82,8 @@ export default function HomeBase({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-xl font-semibold text-gray-900">Today</h2>
         {glance && <p className="w-full text-base text-gray-900">{glance}</p>}
+        <AllClear show={glance === "Nothing is waiting, and every connection is fine."} />
+        <WeekRecap />
         {since && <p className="w-full text-sm text-gray-700">{since}</p>}
         {updated && <p className="text-sm text-gray-600">Updated {updated}</p>}
       </div>
@@ -124,7 +128,9 @@ export default function HomeBase({
           ))}
         </ul>
       </div>
-      <label className="flex min-h-[44px] items-center gap-2 text-sm text-gray-900">
+        <GentleQuests />
+        <FeelSettings role={role} onChanged={() => onOpenTab("home")} />
+        <label className="flex min-h-[44px] items-center gap-2 text-sm text-gray-900">
         <input
           type="checkbox"
           onChange={(e) => {
