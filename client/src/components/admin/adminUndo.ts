@@ -18,7 +18,7 @@ let pending: Pending | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
-  for (const fn of listeners) fn();
+  for (const fn of Array.from(listeners)) fn();
 }
 
 export function undoWaitMs(): number {
