@@ -11,6 +11,8 @@
  *
  *   GET   /api/admin/member-tasks/access        steward: whose lists are on
  *   PUT   /api/admin/member-tasks/access/:userId steward: turn one member's list on or off
+ *   POST  /api/admin/member-tasks/import         steward: bring one member's library tasks in (dry run unless dryRun is false)
+ *   POST  /api/admin/member-tasks/import/:batch/remove  steward: undo a whole import batch
  *
  * Every door needs a signed-in member and reaches ONLY their own rows. Every
  * write refuses until a steward has turned the member's list on, so nothing
@@ -19,6 +21,8 @@
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
+import { itemsOf, planImport, planSummary } from "../../shared/memberTaskImport";
+import { heldFromLibrary, memberExists, removeBatch, runImport } from "../repos/memberTaskImport";
 import { villageDayKey } from "../../shared/companionItems";
 import {
   PRESETS, REMOVE_REASONS, clampWeights, countsOf, parseTaskInput, parseTaskPatch, rankTasks,
@@ -180,5 +184,33 @@ export function register(app: Express, deps: Deps): void {
     const on = (req.body as any)?.on === true;
     await setListOn(getPool(), userId, on, adminActor(req)?.id ?? null);
     res.json({ userId, on });
+  });
+
+  // ── Steward: one member's library tasks ─────────────────────────────────
+
+  app.post("/api/admin/member-tasks/import", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const userId = String(body.userId ?? "").trim();
+    const seraOwnerId = String(body.seraOwnerId ?? "").trim();
+    if (!userId || userId.length > 64) return res.status(400).json({ error: "Which member?" });
+    if (!seraOwnerId || seraOwnerId.length > 128) return res.status(400).json({ error: "Which person in the library? Paste their owner id." });
+    const items = itemsOf(body.items ?? body.answer);
+    if (!items.length) return res.status(400).json({ error: "No tasks found in what was pasted." });
+    if (items.length > 2000) return res.status(400).json({ error: "That is more than 2000 tasks. Split it." });
+    if (!(await memberExists(getPool(), userId))) return res.status(404).json({ error: "No member with that id." });
+    const plan = planImport(items, seraOwnerId, await heldFromLibrary(getPool(), userId));
+    const summary = planSummary(plan);
+    // A dry run unless the steward said otherwise in so many words.
+    if (body.dryRun !== false) return res.json({ dryRun: true, ...summary });
+    const result = await runImport(getPool(), userId, seraOwnerId, plan, today(), adminActor(req)?.id ?? null);
+    res.json({ dryRun: false, ...summary, ...result, listOn: await listIsOn(getPool(), userId) });
+  });
+
+  app.post("/api/admin/member-tasks/import/:batch/remove", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const batch = String(req.params.batch ?? "").trim();
+    if (!/^imp-[0-9a-f-]{36}$/.test(batch)) return res.status(400).json({ error: "That is not an import batch." });
+    res.json({ batch, removed: await removeBatch(getPool(), batch, adminActor(req)?.id ?? null) });
   });
 }

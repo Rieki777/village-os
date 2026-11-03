@@ -257,5 +257,8 @@ export async function forgetMemberTasks(db: Queryable, userId: string): Promise<
   const [t] = await db.query<ResultSetHeader>("DELETE FROM `member_tasks` WHERE `user_id` = ?", [uid]);
   const [a] = await db.query<ResultSetHeader>("DELETE FROM `member_task_access` WHERE `user_id` = ?", [uid]);
   await db.query("UPDATE `member_task_access` SET `set_by_user_id` = NULL WHERE `set_by_user_id` = ?", [uid]);
+  // The library's links for them (drizzle/0311), dropped last.
+  await db.query("DELETE FROM `sera_person_links` WHERE `user_id` = ?", [uid]);
+  await db.query("UPDATE `sera_person_links` SET `linked_by_user_id` = NULL WHERE `linked_by_user_id` = ?", [uid]);
   return e.affectedRows + t.affectedRows + a.affectedRows;
 }
