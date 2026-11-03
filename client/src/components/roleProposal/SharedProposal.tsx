@@ -66,7 +66,7 @@ export default function SharedProposal({ token, shared }: { token: string; share
           <p className="text-sm text-foreground">
             {RP_WORDS.yourOwn}{" "}
             <Link href={`/role-proposals/${encodeURIComponent(proposal.id)}`} className={`${QUIET} px-0`}>
-              {RP_WORDS.editYourOwn}
+              {proposal.status === "draft" ? RP_WORDS.editYourOwn : RP_WORDS.profileSee}
             </Link>
           </p>
         )}

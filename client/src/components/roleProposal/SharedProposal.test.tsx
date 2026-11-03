@@ -122,4 +122,10 @@ describe("the owner reading their own link", () => {
     expect(screen.queryByRole("textbox", { name: RP_WORDS.feedbackLabel })).toBeNull();
     await waitFor(() => expect(asked.some((a) => a.url.endsWith("/comments"))).toBe(true));
   });
+
+  it("points a submitted proposal at where it stands, and does not offer to edit it", () => {
+    draw({ proposal: { ...proposal, status: "submitted" }, card: null, you: { isOwner: true, mayComment: false, tier: "member" } });
+    expect(screen.getByRole("link", { name: RP_WORDS.profileSee }).getAttribute("href")).toBe(`/role-proposals/${proposal.id}`);
+    expect(screen.queryByRole("link", { name: RP_WORDS.editYourOwn })).toBeNull();
+  });
 });

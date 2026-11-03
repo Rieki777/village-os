@@ -37,8 +37,8 @@ import { RP_WORDS } from "./proposalWords";
 
 let server: ReturnType<typeof fakeServer>;
 
-function draw(body: DraftBody, step: string, extra: Parameters<typeof proposalWith>[1] = {}) {
-  server = fakeServer(body, { extra });
+function draw(body: DraftBody, step: string, extra: Parameters<typeof proposalWith>[1] = {}, opts: { failPut?: boolean } = {}) {
+  server = fakeServer(body, { extra, failPut: opts.failPut });
   vi.stubGlobal("fetch", vi.fn(server.fetch));
   window.history.replaceState(null, "", `/role-proposals/${PROPOSAL_ID}?step=${step}`);
   return render(
@@ -263,5 +263,15 @@ describe("step 4, terms and review dates", () => {
     expect(await screen.findByText(RP_WORDS.seasonLede)).toBeTruthy();
     expect(screen.getByText("Step 3 of 6")).toBeTruthy();
     expect(window.location.search).toBe("?step=season");
+  });
+
+  it("stays on the step when the save does not land", async () => {
+    draw({ roles: [{ roleId: "r1" }] }, "terms", {}, { failPut: true });
+    const reviews = (await screen.findByText(RP_WORDS.reviewDates)).closest("section") as HTMLElement;
+    fireEvent.change(within(reviews).getByLabelText("Kitchen keeper"), { target: { value: "2027-02-08" } });
+    expect(await screen.findByText(RP_WORDS.notSaved)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: RP_WORDS.back }));
+    expect(screen.getByText(RP_WORDS.termsLede)).toBeTruthy();
+    expect(screen.queryByText(RP_WORDS.seasonLede)).toBeNull();
   });
 });

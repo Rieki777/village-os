@@ -11,6 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
+import { fixturePayload } from "@/test/playerCardFixture";
 import { fakeServer, PROPOSAL_ID, proposalWith, type DraftBody } from "@/test/roleProposalFixture";
 import { AUTOSAVE } from "./useAutosave";
 import { RP_WORDS } from "./proposalWords";
@@ -45,6 +46,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  window.sessionStorage.clear();
 });
 
 describe("the quick path", () => {
@@ -75,10 +77,70 @@ describe("the quick path", () => {
     expect(screen.getByLabelText(RP_WORDS.love)).toHaveValue("The seed lists");
   });
 
+  it("Mia can step back to her own words, and the bar moves forward", async () => {
+    draw({ roles: [] }, "?path=quick");
+    fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.startQuestions }));
+    const yours = screen.getByRole("progressbar");
+    expect(yours.getAttribute("aria-valuenow")).toBe("2");
+    fireEvent.click(screen.getByRole("button", { name: RP_WORDS.back }));
+    expect(screen.getByText(RP_WORDS.welcomeLede)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: RP_WORDS.startQuestions }));
+    fireEvent.click(screen.getByRole("button", { name: RP_WORDS.onToRoles }));
+    expect(await screen.findByText(RP_WORDS.rolesLede)).toBeTruthy();
+    const roles = screen.getByRole("progressbar");
+    expect(Number(roles.getAttribute("aria-valuenow"))).toBeGreaterThan(2);
+    fireEvent.click(screen.getByRole("button", { name: RP_WORDS.quickPath }));
+    expect(screen.getByText(RP_WORDS.rolesLede)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: RP_WORDS.back }));
+    expect(screen.getByLabelText(RP_WORDS.love)).toBeTruthy();
+  });
+
+  it("comes back to the step it left when the profile link names no step", async () => {
+    draw({ roles: [] }, "?path=full");
+    fireEvent.click(await screen.findByRole("button", { name: "Step 3: Your season" }));
+    expect(await screen.findByText(RP_WORDS.seasonLede)).toBeTruthy();
+    cleanup();
+    window.history.replaceState(null, "", `/role-proposals/${PROPOSAL_ID}`);
+    render(
+      <Router>
+        <ProposalEditor initial={proposalWith({ roles: [] })} me="u-me" />
+      </Router>,
+    );
+    expect(await screen.findByText(RP_WORDS.seasonLede)).toBeTruthy();
+    expect(screen.getByText("Step 3 of 6")).toBeTruthy();
+  });
+
   it("a role card adds that role, and stops at five", async () => {
     draw({ roles: [] }, "?role=r4&path=quick");
     await waitFor(() => expect(server.puts().some((p) => p.roles?.some((r) => r.roleId === "r4"))).toBe(true));
     fireEvent.click(screen.getByRole("button", { name: RP_WORDS.fullControl }));
     expect(await screen.findByRole("checkbox", { name: /Water keeper/ })).toBeChecked();
+  });
+
+  it("a role card says so when the proposal already holds five, and does not add a sixth", async () => {
+    draw({ roles: ["r1", "r2", "r3", "r4", "r5"].map((roleId) => ({ roleId })) }, "?role=r6&path=quick");
+    expect(await screen.findByText(RP_WORDS.atMost(5))).toBeTruthy();
+    expect(server.puts().some((p) => p.roles?.some((r) => r.roleId === "r6"))).toBe(false);
+  });
+
+  it("a role card says so when that role is not on the chart", async () => {
+    draw({ roles: [] }, "?role=missing&path=quick");
+    expect(await screen.findByText(RP_WORDS.roleNotOnChart)).toBeTruthy();
+    expect(server.puts()).toEqual([]);
+  });
+
+  it("a submitted proposal is not opened for editing, even from a role card", async () => {
+    const submitted = proposalWith({ roles: [{ roleId: "r1" }] }, { status: "submitted" });
+    server = fakeServer({ roles: [{ roleId: "r1" }] }, { extra: { status: "submitted" }, card: fixturePayload(1, "self", { mode: "proposal" }) });
+    vi.stubGlobal("fetch", vi.fn(server.fetch));
+    window.history.replaceState(null, "", `/role-proposals/${PROPOSAL_ID}?role=r4&path=quick`);
+    render(
+      <Router>
+        <ProposalEditor initial={submitted} me="u-me" />
+      </Router>,
+    );
+    expect(await screen.findByText(RP_WORDS.stateHeading)).toBeTruthy();
+    expect(screen.queryByText(RP_WORDS.rolesLede)).toBeNull();
+    expect(server.puts()).toEqual([]);
   });
 });

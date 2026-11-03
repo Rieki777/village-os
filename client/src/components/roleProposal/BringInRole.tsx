@@ -35,6 +35,7 @@ import { saveProposal, type ProposalOut, type ProposalUpdate } from "./proposalA
 import { importRoleFile, importRoleText, type ImportOut } from "./roleCardApi";
 import type { OrgView } from "./StepRoles";
 import { copyText, promptFor } from "./OwnAiPrompt";
+import { RP_WORDS } from "./proposalWords";
 import { RC_WORDS } from "./roleCardWords";
 import { FOCUS, INPUT, LEDE, PANEL, PRIMARY, QUIET, SECONDARY } from "./parts";
 
@@ -130,7 +131,12 @@ export default function BringInRole({
     setFallback(null);
     setHandedTo(null);
     setSaid(null);
-    await beforeImport();
+    const saved = await beforeImport();
+    if (!saved) {
+      setBusy(false);
+      setError(RP_WORDS.notSaved);
+      return;
+    }
     const r = await send();
     if (!r.ok) setError(r.error);
     else if (r.data.isCard) show(r.data);
