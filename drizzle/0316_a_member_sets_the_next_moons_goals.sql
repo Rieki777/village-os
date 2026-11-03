@@ -11,15 +11,10 @@
 -- why it was let go, the day it was set (the score counts this moon's tasks
 -- only), and, for Outside my roles work, the role it really belongs to.
 --
--- origin widens from 8 to 24 characters for the moon pack's origin,
--- claude_deep_dive (spec section 16). Widening keeps every value the previous
--- release wrote and reads.
---
 -- moon_recaps gains the score as written at send, in half-points so nothing
 -- stored is a decimal. No column here carries hours or minutes.
 --
--- Expand only: one new table, nullable columns, and one column widened, on
--- tables 0313 made.
+-- Expand only: one new table and nullable columns on tables 0313 made.
 
 CREATE TABLE IF NOT EXISTS `moon_goals` (
   `id` varchar(64) NOT NULL,
@@ -42,7 +37,6 @@ CREATE TABLE IF NOT EXISTS `moon_goals` (
 );
 
 ALTER TABLE `moon_recap_items`
-  MODIFY COLUMN `origin` varchar(24) NOT NULL,
   ADD COLUMN `task_status` varchar(12) NULL,
   ADD COLUMN `redirect_to` varchar(120) NULL,
   ADD COLUMN `let_go_reason` varchar(300) NULL,

@@ -257,7 +257,7 @@ export function invoicePaidFrom(rows: readonly { state: string; paidAt: string |
 // ── Items ────────────────────────────────────────────────────────────────────
 
 /** Where a piece of work came from. A quest is never one of them. */
-export const ITEM_ORIGINS = ["task", "room", "sera", "hand", "carry", "claude_deep_dive"] as const;
+export const ITEM_ORIGINS = ["task", "room", "sera", "hand", "carry", "claude"] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 
 export const ITEM_STATES = ["suggested", "kept", "dropped"] as const;
@@ -275,7 +275,7 @@ export const ITEM_ORIGIN_WORDS: Record<ItemOrigin, string> = {
   sera: "From Sera",
   hand: "Added by hand",
   carry: "Carried from last moon",
-  claude_deep_dive: "From the deep dive",
+  claude: "From the deep dive",
 };
 
 export const ITEM_STATE_WORDS: Record<ItemState, string> = {
@@ -300,7 +300,7 @@ export const ITEM_REVIEW_WORDS: Record<ItemReview, string> = {
  * on its library id whichever path finds it: through the profile list or
  * through the Sera draft.
  */
-export function itemDedupeKey(origin: "task" | "room" | "hand" | "carry" | "claude_deep_dive", ref: string): string;
+export function itemDedupeKey(origin: "task" | "room" | "hand" | "carry" | "claude", ref: string): string;
 export function itemDedupeKey(origin: "sera", externalId: string): string;
 export function itemDedupeKey(origin: ItemOrigin, ref: string): string {
   return `${origin}:${String(ref).slice(0, 150)}`;
@@ -2035,126 +2035,8 @@ export function seraCloseKey(cycleId: string, externalId: string): string {
   return `moon:${cycleId}:${externalId}`;
 }
 
-// ── The moon pack (spec section 16) ──────────────────────────────────────────
-
-/**
- * What the end-of-moon skill hands My moon: the member's items, role audit
- * verdicts and next moon's goals. Never an amount, a pay route or anybody
- * else's personal details; `parseMoonPack` refuses a pack carrying a key
- * that names money or a route, and any text shaped like payment details.
- */
-export interface MoonPackItem {
-  title: string;
-  status: TaskStatus | null;
-  sourceLink: string | null;
-  /** YYYY-MM-DD. */
-  date: string | null;
-  roleId: string | null;
-  accountability: string | null;
-  seasonGoalId: string | null;
-  outsideRole: boolean;
-  /** Redirect, or the role Outside my roles work belongs to. */
-  redirectRole: string | null;
-}
-
-export interface MoonPack {
-  version: 1;
-  cycleId: string;
-  items: MoonPackItem[];
-  roleAudit: RoleAudit;
-  nextGoals: GoalInput[];
-}
-
-const PACK_FORBIDDEN_KEY = /amount|minor|price|pay|route|invoice|bank|iban|salary|fee|rate/i;
-
-function forbiddenKeyIn(v: unknown, depth = 0): string | null {
-  if (depth > 6 || !v || typeof v !== "object") return null;
-  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
-    if (PACK_FORBIDDEN_KEY.test(k)) return k;
-    const inner = forbiddenKeyIn(x, depth + 1);
-    if (inner) return inner;
-  }
-  return null;
-}
-
-/** The dedupe key of a pack item: by its source link, else by its words. */
-export function packItemKey(sourceLink: string | null, title: string): string {
-  return itemDedupeKey("claude_deep_dive", `link:${fnv1a(sourceLink || `title:${title.toLowerCase()}`)}`);
-}
-
-/** 64-bit FNV-1a as hex, so a long link keys in a fixed width. */
-function fnv1a(text: string): string {
-  let h = BigInt("0xcbf29ce484222325");
-  const prime = BigInt("0x100000001b3");
-  const mask = BigInt("0xffffffffffffffff");
-  const bytes = new TextEncoder().encode(text);
-  for (let k = 0; k < bytes.length; k++) h = ((h ^ BigInt(bytes[k])) * prime) & mask;
-  return h.toString(16).padStart(16, "0");
-}
-
-/** Read a pasted pack, for `POST /api/me/moon/:cycle/import` (member, Draft only). */
-export function parseMoonPack(raw: unknown, cycleId: string, heldRoleIds: readonly string[]): Parsed<MoonPack> {
-  let v = raw;
-  if (typeof raw === "string") {
-    try {
-      v = JSON.parse(raw);
-    } catch {
-      return { ok: false, field: "pack", error: PACK_WORDS.notJson };
-    }
-  }
-  if (!isObj(v) || v.version !== 1) return { ok: false, field: "pack", error: PACK_WORDS.notPack };
-  const bad = forbiddenKeyIn(v);
-  if (bad) return { ok: false, field: "pack", error: PACK_WORDS.carriesMoney };
-  if (v.cycleId !== cycleId) return { ok: false, field: "cycleId", error: PACK_WORDS.otherMoon };
-  const items: MoonPackItem[] = [];
-  for (const i of Array.isArray(v.items) ? v.items : []) {
-    if (!isObj(i)) continue;
-    const title = optText(i.title, LIMITS.itemText, "text");
-    if (!title.ok) return title;
-    if (!title.value) continue;
-    if (looksLikePaymentDetails(title.value)) return { ok: false, field: "text", error: PAYMENT_DETAILS_REFUSED };
-    const link = optText(i.sourceLink, LIMITS.evidenceUrl, "evidenceUrl");
-    if (!link.ok) return link;
-    if (link.value && evidenceUrlProblem(link.value)) return { ok: false, field: "evidenceUrl", error: evidenceUrlProblem(link.value) as string };
-    const date = optDate(i.date, "date");
-    if (!date.ok) return date;
-    const status = i.status === undefined || i.status === null ? null : (TASK_STATUSES as readonly unknown[]).includes(i.status) ? (i.status as TaskStatus) : undefined;
-    if (status === undefined) return { ok: false, field: "status", error: "A task is Done, Partly, Carry, Let go or Redirect." };
-    const roleId = typeof i.roleId === "string" && heldRoleIds.includes(i.roleId) ? i.roleId : null;
-    const acc = optText(i.accountability, LIMITS.accountabilityWords, "accountabilityWords");
-    if (!acc.ok) return acc;
-    const goal = optText(i.seasonGoalId, 64, "seasonGoalId");
-    if (!goal.ok) return goal;
-    const redirect = optText(i.redirectRole, LIMITS.redirectTo, "redirectTo");
-    if (!redirect.ok) return redirect;
-    items.push({ title: title.value, status, sourceLink: link.value, date: date.value, roleId, accountability: acc.value, seasonGoalId: goal.value, outsideRole: i.outsideRole === true || !roleId, redirectRole: redirect.value });
-  }
-  if (items.length > LIMITS.items) return { ok: false, field: "items", error: `A pack holds ${LIMITS.items} items at most.` };
-  const audit = parseRoleAudit(v.roleAudit, heldRoleIds);
-  if (!audit.ok) return audit;
-  let nextGoals: GoalInput[] = [];
-  if (Array.isArray(v.nextGoals) && v.nextGoals.length > 0) {
-    const g = parseMoonGoals(v.nextGoals);
-    if (!g.ok) return g;
-    nextGoals = g.value;
-  }
-  return { ok: true, value: { version: 1, cycleId, items, roleAudit: audit.value, nextGoals } };
-}
-
-export const PACK_WORDS = {
-  button: "Import from Claude",
-  notJson: "This is not a moon pack. Paste the whole pack the deep dive gave you.",
-  notPack: "This is not a moon pack, or it is from a newer version.",
-  carriesMoney: "A moon pack never carries amounts, pay routes or invoices. Ask for the pack again without them.",
-  otherMoon: "This pack is for another moon.",
-} as const;
-
-/** `POST /api/me/moon/:cycle/import`: what the pack added, and what it skipped as already on the recap. */
-export interface ImportPackResponse {
-  added: number;
-  skipped: number;
-  items: RecapItem[];
-}
+// The moon pack itself (its v1 shape, validation, preview and the
+// `claude:<32 hex>` key) lands with part 3 of lane A, from spec section 17 A2.
 
 // ── Outside my roles in the role audit (check 23) ────────────────────────────
 

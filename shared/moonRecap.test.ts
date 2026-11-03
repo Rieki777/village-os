@@ -568,26 +568,3 @@ describe("a fresh install names nobody (decision 22)", () => {
     expect(contract.moonReviewConfigProblem({ allStaffWeekday: 9 })).not.toBeNull();
   });
 });
-
-describe("the moon pack (spec section 16)", () => {
-  const pack = (over: Record<string, unknown> = {}) => ({
-    version: 1, cycleId: "lunar-000331",
-    items: [{ title: "Task 1", status: "done", sourceLink: "https://example.org/a", roleId: "r1", accountability: "Keep the water plan" }, { title: "Task 2", outsideRole: true, redirectRole: "Land role" }],
-    roleAudit: { roles: [{ roleId: "r1", choice: "keep" }] }, ...over,
-  });
-  it("reads a pack, pasted as text or as an object", () => {
-    const p = contract.parseMoonPack(JSON.stringify(pack()), "lunar-000331", ["r1"]);
-    expect(p.ok && p.value.items.map((i) => [i.title, i.status, i.roleId, i.outsideRole])).toEqual([["Task 1", "done", "r1", false], ["Task 2", null, null, true]]);
-  });
-  it("refuses a pack that carries an amount or a route, another moon's pack, and payment details", () => {
-    expect(contract.parseMoonPack(pack({ items: [{ title: "Task 1", amountMinor: 100 }] }), "lunar-000331", ["r1"])).toEqual({ ok: false, field: "pack", error: contract.PACK_WORDS.carriesMoney });
-    expect(contract.parseMoonPack(pack({ payRoute: "abroad" }), "lunar-000331", ["r1"]).ok).toBe(false);
-    expect(contract.parseMoonPack(pack(), "lunar-000332", ["r1"]).ok).toBe(false);
-    expect(contract.parseMoonPack(pack({ items: [{ title: "Card 4111 1111 1111 1111" }] }), "lunar-000331", ["r1"]).ok).toBe(false);
-  });
-  it("keys an item by its source link, so the same link is skipped", () => {
-    expect(contract.packItemKey("https://example.org/a", "Task 1")).toBe(contract.packItemKey("https://example.org/a", "Other words"));
-    expect(contract.packItemKey("https://example.org/a", "Task 1")).not.toBe(contract.packItemKey("https://example.org/b", "Task 1"));
-    expect(contract.packItemKey("https://example.org/a", "x")).toMatch(/^claude_deep_dive:link:[0-9a-f]{16}$/);
-  });
-});
