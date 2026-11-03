@@ -50,6 +50,7 @@ export default function StepSeason({ season, orgGoals, onChange }: { season: Sea
       </div>
       <AiHelpButton
         step="season"
+        ownText={[season.ownWords.love, season.ownWords.offer, season.ownWords.why].map((s) => s.trim()).filter(Boolean).join("\n")}
         words={{ aim: season.aim, ...Object.fromEntries(season.seasonal.map((g, i) => [`seasonalGoals.${i}`, g.doneWhen ? `${g.title}: ${g.doneWhen}` : g.title])) }}
         onAccept={(field, words) => {
           if (field === "aim") onChange({ ...season, aim: words });

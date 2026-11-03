@@ -47,6 +47,8 @@ export interface StepWordsProps {
   frameworkTerms: boolean;
   onType: (roleId: string, field: string, text: string) => void;
   onReview: (roleId: string, day: string) => void;
+  /** The member's three answers, so the guide can cite them. */
+  ownText?: string | null;
 }
 
 const list = (v: WordValue | undefined): string[] => (Array.isArray(v) ? v : typeof v === "string" && v ? [v] : []);
@@ -170,7 +172,7 @@ function WordInput({
   );
 }
 
-export default function StepWords({ roles, typed, frameworkTerms, onType, onReview }: StepWordsProps) {
+export default function StepWords({ roles, typed, frameworkTerms, onType, onReview, ownText }: StepWordsProps) {
   const [current, setCurrent] = useState(0);
   if (!roles.length) return <p className="text-stone-700">{RP_WORDS.pickRoleFirst}</p>;
   const role = roles[Math.min(current, roles.length - 1)];
@@ -247,6 +249,7 @@ export default function StepWords({ roles, typed, frameworkTerms, onType, onRevi
         <AiHelpButton
           step="words"
           words={Object.fromEntries(EDIT_FIELDS.map((f) => [f.field, shownText(state, f.field)]))}
+          ownText={ownText}
           onAccept={(field, words) => onType(role.id, field, words)}
         />
       </section>

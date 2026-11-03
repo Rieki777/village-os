@@ -23,10 +23,13 @@ import RoleGuidePanel from "./RoleGuidePanel";
 export default function AiHelpButton({
   step,
   onAccept,
+  ownText,
 }: {
   step: AiHelpStep;
   /** The words written on this step so far, by field. The guide reads the saved draft, so these are not sent. */
   words?: Record<string, string>;
+  /** The member's three answers, sent as the document so a suggestion can cite them. */
+  ownText?: string | null;
   /** The member accepted one suggestion: put it in its field. */
   onAccept: (field: string, words: string) => void;
 }) {
@@ -49,7 +52,7 @@ export default function AiHelpButton({
         proposalId={id}
         step={step}
         villageName={villageName}
-        document={document}
+        document={document ?? (ownText?.trim() ? ownText : null)}
         accepts={accepts}
         onAccept={(s) => onAccept(s.field, Array.isArray(s.words) ? s.words.join("\n") : s.words)}
       />
