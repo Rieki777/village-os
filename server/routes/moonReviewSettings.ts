@@ -27,7 +27,7 @@
  * Mounted behind `requireModule("moon-review")` here, in the module, the way
  * server/routes/badges.ts mounts its prefixes. All SQL is in server/repos.
  */
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { requireModule } from "../lib/modules";
 import { recordEvent } from "../lib/events";
@@ -50,7 +50,6 @@ export function changeNote(changes: readonly unknown[]): string {
 }
 
 interface DocSpec<T> {
-  path: string;
   key: string;
   empty: T;
   parse: (raw: unknown) => { ok: true; value: T } | { ok: false; field: string; error: string };
@@ -70,14 +69,15 @@ export function register(app: Express, deps: Deps): void {
     return parsed.ok ? parsed.value : spec.empty;
   }
 
-  function mount<T>(spec: DocSpec<T>, extra: (doc: T) => Record<string, unknown> = () => ({})): void {
-    app.get(spec.path, async (req, res) => {
+  /** The two handlers for one document. Registered below with literal paths, so the route walkers can read them. */
+  function handlers<T>(spec: DocSpec<T>, extra: (doc: T) => Record<string, unknown> = () => ({})) {
+    const get: RequestHandler = async (req, res) => {
       if (!(await guardCapability(req, res, "cash.pay"))) return;
       const doc = await read(spec);
       res.json({ document: doc, ...extra(doc) });
-    });
+    };
 
-    app.put(spec.path, async (req, res) => {
+    const put: RequestHandler = async (req, res) => {
       if (!(await guardCapability(req, res, "cash.pay"))) return;
       const actor = await authedUser(req);
       if (!actor) return res.status(401).json({ error: "auth_required" });
@@ -100,16 +100,23 @@ export function register(app: Express, deps: Deps): void {
         });
       }
       res.json({ document: parsed.value, changed: changes.length, ...extra(parsed.value) });
-    });
+    };
+    return { get, put };
   }
 
-  const payers: DocSpec<PayersDoc> = { path: SETTINGS_ROUTES[0], key: PAYERS_DOC_KEY, empty: EMPTY_PAYERS, parse: parsePayers, changes: payersChanges, event: "payers_changed" };
-  const settings: DocSpec<MoonReviewSettings> = { path: SETTINGS_ROUTES[1], key: SETTINGS_DOC_KEY, empty: EMPTY_SETTINGS, parse: parseMoonReviewSettings, changes: settingsChanges, event: "settings_changed" };
-  const rhythm: DocSpec<RhythmDoc> = { path: SETTINGS_ROUTES[2], key: RHYTHM_DOC_KEY, empty: EMPTY_RHYTHM, parse: parseRhythm, changes: rhythmChanges, event: "rhythm_changed" };
+  const payers: DocSpec<PayersDoc> = { key: PAYERS_DOC_KEY, empty: EMPTY_PAYERS, parse: parsePayers, changes: payersChanges, event: "payers_changed" };
+  const settings: DocSpec<MoonReviewSettings> = { key: SETTINGS_DOC_KEY, empty: EMPTY_SETTINGS, parse: parseMoonReviewSettings, changes: settingsChanges, event: "settings_changed" };
+  const rhythm: DocSpec<RhythmDoc> = { key: RHYTHM_DOC_KEY, empty: EMPTY_RHYTHM, parse: parseRhythm, changes: rhythmChanges, event: "rhythm_changed" };
 
   // Each answer carries what this document still has to name, so the desk can say it.
   const words = (keys: readonly (keyof typeof SETUP_GAP_WORDS)[]) => keys.map((k) => ({ key: k, words: SETUP_GAP_WORDS[k] }));
-  mount(payers, (doc) => ({ gaps: words(payerGapKeys(doc)) }));
-  mount(settings, (doc) => ({ gaps: words(settingsGapKeys(doc)) }));
-  mount(rhythm);
+  const payersDoor = handlers(payers, (doc) => ({ gaps: words(payerGapKeys(doc)) }));
+  const settingsDoor = handlers(settings, (doc) => ({ gaps: words(settingsGapKeys(doc)) }));
+  const rhythmDoor = handlers(rhythm);
+  app.get("/api/moon-review/payers", payersDoor.get);
+  app.put("/api/moon-review/payers", payersDoor.put);
+  app.get("/api/moon-review/settings", settingsDoor.get);
+  app.put("/api/moon-review/settings", settingsDoor.put);
+  app.get("/api/moon-review/rhythm", rhythmDoor.get);
+  app.put("/api/moon-review/rhythm", rhythmDoor.put);
 }
