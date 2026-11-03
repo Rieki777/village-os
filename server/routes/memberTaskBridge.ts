@@ -20,13 +20,10 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { registerJob } from "../lib/scheduler";
-<<<<<<< HEAD
 import { runListNudges } from "../lib/memberTaskNudges";
-=======
 import { randomUUID } from "node:crypto";
 import { HARD_DELETE_TOOL, callPrivacyTool, libraryExportFor, readHardDelete } from "../lib/saberraPrivacy";
 import { exportMemberTasks } from "../repos/memberTasks";
->>>>>>> 73f8c964 (Saberra: before erasing a member, export their tasks and remove them in Sera over a separate privacy connection)
 import { villageDayKey } from "../../shared/companionItems";
 import { REDIRECT_CHOICES, parseFeedback, type ScreenReason } from "../../shared/memberTaskFeedback";
 import { heldFromLibrary } from "../repos/memberTaskImport";
