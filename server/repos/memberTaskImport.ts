@@ -17,12 +17,13 @@ import { recordTaskEvent, type Queryable } from "./memberTasks";
 
 export async function heldFromLibrary(db: Queryable, userId: string): Promise<HeldTask[]> {
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT `id`, `external_id`, `title`, `tier`, DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `status`, `member_edited` FROM `member_tasks` WHERE `user_id` = ? AND `source` = 'sera' AND `external_id` IS NOT NULL",
+    "SELECT `id`, `external_id`, `title`, `tier`, DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `status`, `member_edited`, `requested_by` FROM `member_tasks` WHERE `user_id` = ? AND `source` = 'sera' AND `external_id` IS NOT NULL",
     [userId],
   );
   return rows.map((r) => ({
     id: String(r.id), externalId: String(r.external_id), title: String(r.title), tier: r.tier as Tier,
     dueOn: r.due_on == null ? null : String(r.due_on), status: r.status as TaskStatus, memberEdited: Number(r.member_edited) === 1,
+    requestedBy: r.requested_by == null ? null : String(r.requested_by),
   }));
 }
 
@@ -60,8 +61,8 @@ export async function runImport(
     for (const t of plan.create) {
       const id = `mt-${randomUUID()}`;
       const [res] = await conn.query<any>(
-        "INSERT IGNORE INTO `member_tasks` (`id`, `user_id`, `title`, `tier`, `due_on`, `source`, `external_id`, `import_batch`, `confidence`, `created_on`) VALUES (?,?,?,?,?,'sera',?,?,?,?)",
-        [id, userId, t.title, t.tier, t.dueOn, t.externalId, batch, t.confidence, createdOn],
+        "INSERT IGNORE INTO `member_tasks` (`id`, `user_id`, `title`, `tier`, `due_on`, `source`, `external_id`, `import_batch`, `confidence`, `requested_by`, `created_on`) VALUES (?,?,?,?,?,'sera',?,?,?,?,?)",
+        [id, userId, t.title, t.tier, t.dueOn, t.externalId, batch, t.confidence, t.requestedBy ?? null, createdOn],
       );
       if (res.affectedRows === 1) {
         created += 1;
@@ -70,8 +71,8 @@ export async function runImport(
     }
     for (const u of plan.update) {
       const [res] = await conn.query<any>(
-        "UPDATE `member_tasks` SET `title` = ?, `tier` = ?, `due_on` = ?, `version` = `version` + 1 WHERE `id` = ? AND `user_id` = ? AND `status` = 'open' AND `member_edited` = 0",
-        [u.next.title, u.next.tier, u.next.dueOn, u.id, userId],
+        "UPDATE `member_tasks` SET `title` = ?, `tier` = ?, `due_on` = ?, `requested_by` = ?, `version` = `version` + 1 WHERE `id` = ? AND `user_id` = ? AND `status` = 'open' AND `member_edited` = 0",
+        [u.next.title, u.next.tier, u.next.dueOn, u.next.requestedBy ?? null, u.id, userId],
       );
       if (res.affectedRows === 1) {
         updated += 1;

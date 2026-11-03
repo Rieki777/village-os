@@ -65,6 +65,7 @@ function TaskRow({ task, busy, onDone, onPick, onPin, onTier, others, selected, 
         </span>
         {task.dueOn && <span className={HINT}>Due {task.dueOn}</span>}
       </div>
+      {task.requestedBy && <p className={`${HINT} mt-1`}>Asked by {task.requestedBy}</p>}
       {task.privateDetail && (
         <p className={`${HINT} mt-1 whitespace-pre-line`}>
           <span className="font-semibold">Only you see this: </span>

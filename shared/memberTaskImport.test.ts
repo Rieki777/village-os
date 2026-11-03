@@ -61,3 +61,14 @@ describe("planning a library import", () => {
     expect(itemsOf([{ tasks: [1, 2], next_cursor: "c" }, { tasks: [3] }])).toHaveLength(3);
   });
 });
+
+describe("requested_by from the library", () => {
+  it("reads it, takes out emails, and refreshes an unedited task when it changes", async () => {
+    const { readLibraryTask, planImport } = await import("./memberTaskImport");
+    expect(readLibraryTask({ id: "x", title: "T", requested_by: "Ana (ana@x.org)" })!.requestedBy).not.toContain("@");
+    expect(readLibraryTask({ id: "x", title: "T" })!.requestedBy).toBeNull();
+    const held = [{ id: "m1", externalId: "x", title: "T", tier: "high" as const, dueOn: null, status: "open" as const, memberEdited: false, requestedBy: null }];
+    const p = planImport([{ id: "x", title: "T", priority: "High", requested_by: "Ana" }], "own", held);
+    expect(p.update).toHaveLength(1);
+  });
+});
