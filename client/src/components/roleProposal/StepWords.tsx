@@ -25,7 +25,9 @@ import type { WordValue } from "@shared/roleProposals";
 import AiHelpButton from "./AiHelpButton";
 import type { WordFieldOut } from "./proposalApi";
 import { RP_WORDS } from "./proposalWords";
+import TermGlossary from "@/components/governance/TermGlossary";
 import { EDIT_FIELDS, fieldProblem, NAME_FIELD, stateFrom, shownText, differs, type EditField } from "./roleWords";
+import WrittenDate from "./WrittenDate";
 import { FieldFrame, FOCUS, INPUT, LEDE, PANEL } from "./parts";
 
 export interface WordsRole {
@@ -194,6 +196,10 @@ export default function StepWords({ roles, typed, frameworkTerms, onType, onRevi
   return (
     <div className="grid gap-4">
       <p className={LEDE}>{RP_WORDS.wordsLede}</p>
+      <p className="text-sm text-foreground" data-any-language="">
+        {RP_WORDS.anyLanguage}
+      </p>
+      <TermGlossary />
       {roles.length > 1 && (
         <div role="group" aria-label={RP_WORDS.whichRole} className="flex flex-wrap gap-2">
           {roles.map((r, i) => (
@@ -242,6 +248,7 @@ export default function StepWords({ roles, typed, frameworkTerms, onType, onRevi
             <label className="grid gap-1 rounded-xl border border-border bg-card p-3 text-sm font-semibold text-foreground">
               {RP_WORDS.reviewOn}
               <span className="text-xs font-normal text-muted-foreground">{RP_WORDS.reviewHint}</span>
+              <WrittenDate iso={role.reviewOn} />
               <input type="date" value={role.reviewOn} onChange={(e) => onReview(role.id, e.target.value)} className={`min-h-[44px] ${INPUT}`} />
             </label>
           </>

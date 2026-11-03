@@ -2061,6 +2061,10 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 
 - The game variable `memberTasks.listDefault` (boolean, default `true`, "Every member has a task board unless a steward turns one off") decides a member's task board when they have no `member_task_access` row. A steward's explicit off still keeps a board off. No rows are written, so a village that sets the variable to `false` gets exactly the earlier behaviour back, where a board stays off until a steward turns it on.
 
+## The end-of-moon review's three village documents, and where they are edited (decision 22, 2026-11-03)
+
+- `payers`, `moon-review-settings` and `moon_rhythm` in `app_config` all ship empty and are edited on the admin Cash payouts desk, under "End-of-moon review settings", by a `cash.pay` holder (`GET`/`PUT /api/moon-review/payers`, `/settings` and `/rhythm`, in `server/routes/moonReviewSettings.ts`, behind the `moon-review` module). Each save is checked by the contract's parser, and every change writes a `moon_review_events` row (`payers_changed`, `settings_changed`, `rhythm_changed`) with the old and new value of each field that moved. A village fills in its payers, its host country and pilot acknowledgement, and, if it wants them, its moved moon days and guide link; nothing village-specific is set in code or in the environment.
+
 ## The village connector (`POST /api/agent/v1/mcp`, 2026-11-03, no migration)
 
 - A remote MCP server on the existing `vat_` agent tokens. A member mints a token under Your agent with `moon.read` (their moon, roles, season and task board) and, if they want, `tasks.write` (their own board pressed Done, Let go or Undo, each write asked first and confirmed), then adds `<origin>/api/agent/v1/mcp` to their client with `Authorization: Bearer <token>`. Every tool runs the member's own route over the loopback at `127.0.0.1:$PORT`, so nothing new needs provisioning, and the connector's name is the village's own name setting. OAuth sign-in for Claude's custom connectors comes with the next piece.

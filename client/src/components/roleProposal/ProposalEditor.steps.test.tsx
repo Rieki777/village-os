@@ -241,7 +241,7 @@ describe("step 4, terms and review dates", () => {
     fireEvent.click(screen.getByRole("button", { name: "Volunteer role" }));
     expect(term.textContent).toContain("Suggested from Until the season ends.");
     const pay = screen.getByText("Money for the work, if the role has any").closest("[data-settings-group]") as HTMLElement;
-    expect(pay.textContent).toContain("Suggested from Unpaid. A proposal, confirmed with the village's operations role.");
+    expect(pay.textContent).toContain("Suggested from Unpaid. A proposal, not a promise. Confirmed with the village's operations role.");
   });
 
   it("an hours chip writes the role's time, which the load check can read", async () => {
@@ -255,6 +255,7 @@ describe("step 4, terms and review dates", () => {
     draw({ roles: [{ roleId: "r1" }] }, "terms");
     const reviews = (await screen.findByText(RP_WORDS.reviewDates)).closest("section") as HTMLElement;
     fireEvent.change(within(reviews).getByLabelText("Kitchen keeper"), { target: { value: "2027-02-08" } });
+    expect(within(reviews).getByText("8 February 2027")).toBeTruthy();
     await waitFor(() => expect(lastPut()).toEqual({ roles: [{ roleId: "r1", words: {}, reviewOn: "2027-02-08" }] }));
   });
 

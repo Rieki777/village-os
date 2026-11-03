@@ -22,6 +22,7 @@
  *
  * Money in these words is a record. Nothing here pays, posts or settles.
  */
+import { opsPartner } from "./roleProposalHonesty";
 import { seatList } from "./seatApplications";
 import { MONEY_GROUPS, settingsWords, type SeatSettings } from "./seatSettings";
 
@@ -119,8 +120,9 @@ export interface RenderedText {
  * did not see can be in it. No candidate name: the parties carry who, and a
  * name in the words would be one more thing an erasure has to find.
  */
-export function renderSeatTermsText(seatNames: readonly string[], settings: SeatSettings): RenderedText {
+export function renderSeatTermsText(seatNames: readonly string[], settings: SeatSettings, partner?: string | null): RenderedText {
   const title = `Terms for ${seatList(seatNames)}`.slice(0, 200);
+  const who = opsPartner(partner);
   const rows = settingsWords(settings);
   const set = rows.filter((r) => r.set);
   const unset = rows.filter((r) => !r.set);
@@ -137,7 +139,7 @@ export function renderSeatTermsText(seatNames: readonly string[], settings: Seat
       ...(r.moneyLine ? [`    ${r.moneyLine}`] : []),
     ]),
     ...(set.length === 0 ? ["  None set."] : []),
-    ...(unset.length > 0 ? ["", `Not set: ${unset.map((r) => r.label).join(", ")}.`] : []),
+    ...(unset.length > 0 ? ["", `We'll fill this together with ${who}: ${unset.map((r) => r.label).join(", ")}.`] : []),
     "",
   ];
   return { title, body: lines.join("\n") };

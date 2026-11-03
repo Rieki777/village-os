@@ -91,9 +91,11 @@ describe("SeatSettingsEditor", () => {
     expect(within(groupBox("term")).queryByRole("alert")).toBeNull();
   });
 
-  it("reads an empty group as Not set and carries the money line only where money is recorded", () => {
+  it("reads an empty group as something to fill with the operations role, and carries the money line only where money is recorded", () => {
     render(<Harness start={{ v: 1, pay: { kind: "fixed", per: "month" }, bonus: { kind: "none" } }} seen={() => {}} />);
-    expect(within(groupBox("allowance")).getByText("Not set")).toBeInTheDocument();
+    expect(within(groupBox("allowance")).getByText("We'll fill this together with the village's operations role.")).toBeInTheDocument();
+    expect(within(groupBox("allowance")).queryByText("Not set")).toBeNull();
+    expect(within(groupBox("allowance")).queryByText("No preset")).toBeNull();
     expect(within(groupBox("pay")).getByText("Recorded here. Paid outside the platform.")).toBeInTheDocument();
     expect(within(groupBox("allowance")).queryByText("Recorded here. Paid outside the platform.")).toBeNull();
     // No bonus records no money, so it says nothing about paying.
