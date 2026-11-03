@@ -60,7 +60,7 @@ export function invoice(over: Partial<InvoiceView> = {}): InvoiceView {
     lines: [{
       key: "app-1", applicationId: "app-1", firstSeatId: "seat-1", kind: "pay", roleIds: ["role-seeds"], roleNames: ["Seed keeper"], basis: "per_moon", listedAs: null,
       currency: "USD", termsMinor: 123456, per: "moon", range: null, proposedMinor: null, finalMinor: null, daysInMoon: 30, daysHeld: 30, amountMinor: 123456,
-      basisLine: "US$1,234.56 per moon", approvedItemIds: [], cashOwedId: null, held: false,
+      basisLine: "US$1,234.56 per moon", approvedItemIds: [], cashOwedId: null, held: false, // village-ok: test fixture data, never shown to a member
     }],
     currency: "USD",
     totalMinor: 123456,
