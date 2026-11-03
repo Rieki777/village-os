@@ -147,3 +147,17 @@ export function parseRhythm(raw: unknown): Parsed<RhythmDoc> {
   }
   return { ok: true, value: { sendHour: hour, guideUrl: guide, cycles } };
 }
+
+/** Old and new values for every rhythm field a `PUT` changed, for the event note. */
+export function rhythmChanges(before: RhythmDoc, after: RhythmDoc): Array<{ field: string; from: unknown; to: unknown }> {
+  const out: Array<{ field: string; from: unknown; to: unknown }> = [];
+  if (before.sendHour !== after.sendHour) out.push({ field: "sendHour", from: before.sendHour, to: after.sendHour });
+  if (before.guideUrl !== after.guideUrl) out.push({ field: "guideUrl", from: before.guideUrl, to: after.guideUrl });
+  const ids = Array.from(new Set([...Object.keys(before.cycles), ...Object.keys(after.cycles)])).sort();
+  for (const id of ids) {
+    const a = before.cycles[id] ?? null;
+    const b = after.cycles[id] ?? null;
+    if (JSON.stringify(a) !== JSON.stringify(b)) out.push({ field: `cycles.${id}`, from: a, to: b });
+  }
+  return out;
+}
