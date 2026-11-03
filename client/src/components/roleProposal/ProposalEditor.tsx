@@ -33,6 +33,7 @@ import { BreathingLoader } from "@/components/natural";
 import { servedBody, servedRows, seasonalBody } from "@/components/seasonPlans/SeasonGoalsFields";
 import type { PlayerCardPayload } from "@shared/playerCardPayload";
 import { operationsRoleName, opsPartner } from "@shared/roleProposalHonesty";
+import { stepDone, type StepDoneCopy } from "@shared/stepDone";
 import { civilDayWords } from "@shared/seasonPlans";
 import { parseSeatSettings, settingsWords, type SeatSettings } from "@shared/seatSettings";
 import { PROPOSAL_WORDS } from "@shared/roleProposals";
@@ -54,6 +55,7 @@ import StepSeason, { type SeasonState } from "./StepSeason";
 import StepTerms from "./StepTerms";
 import StepShare from "./StepShare";
 import { PathToggle, WelcomeScreen, YourWordsScreen, pathFromUrl, readPlace, rememberPath, roleFromUrl, urlNamesPlace, writePlace, type FrontScreen, type ProposalPath } from "./QuickPath";
+import StepDoneCard from "./StepDoneCard";
 import BringInRole from "./BringInRole";
 import OwnAiPrompt from "./OwnAiPrompt";
 import ProposalState from "./ProposalState";
@@ -114,6 +116,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   const [path, setPath] = useState<ProposalPath>(resumed?.path ?? pathFromUrl);
   const [front, setFront] = useState<FrontScreen>(resumed?.front ?? ((resumed?.path ?? pathFromUrl()) === "quick" ? "welcome" : "steps"));
   const [seedNote, setSeedNote] = useState<string | null>(null);
+  const [done, setDone] = useState<StepDoneCopy | null>(null);
   const [orgAttempt, setOrgAttempt] = useState(0);
   const [picked, setPicked] = useState<string[]>(() => initial.roles.map((r) => r.roleId));
   const [newRoles, setNewRoles] = useState<LocalNew[]>(() => initial.newRoles.map((r) => ({ id: r.id, circleId: r.circle?.id ?? "", seats: r.seats })));
@@ -250,9 +253,9 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   }, []);
 
   useEffect(() => {
-    const id = front === "steps" ? "rp-step-title" : front === "yours" ? "rp-your-words" : "rp-welcome";
+    const id = done ? "rp-step-done" : front === "steps" ? "rp-step-title" : front === "yours" ? "rp-your-words" : "rp-welcome";
     document.getElementById(id)?.focus();
-  }, [step, front]);
+  }, [step, front, done]);
 
   useEffect(() => {
     if (proposal.status !== "draft") return;
@@ -262,6 +265,8 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   const go = async (next: StepKey) => {
     const ok = await save.flush();
     if (!ok) return;
+    const forward = STEPS.indexOf(next) > STEPS.indexOf(step);
+    setDone(forward && step !== "share" ? stepDone(step) : null);
     setStep(next);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -373,11 +378,6 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
           />
         </div>
       </div>
-      {save.status === "saved" && (
-        <p className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground" data-done-card="">
-          {RP_WORDS.savedReturn}
-        </p>
-      )}
       <header className="grid gap-1">
         <h1 className="font-display text-3xl font-bold text-foreground">{RP_WORDS.title}</h1>
         <p className={LEDE}>{target ? RP_WORDS.forSeason(target.name, civilDayWords(target.startsOn)) : proposal.targetWords}</p>
@@ -388,7 +388,8 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
         )}
       </header>
 
-      {front === "welcome" && <WelcomeScreen org={org} onStart={() => setFront("yours")} />}
+      {done && <StepDoneCard saved={done.saved} next={done.next} />}
+      {front === "welcome" && <WelcomeScreen org={org} onStart={() => { setDone(stepDone("welcome")); setFront("yours"); }} />}
       {front === "yours" && (
         <YourWordsScreen
           season={season}
@@ -396,8 +397,8 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             setSeason(next);
             save.touch("season");
           }}
-          onBack={() => setFront("welcome")}
-          onNext={() => setFront("steps")}
+          onBack={() => { setDone(null); setFront("welcome"); }}
+          onNext={() => { setDone(stepDone("yours")); setFront("steps"); }}
         />
       )}
 
@@ -524,7 +525,17 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
         <SaveLine status={save.status} error={save.error} onRetry={() => void save.flush()} />
         {front === "steps" && (
         <div className="flex items-center justify-between gap-2">
-          <button type="button" disabled={index === 0 && path !== "quick"} onClick={() => (index === 0 ? setFront("yours") : void go(STEPS[index - 1]))} className={SECONDARY}>
+          <button
+            type="button"
+            disabled={index === 0 && path !== "quick"}
+            onClick={() => {
+              if (index === 0) {
+                setDone(null);
+                setFront("yours");
+              } else void go(STEPS[index - 1]);
+            }}
+            className={SECONDARY}
+          >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             {RP_WORDS.back}
           </button>
