@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
 import { ROLE_CCOS_WORDS } from "@shared/roleCcos";
+import { GROUP_PLAIN } from "@shared/roleProposalHonesty";
 import { LOAD_WORDS } from "@shared/roleProposalLoad";
 import { fakeServer, ORG, PROPOSAL_ID, proposalWith, type DraftBody } from "@/test/roleProposalFixture";
 
@@ -176,7 +177,12 @@ describe("step 3, your season", () => {
     fireEvent.change(screen.getByLabelText(new RegExp(RP_WORDS.aim)), { target: { value: "Every meal from our own land." } });
     await waitFor(() =>
       expect(lastPut()).toEqual({
-        season: { aim: "Every meal from our own land.", seasonalGoals: [], servesGoals: [{ goal: "Grow the orchard", howItHelps: "Fruit for the kitchen." }] },
+        season: {
+          aim: "Every meal from our own land.",
+          seasonalGoals: [],
+          servesGoals: [{ goal: "Grow the orchard", howItHelps: "Fruit for the kitchen." }],
+          ownWords: { love: "", offer: "", why: "" },
+        },
       }),
     );
     expect(screen.queryByRole("button", { name: RP_WORDS.aiHelp })).toBeNull();
@@ -189,7 +195,14 @@ describe("step 3, your season", () => {
     fireEvent.change(screen.getByLabelText("Goal"), { target: { value: "A harvest supper" } });
     fireEvent.change(screen.getByLabelText("Done when"), { target: { value: "Everyone has eaten from the orchard" } });
     await waitFor(() =>
-      expect(lastPut()).toEqual({ season: { aim: null, seasonalGoals: [{ title: "A harvest supper", doneWhen: "Everyone has eaten from the orchard" }], servesGoals: [] } }),
+      expect(lastPut()).toEqual({
+        season: {
+          aim: null,
+          seasonalGoals: [{ title: "A harvest supper", doneWhen: "Everyone has eaten from the orchard" }],
+          servesGoals: [],
+          ownWords: { love: "", offer: "", why: "" },
+        },
+      }),
     );
   });
 });
@@ -220,6 +233,7 @@ describe("step 4, terms and review dates", () => {
     expect(await screen.findByText("For next season, starting 1 January 2027.")).toBeTruthy();
     const term = (await screen.findByText("How long you hold this role")).closest("[data-settings-group]") as HTMLElement;
     expect(term.textContent).toContain("We'll fill this together with the village's operations role.");
+    for (const line of Object.values(GROUP_PLAIN)) expect(screen.getByText(line)).toBeTruthy();
     expect(term.textContent).not.toContain("No preset");
     fireEvent.click(screen.getByRole("button", { name: "Volunteer role" }));
     expect(term.textContent).toContain("Suggested from Until the season ends.");

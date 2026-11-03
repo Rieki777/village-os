@@ -86,6 +86,16 @@ describe("the guide's card as suggestions", () => {
     expect(GUIDE_FIELDS.words).not.toContain("reviewOn");
   });
 
+  it("never writes the member's own words, or suggests pay", () => {
+    const love = "I love the bread,  the early oven";
+    const proposed = { season: { aim: "Feed the village from its own land", ownWords: { love, offer: "loaves", why: "now" } } };
+    const out = suggestionsFrom("season", current, proposed, [], ctx, []);
+    expect(out.map((s) => s.field)).toEqual(["aim"]);
+    expect(JSON.stringify(out)).not.toContain(love);
+    expect(GUIDE_FIELDS.words.join(" ")).not.toMatch(/ownWords|love|offer|why|pay|allowance|bonus/);
+    expect(GUIDE_FIELDS.season.join(" ")).not.toMatch(/ownWords|love|offer|why|pay|allowance|bonus/);
+  });
+
   it("suggests the season's aim and goals on the season step only", () => {
     const proposed = { season: { aim: "Feed the village from its own land", seasonalGoals: [{ title: "A harvest list each week", doneWhen: "the kitchen plans from it" }], servesGoals: [] } };
     const season = suggestionsFrom("season", current, proposed, [], ctx, []);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GROUP_PLAIN, honestyLine, operationsRoleName, OPS_FALLBACK, opsPartner, seasonHeading } from "./roleProposalHonesty";
+import { GROUP_PLAIN, guideName, honestyLine, operationsRoleName, OPS_FALLBACK, opsPartner, seasonHeading } from "./roleProposalHonesty";
 import { SETTINGS_GROUPS } from "./seatSettings";
 
 describe("season heading", () => {
@@ -43,6 +43,12 @@ describe("the operations role", () => {
   it("drops an email-shaped name and never needs a village name", () => {
     expect(operationsRoleName([{ name: "operations@example.org" }])).toBeNull();
     expect(opsPartner("Operations Steward")).toBe("Operations Steward");
+  });
+
+  it("names the guide by a first name, and never by an email", () => {
+    expect(guideName([{ name: "Operations Steward", holders: [{ name: "Rye Cordon" }, { name: "ops@example.org" }] }])).toBe("Rye");
+    expect(guideName([{ name: "Operations Steward", holders: [{ name: "ops@example.org" }] }])).toBe("Operations Steward");
+    expect(guideName([])).toBe(OPS_FALLBACK);
   });
 });
 
