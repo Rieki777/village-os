@@ -63,6 +63,7 @@ export const RP_WORDS = {
   yourWordsTitle: "In your words",
   yourWordsLede: "Write the way you talk. These stay exactly as you wrote them.",
   yourWordsKept: "Your words, kept as you wrote them",
+  anyLanguage: "Any language is welcome. Write in the language you think in.",
   love: "What do you love doing?",
   offer: "What would you offer the village?",
   whyHere: "Why here, why now?",

@@ -151,6 +151,9 @@ export function YourWordsScreen({
       <p className="text-sm font-semibold text-notice" data-words-kept="">
         {RP_WORDS.yourWordsKept}
       </p>
+      <p className="text-sm text-foreground" data-any-language="">
+        {RP_WORDS.anyLanguage}
+      </p>
       {QUESTIONS.map((q) => (
         <div key={q.key} className={`${PANEL} grid gap-2`}>
           <GrowingText id={`own-${q.key}`} label={q.label} placeholder={q.hint || undefined} value={season.ownWords[q.key]} onValue={(v) => set(q.key, v)} max={OWN_WORDS_MAX} minRows={3} mic />
