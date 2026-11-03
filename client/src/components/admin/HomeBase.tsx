@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { API_BASE, authHeaders } from "@/components/admin/adminApi";
 import type { NavGroup } from "@/components/admin/adminNavGroups";
 import { ADMIN_AREAS, setHomeBaseOn, tabsInArea, type AreaId } from "./adminAreas";
+import { connectionRows, glanceSentence, readLastGlance, rememberGlance, sinceLastVisit } from "./todayGlance";
 
 interface Needs {
   sentence: string;
@@ -43,6 +44,8 @@ export default function HomeBase({
   groups: NavGroup[];
 }) {
   const [needs, setNeeds] = useState<Needs | null>(null);
+  const [glance, setGlance] = useState<string | null>(null);
+  const [since, setSince] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [updated, setUpdated] = useState<string | null>(null);
   const [area, setArea] = useState<AreaId>("today");
@@ -53,10 +56,16 @@ export default function HomeBase({
     Promise.all([
       fetch(`${API_BASE}/admin/submissions`, { headers: authHeaders(password) }).then((r) => (r.ok ? r.json() : [])),
       fetch(`${API_BASE}/admin/launch`, { headers: authHeaders(password) }).then((r) => (r.ok ? r.json() : null)),
-    ]).then(([subs, launch]) => {
+      fetch(`${API_BASE}/admin/integrations`, { headers: authHeaders(password) }).then((r) => (r.ok ? r.json() : {})),
+    ]).then(([subs, launch, integrations]) => {
       const count = Array.isArray(subs) ? subs.length : 0;
       const blocking = Number(launch?.blockingOpen ?? 0);
+      const rows = connectionRows(integrations ?? {});
+      const prev = readLastGlance();
       setNeeds(needsFrom(count, Number.isFinite(blocking) ? blocking : 0));
+      setGlance(glanceSentence(count, rows));
+      setSince(sinceLastVisit(prev, count));
+      rememberGlance(count, rows.filter((row) => row.state !== "working").length);
       setUpdated(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     }).catch(() => setProblem("This did not load. Try again in a moment."));
   };
@@ -69,6 +78,8 @@ export default function HomeBase({
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-xl font-semibold text-gray-900">Today</h2>
+        {glance && <p className="w-full text-base text-gray-900">{glance}</p>}
+        {since && <p className="w-full text-sm text-gray-700">{since}</p>}
         {updated && <p className="text-sm text-gray-600">Updated {updated}</p>}
       </div>
       {problem ? (
