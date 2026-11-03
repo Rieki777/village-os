@@ -222,6 +222,11 @@ export default function ModuleStewardPanel({
       )}
 
       {/* While Settings is open the same board is inside it, so it is never on screen twice. */}
+      {m.id === "saberra" && (
+        <p className="mt-3">
+          <a href="/admin?tab=modules&module=saberra" className="inline-flex min-h-[44px] items-center text-sm font-medium text-teal-deep underline">Back to admin</a>
+        </p>
+      )}
       {BOARD_ON_PAGE.has(m.id) && !settingsOpen && (
         <div className="mt-4" data-testid="module-board">
           <Suspense fallback={<p className="text-xs text-gray-500">Loading the board…</p>}>

@@ -6,7 +6,7 @@
  * here too. The line under the title points at the library, which is where
  * the filters are changed.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Lock, LogOut } from "lucide-react";
 import { HANDLED_EVENT, readHandledCount } from "./handledToday";
 import "./adminNight.css";
@@ -21,12 +21,14 @@ export default function AdminHeader({
   night,
   onNight,
   onSignOut,
+  extra,
 }: {
   villageName: string;
   siteUrl: string;
   night: boolean;
   onNight: (next: boolean) => void;
   onSignOut: () => void;
+  extra?: ReactNode;
 }) {
   const [handled, setHandled] = useState(() => readHandledCount(new Date()));
   useEffect(() => {
@@ -63,6 +65,7 @@ export default function AdminHeader({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {extra}
           <p className={`text-sm ${quiet}`}>Handled today: {handled}, on this device</p>
           <button
             type="button"

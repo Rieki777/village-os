@@ -39,6 +39,7 @@ import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
+import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
 import { TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
@@ -7874,7 +7875,7 @@ export default function Admin() {
 
   // The retired Module Library tab, and every old link to it, land on the
   // library itself. Before the gate: the library is public.
-  if (activeTab === "modules") {
+  if (activeTab === "modules" && new URLSearchParams(window.location.search).get("module") !== "saberra") {
     return <Redirect to={legacyModulesTabTarget(window.location.search) ?? "/modules"} replace />;
   }
   if (!password) {
@@ -7893,6 +7894,7 @@ export default function Admin() {
         night={night}
         onNight={setNight}
         onSignOut={() => setPassword(null)}
+        extra={<AdminSeraChip password={password} />}
       />
 
       <div className="flex">
@@ -7917,6 +7919,7 @@ export default function Admin() {
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
+          {activeTab === "modules" && <SeraAdminHome />}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
           {/* The two facts only this village can state. VillageAnswers.tsx says why it outlives the checklist. */}

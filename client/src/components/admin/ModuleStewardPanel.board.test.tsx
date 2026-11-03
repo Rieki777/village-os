@@ -37,6 +37,7 @@ describe("the module board on the module's page", () => {
   it("shows Saberra's board open, once", async () => {
     panel("saberra");
     expect(await screen.findByText("saberra board")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to admin" }).getAttribute("href")).toBe("/admin?tab=modules&module=saberra");
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect((await screen.findAllByText("saberra board")).length).toBe(1);
   });
