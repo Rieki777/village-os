@@ -41,6 +41,8 @@ import AdminHeader from "@/components/admin/AdminHeader";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
 import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
 import { tabFromSearch } from "@/components/admin/adminAreas";
+import HealthStrip from "@/components/admin/HealthStrip";
+import AdminHelp from "@/components/admin/AdminHelp";
 
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
 import { TIER_PILL } from "@shared/moduleCatalog";
@@ -7920,6 +7922,8 @@ export default function Admin() {
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
+          <HealthStrip password={password} onOpen={setActiveTab} />
+          <AdminHelp tab={activeTab} />
           {activeTab === "home" && <Suspense fallback={null}><HomeBase password={password} onOpenTab={setActiveTab} groups={filterNavByModules(navGroups(setupComplete), moduleLifecycles)} /></Suspense>}
           {activeTab === "modules" && <SeraAdminHome />}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
