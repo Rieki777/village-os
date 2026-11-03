@@ -468,11 +468,9 @@ function MessageReportsTab({ password }: { password: string }) {
  * exists. Collapsed it is a 56px strip of icons that still navigate in one
  * tap, so narrowing costs nothing.
  *
- * Expanded, the two sizes behave differently on purpose. On a wide screen it
- * sits in the layout and pushes the content across. On a phone there is no
- * room to push anything, so it floats over the content with a backdrop and
- * closes itself the moment you choose something — the pattern every mobile
- * drawer uses, because the alternative is squeezing the page to nothing.
+ * Expanded, it sits in the layout and pushes the content across. Below the
+ * laptop width this rail is hidden: the phone uses the bottom sheet, and a
+ * backdrop here would cover that page with nothing behind it to open.
  */
 function AdminNav({
   groups, activeTab, onSelect, open, setOpen,
@@ -612,13 +610,6 @@ function AdminNav({
         >
           {tip.label}
         </div>
-      )}
-      {open && (
-        <button
-          aria-label="Close menu"
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
-        />
       )}
       <nav
         onTouchStart={swipeStart}

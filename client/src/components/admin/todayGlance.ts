@@ -53,34 +53,47 @@ function cardFor(input: ConnInput, moduleId: string): ConnCard | undefined {
   return (input.cards ?? []).find((c) => c.module === moduleId);
 }
 
-function stateFrom(on: boolean, card: ConnCard | undefined): ConnState {
-  const verdict = card?.health?.find((h) => h.verdict)?.verdict;
-  if (verdict === "failing") return "broken";
-  if (!on && verdict !== "quiet") return "needs";
-  if (verdict === "quiet" || verdict === "ok") return "working";
-  return on ? "working" : "needs";
+/** A saved key is not a check. Only these verdicts mean the last call was fine. */
+const CONFIRMED = new Set(["working", "quiet"]);
+
+function verdictsOf(card: ConnCard | undefined): string[] {
+  return (card?.health ?? []).map((h) => h.verdict).filter((v): v is string => typeof v === "string" && v.length > 0);
+}
+
+/**
+ * Failing wins. A mix, a stale reading, or a card with no reading is needs.
+ * Listing the card is not the same as a check.
+ */
+function stateFrom(verdicts: string[]): ConnState {
+  if (verdicts.includes("failing")) return "broken";
+  if (verdicts.length > 0 && verdicts.every((v) => CONFIRMED.has(v))) return "working";
+  return "needs";
 }
 
 export function connectionRows(input: ConnInput): ConnectionRow[] {
-  const emailOn = input.emailConfigured === true || secretOn(input, "resend_api_key");
-  const payOn = input.stripeConfigured === true || secretOn(input, "stripe_secret_key");
+  const emailKey = input.emailConfigured === true || secretOn(input, "resend_api_key");
+  const payKey = input.stripeConfigured === true || secretOn(input, "stripe_secret_key");
   const calendar = cardFor(input, "events");
   const sera = cardFor(input, "saberra");
-  const seraOn = secretOn(input, "sera_api_secret") || !!sera;
-  const rows: { id: string; name: string; state: ConnState }[] = [
-    { id: "email", name: "Email", state: stateFrom(emailOn, undefined) },
-    { id: "payments", name: "Payments", state: stateFrom(payOn, undefined) },
-    { id: "calendar", name: "Calendar", state: stateFrom(!!calendar, calendar) },
-    { id: "sera", name: "Sera", state: stateFrom(seraOn, sera) },
+  const seraKey = secretOn(input, "sera_api_secret");
+  const rows: { id: string; name: string; state: ConnState; key: boolean }[] = [
+    { id: "email", name: "Email", state: stateFrom(verdictsOf(cardFor(input, "email"))), key: emailKey },
+    { id: "payments", name: "Payments", state: stateFrom(verdictsOf(cardFor(input, "payments"))), key: payKey },
+    { id: "calendar", name: "Calendar", state: stateFrom(verdictsOf(calendar)), key: false },
+    { id: "sera", name: "Sera", state: stateFrom(verdictsOf(sera)), key: seraKey },
   ];
   return rows.map((row) => ({
-    ...row,
+    id: row.id,
+    name: row.name,
+    state: row.state,
     word: WORD[row.state],
     detail: row.state === "broken"
       ? "The last call failed."
-      : row.state === "needs"
-        ? "It is not connected yet."
-        : "A key is saved.",
+      : row.state === "working"
+        ? "The last check went through."
+        : row.key
+          ? "A key is saved. It has not been confirmed."
+          : "It is not connected yet.",
   }));
 }
 
@@ -94,7 +107,9 @@ export function glanceSentence(requests: number, rows: ConnectionRow[]): string 
   }
   if (needs > 0) {
     const c = needs === 1 ? "1 connection needs you" : `${needs} connections need you`;
-    return requests === 0 ? `${c}. Everything else is fine.` : `${req}, ${c}, everything else is fine.`;
+    const all = needs === rows.length;
+    if (requests === 0) return all ? "Every connection needs you." : `${c}. Everything else is fine.`;
+    return all ? `${req}, and ${c}.` : `${req}, ${c}, everything else is fine.`;
   }
   if (requests === 0) return "Nothing is waiting, and every connection is fine.";
   return `${req}, everything else is fine.`;
