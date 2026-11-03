@@ -118,3 +118,50 @@ export function ToolBadges({ tools }: { tools: readonly SeraTool[] }) {
     </ul>
   );
 }
+
+/**
+ * One level of the board that holds controls: the address form, the
+ * connection with its sync controls, the sync history, the journal outbox.
+ * The title is the section's heading, so screen readers move by level.
+ */
+export function QuestLevel({
+  level,
+  title,
+  state,
+  headingId,
+  children,
+}: {
+  level: number;
+  title: string;
+  state?: QuestState;
+  /** When the content carries its own heading, the title is a label and the heading names the level. */
+  headingId?: string;
+  children: ReactNode;
+}) {
+  const id = `saberra-level-${level}`;
+  const Title = headingId ? "p" : "h3";
+  return (
+    <section
+      aria-labelledby={headingId ?? id}
+      className={`rounded-xl border p-4 bg-white ${state === "done" ? "border-emerald-200" : "border-gray-100"}`}
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-teal-deep text-white text-xs font-semibold">
+            {level}
+          </span>
+          <Title id={id} className={headingId ? "text-xs uppercase tracking-wide text-gray-500" : "font-semibold text-gray-900"}>
+            {title}
+          </Title>
+        </div>
+        {state && (
+          <span className={`shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${STATE_CLS[state]}`}>
+            {state === "done" && <Sparkles aria-hidden className="w-3 h-3 motion-safe:animate-pulse" />}
+            {STATE_WORDS[state]}
+          </span>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}

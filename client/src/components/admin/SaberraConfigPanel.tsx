@@ -44,6 +44,7 @@ import type { SyncFailureWhy } from "@shared/saberraSyncLog";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { useModuleConfig } from "./ModuleConfigPanels";
 import SaberraOutboxPanel from "./SaberraOutboxPanel";
+import { QuestLevel } from "./SaberraBridgeQuests";
 import { ReviewQueueButton, ScheduleControl, SyncRunLog, WHY_WORDS } from "./SaberraSyncSchedule";
 
 const MODULE_ID = "saberra";
@@ -246,12 +247,11 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
   const keyState = status?.connection.state;
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-5 space-y-5">
+    <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 sm:p-5 space-y-4">
       <Suspense fallback={<p className="text-xs text-gray-500">Reading the bridge…</p>}>
         <SaberraBridgeBoard password={password} />
       </Suspense>
-      <div>
-        <h3 className="font-semibold text-gray-900 mb-1">This village's address at the service</h3>
+      <QuestLevel level={1} title="This village's address at the service" state={status?.addressSet ? "done" : undefined}>
         <p className="text-xs text-gray-500 mb-3">
           The service gives each village its own address. The key that goes with it is entered
           in Integrations, never here.
@@ -294,10 +294,9 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
         <button type="button" className={`${saveCls} mt-3`} disabled={saving} onClick={onSave}>
           {saving ? "Saving…" : "Save addresses"}
         </button>
-      </div>
+      </QuestLevel>
 
-      <div className="border-t border-gray-100 pt-4">
-        <h3 className="font-semibold text-gray-900 mb-1">The connection</h3>
+      <QuestLevel level={2} title="The connection" state={keyState === "ready" && status?.addressSet ? "done" : undefined}>
         {loading ? (
           <p className="text-sm text-gray-500">Loading…</p>
         ) : !on ? (
@@ -377,13 +376,22 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
               </p>
             )}
             {result && <SyncAnswer result={result} />}
-            <SyncRunLog password={password} version={runsVersion} />
           </>
         )}
-      </div>
+      </QuestLevel>
+
+      {!loading && on && (
+        <QuestLevel level={3} title="Sync history">
+          <SyncRunLog password={password} version={runsVersion} />
+        </QuestLevel>
+      )}
 
       {/* Behind the module's own gate like the status read, so it is asked only while the module is on. */}
-      {on && <SaberraOutboxPanel password={password} />}
+      {on && (
+        <QuestLevel level={4} title="Journal outbox" headingId="saberra-outbox-heading">
+          <SaberraOutboxPanel password={password} />
+        </QuestLevel>
+      )}
     </div>
   );
 }

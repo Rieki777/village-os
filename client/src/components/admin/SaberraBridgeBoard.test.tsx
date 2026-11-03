@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 afterEach(cleanup);
 import { BridgeView } from "./SaberraBridgeBoard";
+import { QuestLevel } from "./SaberraBridgeQuests";
 import { bridgeChecks, SERA_AGREEMENT, type BridgeAnswer } from "@shared/seraBridgeBoard";
 
 const before = Date.parse(SERA_AGREEMENT.at) - 3 * 3_600_000;
@@ -43,5 +44,18 @@ describe("the Sera bridge board", () => {
     render(<BridgeView a={a} now={before} />);
     expect(screen.getByText("3 sent, 1 queued, 0 failed.")).toBeTruthy();
     expect(screen.getByText("Notes held until the agreement: 2.")).toBeTruthy();
+  });
+
+  it("names a level by its own heading, or by the content's heading when it has one", () => {
+    render(
+      <>
+        <QuestLevel level={2} title="The connection" state="done"><p>inside</p></QuestLevel>
+        <QuestLevel level={4} title="Journal outbox" headingId="own"><h3 id="own">What Saberra would receive</h3></QuestLevel>
+      </>,
+    );
+    expect(screen.getByRole("region", { name: "The connection" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "The connection" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "What Saberra would receive" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Journal outbox" })).toBeNull();
   });
 });

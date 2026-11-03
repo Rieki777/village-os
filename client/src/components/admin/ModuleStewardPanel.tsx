@@ -22,13 +22,23 @@
  * on the admin workspace, which is why it sits in client/src/components/admin
  * where the gray scale is allowed.
  */
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { toast } from "sonner";
 import { Activity } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
 import { prepareImageForUpload } from "@/lib/imagePrep";
 import { refusal } from "@/components/admin/adminApi";
 import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
+
+/**
+ * Saberra's whole board (the bridge, the address, the connection and its sync
+ * controls, the sync history, the journal outbox) shown on the module's own
+ * page for a steward, not only behind Settings. Its own chunk; this panel only
+ * renders for a steward, so nobody else loads it or calls its routes.
+ */
+const SaberraConfigPanel = lazy(() => import("@/components/admin/SaberraConfigPanel"));
+/** Modules whose config board is shown open on their page. */
+const BOARD_ON_PAGE = new Set(["saberra"]);
 import { useModuleDeepLink } from "@/components/admin/moduleDeepLink";
 import { forgetExamplesCache, RETIRES_WITH } from "@/components/ExamplesBanner";
 import { GoLiveCard } from "@/components/modules/GoLiveCard";
@@ -209,6 +219,15 @@ export default function ModuleStewardPanel({
           <Activity className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
           {health.text}
         </p>
+      )}
+
+      {/* While Settings is open the same board is inside it, so it is never on screen twice. */}
+      {BOARD_ON_PAGE.has(m.id) && !settingsOpen && (
+        <div className="mt-4" data-testid="module-board">
+          <Suspense fallback={<p className="text-xs text-gray-500">Loading the board…</p>}>
+            <SaberraConfigPanel password={token} />
+          </Suspense>
+        </div>
       )}
 
       {/* The switch. Two columns on a phone, one row from sm: up, every cell a
