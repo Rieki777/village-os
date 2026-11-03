@@ -199,18 +199,21 @@ export function heroOf(input: HeroIn): HeroOut {
   const span = term ? { ...term, over: "term" as const } : seasonStart && seasonEnd ? { start: seasonStart, end: seasonEnd, over: "season" as const } : null;
   const name = moonNameOf(LUNAR_CLOCK.boundsFor(input.now).startsAt, tz);
   let moon: HeroOut["moon"] = { words: name, name, day: null, of: null, over: null };
-  // A day is counted only inside the span (E9): a proposal card drawn in a
-  // season not begun, or one since ended, names today's moon alone rather
-  // than "Day 1" of a season nobody is in.
+  // A day is counted only inside the span (E9). A proposal for a season that
+  // has not begun, or one that has ended, names that season. Naming today's
+  // moon beside next season's dates reads as the wrong month.
   // A term runs through its last day, as `adoptedTerm` reads it; a season's
   // end is already the last instant before the next one starts.
   const nowMs = input.now.getTime();
   const inside = !!span && nowMs >= span.start.getTime() && nowMs < span.end.getTime() + (span.over === "term" ? 86_400_000 : 1);
+  const seasonName = input.proposal ? clean(season?.name ?? null) : null;
   if (span && inside && span.end.getTime() >= span.start.getTime()) {
     const of = civilDaysBetween(span.start, span.end, tz) + 1;
     const d = Math.min(of, Math.max(1, civilDaysBetween(span.start, input.now, tz) + 1));
     const source = span.over === "term" ? "applications.starts_at, applications.term_ends_at" : "season.startsOn, season.endsOn";
     moon = { words: W.moonPill(name, d, of), name, day: { n: d, source }, of: { n: of, source }, over: span.over };
+  } else if (seasonName) {
+    moon = { words: seasonName, name: seasonName, day: null, of: null, over: null };
   }
   return { eyebrow, tagline, span: span ? spanWords(span.start, span.end, tz) : null, moon };
 }

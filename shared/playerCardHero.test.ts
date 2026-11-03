@@ -106,12 +106,13 @@ describe("the hero", () => {
     const card = buildPlayerCard(input({ mode: "proposal", proposalSeason: next }));
     expect(card.header.eyebrow).toBe("Riverbend · Second Season");
     expect(card.header.span).toBe("1 January to 20 March 2027");
-    expect(card.header.moon).toMatchObject({ words: "October Moon", day: null, of: null, over: null });
+    expect(card.header.moon).toMatchObject({ words: "Second Season", day: null, of: null, over: null });
     // My moon cycle runs over that season.
     expect(card.timeline.moons[0].startsAt.slice(0, 10)).toBe("2027-01-01");
     // A season that has already ended: named, with no day counted.
     const past = buildPlayerCard(input({ mode: "proposal", proposalSeason: { id: "s1", name: "First Season", startsOn: "2026-03-01", endsOn: "2026-06-01" } })).header;
     expect(past.eyebrow).toBe("Riverbend · First Season");
+    expect(past.moon.words).toBe("First Season");
     expect(past.moon.day).toBeNull();
     // No season for the proposal: none drawn, never the running one.
     const none = buildPlayerCard(input({ mode: "proposal", proposalSeason: null })).header;
