@@ -207,6 +207,7 @@ import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerCompanionRoutes } from "./routes/companions";
+import { exportMemberTasks, register as registerMemberTaskRoutes } from "./routes/memberTasks";
 import { register as registerMemberAskRoutes } from "./routes/memberAsks";
 import { register as registerStockAvatarRoutes, STOCK_AVATAR_DIR } from "./routes/stockAvatars";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
@@ -18190,6 +18191,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
+  registerMemberTaskRoutes(app, { authedUser, getPool, overLimit, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
   registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: guidePromptName(getWorkWithUs().assistantName), timeZone: getSeasonConfig().timezone }) });
@@ -25865,6 +25867,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
       sessions: await exportMemberSessions(pool, user.id), // live sessions they joined, entries they wrote or hold, and their own answers; arrival words are already erased from closed ones (server/lib/liveSessions.ts)
       geneKeys: await exportMemberGeneKeys(pool, user.id), // their saved Gene Keys result and settings; no birth data exists to export (server/lib/geneKeys.ts)
+      memberTasks: await exportMemberTasks(pool, user.id), // their own list, private detail and tombstones included (server/repos/memberTasks.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *

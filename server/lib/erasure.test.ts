@@ -36,6 +36,7 @@
  * file pass while the sweep wrote nothing anywhere. No TEST_DATABASE_URL and
  * the suite skips (harness rule).
  */
+import { insertTask, setListOn } from "../repos/memberTasks";
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
@@ -523,6 +524,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "role-holdings-after-tombstone",
       "sessions-after-tombstone",
       "gene-keys-after-tombstone",
+      "member-tasks-after-tombstone",
       "quest-crews-after-tombstone",
       "quest-claims-after-tombstone",
       "photo-report-reasons-after-tombstone",
@@ -630,6 +632,28 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(await q("SELECT `id` FROM `proposal_drafts` WHERE `user_id` = ?", [id])).toHaveLength(0);
     expect((await erasureRecord(pool, id))!.stepsDone).toContain("proposal-drafts");
     expect(await q("SELECT `id` FROM `proposal_drafts` WHERE `user_id` = ?", [neighbour])).toHaveLength(1);
+  });
+
+  it("takes their own task list with them: tasks, tombstones, events and the switch", async () => {
+    const id = "er-tasks-1";
+    const neighbour = "er-tasks-neighbour";
+    const target = await seedMember(id);
+    await setListOn(pool, id, true, null);
+    await setListOn(pool, neighbour, true, id);
+    await insertTask(pool, id, { title: "Mine", tier: "high", dueOn: null, horizon: null, minutes: null, privateDetail: "journal words", source: "journal", createdOn: "2026-11-02" }, id);
+    await insertTask(pool, neighbour, { title: "Theirs", tier: "priority", dueOn: null, horizon: null, minutes: null, privateDetail: null, source: "self", createdOn: "2026-11-02" }, id);
+    const named = async () =>
+      Number((await q(
+        "SELECT (SELECT COUNT(*) FROM `member_tasks` WHERE `user_id` = ?) + " +
+          "(SELECT COUNT(*) FROM `member_task_events` WHERE `user_id` = ? OR `by_user_id` = ?) + " +
+          "(SELECT COUNT(*) FROM `member_task_access` WHERE `user_id` = ? OR `set_by_user_id` = ?) AS n",
+        [id, id, id, id, id],
+      ))[0].n);
+    expect(await named(), "the fixture must name them, or the zero below proves nothing").toBeGreaterThan(0);
+    await anonymizeMember(pool, target, null, deps());
+    expect(await named()).toBe(0);
+    expect((await erasureRecord(pool, id))!.stepsDone).toContain("member-tasks-after-tombstone");
+    expect(await q("SELECT `id` FROM `member_tasks` WHERE `user_id` = ?", [neighbour])).toHaveLength(1);
   });
 
   it("takes the journal with them: entries, pulse, the feedback yes, and feedback both ways", async () => {

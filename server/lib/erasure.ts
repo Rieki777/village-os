@@ -168,6 +168,7 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
+import { forgetMemberTasks } from "../repos/memberTasks";
 import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
@@ -1562,6 +1563,20 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * Your list (0310): the member's own tasks, their events and their
+       * switch are deleted, tombstones and private detail included. Where they
+       * acted on somebody else's list, the id that named them is cleared.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the list
+       * doors write for anybody signed in until the sessions die.
+       */
+      name: "member-tasks-after-tombstone",
+      run: async () => {
+        await forgetMemberTasks(pool, target.id);
+      },
+    },
+    {
+      /*
        * Quest crews (0067): they leave every crew they are in, the way
        * `crewsRepo.leave` lets a member walk out, and a crew left with nobody
        * in it disbands. Kept, a full crew refused the next person in their
@@ -2195,6 +2210,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "role-holdings-after-tombstone",
   "sessions-after-tombstone",
   "gene-keys-after-tombstone",
+  "member-tasks-after-tombstone",
   "quest-crews-after-tombstone",
   "quest-claims-after-tombstone",
   "photo-report-reasons-after-tombstone",

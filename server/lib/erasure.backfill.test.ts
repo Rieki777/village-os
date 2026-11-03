@@ -110,6 +110,7 @@ const GIVEN_TO_IT = [
   "org-seatings-after-tombstone",
   "role-holdings-after-tombstone",
   "gene-keys-after-tombstone",
+  "member-tasks-after-tombstone",
   "quest-crews-after-tombstone",
   "quest-claims-after-tombstone",
   "photo-report-reasons-after-tombstone",
