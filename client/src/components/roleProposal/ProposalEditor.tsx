@@ -53,7 +53,7 @@ import StepWords, { type WordsRole } from "./StepWords";
 import StepSeason, { type SeasonState } from "./StepSeason";
 import StepTerms from "./StepTerms";
 import StepShare from "./StepShare";
-import { PathToggle, WelcomeScreen, YourWordsScreen, pathFromUrl, rememberPath, roleFromUrl, type FrontScreen, type ProposalPath } from "./QuickPath";
+import { PathToggle, WelcomeScreen, YourWordsScreen, pathFromUrl, readPlace, rememberPath, roleFromUrl, urlNamesPlace, writePlace, type FrontScreen, type ProposalPath } from "./QuickPath";
 import BringInRole from "./BringInRole";
 import OwnAiPrompt from "./OwnAiPrompt";
 import ProposalState from "./ProposalState";
@@ -102,16 +102,19 @@ export function ProposalPreview({ proposal }: { proposal: ProposalOut }) {
 }
 
 export default function ProposalEditor({ initial, me }: { initial: ProposalOut; me: string }) {
+  const resumed = !urlNamesPlace() ? readPlace(initial.id) : null;
   const [proposal, setProposal] = useState(initial);
-  const [step, setStep] = useState<StepKey>(stepFromUrl);
+  const [step, setStep] = useState<StepKey>(resumed?.step ?? stepFromUrl);
   const submitOpen = useRef<() => void>(() => {});
   const [submitOff, setSubmitOff] = useState(true);
   const onSubmitGate = useCallback((gate: { open: () => void; off: boolean }) => {
     submitOpen.current = gate.open;
     setSubmitOff((prev) => (prev === gate.off ? prev : gate.off));
   }, []);
-  const [path, setPath] = useState<ProposalPath>(pathFromUrl);
-  const [front, setFront] = useState<FrontScreen>(() => (pathFromUrl() === "quick" ? "welcome" : "steps"));
+  const [path, setPath] = useState<ProposalPath>(resumed?.path ?? pathFromUrl);
+  const [front, setFront] = useState<FrontScreen>(resumed?.front ?? ((resumed?.path ?? pathFromUrl()) === "quick" ? "welcome" : "steps"));
+  const [seedNote, setSeedNote] = useState<string | null>(null);
+  const [orgAttempt, setOrgAttempt] = useState(0);
   const [picked, setPicked] = useState<string[]>(() => initial.roles.map((r) => r.roleId));
   const [newRoles, setNewRoles] = useState<LocalNew[]>(() => initial.newRoles.map((r) => ({ id: r.id, circleId: r.circle?.id ?? "", seats: r.seats })));
   const [reviews, setReviews] = useState<Record<string, string>>(() => reviewsFrom(initial));
@@ -127,6 +130,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
 
   useEffect(() => {
     let alive = true;
+    setOrg(null);
     void loadOrg().then((o) => {
       if (!alive) return;
       setOrg(o ? { roles: Array.isArray(o.roles) ? o.roles : [], circles: Array.isArray(o.circles) ? o.circles : [] } : "failed");
@@ -144,7 +148,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
     return () => {
       alive = false;
     };
-  }, [me]);
+  }, [me, orgAttempt]);
 
   const send = useCallback(async (groups: ReadonlySet<Group>): Promise<SaveResult> => {
     const s = latest.current;
@@ -194,23 +198,30 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   const seededRole = useRef(false);
   // A role card can open this draft with that role already picked, up to the five.
   useEffect(() => {
-    if (seededRole.current || !org || org === "failed") return;
+    if (proposal.status !== "draft" || seededRole.current || !org || org === "failed") return;
     const role = roleFromUrl();
     if (!role) return;
     seededRole.current = true;
-    if (!org.roles.some((r) => r.id === role && !r.isExample)) return;
+    if (!org.roles.some((r) => r.id === role && !r.isExample)) {
+      setSeedNote(RP_WORDS.roleNotOnChart);
+      return;
+    }
     const now = latest.current;
     if (now.picked.includes(role)) return;
-    if (now.picked.length + now.newRoles.length >= now.proposal.limits.maxRoles) return;
+    if (now.picked.length + now.newRoles.length >= now.proposal.limits.maxRoles) {
+      setSeedNote(RP_WORDS.atMost(now.proposal.limits.maxRoles));
+      return;
+    }
     // The save reads this ref, and it is only rewritten on the next render.
     // Write the pick in before the save is asked, or the save can leave with the old list.
     const picked = [...now.picked, role];
     latest.current = { ...now, picked };
     setPicked(picked);
     save.touch("roles");
-  }, [org, save]);
+  }, [org, save, proposal.status]);
 
   const choosePath = (next: ProposalPath) => {
+    if (next === path) return;
     setPath(next);
     rememberPath(next);
     setFront(next === "full" ? "steps" : "yours");
@@ -243,8 +254,14 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
     document.getElementById(id)?.focus();
   }, [step, front]);
 
+  useEffect(() => {
+    if (proposal.status !== "draft") return;
+    writePlace(proposal.id, { path, step, front });
+  }, [proposal.id, proposal.status, path, step, front]);
+
   const go = async (next: StepKey) => {
-    await save.flush();
+    const ok = await save.flush();
+    if (!ok) return;
     setStep(next);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -334,6 +351,9 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
 
   const index = STEPS.indexOf(step);
   const target = proposal.target;
+  const quick = path === "quick";
+  const progressTotal = quick ? STEPS.length + 2 : STEPS.length;
+  const progressNow = front === "welcome" ? 1 : front === "yours" ? 2 : quick ? index + 3 : index + 1;
 
   return (
     <div className="grid gap-5">
@@ -342,14 +362,14 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
         <div
           role="progressbar"
           aria-valuemin={0}
-          aria-valuemax={STEPS.length}
-          aria-valuenow={front === "welcome" ? 1 : front === "yours" ? 2 : index + 1}
+          aria-valuemax={progressTotal}
+          aria-valuenow={progressNow}
           aria-label={front === "steps" ? RP_WORDS.stepOf(index + 1, STEPS.length) : front === "yours" ? RP_WORDS.yourWordsTitle : RP_WORDS.welcomeTitle}
           className="h-2.5 overflow-hidden rounded-md border border-dash-edge bg-dash-track"
         >
           <div
             className="h-full bg-[linear-gradient(90deg,var(--color-dash-gold),var(--color-dash-gold-lit))]"
-            style={{ width: `${Math.round(((front === "welcome" ? 1 : front === "yours" ? 2 : index + 1) / STEPS.length) * 100)}%` }}
+            style={{ width: `${Math.round((progressNow / progressTotal) * 100)}%` }}
           />
         </div>
       </div>
@@ -361,6 +381,11 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
       <header className="grid gap-1">
         <h1 className="font-display text-3xl font-bold text-foreground">{RP_WORDS.title}</h1>
         <p className={LEDE}>{target ? RP_WORDS.forSeason(target.name, civilDayWords(target.startsOn)) : proposal.targetWords}</p>
+        {seedNote && (
+          <p role="status" className="text-sm font-medium text-foreground" data-role-seed="">
+            {seedNote}
+          </p>
+        )}
       </header>
 
       {front === "welcome" && <WelcomeScreen org={org} onStart={() => setFront("yours")} />}
@@ -371,6 +396,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             setSeason(next);
             save.touch("season");
           }}
+          onBack={() => setFront("welcome")}
           onNext={() => setFront("steps")}
         />
       )}
@@ -420,6 +446,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             onToggle={toggle}
             onAddNew={addNew}
             onRemoveNew={removeNew}
+            onRetry={() => setOrgAttempt((n) => n + 1)}
           />
         )}
         {step === "words" && (
@@ -496,7 +523,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
         <SaveLine status={save.status} error={save.error} onRetry={() => void save.flush()} />
         {front === "steps" && (
         <div className="flex items-center justify-between gap-2">
-          <button type="button" disabled={index === 0} onClick={() => void go(STEPS[index - 1])} className={SECONDARY}>
+          <button type="button" disabled={index === 0 && path !== "quick"} onClick={() => (index === 0 ? setFront("yours") : void go(STEPS[index - 1]))} className={SECONDARY}>
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             {RP_WORDS.back}
           </button>

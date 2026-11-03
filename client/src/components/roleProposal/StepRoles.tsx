@@ -39,6 +39,8 @@ export interface StepRolesProps {
   onToggle: (roleId: string) => void;
   onAddNew: (circleId: string, name: string) => Promise<string | null>;
   onRemoveNew: (id: string) => void;
+  /** Asked again after the chart did not load. */
+  onRetry?: () => void;
 }
 
 const holderIds = (r: OrgRoleIn): string[] => (r.holders ?? []).map((h) => String(h?.userId ?? "")).filter(Boolean);
@@ -64,7 +66,7 @@ export function roleFacts(r: OrgRoleIn, me: string, applying: number): string[] 
   return out;
 }
 
-export default function StepRoles({ proposal, picked, newRoles, org, applying, me, onToggle, onAddNew, onRemoveNew }: StepRolesProps) {
+export default function StepRoles({ proposal, picked, newRoles, org, applying, me, onToggle, onAddNew, onRemoveNew, onRetry }: StepRolesProps) {
   const max = proposal.limits.maxRoles;
   const count = picked.length + newRoles.length;
   const atMost = count >= max;
@@ -143,7 +145,16 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
       </p>
 
       {org === null && <p className="text-sm text-muted-foreground">{RP_WORDS.loadingRoles}</p>}
-      {org === "failed" && <p className="text-sm text-coral">{RP_WORDS.rolesFailed}</p>}
+      {org === "failed" && (
+        <p className="text-sm text-coral">
+          {RP_WORDS.rolesFailed}{" "}
+          {onRetry && (
+            <button type="button" className={QUIET} onClick={onRetry}>
+              {RP_WORDS.tryAgain}
+            </button>
+          )}
+        </p>
+      )}
       {org && org !== "failed" && roles.length === 0 && <p className="text-sm text-muted-foreground">{RP_WORDS.noRolesYet}</p>}
 
       {groups.map((g) => {

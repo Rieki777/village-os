@@ -11,7 +11,7 @@ import { guideName } from "@shared/roleProposalHonesty";
 import { OWN_WORDS_MAX } from "@shared/roleProposals";
 import type { OrgView } from "./StepRoles";
 import type { SeasonState } from "./StepSeason";
-import { RP_WORDS } from "./proposalWords";
+import { RP_WORDS, STEPS, type StepKey } from "./proposalWords";
 import { H2, LEDE, PANEL, PRIMARY, SECONDARY } from "./parts";
 
 export type ProposalPath = "quick" | "full";
@@ -44,6 +44,46 @@ export function proposeRoleHref(roleId: string): string {
 export function roleFromUrl(): string {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get("role")?.trim() ?? "";
+}
+
+export interface SavedPlace {
+  path: ProposalPath;
+  step: StepKey;
+  front: FrontScreen;
+}
+
+const placeKey = (id: string) => `rp-place:${id}`;
+
+/** The link names a path or a step, so it wins over what this browser last had open. */
+export function urlNamesPlace(): boolean {
+  if (typeof window === "undefined") return false;
+  const q = new URLSearchParams(window.location.search);
+  return q.has("path") || q.has("step");
+}
+
+/** Where this browser last left this draft. Null when nothing was stored, or it cannot be read. */
+export function readPlace(id: string): SavedPlace | null {
+  if (typeof window === "undefined" || !id) return null;
+  try {
+    const raw = window.sessionStorage.getItem(placeKey(id));
+    if (!raw) return null;
+    const p = JSON.parse(raw) as Partial<SavedPlace>;
+    if (p.path !== "quick" && p.path !== "full") return null;
+    if (p.front !== "welcome" && p.front !== "yours" && p.front !== "steps") return null;
+    if (!(STEPS as readonly string[]).includes(p.step ?? "")) return null;
+    return { path: p.path, step: p.step as StepKey, front: p.front };
+  } catch {
+    return null;
+  }
+}
+
+export function writePlace(id: string, place: SavedPlace): void {
+  if (typeof window === "undefined" || !id) return;
+  try {
+    window.sessionStorage.setItem(placeKey(id), JSON.stringify(place));
+  } catch {
+    // A private window can refuse storage. The draft itself is already on the server.
+  }
 }
 
 /** Keep a role from the page that started the draft, onto the draft's own address. */
@@ -93,10 +133,12 @@ const QUESTIONS = [
 export function YourWordsScreen({
   season,
   onChange,
+  onBack,
   onNext,
 }: {
   season: SeasonState;
   onChange: (next: SeasonState) => void;
+  onBack: () => void;
   onNext: () => void;
 }) {
   const set = (key: "love" | "offer" | "why", value: string) => onChange({ ...season, ownWords: { ...season.ownWords, [key]: value } });
@@ -114,9 +156,14 @@ export function YourWordsScreen({
           <GrowingText id={`own-${q.key}`} label={q.label} placeholder={q.hint || undefined} value={season.ownWords[q.key]} onValue={(v) => set(q.key, v)} max={OWN_WORDS_MAX} minRows={3} mic />
         </div>
       ))}
-      <button type="button" className={PRIMARY} onClick={onNext}>
-        {RP_WORDS.onToRoles}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={SECONDARY} onClick={onBack}>
+          {RP_WORDS.back}
+        </button>
+        <button type="button" className={PRIMARY} onClick={onNext}>
+          {RP_WORDS.onToRoles}
+        </button>
+      </div>
     </div>
   );
 }
