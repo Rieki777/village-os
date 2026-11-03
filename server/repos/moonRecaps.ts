@@ -61,6 +61,8 @@ export interface RecapRow {
   /** An approval on this recap was the member's own (decision 19). */
   selfApproved: boolean;
   createdAt: string | null;
+  /** A7: who helped, as JSON (`parseThanks` reads it). */
+  thanksJson: string | null;
   /** The score written at send, in half-points, or null before send. */
   score: { taskNumHalves: number; taskDen: number; seatOn: number; seatTotal: number; goalNumHalves: number; goalDen: number } | null;
 }
@@ -72,7 +74,7 @@ function toRecap(r: RowDataPacket): RecapRow {
     roleAuditJson: str(r.role_audit_json), workApprovedAt: ts(r.work_approved_at), workApprovedBy: str(r.work_approved_by),
     financeApprovedAt: ts(r.finance_approved_at), financeApprovedBy: str(r.finance_approved_by), approvalHash: str(r.approval_hash),
     returnedNote: str(r.returned_note), returnedBy: str(r.returned_by), returnedAt: ts(r.returned_at), sentAt: ts(r.sent_at),
-    seraState: str(r.sera_state), selfApproved: Number(r.self_approved) === 1, createdAt: ts(r.created_at),
+    seraState: str(r.sera_state), selfApproved: Number(r.self_approved) === 1, createdAt: ts(r.created_at), thanksJson: str(r.thanks_json),
     score: r.task_den == null ? null : {
       taskNumHalves: Number(r.task_num_halves), taskDen: Number(r.task_den), seatOn: Number(r.seat_on), seatTotal: Number(r.seat_total),
       goalNumHalves: Number(r.goal_num_halves), goalDen: Number(r.goal_den),
@@ -237,6 +239,15 @@ export async function writeScoreSnapshot(db: Queryable, id: string, s: { taskNum
   const [res] = await db.query<ResultSetHeader>(
     "UPDATE `moon_recaps` SET `task_num_halves` = ?, `task_den` = ?, `seat_on` = ?, `seat_total` = ?, `goal_num_halves` = ?, `goal_den` = ? WHERE `id` = ?",
     [s.taskNumHalves, s.taskDen, s.seatOn, s.seatTotal, s.goalNumHalves, s.goalDen, id],
+  );
+  return res.affectedRows;
+}
+
+/** Who helped, while the recap is the member's to edit (A7). */
+export async function saveThanks(db: Queryable, id: string, thanksJson: string | null): Promise<number> {
+  const [res] = await db.query<ResultSetHeader>(
+    "UPDATE `moon_recaps` SET `thanks_json` = ? WHERE `id` = ? AND `status` IN ('draft', 'returned')",
+    [thanksJson, id],
   );
   return res.affectedRows;
 }
@@ -863,7 +874,7 @@ export async function forgetMoonReviews(db: Queryable, userId: string): Promise<
     [uid],
   );
   const [recaps] = await db.query<ResultSetHeader>(
-    "UPDATE `moon_recaps` SET `own_words` = NULL, `role_audit_json` = NULL, `returned_note` = NULL, `sera_state` = NULL WHERE `user_id` = ?",
+    "UPDATE `moon_recaps` SET `own_words` = NULL, `role_audit_json` = NULL, `returned_note` = NULL, `sera_state` = NULL, `thanks_json` = NULL WHERE `user_id` = ?",
     [uid],
   );
   const [invoices] = await db.query<ResultSetHeader>(

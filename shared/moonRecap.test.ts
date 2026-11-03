@@ -529,7 +529,7 @@ describe("the send-by day and the copied addresses (decision 21)", () => {
   it("is the circle Monday (section 18): Monday 9 November 2026, and Monday 7 December for November", () => {
     expect(sendBy(NOV, TZ)).toBe("2026-11-09");
     expect(sendBy(LUNAR_CLOCK.boundsFor(new Date("2026-11-20T12:00:00Z")), TZ)).toBe("2026-12-07");
-    expect(sendBy(NOV, TZ, { sendHour: 9, cycles: { [NOV.id]: { monday: "2026-11-10" } } })).toBe("2026-11-10");
+    expect(sendBy(NOV, TZ, { sendHour: 9, guideUrl: "", cycles: { [NOV.id]: { circle: "2026-11-10" } } })).toBe("2026-11-10");
     expect(contract.sendByLine("2026-11-09")).toBe("Send by Monday 9 November 2026. Sending any time before then counts the same as sending in the room.");
   });
   it("reads invoiceCc as email addresses, and refuses anything else", () => {
@@ -679,7 +679,7 @@ describe("another member never reads a private kind of proof (A1, check 26)", ()
 });
 
 describe("reading the score (A4, check 34)", () => {
-  const ctx0 = { counted: 20, outside: 0, redirected: 0, lastWeek: 0, letGo: 0 };
+  const ctx0 = { done: 10, counted: 20, outside: 0, redirected: 0, lastWeek: 0, letGo: 0 };
   it("puts each band edge in the higher band, on half-points", () => {
     const band = (done: number, den: number) => contract.readingOf({ numHalves: done * 2, den }, ctx0)?.label;
     expect(band(17, 20)).toBe("Very full");
@@ -693,12 +693,63 @@ describe("reading the score (A4, check 34)", () => {
     expect(contract.readingOf({ numHalves: 0, den: 0 }, ctx0)).toBeNull();
   });
   it("adds the context lines at their thresholds", () => {
-    const r = contract.readingOf({ numHalves: 6, den: 4 }, { counted: 4, outside: 3, redirected: 3, lastWeek: 3, letGo: 3 });
-    expect(r?.lines).toEqual([contract.CONTEXT_WORDS.few, contract.CONTEXT_WORDS.outside, contract.CONTEXT_WORDS.redirected, contract.CONTEXT_WORDS.lastWeek, contract.CONTEXT_WORDS.letGo]);
-    expect(contract.readingOf({ numHalves: 6, den: 5 }, { counted: 5, outside: 2, redirected: 2, lastWeek: 2, letGo: 2 })?.lines).toEqual([]);
+    const r = contract.readingOf({ numHalves: 4, den: 4 }, { done: 2, counted: 4, outside: 3, redirected: 0, lastWeek: 3, letGo: 0 });
+    expect(r?.lines).toEqual([contract.CONTEXT_WORDS.few, contract.CONTEXT_WORDS.outside, contract.CONTEXT_WORDS.lastWeek]);
+    const shed = contract.readingOf({ numHalves: 20, den: 10 }, { done: 10, counted: 10, outside: 0, redirected: 3, lastWeek: 0, letGo: 3 });
+    expect(shed?.lines.slice(1)).toEqual([contract.CONTEXT_WORDS.redirected, contract.CONTEXT_WORDS.letGo]);
+    expect(contract.readingOf({ numHalves: 6, den: 5 }, { done: 3, counted: 5, outside: 2, redirected: 1, lastWeek: 2, letGo: 1 })?.lines).toEqual([]);
+  });
+  it("check 47: the let-go cap stops 5 Done and 5 Let go at Steady, and leaves 5 Done and 1 Let go Very full", () => {
+    const capped = contract.readingOf({ numHalves: 10, den: 5 }, { done: 5, counted: 5, outside: 0, redirected: 0, lastWeek: 0, letGo: 5 });
+    expect([capped?.label, capped?.says, capped?.capped, capped?.lines[0]]).toEqual(["Steady", contract.CAPPED_BAND.says, true, contract.CAPPED_BAND.line]);
+    const fine = contract.readingOf({ numHalves: 10, den: 5 }, { done: 5, counted: 5, outside: 0, redirected: 0, lastWeek: 0, letGo: 1 });
+    expect([fine?.label, fine?.capped]).toEqual(["Very full", false]);
+  });
+  it("check 48: 3 Done, 5 Carry and 7 outside-role items read Covering an empty role; with 2 outside it reads Rethink the plan", () => {
+    const covering = contract.readingOf({ numHalves: 6, den: 8 }, { done: 3, counted: 8, outside: 7, redirected: 0, lastWeek: 0, letGo: 0 });
+    expect([covering?.label, covering?.says]).toEqual(["Covering an empty role", contract.COVERING_BAND.says]);
+    expect(contract.readingOf({ numHalves: 6, den: 8 }, { done: 3, counted: 8, outside: 2, redirected: 0, lastWeek: 0, letGo: 0 })?.label).toBe("Rethink the plan");
   });
   it("never reaches the approval hash, which binds lines and items only (check 35, the pure half)", () => {
     const bytes = contract.approvalSubjectBytes({ payerKey: "p", route: "abroad", currency: "USD", from: null, lines: [], items: [] });
     expect(Object.keys(JSON.parse(bytes)).sort()).toEqual(["currency", "from", "items", "lines", "payerKey", "route"]);
+  });
+});
+
+describe("the thank-you step (A7, check 51 pure half)", () => {
+  it("reads up to ten thank-yous, a member or a named person, notes kept to approvers unless chosen", () => {
+    const t = contract.parseThanks([{ userId: "u2", note: "Held the gate" }, { name: "A neighbour", note: "Lent the truck", visibility: "members" }, { userId: "u2" }], ["u2"]);
+    expect(t).toEqual({ ok: true, value: [
+      { userId: "u2", name: null, note: "Held the gate", visibility: "approvers" },
+      { userId: null, name: "A neighbour", note: "Lent the truck", visibility: "members" },
+    ] });
+    expect(contract.parseThanks(Array.from({ length: 11 }, (_, k) => ({ name: `Person ${k}` }))).ok).toBe(false);
+    expect(contract.parseThanks([{ userId: "u9" }], ["u2"]).ok).toBe(false);
+    expect(contract.parseThanks([{ note: "Nobody named" }]).ok).toBe(false);
+    expect(contract.thanksDedupeKey("mr-1", "u2")).toBe("moon-thanks:mr-1:u2");
+  });
+  it("writes a THANK YOU section, with notes only when asked", () => {
+    const entries = [{ userId: "u2", name: null, note: "Held the gate", visibility: "members" as const }, { userId: null, name: "A neighbour", note: null, visibility: "approvers" as const }];
+    expect(contract.thankYouLines(entries, () => "Member Two", true)).toEqual(["THANK YOU", "- Member Two: Held the gate", "- A neighbour"]);
+    expect(contract.thankYouLines(entries, () => "Member Two", false)).toEqual(["THANK YOU", "- Member Two", "- A neighbour"]);
+    expect(contract.thankYouLines([], () => "", true)).toEqual([]);
+  });
+  it("matches a pack's thanked names to members, and keeps an unmatched name as words", async () => {
+    const moon = contract.packMoonDates(NOV, TZ);
+    const r = await contract.validatePack({ kind: "moon_pack", version: 1, moon, items: [], thanks: [{ name: "Member Two", note: "Thanks" }, { name: "A neighbour" }] }, {
+      moon, seats: [], allRoles: [], seasonGoals: [], existingKeys: new Map(), members: [{ userId: "u2", name: "Member Two" }],
+    });
+    expect(r.ok && r.preview.thanks).toEqual([
+      { userId: "u2", name: null, note: "Thanks", visibility: "approvers" },
+      { userId: null, name: "A neighbour", note: null, visibility: "approvers" },
+    ]);
+  });
+});
+
+describe("reminder words (B1, check 50 pure half)", () => {
+  it("names the guide's worksheet only when the village set a guide, and keys each reminder once", () => {
+    expect(contract.nudgeText("eom_prep", { guideUrl: "" })).toBe(contract.NUDGE_WORDS.eom_prep);
+    expect(contract.nudgeText("eom_prep", { guideUrl: "https://example.org/g" })).toBe(`${contract.NUDGE_WORDS.eom_prep} The worksheet: https://example.org/g#sheet`);
+    expect(contract.nudgeDedupeKey("lunar-000331", "eom_day", "u1")).toBe("moon:lunar-000331:eom_day:u1");
   });
 });

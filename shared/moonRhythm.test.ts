@@ -1,12 +1,20 @@
 /**
  * The moon rhythm (shared/moonRhythm.ts), spec section 17 B1 as section 18
- * settles it. Check 27: for the October 2026 moon the rhythm gives Friday 6
- * November and Monday 9 November; for November, Friday 4 December and Monday
- * 7 December; an override moves December's Friday off 1 January.
+ * settles it.
+ *
+ *   27 October 2026: Friday 6 November and Monday 9 November; November:
+ *      Friday 4 December and Monday 7 December; with the override,
+ *      December's walkthrough and circle are both Monday 4 January.
+ *   49 (addendum v5) the December override gives walkthrough and circle on
+ *      Monday 4 January, `eom_prep` fires Wednesday 30 December, and a moon's
+ *      name is the month of its full moon.
+ *
+ * The December override and the guide link are data a village sets; the
+ * override here is a test fixture, never a default.
  */
 import { describe, expect, it } from "vitest";
 import { LUNAR_CLOCK } from "./cycleClock";
-import { circleMonday, closingNewMoonDay, EMPTY_RHYTHM, endOfMoonFriday, halfwayDay, parseRhythm, prepReminderDay } from "./moonRhythm";
+import { circleDay, circleMonday, closingNewMoonDay, EMPTY_RHYTHM, endOfMoonFriday, guideSheetLink, halfwayDay, moonName, moonNameWords, parseRhythm, prepReminderDay, walkthroughDay } from "./moonRhythm";
 
 const TZ = "America/Costa_Rica";
 const moon = (iso: string) => LUNAR_CLOCK.boundsFor(new Date(iso));
@@ -23,18 +31,31 @@ describe("the moon rhythm (check 27)", () => {
     expect(prepReminderDay(OCT, TZ)).toBe("2026-11-04");
   });
 
-  it("lets a village move December's Friday off New Year's Day, and the Monday follows unless moved too", () => {
-    const rhythm = { ...EMPTY_RHYTHM, cycles: { [DEC.id]: { friday: "2026-12-31" } } };
-    expect(endOfMoonFriday(DEC, TZ, rhythm)).toBe("2026-12-31");
-    expect(circleMonday(DEC, TZ, rhythm)).toBe("2027-01-04");
-    expect(circleMonday(DEC, TZ, { ...rhythm, cycles: { [DEC.id]: { friday: "2026-12-31", monday: "2027-01-05" } } })).toBe("2027-01-05");
-    expect(endOfMoonFriday(NOV, TZ, rhythm)).toBe("2026-12-04");
+  it("moves December's walkthrough and circle together to Monday 4 January, and eom_prep to Wednesday 30 December (check 49)", () => {
+    const rhythm = { ...EMPTY_RHYTHM, cycles: { [DEC.id]: { walkthrough: "2027-01-04", circle: "2027-01-04" } } };
+    expect([walkthroughDay(DEC, TZ, rhythm), circleDay(DEC, TZ, rhythm), prepReminderDay(DEC, TZ, rhythm)]).toEqual(["2027-01-04", "2027-01-04", "2026-12-30"]);
+    expect([walkthroughDay(NOV, TZ, rhythm), circleDay(NOV, TZ, rhythm)]).toEqual(["2026-12-04", "2026-12-07"]);
+    expect([endOfMoonFriday, circleMonday]).toEqual([walkthroughDay, circleDay]);
+  });
+
+  it("names a moon by the month of its full moon", () => {
+    expect([moonName(OCT, TZ), moonName(NOV, TZ), moonName(DEC, TZ)]).toEqual(["October", "November", "December"]);
+    expect(moonNameWords(OCT, TZ)).toBe("the October Moon");
+  });
+
+  it("shows no guide link anywhere until the village sets one (check 50, the pure half)", () => {
+    expect(EMPTY_RHYTHM.guideUrl).toBe("");
+    expect(guideSheetLink(EMPTY_RHYTHM)).toBeNull();
+    expect(guideSheetLink({ guideUrl: "https://example.org/guide" })).toBe("https://example.org/guide#sheet");
   });
 
   it("reads the rhythm document, empty by default", () => {
-    expect(parseRhythm(undefined)).toEqual({ ok: true, value: { sendHour: 9, cycles: {} } });
-    expect(parseRhythm({ sendHour: 8, cycles: { [DEC.id]: { friday: "2026-12-31" } } })).toEqual({ ok: true, value: { sendHour: 8, cycles: { [DEC.id]: { friday: "2026-12-31" } } } });
+    expect(parseRhythm(undefined)).toEqual({ ok: true, value: { sendHour: 9, guideUrl: "", cycles: {} } });
+    expect(parseRhythm({ sendHour: 8, guideUrl: "https://example.org/g", cycles: { [DEC.id]: { walkthrough: "2027-01-04", circle: "2027-01-04" } } }))
+      .toEqual({ ok: true, value: { sendHour: 8, guideUrl: "https://example.org/g", cycles: { [DEC.id]: { walkthrough: "2027-01-04", circle: "2027-01-04" } } } });
     expect(parseRhythm({ sendHour: 24 }).ok).toBe(false);
-    expect(parseRhythm({ cycles: { [DEC.id]: { friday: "2027-01-04", monday: "2027-01-01" } } }).ok).toBe(false);
+    expect(parseRhythm({ guideUrl: "http://example.org/g" }).ok).toBe(false);
+    expect(parseRhythm({ guideUrl: "https://example.org/g#sheet" }).ok).toBe(false);
+    expect(parseRhythm({ cycles: { [DEC.id]: { walkthrough: "2027-01-04", circle: "2027-01-01" } } }).ok).toBe(false);
   });
 });

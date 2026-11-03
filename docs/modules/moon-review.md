@@ -96,9 +96,16 @@ launch, `members` takes a `module.switch` holder or a vote.
 - **One Sera key** (`seraCloseKey`): `moon:<moon start>:<sera task id>`, with the reason codes the skill sends
   (`already_done`, `not_a_task`, `not_mine`), so a task closed from either side lands once.
 - **Reading the score** (`readingOf`, `seatReadingOf`): a band, its sentence and context lines, compared on
-  half-points. The score never sets pay and is never ranked.
-- **Reminders** (`moon_nudges`): one row per member, cycle and kind (`eom_prep`, `eom_day`, `halfway`); the insert is
-  the claim.
+  half-points. Two guards: when more than a third of the tasks set were let go or redirected and the score is 60% or
+  more, the reading stops at Steady with its own line, the number unchanged; when the score is under 60% and Outside my
+  roles items number at least the larger of 3 and Done, it reads "Covering an empty role". The score never sets pay
+  and is never ranked.
+- **Thanks** (`parseThanks`, `moon_recaps.thanks_json`): who helped, up to ten, each a member or a named person with a
+  short note that shows to other members only when the member chooses. The recap text carries a THANK YOU section. A
+  thanked member is told once per recap. Gratitude moves only when the member sends it through the gratitude flow.
+- **Reminders** (`moon_nudges`): one row per member, cycle and kind (`eom_prep` on the last Wednesday before the
+  walkthrough day, `eom_day` on the walkthrough day, `halfway` at the full moon); the insert is the claim. A moon is
+  named by the month of its full moon (`moonName`).
 
 ## Nothing village-specific in code (decision 22)
 
@@ -111,8 +118,9 @@ and every change writes a `moon_review_events` row with old and new values:
   name), its VAT rate, its exchange-rate source and its currency, the tax forms kept on file, the routes that need one,
   the hold rules, and the pilot acknowledgement with its version. A new version asks every member to accept again.
   The attestation and the route words are templates filled from these.
-- **The moon rhythm** (`moon_rhythm` in `app_config`): a moved end-of-moon Friday or circle Monday for any one cycle,
-  and the hour reminders go out. Empty by default.
+- **The moon rhythm** (`moon_rhythm` in `app_config`): a moved walkthrough or circle day for any one cycle
+  (`{cycleId: {walkthrough, circle}}`), the hour reminders go out, and `guideUrl`, the village's own End of Moon guide
+  (https only). Empty by default: with no guide set, no guide link shows anywhere.
 
 What stays in code: the closed list of route kinds (`pending`, `abroad`, `nomad`, `local_contractor`,
 `local_employee`, `visitor`), the status words, the scoring rules and the safety checks. Defaults ship empty: until a
