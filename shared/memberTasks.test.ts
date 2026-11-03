@@ -63,6 +63,15 @@ describe("ranking", () => {
   });
 });
 
+describe("a member's own pin", () => {
+  it("puts a member-pinned task first in its horizon, after always-show tasks", () => {
+    const ranked = rankTasks([t("hi", { tier: "high" }), t("mine", { tier: "not_yet", memberPinned: true })], PRESETS.balanced, TODAY);
+    expect(ranked[0].task.id).toBe("mine");
+    expect(ranked[0].reasons).toContain("pinned_by_you");
+    expect(ranked[0].always).toBe(false);
+  });
+});
+
 describe("the library's priorities", () => {
   it("maps High, Medium and Low, and flags anything else as priority", () => {
     expect(tierFromLibrary("High")).toEqual({ tier: "high", flagged: false });

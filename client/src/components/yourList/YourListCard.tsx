@@ -15,7 +15,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { HORIZONS, TIERS, type Horizon, type ReasonCode, type Tier } from "@shared/memberTasks";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, LABEL_CAPS, PANEL } from "@/components/sessions/roomUi";
-import { addTask, markDone, readList, removeTask, undoTask, type ListPayload, type ListTask, type RankedTask } from "./yourListApi";
+import { daysBetween } from "@shared/memberTasks";
+import type { FeedbackContext } from "@shared/memberTaskFeedback";
+import ReasonSheet, { type ReasonPick } from "./ReasonSheet";
+import {
+  addTask, changeTier, markDone, newFeedbackId, pinTask, readFeedbackSwitch, readList, redirectTask, removeTask, saveFeedbackSwitch, undoTask,
+  type ListPayload, type ListTask, type RankedTask,
+} from "./yourListApi";
 
 export const HORIZON_WORDS: Record<Horizon, string> = { today: "Today", week: "This week", later: "Later" };
 export const TIER_WORDS: Record<Tier, string> = { high: "High", priority: "Priority", not_yet: "Not yet" };
@@ -24,6 +30,8 @@ export const REASON_WORDS: Record<ReasonCode, string> = {
   due_soon: "It is due within two days.",
   overdue: "Its date has passed.",
   pinned: "A steward pinned it.",
+  pinned_by_you: "You pinned it to the top.",
+  handed_to_you: "Someone handed it to you.",
   from_session: "It came from a session.",
   from_journal: "You made it from your journal.",
   from_library: "It came from the knowledge library.",
@@ -33,12 +41,23 @@ export const REASON_WORDS: Record<ReasonCode, string> = {
 
 type Live = Extract<ListPayload, { on: true }>;
 
-function TaskRow({ task, busy, onDone, onRemove }: { task: RankedTask; busy: boolean; onDone: () => void; onRemove: () => void }) {
+function TaskRow({ task, busy, onDone, onPick, onPin, onTier }: {
+  task: RankedTask;
+  busy: boolean;
+  onDone: () => void;
+  onPick: (mode: "remove" | "redirect", p: ReasonPick) => void;
+  onPin: () => void;
+  onTier: (t: Tier) => void;
+}) {
   const [why, setWhy] = useState(false);
+  const [sheet, setSheet] = useState<"remove" | "redirect" | null>(null);
   return (
     <li className="rounded-xl border border-border bg-muted px-3.5 py-3 text-foreground">
       <div className="flex flex-wrap items-start gap-2">
-        <span className="min-w-0 flex-1 break-words text-base">{task.title}</span>
+        <span className="min-w-0 flex-1 break-words text-base">
+          {task.memberPinned ? <span className="mr-1 font-semibold">Pinned:</span> : null}
+          {task.title}
+        </span>
         {task.dueOn && <span className={HINT}>Due {task.dueOn}</span>}
       </div>
       {task.privateDetail && (
@@ -47,15 +66,34 @@ function TaskRow({ task, busy, onDone, onRemove }: { task: RankedTask; busy: boo
           {task.privateDetail}
         </p>
       )}
-      <div className="mt-2 flex flex-wrap gap-1">
+      <div className="mt-2 flex flex-wrap items-center gap-1">
         <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={onDone}>It's done</button>
-        <button type="button" className={BTN_QUIET} disabled={busy} onClick={onRemove}>Remove</button>
+        <button type="button" className={BTN_QUIET} disabled={busy} aria-expanded={sheet === "remove"} onClick={() => setSheet(sheet === "remove" ? null : "remove")}>Remove</button>
+        <button type="button" className={BTN_QUIET} disabled={busy} aria-expanded={sheet === "redirect"} onClick={() => setSheet(sheet === "redirect" ? null : "redirect")}>Hand it on</button>
+        <button type="button" className={BTN_QUIET} disabled={busy} aria-pressed={!!task.memberPinned} onClick={onPin}>{task.memberPinned ? "Unpin" : "Pin to top"}</button>
+        <label className="inline-flex items-center gap-1 text-sm text-foreground">
+          <span className="sr-only">Tier</span>
+          <select className="min-h-11 rounded-lg border border-border bg-background px-2 text-foreground" value={task.tier} disabled={busy} onChange={(e) => onTier(e.target.value as Tier)}>
+            {TIERS.map((t) => <option key={t} value={t}>{TIER_WORDS[t]}</option>)}
+          </select>
+        </label>
         <button type="button" className={BTN_QUIET} aria-expanded={why} onClick={() => setWhy((w) => !w)}>Why this is here</button>
       </div>
       {why && (
         <ul className={`${HINT} mt-1 list-disc pl-5`}>
           {task.reasons.map((r) => <li key={r}>{REASON_WORDS[r]}</li>)}
         </ul>
+      )}
+      {sheet && (
+        <ReasonSheet
+          mode={sheet}
+          busy={busy}
+          onCancel={() => setSheet(null)}
+          onPick={(p) => {
+            setSheet(null);
+            onPick(sheet, p);
+          }}
+        />
       )}
     </li>
   );
@@ -70,9 +108,11 @@ export default function YourListCard() {
   const [undo, setUndo] = useState<ListTask | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   const [showRemoved, setShowRemoved] = useState(false);
+  const [sharing, setSharing] = useState<boolean | null>(null);
 
   const load = useCallback(async () => setList(await readList()), []);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void readFeedbackSwitch().then(setSharing); }, []);
 
   if (!list || !list.on) return null;
   const live = list as Live;
@@ -91,6 +131,25 @@ export default function YourListCard() {
     e.preventDefault();
     if (!title.trim()) return;
     await act(() => addTask(title.trim(), tier), () => setTitle(""));
+  };
+
+  const contextOf = (t: RankedTask): FeedbackContext => ({
+    shownIn: t.shown ? t.horizonNow : "hidden",
+    rankScore: t.score,
+    daysOnList: Math.max(0, daysBetween(t.createdOn, live.today)),
+    surface: "profile",
+  });
+  const pressed = (t: RankedTask, mode: "remove" | "redirect", p: ReasonPick) => {
+    const press = { feedbackId: newFeedbackId(), reason: p.reason, note: p.note, context: contextOf(t) };
+    return mode === "remove"
+      ? act(() => removeTask(t, press), (gone) => setUndo(gone))
+      : act(() => redirectTask(t, press, { toUserId: p.toUserId, toRoleId: p.toRoleId }), (gone) => setUndo(gone));
+  };
+  const flipSharing = async () => {
+    if (sharing === null) return;
+    const next = await saveFeedbackSwitch(!sharing);
+    if (next === null) setProblem("That did not save. Try again.");
+    else setSharing(next);
   };
 
   const shown = (h: Horizon) => live.open.filter((t) => t.horizonNow === h && (showHidden || t.shown));
@@ -128,7 +187,7 @@ export default function YourListCard() {
       {problem && <p role="alert" className="mt-2 text-sm text-foreground">{problem}</p>}
       {undo && (
         <p className="mt-2 flex items-center gap-2 text-sm text-foreground" role="status">
-          Removed "{undo.title}".
+          Moved "{undo.title}" off your list.
           <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => act(() => undoTask(undo), () => setUndo(null))}>Undo</button>
         </p>
       )}
@@ -154,7 +213,9 @@ export default function YourListCard() {
                           task={t}
                           busy={busy}
                           onDone={() => act(() => markDone(t))}
-                          onRemove={() => act(() => removeTask(t, "other"), (gone) => setUndo(gone))}
+                          onPick={(mode, p) => pressed(t, mode, p)}
+                          onPin={() => act(() => pinTask(t, !t.memberPinned))}
+                          onTier={(tr2) => act(() => changeTier(t, tr2, contextOf(t)))}
                         />
                       ))}
                     </ul>
@@ -178,6 +239,15 @@ export default function YourListCard() {
           </button>
         )}
       </div>
+      {sharing !== null && (
+        <label className="mt-4 flex items-start gap-2 text-sm text-foreground">
+          <input type="checkbox" className="mt-1" checked={sharing} onChange={flipSharing} />
+          <span>
+            Help the knowledge library learn from my choices. When this is on, the reason you pick for a task it sent you goes back to it.
+            Your journal words never do.
+          </span>
+        </label>
+      )}
       {showRemoved && (
         <ul className="mt-2 space-y-2">
           {live.removed.map((t) => (

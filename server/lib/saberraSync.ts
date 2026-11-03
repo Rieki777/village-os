@@ -126,7 +126,7 @@ type Preflight =
  *
  * The bodies are the ones the route has always answered a press with.
  */
-function preflight(): Preflight {
+export function preflight(): Preflight {
   const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
   if (!connection.mayCall) {
     const gap: Gap =

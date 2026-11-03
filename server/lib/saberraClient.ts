@@ -280,6 +280,36 @@ export async function callTool(
 }
 
 /**
+ * A tool call whose answer is not a record list: a write (feedback, a
+ * suppression) or a paged read in the service's newer `{ results, has_more,
+ * next_cursor }` shape. Answers the parsed JSON, or the text when it is prose.
+ * An MCP tool error (`isError`) is a named `vendor-error`, never a success.
+ */
+export async function callToolJson(
+  o: ClientOptions,
+  sessionId: string,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: true; value: unknown } | CallFailure> {
+  const answer = await request(o, sessionId, 4, "tools/call", { name: tool, arguments: args });
+  if (!answer.ok) return answer;
+  const result = answer.message.result as Record<string, unknown> | undefined;
+  if (!result || typeof result !== "object") return { ok: false, why: "unreadable", detail: describeReply(answer.message) };
+  const text = Array.isArray(result.content)
+    ? (result.content as unknown[])
+        .map((b) => (b && typeof b === "object" && (b as Record<string, unknown>).type === "text" ? String((b as Record<string, unknown>).text ?? "") : ""))
+        .join("\n")
+    : "";
+  if (result.isError === true) return { ok: false, why: "vendor-error", detail: vendorWords(text || "the tool refused") };
+  if (result.structuredContent && typeof result.structuredContent === "object") return { ok: true, value: result.structuredContent };
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: true, value: text };
+  }
+}
+
+/**
  * The tools the service offers, each with the input schema it declares.
  *
  * A reply this cannot read is `unreadable`, never an empty list, for the reason

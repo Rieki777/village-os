@@ -208,6 +208,7 @@ import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerCompanionRoutes } from "./routes/companions";
 import { exportMemberTasks, register as registerMemberTaskRoutes } from "./routes/memberTasks";
+import { register as registerMemberTaskBridgeRoutes } from "./routes/memberTaskBridge";
 import { register as registerMemberAskRoutes } from "./routes/memberAsks";
 import { register as registerStockAvatarRoutes, STOCK_AVATAR_DIR } from "./routes/stockAvatars";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
@@ -18192,6 +18193,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
   registerMemberTaskRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
+  registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
   registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: guidePromptName(getWorkWithUs().assistantName), timeZone: getSeasonConfig().timezone }) });

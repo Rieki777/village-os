@@ -32,7 +32,7 @@ export type Horizon = (typeof HORIZONS)[number];
 export const STATUSES = ["open", "done", "removed"] as const;
 export type TaskStatus = (typeof STATUSES)[number];
 
-export const SOURCES = ["self", "journal", "session", "sera", "assistant"] as const;
+export const SOURCES = ["self", "journal", "session", "sera", "assistant", "redirect"] as const;
 export type TaskSource = (typeof SOURCES)[number];
 
 /** Why a task is on the list, in codes the UI turns into words ("Why this is here"). */
@@ -41,6 +41,8 @@ export const REASONS = [
   "due_soon",
   "overdue",
   "pinned",
+  "pinned_by_you",
+  "handed_to_you",
   "from_session",
   "from_journal",
   "from_library",
@@ -125,6 +127,8 @@ export interface TaskForRank {
   /** The horizon the member chose, or null to let the due date decide. */
   horizon: Horizon | null;
   pinned: boolean;
+  /** The member pinned it to the top of its tier (PR E). Not an always-show. */
+  memberPinned?: boolean;
   /** Village day the task was made. */
   createdOn: string;
   /** 0 to 1 when the library sent one. */
@@ -168,6 +172,7 @@ export interface Ranked<T extends TaskForRank = TaskForRank> {
 export function reasonsFor(t: TaskForRank, today: string): ReasonCode[] {
   const r: ReasonCode[] = [];
   if (t.pinned) r.push("pinned");
+  if (t.memberPinned) r.push("pinned_by_you");
   if (t.dueOn && isDayKey(t.dueOn)) {
     const d = daysBetween(today, t.dueOn);
     if (d < 0) r.push("overdue");
@@ -176,7 +181,7 @@ export function reasonsFor(t: TaskForRank, today: string): ReasonCode[] {
   if (t.tier === "high") r.push("tier_high");
   if (t.horizon === "today") r.push("chosen_today");
   r.push(
-    t.source === "session" ? "from_session" : t.source === "journal" ? "from_journal" : t.source === "sera" ? "from_library" : "added_by_you",
+    t.source === "session" ? "from_session" : t.source === "journal" ? "from_journal" : t.source === "sera" ? "from_library" : t.source === "redirect" ? "handed_to_you" : "added_by_you",
   );
   return r;
 }
@@ -219,6 +224,7 @@ export function rankTasks<T extends TaskForRank>(tasks: readonly T[], weights: W
     (a, b) =>
       hOrder[a.horizon] - hOrder[b.horizon] ||
       Number(b.always) - Number(a.always) ||
+      Number(!!b.task.memberPinned) - Number(!!a.task.memberPinned) ||
       b.score - a.score ||
       (a.task.dueOn ?? "9999").localeCompare(b.task.dueOn ?? "9999") ||
       a.task.id.localeCompare(b.task.id),
