@@ -59,6 +59,7 @@
  * The job checks every scheduler tick and calls the service only when the
  * module's `pollSchedule` says it is due; off, the default, never calls it.
  */
+import { boolVar } from "../lib/variables";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { POLL_JOB, pollOnce, syncByHand, syncRunsAnswer } from "../lib/saberraSync";
@@ -116,7 +117,7 @@ export function register(app: Express, deps: Deps): void {
       const pool = getPool();
       const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
       const held = await moduleFactCount(pool, MODULE_ID);
-      const rest = await bridgeReading(pool);
+      const rest = await bridgeReading(pool, boolVar("memberTasks.listDefault"));
       const questFeed = { last: await lastQuestFeed(pool), waiting: await waitingSeraQuests(pool, QUEST_FEED_MODULE).catch(() => 0) };
       res.json({ connection: { mayCall: connection.mayCall, addressSet: addressSet(), held, privacySet: privacyTokenSet() }, ...rest, questFeed });
     } catch {

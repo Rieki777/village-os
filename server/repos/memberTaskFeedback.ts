@@ -211,10 +211,11 @@ export async function activeRoles(db: Queryable): Promise<{ id: string; name: st
 }
 
 /** Members a task can be handed to by name: those whose list is on. Names only. */
-export async function redirectPeople(db: Queryable, exceptUserId: string): Promise<{ id: string; name: string }[]> {
+export async function redirectPeople(db: Queryable, exceptUserId: string, listDefault: boolean): Promise<{ id: string; name: string }[]> {
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT u.`id`, u.`name` FROM `member_task_access` a JOIN `users` u ON u.`id` = a.`user_id` WHERE a.`list_on` = 1 AND u.`id` <> ? ORDER BY u.`name` LIMIT 300",
-    [exceptUserId],
+    "SELECT u.`id`, u.`name` FROM `users` u LEFT JOIN `member_task_access` a ON a.`user_id` = u.`id` " +
+      "WHERE COALESCE(a.`list_on`, ?) = 1 AND u.`id` <> ? ORDER BY u.`name` LIMIT 300",
+    [listDefault ? 1 : 0, exceptUserId],
   );
   return rows.map((r) => ({ id: String(r.id), name: String(r.name ?? "") }));
 }
@@ -272,9 +273,12 @@ export async function markLinkSynced(db: Queryable, owner: string, at: Date | st
   await db.query("UPDATE `sera_person_links` SET `last_synced_at` = ? WHERE `sera_owner_id` = ?", [at, owner]);
 }
 
-export async function syncableLinks(db: Queryable): Promise<{ owner: string; userId: string; since: string | null }[]> {
+/** Every linked member whose board is on by the `listIsOn` rule: a row decides, no row means `listDefault` (A6). */
+export async function syncableLinks(db: Queryable, listDefault: boolean): Promise<{ owner: string; userId: string; since: string | null }[]> {
   const [links] = await db.query<RowDataPacket[]>(
-    "SELECT l.`sera_owner_id`, l.`user_id`, l.`last_synced_at` FROM `sera_person_links` l JOIN `member_task_access` a ON a.`user_id` = l.`user_id` AND a.`list_on` = 1",
+    "SELECT l.`sera_owner_id`, l.`user_id`, l.`last_synced_at` FROM `sera_person_links` l " +
+      "LEFT JOIN `member_task_access` a ON a.`user_id` = l.`user_id` WHERE COALESCE(a.`list_on`, ?) = 1",
+    [listDefault ? 1 : 0],
   );
   return links.map((l) => ({
     owner: String(l.sera_owner_id),

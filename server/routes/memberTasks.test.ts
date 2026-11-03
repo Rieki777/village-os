@@ -144,7 +144,12 @@ describe.skipIf(!configured)("your list against a real schema", () => {
     expect(row.title).toBe("Call Marco about the pipe");
   });
 
-  it("says off and refuses writes until a steward turns the list on", async () => {
+  // A6 (spec section 17): a board is on with no access row, and a steward's
+  // off keeps it off. This case said "off until a steward turns it on" until
+  // `memberTasks.listDefault` shipped on; check 40 is the new rule.
+  it("is on with no row, says off and refuses writes once a steward turns it off, and works again when turned on", async () => {
+    expect((await call(handlers, "GET /api/member-tasks/me")).body.on).toBe(true);
+    await setListOn(pool, "m-wren", false, "m-steward");
     expect((await call(handlers, "GET /api/member-tasks/me")).body).toEqual({ on: false });
     expect((await call(handlers, "POST /api/member-tasks/me", { body: { title: "Water the beds" } })).status).toBe(403);
     await setListOn(pool, "m-wren", true, "m-steward");

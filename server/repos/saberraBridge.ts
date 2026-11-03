@@ -26,11 +26,13 @@ async function one(pool: Pool, sql: string, args: unknown[] = []): Promise<Row> 
 
 const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-export async function bridgeLists(pool: Pool, have: Set<string>): Promise<BridgeAnswer["lists"]> {
+/** The board counts, by the `listIsOn` rule: a row decides, no row means `listDefault` (A6). */
+export async function bridgeLists(pool: Pool, have: Set<string>, listDefault: boolean): Promise<BridgeAnswer["lists"]> {
   const empty = { ready: false, linkedPeople: 0, listsOn: 0, imported: 0, importedOpen: 0, lastBatch: null };
   if (!have.has("member_tasks") || !have.has("member_task_access") || !have.has("sera_person_links")) return empty;
   const linked = await one(pool, "SELECT COUNT(DISTINCT `user_id`) AS n FROM `sera_person_links`");
-  const on = await one(pool, "SELECT COUNT(*) AS n FROM `member_task_access` WHERE `list_on` = 1");
+  const dflt = listDefault ? 1 : 0;
+  const on = await one(pool, "SELECT COUNT(*) AS n FROM `users` u LEFT JOIN `member_task_access` a ON a.`user_id` = u.`id` WHERE COALESCE(a.`list_on`, ?) = 1", [dflt]);
   const imp = await one(
     pool,
     "SELECT COUNT(*) AS n, SUM(`status` = 'open') AS o FROM `member_tasks` WHERE `source` = 'sera'",
@@ -40,12 +42,13 @@ export async function bridgeLists(pool: Pool, have: Set<string>): Promise<Bridge
     "SELECT `import_batch` AS b, MAX(`created_at`) AS at, COUNT(*) AS n FROM `member_tasks` WHERE `source` = 'sera' AND `import_batch` IS NOT NULL GROUP BY `import_batch` ORDER BY MAX(`created_at`) DESC LIMIT 1",
   );
   const [ppl] = await pool.query(
-    "SELECT u.`name` AS name, COALESCE(a.`list_on`, 0) AS on_, " +
+    "SELECT u.`name` AS name, COALESCE(a.`list_on`, ?) AS on_, " +
       "(SELECT COUNT(*) FROM `member_tasks` t WHERE t.`user_id` = l.`user_id` AND t.`source` = 'sera') AS imported, " +
       "(SELECT MAX(s.`last_synced_at`) FROM `sera_person_links` s WHERE s.`user_id` = l.`user_id`) AS synced_at, " +
       "(SELECT MAX(t.`created_at`) FROM `member_tasks` t WHERE t.`user_id` = l.`user_id` AND t.`source` = 'sera' AND t.`import_batch` IS NOT NULL) AS last_at " +
       "FROM (SELECT DISTINCT `user_id` FROM `sera_person_links`) l JOIN `users` u ON u.`id` = l.`user_id` " +
       "LEFT JOIN `member_task_access` a ON a.`user_id` = l.`user_id` ORDER BY u.`name` LIMIT 50",
+    [dflt],
   );
   const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? String(v) : null);
   const people = (ppl as Row[]).map((r) => ({ name: String(r.name ?? ""), listOn: n(r.on_) === 1, imported: n(r.imported), lastImportAt: iso(r.last_at), lastSyncedAt: iso(r.synced_at) }));
@@ -85,7 +88,7 @@ export async function bridgeFeedback(pool: Pool, have: Set<string>): Promise<Bri
   };
 }
 
-export async function bridgeReading(pool: Pool): Promise<Omit<BridgeAnswer, "connection">> {
+export async function bridgeReading(pool: Pool, listDefault: boolean): Promise<Omit<BridgeAnswer, "connection">> {
   const have = await tables(pool, [
     "member_tasks",
     "member_task_access",
@@ -96,7 +99,7 @@ export async function bridgeReading(pool: Pool): Promise<Omit<BridgeAnswer, "con
     "member_task_prefs",
     "external_proposals",
   ]);
-  const lists = await bridgeLists(pool, have);
+  const lists = await bridgeLists(pool, have, listDefault);
   const feedback = await bridgeFeedback(pool, have);
   const review = have.has("external_proposals")
     ? n((await one(pool, "SELECT COUNT(*) AS n FROM `external_proposals` WHERE `module_id` = 'saberra' AND `status` = 'proposed'")).n)

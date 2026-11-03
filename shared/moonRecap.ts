@@ -76,6 +76,7 @@ import { canonicalJson } from "./canonicalJson";
 import { looksLikePaymentDetails, moneyWords, type SeatSettings } from "./seatSettings";
 import type { CycleBounds } from "./cycleClock";
 import { civilDateKey } from "./lunar";
+import { circleDay, guideSheetLink, halfwayDay, walkthroughDay, type RhythmDoc } from "./moonRhythm";
 
 // ── Ids and limits ───────────────────────────────────────────────────────────
 
@@ -313,6 +314,13 @@ export function itemDedupeKey(origin: ItemOrigin, ref: string): string {
  */
 export const SERA_CLOSED_NOTE = "Closed in Sera";
 
+/** Where a deep-dive item's proof lives (spec section 17, A1). */
+export const EVIDENCE_KINDS = ["sera", "artifact", "mail", "notes", "drive", "file", "build"] as const;
+export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
+
+/** Kinds whose link another member never reads, even on an item marked Members (check 26). */
+export const PRIVATE_EVIDENCE_KINDS: readonly EvidenceKind[] = ["mail", "notes", "drive", "file"];
+
 /** How a piece of work ended this moon (decision 20). Null until the member says. */
 export const TASK_STATUSES = ["done", "partly", "carry", "let_go", "redirect"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -356,6 +364,10 @@ export interface RecapItem {
   letGoReason: string | null;
   /** Outside my roles: the role this work really belongs to, for the role audit. */
   belongsToRoleId: string | null;
+  /** A1: the deep dive's source kind and date, and the role named in words. */
+  evidenceKind: EvidenceKind | null;
+  evidenceOn: string | null;
+  belongsToSeatWords: string | null;
 }
 
 /** The fields a member may set on an item while the recap is theirs to edit. */
@@ -535,29 +547,33 @@ export function moonDays(bounds: Pick<CycleBounds, "id" | "clock" | "startsAt" |
 }
 
 /**
- * THE END-OF-MOON FRIDAY: the last Friday on or before the moon's last day,
- * in village time. The moon ending with the 9 November 2026 new moon gives
- * Friday 6 November.
+ * THE END-OF-MOON FRIDAY, the prepare-by day: the last Friday before the
+ * closing new moon's civil date, unless the village moved it
+ * (`shared/moonRhythm.ts`). The moon ending with the 9 November 2026 new moon
+ * gives Friday 6 November.
  */
-export function endOfMoonFriday(bounds: Pick<CycleBounds, "id" | "clock" | "startsAt" | "endsAt">, timeZone: string): string {
-  const { lastDay } = moonDays(bounds, timeZone);
-  const back = (weekdayOf(lastDay) - 5 + 7) % 7;
-  return addDays(lastDay, -back);
+export function endOfMoonFriday(bounds: Pick<CycleBounds, "id" | "clock" | "startsAt" | "endsAt">, timeZone: string, rhythm?: RhythmDoc): string {
+  return walkthroughDay(bounds, timeZone, rhythm);
 }
 
 /**
- * THE SEND-BY DAY (decision 21): the new moon circle day, which is the first
- * day of the next moon, or the first all-staff on or after it when the
- * village names one (its weekday, 0 Sunday to 6 Saturday). The moon ending
- * with the 9 November 2026 new moon gives Monday 9 November. Sending any time
- * before then counts the same as sending in the room. `endOfMoonFriday` stays
- * the prepare-by day.
+ * THE SEND-BY DAY: the circle Monday, the first Monday after the end-of-moon
+ * Friday, unless the village moved it (spec section 18 replaces decision 21's
+ * new-moon-day rule). Monday 9 November 2026 for the October moon, Monday 7
+ * December for November. Sending any time before then counts the same as
+ * sending in the room.
  */
-export function sendBy(bounds: Pick<CycleBounds, "id" | "clock" | "startsAt" | "endsAt">, timeZone: string, allStaffWeekday: number | null = null): string {
-  const newMoonDay = addDays(moonDays(bounds, timeZone).lastDay, 1);
-  if (allStaffWeekday === null || !Number.isInteger(allStaffWeekday) || allStaffWeekday < 0 || allStaffWeekday > 6) return newMoonDay;
-  return addDays(newMoonDay, (allStaffWeekday - weekdayOf(newMoonDay) + 7) % 7);
+export function sendBy(bounds: Pick<CycleBounds, "id" | "clock" | "startsAt" | "endsAt">, timeZone: string, rhythm?: RhythmDoc): string {
+  return circleDay(bounds, timeZone, rhythm);
 }
+
+/** The dates a moon pack must name: the cycle's civil start, and the civil day of its closing new moon. */
+export function packMoonDates(bounds: Pick<CycleBounds, "id" | "clock" | "startsAt" | "endsAt">, timeZone: string): { start: string; end: string } {
+  const d = moonDays(bounds, timeZone);
+  return { start: d.firstDay, end: addDays(d.lastDay, 1) };
+}
+
+export { halfwayDay };
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -757,13 +773,14 @@ export function memberView(input: {
   items: readonly RecapItem[];
   roomVisible: (item: RecapItem) => boolean;
 }): MemberViewRole[] {
+  // A1: mail, notes, Drive and file links stay with the member and approvers.
   if (input.status === "draft") return [];
   const kept = input.items.filter((i) => i.state === "kept" && i.review !== "returned" && (i.origin !== "room" || input.roomVisible(i)));
   const groups: MemberViewRole[] = [...input.roles.map((r) => ({ roleId: r.roleId as string | null, name: r.name, items: [] as MemberViewItem[], heldPrivately: 0 })), { roleId: null, name: OUTSIDE_MY_ROLES, items: [], heldPrivately: 0 }];
   for (const i of kept) {
     const g = groups.find((x) => x.roleId === i.roleId) ?? groups[groups.length - 1];
     if (i.visibility === "approvers") g.heldPrivately += 1;
-    else g.items.push({ id: i.id, text: i.text, evidenceUrl: i.origin === "sera" ? null : i.evidenceUrl, seasonGoalId: i.seasonGoalId });
+    else g.items.push({ id: i.id, text: i.text, evidenceUrl: i.origin === "sera" || (i.evidenceKind && PRIVATE_EVIDENCE_KINDS.includes(i.evidenceKind)) ? null : i.evidenceUrl, seasonGoalId: i.seasonGoalId });
   }
   return groups.filter((g) => g.items.length > 0 || g.heldPrivately > 0);
 }
@@ -775,7 +792,8 @@ export function heldPrivatelyWords(n: number): string {
 
 // ── The role audit ───────────────────────────────────────────────────────────
 
-export const ROLE_AUDIT_CHOICES = ["keep", "expand", "contract", "hand_back"] as const;
+/** `fill`: a role the member does not hold and kept covering (A1). */
+export const ROLE_AUDIT_CHOICES = ["keep", "expand", "contract", "hand_back", "fill"] as const;
 export type RoleAuditChoice = (typeof ROLE_AUDIT_CHOICES)[number];
 
 export const ROLE_AUDIT_WORDS: Record<RoleAuditChoice, string> = {
@@ -783,6 +801,7 @@ export const ROLE_AUDIT_WORDS: Record<RoleAuditChoice, string> = {
   expand: "Expand",
   contract: "Contract",
   hand_back: "Hand back",
+  fill: "Fill",
 };
 
 export interface RoleAudit {
@@ -791,13 +810,17 @@ export interface RoleAudit {
   newRoles: Array<{ name: string; why: string | null }>;
 }
 
-export function parseRoleAudit(raw: unknown, heldRoleIds: readonly string[]): Parsed<RoleAudit> {
+export function parseRoleAudit(raw: unknown, heldRoleIds: readonly string[], knownRoleIds: readonly string[] = heldRoleIds): Parsed<RoleAudit> {
   if (raw === undefined || raw === null) return { ok: true, value: { roles: [], newRoles: [] } };
   if (!isObj(raw)) return { ok: false, field: "roleAudit", error: "The role audit is a list of roles and new roles." };
   const roles: RoleAudit["roles"] = [];
   for (const r of Array.isArray(raw.roles) ? raw.roles : []) {
-    if (!isObj(r) || typeof r.roleId !== "string" || !heldRoleIds.includes(r.roleId)) return { ok: false, field: "roleAudit", error: "The role audit names only roles you held this moon." };
-    if (!(ROLE_AUDIT_CHOICES as readonly unknown[]).includes(r.choice)) return { ok: false, field: "roleAudit", error: "Each role is kept, expanded, contracted or handed back." };
+    if (!isObj(r) || typeof r.roleId !== "string") return { ok: false, field: "roleAudit", error: "The role audit names only roles you held this moon." };
+    if (!(ROLE_AUDIT_CHOICES as readonly unknown[]).includes(r.choice)) return { ok: false, field: "roleAudit", error: "Each role is kept, expanded, contracted, handed back, or filled." };
+    // Fill names a role the member does NOT hold; every other verdict names one they do.
+    if (r.choice === "fill" ? heldRoleIds.includes(r.roleId) || !knownRoleIds.includes(r.roleId) : !heldRoleIds.includes(r.roleId)) {
+      return { ok: false, field: "roleAudit", error: r.choice === "fill" ? "Fill names a role you do not hold." : "The role audit names only roles you held this moon." };
+    }
     if (roles.some((x) => x.roleId === r.roleId)) continue;
     const note = optText(r.note, LIMITS.roleAuditNote, "note");
     if (!note.ok) return note;
@@ -1095,21 +1118,6 @@ export const SETUP_GAP_WORDS = {
   country: "Name the host country",
   pilotAck: "Write the pilot acknowledgement and its version",
 } as const;
-
-/** The module's own config (module_settings): the send-by rule. */
-export interface MoonReviewModuleConfig {
-  /** The weekday of the village's all-staff, 0 Sunday to 6 Saturday, or null for the new moon day itself. */
-  allStaffWeekday: number | null;
-}
-
-export const MOON_REVIEW_DEFAULT_CONFIG: MoonReviewModuleConfig = { allStaffWeekday: null };
-
-export function moonReviewConfigProblem(config: unknown): string | null {
-  if (!isObj(config)) return "The moon review settings are a set of fields.";
-  const w = config.allStaffWeekday;
-  if (w === undefined || w === null) return null;
-  return Number.isInteger(w) && (w as number) >= 0 && (w as number) <= 6 ? null : "The all-staff weekday runs from 0 (Sunday) to 6 (Saturday).";
-}
 
 // ── The moon attestation ─────────────────────────────────────────────────────
 
@@ -1731,6 +1739,10 @@ export interface SummaryInput {
   seasonGoals: readonly SeasonGoalRef[];
   /** YYYY-MM-DD, the day the second approval was given. */
   approvedOn: string;
+  /** A4: the `READING:` line, when the caller has one. */
+  reading?: Reading | null;
+  /** A7: the THANK YOU section from `thankYouLines`, when the caller includes it. */
+  thankYou?: readonly string[];
 }
 
 interface SummaryBlock {
@@ -1785,6 +1797,8 @@ export function workSummaryText(s: SummaryInput): string {
   if (goals) out.push(`Season goals served: ${goals}`);
   if (own) out.push(`My seasonal goals: ${own}`);
   if (goals || own) out.push("");
+  if (s.reading) out.push(readingLine(s.reading), "");
+  if (s.thankYou && s.thankYou.length > 0) out.push(...s.thankYou, "");
   out.push(`Approved by the Operations and Finance roles on ${dayWords(s.approvedOn)}`);
   return out.join("\n");
 }
@@ -1806,11 +1820,40 @@ export function workSummaryHtml(s: SummaryInput): string {
   return out.join("\n");
 }
 
+// ── Moon rhythm reminders (B1) ───────────────────────────────────────────────
+
+/** One row per member, cycle and kind in `moon_nudges`: the insert is the claim. */
+export const NUDGE_KINDS = ["eom_prep", "eom_day", "halfway"] as const;
+export type NudgeKind = (typeof NUDGE_KINDS)[number];
+
+/** The notification preference category members opt out of. */
+export const NUDGE_CATEGORY = "moon";
+
+export const NUDGE_WORDS: Record<NudgeKind, string> = {
+  eom_prep: "The end-of-moon walkthrough is coming. Start in My moon, or ask Claude \"What's my monthly recap?\". Tap Done on your task board as you go, and your recap starts already marked.",
+  eom_day: "Today is the end-of-moon walkthrough. Your recap is still a draft: open My moon to finish it.",
+  halfway: "The moon is halfway. Open My moon for the Halfway card. Tap Done on your task board as you go, and your recap starts already marked.",
+};
+
+/** A reminder's words, with the guide's worksheet when the village has set one, and nothing about it when not. */
+export function nudgeText(kind: NudgeKind, rhythm: Pick<RhythmDoc, "guideUrl">): string {
+  const sheet = guideSheetLink(rhythm);
+  return sheet ? `${NUDGE_WORDS[kind]} The worksheet: ${sheet}` : NUDGE_WORDS[kind];
+}
+
+/** The notification key for one reminder (B1): sent once per cycle, kind and member. */
+export function nudgeDedupeKey(cycleId: string, kind: NudgeKind, userId: string): string {
+  return `moon:${cycleId}:${kind}:${userId}`;
+}
+
+/** The link My moon and the moon card show, or null when the village has set no guide. */
+export const GUIDE_WORDS = { open: "Open the End of Moon guide" } as const;
+
 // ── Events ───────────────────────────────────────────────────────────────────
 
 export const REVIEW_EVENT_KINDS = [
   "sent", "taken_back", "work_approved", "returned", "amount_set", "range_answered", "invoice_sent",
-  "invoice_approved", "paid", "void", "route_confirmed", "route_changed", "payers_changed", "settings_changed", "self_approved", "pack_imported",
+  "invoice_approved", "paid", "void", "route_confirmed", "route_changed", "payers_changed", "settings_changed", "rhythm_changed", "self_approved", "imported",
 ] as const;
 export type ReviewEventKind = (typeof REVIEW_EVENT_KINDS)[number];
 
@@ -1895,6 +1938,189 @@ export function seatCoverage(seats: readonly Pick<RoleCardForCoverage, "roleId" 
     }
   }
   return { on, total, pct: total > 0 ? Math.round((on / total) * 100) : null };
+}
+
+// ── The thank-you step (addendum v5, A7) ─────────────────────────────────────
+
+/**
+ * Each recap names who helped. A member is picked from the directory; a
+ * free-text name is kept for people outside the game. Gratitude still moves
+ * only when the member sends it through the gratitude flow: nothing here
+ * sends or moves anything. A note follows the item visibility rule, so it
+ * shows to other members only when the member chooses.
+ */
+export const THANKS_MAX = 10;
+export const THANKS_NOTE_MAX = 200;
+
+export interface ThanksEntry {
+  userId: string | null;
+  name: string | null;
+  note: string | null;
+  visibility: ItemVisibility;
+}
+
+export function parseThanks(raw: unknown, memberIds: readonly string[] = []): Parsed<ThanksEntry[]> {
+  if (raw === undefined || raw === null) return { ok: true, value: [] };
+  if (!Array.isArray(raw)) return { ok: false, field: "thanks", error: "Who helped is a list." };
+  if (raw.length > THANKS_MAX) return { ok: false, field: "thanks", error: `A recap thanks ${THANKS_MAX} people at most.` };
+  const out: ThanksEntry[] = [];
+  for (const t of raw) {
+    if (!isObj(t)) return { ok: false, field: "thanks", error: "Each thank-you names a member or a person." };
+    const userId = typeof t.userId === "string" && t.userId.trim() ? t.userId.trim() : null;
+    if (userId && memberIds.length > 0 && !memberIds.includes(userId)) return { ok: false, field: "thanks", error: "Pick the member from the directory." };
+    const name = optText(t.name, 120, "note");
+    if (!name.ok) return name;
+    if (!userId && !name.value) return { ok: false, field: "thanks", error: "Each thank-you names a member or a person." };
+    const note = optText(t.note, THANKS_NOTE_MAX, "note");
+    if (!note.ok) return note;
+    if (note.value && looksLikePaymentDetails(note.value)) return { ok: false, field: "note", error: PAYMENT_DETAILS_REFUSED };
+    if (userId && out.some((x) => x.userId === userId)) continue;
+    out.push({ userId, name: userId ? null : name.value, note: note.value, visibility: t.visibility === "members" ? "members" : "approvers" });
+  }
+  return { ok: true, value: out };
+}
+
+/** One notice per thanked member per recap. */
+export function thanksDedupeKey(recapId: string, userId: string): string {
+  return `moon-thanks:${recapId}:${userId}`;
+}
+
+/** The recap text's THANK YOU section. `nameOf` turns a member id into a name. */
+export function thankYouLines(thanks: readonly ThanksEntry[], nameOf: (userId: string) => string, includeNotes: boolean): string[] {
+  if (thanks.length === 0) return [];
+  return ["THANK YOU", ...thanks.map((t) => {
+    const who = t.userId ? nameOf(t.userId) : (t.name as string);
+    return includeNotes && t.note ? `- ${who}: ${t.note}` : `- ${who}`;
+  })];
+}
+
+export const THANKS_WORDS = {
+  heading: "Who helped you this moon?",
+  sendGratitude: "Send gratitude",
+  notice: (name: string) => `${name} thanked you in their moon recap.`,
+} as const;
+
+// ── Reading the score (spec section 17, A4) ──────────────────────────────────
+
+/**
+ * Every score shows a named range, a plain sentence and context lines, in
+ * the same words everywhere. The score never sets pay (no invoice path reads
+ * it) and is never ranked (no members view or room panel returns it).
+ * Each band includes its lower edge, compared on half-points so no decimal
+ * drifts.
+ */
+export const TASK_BANDS = [
+  { key: "very_full", minPct: 85, label: "Very full", says: "You finished nearly everything you set. Next moon, check your goals still stretch you, and that nothing hard was let go just to keep the number up." },
+  { key: "steady", minPct: 60, label: "Steady", says: "The normal range for real work, where priorities move mid-moon. Nothing to fix." },
+  { key: "pulled", minPct: 40, label: "Pulled", says: "Something took your time: work outside your roles, tasks waiting on others, or tasks too big for one moon. Name which, and shape next moon's tasks around it." },
+  { key: "rethink", minPct: 0, label: "Rethink the plan", says: "Usually this points to the plan: the tasks weren't the work the village needed this moon, or you were covering an empty role. Bring it to the circle." },
+] as const;
+
+/**
+ * THE TWO GUARDS (addendum v5, from adversarial tests on 3 November).
+ *
+ *   The let-go cap: "set" is Done + Partly + Carry + Let go + Redirect and
+ *   "shed" is Let go + Redirect. When shed is more than a third of set and
+ *   the score is 60% or more, the reading stops at Steady with its own
+ *   sentence and line. The number is shown unchanged. Without it, a 50% moon
+ *   read 100% Very full by letting go of its five unfinished tasks.
+ *
+ *   Covering an empty role: when the score is under 60% and the member's
+ *   Outside my roles items number at least max(3, Done), the reading names
+ *   that, in place of Pulled or Rethink the plan. Without it, an honest
+ *   member at 3 of 8 Done with 7 outside-role items read Rethink the plan.
+ *
+ * The addendum names the second band "Covering an empty seat"; the voice
+ * gate's rule 6 refuses "seat" for a role, so the platform says "role".
+ */
+export const CAPPED_BAND = {
+  key: "steady_capped",
+  label: "Steady",
+  says: "The number looks high, but much of this moon was let go or redirected.",
+  line: "More than a third of the tasks set this moon were let go or redirected, so the reading stops at Steady. Each needs its reason, and each redirect its new owner.",
+} as const;
+
+export const COVERING_BAND = {
+  key: "covering",
+  label: "Covering an empty role",
+  says: "Much of your moon went to work no role holds, which is why the task score is where it is. Bring the role to the circle so it can be filled.",
+} as const;
+
+export const SEAT_BANDS = [
+  { key: "well_held", minPct: 90, label: "Role well held", says: "Nearly every accountability had work under it." },
+  { key: "mostly_held", minPct: 70, label: "Mostly held", says: "One or two accountabilities were quiet. Ask whether they're still needed this season." },
+  { key: "bigger", minPct: 0, label: "Role bigger than the moon", says: "Consider contracting the role, or handing an accountability to another role." },
+] as const;
+
+export type TaskBandKey = (typeof TASK_BANDS)[number]["key"];
+export type SeatBandKey = (typeof SEAT_BANDS)[number]["key"];
+
+export interface ScoreContext {
+  /** Done, for the covering guard. */
+  done: number;
+  counted: number;
+  outside: number;
+  redirected: number;
+  lastWeek: number;
+  letGo: number;
+}
+
+export const CONTEXT_WORDS = {
+  few: "Fewer than five tasks were counted, so read the score lightly.",
+  outside: "Three or more items sat outside your roles. That time went where the village needed it: name it as tasks next moon, or bring the role to the circle.",
+  redirected: "Three or more tasks were redirected to the people they belong to.",
+  lastWeek: "Three or more tasks arrived in the final week, and wait for next moon.",
+  letGo: "Three or more tasks were let go, each with its reason.",
+} as const;
+
+export interface Reading {
+  band: string;
+  label: string;
+  says: string;
+  lines: string[];
+  /** The let-go cap stopped the reading at Steady; the number is unchanged. */
+  capped: boolean;
+}
+
+/** The task score's reading: its band, its sentence and its context lines. Null when nothing was counted. */
+export function readingOf(score: Pick<Score, "numHalves" | "den">, context: ScoreContext): Reading | null {
+  if (score.den <= 0) return null;
+  let band: { key: string; label: string; says: string } = TASK_BANDS.find((b) => score.numHalves * 100 >= b.minPct * score.den * 2) ?? TASK_BANDS[TASK_BANDS.length - 1];
+  const lines: string[] = [];
+  const atLeast60 = score.numHalves * 100 >= 60 * score.den * 2;
+  const shed = context.letGo + context.redirected;
+  const set = context.counted + shed;
+  let capped = false;
+  if (atLeast60 && shed * 3 > set) {
+    band = CAPPED_BAND;
+    capped = true;
+    lines.push(CAPPED_BAND.line);
+  } else if (!atLeast60 && context.outside >= Math.max(3, context.done)) {
+    band = COVERING_BAND;
+  }
+  if (context.counted < 5) lines.push(CONTEXT_WORDS.few);
+  if (context.outside >= 3) lines.push(CONTEXT_WORDS.outside);
+  if (context.redirected >= 3) lines.push(CONTEXT_WORDS.redirected);
+  if (context.lastWeek >= 3) lines.push(CONTEXT_WORDS.lastWeek);
+  if (context.letGo >= 3) lines.push(CONTEXT_WORDS.letGo);
+  return { band: band.key, label: band.label, says: band.says, lines, capped };
+}
+
+/** Role coverage's reading. Null when the member's roles list no accountabilities. */
+export function seatReadingOf(on: number, total: number): Reading | null {
+  if (total <= 0) return null;
+  const band = SEAT_BANDS.find((b) => on * 100 >= b.minPct * total) ?? SEAT_BANDS[SEAT_BANDS.length - 1];
+  return { band: band.key, label: band.label, says: band.says, lines: [], capped: false };
+}
+
+/** The context a task score is read in, from the same items `taskScore` counted. */
+export function scoreContextOf(t: TaskScore, outsideItems: number): ScoreContext {
+  return { done: t.done, counted: t.den, outside: outsideItems, redirected: t.leftOut.redirect, lastWeek: t.leftOut.lastWeekNotDone, letGo: t.leftOut.letGo };
+}
+
+/** The `READING:` line the recap text and the work summary carry. */
+export function readingLine(r: Reading): string {
+  return `READING: ${r.label}. ${r.says}`;
 }
 
 // ── Moon goals (decision 20) ─────────────────────────────────────────────────
@@ -2006,37 +2232,373 @@ export function seraExternalId(item: Pick<RecapItem, "dedupeKey">): string | nul
   return item.dedupeKey.startsWith("sera:") ? item.dedupeKey.slice(5) : null;
 }
 
+/** The reason codes Sera takes, the same ones the end-of-moon skill sends (A3). */
+export const SERA_REASONS: Record<"done" | "let_go" | "redirect", "already_done" | "not_a_task" | "not_mine"> = {
+  done: "already_done",
+  let_go: "not_a_task",
+  redirect: "not_mine",
+};
+
+export interface SeraClosure {
+  itemId: string;
+  externalId: string;
+  action: "done" | "let_go" | "redirect";
+  reason: "already_done" | "not_a_task" | "not_mine";
+  note: string | null;
+  /** Redirect: who it belongs to, when the member named them. */
+  redirectTarget: string | null;
+  idempotencyKey: string;
+}
+
 /**
  * What to tell Sera once the work is approved: each item Sera sent that the
  * member marked Done or Let go closes, and each Redirect goes with its words.
- * Only tasks Sera sent. The caller sends these through the feedback outbox
- * (server/lib/memberTaskBridge.ts), keyed on the item id so a repeat is a
- * no-op.
+ * Only tasks Sera sent, and never one the board already told Sera about (the
+ * caller passes `alreadyTold`, from the outbox). The caller sends these
+ * through the feedback outbox (server/lib/memberTaskBridge.ts).
  */
-export function seraClosures(items: readonly RecapItem[], cycleId: string): Array<{ itemId: string; externalId: string; action: "done" | "let_go" | "redirect"; note: string | null; idempotencyKey: string }> {
-  const out: Array<{ itemId: string; externalId: string; action: "done" | "let_go" | "redirect"; note: string | null; idempotencyKey: string }> = [];
+export function seraClosures(items: readonly RecapItem[], moonStart: string, alreadyTold: ReadonlySet<string> = new Set()): SeraClosure[] {
+  const out: SeraClosure[] = [];
   for (const i of items) {
     const ext = seraExternalId(i);
-    if (!ext || i.state === "dropped") continue;
-    const base = { itemId: i.id, externalId: ext, idempotencyKey: seraCloseKey(cycleId, ext) };
-    if (i.taskStatus === "done") out.push({ ...base, action: "done", note: null });
-    else if (i.taskStatus === "let_go") out.push({ ...base, action: "let_go", note: i.letGoReason });
-    else if (i.taskStatus === "redirect") out.push({ ...base, action: "redirect", note: i.redirectTo });
+    if (!ext || i.state === "dropped" || alreadyTold.has(ext)) continue;
+    if (i.taskStatus !== "done" && i.taskStatus !== "let_go" && i.taskStatus !== "redirect") continue;
+    out.push({
+      itemId: i.id, externalId: ext, action: i.taskStatus, reason: SERA_REASONS[i.taskStatus],
+      note: i.taskStatus === "let_go" ? i.letGoReason : null,
+      redirectTarget: i.taskStatus === "redirect" ? i.redirectTo : null,
+      idempotencyKey: seraCloseKey(moonStart, ext),
+    });
   }
   return out;
 }
 
 /**
- * ONE KEY FOR A SERA CLOSE (spec section 16): the platform's outbox and the
- * end-of-moon skill both close a task with `moon:<cycle>:<sera task id>`, so a
- * task closed from either side is never closed twice.
+ * ONE KEY FOR A SERA CLOSE (A3): `moon:<moon start, YYYY-MM-DD>:<sera task
+ * id>`, for example `moon:2026-10-10:abc123`. The platform's outbox and the
+ * end-of-moon skill each compute it with no shared state, so a task closed
+ * from both sides lands once.
  */
-export function seraCloseKey(cycleId: string, externalId: string): string {
-  return `moon:${cycleId}:${externalId}`;
+export function seraCloseKey(moonStart: string, externalId: string): string {
+  return `moon:${moonStart}:${externalId}`;
 }
 
-// The moon pack itself (its v1 shape, validation, preview and the
-// `claude:<32 hex>` key) lands with part 3 of lane A, from spec section 17 A2.
+// ── The moon pack, version 1 (spec section 17, A2) ───────────────────────────
+
+/** Whole-pack limits. */
+export const PACK_MAX_BYTES = 200 * 1024;
+export const PACK_MAX_ITEMS = 300;
+export const PACK_MAX_GOALS = 5;
+
+/** Any key, at any depth, matching this refuses the pack whole: a pack never carries money. */
+export const PACK_FORBIDDEN_KEY = /amount|minor|total|currency|rate|fx|fee|pay|price|salary|bank|iban|tax/i;
+
+const PACK_TOP_KEYS = ["kind", "version", "moon", "items", "role_audit", "next_goals", "own_words", "thanks"];
+const PACK_THANKS_KEYS = ["name", "note"];
+const PACK_ITEM_KEYS = ["text", "status", "redirect_to", "let_go_reason", "evidence", "sera_task_id", "seat", "accountability", "season_goal", "outside", "belongs_to_seat"];
+const PACK_EVIDENCE_KEYS = ["kind", "ref", "on"];
+const PACK_AUDIT_KEYS = ["seat", "verdict", "why"];
+const PACK_GOAL_KEYS = ["text", "done_when", "season_goal", "carried_from"];
+
+export type PackRefusalCode = "not_a_pack" | "too_big" | "too_many_items" | "too_many_goals" | "moon_mismatch" | "forbidden_key" | "unknown_key" | "invalid";
+export type PackSkipReason = "seat_unknown" | "goal_unknown" | "outside_moon" | "duplicate";
+
+export const PACK_REFUSAL_WORDS: Record<PackRefusalCode, string> = {
+  not_a_pack: "This is not a moon pack. Paste the whole pack the deep dive gave you.",
+  too_big: "This pack is over 200 KB. Ask for a shorter one.",
+  too_many_items: "A pack holds 300 items at most.",
+  too_many_goals: "A pack sets five next-moon goals at most.",
+  moon_mismatch: "This pack is for another moon. Its start and end dates do not match this one.",
+  forbidden_key: "A moon pack never carries amounts, pay, rates or tax. Ask for the pack again without them.",
+  unknown_key: "This pack has a field the moon pack does not have. Ask for the pack again.",
+  invalid: "Part of this pack is not in the moon pack's shape.",
+};
+
+export const PACK_SKIP_WORDS: Record<PackSkipReason, string> = {
+  seat_unknown: "Names a role you do not hold",
+  goal_unknown: "Names a season goal this season does not have",
+  outside_moon: "Its date is outside this moon",
+  duplicate: "Already on your recap",
+};
+
+export const PACK_WORDS = {
+  button: "Import from Claude",
+  preview: "Preview",
+  confirm: "Import",
+  added: (n: number) => `${n} to add`,
+  merged: (n: number) => `${n} to merge with items already here`,
+  skipped: (n: number) => `${n} to skip`,
+} as const;
+
+/** One item of the pack, read and placed: what the import writes or merges. */
+export interface PackItemPlan {
+  index: number;
+  dedupeKey: string;
+  text: string;
+  taskStatus: TaskStatus | null;
+  redirectTo: string | null;
+  letGoReason: string | null;
+  evidenceKind: EvidenceKind | null;
+  evidenceUrl: string | null;
+  /** A ref that is no link (an id or a file name), kept as words. */
+  evidenceRef: string | null;
+  evidenceOn: string | null;
+  roleId: string | null;
+  accountabilityWords: string | null;
+  seasonGoalId: string | null;
+  belongsToSeatWords: string | null;
+}
+
+export interface PackPreview {
+  add: PackItemPlan[];
+  /** A Sera task the recap already holds: the pack's words merge into that item. */
+  merge: Array<PackItemPlan & { itemId: string }>;
+  skip: Array<{ index: number; reason: PackSkipReason }>;
+  roleAudit: Array<{ roleId: string; verdict: RoleAuditChoice; why: string | null }>;
+  nextGoals: Array<GoalInput & { carriedFromId: string | null }>;
+  ownWords: string | null;
+  /** A7: names matched to members like roles are; an unmatched name stays as words. */
+  thanks: ThanksEntry[];
+}
+
+export interface PackContext {
+  /** From `packMoonDates`. */
+  moon: { start: string; end: string };
+  /** The member's roles this moon. */
+  seats: ReadonlyArray<{ roleId: string; name: string }>;
+  /** Every role, for a Fill verdict on one the member does not hold. */
+  allRoles: ReadonlyArray<{ roleId: string; name: string }>;
+  /** The running season's goals in order, so g1 to g7 name them by position. */
+  seasonGoals: readonly SeasonGoalRef[];
+  /** Dedupe keys already on the recap, to the item that holds each. */
+  existingKeys: ReadonlyMap<string, string>;
+  /** The directory, for matching a thanked name to a member. */
+  members?: ReadonlyArray<{ userId: string; name: string }>;
+}
+
+export type PackResult =
+  | { ok: true; preview: PackPreview; previewHash: string; packSha256: string }
+  | { ok: false; code: PackRefusalCode; error: string; field?: string };
+
+/** sha256 as lowercase hex. Async because Web Crypto is. */
+export async function sha256Hex(text: string): Promise<string> {
+  const subtle = (globalThis as { crypto?: Crypto }).crypto?.subtle;
+  if (!subtle) throw new Error("sha256Hex needs Web Crypto, which this runtime does not provide");
+  const digest = await subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * A deep-dive item's key (A1): `claude:` and the first 32 hex of the sha256
+ * of its evidence kind, ref and words; or `sera:<id>` when it names a Sera
+ * task, so the pack and the sync meet on one item.
+ */
+export async function claudeItemKey(input: { seraTaskId?: string | null; evidenceKind: string | null; ref: string | null; text: string }): Promise<string> {
+  if (input.seraTaskId) return itemDedupeKey("sera", input.seraTaskId);
+  const hex = await sha256Hex(`${input.evidenceKind ?? ""}\n${input.ref ?? ""}\n${input.text}`);
+  return itemDedupeKey("claude", hex.slice(0, 32));
+}
+
+function forbiddenKeyIn(v: unknown, depth = 0): boolean {
+  if (depth > 8 || !v || typeof v !== "object") return false;
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+    if (!Array.isArray(v) && PACK_FORBIDDEN_KEY.test(k)) return true;
+    if (forbiddenKeyIn(x, depth + 1)) return true;
+  }
+  return false;
+}
+
+function onlyKeys(o: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(o).every((k) => allowed.includes(k));
+}
+
+type Bad = { ok: false; code: PackRefusalCode; error: string; field?: string };
+const invalid = (field: string, why?: string): Bad => ({ ok: false, code: "invalid", error: why ?? PACK_REFUSAL_WORDS.invalid, field });
+
+function packText(v: unknown, max: number, field: string, required = false): { ok: true; value: string | null } | Bad {
+  if (v === undefined || v === null || v === "") return required ? invalid(field) : { ok: true, value: null };
+  if (typeof v !== "string") return invalid(field);
+  const t = v.replace(/\s+/g, " ").trim();
+  if (!t) return required ? invalid(field) : { ok: true, value: null };
+  if (t.length > max) return invalid(field, `${field} runs to ${max} characters at most.`);
+  return { ok: true, value: t };
+}
+
+function seasonGoalOf(ref: string | null, goals: readonly SeasonGoalRef[]): string | null | undefined {
+  if (!ref) return null;
+  const pos = /^g([1-9])$/.exec(ref);
+  if (pos) return goals[Number(pos[1]) - 1]?.id ?? undefined;
+  return goals.find((g) => g.id === ref)?.id ?? undefined;
+}
+
+function seatOf(ref: string | null, seats: ReadonlyArray<{ roleId: string; name: string }>): string | null | undefined {
+  if (!ref) return null;
+  return (seats.find((r) => r.roleId === ref) ?? seats.find((r) => r.name === ref))?.roleId ?? undefined;
+}
+
+/**
+ * READ A MOON PACK (A2): the preview of what an import would do, or the
+ * reason the pack is refused whole. Pure: nothing writes. The door answers
+ * the preview with `previewHash`, and writes only when the confirm carries
+ * the same hash.
+ *
+ *   Refused whole: not a v1 moon pack, over 200 KB, over 300 items, over
+ *   five next goals, moon dates that do not match the cycle, any key at any
+ *   depth naming money, any field the pack does not have, or a field not in
+ *   its shape.
+ *   Skipped per item, never failing the pack: an unknown role, an unknown
+ *   season goal, an evidence date outside the moon, or a key already on the
+ *   recap or earlier in the pack. A Sera task the recap already holds merges.
+ *   Built-but-not-live work (evidence kind `build`) never imports as Done:
+ *   it imports as Partly.
+ */
+export async function validatePack(raw: unknown, ctx: PackContext): Promise<PackResult> {
+  let v = raw;
+  const bytes = typeof raw === "string" ? new TextEncoder().encode(raw).length : new TextEncoder().encode(JSON.stringify(raw ?? null)).length;
+  if (bytes > PACK_MAX_BYTES) return { ok: false, code: "too_big", error: PACK_REFUSAL_WORDS.too_big };
+  if (typeof raw === "string") {
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      return { ok: false, code: "not_a_pack", error: PACK_REFUSAL_WORDS.not_a_pack };
+    }
+  }
+  if (!isObj(v) || v.kind !== "moon_pack" || v.version !== 1) return { ok: false, code: "not_a_pack", error: PACK_REFUSAL_WORDS.not_a_pack };
+  if (forbiddenKeyIn(v)) return { ok: false, code: "forbidden_key", error: PACK_REFUSAL_WORDS.forbidden_key };
+  if (!onlyKeys(v, PACK_TOP_KEYS)) return { ok: false, code: "unknown_key", error: PACK_REFUSAL_WORDS.unknown_key };
+  const items = Array.isArray(v.items) ? v.items : [];
+  if (items.length > PACK_MAX_ITEMS) return { ok: false, code: "too_many_items", error: PACK_REFUSAL_WORDS.too_many_items };
+  const goals = Array.isArray(v.next_goals) ? v.next_goals : [];
+  if (goals.length > PACK_MAX_GOALS) return { ok: false, code: "too_many_goals", error: PACK_REFUSAL_WORDS.too_many_goals };
+  const moon = isObj(v.moon) ? v.moon : {};
+  if (moon.start !== ctx.moon.start || moon.end !== ctx.moon.end) return { ok: false, code: "moon_mismatch", error: PACK_REFUSAL_WORDS.moon_mismatch };
+
+  const preview: PackPreview = { add: [], merge: [], skip: [], roleAudit: [], nextGoals: [], ownWords: null, thanks: [] };
+  const seen = new Set<string>();
+  for (let index = 0; index < items.length; index++) {
+    const it = items[index];
+    if (!isObj(it) || !onlyKeys(it, PACK_ITEM_KEYS)) return isObj(it) ? { ok: false, code: "unknown_key", error: PACK_REFUSAL_WORDS.unknown_key } : invalid(`items[${index}]`);
+    const text = packText(it.text, LIMITS.itemText, "text", true);
+    if (!text.ok) return text;
+    if (looksLikePaymentDetails(text.value as string)) return invalid("text", PAYMENT_DETAILS_REFUSED);
+    let status: TaskStatus | null = null;
+    if (it.status !== undefined && it.status !== null) {
+      if (!(TASK_STATUSES as readonly unknown[]).includes(it.status)) return invalid("status");
+      status = it.status as TaskStatus;
+    }
+    const redirectTo = packText(it.redirect_to, 200, "redirect_to");
+    if (!redirectTo.ok) return redirectTo;
+    const letGo = packText(it.let_go_reason, 200, "let_go_reason");
+    if (!letGo.ok) return letGo;
+    if (status === "redirect" && !redirectTo.value) return invalid("redirect_to", REDIRECT_NEEDS_WHO);
+    if (status === "let_go" && !letGo.value) return invalid("let_go_reason", LET_GO_NEEDS_REASON);
+    let kind: EvidenceKind | null = null;
+    let ref: string | null = null;
+    let on: string | null = null;
+    if (it.evidence !== undefined && it.evidence !== null) {
+      if (!isObj(it.evidence)) return invalid("evidence");
+      if (!onlyKeys(it.evidence, PACK_EVIDENCE_KEYS)) return { ok: false, code: "unknown_key", error: PACK_REFUSAL_WORDS.unknown_key };
+      if (it.evidence.kind !== undefined && !(EVIDENCE_KINDS as readonly unknown[]).includes(it.evidence.kind)) return invalid("evidence.kind");
+      kind = (it.evidence.kind as EvidenceKind | undefined) ?? null;
+      const r = packText(it.evidence.ref, LIMITS.evidenceUrl, "evidence.ref");
+      if (!r.ok) return r;
+      ref = r.value;
+      const d = optDate(it.evidence.on, "evidence.on");
+      if (!d.ok) return invalid("evidence.on");
+      on = d.value;
+    }
+    const seraId = packText(it.sera_task_id, 128, "sera_task_id");
+    if (!seraId.ok) return seraId;
+    const seatRef = packText(it.seat, 200, "seat");
+    if (!seatRef.ok) return seatRef;
+    const acc = packText(it.accountability, LIMITS.accountabilityWords, "accountability");
+    if (!acc.ok) return acc;
+    const goalRef = packText(it.season_goal, 64, "season_goal");
+    if (!goalRef.ok) return goalRef;
+    const belongs = packText(it.belongs_to_seat, 200, "belongs_to_seat");
+    if (!belongs.ok) return belongs;
+    const outside = it.outside === true;
+
+    const roleId = outside ? null : seatOf(seatRef.value, ctx.seats);
+    if (roleId === undefined) { preview.skip.push({ index, reason: "seat_unknown" }); continue; }
+    const seasonGoalId = seasonGoalOf(goalRef.value, ctx.seasonGoals);
+    if (seasonGoalId === undefined) { preview.skip.push({ index, reason: "goal_unknown" }); continue; }
+    if (on && (on < ctx.moon.start || on > ctx.moon.end)) { preview.skip.push({ index, reason: "outside_moon" }); continue; }
+
+    const key = await claudeItemKey({ seraTaskId: seraId.value, evidenceKind: kind, ref, text: text.value as string });
+    const isLink = !!ref && evidenceUrlProblem(ref) === null;
+    const plan: PackItemPlan = {
+      index, dedupeKey: key, text: text.value as string,
+      taskStatus: kind === "build" && status === "done" ? "partly" : status,
+      redirectTo: status === "redirect" ? redirectTo.value : null,
+      letGoReason: status === "let_go" ? letGo.value : null,
+      evidenceKind: kind, evidenceUrl: isLink ? ref : null, evidenceRef: isLink ? null : ref, evidenceOn: on,
+      roleId, accountabilityWords: acc.value, seasonGoalId, belongsToSeatWords: outside ? belongs.value : null,
+    };
+    const held = ctx.existingKeys.get(key);
+    if (seen.has(key) || (held && !key.startsWith("sera:"))) { preview.skip.push({ index, reason: "duplicate" }); continue; }
+    seen.add(key);
+    if (held) preview.merge.push({ ...plan, itemId: held });
+    else preview.add.push(plan);
+  }
+
+  for (const a of Array.isArray(v.role_audit) ? v.role_audit : []) {
+    if (!isObj(a) || !onlyKeys(a, PACK_AUDIT_KEYS)) return isObj(a) ? { ok: false, code: "unknown_key", error: PACK_REFUSAL_WORDS.unknown_key } : invalid("role_audit");
+    if (!(ROLE_AUDIT_CHOICES as readonly unknown[]).includes(a.verdict)) return invalid("role_audit.verdict");
+    const why = packText(a.why, 200, "role_audit.why");
+    if (!why.ok) return why;
+    const verdict = a.verdict as RoleAuditChoice;
+    const seat = typeof a.seat === "string" ? a.seat : "";
+    const roleId = verdict === "fill" ? seatOf(seat, ctx.allRoles.filter((r) => !ctx.seats.some((m) => m.roleId === r.roleId))) : seatOf(seat, ctx.seats);
+    if (!roleId || preview.roleAudit.some((x) => x.roleId === roleId)) continue;
+    preview.roleAudit.push({ roleId, verdict, why: why.value });
+  }
+
+  for (const g of goals) {
+    if (!isObj(g) || !onlyKeys(g, PACK_GOAL_KEYS)) return isObj(g) ? { ok: false, code: "unknown_key", error: PACK_REFUSAL_WORDS.unknown_key } : invalid("next_goals");
+    const text = packText(g.text, LIMITS.goalText, "next_goals.text", true);
+    if (!text.ok) return text;
+    const doneWhen = packText(g.done_when, LIMITS.goalDoneWhen, "next_goals.done_when");
+    if (!doneWhen.ok) return doneWhen;
+    const goalRef = packText(g.season_goal, 64, "next_goals.season_goal");
+    if (!goalRef.ok) return goalRef;
+    const carried = packText(g.carried_from, 64, "next_goals.carried_from");
+    if (!carried.ok) return carried;
+    preview.nextGoals.push({ text: text.value as string, doneWhen: doneWhen.value, seasonGoalId: seasonGoalOf(goalRef.value, ctx.seasonGoals) ?? null, carriedFromId: carried.value });
+  }
+
+  const own = packText(v.own_words, LIMITS.ownWords, "own_words");
+  if (!own.ok) return own;
+  preview.ownWords = own.value;
+
+  const thanks = Array.isArray(v.thanks) ? v.thanks : [];
+  if (thanks.length > THANKS_MAX) return invalid("thanks", `A recap thanks ${THANKS_MAX} people at most.`);
+  for (const t of thanks) {
+    if (!isObj(t) || !onlyKeys(t, PACK_THANKS_KEYS)) return isObj(t) ? { ok: false, code: "unknown_key", error: PACK_REFUSAL_WORDS.unknown_key } : invalid("thanks");
+    const name = packText(t.name, 120, "thanks.name", true);
+    if (!name.ok) return name;
+    const note = packText(t.note, THANKS_NOTE_MAX, "thanks.note");
+    if (!note.ok) return note;
+    const member = (ctx.members ?? []).find((m) => m.name === name.value);
+    if (member && preview.thanks.some((x) => x.userId === member.userId)) continue;
+    preview.thanks.push({ userId: member?.userId ?? null, name: member ? null : name.value, note: note.value, visibility: "approvers" });
+  }
+
+  const packSha256 = await sha256Hex(canonicalJson(v));
+  const previewHash = await sha256Hex(canonicalJson({ pack: packSha256, preview }));
+  return { ok: true, preview, previewHash, packSha256 };
+}
+
+/** `POST /api/me/moon/:cycle/import`. Call one sends `{pack}`; call two `{pack, confirm: true, previewHash}`. */
+export interface ImportPackRequest {
+  pack: unknown;
+  confirm?: boolean;
+  previewHash?: string;
+}
+
+export type ImportPackResponse =
+  | { written: false; preview: PackPreview; previewHash: string }
+  | { written: true; added: number; merged: number; skipped: number; items: RecapItem[] };
 
 // ── Outside my roles in the role audit (check 23) ────────────────────────────
 
@@ -2112,8 +2674,10 @@ export interface MoonRef {
   periodWords: string;
   /** The prepare-by day. */
   endOfMoonFriday: string;
-  /** The send-by day: the new moon circle (decision 21). */
+  /** The send-by day: the circle Monday (spec section 18). */
   sendBy: string;
+  /** The full moon's civil day, from which the Halfway card shows (B2). */
+  halfwayDay: string | null;
 }
 
 export interface RoleHeld {
@@ -2193,6 +2757,9 @@ export interface MyMoonResponse {
   moonLoad: number | null;
   /** The two rings at the top (decision 20). */
   taskScore: TaskScore;
+  /** A4: the band, its sentence and its context lines, under each number. Member only. */
+  taskReading: Reading | null;
+  seatReading: Reading | null;
   seatCoverage: { on: number; total: number; pct: number | null };
   lastMoonGoals: Array<MoonGoal & { flagged: boolean }>;
   goalScore: Score & { unscored: number };
