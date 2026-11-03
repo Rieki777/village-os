@@ -46,7 +46,7 @@ function item(over: Partial<RecapItem>): RecapItem {
     id: "mi-0000000000000001", origin: "task", dedupeKey: "task:t1", text: "Wrote the water plan", originNote: null, doneOn: null, evidenceUrl: null,
     evidenceAsset: null, proofInSummary: false, roleId: "r1", accountabilityWords: null, seasonGoalId: null, ownGoalWords: null,
     state: "kept", visibility: "members", review: "pending", reviewNote: null, position: 0, setOn: null, taskStatus: null,
-    redirectTo: null, letGoReason: null, belongsToRoleId: null, ...over,
+    redirectTo: null, letGoReason: null, belongsToRoleId: null, evidenceKind: null, evidenceOn: null, belongsToSeatWords: null, ...over,
   };
 }
 
@@ -494,9 +494,17 @@ describe("closing the loop in Sera (check 22, the pure half)", () => {
       item({ id: "b", dedupeKey: "sera:ext-2", taskStatus: "redirect", redirectTo: "The land role" }),
       item({ id: "c", dedupeKey: "task:t3", taskStatus: "done" }),
       item({ id: "d", dedupeKey: "sera:ext-4", taskStatus: "carry" }),
-    ], "lunar-000331")).toEqual([
-      { itemId: "a", externalId: "ext-1", action: "done", note: null, idempotencyKey: "moon:lunar-000331:ext-1" },
-      { itemId: "b", externalId: "ext-2", action: "redirect", note: "The land role", idempotencyKey: "moon:lunar-000331:ext-2" },
+    ], "2026-10-10")).toEqual([
+      { itemId: "a", externalId: "ext-1", action: "done", reason: "already_done", note: null, redirectTarget: null, idempotencyKey: "moon:2026-10-10:ext-1" },
+      { itemId: "b", externalId: "ext-2", action: "redirect", reason: "not_mine", note: null, redirectTarget: "The land role", idempotencyKey: "moon:2026-10-10:ext-2" },
+    ]);
+  });
+  it("uses the skill's reason codes, and skips a task the board already told Sera about (A3)", () => {
+    expect(contract.SERA_REASONS).toEqual({ done: "already_done", let_go: "not_a_task", redirect: "not_mine" });
+    expect(contract.seraCloseKey("2026-10-10", "abc123")).toBe("moon:2026-10-10:abc123");
+    const items = [item({ id: "a", dedupeKey: "sera:ext-1", taskStatus: "let_go", letGoReason: "Not needed" }), item({ id: "b", dedupeKey: "sera:ext-2", taskStatus: "done" })];
+    expect(seraClosures(items, "2026-10-10", new Set(["ext-2"]))).toEqual([
+      { itemId: "a", externalId: "ext-1", action: "let_go", reason: "not_a_task", note: "Not needed", redirectTarget: null, idempotencyKey: "moon:2026-10-10:ext-1" },
     ]);
   });
 });
@@ -518,10 +526,10 @@ describe("Outside my roles in the role audit (check 23)", () => {
 });
 
 describe("the send-by day and the copied addresses (decision 21)", () => {
-  it("is the new moon day, Monday 9 November 2026, or the first all-staff on or after it", () => {
+  it("is the circle Monday (section 18): Monday 9 November 2026, and Monday 7 December for November", () => {
     expect(sendBy(NOV, TZ)).toBe("2026-11-09");
-    expect(sendBy(NOV, TZ, 3)).toBe("2026-11-11");
-    expect(sendBy(NOV, TZ, 1)).toBe("2026-11-09");
+    expect(sendBy(LUNAR_CLOCK.boundsFor(new Date("2026-11-20T12:00:00Z")), TZ)).toBe("2026-12-07");
+    expect(sendBy(NOV, TZ, { sendHour: 9, cycles: { [NOV.id]: { monday: "2026-11-10" } } })).toBe("2026-11-10");
     expect(contract.sendByLine("2026-11-09")).toBe("Send by Monday 9 November 2026. Sending any time before then counts the same as sending in the room.");
   });
   it("reads invoiceCc as email addresses, and refuses anything else", () => {
@@ -564,7 +572,133 @@ describe("a fresh install names nobody (decision 22)", () => {
     expect(contract.settingsChanges(SETTINGS, { ...SETTINGS, pilotAck: { text: "New words.", version: "v2" } })).toEqual([
       { field: "pilotAck", from: SETTINGS.pilotAck, to: { text: "New words.", version: "v2" } },
     ]);
-    expect(contract.moonReviewConfigProblem({ allStaffWeekday: 1 })).toBeNull();
-    expect(contract.moonReviewConfigProblem({ allStaffWeekday: 9 })).not.toBeNull();
+  });
+});
+
+describe("the moon pack, version 1 (A2, checks 24 and 25)", () => {
+  const moon = contract.packMoonDates(NOV, TZ);
+  const ctx = (existing: Array<[string, string]> = []): contract.PackContext => ({
+    moon, seats: [{ roleId: "r1", name: "Steward" }], allRoles: [{ roleId: "r1", name: "Steward" }, { roleId: "r9", name: "Land role" }],
+    seasonGoals: [{ id: "gid-1", words: "Goal one" }, { id: "gid-2", words: "Goal two" }], existingKeys: new Map(existing),
+  });
+  const pack = (over: Record<string, unknown> = {}) => ({
+    kind: "moon_pack", version: 1, moon,
+    items: [
+      { text: "Task 1", status: "done", evidence: { kind: "mail", ref: "thread 42", on: "2026-10-20" }, seat: "Steward", season_goal: "g2" },
+      { text: "Task 2", status: "done", evidence: { kind: "build", ref: "https://example.org/build" }, seat: "r1" },
+      { text: "Task 3", outside: true, belongs_to_seat: "Land role" },
+      { text: "Task 4", seat: "Unknown role" },
+      { text: "Task 5", season_goal: "g9" },
+      { text: "Task 6", evidence: { kind: "notes", ref: "x", on: "2026-09-01" } },
+      { text: "Task 7", sera_task_id: "ext-7", status: "carry" },
+    ],
+    role_audit: [{ seat: "Steward", verdict: "keep" }, { seat: "Land role", verdict: "fill", why: "Covered it all moon" }],
+    next_goals: [{ text: "Goal A" }, { text: "Goal B", season_goal: "g1" }],
+    ...over,
+  });
+
+  it("previews adds, merges and skips with reasons, and writes nothing", async () => {
+    const r = await contract.validatePack(JSON.stringify(pack()), ctx([["sera:ext-7", "mi-held"]]));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.preview.add.map((a) => [a.text, a.taskStatus, a.roleId, a.seasonGoalId, a.evidenceKind])).toEqual([
+      ["Task 1", "done", "r1", "gid-2", "mail"],
+      ["Task 2", "partly", "r1", null, "build"],
+      ["Task 3", null, null, null, null],
+    ]);
+    expect(r.preview.add[0].dedupeKey).toMatch(/^claude:[0-9a-f]{32}$/);
+    expect(r.preview.add[1].evidenceUrl).toBe("https://example.org/build");
+    expect(r.preview.add[2].belongsToSeatWords).toBe("Land role");
+    expect(r.preview.merge.map((m) => [m.itemId, m.dedupeKey])).toEqual([["mi-held", "sera:ext-7"]]);
+    expect(r.preview.skip).toEqual([{ index: 3, reason: "seat_unknown" }, { index: 4, reason: "goal_unknown" }, { index: 5, reason: "outside_moon" }]);
+    expect(r.preview.roleAudit).toEqual([{ roleId: "r1", verdict: "keep", why: null }, { roleId: "r9", verdict: "fill", why: "Covered it all moon" }]);
+    expect(r.preview.nextGoals.map((g) => [g.text, g.seasonGoalId])).toEqual([["Goal A", null], ["Goal B", "gid-1"]]);
+    expect(r.previewHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("adds nothing the second time: every key is already on the recap (check 24)", async () => {
+    const first = await contract.validatePack(pack(), ctx([["sera:ext-7", "mi-held"]]));
+    if (!first.ok) throw new Error(first.error);
+    const held: Array<[string, string]> = [["sera:ext-7", "mi-held"], ...first.preview.add.map((a, k): [string, string] => [a.dedupeKey, `mi-${k}`])];
+    const second = await contract.validatePack(pack(), ctx(held));
+    if (!second.ok) throw new Error(second.error);
+    expect(second.preview.add).toEqual([]);
+    expect(second.preview.skip.filter((x) => x.reason === "duplicate")).toHaveLength(3);
+  });
+
+  it("gives the same preview hash for the same pack, and a new one when it changes", async () => {
+    const a = await contract.validatePack(pack(), ctx());
+    const b = await contract.validatePack(JSON.stringify(pack()), ctx());
+    const c = await contract.validatePack(pack({ own_words: "Changed" }), ctx());
+    expect(a.ok && b.ok && c.ok).toBe(true);
+    if (a.ok && b.ok && c.ok) {
+      expect(a.previewHash).toBe(b.previewHash);
+      expect(c.previewHash).not.toBe(a.previewHash);
+    }
+  });
+
+  it.each([
+    ["an amount at any depth", { items: [{ text: "Task 1", evidence: { kind: "file", ref: "x", amountMinor: 1 } }] }, "forbidden_key"],
+    ["a tax field", { tax_form: "x" }, "forbidden_key"],
+    ["a field the pack does not have", { extra: 1 }, "unknown_key"],
+    ["another moon (check 25)", { moon: { start: "2026-11-09", end: "2026-12-08" } }, "moon_mismatch"],
+    ["six next goals", { next_goals: Array.from({ length: 6 }, (_, k) => ({ text: `Goal ${k}` })) }, "too_many_goals"],
+    ["301 items", { items: Array.from({ length: 301 }, (_, k) => ({ text: `Task ${k}` })) }, "too_many_items"],
+    ["a let go with no reason", { items: [{ text: "Task 1", status: "let_go" }] }, "invalid"],
+    ["the wrong kind", { kind: "something_else" }, "not_a_pack"],
+  ])("refuses the whole pack: %s", async (_n, over, code) => {
+    const r = await contract.validatePack(pack(over), ctx());
+    expect(r.ok ? null : r.code).toBe(code);
+  });
+
+  it("refuses a pack over 200 KB", async () => {
+    const r = await contract.validatePack(JSON.stringify(pack({ own_words: "x".repeat(210 * 1024) })), ctx());
+    expect(r.ok ? null : r.code).toBe("too_big");
+  });
+
+  it("keys a deep-dive item by kind, ref and words, or by its Sera task", async () => {
+    const k1 = await contract.claudeItemKey({ evidenceKind: "mail", ref: "a", text: "Task 1" });
+    expect(k1).toBe(await contract.claudeItemKey({ evidenceKind: "mail", ref: "a", text: "Task 1" }));
+    expect(k1).not.toBe(await contract.claudeItemKey({ evidenceKind: "notes", ref: "a", text: "Task 1" }));
+    expect(await contract.claudeItemKey({ seraTaskId: "ext-1", evidenceKind: "sera", ref: null, text: "x" })).toBe("sera:ext-1");
+  });
+});
+
+describe("another member never reads a private kind of proof (A1, check 26)", () => {
+  it("drops mail, notes, drive and file links from a members item, and keeps an artifact link", () => {
+    const view = memberView({
+      status: "waiting", roles: [{ roleId: "r1", name: "Steward" }], roomVisible: () => true,
+      items: (["mail", "notes", "drive", "file", "artifact"] as const).map((k, n) => item({ id: `i${n}`, evidenceKind: k, evidenceUrl: `https://example.org/${k}` })),
+    });
+    expect(view[0].items.map((i) => i.evidenceUrl)).toEqual([null, null, null, null, "https://example.org/artifact"]);
+  });
+  it("lets Fill name a role the member does not hold, and only that", () => {
+    expect(parseRoleAudit({ roles: [{ roleId: "r9", choice: "fill" }] }, ["r1"], ["r1", "r9"]).ok).toBe(true);
+    expect(parseRoleAudit({ roles: [{ roleId: "r1", choice: "fill" }] }, ["r1"], ["r1", "r9"]).ok).toBe(false);
+    expect(parseRoleAudit({ roles: [{ roleId: "r9", choice: "keep" }] }, ["r1"], ["r1", "r9"]).ok).toBe(false);
+  });
+});
+
+describe("reading the score (A4, check 34)", () => {
+  const ctx0 = { counted: 20, outside: 0, redirected: 0, lastWeek: 0, letGo: 0 };
+  it("puts each band edge in the higher band, on half-points", () => {
+    const band = (done: number, den: number) => contract.readingOf({ numHalves: done * 2, den }, ctx0)?.label;
+    expect(band(17, 20)).toBe("Very full");
+    expect(band(6, 10)).toBe("Steady");
+    expect(band(4, 10)).toBe("Pulled");
+    expect(band(3, 10)).toBe("Rethink the plan");
+    expect(contract.readingOf({ numHalves: 25, den: 18 }, ctx0)?.label).toBe("Steady");
+    expect(contract.seatReadingOf(11, 12)?.label).toBe("Role well held");
+    expect(contract.seatReadingOf(7, 10)?.label).toBe("Mostly held");
+    expect(contract.seatReadingOf(6, 10)?.label).toBe("Role bigger than the moon");
+    expect(contract.readingOf({ numHalves: 0, den: 0 }, ctx0)).toBeNull();
+  });
+  it("adds the context lines at their thresholds", () => {
+    const r = contract.readingOf({ numHalves: 6, den: 4 }, { counted: 4, outside: 3, redirected: 3, lastWeek: 3, letGo: 3 });
+    expect(r?.lines).toEqual([contract.CONTEXT_WORDS.few, contract.CONTEXT_WORDS.outside, contract.CONTEXT_WORDS.redirected, contract.CONTEXT_WORDS.lastWeek, contract.CONTEXT_WORDS.letGo]);
+    expect(contract.readingOf({ numHalves: 6, den: 5 }, { counted: 5, outside: 2, redirected: 2, lastWeek: 2, letGo: 2 })?.lines).toEqual([]);
+  });
+  it("never reaches the approval hash, which binds lines and items only (check 35, the pure half)", () => {
+    const bytes = contract.approvalSubjectBytes({ payerKey: "p", route: "abroad", currency: "USD", from: null, lines: [], items: [] });
+    expect(Object.keys(JSON.parse(bytes)).sort()).toEqual(["currency", "from", "items", "lines", "payerKey", "route"]);
   });
 });

@@ -289,7 +289,6 @@ Once a moon, each member who holds a role gathers what they delivered, checks it
 | What a village plants | nothing beyond the platform's own layers |
 | What it needs from you | Seat someone in a power group that approves the work in moon recaps (`hands`, `before-enable`, recommended); Choose who approves invoices and records the pay (`hands`, `before-enable`, recommended) |
 | Contract doc | [moon-review.md](modules/moon-review.md) |
-| Config it seeds | `allStaffWeekday` |
 
 ### Live Sessions
 
