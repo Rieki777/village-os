@@ -1,5 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Tests are not shipped, so a class only a test names is not generated. */
+@source not "./**/*.test.ts";
+@source not "./**/*.test.tsx";
+@source not "./**/*.e2e.test.ts";
 
 /*
  * No @font-face here, deliberately. A village's brand font is DEPLOYMENT

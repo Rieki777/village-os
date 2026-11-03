@@ -132,7 +132,15 @@ function PageTitle() {
  * New page? Add it to the lazy list. Only add to the eager set if it renders
  * on first paint for a signed-out visitor.
  */
-import Home from "./pages/Home";
+/*
+ * Home is the brochure landing page, and it only renders once the brochure
+ * switch has loaded (LandingRoute above), so it never paints before an async
+ * step anyway. It is lazy to keep its ~17 KB out of the main chunk, and the
+ * fetch starts at boot on "/" so it runs in parallel with that config request.
+ */
+const loadHome = () => import("./pages/Home");
+if (typeof window !== "undefined" && window.location.pathname === "/") void loadHome();
+const Home = lazy(loadHome);
 import Login from "./pages/Login";
 
 // The animation engine, after the first page: see lib/motionFeatures.ts.

@@ -284,6 +284,15 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    /*
+     * Terser rather than esbuild's minifier, 2026-11-02 budget pass: about
+     * 40 KB less across dist/public and 4 KB less main JS for the same code.
+     * `module`/`toplevel` are safe because every chunk is an ES module, and
+     * ecma 2020 matches Vite's default "modules" browser target. Costs a few
+     * seconds of build time and nothing at runtime.
+     */
+    minify: "terser",
+    terserOptions: { module: true, toplevel: true, ecma: 2020, compress: { passes: 3, ecma: 2020 }, mangle: { toplevel: true }, format: { comments: false, ecma: 2020 } },
     rollupOptions: {
       output: {
         /**
