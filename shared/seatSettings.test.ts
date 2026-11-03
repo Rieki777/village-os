@@ -250,7 +250,7 @@ describe("settingsWords", () => {
   it("writes the full card in plain words", () => {
     const byGroup = Object.fromEntries(settingsWords(FULL).map((r) => [r.group, r]));
     expect(byGroup.term.headline).toBe("Until the season ends");
-    expect(byGroup.term.lines).toEqual(["Notice: 14 days", "Review on 1 Dec 2026"]);
+    expect(byGroup.term.lines).toEqual(["Notice: 14 days", "Review on 1 December 2026"]);
     expect(byGroup.clocks.headline).toBe("Paid by the calendar month, works by the moon");
     expect(byGroup.pay.headline).toBe("Between €500 and €900 a month");
     expect(byGroup.allowance.headline).toBe("A flat allowance of €100 a month");

@@ -195,6 +195,7 @@ import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
 import { register as registerMoonRecapRoutes, exportMoonReviews } from "./routes/moonRecaps";
+import { register as registerMoonReviewSettingsRoutes } from "./routes/moonReviewSettings";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
 import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { claimsAnnouncedHere } from "./lib/rewardMoment";
@@ -18224,6 +18225,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
   registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
+  registerMoonReviewSettingsRoutes(app, { authedUser, getPool, guardCapability, overLimit }); // decision 22: the moon review's village settings (server/routes/moonReviewSettings.ts)
   registerOwnHoldingsRoutes(app, { authedUser, getPool });
   registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
   registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)

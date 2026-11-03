@@ -1106,11 +1106,22 @@ export function settingsChanges(before: MoonReviewSettings, after: MoonReviewSet
  * means ready. Payers come from the payers document; the rest from settings.
  */
 export function setupGaps(payers: PayersDoc, settings: MoonReviewSettings): string[] {
-  const gaps: string[] = [];
-  if (!payers.payers.some((p) => p.invoicing && p.routes.length > 0)) gaps.push(SETUP_GAP_WORDS.payer);
-  if (!settings.hostCountry) gaps.push(SETUP_GAP_WORDS.country);
-  if (!settings.pilotAck) gaps.push(SETUP_GAP_WORDS.pilotAck);
-  return gaps;
+  return [...payerGapKeys(payers), ...settingsGapKeys(settings)].map((k) => SETUP_GAP_WORDS[k]);
+}
+
+export type SetupGapKey = keyof typeof SETUP_GAP_WORDS;
+
+/** The gaps the payers document alone can close. */
+export function payerGapKeys(payers: PayersDoc): SetupGapKey[] {
+  return payers.payers.some((p) => p.invoicing && p.routes.length > 0) ? [] : ["payer"];
+}
+
+/** The gaps the settings document alone can close. */
+export function settingsGapKeys(settings: MoonReviewSettings): SetupGapKey[] {
+  const out: SetupGapKey[] = [];
+  if (!settings.hostCountry) out.push("country");
+  if (!settings.pilotAck) out.push("pilotAck");
+  return out;
 }
 
 export const SETUP_GAP_WORDS = {
@@ -3081,4 +3092,90 @@ export const NOTICE_WORDS = {
   reminder: (name: string) => `${name}'s moon recap is still waiting on your approval.`,
   escalated: (name: string, role: string) => `${name}'s moon recap has waited 14 days on ${role}.`,
   refusedToFinance: (name: string) => `${name} could not send an invoice this moon. Their recap still counts.`,
+} as const;
+
+// ── The admin editors' words (decision 22) ───────────────────────────────────
+
+/** A route in a few words, for the payer and settings editors' checkboxes. */
+export const PAY_ROUTE_SHORT_WORDS: Record<PayRoute, string> = {
+  pending: "Not chosen yet",
+  abroad: "Lives and works abroad",
+  nomad: "Digital nomad",
+  local_contractor: "Local contractor",
+  local_employee: "Local employee",
+  visitor: "Visitor, or status pending",
+};
+
+export const AUTHORITY_KIND_WORDS: Record<AuthorityKind, string> = {
+  none: "None recorded",
+  bridge_agreement: "Bridge agreement",
+  written_authorization: "Written authorization",
+};
+
+export const ADMIN_WORDS = {
+  heading: "End-of-moon review settings",
+  intro: "Who the village pays and how, the host country's words and rates, and the moon's days. Every value here is the village's own, and each change is recorded with its old and new value.",
+  tabs: { payers: "Payers", settings: "Village settings", rhythm: "Moon rhythm" },
+  save: "Save",
+  saving: "Saving",
+  saved: (n: number) => (n === 0 ? "Nothing changed." : n === 1 ? "Saved. 1 change recorded." : `Saved. ${n} changes recorded.`),
+  loadFailed: "These settings did not load. Try again in a moment.",
+  noKey: "These settings need the cash power, and this account does not hold it.",
+  payers: {
+    empty: "Name who you pay first. Until a payer has invoicing on and the routes it pays, members can send their recap and no invoice.",
+    add: "Add a payer",
+    newPayer: "A new payer",
+    remove: "Remove this payer",
+    key: "Short key (lowercase, used in bill refs)",
+    legalName: "Legal name",
+    address: "Address",
+    taxId: "Tax number",
+    country: "Country (two-letter code)",
+    currencies: "Currencies it pays in (three-letter codes, comma separated)",
+    invoiceTo: "Where invoices go",
+    invoiceCc: "Copy invoices to (email addresses, comma separated, up to 5)",
+    invoicing: "Invoicing is on for this payer",
+    routes: "The routes it pays",
+    authority: "Authority, kept as a note",
+    authorityKind: "Kind",
+    authorityDate: "Date",
+    ceiling: "Monthly ceiling, in minor units",
+    ceilingCurrency: "Ceiling currency",
+    filedWhere: "Where it is filed",
+    queueNote: "A note Finance reads beside each invoice",
+  },
+  settings: {
+    hostCode: "Host country code (two letters)",
+    hostName: "Host country name",
+    hostMissing: "Name the host country. The route and attestation words say \"the host country\" until you do.",
+    vat: "VAT rate, as a percent",
+    rateSource: "Where the exchange rate comes from",
+    currency: "Host currency (three-letter code)",
+    ackText: "Pilot acknowledgement",
+    ackVersion: "Its version",
+    ackMissing: "Write the pilot acknowledgement and its version. A new version asks every member to accept again.",
+    taxForms: "Tax forms kept on file",
+    addForm: "Add a tax form",
+    formKey: "Key (up to 8 letters, digits or dashes)",
+    formLabel: "Name members read",
+    formRoutes: "Routes that need a valid tax form",
+    holds: "Holds: invoices Finance decides with the accountant",
+    addHold: "Add a hold",
+    holdForm: "Tax form",
+    holdCountry: "Work done in (two-letter code)",
+    holdNote: "Note",
+    remove: "Remove",
+  },
+  rhythm: {
+    sendHour: "Hour reminders go out, village time (0 to 23)",
+    guideUrl: "The village's End of Moon guide (https link)",
+    guideEmpty: "With no guide set, no guide link shows anywhere.",
+    overrides: "Moved days",
+    overridesHint: "Move one moon's walkthrough or circle day, for a holiday or another meeting day. Leave a day empty to keep the usual one.",
+    addOverride: "Move a moon's days",
+    cycleId: "Moon (cycle id)",
+    walkthrough: "Walkthrough day",
+    circle: "Circle day",
+    remove: "Remove",
+  },
 } as const;

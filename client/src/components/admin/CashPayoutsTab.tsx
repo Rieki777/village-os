@@ -24,7 +24,7 @@
  *
  * Light-only, like the rest of this folder.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { HandCoins } from "lucide-react";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { formatMoney } from "@shared/money";
@@ -34,6 +34,9 @@ import {
   cashTotalsByCurrency,
   type CashQueueEntry,
 } from "@shared/cashOwed";
+
+/** The moon review's village settings (decision 22), its own chunk: the desk's first page carries none of it. */
+const MoonReviewSettingsPanel = lazy(() => import("./moonReview/MoonReviewSettingsPanel"));
 
 type View = "unpaid" | "paid";
 type ClaimFilter = "all" | "claimed" | "unclaimed";
@@ -468,6 +471,10 @@ export default function CashPayoutsTab({ password, asPage = false }: {
           })}
         </ul>
       )}
+
+      <Suspense fallback={null}>
+        <MoonReviewSettingsPanel password={password} />
+      </Suspense>
     </div>
   );
 }

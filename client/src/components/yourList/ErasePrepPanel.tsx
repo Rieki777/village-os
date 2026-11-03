@@ -12,8 +12,15 @@ import type { PanelPerson } from "./PersonalListsPanel";
 
 const FIELD = "mt-1 block min-h-11 w-full rounded-xl border border-border bg-background px-3 text-foreground";
 
-export default function ErasePrepPanel({ password, players }: { password: string; players: PanelPerson[] }) {
-  const [userId, setUserId] = useState("");
+export default function ErasePrepPanel({ password, players, initialUserId = "", onContinue, onCancel }: {
+  password: string;
+  players: PanelPerson[];
+  initialUserId?: string;
+  /** Players tab: the steward has done the steps and goes on to delete the account. */
+  onContinue?: () => void;
+  onCancel?: () => void;
+}) {
+  const [userId, setUserId] = useState(initialUserId);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [dry, setDry] = useState<{ userId: string; count: number; code: string } | null>(null);
@@ -85,6 +92,12 @@ export default function ErasePrepPanel({ password, players }: { password: string
         </div>
       )}
       {msg && <p role="alert" className="mt-2 text-sm text-foreground">{msg}</p>}
+      {(onContinue || onCancel) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {onContinue && <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={onContinue}>Go on to delete the account</button>}
+          {onCancel && <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={onCancel}>Not now</button>}
+        </div>
+      )}
     </div>
   );
 }
