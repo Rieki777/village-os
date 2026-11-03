@@ -274,7 +274,7 @@ export function AcrossSection({
           {across.tasks.kind !== "unread" && (
             <div className="pc-col pc-tasks">
               <h3 className="pc-h2">{W.tasks}</h3>
-              <p className="pc-dim pc-f13">{across.moonLine}</p>
+              <p className="pc-dim pc-f13" data-moon-line="">{across.moonLine}</p>
               <SlotView slot={across.tasks}>
                 {tasks => (
                   <ol className="pc-quests">
