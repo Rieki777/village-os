@@ -433,6 +433,19 @@ describe("the timeline", () => {
     const some = buildPlayerCard(input({ roles: [role(1, { invoiceOn: ["2026-10-30"] })] })).timeline.moons.flatMap((m) => m.markers);
     expect(some.filter((m) => m.kind === "invoice")).toHaveLength(1);
   });
+  it("shows every moon once, in order, across a long season", () => {
+    const t = buildPlayerCard(
+      input({
+        now: new Date("2026-07-01T18:00:00Z"),
+        season: { id: "s2", name: "Season of Foundations", startsOn: "2026-06-21", endsOn: "2026-12-31" },
+      }),
+    ).timeline;
+    const moons = t.moons.filter((m) => m.title !== "Getting started");
+    expect(moons.length).toBeGreaterThanOrEqual(6);
+    expect(moons.length).toBeLessThanOrEqual(8);
+    const labels = moons.map((m) => m.label);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
 });
 
 describe("my applications", () => {

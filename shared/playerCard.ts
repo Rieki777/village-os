@@ -907,7 +907,9 @@ function timeline(input: PlayerCardInput, roles: PlayerRoleIn[]): TimelineOut {
   if (cursor.getTime() > from.getTime()) spans.push({ start: from, end: cursor, title: W.gettingStarted, starting: true });
   let guard = 0;
   while (cursor.getTime() <= to.getTime() && guard++ < 24) {
-    const b = LUNAR_CLOCK.boundsFor(cursor);
+    // Look up the moment just after the boundary, so a moon's end never
+    // resolves back to the same moon and repeats until the guard stops it.
+    const b = LUNAR_CLOCK.boundsFor(new Date(cursor.getTime() + 1));
     spans.push({ start: b.startsAt, end: b.endsAt, title: moonNameOf(b.startsAt, tz), starting: false });
     cursor = b.endsAt;
   }
