@@ -369,13 +369,15 @@ export function PlayerCard({
   return (
     <article className={`rounded-2xl border bg-white transition-colors ${picked ? "border-teal-deep/50 ring-1 ring-teal-deep/30" : "border-gray-200"}`}>
       <header className="flex items-center gap-3 px-5 pt-4">
-        <input
-          type="checkbox"
-          aria-label={`Select ${p.name}`}
-          checked={picked}
-          onChange={(e) => onPick(e.target.checked)}
-          className="h-5 w-5 shrink-0"
-        />
+        <label className="flex h-11 w-11 shrink-0 items-center justify-center">
+          <input
+            type="checkbox"
+            aria-label={`Select ${p.name}`}
+            checked={picked}
+            onChange={(e) => onPick(e.target.checked)}
+            className="h-6 w-6"
+          />
+        </label>
         <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-deep/10 font-semibold text-teal-deep">
           {initial}
         </span>

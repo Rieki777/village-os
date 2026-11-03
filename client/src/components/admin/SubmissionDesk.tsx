@@ -162,12 +162,12 @@ export default function SubmissionDesk({
       </div>
       {targets.length > 0 && (
         <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3 max-sm:sticky max-sm:bottom-3 max-sm:z-30">
-          <p className="text-sm text-gray-900">{targets.length} selected. One reason covers all of them.</p>
+          <p className="text-sm text-gray-900">{targets.length} selected. The reason you pick applies to every form you selected.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" className={`${TAP} bg-teal-deep text-white`} onClick={() => setMode("done")}>Done</button>
             <button type="button" className={`${TAP} border border-gray-300 bg-white text-gray-900`} onClick={() => { setMode("remove"); setReason("already_done"); }}>Remove</button>
             <button type="button" className={`${TAP} border border-gray-300 bg-white text-gray-900`} onClick={() => { setMode("redirect"); setReason("better_for_someone_else"); }}>Redirect</button>
-            <button type="button" className={`${TAP} text-gray-700`} onClick={() => setPicked(rows.map((row) => row.id))}>Select all</button>
+            <button type="button" className={`${TAP} admin-nowrap border border-gray-300 bg-white text-gray-900`} onClick={() => setPicked(rows.map((row) => row.id))}>Select all</button>
           </div>
           {mode && mode !== "done" && (
             <fieldset className="mt-3">

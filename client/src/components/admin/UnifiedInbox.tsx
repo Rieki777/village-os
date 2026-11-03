@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { API_BASE, authHeaders } from "@/components/admin/adminApi";
 import { storedText, writeStored } from "@/lib/safeStorage";
+import { requestRow } from "./waitingWork";
 
 export type InboxKind = "all" | "requests" | "feedback" | "sera";
 
@@ -14,6 +15,7 @@ export interface InboxItem {
   id: string;
   kind: Exclude<InboxKind, "all">;
   title: string;
+  detail: string;
   next: string;
   tab: string;
 }
@@ -24,8 +26,8 @@ const NEXT: Record<InboxItem["kind"], string> = {
   sera: "Open the Sera board and decide.",
 };
 
-export function inboxItem(kind: InboxItem["kind"], id: string, title: string, tab: string): InboxItem {
-  return { id: `${kind}:${id}`, kind, title: title.trim() || "Untitled", next: NEXT[kind], tab };
+export function inboxItem(kind: InboxItem["kind"], id: string, title: string, tab: string, detail = ""): InboxItem {
+  return { id: `${kind}:${id}`, kind, title: title.trim() || "Untitled", detail, next: NEXT[kind], tab };
 }
 
 const VIEW_KEY = "admin.inboxView";
@@ -61,8 +63,10 @@ export default function UnifiedInbox({ password, onOpen }: { password: string; o
       fetch(`${API_BASE}/admin/member-tasks/bridge`, { headers: authHeaders(password) }).then((r) => (r.ok ? r.json() : { review: [] })),
     ]).then(([subs, feedback, bridge]) => {
       if (gone) return;
-      const requests = (Array.isArray(subs) ? subs : []).slice(0, 30).map((s: { id?: string; type?: string; data?: { name?: string } }) =>
-        inboxItem("requests", String(s.id ?? ""), String(s.data?.name || s.type || "A request"), "submissions"));
+      const requests = (Array.isArray(subs) ? subs : []).slice(0, 30).map((s: { id?: string; type?: string; status?: string; submittedAt?: string; data?: { name?: string } }) => {
+        const row = requestRow({ id: s.id, name: s.data?.name, type: s.type, status: s.status, submittedAt: s.submittedAt });
+        return { ...inboxItem("requests", row.id, row.title, "submissions"), detail: row.detail, next: row.next };
+      });
       const notes = (Array.isArray(feedback?.items) ? feedback.items : []).slice(0, 30).map((f: { id?: string; body?: string; message?: string }) =>
         inboxItem("feedback", String(f.id ?? ""), String(f.body || f.message || "A note"), "feedback"));
       const tasks = (Array.isArray(bridge?.review) ? bridge.review : []).slice(0, 30).map((t: { feedbackId?: string; title?: string }) =>
@@ -93,6 +97,7 @@ export default function UnifiedInbox({ password, onOpen }: { password: string; o
           <li key={item.id}>
             <button type="button" onClick={() => item.kind === "sera" ? window.location.assign("/modules/saberra") : onOpen(item.tab)} className="flex min-h-[44px] w-full flex-col items-start rounded-xl border border-gray-200 bg-white px-3 py-2 text-left">
               <span className="text-base font-medium text-gray-900">{item.title}</span>
+              {item.detail ? <span className="text-sm text-gray-700">{item.detail}</span> : null}
               <span className="text-sm text-gray-700">{item.next}</span>
             </button>
           </li>

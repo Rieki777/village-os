@@ -29,4 +29,15 @@ describe("home", () => {
     expect(localStorage.getItem("admin.homeBase")).toBe("0");
     expect(onOpenTab).toHaveBeenCalledWith("submissions");
   });
+
+  it("does not count a form that has already been accepted", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).endsWith("/submissions")) {
+        return { ok: true, json: async () => [{ id: "1", status: "new" }, { id: "2", status: "accepted" }, { id: "3", status: "declined" }] };
+      }
+      return { ok: true, json: async () => ({}) };
+    }));
+    render(<HomeBase password="tok" onOpenTab={vi.fn()} groups={groups} />);
+    expect(await screen.findByText("1 request is waiting.")).toBeTruthy();
+  });
 });

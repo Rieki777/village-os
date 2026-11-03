@@ -227,7 +227,7 @@ export default function YourListCard() {
 
       {chosen.length > 0 && (
         <div className="mt-4 rounded-xl border border-border bg-background p-3">
-          <p className="text-sm text-foreground">{chosen.length} selected. One reason covers all of them.</p>
+          <p className="text-sm text-foreground">{chosen.length} selected. The reason you pick applies to every task you selected.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => holdUndo(`Applying this to ${chosen.length} tasks.`, () => { void applyBulk("done"); })}>Done</button>
             <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => setBulk(bulk === "remove" ? null : "remove")}>Remove</button>

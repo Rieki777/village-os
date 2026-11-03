@@ -304,10 +304,10 @@ export default function QuestsTab({ password }: { password: string }) {
                       <input value={d.imageUrl ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, imageUrl: e.target.value } })} placeholder="/api/uploads/quest-01.webp" className={`${inputCls} w-full mt-1`} />
                     </label>
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-2">
+                  <p className="mt-2 text-sm text-gray-700">
                     Beginner places this quest in the board's Start here ring. Any other setting, and an empty one, place it under The village. A stage floor or a role requirement moves it to Further in whatever you pick.
                   </p>
-                  <p className="text-[11px] text-gray-400 mt-2">
+                  <p className="mt-2 text-sm text-gray-700">
                     A poster comes through the village's own upload, so its path starts with /api/uploads/. Leave it empty and the card paints a scene from the quest's circle.
                   </p>
                 </details>

@@ -18,6 +18,8 @@ describe("phone sections", () => {
     const opener = screen.getByRole("button", { name: /Sections/ });
     expect(opener.className).toContain("min-h-[44px]");
     await userEvent.click(opener);
+    expect(opener).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
     const players = screen.getByRole("button", { name: "Players" });
     expect(players.className).toContain("min-h-[44px]");
     await userEvent.click(players);

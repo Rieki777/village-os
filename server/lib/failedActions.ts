@@ -204,7 +204,7 @@ export const labelFor = (source: string): string => SOURCE_LABELS[source] ?? sou
  * the failure this whole job exists to end.
  */
 export const BLIND_SPOTS: readonly string[] = [
-  "Emails that fail to send. Nothing records whether a send worked, so a failed one cannot show up here yet.",
+  "Emails that failed to send. Those are listed under Sent mail. This report does not count them.",
   "Notifications and activity records that fail to save. Those go to the server log only.",
   "Web push notifications. Nothing sends them yet, so there is nothing to fail.",
   "A scheduled job that catches its own errors. It tells the scheduler it succeeded, so only its own alerts say anything.",
