@@ -203,7 +203,9 @@ Three CI budgets cap the client: main JS, the first page's scripts (every `.js` 
 `index.html` loads, which does not move when code only changes chunk), and total `dist/public`, all
 measured after `pnpm build`. Read the numbers off `MAX_MAIN_JS_KB`, `MAX_BOOT_JS_KB` and `MAX_TOTAL_DIST_KB` in
 `.github/workflows/ci.yml`, which is the authority: this block said 6 MB for as long as the
-ceiling was 6000, and stayed at 6 MB when `dbb4f9c` raised it to 6600 for the catalog art.
+ceiling was 6000, and stayed at 6 MB when `dbb4f9c` raised it to 6600 for the catalog art. On
+2026-11-02 Rye raised it to 7000: the total is block-charged, so it grows when chunks split without
+slowing anyone, and main JS (400) and first-page JS (750) stay the visitor-facing guard.
 `node scripts/check-dist-budget.mjs` reproduces the CI measurement locally and CI runs the same
 script, so the METHOD no longer differs between the two. It was checked against a real ext4
 volume on five different built trees and matched `du -sk` to the kilobyte on every one.
