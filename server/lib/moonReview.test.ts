@@ -335,7 +335,7 @@ describe.skipIf(!configured)("the review against a real schema", () => {
     expect((await call(`GET ${MOON_ROUTES.queue}`, { query: { cycle: CYCLE } })).status).toBe(403);
   });
 
-  it("the room panel answers only a member joined to the room, and carries no amount", async () => {
+  it("the room panel answers only a member joined to the room, holds back a Speak only holder, and carries no amount, score or count", async () => {
     await configure();
     await route("m-wren");
     await sendRecap("m-wren");
@@ -350,12 +350,20 @@ describe.skipIf(!configured)("the review against a real schema", () => {
     as("m-wren"); // holds the stick, never joined
     expect((await call(`GET ${MOON_ROUTES.room}`, { params: { sessionId: "901" }, query: { cycle: CYCLE } })).status).toBe(404);
     as("m-ops");
+    // Speak only, the default: the stick shows nobody, so nothing of the holder's reaches the room.
+    const quiet = await call(`GET ${MOON_ROUTES.room}`, { params: { sessionId: "901" }, query: { cycle: CYCLE } });
+    expect(quiet.status).toBe(200);
+    expect(quiet.body.holder).toEqual({ userId: "m-wren", name: "wren" });
+    expect(quiet.body.recap).toBeNull();
+    expect(quiet.body.goals).toBeNull();
+    // Show my moon: the stick's `shows` names the holder.
+    await q("UPDATE `live_session_template_uses` SET `stick` = ? WHERE `session_id` = 901", [JSON.stringify({ order: [no("m-wren")], at: 0, rounds: 0, shows: [no("m-wren")] })]); // module-review-ok: fixture SQL
     const out = await call(`GET ${MOON_ROUTES.room}`, { params: { sessionId: "901" }, query: { cycle: CYCLE } });
     expect(out.status).toBe(200);
-    expect(out.body.holder).toEqual({ userId: "m-wren", name: "wren" });
     expect(out.body.recap.roles[0].items).toEqual([{ text: "Fixed the pump", evidenceUrl: null }]);
     const text = JSON.stringify(out.body);
-    for (const k of ["amount", "Minor", "total", "currency", "invoice\":", "score\":{\"pct"]) expect(text).not.toContain(k);
+    // A4: no room panel shows anyone's numbers, not even a count of private items or of season goals.
+    for (const k of ["amount", "Minor", "total", "currency", "invoice\":", "\"score\"", "heldPrivately", "\"count\"", "pct"]) expect(text).not.toContain(k);
     expect(Object.keys(out.body).sort()).toEqual(["goals", "holder", "mine", "moon", "ready", "recap", "sentCount"]);
   });
 
@@ -431,5 +439,16 @@ describe.skipIf(!configured)("the review against a real schema", () => {
     // Import is refused once the recap has left Draft.
     as("m-wren");
     expect((await call(`POST ${MOON_ROUTES.importPack}`, { params: { cycle: CYCLE }, body: { pack: PACK() } })).body).toEqual({ error: "not_editable" });
+  });
+});
+
+describe("the room's Speak only rule, read from the stick", () => {
+  it("shows a member only when the stick names them, and reads a stick without `shows` as Speak only", async () => {
+    const { stickShows } = await import("./moonReview");
+    expect([...stickShows(JSON.stringify({ order: [4, 7], at: 0, shows: [7] }))]).toEqual([7]);
+    expect(stickShows(JSON.stringify({ order: [4], at: 0 })).size).toBe(0);
+    expect(stickShows({ shows: ["5", 0, -1, "x"] })).toEqual(new Set([5]));
+    expect(stickShows("not json").size).toBe(0);
+    expect(stickShows(null).size).toBe(0);
   });
 });

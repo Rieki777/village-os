@@ -38,7 +38,7 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import {
   APPROVAL_REFUSALS, APPROVE_ALONE_CAPABILITY, APPROVE_OWN_CAPABILITY, CONFIRM_OWN_ROUTE_REFUSED, INVOICE_APPROVE_CAPABILITY,
   LIMITS, NOTICE_WORDS, PAYMENT_DETAILS_REFUSED, RECAP_ID, RECAP_STATUS_WORDS, SELF_APPROVED_WORDS, WORK_APPROVE_CAPABILITY,
-  approvalDecision, approvalHash, goalScoreProblem, invoicePaidFrom, parseMoonGoals, rowExistsRefusal, authorityNote, carriedTooOften, confirmRouteRefusal, coverage, eligibleApprovers,
+  GOAL_STATUS_WORDS, approvalDecision, approvalHash, goalScoreProblem, invoicePaidFrom, parseMoonGoals, rowExistsRefusal, authorityNote, carriedTooOften, confirmRouteRefusal, coverage, eligibleApprovers,
   financeApprovalRefusal, goalScore, invoiceSendRefusal, invoiceTotals, isPayableLine, linesFromTerms, memberView, packMoonDates,
   parseAttestation, payerForRoute, rangeChangedNote, readingOf, recapEditable, recapStatusAfterWork, reviewDedupeKey,
   scoreContextOf, seatCoverage, seatReadingOf, taskScore, termsCarryMoney, validatePack, waitingStage,
@@ -709,6 +709,25 @@ export async function settlePaidInvoices(pool: Pool, cashIds: readonly string[],
 // ── The room panel ───────────────────────────────────────────────────────────
 
 /**
+ * The member numbers the stick SHOWS (the session lane's `shows`, stored in
+ * the stick's JSON beside `order` and `at`). Read defensively: `readStick`
+ * does not know the field yet, and a stick without it is Speak only.
+ */
+export function stickShows(raw: unknown): Set<number> {
+  let v: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      return new Set();
+    }
+  }
+  const shows = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>).shows : undefined;
+  if (!Array.isArray(shows)) return new Set();
+  return new Set(shows.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0));
+}
+
+/**
  * THE ROOM'S TWO SECTIONS, for a member joined to that room: the stick
  * holder's sent recap as `memberView` reads it (no ids, no amounts, no review
  * notes), their goals, who is ready to share, and this viewer's own row. The
@@ -726,26 +745,23 @@ export async function roomPanel(pool: Pool, sessionId: number, viewerId: string,
 
   let recapPart: RoomResponse["recap"] = null;
   let goals: RoomResponse["goals"] = null;
-  if (holderId) {
+  // Speak only holds on the server too: nothing of the holder's shows unless the stick shows it.
+  if (holderId && holderNo != null && stickShows(use[0]?.stick ?? null).has(holderNo)) {
     const hr = sent.find((r) => r.userId === holderId) ?? null;
     if (hr) {
       const frame = await loadFrame(pool, holderId, moon, deps);
       const items = await store.itemsOf(pool, hr.id);
       // Room items here show only to the room as a whole, so none passes the per-reader filter.
       const roles = memberView({ status: hr.status, roles: frame.roles.map((r) => ({ roleId: r.roleId, name: r.name })), items, roomVisible: () => false });
-      const cov = coverage({ roles: frame.roles, items: items.filter((i) => i.visibility === "members" && i.review !== "returned"), seasonGoals: frame.seasonGoals, ownGoals: [] });
       recapPart = {
-        roles: roles.map((r) => ({ roleId: r.roleId, name: r.name, items: r.items.map((i) => ({ text: i.text, evidenceUrl: i.evidenceUrl })), heldPrivately: r.heldPrivately })),
-        seasonGoals: cov.seasonGoals,
+        roles: roles.filter((r) => r.items.length > 0).map((r) => ({ roleId: r.roleId, name: r.name, items: r.items.map((i) => ({ text: i.text, evidenceUrl: i.evidenceUrl })) })),
       };
     }
     const last = await store.goalsFor(pool, holderId, moon.bounds.id);
     const next = await store.goalsFor(pool, holderId, deps.nextCycleId);
     if (last.length > 0 || next.length > 0) {
-      const s = goalScore(last);
       goals = {
-        last: last.map((g) => ({ text: g.text, status: g.status, flagged: carriedTooOften(g) })),
-        score: { numHalves: s.numHalves, den: s.den, pct: s.pct },
+        last: last.map((g) => ({ text: g.text, status: g.status, statusWords: GOAL_STATUS_WORDS[g.status], flagged: carriedTooOften(g) })),
         next: next.map((g) => ({ text: g.text, doneWhen: g.doneWhen })),
       };
     }

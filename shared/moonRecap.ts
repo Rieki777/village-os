@@ -2974,16 +2974,20 @@ export type SettingsRequest = MoonReviewSettings;
 export interface RoomResponse {
   moon: MoonRef;
   holder: { userId: string; name: string } | null;
+  /**
+   * The stick holder's sent recap, only while the stick SHOWS it (the
+   * session's `shows` set; absent means Speak only, and this is null). A4:
+   * no room panel shows anyone's numbers, so there is no count here, not
+   * even of items held privately or per season goal.
+   */
   recap: {
-    roles: Array<{ roleId: string | null; name: string; items: Array<{ text: string; evidenceUrl: string | null }>; heldPrivately: number }>;
-    seasonGoals: Array<{ id: string; words: string; count: number }>;
+    roles: Array<{ roleId: string | null; name: string; items: Array<{ text: string; evidenceUrl: string | null }> }>;
   } | null;
   /** Who is ready to share. Nobody is marked as not ready. */
   ready: Array<{ userId: string; name: string }>;
-  /** The `moon_goals` section: the holder's last-moon goals with their score, then the next moon's. */
+  /** The `moon_goals` section, under the same Speak only rule: each goal with its status word, never a score. */
   goals: {
-    last: Array<{ text: string; status: GoalStatus; flagged: boolean }>;
-    score: Score;
+    last: Array<{ text: string; status: GoalStatus; statusWords: string; flagged: boolean }>;
     next: Array<{ text: string; doneWhen: string | null }>;
   } | null;
   /** This viewer's own row in the sending section. */
