@@ -997,7 +997,12 @@ jobs:
         env:
           MAX_MAIN_JS_KB: 400
           MAX_BOOT_JS_KB: 750
-          MAX_TOTAL_DIST_KB: 6600
+          # 7000 since 2026-11-02 (decision by Rye; was 6600). The total is
+          # BLOCK-CHARGED: du on ext4 bills every file a whole 4 KB block, so
+          # splitting a chunk raises it without slowing any visitor. The
+          # visitor-facing limits above, MAX_MAIN_JS_KB (400) and
+          # MAX_BOOT_JS_KB (750), are unchanged and are the real guard.
+          MAX_TOTAL_DIST_KB: 7000
           MAX_SINGLE_IMAGE_KB: 400
         run: |
           echo "## Bundle sizes" >> "$GITHUB_STEP_SUMMARY"
