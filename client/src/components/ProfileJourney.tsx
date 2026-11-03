@@ -321,14 +321,13 @@ export default function ProfileJourney() {
           </div>
 
           {(prog.roles ?? []).length > 0 && (
-            {/*
+            /*
               GROUPS, NOT THE WORK ROLES.
 
-              These chips are the standing groups (Founders Circle, Steward
-              Circle, Treasury). "Your roles" on the same page is the work a
-              member is doing for the village. Calling both "roles you hold"
-              made an empty work list contradict a full group list.
-            */}
+              These chips are the standing groups. "Your roles" on the same
+              page is the work a member is doing for the village. Calling both
+              "roles you hold" made an empty work list contradict a full group list.
+            */
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-dash-gold-lit">
               Groups you are in
             </p>
