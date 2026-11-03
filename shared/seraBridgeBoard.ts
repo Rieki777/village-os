@@ -18,7 +18,7 @@ export const SERA_AGREEMENT = {
 } as const;
 
 export interface BridgeAnswer {
-  connection: { mayCall: boolean; addressSet: boolean; held: number };
+  connection: { mayCall: boolean; addressSet: boolean; held: number; /** The full-scope privacy token is set (never its value). */ privacySet?: boolean };
   lists: {
     /** False when the member-list tables are not in this database yet. */
     ready: boolean;
