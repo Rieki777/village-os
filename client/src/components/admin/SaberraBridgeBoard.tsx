@@ -17,6 +17,7 @@ import {
   bridgeChecks,
   type BridgeAnswer,
 } from "@shared/seraBridgeBoard";
+import type { QuestFeedAnswer } from "@shared/seraQuestFeed";
 import { API_BASE, authHeaders } from "./adminApi";
 import { LevelRing, QuestCard, ToolBadges, type QuestState } from "./SaberraBridgeQuests";
 
@@ -36,7 +37,16 @@ function villageDate(iso: string | null): string {
   return d.toLocaleString("en-US", { timeZone: SERA_AGREEMENT.timezone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-export function BridgeView({ a, now }: { a: BridgeAnswer; now: number }) {
+export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; onFeed?: (dryRun: boolean) => Promise<QuestFeedAnswer | string> }) {
+  const [feed, setFeed] = useState<QuestFeedAnswer | string | null>(null);
+  const [feeding, setFeeding] = useState(false);
+  const press = async (dryRun: boolean) => {
+    if (!onFeed) return;
+    setFeeding(true);
+    setFeed(await onFeed(dryRun));
+    setFeeding(false);
+  };
+  const shown = feed && typeof feed !== "string" ? feed : a.questFeed?.last ?? null;
   const [showChecks, setShowChecks] = useState(false);
   const checks = bridgeChecks(a, now);
   const done = checks.filter((c) => c.done).length;
@@ -143,6 +153,33 @@ export function BridgeView({ a, now }: { a: BridgeAnswer; now: number }) {
           )}
         </QuestCard>
 
+        <QuestCard title="Quest feed" state={a.questFeed?.last ? "done" : "waiting"}>
+          {shown ? (
+            <p>
+              {shown.dryRun ? "Dry run: " : `Last run ${villageDate(shown.at)}: `}
+              {shown.read} read, {shown.queued} {shown.dryRun ? "would be queued" : "queued"}, {shown.alreadySeen} already seen,{" "}
+              {shown.droppedForEmail} dropped by Sera for an email{shown.refusedHere ? `, ${shown.refusedHere} refused here` : ""}.
+              {shown.status !== "ok" && ` (${shown.status}${shown.detail ? `: ${shown.detail}` : ""})`}
+            </p>
+          ) : (
+            <p>No quest feed run yet.</p>
+          )}
+          {typeof feed === "string" && <p role="alert">{feed}</p>}
+          <p>{plural(a.questFeed?.waiting ?? 0, "quest")} from Sera waiting for a steward.</p>
+          {onFeed && (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={feeding} onClick={() => press(true)} className="min-h-[44px] rounded px-2 text-teal-deep underline focus:outline-none focus:ring-2 focus:ring-teal-deep">
+                Dry run
+              </button>
+              {feed && typeof feed !== "string" && feed.dryRun && feed.status === "ok" && (
+                <button type="button" disabled={feeding} onClick={() => press(false)} className="min-h-[44px] rounded px-2 text-teal-deep underline focus:outline-none focus:ring-2 focus:ring-teal-deep">
+                  Bring them into review
+                </button>
+              )}
+            </div>
+          )}
+        </QuestCard>
+
         <QuestCard title="Review queue" state={a.reviewQueue.waiting > 0 ? "active" : "done"}>
           <p>{a.reviewQueue.waiting > 0 ? `${plural(a.reviewQueue.waiting, "suggestion")} waiting.` : "Nothing waiting."}</p>
           {a.reviewQueue.waiting > 0 && (
@@ -202,5 +239,18 @@ export default function SaberraBridgeBoard({ password }: { password: string }) {
 
   if (failed) return <p className="text-xs text-amber-800">The bridge board could not be read just now.</p>;
   if (!a) return <p className="text-xs text-gray-500">Reading the bridge…</p>;
-  return <BridgeView a={a} now={now} />;
+  const onFeed = async (dryRun: boolean): Promise<QuestFeedAnswer | string> => {
+    try {
+      const r = await fetch(`${API_BASE}/saberra/quest-feed`, {
+        method: "POST",
+        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        body: JSON.stringify({ dryRun }),
+      });
+      const body = await r.json().catch(() => ({}));
+      return r.ok ? (body as QuestFeedAnswer) : String(body?.error ?? "The quest feed did not run.");
+    } catch {
+      return "Could not reach the village.";
+    }
+  };
+  return <BridgeView a={a} now={now} onFeed={onFeed} />;
 }

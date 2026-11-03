@@ -6,6 +6,7 @@
  * checklist state taken from Saberra's emails (Rick, Nov 2 2026), not a reading
  * of the service, and the board says so.
  */
+import type { QuestFeedAnswer } from "./seraQuestFeed";
 
 /** The data agreement with Saberra LLC: Tue Nov 3 2026, 2:00 PM Costa Rica time (UTC-6). */
 export const SERA_AGREEMENT = {
@@ -41,6 +42,8 @@ export interface BridgeAnswer {
     membersOff?: number;
   };
   reviewQueue: { waiting: number };
+  /** Sera's quest feed: the last real run, and how many of its quests wait for a steward. */
+  questFeed?: { last: QuestFeedAnswer | null; waiting: number };
   needsOwner: { ready: boolean; waiting: number };
 }
 

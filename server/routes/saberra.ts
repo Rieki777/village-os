@@ -70,6 +70,8 @@ import { httpsAddress } from "@shared/modules";
 import { factsForEntity, moduleFactCount } from "../repos/moduleFacts";
 import { outboxView } from "../lib/saberraOutbox";
 import { bridgeReading } from "../repos/saberraBridge";
+import { lastQuestFeed, runQuestFeed, QUEST_FEED_MODULE } from "../lib/seraQuestFeed";
+import { waitingSeraQuests } from "../repos/seraQuestFeed";
 
 type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser">;
 
@@ -114,7 +116,8 @@ export function register(app: Express, deps: Deps): void {
       const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
       const held = await moduleFactCount(pool, MODULE_ID);
       const rest = await bridgeReading(pool);
-      res.json({ connection: { mayCall: connection.mayCall, addressSet: addressSet(), held }, ...rest });
+      const questFeed = { last: await lastQuestFeed(pool), waiting: await waitingSeraQuests(pool, QUEST_FEED_MODULE).catch(() => 0) };
+      res.json({ connection: { mayCall: connection.mayCall, addressSet: addressSet(), held }, ...rest, questFeed });
     } catch {
       res.status(500).json({ error: "Could not read the bridge." });
     }
@@ -152,6 +155,20 @@ export function register(app: Express, deps: Deps): void {
       res.status(status).json(body);
     } catch {
       res.status(500).json({ error: "The sync stopped on an error in this village's server." });
+    }
+  });
+
+  /**
+   * Sera's quest feed into the quest review queue. A dry run unless the body
+   * says `dryRun: false` in so many words; nothing reaches the board until a
+   * steward accepts a proposal and types its reward.
+   */
+  app.post("/api/saberra/quest-feed", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    try {
+      res.json(await runQuestFeed(getPool(), { dryRun: (req.body as any)?.dryRun !== false }));
+    } catch {
+      res.status(500).json({ error: "The quest feed stopped on an error in this village's server." });
     }
   });
 

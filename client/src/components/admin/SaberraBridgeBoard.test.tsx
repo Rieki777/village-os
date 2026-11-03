@@ -88,3 +88,12 @@ describe("the checks disclosure", () => {
     expect(items).toHaveLength(8);
   });
 });
+
+describe("the quest feed card", () => {
+  it("shows the last run's counts and what waits for a steward", () => {
+    const a: BridgeAnswer = { ...base, questFeed: { waiting: 3, last: { dryRun: false, status: "ok", read: 9, queued: 3, alreadySeen: 5, droppedForEmail: 1, refusedHere: 0, at: "2026-11-03T03:00:00Z" } } };
+    render(<BridgeView a={a} now={before} />);
+    expect(screen.getByText(/9 read, 3 queued, 5 already seen,\s+1 dropped by Sera for an email/)).toBeTruthy();
+    expect(screen.getByText("3 quests from Sera waiting for a steward.")).toBeTruthy();
+  });
+});
