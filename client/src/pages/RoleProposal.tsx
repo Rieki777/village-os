@@ -26,6 +26,7 @@ import { BreathingLoader } from "@/components/natural";
 import ProposalEditor from "@/components/roleProposal/ProposalEditor";
 import SharedProposal from "@/components/roleProposal/SharedProposal";
 import { fetchProposal, fetchShared, startFromCard, type ProposalOut, type SharedOut } from "@/components/roleProposal/proposalApi";
+import { keepRoleOn } from "@/components/roleProposal/QuickPath";
 import { RP_WORDS } from "@/components/roleProposal/proposalWords";
 
 const GATE_LINE = "Each member's proposal for the roles they will hold next season, shared for feedback before it goes to the circle.";
@@ -73,9 +74,9 @@ export function NewRoleProposal() {
     let alive = true;
     void startFromCard().then((r) => {
       if (!alive) return;
-      if (r.ok) setLocation(r.data.proposal.href, { replace: true });
+      if (r.ok) setLocation(keepRoleOn(r.data.proposal.href), { replace: true });
       // One draft at a time: the one already open is where the member carries on.
-      else if (r.status === 409 && typeof r.body?.href === "string" && r.body.href.startsWith("/role-proposals/")) setLocation(r.body.href, { replace: true });
+      else if (r.status === 409 && typeof r.body?.href === "string" && r.body.href.startsWith("/role-proposals/")) setLocation(keepRoleOn(r.body.href), { replace: true });
       else setError({ status: r.status, text: r.error });
     });
     return () => {

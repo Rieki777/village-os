@@ -20,6 +20,8 @@ import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
 import RoleHolderCards from "@/components/playerCard/RoleHolderCards";
 import RaiseTension from "@/components/roleTension/RaiseTension";
+import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
+import { RP_WORDS } from "@/components/roleProposal/proposalWords";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
@@ -295,6 +297,11 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                   link to it has nothing to ask anybody. */}
               {!role.isExample && <RoleHolderCards role={role.raw} />}
               {!role.isExample && <SeatLinkCopy seatId={role.id} seatName={role.name} />}
+              {!role.isExample && (
+                <Link href={proposeRoleHref(role.id)} className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2">
+                  {RP_WORDS.proposeThisRole}
+                </Link>
+              )}
               {!role.isExample && <RaiseTension roleId={role.id} roleName={role.name} />}
               {/* The card is the seat today. This is the seat's whole record,
                   ended holdings included, which is the half a village loses

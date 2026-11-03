@@ -9,6 +9,7 @@
  * The season line used to print "For , starting" when the next season had a
  * date and no name. A blank name reads as "next season".
  */
+import { holderFirstName } from "./roleHolderLabel";
 import type { SettingsGroup } from "./seatSettings";
 
 /** The sentence when the chart names no operations role. */
@@ -54,6 +55,20 @@ export function operationsRoleName(
 export function opsPartner(name: string | null | undefined): string {
   const n = String(name ?? "").trim();
   return n || OPS_FALLBACK;
+}
+
+/**
+ * Who the welcome names as the guide: the operations role's holder, first
+ * name only, then the role's own name, then the fallback. An email is dropped.
+ */
+export function guideName(
+  roles: readonly { name?: string | null; isExample?: boolean; active?: boolean; holders?: readonly { name?: string | null; userId?: string | null }[] | null }[] | null | undefined,
+): string {
+  const title = operationsRoleName(roles);
+  const role = (roles ?? []).find((r) => String(r.name ?? "").trim() === title);
+  const first = (role?.holders ?? []).map((h) => holderFirstName(h?.name)).find((n) => n.length > 0);
+  if (first) return first;
+  return opsPartner(title);
 }
 
 /** The line under a terms row: a suggestion and its source, or an open row. */

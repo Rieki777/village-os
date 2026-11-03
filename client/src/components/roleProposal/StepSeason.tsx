@@ -19,6 +19,8 @@ export interface SeasonState {
   aim: string;
   seasonal: SeasonalRow[];
   served: ServedRow[];
+  /** The three answers. A season edit keeps them by spreading this object. */
+  ownWords: { love: string; offer: string; why: string };
 }
 
 export default function StepSeason({ season, orgGoals, onChange }: { season: SeasonState; orgGoals: readonly string[]; onChange: (next: SeasonState) => void }) {

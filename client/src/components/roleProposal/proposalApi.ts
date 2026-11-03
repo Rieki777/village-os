@@ -125,6 +125,8 @@ export interface SeasonWordsOut {
   aim: string | null;
   seasonalGoals: Array<{ title: string; doneWhen: string | null }>;
   servesGoals: Array<{ goal: string; howItHelps: string | null }>;
+  /** The three answers, when this draft has them. Older drafts omit the field. */
+  ownWords?: { love: string; offer: string; why: string };
 }
 
 export interface ProposalOut {
@@ -218,7 +220,7 @@ export interface OrgRoleIn {
   seats: number;
   state?: string;
   holderCount?: number;
-  holders?: Array<{ userId?: string | null }>;
+  holders?: Array<{ userId?: string | null; name?: string | null }>;
   isExample?: boolean;
   runbook?: string | null;
   /** What the role pays, at the `terms.read` tier (server/lib/workPay.ts). Absent below it. */

@@ -22,6 +22,7 @@ import {
   applicationWordsOf,
   changesRoles,
   COMMENT_MAX,
+  bodyOf,
   emptyBody,
   MAX_PROPOSAL_ROLES,
   NOT_ROLE_WORDS,
@@ -189,6 +190,21 @@ describe("a body update", () => {
     if (!r.ok) return;
     expect(r.value.roles).toEqual(start().roles);
     expect(r.value.season.aim).toBe("Feed thirty people.");
+  });
+
+  it("keeps the member's own words exactly, and a later aim does not rewrite them", () => {
+    const love = "I love the bread,  the early oven";
+    const first = parseBodyUpdate({ season: { ownWords: { love, offer: "loaves on Fridays", why: "the kitchen asked" } } }, emptyBody(), ctx());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value.season.ownWords).toEqual({ love, offer: "loaves on Fridays", why: "the kitchen asked" });
+    const again = parseBodyUpdate({ season: { aim: "Feed thirty people." } }, first.value, ctx());
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(again.value.season.ownWords).toEqual(first.value.season.ownWords);
+    expect(again.value.season.aim).toBe("Feed thirty people.");
+    const read = bodyOf({ season: { ownWords: { love, offer: "loaves on Fridays" } } });
+    expect(read.season.ownWords).toEqual({ love, offer: "loaves on Fridays", why: "" });
   });
 
   it(`holds at most ${MAX_SEATS} roles across those the village has and new ones`, () => {

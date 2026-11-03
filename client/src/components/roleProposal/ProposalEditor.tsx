@@ -53,6 +53,7 @@ import StepWords, { type WordsRole } from "./StepWords";
 import StepSeason, { type SeasonState } from "./StepSeason";
 import StepTerms from "./StepTerms";
 import StepShare from "./StepShare";
+import { PathToggle, WelcomeScreen, YourWordsScreen, pathFromUrl, rememberPath, roleFromUrl, type FrontScreen, type ProposalPath } from "./QuickPath";
 import BringInRole from "./BringInRole";
 import OwnAiPrompt from "./OwnAiPrompt";
 import ProposalState from "./ProposalState";
@@ -67,6 +68,11 @@ const seasonFrom = (p: ProposalOut): SeasonState => ({
   aim: p.season?.aim ?? "",
   seasonal: (p.season?.seasonalGoals ?? []).map((g) => ({ title: g.title, doneWhen: g.doneWhen ?? "" })),
   served: servedRows(p.orgGoals, p.season?.servesGoals ?? []),
+  ownWords: {
+    love: p.season?.ownWords?.love ?? "",
+    offer: p.season?.ownWords?.offer ?? "",
+    why: p.season?.ownWords?.why ?? "",
+  },
 });
 
 const reviewsFrom = (p: ProposalOut): Record<string, string> =>
@@ -98,6 +104,8 @@ export function ProposalPreview({ proposal }: { proposal: ProposalOut }) {
 export default function ProposalEditor({ initial, me }: { initial: ProposalOut; me: string }) {
   const [proposal, setProposal] = useState(initial);
   const [step, setStep] = useState<StepKey>(stepFromUrl);
+  const [path, setPath] = useState<ProposalPath>(pathFromUrl);
+  const [front, setFront] = useState<FrontScreen>(() => (pathFromUrl() === "quick" ? "welcome" : "steps"));
   const [picked, setPicked] = useState<string[]>(() => initial.roles.map((r) => r.roleId));
   const [newRoles, setNewRoles] = useState<LocalNew[]>(() => initial.newRoles.map((r) => ({ id: r.id, circleId: r.circle?.id ?? "", seats: r.seats })));
   const [reviews, setReviews] = useState<Record<string, string>>(() => reviewsFrom(initial));
@@ -163,7 +171,12 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
       update.settings = s.settings;
     }
     if (groups.has("season")) {
-      update.season = { aim: s.season.aim.trim() || null, seasonalGoals: seasonalBody(s.season.seasonal), servesGoals: servedBody(s.season.served) };
+      update.season = {
+        aim: s.season.aim.trim() || null,
+        seasonalGoals: seasonalBody(s.season.seasonal),
+        servesGoals: servedBody(s.season.served),
+        ownWords: s.season.ownWords,
+      };
     }
     const r = await saveProposal(p.id, update);
     if (!r.ok) return { ok: false, error: r.error };
@@ -172,6 +185,30 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   }, []);
 
   const save = useAutosave(send);
+  const seededRole = useRef(false);
+  // A role card can open this draft with that role already picked, up to the five.
+  useEffect(() => {
+    if (seededRole.current || !org || org === "failed") return;
+    const role = roleFromUrl();
+    if (!role) return;
+    seededRole.current = true;
+    if (!org.roles.some((r) => r.id === role && !r.isExample)) return;
+    const now = latest.current;
+    if (now.picked.includes(role)) return;
+    if (now.picked.length + now.newRoles.length >= now.proposal.limits.maxRoles) return;
+    // The save reads this ref, and it is only rewritten on the next render.
+    // Write the pick in before the save is asked, or the save can leave with the old list.
+    const picked = [...now.picked, role];
+    latest.current = { ...now, picked };
+    setPicked(picked);
+    save.touch("roles");
+  }, [org, save]);
+
+  const choosePath = (next: ProposalPath) => {
+    setPath(next);
+    rememberPath(next);
+    setFront(next === "full" ? "steps" : "yours");
+  };
 
   /** A draft the server answered as a whole (a role card filled it): everything typed starts again from it. */
   const adopt = (p: ProposalOut) => {
@@ -289,11 +326,26 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
 
   return (
     <div className="grid gap-5">
+      <PathToggle path={path} onPath={choosePath} />
       <header className="grid gap-1">
         <h1 className="font-display text-3xl font-bold text-stone-900">{RP_WORDS.title}</h1>
         <p className={LEDE}>{target ? RP_WORDS.forSeason(target.name, civilDayWords(target.startsOn)) : proposal.targetWords}</p>
       </header>
 
+      {front === "welcome" && <WelcomeScreen org={org} onStart={() => setFront("yours")} />}
+      {front === "yours" && (
+        <YourWordsScreen
+          season={season}
+          onChange={(next) => {
+            setSeason(next);
+            save.touch("season");
+          }}
+          onNext={() => setFront("steps")}
+        />
+      )}
+
+      {front === "steps" && (
+      <>
       <nav aria-label={RP_WORDS.stepOf(index + 1, STEPS.length)}>
         <ol className="flex flex-wrap gap-2" data-step-indicator="">
           {STEPS.map((s, i) => (
@@ -380,6 +432,8 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
           />
         )}
       </section>
+      </>
+      )}
 
       {/*
         The save line and Back and Next, kept in reach. On a phone the bar sits
@@ -394,6 +448,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
         style={{ "--rp-bar-bottom": "max(calc(env(safe-area-inset-bottom, 0px) + 4rem), 4rem)" } as React.CSSProperties}
       >
         <SaveLine status={save.status} error={save.error} onRetry={() => void save.flush()} />
+        {front === "steps" && (
         <div className="flex items-center justify-between gap-2">
           <button type="button" disabled={index === 0} onClick={() => void go(STEPS[index - 1])} className={SECONDARY}>
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -406,6 +461,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             </button>
           )}
         </div>
+        )}
       </div>
     </div>
   );
