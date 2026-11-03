@@ -1,5 +1,6 @@
 /**
- * The bridge board's reading: counts only, never a title, a note, or a person.
+ * The bridge board's reading: counts, plus the names of members linked to Sera
+ * (a steward-only answer). Never a task title, a note, or a library owner id.
  * A table that is not in this database yet answers "not ready", never an error,
  * so the board can say "Building" while another change is still landing.
  */
@@ -37,6 +38,15 @@ export async function bridgeLists(pool: Pool, have: Set<string>): Promise<Bridge
     pool,
     "SELECT `import_batch` AS b, MAX(`created_at`) AS at, COUNT(*) AS n FROM `member_tasks` WHERE `source` = 'sera' AND `import_batch` IS NOT NULL GROUP BY `import_batch` ORDER BY MAX(`created_at`) DESC LIMIT 1",
   );
+  const [ppl] = await pool.query(
+    "SELECT u.`name` AS name, COALESCE(a.`list_on`, 0) AS on_, " +
+      "(SELECT COUNT(*) FROM `member_tasks` t WHERE t.`user_id` = l.`user_id` AND t.`source` = 'sera') AS imported, " +
+      "(SELECT MAX(t.`created_at`) FROM `member_tasks` t WHERE t.`user_id` = l.`user_id` AND t.`source` = 'sera' AND t.`import_batch` IS NOT NULL) AS last_at " +
+      "FROM (SELECT DISTINCT `user_id` FROM `sera_person_links`) l JOIN `users` u ON u.`id` = l.`user_id` " +
+      "LEFT JOIN `member_task_access` a ON a.`user_id` = l.`user_id` ORDER BY u.`name` LIMIT 50",
+  );
+  const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? String(v) : null);
+  const people = (ppl as Row[]).map((r) => ({ name: String(r.name ?? ""), listOn: n(r.on_) === 1, imported: n(r.imported), lastImportAt: iso(r.last_at) }));
   const at = last.at instanceof Date ? last.at.toISOString() : last.at ? String(last.at) : null;
   return {
     ready: true,
@@ -45,6 +55,7 @@ export async function bridgeLists(pool: Pool, have: Set<string>): Promise<Bridge
     imported: n(imp.n),
     importedOpen: n(imp.o),
     lastBatch: last.b ? { id: String(last.b), at, tasks: n(last.n) } : null,
+    people,
   };
 }
 
@@ -53,6 +64,9 @@ export async function bridgeFeedback(pool: Pool, have: Set<string>): Promise<Bri
   if (!have.has("member_task_outbox") || !have.has("member_task_bridge")) return off;
   // The outbox is what goes to Sera; `member_task_feedback` is what members said.
   const counts = await outboxCounts(pool);
+  const membersOff = have.has("member_task_prefs")
+    ? n((await one(pool, "SELECT COUNT(*) AS n FROM `member_task_prefs` WHERE `feedback_on` = 0")).n)
+    : 0;
   const sum = (status: string, kind?: string) =>
     Object.entries(counts).reduce((t, [k, v]) => {
       const [kk, ss] = k.split(":");
@@ -65,6 +79,7 @@ export async function bridgeFeedback(pool: Pool, have: Set<string>): Promise<Bri
     failed: sum("failed"),
     notesHeld: sum("held", "note"),
     notesReleased: (await notesRelease(pool)) === "released",
+    membersOff,
   };
 }
 
@@ -76,6 +91,7 @@ export async function bridgeReading(pool: Pool): Promise<Omit<BridgeAnswer, "con
     "member_task_import_queue",
     "member_task_outbox",
     "member_task_bridge",
+    "member_task_prefs",
     "external_proposals",
   ]);
   const lists = await bridgeLists(pool, have);

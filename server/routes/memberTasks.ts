@@ -114,7 +114,7 @@ export function register(app: Express, deps: Deps): void {
   };
 
   /** Tell the bridge, never failing the member's press because of it. */
-  const tell = async (uid: string, id: string, action: FeedbackAction, body: any, extra: { redirectToUserId?: string | null; redirectToRoleId?: string | null } = {}) => {
+  const tell = async (uid: string, id: string, action: FeedbackAction, body: any, extra: { redirectToUserId?: string | null; redirectToRoleId?: string | null; mergedIntoExternalId?: string | null } = {}) => {
     try {
       const f = feedbackOf(body, action);
       const task = await ownTask(getPool(), uid, id);
@@ -178,7 +178,16 @@ export function register(app: Express, deps: Deps): void {
     if (!f.ok) return res.status(400).json({ error: f.problem });
     const id = String(req.params.id);
     const result = await setStatus(getPool(), uid, id, version, "removed", f.value.reason);
-    if (result === "ok") await tell(uid, id, "remove", { ...req.body, feedbackId: f.value.feedbackId, reason: f.value.reason });
+    if (result === "ok") {
+      // A duplicate may name the task that stays; the library hears it only when that task is the library's too.
+      let mergedIntoExternalId: string | null = null;
+      const keeps = typeof req.body?.mergedIntoTaskId === "string" ? req.body.mergedIntoTaskId.slice(0, 64) : "";
+      if (keeps && keeps !== id && (f.value.reason === "duplicate" || f.value.reason === "merged")) {
+        const kept = await ownTask(getPool(), uid, keeps).catch(() => null);
+        if (kept && kept.source === "sera" && kept.externalId) mergedIntoExternalId = kept.externalId;
+      }
+      await tell(uid, id, "remove", { ...req.body, feedbackId: f.value.feedbackId, reason: f.value.reason }, { mergedIntoExternalId });
+    }
     await answer(res, uid, id, result);
   });
 

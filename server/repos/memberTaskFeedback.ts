@@ -88,6 +88,17 @@ export async function undoFeedback(db: Queryable, userId: string, feedbackId: st
   const [sent] = await db.query<RowDataPacket[]>("SELECT `id` FROM `member_task_outbox` WHERE `feedback_id` = ? AND `status` = 'sent' LIMIT 1", [feedbackId]);
   await db.query("UPDATE `member_task_outbox` SET `status` = 'dropped', `payload` = '{}' WHERE `feedback_id` = ? AND `status` IN ('queued','held','failed')", [feedbackId]);
   await db.query("UPDATE `member_task_role_queue` SET `status` = 'dismissed' WHERE `feedback_id` = ? AND `status` = 'waiting'", [feedbackId]);
+  // A task handed to a person comes back: their copy goes, if they have not touched it yet.
+  const [fb] = await db.query<RowDataPacket[]>(
+    "SELECT f.`redirect_to_user_id` AS to_uid, t.`title`, f.`created_at` AS at FROM `member_task_feedback` f JOIN `member_tasks` t ON t.`id` = f.`task_id` WHERE f.`feedback_id` = ? AND f.`user_id` = ? AND f.`action` = 'redirect'",
+    [feedbackId, userId],
+  );
+  if (fb.length && fb[0].to_uid) {
+    await db.query(
+      "DELETE FROM `member_tasks` WHERE `user_id` = ? AND `source` IN ('redirect','sera') AND `import_batch` IS NULL AND `title` = ? AND `status` = 'open' AND `member_edited` = 0 AND `created_at` >= ? ORDER BY `created_at` DESC LIMIT 1",
+      [String(fb[0].to_uid), String(fb[0].title), fb[0].at],
+    );
+  }
   return { wasSent: sent.length > 0 };
 }
 
@@ -283,4 +294,13 @@ export async function setImportPhrase(db: Queryable, phrase: string): Promise<vo
     "INSERT INTO `member_task_bridge` (`setting`, `value`) VALUES ('import_phrase', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
     [phrase.slice(0, 200)],
   );
+}
+
+/** Did a removal for this member reach the library in the last few minutes? Then an empty removed_since may just be lag. */
+export async function recentRemovalSent(db: Queryable, userId: string, seconds = 180): Promise<boolean> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT 1 FROM `member_task_outbox` WHERE `user_id` = ? AND `kind` = 'feedback' AND `status` = 'sent' AND `sent_at` > NOW() - INTERVAL ? SECOND LIMIT 1",
+    [userId, seconds],
+  );
+  return rows.length > 0;
 }

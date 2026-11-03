@@ -59,3 +59,20 @@ describe("the Sera bridge board", () => {
     expect(screen.queryByRole("heading", { name: "Journal outbox" })).toBeNull();
   });
 });
+
+describe("the linked card and the feedback switch count", () => {
+  it("says not linked yet when nobody is linked", () => {
+    render(<BridgeView a={{ ...base, lists: { ...base.lists, people: [] } }} now={before} />);
+    expect(screen.getByText(/Not linked yet/)).toBeTruthy();
+  });
+  it("shows each linked member and how many turned feedback off", () => {
+    const a: BridgeAnswer = {
+      ...base,
+      lists: { ...base.lists, people: [{ name: "Ana", listOn: true, imported: 33, lastImportAt: null }] },
+      feedback: { ready: true, sent: 1, queued: 0, failed: 0, notesHeld: 0, notesReleased: false, membersOff: 2 },
+    };
+    render(<BridgeView a={a} now={before} />);
+    expect(screen.getByText(/list on, 33 tasks imported, no import yet/)).toBeTruthy();
+    expect(screen.getByText(/2 members turned feedback off/)).toBeTruthy();
+  });
+});

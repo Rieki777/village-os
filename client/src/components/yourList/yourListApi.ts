@@ -67,6 +67,8 @@ export interface Press {
   reason: ScreenReason;
   note: string | null;
   context: FeedbackContext;
+  /** On a duplicate or merge: the member's task that stays. */
+  mergedIntoTaskId?: string;
 }
 
 /** One id per press, so a retried press is never counted twice. */

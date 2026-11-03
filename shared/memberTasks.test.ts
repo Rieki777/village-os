@@ -17,6 +17,12 @@ describe("horizons in the village's days", () => {
     expect(horizonOf(t("a", { dueOn: "2026-11-09" }), TODAY)).toBe("later");
     expect(horizonOf(t("a"), TODAY)).toBe("later");
   });
+  it("ends this week on Sunday, because the village's week starts Monday", () => {
+    expect(horizonOf(t("a", { dueOn: "2026-11-08" }), "2026-11-05")).toBe("week");
+    expect(horizonOf(t("a", { dueOn: "2026-11-09" }), "2026-11-05")).toBe("later");
+    expect(horizonOf(t("a", { dueOn: "2026-11-09" }), "2026-11-08")).toBe("later");
+    expect(horizonOf(t("a", { dueOn: "2026-11-15" }), "2026-11-09")).toBe("week");
+  });
   it("lets a chosen horizon pull a task sooner but never later than its due date", () => {
     expect(horizonOf(t("a", { horizon: "today", dueOn: "2026-12-01" }), TODAY)).toBe("today");
     expect(horizonOf(t("a", { horizon: "later", dueOn: TODAY }), TODAY)).toBe("today");

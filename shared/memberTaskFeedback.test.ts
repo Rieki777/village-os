@@ -46,4 +46,11 @@ describe("parsing a press", () => {
     const p = parseFeedback({ feedbackId: "fb-12345678", reason: "duplicate", note: " x ", context: { shownIn: "today", rankScore: 4.2, daysOnList: 3, surface: "profile" } }, "remove");
     expect(p.ok && p.value).toMatchObject({ reason: "duplicate", note: "x", context: { shownIn: "today", rankScore: 4.2, daysOnList: 3 } });
   });
+describe("stripping contact details from a note", () => {
+  it("takes out phones in the shapes members write them, and keeps a date", () => {
+    for (const n of ["(506) 8888 1234", "88881234", "whatsapp: 506-8888-1234", "+1 (415) 555-0100"]) expect(stripContact(n)).not.toMatch(/8888|555/);
+    expect(stripContact("due 2026-11-03")).toBe("due 2026-11-03");
+    expect(stripContact("A.B+tag@sub.example.co.cr")).toBe("[email removed]");
+  });
+});
 });

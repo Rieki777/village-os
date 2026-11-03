@@ -93,11 +93,33 @@ export function BridgeView({ a, now }: { a: BridgeAnswer; now: number }) {
           )}
         </QuestCard>
 
+        <QuestCard title="Linked to Sera" state={!a.lists.ready ? "building" : a.lists.people?.length ? "done" : "waiting"}>
+          {!a.lists.ready ? (
+            <p>The list tables are not in this database yet.</p>
+          ) : a.lists.people?.length ? (
+            <ul className="space-y-1">
+              {a.lists.people.map((p, i) => (
+                <li key={i}>
+                  <span className="font-semibold">{p.name || "A member"}</span>: list {p.listOn ? "on" : "off"}, {plural(p.imported, "task")} imported,{" "}
+                  {p.lastImportAt ? `last import ${villageDate(p.lastImportAt)}` : "no import yet"}.
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>Not linked yet. No member is linked to Sera; a steward links one in Admin, Players.</p>
+          )}
+        </QuestCard>
+
         <QuestCard title="Member feedback to Sera" state={a.feedback.ready ? (a.feedback.sent > 0 ? "done" : "active") : "building"}>
           {a.feedback.ready ? (
             <>
               <p>
                 {a.feedback.sent} sent, {a.feedback.queued} queued, {a.feedback.failed} failed.
+              </p>
+              <p>
+                {a.feedback.membersOff
+                  ? `${plural(a.feedback.membersOff, "member")} turned feedback off; nothing of theirs is sent.`
+                  : "Every member has feedback on."}
               </p>
               <p>
                 {a.feedback.notesReleased

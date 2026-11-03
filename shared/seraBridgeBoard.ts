@@ -25,6 +25,8 @@ export interface BridgeAnswer {
     imported: number;
     importedOpen: number;
     lastBatch: { id: string; at: string | null; tasks: number } | null;
+    /** Each member linked to Sera, for the steward: name, list switch, what came in. */
+    people?: LinkedPerson[];
   };
   feedback: {
     /** False while the feedback bridge has not landed: the board shows "Building". */
@@ -35,9 +37,18 @@ export interface BridgeAnswer {
     notesHeld: number;
     /** Whether notes are released to Sera, or null when unknown. */
     notesReleased: boolean | null;
+    /** Members who turned "Help the knowledge library learn" off. */
+    membersOff?: number;
   };
   reviewQueue: { waiting: number };
   needsOwner: { ready: boolean; waiting: number };
+}
+
+export interface LinkedPerson {
+  name: string;
+  listOn: boolean;
+  imported: number;
+  lastImportAt: string | null;
 }
 
 export interface SeraTool {
