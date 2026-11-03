@@ -42,6 +42,8 @@ const deps = (pool: any, who: () => string | null) => ({
   getPool: () => pool,
   overLimit: async () => false,
   timeZone: () => "America/Costa_Rica",
+  isAdmin: async () => who() === "m-steward",
+  adminActor: () => (who() === "m-steward" ? { id: "m-steward" } : null),
 });
 
 const ROUTES = [
@@ -59,6 +61,12 @@ describe("your list routes without a database", () => {
     const c = collect();
     register(c.app, deps(null, () => null));
     for (const r of ROUTES) expect((await call(c.handlers, r, { params: { id: "x" } })).status, r).toBe(401);
+  });
+  it("keeps the switch to stewards", async () => {
+    const c = collect();
+    register(c.app, deps(null, () => "m-wren"));
+    expect((await call(c.handlers, "GET /api/admin/member-tasks/access")).status).toBe(401);
+    expect((await call(c.handlers, "PUT /api/admin/member-tasks/access/:userId", { params: { userId: "m-wren" }, body: { on: true } })).status).toBe(401);
   });
 });
 
@@ -139,6 +147,15 @@ describe.skipIf(!configured)("your list against a real schema", () => {
     const steward = await stewardView(pool, "m-wren");
     expect(steward).toHaveLength(1);
     expect(JSON.stringify(steward)).not.toContain("leak is back");
+  });
+
+  it("lets a steward turn a member's list on through the door", async () => {
+    whoami = "m-steward";
+    const put = await call(handlers, "PUT /api/admin/member-tasks/access/:userId", { params: { userId: "m-wren" }, body: { on: true } });
+    expect(put.body).toEqual({ userId: "m-wren", on: true });
+    expect((await call(handlers, "GET /api/admin/member-tasks/access")).body.on).toContain("m-wren");
+    whoami = "m-wren";
+    expect((await call(handlers, "GET /api/member-tasks/me")).body.on).toBe(true);
   });
 
   it("refuses a library source from a member's own hand", async () => {

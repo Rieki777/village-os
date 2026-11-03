@@ -9,6 +9,9 @@
  *   POST  /api/member-tasks/me/:id/undo        bring a done or removed task back
  *   POST  /api/member-tasks/me/:id/not-now     push it down the list
  *
+ *   GET   /api/admin/member-tasks/access        steward: whose lists are on
+ *   PUT   /api/admin/member-tasks/access/:userId steward: turn one member's list on or off
+ *
  * Every door needs a signed-in member and reaches ONLY their own rows. Every
  * write refuses until a steward has turned the member's list on, so nothing
  * changes for anybody until then. The days are the village's, never the
@@ -22,13 +25,13 @@ import {
   type PresetName, type RemoveReason, type TaskSource,
 } from "../../shared/memberTasks";
 import {
-  bumpNotNow, insertTask, listIsOn, ownTask, ownTasks, patchTask, setStatus, type MemberTaskRow,
+  bumpNotNow, insertTask, listIsOn, membersWithListOn, ownTask, ownTasks, patchTask, setListOn, setStatus, type MemberTaskRow,
 } from "../repos/memberTasks";
 
 /** Re-exported so server/index.ts reaches it on its one exempt import line for this module. */
 export { exportMemberTasks } from "../repos/memberTasks";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit"> & { timeZone: () => string };
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "isAdmin" | "adminActor"> & { timeZone: () => string };
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Writes one member may make in an hour. A busy morning of sorting is well under this. */
@@ -60,7 +63,7 @@ export function listOut(rows: MemberTaskRow[], today: string, preset: PresetName
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, overLimit, timeZone } = deps;
+  const { authedUser, getPool, overLimit, timeZone, isAdmin, adminActor } = deps;
   const today = () => villageDayKey(new Date(), timeZone());
 
   /** The signed-in member whose list is on, or null after answering. */
@@ -161,5 +164,21 @@ export function register(app: Express, deps: Deps): void {
     if (!(await bumpNotNow(getPool(), uid, id))) return res.status(404).json({ error: "not_found" });
     const task = await ownTask(getPool(), uid, id);
     res.json({ task: task ? taskOut(task) : null });
+  });
+
+  // ── Steward: the per-member switch ──────────────────────────────────────
+
+  app.get("/api/admin/member-tasks/access", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    res.json({ on: await membersWithListOn(getPool()) });
+  });
+
+  app.put("/api/admin/member-tasks/access/:userId", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const userId = String(req.params.userId ?? "").trim();
+    if (!userId || userId.length > 64) return res.status(400).json({ error: "Which member?" });
+    const on = (req.body as any)?.on === true;
+    await setListOn(getPool(), userId, on, adminActor(req)?.id ?? null);
+    res.json({ userId, on });
   });
 }

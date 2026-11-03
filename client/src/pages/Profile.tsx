@@ -33,6 +33,7 @@ import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
 import TaskBoard from "@/components/profile/TaskBoard";
 import TasksWaitingCard from "@/components/profile/TasksWaitingCard";
+import YourListMount from "@/components/yourList/YourListMount";
 import ProfileJournalCard from "@/components/journal/ProfileJournalCard";
 import { ProfileGeneKeysCard } from "@/components/geneKeys/ProfileGeneKeys";
 import { TASK_BOARD_ANCHOR } from "@shared/sessionTasks";
@@ -569,6 +570,7 @@ export default function Profile() {
                 {(sessionsOn || governanceOn) && (
                   <div id={TASK_BOARD_ANCHOR} className={`scroll-mt-28 ${tabOf("quests")}`}>
                     <TaskBoard sessions={sessionsOn} />
+                    <YourListMount />
                   </div>
                 )}
                 <div className={tabOf("quests")}>
