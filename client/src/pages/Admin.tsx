@@ -53,8 +53,10 @@ import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import AdminMobileNav from "@/components/admin/AdminMobileNav";
 import AdminQueueState from "@/components/admin/AdminQueueState";
 import { loadSubmissionRows } from "@/components/admin/adminQueueState";
-import { FORM_TYPES, putSubmissionStatus } from "@/components/admin/submissionStatus";
+import { putSubmissionStatus } from "@/components/admin/submissionStatus";
 import SubmissionHandling from "@/components/admin/SubmissionHandling";
+import SubmissionDesk, { Pick } from "@/components/admin/SubmissionDesk";
+import { useSubmissionFilter } from "@/components/admin/savedViews";
 import OpenProposalsPanel from "@/components/admin/OpenProposalsPanel";
 import ProposalAcceptCash from "@/components/admin/ProposalAcceptCash";
 import LandTab from "@/components/admin/LandTab";
@@ -718,7 +720,7 @@ function prettyType(t: string) {
 
 export function SubmissionsTab({ password }: { password: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [filter, setFilter] = useState<string>("all");
+  const [filter, setFilter] = useSubmissionFilter();
   const [loading, setLoading] = useState(true);
   const [problem, setProblem] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -737,40 +739,7 @@ export function SubmissionsTab({ password }: { password: string }) {
   const setStatus = async (id: string, status: string, type = "") => { if (await putSubmissionStatus(password, id, status, type)) load(); };
 
   return (
-    <div>
-      {/* flex-wrap and gap, because this row does not fit a phone: the heading
-          plus a 171px type filter plus the refresh button need about 657px, and
-          justify-between on a non-wrapping flex pushed the overflow onto the
-          document rather than onto this row. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Form Submissions</h2>
-        {/* The row above wraps; this group used to not, and the filter sizes itself to its longest
-            option, so at 320px it pushed the button 19px off the edge. It now takes the wrapped line,
-            the filter shrinks into it, and the button never does. */}
-        <div className="flex items-center gap-3 w-full min-w-0 sm:w-auto">
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            aria-label="Form type"
-            className="min-h-[44px] min-w-0 flex-1 sm:flex-none text-base sm:text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-          >
-            <option value="all">All types</option>
-            {FORM_TYPES.map((t) => (
-              <option key={t} value={t}>{prettyType(t)}</option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={load}
-            aria-label="Look again for new submissions"
-            title="Look again"
-            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
+    <SubmissionDesk password={password} filter={filter} onFilter={setFilter} rows={submissions} onChanged={load}>
       <OpenProposalsPanel password={password} />
       {loading ? (
         <div className="text-center py-12 text-gray-400">Loading...</div>
@@ -781,7 +750,9 @@ export function SubmissionsTab({ password }: { password: string }) {
       ) : (
         <div className="space-y-3">
           {submissions.map((s) => (
-            <div key={s.id} className="border border-gray-200 rounded-xl overflow-hidden">
+            <div key={s.id} className="flex items-start border border-gray-200 rounded-xl overflow-hidden">
+              <Pick id={s.id} />
+              <div className="min-w-0 flex-1">
               <button
                 onClick={() => setExpanded(expanded === s.id ? null : s.id)}
                 className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors text-left"
@@ -857,11 +828,12 @@ export function SubmissionsTab({ password }: { password: string }) {
                   </table>
                 </div>
               )}
+              </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </SubmissionDesk>
   );
 }
 

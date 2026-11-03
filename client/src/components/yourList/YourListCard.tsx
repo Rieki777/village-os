@@ -41,10 +41,12 @@ export const REASON_WORDS: Record<ReasonCode, string> = {
 
 type Live = Extract<ListPayload, { on: true }>;
 
-function TaskRow({ task, busy, onDone, onPick, onPin, onTier, others }: {
+function TaskRow({ task, busy, onDone, onPick, onPin, onTier, others, selected, onToggle }: {
   task: RankedTask;
   others: { id: string; title: string }[];
   busy: boolean;
+  selected: boolean;
+  onToggle: () => void;
   onDone: () => void;
   onPick: (mode: "remove" | "redirect", p: ReasonPick) => void;
   onPin: () => void;
@@ -55,6 +57,7 @@ function TaskRow({ task, busy, onDone, onPick, onPin, onTier, others }: {
   return (
     <li className="rounded-xl border border-border bg-muted px-3.5 py-3 text-foreground">
       <div className="flex flex-wrap items-start gap-2">
+        <input type="checkbox" aria-label={`Select ${task.title}`} className="mt-1 h-11 w-11 shrink-0" checked={selected} onChange={onToggle} />
         <span className="min-w-0 flex-1 break-words text-base">
           {task.memberPinned ? <span className="mr-1 font-semibold">Pinned:</span> : null}
           {task.title}
@@ -111,6 +114,8 @@ export default function YourListCard() {
   const [showHidden, setShowHidden] = useState(false);
   const [showRemoved, setShowRemoved] = useState(false);
   const [sharing, setSharing] = useState<boolean | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [bulk, setBulk] = useState<"remove" | "redirect" | null>(null);
 
   const load = useCallback(async () => setList(await readList()), []);
   useEffect(() => { void load(); }, [load]);
@@ -155,6 +160,31 @@ export default function YourListCard() {
   };
 
   const shown = (h: Horizon) => live.open.filter((t) => t.horizonNow === h && (showHidden || t.shown));
+  const chosen = live.open.filter((t) => selected.includes(t.id));
+  const applyBulk = async (mode: "remove" | "redirect" | "done", p?: ReasonPick) => {
+    setBusy(true);
+    setProblem(null);
+    for (const t of chosen) {
+      const press = p ? { feedbackId: newFeedbackId(), reason: p.reason, note: p.note, context: contextOf(t), ...(p.mergedIntoTaskId ? { mergedIntoTaskId: p.mergedIntoTaskId } : {}) } : null;
+      const result = mode === "done"
+        ? await markDone(t)
+        : mode === "remove" && press
+          ? await removeTask(t, press)
+          : press
+            ? await redirectTask(t, press, { toUserId: p?.toUserId, toRoleId: p?.toRoleId })
+            : { ok: false as const, error: "Pick a reason." };
+      if (!result.ok) {
+        setProblem(result.error);
+        setBusy(false);
+        await load();
+        return;
+      }
+    }
+    setSelected([]);
+    setBulk(null);
+    setBusy(false);
+    await load();
+  };
 
   return (
     <section className={PANEL} aria-labelledby="your-list-h">
@@ -194,6 +224,26 @@ export default function YourListCard() {
         </p>
       )}
 
+      {chosen.length > 0 && (
+        <div className="mt-4 rounded-xl border border-border bg-background p-3">
+          <p className="text-sm text-foreground">{chosen.length} selected. One reason covers all of them.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void applyBulk("done")}>Done</button>
+            <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => setBulk(bulk === "remove" ? null : "remove")}>Remove</button>
+            <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => setBulk(bulk === "redirect" ? null : "redirect")}>Redirect</button>
+          </div>
+          {bulk && (
+            <ReasonSheet
+              mode={bulk}
+              busy={busy}
+              others={chosen.map((t) => ({ id: t.id, title: t.title }))}
+              onCancel={() => setBulk(null)}
+              onPick={(p) => void applyBulk(bulk, p)}
+            />
+          )}
+        </div>
+      )}
+
       {HORIZONS.map((h) => {
         const tasks = shown(h);
         return (
@@ -215,6 +265,8 @@ export default function YourListCard() {
                           task={t}
                           others={tasks.filter((o) => o.id !== t.id).map((o) => ({ id: o.id, title: o.title }))}
                           busy={busy}
+                          selected={selected.includes(t.id)}
+                          onToggle={() => setSelected((cur) => cur.includes(t.id) ? cur.filter((id) => id !== t.id) : [...cur, t.id])}
                           onDone={() => act(() => markDone(t))}
                           onPick={(mode, p) => pressed(t, mode, p)}
                           onPin={() => act(() => pinTask(t, !t.memberPinned))}
