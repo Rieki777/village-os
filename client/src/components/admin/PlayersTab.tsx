@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { BulkStageGrant } from "./StageFloorPicker";
+import PersonalListsPanel from "@/components/yourList/PersonalListsPanel";
 import { NO_FILTER, PlayerCard, PlayersFilters, PlayersKey, filterPlayers, type LadderStage, type PathOption, type Player, type PlayerDetail } from "./PlayerCard";
 
 export default function PlayersTab({ password }: { password: string }) {
@@ -136,6 +137,7 @@ export default function PlayersTab({ password }: { password: string }) {
         <p className="text-sm text-gray-400">No players yet.</p>
       ) : (
         <>
+          <PersonalListsPanel password={password} players={players} />
           <PlayersKey players={players} stages={stages} gameStarted={gameStarted} />
           <PlayersFilters value={filter} onChange={setFilter} stages={stages} paths={paths} shown={filterPlayers(players, filter).length} total={players.length} />
           <div className="space-y-3">
