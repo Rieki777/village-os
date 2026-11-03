@@ -30,7 +30,7 @@ import {
   eligibleApprovers, endOfMoonFriday, financeApprovalRefusal, INVOICE_STATUS_WORDS, invoicePaidFrom, invoiceSendRefusal,
   invoiceStatusLine, invoiceTotals, ITEM_ORIGINS, itemDedupeKey, linesFromTerms, memberView, moonDays,
   parseAttestation, parseItemFields, parsePayers, parsePayRouteInput, parseRoleAudit, payersChanges, payerForRoute,
-  PILOT_ACK_VERSION, prorate, RECAP_STATUS_WORDS, routeChangeClearsConfirmation, SEND_REFUSALS, taxFormValidOn,
+  prorate, RECAP_STATUS_WORDS, routeChangeClearsConfirmation, SEND_REFUSALS, taxFormValidOn,
   workSummaryText, workDueOn, type ApprovalSubject, type InvoiceLine, type Payer, type PayRouteRecord, type RecapItem,
   type TermsInForce, taskScore, seatCoverage, goalScore, scoreWords, carriedTooOften, carriedGoals, goalScoreProblem, parseMoonGoals,
   carriedItems, seraClosures, outsideRolesAudit, sendBy, type MoonGoal,
@@ -62,11 +62,20 @@ function payer(over: Partial<Payer> = {}): Payer {
 function route(over: Partial<PayRouteRecord> = {}): PayRouteRecord {
   return {
     userId: "u1", route: "abroad", payerKey: "us-payer", currency: "USD", legalName: "A Member", address: "Somewhere",
-    statusValidUntil: null, taxFormKind: "W-8BEN", taxFormSignedOn: "2026-01-01", taxFormExpiresOn: "2028-12-31",
-    taxFormFiledWhere: "Finance drive", confirmedAt: "2026-11-02T00:00:00Z", confirmedBy: "u9", pilotAckVersion: PILOT_ACK_VERSION,
+    statusValidUntil: null, taxFormKind: "form-b", taxFormSignedOn: "2026-01-01", taxFormExpiresOn: "2028-12-31",
+    taxFormFiledWhere: "Finance drive", confirmedAt: "2026-11-02T00:00:00Z", confirmedBy: "u9", pilotAckVersion: "v1",
     pilotAckAt: "2026-11-02T00:00:00Z", bankChangedOn: null, bankConfirmedByRole: null, ...over,
   };
 }
+
+/** A village that has filled in its settings, with neutral example values. */
+const SETTINGS: contract.MoonReviewSettings = {
+  hostCountry: { code: "XX", name: "Examplia" }, hostVatRateBp: 1300, hostRateSource: "The central bank's reference rate", hostCurrency: "XXX",
+  pilotAck: { text: "This pay process is a pilot.", version: "v1" },
+  taxForms: [{ key: "form-a", label: "Form A" }, { key: "form-b", label: "Form B" }],
+  taxFormRoutes: ["abroad", "nomad"],
+  holds: [{ taxFormKey: "form-b", workCountry: "YY", note: "Form B holders who worked in YY." }],
+};
 
 function terms(over: Partial<TermsInForce> = {}): TermsInForce {
   return {
@@ -142,22 +151,23 @@ describe("lines from terms (checks 3 and 4)", () => {
 describe("sends (check 7)", () => {
   const lines = linesFromTerms([terms()], MOON);
   const att = parseAttestation({ workCountries: ["us"], daysInHostCountry: 0, statusUnchanged: true }, "abroad", MOON);
-  const ok = { route: "abroad" as const, payer: payer(), lines, attestation: att, pilotAckVersion: PILOT_ACK_VERSION, memberNumber: "INV-2026-11", externalInvoiceKey: null };
+  const ok = { route: "abroad" as const, payer: payer(), lines, attestation: att, pilotAckVersion: "v1", memberNumber: "INV-2026-11", externalInvoiceKey: null, settings: SETTINGS, payers: { payers: [payer()] } };
   it("a complete send passes, with a long digits-only number or key", () => {
     expect(invoiceSendRefusal(ok)).toBeNull();
     expect(invoiceSendRefusal({ ...ok, memberNumber: "0012345678901" })).toBeNull();
-    expect(invoiceSendRefusal({ ...ok, route: "cr_contractor", externalInvoiceKey: "50601112600310123456700100001010000000001100000001" })).toBeNull();
-    expect(invoiceSendRefusal({ ...ok, route: "cr_contractor", externalInvoiceKey: "50-601" })).toContain("digits only");
+    expect(invoiceSendRefusal({ ...ok, route: "local_contractor", externalInvoiceKey: "50601112600310123456700100001010000000001100000001" })).toBeNull();
+    expect(invoiceSendRefusal({ ...ok, route: "local_contractor", externalInvoiceKey: "50-601" })).toContain("digits only");
   });
   it.each([
     ["pending", { route: "pending" as const }, SEND_REFUSALS.pending],
-    ["tourist", { route: "tourist" as const }, SEND_REFUSALS.tourist],
+    ["visitor", { route: "visitor" as const }, SEND_REFUSALS.visitor],
+    ["an older pilot acknowledgement", { pilotAckVersion: "v0" }, SEND_REFUSALS.pilotAck],
     ["invoicing off", { payer: payer({ invoicing: false }) }, SEND_REFUSALS.invoicingOff],
     ["no payable line", { lines: linesFromTerms([terms({ settings: { v: 1, pay: { kind: "honorary" } } })], MOON) }, SEND_REFUSALS.noPayableLine],
     ["no acknowledgement", { pilotAckVersion: null }, SEND_REFUSALS.pilotAck],
     ["no invoice number of their own (decision 16 revised)", { memberNumber: "  " }, SEND_REFUSALS.numberMissing],
     ["an invoice number used before", { usedNumbers: ["INV-2026-11"] }, SEND_REFUSALS.numberUsed],
-    ["the contractor route with no electronic key", { route: "cr_contractor" as const, payer: payer({ routes: ["cr_contractor"] }) }, SEND_REFUSALS.externalKey],
+    ["the contractor route with no electronic key", { route: "local_contractor" as const, payer: payer({ routes: ["local_contractor"] }) }, SEND_REFUSALS.externalKey],
   ])("is refused: %s", (_n, over, sentence) => expect(invoiceSendRefusal({ ...ok, ...over })).toBe(sentence));
   it("is refused with no attestation, and with one that is not whole", () => {
     expect(invoiceSendRefusal({ ...ok, attestation: null })).toBe(contract.ATTESTATION_MISSING);
@@ -225,14 +235,15 @@ describe("approvals (checks 8, 9, 10)", () => {
     ]) expect(await approvalHash(changed)).not.toBe(h);
   });
   it("Finance refuses an unconfirmed route, an ended nomad status, visitor-entry work and a tax form invalid on the expected date", () => {
-    const att = { workCountries: ["US"], daysInHostCountry: 0, statusUnchanged: true, servedAbroad: null, visitorEntryWork: false };
-    const facts = { route: route(), hostCountry: "CR", attestation: att, moonLastDay: MOON.lastDay, expectedOn: "2026-11-20" };
-    expect(financeApprovalRefusal({ ...facts, route: route({ taxFormKind: "W-9" }) })).toBeNull();
+    const att = { workCountries: ["YY"], daysInHostCountry: 0, statusUnchanged: true, servedAbroad: null, visitorEntryWork: false };
+    const facts = { route: route(), settings: SETTINGS, attestation: att, moonLastDay: MOON.lastDay, expectedOn: "2026-11-20" };
+    expect(financeApprovalRefusal({ ...facts, route: route({ taxFormKind: "form-a" }) })).toBeNull();
     expect(financeApprovalRefusal({ ...facts, route: route({ confirmedAt: null }) })).toEqual({ refusal: contract.FINANCE_REFUSALS.unconfirmed });
     expect(financeApprovalRefusal({ ...facts, route: route({ route: "nomad", statusValidUntil: "2026-11-01" }) })).toEqual({ refusal: contract.FINANCE_REFUSALS.nomadEnded });
     expect(financeApprovalRefusal({ ...facts, attestation: { ...att, visitorEntryWork: true } })).toEqual({ refusal: contract.FINANCE_REFUSALS.visitorEntry });
     expect(financeApprovalRefusal({ ...facts, route: route({ taxFormExpiresOn: "2026-11-19" }) })).toEqual({ refusal: contract.FINANCE_REFUSALS.taxForm });
-    expect(financeApprovalRefusal(facts)).toEqual({ hold: contract.FINANCE_REFUSALS.w8benInUs });
+    expect(financeApprovalRefusal(facts)).toEqual({ hold: `${contract.FINANCE_REFUSALS.held} Form B holders who worked in YY.` });
+    expect(financeApprovalRefusal({ ...facts, settings: { ...SETTINGS, taxFormRoutes: [] }, route: route({ taxFormKind: "form-a", taxFormExpiresOn: "2026-11-19" }) })).toBeNull();
     expect(taxFormValidOn(route(), "2025-12-31")).toBe(false);
   });
   it("payer authority is a note and refuses nothing (decision 16)", () => {
@@ -251,7 +262,8 @@ describe("pay routes", () => {
   it("nobody confirms their own, and a change to a confirmed field clears confirmation", () => {
     expect(confirmRouteRefusal("u1", "u1")).toBe(contract.CONFIRM_OWN_ROUTE_REFUSED);
     expect(confirmRouteRefusal("u2", "u1")).toBeNull();
-    const parsed = parsePayRouteInput({ route: "abroad", legalName: "A Member", address: "Somewhere", taxFormKind: "W-9" });
+    expect(parsePayRouteInput({ route: "abroad", taxFormKind: "form-a" }).ok).toBe(false);
+    const parsed = parsePayRouteInput({ route: "abroad", legalName: "A Member", address: "Somewhere", taxFormKind: "form-a" }, { taxFormKeys: ["form-a"] });
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(routeChangeClearsConfirmation(parsed.value, { ...parsed.value })).toBe(false);
@@ -261,6 +273,7 @@ describe("pay routes", () => {
   it("refuses bank details in the legal name and address, and an unknown route", () => {
     expect(parsePayRouteInput({ route: "abroad", address: "Account 1234 5678 9012" }).ok).toBe(false);
     expect(parsePayRouteInput({ route: "salary" }).ok).toBe(false);
+    expect(parsePayRouteInput({ route: "tourist" }).ok).toBe(false);
   });
 });
 
@@ -271,7 +284,7 @@ describe("the payers document", () => {
     if (!doc.ok) return;
     expect(doc.value.payers[0].routes).toEqual(["abroad"]);
     expect(payerForRoute(doc.value, "abroad", null)?.key).toBe("us-payer");
-    expect(payerForRoute(doc.value, "tourist", null)).toBeNull();
+    expect(payerForRoute(doc.value, "visitor", null)).toBeNull();
     const after = { ...doc.value, payers: [{ ...doc.value.payers[0], invoicing: false }] };
     expect(payersChanges(doc.value, after)).toEqual([{ key: "us-payer", field: "invoicing", from: true, to: false }]);
   });
@@ -481,9 +494,9 @@ describe("closing the loop in Sera (check 22, the pure half)", () => {
       item({ id: "b", dedupeKey: "sera:ext-2", taskStatus: "redirect", redirectTo: "The land role" }),
       item({ id: "c", dedupeKey: "task:t3", taskStatus: "done" }),
       item({ id: "d", dedupeKey: "sera:ext-4", taskStatus: "carry" }),
-    ])).toEqual([
-      { itemId: "a", externalId: "ext-1", action: "done", note: null },
-      { itemId: "b", externalId: "ext-2", action: "redirect", note: "The land role" },
+    ], "lunar-000331")).toEqual([
+      { itemId: "a", externalId: "ext-1", action: "done", note: null, idempotencyKey: "moon:lunar-000331:ext-1" },
+      { itemId: "b", externalId: "ext-2", action: "redirect", note: "The land role", idempotencyKey: "moon:lunar-000331:ext-2" },
     ]);
   });
 });
@@ -516,5 +529,65 @@ describe("the send-by day and the copied addresses (decision 21)", () => {
     const ok = parsePayers({ payers: [{ ...base, invoiceCc: ["one@example.org", "two@example.org"] }] });
     expect(ok.ok && contract.billToOf(ok.value.payers[0]).invoiceCc).toEqual(["one@example.org", "two@example.org"]);
     expect(parsePayers({ payers: [{ ...base, invoiceCc: ["not an address"] }] }).ok).toBe(false);
+  });
+});
+
+describe("a fresh install names nobody (decision 22)", () => {
+  it("has no payer, no address, no country and no acknowledgement, and refuses an invoice with Name who you pay", () => {
+    expect(contract.EMPTY_PAYERS).toEqual({ payers: [] });
+    expect(parsePayers(undefined)).toEqual({ ok: true, value: { payers: [] } });
+    const fresh = contract.parseMoonReviewSettings(undefined);
+    expect(fresh).toEqual({ ok: true, value: contract.EMPTY_SETTINGS });
+    expect([contract.EMPTY_SETTINGS.hostCountry, contract.EMPTY_SETTINGS.pilotAck, contract.EMPTY_SETTINGS.taxForms]).toEqual([null, null, []]);
+    expect(contract.setupGaps(contract.EMPTY_PAYERS, contract.EMPTY_SETTINGS)).toHaveLength(3);
+    const att = parseAttestation({ workCountries: ["YY"], daysInHostCountry: 0, statusUnchanged: true }, "abroad", MOON);
+    const refusal = invoiceSendRefusal({
+      route: "abroad", payer: null, lines: linesFromTerms([terms()], MOON), attestation: att, pilotAckVersion: null,
+      memberNumber: "INV-1", externalInvoiceKey: null, settings: contract.EMPTY_SETTINGS, payers: contract.EMPTY_PAYERS,
+    });
+    expect(refusal).toBe(SEND_REFUSALS.notConfigured);
+    expect(refusal).toContain("Name who you pay");
+  });
+  it("fills every host-country template from the settings, and names no country before they are set", () => {
+    expect(contract.payRouteWords("local_contractor", SETTINGS)).toBe("I live in Examplia with the right to work there, working as an independent contractor");
+    expect(contract.attestationWords(SETTINGS).daysIn).toBe("Days spent in Examplia this moon");
+    expect(contract.attestationWords(contract.EMPTY_SETTINGS).daysIn).toBe("Days spent in the host country this moon");
+  });
+  it("keeps the route kinds a closed list with neutral ids", () => {
+    expect(contract.PAY_ROUTES).toEqual(["pending", "abroad", "nomad", "local_contractor", "local_employee", "visitor"]);
+  });
+  it("reads settings, refuses a bad acknowledgement or form key, and logs old and new values", () => {
+    const s1 = contract.parseMoonReviewSettings(SETTINGS);
+    expect(s1).toEqual({ ok: true, value: SETTINGS });
+    expect(contract.parseMoonReviewSettings({ pilotAck: { text: "", version: "v1" } }).ok).toBe(false);
+    expect(contract.parseMoonReviewSettings({ taxForms: [{ key: "much-too-long", label: "X" }] }).ok).toBe(false);
+    expect(contract.settingsChanges(SETTINGS, { ...SETTINGS, pilotAck: { text: "New words.", version: "v2" } })).toEqual([
+      { field: "pilotAck", from: SETTINGS.pilotAck, to: { text: "New words.", version: "v2" } },
+    ]);
+    expect(contract.moonReviewConfigProblem({ allStaffWeekday: 1 })).toBeNull();
+    expect(contract.moonReviewConfigProblem({ allStaffWeekday: 9 })).not.toBeNull();
+  });
+});
+
+describe("the moon pack (spec section 16)", () => {
+  const pack = (over: Record<string, unknown> = {}) => ({
+    version: 1, cycleId: "lunar-000331",
+    items: [{ title: "Task 1", status: "done", sourceLink: "https://example.org/a", roleId: "r1", accountability: "Keep the water plan" }, { title: "Task 2", outsideRole: true, redirectRole: "Land role" }],
+    roleAudit: { roles: [{ roleId: "r1", choice: "keep" }] }, ...over,
+  });
+  it("reads a pack, pasted as text or as an object", () => {
+    const p = contract.parseMoonPack(JSON.stringify(pack()), "lunar-000331", ["r1"]);
+    expect(p.ok && p.value.items.map((i) => [i.title, i.status, i.roleId, i.outsideRole])).toEqual([["Task 1", "done", "r1", false], ["Task 2", null, null, true]]);
+  });
+  it("refuses a pack that carries an amount or a route, another moon's pack, and payment details", () => {
+    expect(contract.parseMoonPack(pack({ items: [{ title: "Task 1", amountMinor: 100 }] }), "lunar-000331", ["r1"])).toEqual({ ok: false, field: "pack", error: contract.PACK_WORDS.carriesMoney });
+    expect(contract.parseMoonPack(pack({ payRoute: "abroad" }), "lunar-000331", ["r1"]).ok).toBe(false);
+    expect(contract.parseMoonPack(pack(), "lunar-000332", ["r1"]).ok).toBe(false);
+    expect(contract.parseMoonPack(pack({ items: [{ title: "Card 4111 1111 1111 1111" }] }), "lunar-000331", ["r1"]).ok).toBe(false);
+  });
+  it("keys an item by its source link, so the same link is skipped", () => {
+    expect(contract.packItemKey("https://example.org/a", "Task 1")).toBe(contract.packItemKey("https://example.org/a", "Other words"));
+    expect(contract.packItemKey("https://example.org/a", "Task 1")).not.toBe(contract.packItemKey("https://example.org/b", "Task 1"));
+    expect(contract.packItemKey("https://example.org/a", "x")).toMatch(/^claude_deep_dive:link:[0-9a-f]{16}$/);
   });
 });

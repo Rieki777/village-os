@@ -81,6 +81,24 @@ launch, `members` takes a `module.switch` holder or a vote.
 - **Closing the loop in Sera** (`seraClosures`): once the work is approved, each item Sera sent that the member marked
   Done or Let go closes through the feedback outbox, and each Redirect goes with its words. Only tasks Sera sent.
 
+## Nothing village-specific in code (decision 22)
+
+Every value one village decides is data with an admin editor on the Cash payouts desk, edited by `cash.pay` holders,
+and every change writes a `moon_review_events` row with old and new values:
+
+- **Payers** (`payers` in `app_config`, `PUT /api/moon-review/payers`): legal name, address, tax number, country,
+  currencies, invoicing on or off, the authority note, `invoiceTo` and `invoiceCc`, and the routes each payer pays.
+- **Settings** (`moon-review-settings` in `app_config`, `PUT /api/moon-review/settings`): the host country (code and
+  name), its VAT rate, its exchange-rate source and its currency, the tax forms kept on file, the routes that need one,
+  the hold rules, and the pilot acknowledgement with its version. A new version asks every member to accept again.
+  The attestation and the route words are templates filled from these.
+- **The send-by rule** is the module's own config (`allStaffWeekday`).
+
+What stays in code: the closed list of route kinds (`pending`, `abroad`, `nomad`, `local_contractor`,
+`local_employee`, `visitor`), the status words, the scoring rules and the safety checks. Defaults ship empty: until a
+payer, the host country and the acknowledgement are filled in, an invoice is refused with "Name who you pay first", and
+a recap still sends.
+
 ## Setup
 
 - An admin creates a power group carrying `moon.approve` and seats someone in it to approve the work. Capabilities live on
@@ -90,8 +108,8 @@ launch, `members` takes a `module.switch` holder or a vote.
   capabilities column needs a SQL function production has never run), so a village that takes one off a group keeps
   it off.
 - Someone holds `cash.pay` (the Treasury role, and the founding stewards at launch).
-- The `payers` document in `app_config` is filled through `PUT /api/moon-review/payers` (see
-  `docs/FORK_RUNBOOK.md`). Entity names live there and nowhere in code.
+- The `payers` and `moon-review-settings` documents are filled on the Cash payouts desk (see
+  `docs/FORK_RUNBOOK.md`). Entity, country, tax and rate names live there and nowhere in code.
 - Roles paid through this flow carry no `org_roles.cash_minor`, so the hourly settlement never owes them.
 
 ## Erasure and export

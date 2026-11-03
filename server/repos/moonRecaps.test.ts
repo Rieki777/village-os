@@ -35,7 +35,7 @@ const item = (over: Partial<ItemInsert>): ItemInsert => ({
 
 const ROUTE = {
   route: "abroad" as const, payerKey: "us-payer", currency: "USD", legalName: "A Member", address: "Somewhere", statusValidUntil: null,
-  taxFormKind: "W-9" as const, taxFormSignedOn: "2026-01-01", taxFormExpiresOn: null, taxFormFiledWhere: "Finance drive",
+  taxFormKind: "form-a", taxFormSignedOn: "2026-01-01", taxFormExpiresOn: null, taxFormFiledWhere: "Finance drive",
 };
 
 describe.skipIf(!configured)("moon review store on a real database", () => {
