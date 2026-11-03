@@ -69,7 +69,7 @@ import { moduleConfig } from "../lib/modules";
 import { httpsAddress } from "@shared/modules";
 import { factsForEntity, moduleFactCount } from "../repos/moduleFacts";
 import { outboxView } from "../lib/saberraOutbox";
-import { bridgeReading } from "../lib/saberraBridge";
+import { bridgeReading } from "../repos/saberraBridge";
 
 type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser">;
 
