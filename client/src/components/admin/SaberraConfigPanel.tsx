@@ -51,6 +51,7 @@ const MODULE_ID = "saberra";
 
 /** The bridge board, its own chunk so the main bundle does not grow. */
 const SaberraBridgeBoard = lazy(() => import("./SaberraBridgeBoard"));
+const SeraLinkPanel = lazy(() => import("./SeraLinkPanel"));
 
 const inputCls =
   "border border-gray-200 rounded-lg px-2 py-1.5 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-deep";
@@ -250,6 +251,9 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
     <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 sm:p-5 space-y-4">
       <Suspense fallback={<p className="text-xs text-gray-500">Reading the bridge…</p>}>
         <SaberraBridgeBoard password={password} />
+      </Suspense>
+      <Suspense fallback={<p className="text-xs text-gray-500">Reading the Sera links…</p>}>
+        <SeraLinkPanel password={password} />
       </Suspense>
       <QuestLevel level={1} title="This village's address at the service" state={status?.addressSet ? "done" : undefined}>
         <p className="text-xs text-gray-500 mb-3">
