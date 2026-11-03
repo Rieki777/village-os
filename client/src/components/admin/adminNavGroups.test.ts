@@ -50,10 +50,13 @@ describe("navGroups", () => {
 
   it("moves the setup tab from a front door to an ordinary settings row", () => {
     const before = navGroups(false);
-    expect(before[0].title).toBe("Start here");
-    expect(before[0].items.map((i) => i.key)).toEqual(["setup"]);
+    expect(before[0].title).toBe("Today");
+    expect(before[0].items.map((i) => i.key)).toEqual(["home"]);
+    expect(before[1].title).toBe("Start here");
+    expect(before[1].items.map((i) => i.key)).toEqual(["setup"]);
 
     const after = navGroups(true);
+    expect(after[0].title).toBe("Today");
     expect(after.map((g) => g.title)).not.toContain("Start here");
     const settings = after.find((g) => g.title === "Settings");
     expect(settings?.items.map((i) => i.key)).toEqual(["setup"]);
@@ -104,6 +107,7 @@ describe("navGroups", () => {
    * the rule.
    */
   const ORDER: Array<[string, string[]]> = [
+    ["Today", ["home"]],
     ["Start here", ["setup"]],
     ["Who runs this village", ["players", "game-roles", "org-chart", "handover", "governance-weights"]],
     // `money` is a CONTENT_SECTIONS entry the economics branch adds (Money &
@@ -174,6 +178,8 @@ describe("navGroups", () => {
       "paths-stages",
       // Cash to pay out, 2026-10-30: the treasurer's record of bank transfers (0285).
       "cash-payouts",
+      // Home, the start page. The side rail stays one tap away.
+      "home",
     ];
     // Rows that LEFT the rail, each with a key that still renders a screen, so
     // a deep link to it still lands. `email-settings` renders Comms Settings.

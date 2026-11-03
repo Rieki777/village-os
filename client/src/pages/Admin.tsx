@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+﻿import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 // Nineteen icons left this list when navGroups and CONTENT_SECTIONS moved to
 // client/src/components/admin/: they were the nav's icons, not this file's.
 import { Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -40,6 +40,9 @@ import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
 import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
+import { tabFromSearch } from "@/components/admin/adminAreas";
+
+const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
 import { TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
@@ -7820,9 +7823,7 @@ export default function Admin() {
   // a specific admin screen; "go to Integrations" had no address. Same
   // `activeTab`/`setActiveTab` contract, so the ~35 call sites are untouched,
   // and back/forward now walk tab history the way a browser should.
-  const [activeTab, setActiveTabState] = useState<string>(
-    () => new URLSearchParams(window.location.search).get("tab") ?? "submissions",
-  );
+  const [activeTab, setActiveTabState] = useState<string>(() => tabFromSearch(window.location.search));
   const setActiveTab = useCallback((tab: string) => {
     setActiveTabState(tab);
     const p = new URLSearchParams(window.location.search);
@@ -7833,7 +7834,7 @@ export default function Admin() {
     window.scrollTo({ top: 0 });
   }, []);
   useEffect(() => {
-    const onPop = () => setActiveTabState(new URLSearchParams(window.location.search).get("tab") ?? "submissions");
+    const onPop = () => setActiveTabState(tabFromSearch(window.location.search));
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -7919,6 +7920,7 @@ export default function Admin() {
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
+          {activeTab === "home" && <Suspense fallback={null}><HomeBase password={password} onOpenTab={setActiveTab} groups={filterNavByModules(navGroups(setupComplete), moduleLifecycles)} /></Suspense>}
           {activeTab === "modules" && <SeraAdminHome />}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
