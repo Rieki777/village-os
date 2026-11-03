@@ -36,7 +36,7 @@
  * the same zone as every other panel in this directory
  * (scripts/check-tailwind-gray.mjs LIGHT_SURFACES).
  */
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { MODULES_BY_ID } from "@shared/modules";
@@ -47,6 +47,9 @@ import SaberraOutboxPanel from "./SaberraOutboxPanel";
 import { ReviewQueueButton, ScheduleControl, SyncRunLog, WHY_WORDS } from "./SaberraSyncSchedule";
 
 const MODULE_ID = "saberra";
+
+/** The bridge board, its own chunk so the main bundle does not grow. */
+const SaberraBridgeBoard = lazy(() => import("./SaberraBridgeBoard"));
 
 const inputCls =
   "border border-gray-200 rounded-lg px-2 py-1.5 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-deep";
@@ -244,6 +247,9 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
 
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-5 space-y-5">
+      <Suspense fallback={<p className="text-xs text-gray-500">Reading the bridge…</p>}>
+        <SaberraBridgeBoard password={password} />
+      </Suspense>
       <div>
         <h3 className="font-semibold text-gray-900 mb-1">This village's address at the service</h3>
         <p className="text-xs text-gray-500 mb-3">
