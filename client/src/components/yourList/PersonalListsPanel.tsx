@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import LibraryImportPanel from "./LibraryImportPanel";
 import BridgePanel from "./BridgePanel";
+import ErasePrepPanel from "./ErasePrepPanel";
 import { BTN_SECONDARY, HINT, LABEL_CAPS, PANEL } from "@/components/sessions/roomUi";
 
 export interface PanelPerson {
@@ -98,6 +99,7 @@ export default function PersonalListsPanel({ password, players }: { password: st
       )}
       <LibraryImportPanel password={password} players={players} />
       <BridgePanel password={password} />
+      <ErasePrepPanel password={password} players={players} />
     </section>
   );
 }
