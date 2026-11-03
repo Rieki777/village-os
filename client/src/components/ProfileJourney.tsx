@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { m } from "framer-motion";
 import { TrendingUp, Heart, ScrollText, ShieldCheck, Users } from "lucide-react";
-import { authToken, useGameConfig, useRoleWord } from "@/lib/gameApi";
+import { authToken, useGameConfig } from "@/lib/gameApi";
 import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenNameLower } from "@/hooks/useTokenNames";
 import Celebration from "@/components/natural/Celebration";
@@ -218,8 +218,6 @@ const SECTIONS = [
 ] as const;
 
 export default function ProfileJourney() {
-  /* The village's own word for a position somebody holds. Default "Role". */
-  const roleWord = useRoleWord();
   const [prog, setProg] = useState<any | null>(null);
   const [flows, setFlows] = useState<any | null>(null);
   const [ledger, setLedger] = useState<any | null>(null);
@@ -323,17 +321,16 @@ export default function ProfileJourney() {
           </div>
 
           {(prog.roles ?? []).length > 0 && (
-            /*
-              THE ROLES A MEMBER HOLDS, NAMED WITH THE VILLAGE'S OWN WORD.
-              The chips were unlabelled: gold pills with a person icon and no
-              heading, which reads as decoration rather than as standing. The
-              design asked for a "Seats you hold" panel; a role is the position
-              and a seat is one person's turn at it, so what a member HOLDS is
-              the role. `roleWord.plural` is derived, so a village calling them
-              Hats reads "Hats you hold" with no second string to set.
-            */
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {roleWord.plural} you hold
+            {/*
+              GROUPS, NOT THE WORK ROLES.
+
+              These chips are the standing groups (Founders Circle, Steward
+              Circle, Treasury). "Your roles" on the same page is the work a
+              member is doing for the village. Calling both "roles you hold"
+              made an empty work list contradict a full group list.
+            */}
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-dash-gold-lit">
+              Groups you are in
             </p>
           )}
           {/*
