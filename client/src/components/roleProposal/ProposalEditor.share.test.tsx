@@ -77,6 +77,15 @@ describe("step 5, preview", () => {
 });
 
 describe("step 6, share", () => {
+  it("sends open terms to the operations role, and leaves submit on the server's own reason", async () => {
+    draw({ roles: [{ roleId: "r1" }] }, "share");
+    const send = await screen.findByRole("button", { name: RP_WORDS.sendToOps("the village's operations role") });
+    expect(screen.getByRole("button", { name: RP_WORDS.submit })).toBeDisabled();
+    expect(screen.getByRole("button", { name: RP_WORDS.makeLink })).toBeTruthy();
+    fireEvent.click(send);
+    await waitFor(() => expect(called("POST", "/share")[0].body).toEqual({ audience: "members" }));
+  });
+
   it("makes a link, switches who reads it, copies it, makes a new one and turns it off", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "share");
     fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.makeLink }));

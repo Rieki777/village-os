@@ -275,6 +275,10 @@ describe("submit readiness", () => {
     expect(submitRefusal(ready, true)).toBeNull();
   });
 
+  it("does not block submit when the terms are still open", () => {
+    expect(submitRefusal({ ...ready, settings: { v: 1 } }, true)).toBeNull();
+  });
+
   it("says Rye's words when next season has no dates", () => {
     expect(PROPOSAL_WORDS.noTarget).toBe("Next season's dates aren't set yet");
   });
