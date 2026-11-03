@@ -27,9 +27,16 @@ export const STEP_TITLES: Record<StepKey, string> = {
 };
 
 export const RP_WORDS = {
-  // The profile button.
+  // The profile button. The card at the top of the profile uses the shorter
+  // lines below. This pair stays for the list under My applications.
   propose: "Propose my roles for next season",
   continue: "Continue my proposal for next season",
+  profileKicker: "Next season",
+  profilePropose: "Propose your role",
+  profileProposeLine: "Say the roles you will hold next season.",
+  profileContinue: "Continue your role proposal",
+  profileSubmitted: "Your role proposal",
+  profileSee: "See where it stands",
   // The page.
   title: "Propose my roles for next season",
   forSeason: (name: string, starts: string) => seasonHeading(name, starts),

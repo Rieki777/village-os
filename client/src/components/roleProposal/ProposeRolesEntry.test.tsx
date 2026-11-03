@@ -51,17 +51,33 @@ describe("the profile button", () => {
   it("starts a proposal when there is no draft", async () => {
     answer = () => json(mine(null));
     draw();
-    const link = await screen.findByRole("link", { name: RP_WORDS.propose });
+    const link = await screen.findByRole("link", { name: RP_WORDS.profilePropose });
     expect(link.getAttribute("href")).toBe("/role-proposals/new");
+    expect(screen.getByText(RP_WORDS.profileProposeLine)).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith("/api/governance/role-proposals/mine", expect.anything());
   });
 
-  it("reads Continue and opens the draft when one exists", async () => {
-    answer = () => json(mine("rp-00000000000000a1"));
+  it("reads Continue and opens the draft when one exists, with how far it has got", async () => {
+    const draft = proposalWith(
+      { roles: [{ roleId: "r1" }], season: { aim: null, seasonalGoals: [], servesGoals: [], ownWords: { love: "Baking", offer: "", why: "" } } },
+      { id: "rp-00000000000000a1", status: "draft" },
+    );
+    answer = () => json(mine(draft.id, [draft]));
     draw();
-    const link = await screen.findByRole("link", { name: RP_WORDS.continue });
+    const link = await screen.findByRole("link", { name: RP_WORDS.profileContinue });
     expect(link.getAttribute("href")).toBe("/role-proposals/rp-00000000000000a1");
-    expect(screen.queryByRole("link", { name: RP_WORDS.propose })).toBeNull();
+    expect(screen.getByText("2 of 3 parts written")).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "2 of 3 parts written" })).toHaveAttribute("aria-valuenow", "2");
+    expect(screen.queryByRole("link", { name: RP_WORDS.profilePropose })).toBeNull();
+  });
+
+  it("says where a submitted proposal stands", async () => {
+    const submitted = proposalWith({ roles: [{ roleId: "r1" }] }, { id: "rp-00000000000000b2", status: "submitted", consent: consentOf("open") });
+    answer = () => json(mine(null, [submitted]));
+    draw();
+    expect(await screen.findByText("Waiting on the circle")).toBeTruthy();
+    const link = screen.getByRole("link", { name: RP_WORDS.profileSee });
+    expect(link.getAttribute("href")).toBe("/role-proposals/rp-00000000000000b2");
   });
 
   it("says when next season has no dates yet", async () => {
