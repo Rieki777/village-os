@@ -33,7 +33,7 @@ import { itemsOf, planImport } from "../../shared/memberTaskImport";
 import { heldFromLibrary, runImport } from "../repos/memberTaskImport";
 import type { MemberTaskRow } from "../repos/memberTasks";
 import {
-  closeLibraryTask, dueOutbox, enqueue, libraryOwnerOf, markLinkSynced, markOutboxDropped, syncableLinks, feedbackOn, insertFeedback, markOutboxFailed, markOutboxSent, notesRelease, sweepOldFeedback, type OutboxRow,
+  closeLibraryTask, dueOutbox, importPhrase, enqueue, libraryOwnerOf, markLinkSynced, markOutboxDropped, syncableLinks, feedbackOn, insertFeedback, markOutboxFailed, markOutboxSent, notesRelease, sweepOldFeedback, type OutboxRow,
 } from "../repos/memberTaskFeedback";
 
 export { libraryOwnerOf };
@@ -78,7 +78,9 @@ export async function recordAction(pool: Pool, a: ActionInput): Promise<boolean>
     reason_code: code ?? "not_a_task",
     action: a.action,
     feedback_id: a.feedback.feedbackId,
-    ...(redirectOwner ? { reassign_to_owner_id: redirectOwner } : {}),
+    ...(redirectOwner ? { reassign_to_owner_id: redirectOwner, redirect_target: { type: "person", owner_id: redirectOwner } } : {}),
+    ...(!redirectOwner && a.redirectToRoleId ? { redirect_target: { type: "role" } } : {}),
+    shown_in: c.shownIn, rank_score: c.rankScore, days_on_list: c.daysOnList, surface: c.surface,
     ...(a.action === "priority_changed" ? { new_priority: a.task.tier } : {}),
     context: { shown_in: c.shownIn, rank_score: c.rankScore, days_on_list: c.daysOnList, surface: c.surface, screen_reason: a.feedback.reason },
   });
@@ -88,7 +90,7 @@ export async function recordAction(pool: Pool, a: ActionInput): Promise<boolean>
   if (a.feedback.note) {
     const held = (await notesRelease(pool)) !== "released";
     await enqueue(pool, a.userId, a.feedback.feedbackId, "note", {
-      task_id: a.task.externalId, owner_id: owner, feedback_id: a.feedback.feedbackId, reason_code: code ?? "not_a_task", note: stripContact(a.feedback.note),
+      task_id: a.task.externalId, owner_id: owner, feedback_id: `${a.feedback.feedbackId}-note`, reason_code: code ?? "not_a_task", note: stripContact(a.feedback.note),
     }, held);
   }
   return true;
@@ -120,10 +122,14 @@ async function sendOne(client: ClientOptions, session: string, tools: Map<string
   let tool: string | null = null;
   let args: Record<string, unknown> = {};
   let minimal: Record<string, unknown> = {};
-  if (row.kind === "feedback" || row.kind === "undo") {
+  if (row.kind === "feedback") {
     tool = "submit_task_feedback";
-    args = row.kind === "undo" ? { ...p, action: "undo" } : p;
-    minimal = { task_id: p.task_id, reason_code: p.reason_code };
+    args = p;
+    minimal = { task_id: p.task_id, reason_code: p.reason_code, feedback_id: p.feedback_id };
+  } else if (row.kind === "undo") {
+    tool = "retract_task_feedback";
+    args = { feedback_id: p.feedback_id };
+    minimal = args;
   } else if (row.kind === "note") {
     // The service has not added a note field yet: when it does not declare one, the note waits.
     const fields = declaredFields(tools.get("submit_task_feedback"));
@@ -137,7 +143,7 @@ async function sendOne(client: ClientOptions, session: string, tools: Map<string
     args = { task_id: p.task_id, owner_id: p.owner_id };
     minimal = { task_id: p.task_id };
   } else if (row.kind === "forget_person") {
-    tool = "delete_feedback_for_person";
+    tool = tools.has("delete_feedback_for_person") ? "delete_feedback_for_person" : "delete_owner_feedback";
     args = p;
     minimal = { owner_id: p.owner_id };
   }
@@ -203,29 +209,57 @@ export function removedIdsOf(page: unknown): string[] {
  * ones refresh, tasks the service closed are marked done on an untouched row,
  * and nothing the member removed or finished ever comes back.
  */
-export async function syncMember(
-  pool: Pool, client: ClientOptions, session: string, tools: Map<string, ToolInfo>, link: { owner: string; userId: string; since: string | null }, today: string,
-): Promise<{ created: number; updated: number; closed: number; error?: string }> {
+/** Every library task for one owner whose evidence holds the phrase, all pages. */
+export async function pullLibrary(
+  client: ClientOptions, session: string, tools: Map<string, ToolInfo>, owner: string, phrase: string, since: string | null,
+): Promise<{ ok: true; items: unknown[]; removed: string[] } | { ok: false; error: string }> {
   const fields = declaredFields(tools.get("list_voice_tasks"));
   const items: unknown[] = [];
   const removed: string[] = [];
   let cursor: string | null = null;
   let pages = 0;
-  const startedAt = new Date();
   do {
     const ask = shapeArgs({
-      owner_id: link.owner, page_size: 100,
+      owner_id: owner, page_size: 100,
+      ...(phrase ? { evidence_contains: phrase } : {}),
       ...(cursor ? { cursor } : {}),
-      ...(link.since ? { changed_since: link.since, removed_since: link.since } : {}),
+      ...(since ? { changed_since: since, removed_since: since } : {}),
     }, fields).args;
     const r = await callToolJson(client, session, "list_voice_tasks", ask);
-    if (!r.ok) return { created: 0, updated: 0, closed: 0, error: `${r.why}: ${r.detail}` };
-    items.push(...itemsOf(r.value));
+    if (!r.ok) return { ok: false, error: `${r.why}: ${r.detail}` };
+    let got = itemsOf(r.value);
+    // Belt and braces: if the filter was not applied, hold to the phrase here.
+    if (phrase) got = got.filter((t) => !t || typeof t !== "object" || !("evidence" in t) || String((t as Record<string, unknown>).evidence ?? "").includes(phrase));
+    items.push(...got);
     removed.push(...removedIdsOf(r.value));
     const v = (r.value ?? {}) as Record<string, unknown>;
     cursor = v.has_more === false ? null : typeof v.next_cursor === "string" && v.next_cursor ? v.next_cursor : null;
     pages += 1;
   } while (cursor && pages < MAX_PAGES);
+  return { ok: true, items, removed };
+}
+
+/** Pull for the steward import: a session of its own. */
+export async function pullForImport(owner: string, phrase: string): Promise<{ ok: true; items: unknown[] } | { ok: false; error: string }> {
+  if (!bridgeOn()) return { ok: false, error: "The library module is off." };
+  const pre = preflight();
+  if (!pre.ok) return { ok: false, error: `Not connected: ${pre.gap}` };
+  const session = await openSession(pre.client);
+  if (!session) return { ok: false, error: "The library did not open a session." };
+  const listing = await listTools(pre.client, session);
+  const tools = new Map<string, ToolInfo>((listing.ok ? listing.tools : []).map((t) => [t.name, t]));
+  if (!tools.has("list_voice_tasks")) return { ok: false, error: "The library does not offer list_voice_tasks." };
+  const r = await pullLibrary(pre.client, session, tools, owner, phrase, null);
+  return r.ok ? { ok: true, items: r.items } : r;
+}
+
+export async function syncMember(
+  pool: Pool, client: ClientOptions, session: string, tools: Map<string, ToolInfo>, link: { owner: string; userId: string; since: string | null }, today: string,
+): Promise<{ created: number; updated: number; closed: number; error?: string }> {
+  const startedAt = new Date();
+  const pulled = await pullLibrary(client, session, tools, link.owner, await importPhrase(pool), link.since);
+  if (!pulled.ok) return { created: 0, updated: 0, closed: 0, error: pulled.error };
+  const { items, removed } = pulled;
   const plan = planImport(items, link.owner, await heldFromLibrary(pool, link.userId));
   const res = await runImport(pool, link.userId, link.owner, plan, today, null);
   let closed = 0;

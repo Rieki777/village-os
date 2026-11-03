@@ -22,8 +22,8 @@
 import { randomUUID } from "node:crypto";
 import type { Express } from "express";
 import { SCREEN_REASONS, parseFeedback, type FeedbackAction, type ScreenReason } from "../../shared/memberTaskFeedback";
-import { recordAction } from "../lib/memberTaskBridge";
-import { latestFeedback, undoFeedback, enqueue } from "../repos/memberTaskFeedback";
+import { pullForImport, recordAction } from "../lib/memberTaskBridge";
+import { importPhrase, latestFeedback, setImportPhrase, undoFeedback, enqueue } from "../repos/memberTaskFeedback";
 import type { AppDeps } from "../lib/appDeps";
 import { itemsOf, planImport, planSummary } from "../../shared/memberTaskImport";
 import { heldFromLibrary, memberExists, removeBatch, runImport } from "../repos/memberTaskImport";
@@ -237,14 +237,26 @@ export function register(app: Express, deps: Deps): void {
     const seraOwnerId = String(body.seraOwnerId ?? "").trim();
     if (!userId || userId.length > 64) return res.status(400).json({ error: "Which member?" });
     if (!seraOwnerId || seraOwnerId.length > 128) return res.status(400).json({ error: "Which person in the library? Paste their owner id." });
-    const items = itemsOf(body.items ?? body.answer);
-    if (!items.length) return res.status(400).json({ error: "No tasks found in what was pasted." });
+    let items: unknown[];
+    let phrase: string | null = null;
+    if (body.pull === true) {
+      // Read straight from the library, filtered by the evidence phrase (never by date).
+      phrase = typeof body.evidenceContains === "string" ? body.evidenceContains.trim().slice(0, 200) : await importPhrase(getPool());
+      const pulled = await pullForImport(seraOwnerId, phrase);
+      if (!pulled.ok) return res.status(502).json({ error: pulled.error });
+      items = itemsOf(pulled.items);
+      if (!items.length) return res.status(400).json({ error: "The library returned no tasks for that person and phrase." });
+      if (body.dryRun === false && phrase) await setImportPhrase(getPool(), phrase);
+    } else {
+      items = itemsOf(body.items ?? body.answer);
+      if (!items.length) return res.status(400).json({ error: "No tasks found in what was pasted." });
+    }
     if (items.length > 2000) return res.status(400).json({ error: "That is more than 2000 tasks. Split it." });
     if (!(await memberExists(getPool(), userId))) return res.status(404).json({ error: "No member with that id." });
     const plan = planImport(items, seraOwnerId, await heldFromLibrary(getPool(), userId));
     const summary = planSummary(plan);
     // A dry run unless the steward said otherwise in so many words.
-    if (body.dryRun !== false) return res.json({ dryRun: true, ...summary });
+    if (body.dryRun !== false) return res.json({ dryRun: true, pulled: phrase !== null, ...summary });
     const result = await runImport(getPool(), userId, seraOwnerId, plan, today(), adminActor(req)?.id ?? null);
     res.json({ dryRun: false, ...summary, ...result, listOn: await listIsOn(getPool(), userId) });
   });

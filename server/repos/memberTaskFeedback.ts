@@ -6,7 +6,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import { RETENTION_DAYS, type FeedbackAction, type FeedbackContext, type LibraryCode, type ScreenReason } from "../../shared/memberTaskFeedback";
+import { DEFAULT_IMPORT_PHRASE, RETENTION_DAYS, type FeedbackAction, type FeedbackContext, type LibraryCode, type ScreenReason } from "../../shared/memberTaskFeedback";
 import type { Queryable } from "./memberTasks";
 
 // ── Switches ──────────────────────────────────────────────────────────────
@@ -270,4 +270,17 @@ export async function syncableLinks(db: Queryable): Promise<{ owner: string; use
     userId: String(l.user_id),
     since: l.last_synced_at instanceof Date ? l.last_synced_at.toISOString() : l.last_synced_at ? String(l.last_synced_at) : null,
   }));
+}
+
+/** The evidence phrase the import and the sync read with. Steward-editable. */
+export async function importPhrase(db: Queryable): Promise<string> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `value` FROM `member_task_bridge` WHERE `setting` = 'import_phrase'");
+  return rows.length && String(rows[0].value).trim() ? String(rows[0].value) : DEFAULT_IMPORT_PHRASE;
+}
+
+export async function setImportPhrase(db: Queryable, phrase: string): Promise<void> {
+  await db.query(
+    "INSERT INTO `member_task_bridge` (`setting`, `value`) VALUES ('import_phrase', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
+    [phrase.slice(0, 200)],
+  );
 }

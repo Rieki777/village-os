@@ -150,3 +150,6 @@ export function parseFeedback(body: unknown, action: FeedbackAction): { ok: true
     },
   };
 }
+
+/** The steward import's evidence filter (Roots, Nov 2): exactly the tasks loaded for this village. */
+export const DEFAULT_IMPORT_PHRASE = "Loaded directly into Sera because the amora.regencivics.earth profile page does not yet read from here"; // brand-ok: the library's literal evidence text, steward-editable
