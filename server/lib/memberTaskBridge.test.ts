@@ -97,4 +97,14 @@ describe.skipIf(!configured)("the bridge against a real schema", () => {
     expect(left[0]).toMatchObject({ kind: "forget_person", user_id: null });
     expect(left[0].payload).not.toContain("m-wren");
   });
+  it("a note carries <feedback_id>-note, a duplicate names the task that stays, and phones are stripped", async () => {
+    const task = await libraryTask();
+    await recordAction(pool, { userId: "m-wren", task, action: "remove", mergedIntoExternalId: "s-keep", feedback: { feedbackId: "fb-ffffffff", reason: "duplicate", note: "call +506 8888 1234 or x@y.org", context: ctx } });
+    const rows = await q("SELECT `kind`, `payload` FROM `member_task_outbox` ORDER BY `id`"); // module-review-ok: fixture SQL against the S5 scratch schema
+    const of = (k: string) => { const r = rows.find((x: any) => x.kind === k); return typeof r.payload === "string" ? JSON.parse(r.payload) : r.payload; };
+    expect(of("feedback")).toMatchObject({ feedback_id: "fb-ffffffff", reason_code: "duplicate", merged_into_task_id: "s-keep" });
+    expect(of("note").feedback_id).toBe("fb-ffffffff-note");
+    expect(of("note").note).not.toMatch(/8888|x@y\.org/);
+    for (const r of rows) expect(JSON.stringify(r.payload)).not.toContain("journal words");
+  });
 });

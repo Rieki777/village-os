@@ -16,12 +16,16 @@ export interface ReasonPick {
   note: string | null;
   toUserId?: string;
   toRoleId?: string;
+  /** On a duplicate or merge, the task that stays. */
+  mergedIntoTaskId?: string;
 }
 
 const FIELD = "mt-1 block min-h-11 w-full rounded-xl border border-border bg-background px-3 text-foreground";
 
-export default function ReasonSheet({ mode, busy, onCancel, onPick }: {
+export default function ReasonSheet({ mode, busy, onCancel, onPick, others = [] }: {
   mode: "remove" | "redirect";
+  /** The member's other open tasks, for "which one stays?" on a duplicate. */
+  others?: { id: string; title: string }[];
   busy: boolean;
   onCancel: () => void;
   onPick: (p: ReasonPick) => void;
@@ -30,6 +34,8 @@ export default function ReasonSheet({ mode, busy, onCancel, onPick }: {
   const [reason, setReason] = useState<ScreenReason | "">("");
   const [note, setNote] = useState("");
   const [to, setTo] = useState("");
+  const [keeps, setKeeps] = useState("");
+  const dup = reason === "duplicate" || reason === "merged";
   const [targets, setTargets] = useState<{ people: { id: string; name: string }[]; roles: { id: string; name: string }[] } | null>(null);
   useEffect(() => {
     if (mode === "redirect") void readTargets().then(setTargets);
@@ -43,6 +49,7 @@ export default function ReasonSheet({ mode, busy, onCancel, onPick }: {
       reason: reason as ScreenReason,
       note: note.trim() || null,
       ...(mode === "redirect" ? (kind === "p" ? { toUserId: id } : { toRoleId: id }) : {}),
+      ...(mode === "remove" && dup && keeps ? { mergedIntoTaskId: keeps } : {}),
     });
   };
 
@@ -59,6 +66,15 @@ export default function ReasonSheet({ mode, busy, onCancel, onPick }: {
           ))}
         </div>
       </fieldset>
+      {mode === "remove" && dup && others.length > 0 && (
+        <label className="mt-2 block">
+          <span className={LABEL_CAPS}>Which task stays? (optional)</span>
+          <select className={FIELD} value={keeps} onChange={(e) => setKeeps(e.target.value)}>
+            <option value="">Don't say</option>
+            {others.map((o) => <option key={o.id} value={o.id}>{o.title}</option>)}
+          </select>
+        </label>
+      )}
       {mode === "redirect" && (
         <label className="mt-2 block">
           <span className={LABEL_CAPS}>To</span>

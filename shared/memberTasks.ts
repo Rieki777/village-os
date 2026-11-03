@@ -139,12 +139,19 @@ export interface TaskForRank {
   notNowCount?: number;
 }
 
+/** Days from a village day to the Sunday that ends its week. The village's week starts Monday (Costa Rica). */
+export function daysLeftInWeek(today: string): number {
+  const [y, m, d] = today.split("-").map(Number);
+  const mondayIs0 = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+  return 6 - mondayIs0;
+}
+
 /** Today, this week or later. A chosen horizon wins unless the due date is sooner. */
 export function horizonOf(t: Pick<TaskForRank, "dueOn" | "horizon">, today: string): Horizon {
   let byDue: Horizon | null = null;
   if (t.dueOn && isDayKey(t.dueOn)) {
     const d = daysBetween(today, t.dueOn);
-    byDue = d <= 0 ? "today" : d <= 6 ? "week" : "later";
+    byDue = d <= 0 ? "today" : d <= daysLeftInWeek(today) ? "week" : "later";
   }
   const order: Record<Horizon, number> = { today: 0, week: 1, later: 2 };
   if (t.horizon && byDue) return order[t.horizon] <= order[byDue] ? t.horizon : byDue;

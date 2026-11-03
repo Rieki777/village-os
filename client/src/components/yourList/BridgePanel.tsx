@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
-import { SCREEN_REASON_WORDS, type ScreenReason } from "@shared/memberTaskFeedback";
+import { SCREEN_REASON_WORDS, SERA_TEST_OWNER_ID, type ScreenReason } from "@shared/memberTaskFeedback";
 import { BTN_QUIET, BTN_SECONDARY, HINT } from "@/components/sessions/roomUi";
 
 interface Bridge {
@@ -62,6 +62,14 @@ export default function BridgePanel({ password }: { password: string }) {
       <p className={`${HINT} mt-1`}>
         {count("queued")} waiting, {count("sent")} sent, {count("failed")} retrying, {count("held")} notes held.
       </p>
+      <details className={`${HINT} mt-2`}>
+        <summary className="cursor-pointer">Testing a send end to end</summary>
+        <p className="mt-1">
+          Use the library's test person, never a real member's owner id. Link a test member to{" "}
+          <code className="font-mono">{SERA_TEST_OWNER_ID}</code> in the import above, import, remove one task with a reason,
+          then press Send now. The test person's tasks are the library's own fixtures.
+        </p>
+      </details>
       <p className="mt-2 text-sm text-foreground">
         Notes are {b.notes === "held" ? "held in the village" : "released to the library"}.
       </p>

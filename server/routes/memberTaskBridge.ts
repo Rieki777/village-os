@@ -22,7 +22,8 @@ import type { AppDeps } from "../lib/appDeps";
 import { registerJob } from "../lib/scheduler";
 import { villageDayKey } from "../../shared/companionItems";
 import { REDIRECT_CHOICES, parseFeedback, type ScreenReason } from "../../shared/memberTaskFeedback";
-import { drainOutbox, recordAction, syncLinked } from "../lib/memberTaskBridge";
+import { heldFromLibrary } from "../repos/memberTaskImport";
+import { drainOutbox, libraryOwnerOf, recordAction, syncLinked } from "../lib/memberTaskBridge";
 import { insertTask, listIsOn, ownTask, setMemberPinned, setStatus } from "../repos/memberTasks";
 import {
   activeRoles, closeRoleItem, feedbackOn, lastOutboxErrors, markReviewed, notesRelease, outboxCounts, queueForRole,
@@ -90,8 +91,14 @@ export function register(app: Express, deps: Deps): void {
     if (result === "missing") return res.status(404).json({ error: "not_found" });
     // The task's words travel; the private detail (journal text) never does.
     if (toUserId) {
-      await insertTask(pool, toUserId, {
-        title: task.title, tier: task.tier, dueOn: task.dueOn, horizon: null, minutes: task.minutes, privateDetail: null, source: "redirect", createdOn: today(),
+      // When both sides are linked to the library, the copy keeps the library's id, so the library's
+      // reassignment lands on this row at the next sync instead of arriving as a second task.
+      const sameLibraryTask = task.source === "sera" && !!task.externalId && !!(await libraryOwnerOf(pool, toUserId));
+      // They already hold it from the library (open, or removed and kept as a tombstone): no second copy.
+      const already = sameLibraryTask && (await heldFromLibrary(pool, toUserId)).some((h) => h.externalId === task.externalId);
+      if (!already) await insertTask(pool, toUserId, {
+        title: task.title, tier: task.tier, dueOn: task.dueOn, horizon: null, minutes: task.minutes, privateDetail: null,
+        source: sameLibraryTask ? "sera" : "redirect", ...(sameLibraryTask ? { externalId: task.externalId } : {}), createdOn: today(),
       }, uid);
     } else {
       await queueForRole(pool, toRoleId!, task.title, uid, f.value.feedbackId);

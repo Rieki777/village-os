@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 afterEach(cleanup);
 import { BridgeView } from "./SaberraBridgeBoard";
@@ -57,5 +57,34 @@ describe("the Sera bridge board", () => {
     expect(screen.getByRole("heading", { name: "The connection" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "What Saberra would receive" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Journal outbox" })).toBeNull();
+  });
+});
+
+describe("the linked card and the feedback switch count", () => {
+  it("says not linked yet when nobody is linked", () => {
+    render(<BridgeView a={{ ...base, lists: { ...base.lists, people: [] } }} now={before} />);
+    expect(screen.getByText(/Not linked yet/)).toBeTruthy();
+  });
+  it("shows each linked member and how many turned feedback off", () => {
+    const a: BridgeAnswer = {
+      ...base,
+      lists: { ...base.lists, people: [{ name: "Ana", listOn: true, imported: 33, lastImportAt: null }] },
+      feedback: { ready: true, sent: 1, queued: 0, failed: 0, notesHeld: 0, notesReleased: false, membersOff: 2 },
+    };
+    render(<BridgeView a={a} now={before} />);
+    expect(screen.getByText(/list on, 33 tasks imported, no import yet/)).toBeTruthy();
+    expect(screen.getByText(/2 members turned feedback off/)).toBeTruthy();
+  });
+});
+
+describe("the checks disclosure", () => {
+  it("is a real button that opens the 8 checks with done and not done", () => {
+    render(<BridgeView a={base} now={before} />);
+    const b = screen.getByRole("button", { name: /See the checks/ });
+    expect(b.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(b);
+    expect(screen.getByRole("button", { name: /Hide the checks/ }).getAttribute("aria-expanded")).toBe("true");
+    const items = screen.getAllByRole("listitem").filter((li) => /: (not )?done$/.test(li.textContent ?? ""));
+    expect(items).toHaveLength(8);
   });
 });

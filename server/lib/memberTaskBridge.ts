@@ -33,7 +33,7 @@ import { itemsOf, planImport } from "../../shared/memberTaskImport";
 import { heldFromLibrary, runImport } from "../repos/memberTaskImport";
 import type { MemberTaskRow } from "../repos/memberTasks";
 import {
-  closeLibraryTask, dueOutbox, importPhrase, enqueue, libraryOwnerOf, markLinkSynced, markOutboxDropped, syncableLinks, feedbackOn, insertFeedback, markOutboxFailed, markOutboxSent, notesRelease, sweepOldFeedback, type OutboxRow,
+  closeLibraryTask, dueOutbox, importPhrase, recentRemovalSent, enqueue, libraryOwnerOf, markLinkSynced, markOutboxDropped, syncableLinks, feedbackOn, insertFeedback, markOutboxFailed, markOutboxSent, notesRelease, sweepOldFeedback, type OutboxRow,
 } from "../repos/memberTaskFeedback";
 
 export { libraryOwnerOf };
@@ -44,6 +44,8 @@ export interface ActionInput {
   action: FeedbackAction;
   feedback: FeedbackInput;
   redirectToUserId?: string | null;
+  /** On a duplicate: the library's id of the task that stays. */
+  mergedIntoExternalId?: string | null;
   redirectToRoleId?: string | null;
 }
 
@@ -82,6 +84,7 @@ export async function recordAction(pool: Pool, a: ActionInput): Promise<boolean>
     ...(!redirectOwner && a.redirectToRoleId ? { redirect_target: { type: "role" } } : {}),
     shown_in: c.shownIn, rank_score: c.rankScore, days_on_list: c.daysOnList, surface: c.surface,
     ...(a.action === "priority_changed" ? { new_priority: a.task.tier } : {}),
+    ...(code === "duplicate" && a.mergedIntoExternalId && a.mergedIntoExternalId !== a.task.externalId ? { merged_into_task_id: a.mergedIntoExternalId } : {}),
     context: { shown_in: c.shownIn, rank_score: c.rankScore, days_on_list: c.daysOnList, surface: c.surface, screen_reason: a.feedback.reason },
   });
   if (a.action === "remove" || a.action === "redirect") {
@@ -90,7 +93,7 @@ export async function recordAction(pool: Pool, a: ActionInput): Promise<boolean>
   if (a.feedback.note) {
     const held = (await notesRelease(pool)) !== "released";
     await enqueue(pool, a.userId, a.feedback.feedbackId, "note", {
-      task_id: a.task.externalId, owner_id: owner, feedback_id: `${a.feedback.feedbackId}-note`, reason_code: code ?? "not_a_task", note: stripContact(a.feedback.note),
+      task_id: a.task.externalId, owner_id: owner, feedback_id: noteFeedbackId(a.feedback.feedbackId), reason_code: code ?? "not_a_task", note: stripContact(a.feedback.note),
     }, held);
   }
   return true;
@@ -117,7 +120,19 @@ export function shapeArgs(args: Record<string, unknown>, fields: Set<string> | n
 
 type Sent = { ok: true; note?: string } | { ok: false; error: string; drop?: boolean };
 
-async function sendOne(client: ClientOptions, session: string, tools: Map<string, ToolInfo>, row: OutboxRow): Promise<Sent> {
+/** A released note is its own feedback on the library's side, so its id never collides with the press it explains. */
+export const noteFeedbackId = (feedbackId: string) => `${feedbackId}-note`;
+
+/** Keep only tasks whose evidence holds the phrase (a task with no evidence field is the service's call, kept). */
+export function filterByPhrase(items: unknown[], phrase: string): unknown[] {
+  if (!phrase) return items;
+  return items.filter((t) => !t || typeof t !== "object" || !("evidence" in t) || String((t as Record<string, unknown>).evidence ?? "").includes(phrase));
+}
+
+export type SendPlan = { tool: string; args: Record<string, unknown>; minimal: Record<string, unknown> } | { tool: null; error: string; drop?: boolean };
+
+/** Which tool an outbox row goes to, and with what. Pure, so it is tested without a service. */
+export function planSend(tools: Map<string, ToolInfo>, row: Pick<OutboxRow, "kind" | "payload">): SendPlan {
   const p = row.payload;
   let tool: string | null = null;
   let args: Record<string, unknown> = {};
@@ -133,13 +148,13 @@ async function sendOne(client: ClientOptions, session: string, tools: Map<string
   } else if (row.kind === "note") {
     // The service has not added a note field yet: when it does not declare one, the note waits.
     const fields = declaredFields(tools.get("submit_task_feedback"));
-    if (fields && !fields.has("note")) return { ok: false, error: "the service does not take a note yet; held for a later try" };
+    if (fields && !fields.has("note")) return { tool: null, error: "the service does not take a note yet; held for a later try" };
     tool = "submit_task_feedback";
     args = p;
     minimal = { task_id: p.task_id, reason_code: p.reason_code, note: p.note };
   } else if (row.kind === "suppress") {
     tool = SUPPRESS_TOOLS.find((t) => tools.has(t)) ?? null;
-    if (!tool) return { ok: false, drop: true, error: "no suppress tool offered; the feedback carries the removal and our tombstone holds" };
+    if (!tool) return { tool: null, drop: true, error: "no suppress tool offered; the feedback carries the removal and our tombstone holds" };
     args = { task_id: p.task_id, owner_id: p.owner_id };
     minimal = { task_id: p.task_id };
   } else if (row.kind === "forget_person") {
@@ -147,7 +162,14 @@ async function sendOne(client: ClientOptions, session: string, tools: Map<string
     args = p;
     minimal = { owner_id: p.owner_id };
   }
-  if (!tool || !tools.has(tool)) return { ok: false, error: `the service does not offer ${tool ?? row.kind} yet` };
+  if (!tool || !tools.has(tool)) return { tool: null, error: `the service does not offer ${tool ?? row.kind} yet` };
+  return { tool, args, minimal };
+}
+
+async function sendOne(client: ClientOptions, session: string, tools: Map<string, ToolInfo>, row: OutboxRow): Promise<Sent> {
+  const plan = planSend(tools, row);
+  if (plan.tool === null) return { ok: false, error: plan.error, drop: plan.drop };
+  const { tool, args, minimal } = plan;
   const shaped = shapeArgs(args, declaredFields(tools.get(tool)));
   let r = await callToolJson(client, session, tool, shaped.args);
   if (!r.ok && r.why === "vendor-error") r = await callToolJson(client, session, tool, shapeArgs(minimal, declaredFields(tools.get(tool))).args);
@@ -193,13 +215,20 @@ export async function drainOutbox(pool: Pool): Promise<string> {
 
 const MAX_PAGES = 20;
 
+/** Short waits before re-reading removed_since after a fresh write (test hook below). */
+export let RETRY_WAITS_MS = [2_000, 5_000];
+export function setRetryWaitsForTest(w: number[]): void {
+  RETRY_WAITS_MS = w;
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 /** Ids the service says were closed or removed, from whichever field it uses. */
 export function removedIdsOf(page: unknown): string[] {
   if (!page || typeof page !== "object") return [];
   const o = page as Record<string, unknown>;
   for (const k of ["removed_ids", "closed_ids", "removed", "deleted_ids"]) {
     const v = o[k];
-    if (Array.isArray(v)) return v.map((x) => (x && typeof x === "object" ? String((x as Record<string, unknown>).id ?? "") : String(x))).filter(Boolean);
+    if (Array.isArray(v)) return v.map((x) => (x && typeof x === "object" ? String((x as Record<string, unknown>).id ?? (x as Record<string, unknown>).task_id ?? "") : String(x))).filter(Boolean);
   }
   return [];
 }
@@ -227,10 +256,8 @@ export async function pullLibrary(
     }, fields).args;
     const r = await callToolJson(client, session, "list_voice_tasks", ask);
     if (!r.ok) return { ok: false, error: `${r.why}: ${r.detail}` };
-    let got = itemsOf(r.value);
     // Belt and braces: if the filter was not applied, hold to the phrase here.
-    if (phrase) got = got.filter((t) => !t || typeof t !== "object" || !("evidence" in t) || String((t as Record<string, unknown>).evidence ?? "").includes(phrase));
-    items.push(...got);
+    items.push(...filterByPhrase(itemsOf(r.value), phrase));
     removed.push(...removedIdsOf(r.value));
     const v = (r.value ?? {}) as Record<string, unknown>;
     cursor = v.has_more === false ? null : typeof v.next_cursor === "string" && v.next_cursor ? v.next_cursor : null;
@@ -257,8 +284,20 @@ export async function syncMember(
   pool: Pool, client: ClientOptions, session: string, tools: Map<string, ToolInfo>, link: { owner: string; userId: string; since: string | null }, today: string,
 ): Promise<{ created: number; updated: number; closed: number; error?: string }> {
   const startedAt = new Date();
-  const pulled = await pullLibrary(client, session, tools, link.owner, await importPhrase(pool), link.since);
+  const phrase = await importPhrase(pool);
+  let pulled = await pullLibrary(client, session, tools, link.owner, phrase, link.since);
   if (!pulled.ok) return { created: 0, updated: 0, closed: 0, error: pulled.error };
+  // The library's store is eventually consistent: right after a removal it may not report it yet.
+  // Retry a couple of times with a short backoff; past that, the next scheduled sync picks it up.
+  if (link.since && !pulled.removed.length && (await recentRemovalSent(pool, link.userId).catch(() => false))) {
+    for (const wait of RETRY_WAITS_MS) {
+      await sleep(wait);
+      const again = await pullLibrary(client, session, tools, link.owner, phrase, link.since);
+      if (!again.ok) break;
+      pulled = again;
+      if (again.removed.length) break;
+    }
+  }
   const { items, removed } = pulled;
   const plan = planImport(items, link.owner, await heldFromLibrary(pool, link.userId));
   const res = await runImport(pool, link.userId, link.owner, plan, today, null);

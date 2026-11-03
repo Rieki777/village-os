@@ -41,8 +41,9 @@ export const REASON_WORDS: Record<ReasonCode, string> = {
 
 type Live = Extract<ListPayload, { on: true }>;
 
-function TaskRow({ task, busy, onDone, onPick, onPin, onTier }: {
+function TaskRow({ task, busy, onDone, onPick, onPin, onTier, others }: {
   task: RankedTask;
+  others: { id: string; title: string }[];
   busy: boolean;
   onDone: () => void;
   onPick: (mode: "remove" | "redirect", p: ReasonPick) => void;
@@ -88,6 +89,7 @@ function TaskRow({ task, busy, onDone, onPick, onPin, onTier }: {
         <ReasonSheet
           mode={sheet}
           busy={busy}
+          others={others}
           onCancel={() => setSheet(null)}
           onPick={(p) => {
             setSheet(null);
@@ -140,7 +142,7 @@ export default function YourListCard() {
     surface: "profile",
   });
   const pressed = (t: RankedTask, mode: "remove" | "redirect", p: ReasonPick) => {
-    const press = { feedbackId: newFeedbackId(), reason: p.reason, note: p.note, context: contextOf(t) };
+    const press = { feedbackId: newFeedbackId(), reason: p.reason, note: p.note, context: contextOf(t), ...(p.mergedIntoTaskId ? { mergedIntoTaskId: p.mergedIntoTaskId } : {}) };
     return mode === "remove"
       ? act(() => removeTask(t, press), (gone) => setUndo(gone))
       : act(() => redirectTask(t, press, { toUserId: p.toUserId, toRoleId: p.toRoleId }), (gone) => setUndo(gone));
@@ -211,6 +213,7 @@ export default function YourListCard() {
                         <TaskRow
                           key={t.id}
                           task={t}
+                          others={tasks.filter((o) => o.id !== t.id).map((o) => ({ id: o.id, title: o.title }))}
                           busy={busy}
                           onDone={() => act(() => markDone(t))}
                           onPick={(mode, p) => pressed(t, mode, p)}

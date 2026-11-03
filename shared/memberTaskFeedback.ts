@@ -105,7 +105,7 @@ const PHONE = /(?:\+?\d[\d\s().-]{5,}\d)/g;
 export function stripContact(note: string): string {
   return note
     .replace(EMAIL, "[email removed]")
-    .replace(PHONE, (m) => ((m.match(/\d/g) ?? []).length >= 7 ? "[number removed]" : m))
+    .replace(PHONE, (m) => (/^\s*\d{4}-\d{2}-\d{2}\s*$/.test(m) ? m : (m.match(/\d/g) ?? []).length >= 7 ? "[number removed]" : m))
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, NOTE_MAX);
@@ -153,3 +153,6 @@ export function parseFeedback(body: unknown, action: FeedbackAction): { ok: true
 
 /** The steward import's evidence filter (Roots, Nov 2): exactly the tasks loaded for this village. */
 export const DEFAULT_IMPORT_PHRASE = "Loaded directly into Sera because the amora.regencivics.earth profile page does not yet read from here"; // brand-ok: the library's literal evidence text, steward-editable
+
+/** The library's test person for end-to-end sends (Roots, Nov 2). Never a real member's id. */
+export const SERA_TEST_OWNER_ID = "40d0a88e-f36a-8150-9dd6-ec0acc8381fa";
