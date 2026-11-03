@@ -38,7 +38,7 @@ function Own() {
   const filed = mine.filed?.filedOn ?? null;
   return (
     <section aria-labelledby="sheet-season-h" className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
-      <p className="text-sm font-semibold text-teal-deep">{mine.season.name}</p>
+      <p className="text-sm font-semibold text-dash-gold-lit">{mine.season.name}</p>
       <h2 id="sheet-season-h" className="mt-1 font-display text-2xl font-bold text-card-foreground">
         {SEASON_SECTION_WORDS.heading}
       </h2>

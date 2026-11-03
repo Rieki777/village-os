@@ -30,8 +30,8 @@ import { civilDayWords } from "@shared/seasonPlans";
 
 export const YOUR_ROLES_WORDS = {
   heading: "Your roles",
-  holding: "The roles you hold.",
-  noSeats: "You hold no roles yet.",
+  holding: "Roles you are doing for the village.",
+  noSeats: "You are not holding a role for the village's work yet.",
   until: (on: string) => `Until ${civilDayWords(on)}`,
   ended: "Its term has ended",
   apply: "Apply for a role",

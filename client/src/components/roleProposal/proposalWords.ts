@@ -179,7 +179,7 @@ export const RP_WORDS = {
   seeApplication: "See the application",
   submittedOn: (day: string) => `Submitted on ${day}.`,
   myProposals: "My role proposals",
-  proposalFor: (season: string) => `Role proposal for ${season}`,
+  proposalFor: (season: string) => `Role proposal for ${season.trim() || "next season"}`,
   proposalNoSeason: "Role proposal for next season",
   draftWords: "Draft, not submitted yet",
 
