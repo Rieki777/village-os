@@ -21,7 +21,7 @@ import {
   clearApprovals, confirmPayRoute, doneTasksBetween, ensureRecap, forgetMoonReviews, insertInvoice, insertItem, insertReviewEvent,
   invoiceById, itemsOf, keysInOtherRecaps, markRecapSent, memberNumbersOf, nextBillRefSeq, payRouteOf, recapById,
   setFinanceApproved, setInvoiceApproved, setWorkApproved, takeBackRecap, upsertPayRoute, type ItemInsert,
-  goalsFor, insertGoal, scoreGoal, updateItem, writeScoreSnapshot, claimNudge, itemKeysOf, mergePackItem,
+  goalsFor, insertGoal, scoreGoal, updateItem, writeScoreSnapshot, claimNudge, itemKeysOf, mergePackItem, saveThanks,
 } from "./moonRecaps";
 
 const configured = testDbConfigured();
@@ -190,6 +190,14 @@ describe.skipIf(!configured)("moon review store on a real database", () => {
     expect([deep?.origin, deep?.evidenceKind, deep?.evidenceOn, deep?.belongsToSeatWords, deep?.visibility, deep?.taskStatus]).toEqual(["claude", "mail", "2026-10-20", "Land role", "approvers", "partly"]);
     const merged = all.filter((i) => i.dedupeKey === "sera:ext-21");
     expect(merged.map((i) => [i.text, i.taskStatus, i.state, i.evidenceOn])).toEqual([["From the pack", "done", "kept", "2026-10-22"]]);
+  });
+
+  it("keeps who helped while the recap is the member's to edit (A7)", async () => {
+    await ensureRecap(pool, { id: "mr-0000000000000030", userId: "u30", cycleId: "lunar-000331", seasonId: null });
+    expect(await saveThanks(pool, "mr-0000000000000030", JSON.stringify([{ userId: "u2", note: "Held the gate" }]))).toBe(1);
+    expect((await recapById(pool, "mr-0000000000000030"))?.thanksJson).toBe('[{"userId":"u2","note":"Held the gate"}]');
+    await markRecapSent(pool, "mr-0000000000000030", 0);
+    expect(await saveThanks(pool, "mr-0000000000000030", null)).toBe(0);
   });
 
   it("claims each reminder once per member, cycle and kind (B1, check 28's store)", async () => {

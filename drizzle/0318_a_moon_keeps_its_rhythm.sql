@@ -11,12 +11,19 @@
 -- two job ticks in one hour send one reminder. Every key column is NOT NULL.
 -- Rows naming a member go in member erasure.
 --
--- Expand only: three nullable columns on a table 0313 made, and one new table.
+-- moon_recaps gains thanks_json (addendum v5, A7): who helped the member this
+-- moon, up to ten entries of a member id or a name and a short note. Nothing
+-- here sends gratitude; the member sends it through the gratitude flow.
+--
+-- Expand only: four nullable columns on tables 0313 made, and one new table.
 
 ALTER TABLE `moon_recap_items`
   ADD COLUMN `evidence_kind` varchar(8) NULL,
   ADD COLUMN `evidence_on` date NULL,
   ADD COLUMN `belongs_to_seat_words` varchar(200) NULL;
+
+ALTER TABLE `moon_recaps`
+  ADD COLUMN `thanks_json` text NULL;
 
 CREATE TABLE IF NOT EXISTS `moon_nudges` (
   `user_id` varchar(64) NOT NULL,
