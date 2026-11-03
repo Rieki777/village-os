@@ -260,11 +260,29 @@ export async function markOutboxDropped(db: Queryable, id: number, why: string):
   await db.query("UPDATE `member_task_outbox` SET `status` = 'dropped', `last_error` = ? WHERE `id` = ?", [why.slice(0, 300), id]);
 }
 
-/** Close an open, unedited library task the library says is gone. */
-export async function closeLibraryTask(db: Queryable, userId: string, externalId: string): Promise<number> {
+/**
+ * Close an open, unedited library task the library says is DONE. `doneAt` is
+ * the library's own closed_at when it sent one, so the work lands in the moon
+ * it was finished in; without it the sync time stands in, as before.
+ */
+export async function closeLibraryTask(db: Queryable, userId: string, externalId: string, doneAt: Date | null = null): Promise<number> {
   const [u] = await db.query<ResultSetHeader>(
-    "UPDATE `member_tasks` SET `status` = 'done', `done_at` = NOW(), `version` = `version` + 1 WHERE `user_id` = ? AND `source` = 'sera' AND `external_id` = ? AND `status` = 'open' AND `member_edited` = 0",
-    [userId, externalId],
+    "UPDATE `member_tasks` SET `status` = 'done', `done_at` = COALESCE(?, NOW()), `version` = `version` + 1 WHERE `user_id` = ? AND `source` = 'sera' AND `external_id` = ? AND `status` = 'open' AND `member_edited` = 0",
+    [doneAt, userId, externalId],
+  );
+  return u.affectedRows;
+}
+
+/**
+ * Remove an open, unedited library task the library cancelled, let go stale,
+ * archived or handed to someone else. It is NOT done: marking it done would
+ * put work nobody finished into a recap. The row stays as a tombstone, so the
+ * next read never brings it back.
+ */
+export async function removeLibraryTask(db: Queryable, userId: string, externalId: string, reason: string): Promise<number> {
+  const [u] = await db.query<ResultSetHeader>(
+    "UPDATE `member_tasks` SET `status` = 'removed', `removed_at` = NOW(), `remove_reason` = ?, `version` = `version` + 1 WHERE `user_id` = ? AND `source` = 'sera' AND `external_id` = ? AND `status` = 'open' AND `member_edited` = 0",
+    [reason, userId, externalId],
   );
   return u.affectedRows;
 }

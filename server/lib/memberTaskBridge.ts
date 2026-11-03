@@ -35,7 +35,7 @@ import { itemsOf, planImport } from "../../shared/memberTaskImport";
 import { heldFromLibrary, runImport } from "../repos/memberTaskImport";
 import type { MemberTaskRow } from "../repos/memberTasks";
 import {
-  closeLibraryTask, setSyncRecord, dueOutbox, importPhrase, recentRemovalSent, enqueue, libraryOwnerOf, markLinkSynced, markOutboxDropped, syncableLinks, feedbackOn, insertFeedback, markOutboxFailed, markOutboxSent, notesRelease, sweepOldFeedback, type OutboxRow,
+  closeLibraryTask, removeLibraryTask, setSyncRecord, dueOutbox, importPhrase, recentRemovalSent, enqueue, libraryOwnerOf, markLinkSynced, markOutboxDropped, syncableLinks, feedbackOn, insertFeedback, markOutboxFailed, markOutboxSent, notesRelease, sweepOldFeedback, type OutboxRow,
 } from "../repos/memberTaskFeedback";
 
 export { libraryOwnerOf };
@@ -231,15 +231,65 @@ export function setRetryWaitsForTest(w: number[]): void {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Ids the service says were closed or removed, from whichever field it uses. */
-export function removedIdsOf(page: unknown): string[] {
+/**
+ * WHY A TASK LEFT THE LIBRARY (the service, 2026-11-03): every removed_since
+ * entry carries `reason`, always one of these five, and `closed_at`, the ISO
+ * time it closed. Only `done` is finished work. The other four are removals,
+ * and reading them as done put cancelled work into end-of-moon recaps.
+ */
+export const LIBRARY_REMOVAL_REASONS = ["done", "cancelled", "stale", "archived", "reassigned"] as const;
+export type LibraryRemovalReason = (typeof LIBRARY_REMOVAL_REASONS)[number];
+
+export interface LibraryRemoval {
+  id: string;
+  /** Null when the service sent a bare id or a reason we do not know: read as done, the behaviour before reasons existed. */
+  reason: LibraryRemovalReason | null;
+  /** The service's own close time, or null when absent or unreadable. */
+  closedAt: Date | null;
+}
+
+const isRemovalReason = (v: unknown): v is LibraryRemovalReason =>
+  typeof v === "string" && (LIBRARY_REMOVAL_REASONS as readonly string[]).includes(v);
+
+function closedAtOf(v: unknown): Date | null {
+  if (typeof v !== "string" || !v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Each removed entry with its reason and close time, from whichever field the service uses. */
+export function removedEntriesOf(page: unknown): LibraryRemoval[] {
   if (!page || typeof page !== "object") return [];
   const o = page as Record<string, unknown>;
   for (const k of ["removed_ids", "closed_ids", "removed", "deleted_ids"]) {
     const v = o[k];
-    if (Array.isArray(v)) return v.map((x) => (x && typeof x === "object" ? String((x as Record<string, unknown>).id ?? (x as Record<string, unknown>).task_id ?? "") : String(x))).filter(Boolean);
+    if (!Array.isArray(v)) continue;
+    return v
+      .map((x): LibraryRemoval => {
+        if (!x || typeof x !== "object") return { id: String(x ?? ""), reason: null, closedAt: null };
+        const r = x as Record<string, unknown>;
+        const reason = typeof r.reason === "string" ? r.reason.toLowerCase() : null;
+        return { id: String(r.id ?? r.task_id ?? ""), reason: isRemovalReason(reason) ? reason : null, closedAt: closedAtOf(r.closed_at) };
+      })
+      .filter((e) => !!e.id);
   }
   return [];
+}
+
+/** Ids the service says were closed or removed, from whichever field it uses. */
+export function removedIdsOf(page: unknown): string[] {
+  return removedEntriesOf(page).map((e) => e.id);
+}
+
+/**
+ * What the board does with one removal. Done (or no reason at all) closes the
+ * task as done at the service's own close time. Every other reason removes it,
+ * with the board's own remove words: a reassigned task was never this member's
+ * to finish, and a cancelled, stale or archived one is no longer wanted.
+ */
+export function removalAction(e: LibraryRemoval): { kind: "done"; doneAt: Date | null } | { kind: "removed"; removeReason: "not_mine" | "not_relevant" } {
+  if (e.reason === null || e.reason === "done") return { kind: "done", doneAt: e.closedAt };
+  return { kind: "removed", removeReason: e.reason === "reassigned" ? "not_mine" : "not_relevant" };
 }
 
 /**
@@ -250,10 +300,10 @@ export function removedIdsOf(page: unknown): string[] {
 /** Every library task for one owner whose evidence holds the phrase, all pages. */
 export async function pullLibrary(
   client: ClientOptions, session: string, tools: Map<string, ToolInfo>, owner: string, phrase: string, since: string | null,
-): Promise<{ ok: true; items: unknown[]; removed: string[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; items: unknown[]; removed: LibraryRemoval[] } | { ok: false; error: string }> {
   const fields = declaredFields(tools.get("list_voice_tasks"));
   const items: unknown[] = [];
-  const removed: string[] = [];
+  const removed: LibraryRemoval[] = [];
   let cursor: string | null = null;
   let pages = 0;
   do {
@@ -267,7 +317,7 @@ export async function pullLibrary(
     if (!r.ok) return { ok: false, error: `${r.why}: ${r.detail}` };
     // Belt and braces: if the filter was not applied, hold to the phrase here.
     items.push(...filterByPhrase(itemsOf(r.value), phrase));
-    removed.push(...removedIdsOf(r.value));
+    removed.push(...removedEntriesOf(r.value));
     const v = (r.value ?? {}) as Record<string, unknown>;
     cursor = v.has_more === false ? null : typeof v.next_cursor === "string" && v.next_cursor ? v.next_cursor : null;
     pages += 1;
@@ -311,8 +361,11 @@ export async function syncMember(
   const plan = planImport(items, link.owner, await heldFromLibrary(pool, link.userId));
   const res = await runImport(pool, link.userId, link.owner, plan, today, null);
   let closed = 0;
-  for (const id of removed) {
-    closed += await closeLibraryTask(pool, link.userId, id);
+  for (const e of removed) {
+    const act = removalAction(e);
+    closed += act.kind === "done"
+      ? await closeLibraryTask(pool, link.userId, e.id, act.doneAt)
+      : await removeLibraryTask(pool, link.userId, e.id, act.removeReason);
   }
   await markLinkSynced(pool, link.owner, startedAt);
   return { created: res.created, updated: res.updated, closed };
