@@ -51,6 +51,10 @@ export type NavGroup = { title: string; items: NavItem[] };
 
 export function navGroups(setupComplete: boolean): NavGroup[] {
   return [
+    {
+      title: "Today",
+      items: [{ key: "home", label: "Home", icon: Home }],
+    },
     ...(setupComplete ? [] : [{
       title: "Start here",
       items: [{ key: "setup", label: "Make This Yours", icon: Sparkles }],

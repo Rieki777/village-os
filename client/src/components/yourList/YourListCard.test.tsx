@@ -12,6 +12,8 @@ const gameFetch = vi.fn();
 vi.mock("@/lib/gameApi", () => ({ gameFetch: (...args: unknown[]) => gameFetch(...args) }));
 
 import YourListCard from "./YourListCard";
+import { setUndoWaitMs } from "@/components/admin/adminUndo";
+import { act } from "@testing-library/react";
 
 const answer = (body: unknown, status = 200) => Promise.resolve({ ok: status >= 200 && status < 300, status, json: async () => body });
 
@@ -26,7 +28,10 @@ const onList = {
   done: [], removed: [],
 };
 
-beforeEach(() => gameFetch.mockReset());
+beforeEach(() => {
+  setUndoWaitMs(0);
+  gameFetch.mockReset();
+});
 
 describe("Your list", () => {
   it("draws nothing while the list is off", async () => {
@@ -64,6 +69,7 @@ describe("Your list", () => {
     await userEvent.click(screen.getAllByText("Remove")[1]);
     await userEvent.click(screen.getByLabelText("Already done"));
     await userEvent.click(screen.getByText("Remove it"));
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(await screen.findByText("Undo")).toBeTruthy();
     const sent = gameFetch.mock.calls.find(([u, i]) => String(u).endsWith("/remove") && i?.method === "POST");
     const body = JSON.parse(String(sent![1].body));
