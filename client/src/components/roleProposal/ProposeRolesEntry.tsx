@@ -38,9 +38,10 @@ export default function ProposeRolesEntry() {
   }, []);
   if (!mine) return null;
 
+  const proposals = mine.proposals ?? [];
   const draftId = mine.draftId;
-  const draft = draftId ? (mine.proposals.find((p) => p.id === draftId) ?? null) : null;
-  const submitted = mine.proposals.find((p) => p.status === "submitted") ?? null;
+  const draft = draftId ? (proposals.find((p) => p.id === draftId) ?? null) : null;
+  const submitted = proposals.find((p) => p.status === "submitted") ?? null;
   const fill = draftId
     ? draftFill({
         roleCount: (draft?.roles.length ?? 0) + (draft?.newRoles.length ?? 0),
@@ -83,10 +84,17 @@ export default function ProposeRolesEntry() {
       )}
       {mine.nextSeasonWords && <p className="mt-2 text-sm text-muted-foreground">{mine.nextSeasonWords}</p>}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Link href={href} className={BTN_GOLD}>
-          {action}
-          <ArrowRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
+        {!draftId && !submitted ? (
+          <Link href="/role-proposals/new" className={BTN_GOLD}>
+            {action}
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        ) : (
+          <Link href={href} className={BTN_GOLD}>
+            {action}
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        )}
         <DownloadCardText url={MY_CARD_TEXT_URL} />
       </div>
     </article>
