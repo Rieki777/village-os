@@ -1511,7 +1511,7 @@ export const MODULES: ModuleDef[] = [
     // The room sections live in Live Sessions; the role audit lands in the
     // circle backlog; Sera drafts from the knowledge library.
     recommends: ["sessions", "governance", "saberra"],
-    capabilities: ["moon.approve"],
+    capabilities: ["moon.approve", "moon.approve_alone", "moon.approve_own"],
     variableKeys: [],
     apiPrefixes: ["/api/me/moon", "/api/me/pay-route", "/api/moon-review"],
     // No openStateCheck yet: what a member is owed lives in cash_owed, which

@@ -287,7 +287,7 @@ describe("hasCapability truth table", () => {
         expect(isBadgeGrantable(SEAT)).toBe(false);
         for (const cap of ALL_CAPABILITIES) {
           // `moon.approve` is fenced too (0313): see the drift check below.
-          if (cap === SEAT || cap === "moon.approve") continue;
+          if (cap === SEAT || cap.startsWith("moon.approve")) continue;
           expect(isBadgeGrantable(cap), cap).toBe(true);
         }
       });
@@ -330,11 +330,12 @@ describe("hasCapability truth table", () => {
         expect(Object.keys(BADGE_GRANTABLE).sort()).toEqual([...ALL_CAPABILITIES].sort());
       });
 
-      it("fences exactly two keys, so a widening is a deliberate edit and not a drift", () => {
+      it("fences exactly four keys, so a widening is a deliberate edit and not a drift", () => {
         // `moon.approve` (0313, the end-of-moon review): an approval of other
         // people's work toward their pay sits on a power group the village
-        // seats, so an admin cannot mint a badge and approve it alone.
-        expect(ALL_CAPABILITIES.filter((c) => !BADGE_GRANTABLE[c])).toEqual(["steward.veto", "moon.approve"]);
+        // seats, so an admin cannot mint a badge and approve it alone. Its two
+        // siblings (decisions 18 and 19) come from named power groups only.
+        expect(ALL_CAPABILITIES.filter((c) => !BADGE_GRANTABLE[c])).toEqual(["steward.veto", "moon.approve", "moon.approve_alone", "moon.approve_own"]);
       });
     });
 

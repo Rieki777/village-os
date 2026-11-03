@@ -9,7 +9,8 @@
  *      task's private detail and minutes never leave member_tasks;
  *   6  a key another recap of the member holds is reported, so gather skips it;
  *   8  the SQL itself refuses the member's own approval and the same person
- *      giving both;
+ *      giving both, unless the caller passes the widening approvalDecision
+ *      granted, and a self-approval is marked on the row;
  *   9  Take back, and an edit after an approval, clear both approvals;
  *   16 erasure clears words and the route, and keeps amounts, numbers and events.
  */
@@ -18,8 +19,8 @@ import mysql from "mysql2/promise";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   clearApprovals, confirmPayRoute, doneTasksBetween, ensureRecap, forgetMoonReviews, insertInvoice, insertItem, insertReviewEvent,
-  invoiceById, itemsOf, keysInOtherRecaps, markRecapSent, nextBillRefSeq, nextMemberInvoiceSeq, payRouteOf, recapById,
-  setFinanceApproved, setWorkApproved, takeBackRecap, upsertPayRoute, type ItemInsert,
+  invoiceById, itemsOf, keysInOtherRecaps, markRecapSent, memberNumbersOf, nextBillRefSeq, payRouteOf, recapById,
+  setFinanceApproved, setInvoiceApproved, setWorkApproved, takeBackRecap, upsertPayRoute, type ItemInsert,
 } from "./moonRecaps";
 
 const configured = testDbConfigured();
@@ -109,32 +110,57 @@ describe.skipIf(!configured)("moon review store on a real database", () => {
     expect((await payRouteOf(pool, "u1"))?.confirmedBy).toBeNull();
   });
 
-  it("numbers invoices per member and per payer, inside one transaction", async () => {
+  it("keeps the member's own invoice number, refuses reusing it, and numbers bill refs per payer", async () => {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      expect(await nextMemberInvoiceSeq(conn, "u1")).toBe(1);
       expect(await nextBillRefSeq(conn, "us-payer")).toBe(1);
       await insertInvoice(conn, {
         id: "mv-0000000000000001", recapId: "mr-0000000000000001", userId: "u1", cycleId: "lunar-000331", payerKey: "us-payer", revision: 1,
         billRefSeq: 1, memberNumber: "2026-001", currency: "USD", totalMinor: 100_000, linesJson: "[]", fromJson: "{\"legalName\":\"A Member\"}",
-        attestationJson: "{\"workCountries\":[\"US\"]}", voidOf: null,
+        attestationJson: "{\"workCountries\":[\"US\"]}", externalInvoiceKey: null, voidOf: null,
       });
       await conn.commit();
+      expect(await nextBillRefSeq(conn, "us-payer")).toBe(2);
     } finally {
       conn.release();
     }
-    const c2 = await pool.getConnection();
-    try {
-      expect(await nextBillRefSeq(c2, "us-payer")).toBe(2);
-      expect(await nextMemberInvoiceSeq(c2, "u1")).toBe(2);
-    } finally {
-      c2.release();
-    }
+    expect(await memberNumbersOf(pool, "u1")).toEqual(["2026-001"]);
+    await expect(insertInvoice(pool, {
+      id: "mv-0000000000000002", recapId: "mr-0000000000000002", userId: "u1", cycleId: "lunar-000332", payerKey: "us-payer", revision: 1,
+      billRefSeq: 2, memberNumber: "2026-001", currency: "USD", totalMinor: 1, linesJson: "[]", fromJson: "{}", attestationJson: "{}", externalInvoiceKey: null, voidOf: null,
+    })).rejects.toThrow(/Duplicate/);
+  });
+
+  it("a widening the rule granted passes the SQL and marks the row; without it the SQL refuses (decisions 18 and 19)", async () => {
+    await ensureRecap(pool, { id: "mr-0000000000000005", userId: "fin", cycleId: "lunar-000331", seasonId: null });
+    expect(await markRecapSent(pool, "mr-0000000000000005", 0)).toBe(1);
+    expect(await setWorkApproved(pool, { id: "mr-0000000000000005", by: "fin", hash: "h", nextStatus: "waiting" })).toBe(0);
+    expect(await setWorkApproved(pool, { id: "mr-0000000000000005", by: "fin", hash: "h", nextStatus: "waiting", selfApproved: true })).toBe(1);
+    expect(await setFinanceApproved(pool, { id: "mr-0000000000000005", by: "fin", hash: "h", selfApproved: true })).toBe(0);
+    expect(await setFinanceApproved(pool, { id: "mr-0000000000000005", by: "fin", hash: "h", selfApproved: true, alone: true })).toBe(1);
+    const r = await recapById(pool, "mr-0000000000000005");
+    expect([r?.status, r?.selfApproved]).toEqual(["approved", true]);
+    await ensureRecap(pool, { id: "mr-0000000000000006", userId: "u6", cycleId: "lunar-000331", seasonId: null });
+    await markRecapSent(pool, "mr-0000000000000006", 0);
+    await setWorkApproved(pool, { id: "mr-0000000000000006", by: "st", hash: "h", nextStatus: "waiting" });
+    expect(await setFinanceApproved(pool, { id: "mr-0000000000000006", by: "st", hash: "h", alone: true })).toBe(1);
+    expect((await recapById(pool, "mr-0000000000000006"))?.selfApproved).toBe(false);
+    await insertInvoice(pool, {
+      id: "mv-0000000000000005", recapId: "mr-0000000000000005", userId: "fin", cycleId: "lunar-000331", payerKey: "us-payer", revision: 1,
+      billRefSeq: 5, memberNumber: "F-1", currency: "USD", totalMinor: 10, linesJson: "[]", fromJson: "{}", attestationJson: "{}", externalInvoiceKey: null, voidOf: null,
+    });
+    const approve = { id: "mv-0000000000000005", by: "fin", hash: "h", expectedOn: "2026-11-20", linesJson: "[]", fxRate: null, fxSource: null, fxDate: null };
+    expect(await setInvoiceApproved(pool, approve)).toBe(0);
+    expect(await setInvoiceApproved(pool, { ...approve, selfApproved: true })).toBe(1);
+    expect((await invoiceById(pool, "mv-0000000000000005"))?.selfApproved).toBe(true);
   });
 
   it("erasure clears words and the route, and keeps amounts, numbers and events (check 16)", async () => {
     await insertReviewEvent(pool, { recapId: "mr-0000000000000001", invoiceId: "mv-0000000000000001", userId: "u1", kind: "sent", actorUserId: "u1", actorRole: null, amountMinor: 100_000, currency: "USD", hash: null, note: "a note" });
+    await insertReviewEvent(pool, { recapId: "mr-0000000000000005", invoiceId: null, userId: "fin", kind: "self_approved", actorUserId: "fin", actorRole: "treasury", amountMinor: null, currency: null, hash: "h", note: null, selfApproved: true });
+    const [mark] = await pool.query<mysql.RowDataPacket[]>("SELECT `self_approved` FROM `moon_review_events` WHERE `kind` = 'self_approved'"); // module-review-ok: fixture read against the S5 scratch schema
+    expect(mark.map((m) => Number(m.self_approved))).toEqual([1]);
     await ensureRecap(pool, { id: "mr-0000000000000009", userId: "bystander", cycleId: "lunar-000331", seasonId: null });
     await insertItem(pool, item({ id: "mi-0000000000000009", recapId: "mr-0000000000000009", text: "Bystander's work" }));
     expect((await itemsOf(pool, "mr-0000000000000001"))[0].text).toBe("Wrote the water plan");

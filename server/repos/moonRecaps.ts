@@ -58,6 +58,8 @@ export interface RecapRow {
   returnedAt: string | null;
   sentAt: string | null;
   seraState: string | null;
+  /** An approval on this recap was the member's own (decision 19). */
+  selfApproved: boolean;
   createdAt: string | null;
 }
 
@@ -68,7 +70,7 @@ function toRecap(r: RowDataPacket): RecapRow {
     roleAuditJson: str(r.role_audit_json), workApprovedAt: ts(r.work_approved_at), workApprovedBy: str(r.work_approved_by),
     financeApprovedAt: ts(r.finance_approved_at), financeApprovedBy: str(r.finance_approved_by), approvalHash: str(r.approval_hash),
     returnedNote: str(r.returned_note), returnedBy: str(r.returned_by), returnedAt: ts(r.returned_at), sentAt: ts(r.sent_at),
-    seraState: str(r.sera_state), createdAt: ts(r.created_at),
+    seraState: str(r.sera_state), selfApproved: Number(r.self_approved) === 1, createdAt: ts(r.created_at),
   };
 }
 
@@ -140,8 +142,8 @@ export async function saveRecapWords(db: Queryable, id: string, ownWords: string
 export async function markRecapSent(db: Queryable, id: string, round: number): Promise<number> {
   const [res] = await db.query<ResultSetHeader>(
     "UPDATE `moon_recaps` SET `status` = 'waiting', `round` = ?, `sent_at` = CURRENT_TIMESTAMP, " +
-      "`work_approved_at` = NULL, `work_approved_by` = NULL, `finance_approved_at` = NULL, `finance_approved_by` = NULL, `approval_hash` = NULL " +
-      "WHERE `id` = ? AND `status` IN ('draft', 'returned') AND `round` = ?",
+      "`work_approved_at` = NULL, `work_approved_by` = NULL, `finance_approved_at` = NULL, `finance_approved_by` = NULL, `approval_hash` = NULL, " +
+      "`self_approved` = 0 WHERE `id` = ? AND `status` IN ('draft', 'returned') AND `round` = ?",
     [round + 1, id, round],
   );
   return res.affectedRows;
@@ -151,29 +153,50 @@ export async function markRecapSent(db: Queryable, id: string, round: number): P
 export async function takeBackRecap(db: Queryable, id: string): Promise<number> {
   const [res] = await db.query<ResultSetHeader>(
     "UPDATE `moon_recaps` SET `status` = 'draft', `work_approved_at` = NULL, `work_approved_by` = NULL, " +
-      "`finance_approved_at` = NULL, `finance_approved_by` = NULL, `approval_hash` = NULL WHERE `id` = ? AND `status` = 'waiting'",
+      "`finance_approved_at` = NULL, `finance_approved_by` = NULL, `approval_hash` = NULL, `self_approved` = 0 WHERE `id` = ? AND `status` = 'waiting'",
     [id],
   );
   return res.affectedRows;
 }
 
-/** The work approval, bound to the hash the approver read. The caller has checked the two-person rule. */
-export async function setWorkApproved(db: Queryable, r: { id: string; by: string; hash: string; nextStatus: RecapStatus }): Promise<number> {
+/**
+ * The two widenings `approvalDecision` (shared/moonRecap.ts) may grant, passed
+ * through so the SQL holds the same line: by default it refuses the member's
+ * own approval and one person giving both. `selfApproved` is set only from a
+ * decision that said so, and it marks the row.
+ */
+export interface ApprovalWidening {
+  /** The decision was `selfApproved` (moon.approve_own). */
+  selfApproved?: boolean;
+  /** The decision was `alone` (moon.approve_alone, or own with both stages). */
+  alone?: boolean;
+}
+
+/** The work approval, bound to the hash the approver read. The caller has run `approvalDecision`. */
+export async function setWorkApproved(db: Queryable, r: { id: string; by: string; hash: string; nextStatus: RecapStatus } & ApprovalWidening): Promise<number> {
+  const own = r.selfApproved ? 1 : 0;
   const [res] = await db.query<ResultSetHeader>(
-    "UPDATE `moon_recaps` SET `work_approved_at` = CURRENT_TIMESTAMP, `work_approved_by` = ?, `approval_hash` = ?, `status` = ? " +
-      "WHERE `id` = ? AND `status` = 'waiting' AND `work_approved_at` IS NULL AND `user_id` <> ?",
-    [r.by, r.hash, r.nextStatus, r.id, r.by],
+    "UPDATE `moon_recaps` SET `work_approved_at` = CURRENT_TIMESTAMP, `work_approved_by` = ?, `approval_hash` = ?, `status` = ?, " +
+      "`self_approved` = IF(? = 1, 1, `self_approved`) " +
+      "WHERE `id` = ? AND `status` = 'waiting' AND `work_approved_at` IS NULL AND (`user_id` <> ? OR ? = 1)",
+    [r.by, r.hash, r.nextStatus, own, r.id, r.by, own],
   );
   return res.affectedRows;
 }
 
-/** The Finance approval: only after the work, only on the same hash, never by the work approver or the member. */
-export async function setFinanceApproved(db: Queryable, r: { id: string; by: string; hash: string }): Promise<number> {
+/**
+ * The Finance approval: only after the work, only on the same hash. By
+ * default never by the member and never by the work approver.
+ */
+export async function setFinanceApproved(db: Queryable, r: { id: string; by: string; hash: string } & ApprovalWidening): Promise<number> {
+  const own = r.selfApproved ? 1 : 0;
+  const alone = r.alone ? 1 : 0;
   const [res] = await db.query<ResultSetHeader>(
-    "UPDATE `moon_recaps` SET `finance_approved_at` = CURRENT_TIMESTAMP, `finance_approved_by` = ?, `status` = 'approved' " +
+    "UPDATE `moon_recaps` SET `finance_approved_at` = CURRENT_TIMESTAMP, `finance_approved_by` = ?, `status` = 'approved', " +
+      "`self_approved` = IF(? = 1, 1, `self_approved`) " +
       "WHERE `id` = ? AND `status` = 'waiting' AND `work_approved_at` IS NOT NULL AND `finance_approved_at` IS NULL " +
-      "AND `approval_hash` = ? AND `user_id` <> ? AND `work_approved_by` <> ?",
-    [r.by, r.id, r.hash, r.by, r.by],
+      "AND `approval_hash` = ? AND (`user_id` <> ? OR ? = 1) AND (`work_approved_by` <> ? OR ? = 1)",
+    [r.by, own, r.id, r.hash, r.by, own, r.by, alone],
   );
   return res.affectedRows;
 }
@@ -196,7 +219,7 @@ export async function returnRecap(db: Queryable, r: { id: string; by: string; no
 export async function clearApprovals(db: Queryable, id: string): Promise<number> {
   const [res] = await db.query<ResultSetHeader>(
     "UPDATE `moon_recaps` SET `work_approved_at` = NULL, `work_approved_by` = NULL, `finance_approved_at` = NULL, " +
-      "`finance_approved_by` = NULL, `approval_hash` = NULL, `status` = IF(`status` = 'approved', 'waiting', `status`) " +
+      "`finance_approved_by` = NULL, `approval_hash` = NULL, `self_approved` = 0, `status` = IF(`status` = 'approved', 'waiting', `status`) " +
       "WHERE `id` = ? AND (`work_approved_at` IS NOT NULL OR `finance_approved_at` IS NOT NULL)",
     [id],
   );
@@ -381,6 +404,7 @@ export interface InvoiceRow {
   fundsSource: string | null;
   voidOf: string | null;
   voidedAt: string | null;
+  selfApproved: boolean;
 }
 
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
@@ -395,6 +419,7 @@ function toInvoice(r: RowDataPacket): InvoiceRow {
     approvedAt: ts(r.approved_at), approvedBy: str(r.approved_by), paidOn: day(r.paid_on), paidAmountMinor: num(r.paid_amount_minor),
     paidCurrency: str(r.paid_currency), fxRate: str(r.fx_rate), fxSource: str(r.fx_source), fxDate: day(r.fx_date),
     feesMinor: num(r.fees_minor), fundsSource: str(r.funds_source), voidOf: str(r.void_of), voidedAt: ts(r.voided_at),
+    selfApproved: Number(r.self_approved) === 1,
   };
 }
 
@@ -438,12 +463,14 @@ export async function nextBillRefSeq(conn: PoolConnection, payerKey: string): Pr
   return (Number(rows[0]?.n) || 0) + 1;
 }
 
-/** The member's own next invoice number, moved under a lock inside the send's transaction. */
-export async function nextMemberInvoiceSeq(conn: PoolConnection, userId: string): Promise<number> {
-  await conn.query("UPDATE `member_pay_routes` SET `invoice_seq` = `invoice_seq` + 1 WHERE `user_id` = ?", [userId]);
-  const [rows] = await conn.query<RowDataPacket[]>("SELECT `invoice_seq` FROM `member_pay_routes` WHERE `user_id` = ? FOR UPDATE", [userId]);
-  if (!rows[0]) throw new Error(`member_pay_routes: no row for ${userId}; an invoice needs a pay route`);
-  return Number(rows[0].invoice_seq);
+/**
+ * Every invoice number the member has used, Void ones included, so a new
+ * invoice never reuses one (decision 16 revised: the number is the one on the
+ * invoice they issued themselves). The unique key backs this up.
+ */
+export async function memberNumbersOf(db: Queryable, userId: string): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `member_number` FROM `moon_invoices` WHERE `user_id` = ?", [userId]);
+  return rows.map((r) => String(r.member_number));
 }
 
 /** The next revision for a member's moon and payer, after a Void. */
@@ -469,29 +496,33 @@ export interface InvoiceInsert {
   linesJson: string;
   fromJson: string;
   attestationJson: string;
+  /** On the contractor route, the electronic invoice key. */
+  externalInvoiceKey: string | null;
   voidOf: string | null;
 }
 
-/** A sent draft invoice. Every NOT NULL column is named. */
+/** A sent draft invoice, carrying the member's own number. Every NOT NULL column is named. */
 export async function insertInvoice(db: Queryable, i: InvoiceInsert): Promise<void> {
   await db.query(
     "INSERT INTO `moon_invoices` (`id`, `recap_id`, `user_id`, `cycle_id`, `payer_key`, `revision`, `bill_ref_seq`, `member_number`, " +
-      "`currency`, `total_minor`, `lines_json`, `from_json`, `attestation_json`, `status`, `sent_at`, `void_of`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', CURRENT_TIMESTAMP, ?)",
-    [i.id, i.recapId, i.userId, i.cycleId, i.payerKey, i.revision, i.billRefSeq, i.memberNumber, i.currency, i.totalMinor, i.linesJson, i.fromJson, i.attestationJson, i.voidOf],
+      "`currency`, `total_minor`, `lines_json`, `from_json`, `attestation_json`, `external_invoice_key`, `status`, `sent_at`, `void_of`, `self_approved`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', CURRENT_TIMESTAMP, ?, 0)",
+    [i.id, i.recapId, i.userId, i.cycleId, i.payerKey, i.revision, i.billRefSeq, i.memberNumber, i.currency, i.totalMinor, i.linesJson, i.fromJson, i.attestationJson, i.externalInvoiceKey, i.voidOf],
   );
 }
 
 /**
- * A resend of an invoice that was taken back or returned: new lines, From and
- * attestation on the same row and number. Never on an approved, paid or void one.
+ * A resend of an invoice that was taken back or returned: new lines, From,
+ * attestation and the member's number (a range Finance changed means a
+ * reissued invoice with a new number, decision 16 revised). Never on an
+ * approved, paid or void one.
  */
-export async function resendInvoice(db: Queryable, id: string, r: { currency: string; totalMinor: number; linesJson: string; fromJson: string; attestationJson: string }): Promise<number> {
+export async function resendInvoice(db: Queryable, id: string, r: { currency: string; totalMinor: number; linesJson: string; fromJson: string; attestationJson: string; memberNumber: string; externalInvoiceKey: string | null }): Promise<number> {
   const [res] = await db.query<ResultSetHeader>(
     "UPDATE `moon_invoices` SET `currency` = ?, `total_minor` = ?, `lines_json` = ?, `from_json` = ?, `attestation_json` = ?, " +
-      "`status` = 'waiting', `sent_at` = CURRENT_TIMESTAMP, `approval_hash` = NULL, `approved_at` = NULL, `approved_by` = NULL, `expected_on` = NULL " +
-      "WHERE `id` = ? AND `status` IN ('waiting', 'returned', 'draft')",
-    [r.currency, r.totalMinor, r.linesJson, r.fromJson, r.attestationJson, id],
+      "`member_number` = ?, `external_invoice_key` = ?, `status` = 'waiting', `sent_at` = CURRENT_TIMESTAMP, `approval_hash` = NULL, " +
+      "`approved_at` = NULL, `approved_by` = NULL, `expected_on` = NULL, `self_approved` = 0 WHERE `id` = ? AND `status` IN ('waiting', 'returned', 'draft')",
+    [r.currency, r.totalMinor, r.linesJson, r.fromJson, r.attestationJson, r.memberNumber, r.externalInvoiceKey, id],
   );
   return res.affectedRows;
 }
@@ -516,12 +547,14 @@ export async function setInvoiceLines(db: Queryable, id: string, linesJson: stri
   return res.affectedRows;
 }
 
-/** Finance approval, bound to the hash. The caller has checked the two-person rule and written the cash owed rows. */
-export async function setInvoiceApproved(db: Queryable, r: { id: string; by: string; hash: string; expectedOn: string; linesJson: string; fxRate: string | null; fxSource: string | null; fxDate: string | null }): Promise<number> {
+/** Finance approval, bound to the hash. The caller has run `approvalDecision` and written the cash owed rows. */
+export async function setInvoiceApproved(db: Queryable, r: { id: string; by: string; hash: string; expectedOn: string; linesJson: string; fxRate: string | null; fxSource: string | null; fxDate: string | null } & ApprovalWidening): Promise<number> {
+  const own = r.selfApproved ? 1 : 0;
   const [res] = await db.query<ResultSetHeader>(
     "UPDATE `moon_invoices` SET `status` = 'approved', `approved_at` = CURRENT_TIMESTAMP, `approved_by` = ?, `approval_hash` = ?, " +
-      "`expected_on` = ?, `lines_json` = ?, `fx_rate` = ?, `fx_source` = ?, `fx_date` = ? WHERE `id` = ? AND `status` = 'waiting' AND `user_id` <> ?",
-    [r.by, r.hash, r.expectedOn, r.linesJson, r.fxRate, r.fxSource, r.fxDate, r.id, r.by],
+      "`expected_on` = ?, `lines_json` = ?, `fx_rate` = ?, `fx_source` = ?, `fx_date` = ?, `self_approved` = ? " +
+      "WHERE `id` = ? AND `status` = 'waiting' AND (`user_id` <> ? OR ? = 1)",
+    [r.by, r.hash, r.expectedOn, r.linesJson, r.fxRate, r.fxSource, r.fxDate, own, r.id, r.by, own],
   );
   return res.affectedRows;
 }
@@ -641,13 +674,15 @@ export interface ReviewEventInsert {
   currency: string | null;
   hash: string | null;
   note: string | null;
+  /** The actor approved their own recap or invoice (decision 19). */
+  selfApproved?: boolean;
 }
 
 export async function insertReviewEvent(db: Queryable, e: ReviewEventInsert): Promise<void> {
   await db.query(
-    "INSERT INTO `moon_review_events` (`recap_id`, `invoice_id`, `user_id`, `kind`, `actor_user_id`, `actor_role`, `amount_minor`, `currency`, `hash`, `note`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [e.recapId, e.invoiceId, e.userId, e.kind, e.actorUserId, e.actorRole, e.amountMinor, e.currency, e.hash, e.note],
+    "INSERT INTO `moon_review_events` (`recap_id`, `invoice_id`, `user_id`, `kind`, `actor_user_id`, `actor_role`, `amount_minor`, `currency`, `hash`, `note`, `self_approved`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [e.recapId, e.invoiceId, e.userId, e.kind, e.actorUserId, e.actorRole, e.amountMinor, e.currency, e.hash, e.note, e.selfApproved ? 1 : 0],
   );
 }
 

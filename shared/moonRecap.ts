@@ -17,24 +17,38 @@
  * and `member_tasks.minutes` and a role's CCOS `timeCommitment` are never
  * read. Quests are separate from role pay: no origin below is a quest.
  *
- * ── TWO PEOPLE, NEITHER OF THEM THE MEMBER ────────────────────────────────
+ * ── WHO APPROVES (decisions 8, 18 and 19, 3 November) ─────────────────────
  *
- * A holder of `moon.approve` approves the work, then a holder of `cash.pay`
- * approves the invoice. `approvalPersonRefusal` compares user ids, so an
- * admin, a founder or a break-glass never passes either approval. The work
- * approver is resolved by `workApproverFor`, the one function a later circle
- * lead rule changes.
+ * The default is two people, neither of them the member: a holder of
+ * `moon.approve` approves the work, then a holder of `cash.pay` approves the
+ * invoice. Two held-back keys widen it, and `approvalDecision` is the one
+ * rule that reads all four:
  *
- * ── FINANCE SENDS THE INVOICE (decision 16, 3 November) ───────────────────
+ *   - `moon.approve_alone` (the founders' and stewards' power groups): its
+ *     holder may give BOTH approvals by themselves. Never on their own recap.
+ *   - `moon.approve_own` (the Treasury power group, an interim step): its
+ *     holder may approve their OWN recap and invoice, and every such
+ *     approval carries `selfApproved`, read as "Approved by the member
+ *     themselves" on the invoice, in the events and on the payouts desk.
  *
- * The member sends their recap and a draft invoice. There is no member issue
- * step: the invoice number comes from the member's own sequence at send, and
- * the From block stays in the member's name. Finance approves invoices one at
- * a time or in bulk, sends each with its work summary to the payer, pays
- * outside the platform and records the bank transfer on the existing
- * `/api/cash-owed/transfers` door. When every cash owed row on an invoice is
- * paid the invoice reads Paid. A payer's authority is a NOTE on the payers
- * document, never a gate.
+ * Every key is read from the holder's own seat, counted without the admin
+ * short-circuit, so an admin or a break-glass never passes an approval here,
+ * and none of the four can come from a badge. The work approver is resolved
+ * by `workApproverFor`, the one function a later circle lead rule changes.
+ *
+ * ── THE MEMBER'S OWN INVOICE IS THE LEGAL ONE (decision 16 revised) ───────
+ *
+ * Contractors always issue their own invoice: by email, through the
+ * electronic invoice system, or however they invoice today. The app's draft
+ * invoice is a SUPPORT document (lines, Bill to, period, work summary) and
+ * never the legal invoice. Sending it for approval needs the member's own
+ * invoice number, and on the contractor route the electronic invoice key.
+ * When Finance changes a range amount the invoice returns to the member, who
+ * voids and reissues their own invoice and sends again with its new number.
+ * Finance approves one at a time or in bulk, pays outside the platform and
+ * records the transfer on the existing `/api/cash-owed/transfers` door. When
+ * every cash owed row on an invoice is paid it reads Paid. A payer's
+ * authority is a NOTE on the payers document, never a gate.
  *
  * ── WHO READS WHAT ────────────────────────────────────────────────────────
  *
@@ -58,6 +72,15 @@ import { civilDateKey } from "./lunar";
 export const MOON_REVIEW_MODULE = "moon-review";
 export const WORK_APPROVE_CAPABILITY = "moon.approve";
 export const INVOICE_APPROVE_CAPABILITY = "cash.pay";
+/** Decision 18: both approvals by one person, never on their own recap. */
+export const APPROVE_ALONE_CAPABILITY = "moon.approve_alone";
+/** Decision 19: the holder's own recap and invoice, marked as such. */
+export const APPROVE_OWN_CAPABILITY = "moon.approve_own";
+
+/** The power groups decision 18 grants `moon.approve_alone` to (the two 0307 granted admin to). */
+export const APPROVE_ALONE_GROUPS = ["founders-circle", "steward-circle"] as const;
+/** The power group decision 19 grants `moon.approve_own` to: the seeded Treasury role. */
+export const APPROVE_OWN_GROUPS = ["treasury"] as const;
 
 /** A recap id: `mr-` and sixteen hex characters. */
 export const RECAP_ID = /^mr-[0-9a-f]{16}$/;
@@ -1218,6 +1241,12 @@ export interface InvoiceSendFacts {
   lines: readonly InvoiceLine[];
   attestation: Parsed<MoonAttestation> | null;
   pilotAckVersion: string | null;
+  /** The member's own invoice number, typed at send (decision 16 revised). */
+  memberNumber: string | null;
+  /** The electronic invoice key, needed on the contractor route. */
+  externalInvoiceKey: string | null;
+  /** The member's numbers already used on other invoices, Void ones included. */
+  usedNumbers?: readonly string[];
 }
 
 /**
@@ -1234,6 +1263,14 @@ export function invoiceSendRefusal(f: InvoiceSendFacts): string | null {
   if (invoiceTotals(f.lines).length > 1) return SEND_REFUSALS.twoCurrencies;
   if (!f.attestation || !f.attestation.ok) return f.attestation && !f.attestation.ok ? f.attestation.error : ATTESTATION_MISSING;
   if (f.pilotAckVersion !== PILOT_ACK_VERSION) return SEND_REFUSALS.pilotAck;
+  const numberProblem = memberNumberProblem(f.memberNumber);
+  if (numberProblem) return numberProblem;
+  if (f.usedNumbers?.includes((f.memberNumber as string).trim())) return SEND_REFUSALS.numberUsed;
+  if (f.route === "cr_contractor") {
+    if (!f.externalInvoiceKey) return SEND_REFUSALS.externalKey;
+    const keyProblem = externalInvoiceKeyProblem(f.externalInvoiceKey);
+    if (keyProblem) return keyProblem;
+  }
   return null;
 }
 
@@ -1246,34 +1283,90 @@ export const SEND_REFUSALS = {
   noPayableLine: "There is no line that carries money this moon, so there is no invoice to send.",
   twoCurrencies: "These lines carry two currencies. Finance splits them before the invoice can go.",
   pilotAck: "Read and accept the pilot note before your first invoice.",
+  numberMissing: "Type the number of the invoice you issued, so Finance can match it to this one.",
+  numberUsed: "You have used this invoice number before. A new invoice takes a new number.",
+  externalKey: "Type the key of the electronic invoice you issued.",
 } as const;
 
-/** The two-person rule, by user id. No admin and no break-glass passes it. */
-export function approvalPersonRefusal(f: { stage: ApprovalStage; actorUserId: string; memberUserId: string; workApprovedBy: string | null }): string | null {
-  if (f.actorUserId === f.memberUserId) return APPROVAL_REFUSALS.own;
-  if (f.stage === "invoice" && f.workApprovedBy && f.workApprovedBy === f.actorUserId) return APPROVAL_REFUSALS.sameApprover;
-  return null;
+/**
+ * What one person holds, read from their own seats and never from the admin
+ * short-circuit or a badge. The caller counts live holders the way
+ * `liveHoldersOfCapability` does.
+ */
+export interface ApproverKeys {
+  userId: string;
+  approve: boolean;
+  pay: boolean;
+  alone: boolean;
+  own: boolean;
+}
+
+export type ApprovalDecision =
+  | { ok: true; selfApproved: boolean; alone: boolean }
+  | { ok: false; refusal: string };
+
+/**
+ * THE ONE APPROVAL RULE: may this person give this approval on this recap?
+ *
+ *   own recap      only with `moon.approve_own`, for either stage, marked
+ *                  `selfApproved`. `moon.approve_alone` never covers it.
+ *   work stage     `moon.approve`, or `moon.approve_alone`, or `cash.pay`
+ *                  when no other `moon.approve` holder can.
+ *   invoice stage  `cash.pay` or `moon.approve_alone`; the person who
+ *                  approved the work may give it only with
+ *                  `moon.approve_alone` (or on their own recap with
+ *                  `moon.approve_own`), and then `alone` is true.
+ *
+ * Every other check (route, attestation, tax form, hash) still runs after
+ * this one passes.
+ */
+export function approvalDecision(f: {
+  stage: ApprovalStage;
+  actor: ApproverKeys;
+  memberUserId: string;
+  workApprovedBy: string | null;
+  /** Live `moon.approve` holders, for the `cash.pay` fallback on work. */
+  approveHolders: readonly string[];
+}): ApprovalDecision {
+  const a = f.actor;
+  const own = a.userId === f.memberUserId;
+  if (own) {
+    if (!a.own) return { ok: false, refusal: APPROVAL_REFUSALS.own };
+    const holds = f.stage === "work" ? a.approve || a.pay || a.alone : a.pay || a.alone;
+    if (!holds) return { ok: false, refusal: APPROVAL_REFUSALS.noKey };
+    return { ok: true, selfApproved: true, alone: f.stage === "invoice" && f.workApprovedBy === a.userId };
+  }
+  if (f.stage === "work") {
+    const holds = a.approve || a.alone || (a.pay && f.approveHolders.every((u) => u === f.memberUserId));
+    return holds ? { ok: true, selfApproved: false, alone: false } : { ok: false, refusal: APPROVAL_REFUSALS.noKey };
+  }
+  if (!(a.pay || a.alone)) return { ok: false, refusal: APPROVAL_REFUSALS.noKey };
+  const same = !!f.workApprovedBy && f.workApprovedBy === a.userId;
+  if (same && !a.alone) return { ok: false, refusal: APPROVAL_REFUSALS.sameApprover };
+  return { ok: true, selfApproved: false, alone: same };
+}
+
+/** The live holders of each key, for the queue's "who can give each approval". */
+export interface ApproverPool {
+  approve: readonly string[];
+  pay: readonly string[];
+  alone: readonly string[];
+  own: readonly string[];
 }
 
 /**
- * Who may give the WORK approval: a `moon.approve` holder, or a `cash.pay`
- * holder only when no other `moon.approve` holder can (every one of them is
- * the member). The caller passes live holders counted without the admin
- * short-circuit.
+ * Who could give each approval on this recap, by user id. Empty means
+ * nobody can, and the queue says so for the core circle to name a stand-in.
  */
-export function mayApproveWork(f: { actorUserId: string; memberUserId: string; actorHoldsApprove: boolean; actorHoldsPay: boolean; approveHolders: readonly string[] }): boolean {
-  if (f.actorUserId === f.memberUserId) return false;
-  if (f.actorHoldsApprove) return true;
-  return f.actorHoldsPay && f.approveHolders.every((u) => u === f.memberUserId);
+export function eligibleApprovers(f: { memberUserId: string; pool: ApproverPool; workApprovedBy: string | null }): { work: string[]; invoice: string[] } {
+  const keysOf = (u: string): ApproverKeys => ({ userId: u, approve: f.pool.approve.includes(u), pay: f.pool.pay.includes(u), alone: f.pool.alone.includes(u), own: f.pool.own.includes(u) });
+  const people = Array.from(new Set([...f.pool.approve, ...f.pool.pay, ...f.pool.alone, ...f.pool.own]));
+  const can = (stage: ApprovalStage) => people.filter((u) => approvalDecision({ stage, actor: keysOf(u), memberUserId: f.memberUserId, workApprovedBy: f.workApprovedBy, approveHolders: f.pool.approve }).ok);
+  return { work: can("work"), invoice: can("invoice") };
 }
 
-/** Is there anybody left who can give each approval? The queue says so when not. */
-export function eligibleApprovers(f: { memberUserId: string; approveHolders: readonly string[]; payHolders: readonly string[]; workApprovedBy: string | null }): { work: string[]; invoice: string[] } {
-  const work = f.approveHolders.filter((u) => u !== f.memberUserId);
-  const workers = work.length > 0 ? work : f.payHolders.filter((u) => u !== f.memberUserId);
-  const invoice = f.payHolders.filter((u) => u !== f.memberUserId && u !== f.workApprovedBy);
-  return { work: workers, invoice };
-}
+/** What the invoice, the events and the payouts desk say about a self-approval. */
+export const SELF_APPROVED_WORDS = "Approved by the member themselves";
 
 export interface FinanceCheckFacts {
   route: PayRouteRecord;
@@ -1324,6 +1417,14 @@ export function rowExistsRefusal(rowId: string): string {
 
 export const CONFIRM_OWN_ROUTE_REFUSED = "Nobody confirms their own pay route.";
 
+/**
+ * Decision 16 revised: Finance changing a range amount sends the invoice back
+ * to the member, who voids and reissues their own invoice before approval.
+ */
+export function rangeChangedNote(roleNames: readonly string[], amount: string): string {
+  return `Finance set ${amount} on the line for ${roleNames.join(", ")}. Void your own invoice, issue a new one with this figure, and send it again with its new number.`;
+}
+
 // ── The approval hash ────────────────────────────────────────────────────────
 
 export interface ApprovalSubject {
@@ -1358,9 +1459,17 @@ export async function approvalHash(s: ApprovalSubject): Promise<string> {
 
 // ── Invoice numbers ──────────────────────────────────────────────────────────
 
-/** The member's own invoice number, from their own sequence: "2026-003". */
-export function memberInvoiceNumber(seq: number, firstDay: string): string {
-  return `${firstDay.slice(0, 4)}-${String(seq).padStart(3, "0")}`;
+/**
+ * The member's own invoice number, from the invoice they issued themselves:
+ * letters, digits, spaces and . _ / - only, up to 40 characters. It has its
+ * own check for the reason the electronic key does: the payment-details check
+ * refuses runs of eight or more digits, and invoice numbers can carry them.
+ */
+export function memberNumberProblem(n: string | null | undefined): string | null {
+  const t = String(n ?? "").trim();
+  if (!t) return SEND_REFUSALS.numberMissing;
+  if (t.length > LIMITS.memberNumber || !/^[A-Za-z0-9][A-Za-z0-9 ._/-]*$/.test(t)) return "An invoice number is letters, digits and . _ / - only, up to 40 characters.";
+  return null;
 }
 
 /** The payer's record of an invoice: "<payer key>-0042". */
@@ -1469,7 +1578,7 @@ export function workSummaryHtml(s: SummaryInput): string {
 
 export const REVIEW_EVENT_KINDS = [
   "sent", "taken_back", "work_approved", "returned", "amount_set", "range_answered", "invoice_sent",
-  "invoice_approved", "paid", "void", "route_confirmed", "route_changed", "payers_changed",
+  "invoice_approved", "paid", "void", "route_confirmed", "route_changed", "payers_changed", "self_approved",
 ] as const;
 export type ReviewEventKind = (typeof REVIEW_EVENT_KINDS)[number];
 
@@ -1572,6 +1681,11 @@ export interface InvoiceView {
   totalMinor: number | null;
   expectedOn: string | null;
   paidOn: string | null;
+  /** True when the member gave an approval on their own invoice (decision 19). */
+  selfApproved: boolean;
+  /** The member's own invoice is the legal one; this view supports it. */
+  supportLine: string;
+  externalInvoiceKey: string | null;
   /** Filled once both approvals are in. */
   workSummary: string | null;
   workSummaryHtml: string | null;
@@ -1634,6 +1748,10 @@ export interface SendRecapResponse {
 export interface SendInvoiceRequest {
   attestation: MoonAttestation;
   pilotAckVersion: string;
+  /** The number of the invoice the member issued themselves. */
+  memberNumber: string;
+  /** On the contractor route, the electronic invoice key. */
+  externalInvoiceKey?: string | null;
   /** A range line's proposed amount, per its `per`, by application id. */
   rangeProposals?: Record<string, number>;
 }
@@ -1678,6 +1796,8 @@ export interface QueueRow {
   status: RecapStatus;
   waitingOn: ApprovalStage | null;
   dueOn: string | null;
+  /** Shown to the founders' and stewards' groups for review after the fact. */
+  selfApproved: boolean;
   /** Who can give each approval for this recap, by name. Empty means nobody can. */
   workApprovers: string[];
   invoiceApprovers: string[];
@@ -1770,6 +1890,13 @@ export const PAYMENT_DETAILS_REFUSED = "This looks like a bank or card number. P
 export const ATTESTATION_MISSING = "Fill in the moon attestation before you send the invoice.";
 export const NAMES_A_MEMBER = "This item names another member. Reword it to say what you delivered.";
 
+export const SUPPORT_LINE = "A support document for your own invoice. The invoice you issue yourself is the legal one.";
+
+/** Where the member sends the invoice they issue: the payer's `invoiceTo`. */
+export function sendYourInvoiceTo(invoiceTo: string): string {
+  return `Send the invoice you issue to ${invoiceTo}.`;
+}
+
 export const MOON_WORDS = {
   heading: "My moon",
   thisMoon: "This moon",
@@ -1799,6 +1926,8 @@ export const MOON_WORDS = {
   attestation: "This moon's attestation",
   paymentDetails: "Payment goes to the account you have on file with Finance.",
   whoReads: "Who can read your pay details",
+  memberNumber: "Your invoice number",
+  externalKey: "Electronic invoice key",
   copySummary: "Copy work summary",
   copyEmail: "Copy for email",
   printable: "Open printable invoice",
@@ -1819,7 +1948,9 @@ export const NOTICE_WORDS = {
   sentToApprover: (name: string) => `${name} sent their moon recap. It is waiting on your approval.`,
   returned: "Your moon recap came back with a note.",
   workApproved: "The work in your moon recap is approved.",
-  approved: "Your moon recap is approved. Finance sends the invoice and the pay.",
+  approved: "Your moon recap is approved. Finance pays outside the platform and tells you once it is sent.",
+  rangeChanged: "Finance set a new amount on your invoice. Reissue your own invoice and send it again.",
+  selfApprovedForReview: (name: string) => `${name} approved their own moon recap. It is open for review on the payouts desk.`,
   paid: (day: string) => paySentWords(day),
   reminder: (name: string) => `${name}'s moon recap is still waiting on your approval.`,
   escalated: (name: string, role: string) => `${name}'s moon recap has waited 14 days on ${role}.`,

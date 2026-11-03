@@ -7,7 +7,9 @@
  *   4  monthly terms prorate by days in the moon; part of a moon by days held.
  *   7  an invoice send is refused for pending, tourist, invoicing off, no
  *      payable line, a missing attestation or acknowledgement.
- *   8  two different people, neither the member (the pure half).
+ *   8  two different people, neither the member, by default; one person
+ *      alone only with moon.approve_alone and never on their own; one's own
+ *      only with moon.approve_own, and marked (decisions 18 and 19).
  *   9  any change to what an approval binds changes the hash.
  *   10 Finance approval refusals (authority is a note, decision 16).
  *   11 the cycle id matches under both clocks (moonDays keeps the clock's id).
@@ -19,9 +21,9 @@
 import { describe, expect, it } from "vitest";
 import { CALENDAR_CLOCK, LUNAR_CLOCK } from "./cycleClock";
 import {
-  addWorkingDays, approvalHash, approvalPersonRefusal, auditTensions, confirmRouteRefusal, coverage, deadlineAction,
+  addWorkingDays, approvalDecision, approvalHash, auditTensions, confirmRouteRefusal, coverage, deadlineAction,
   eligibleApprovers, endOfMoonFriday, financeApprovalRefusal, INVOICE_STATUS_WORDS, invoicePaidFrom, invoiceSendRefusal,
-  invoiceStatusLine, invoiceTotals, ITEM_ORIGINS, itemDedupeKey, linesFromTerms, mayApproveWork, memberView, moonDays,
+  invoiceStatusLine, invoiceTotals, ITEM_ORIGINS, itemDedupeKey, linesFromTerms, memberView, moonDays,
   parseAttestation, parseItemFields, parsePayers, parsePayRouteInput, parseRoleAudit, payersChanges, payerForRoute,
   PILOT_ACK_VERSION, prorate, RECAP_STATUS_WORDS, routeChangeClearsConfirmation, SEND_REFUSALS, taxFormValidOn,
   workSummaryText, workDueOn, type ApprovalSubject, type InvoiceLine, type Payer, type PayRouteRecord, type RecapItem,
@@ -133,14 +135,22 @@ describe("lines from terms (checks 3 and 4)", () => {
 describe("sends (check 7)", () => {
   const lines = linesFromTerms([terms()], MOON);
   const att = parseAttestation({ workCountries: ["us"], daysInHostCountry: 0, statusUnchanged: true }, "abroad", MOON);
-  const ok = { route: "abroad" as const, payer: payer(), lines, attestation: att, pilotAckVersion: PILOT_ACK_VERSION };
-  it("a complete send passes", () => expect(invoiceSendRefusal(ok)).toBeNull());
+  const ok = { route: "abroad" as const, payer: payer(), lines, attestation: att, pilotAckVersion: PILOT_ACK_VERSION, memberNumber: "INV-2026-11", externalInvoiceKey: null };
+  it("a complete send passes, with a long digits-only number or key", () => {
+    expect(invoiceSendRefusal(ok)).toBeNull();
+    expect(invoiceSendRefusal({ ...ok, memberNumber: "0012345678901" })).toBeNull();
+    expect(invoiceSendRefusal({ ...ok, route: "cr_contractor", externalInvoiceKey: "50601112600310123456700100001010000000001100000001" })).toBeNull();
+    expect(invoiceSendRefusal({ ...ok, route: "cr_contractor", externalInvoiceKey: "50-601" })).toContain("digits only");
+  });
   it.each([
     ["pending", { route: "pending" as const }, SEND_REFUSALS.pending],
     ["tourist", { route: "tourist" as const }, SEND_REFUSALS.tourist],
     ["invoicing off", { payer: payer({ invoicing: false }) }, SEND_REFUSALS.invoicingOff],
     ["no payable line", { lines: linesFromTerms([terms({ settings: { v: 1, pay: { kind: "honorary" } } })], MOON) }, SEND_REFUSALS.noPayableLine],
     ["no acknowledgement", { pilotAckVersion: null }, SEND_REFUSALS.pilotAck],
+    ["no invoice number of their own (decision 16 revised)", { memberNumber: "  " }, SEND_REFUSALS.numberMissing],
+    ["an invoice number used before", { usedNumbers: ["INV-2026-11"] }, SEND_REFUSALS.numberUsed],
+    ["the contractor route with no electronic key", { route: "cr_contractor" as const, payer: payer({ routes: ["cr_contractor"] }) }, SEND_REFUSALS.externalKey],
   ])("is refused: %s", (_n, over, sentence) => expect(invoiceSendRefusal({ ...ok, ...over })).toBe(sentence));
   it("is refused with no attestation, and with one that is not whole", () => {
     expect(invoiceSendRefusal({ ...ok, attestation: null })).toBe(contract.ATTESTATION_MISSING);
@@ -152,17 +162,47 @@ describe("sends (check 7)", () => {
 });
 
 describe("approvals (checks 8, 9, 10)", () => {
-  it("nobody approves their own recap, and the two approvals are two different people", () => {
-    expect(approvalPersonRefusal({ stage: "work", actorUserId: "u1", memberUserId: "u1", workApprovedBy: null })).toBe(contract.APPROVAL_REFUSALS.own);
-    expect(approvalPersonRefusal({ stage: "invoice", actorUserId: "u2", memberUserId: "u1", workApprovedBy: "u2" })).toBe(contract.APPROVAL_REFUSALS.sameApprover);
-    expect(approvalPersonRefusal({ stage: "invoice", actorUserId: "u3", memberUserId: "u1", workApprovedBy: "u2" })).toBeNull();
+  const keys = (userId: string, over: Partial<{ approve: boolean; pay: boolean; alone: boolean; own: boolean }> = {}) =>
+    ({ userId, approve: false, pay: false, alone: false, own: false, ...over });
+  const decide = (stage: "work" | "invoice", actor: ReturnType<typeof keys>, workApprovedBy: string | null = null, approveHolders = ["ops"]) =>
+    approvalDecision({ stage, actor, memberUserId: "u1", workApprovedBy, approveHolders });
+
+  it("by default nobody approves their own recap, and the two approvals are two different people", () => {
+    expect(decide("work", keys("u1", { approve: true, pay: true }))).toEqual({ ok: false, refusal: contract.APPROVAL_REFUSALS.own });
+    expect(decide("work", keys("ops", { approve: true }))).toEqual({ ok: true, selfApproved: false, alone: false });
+    expect(decide("invoice", keys("ops", { approve: true, pay: true }), "ops")).toEqual({ ok: false, refusal: contract.APPROVAL_REFUSALS.sameApprover });
+    expect(decide("invoice", keys("fin", { pay: true }), "ops")).toEqual({ ok: true, selfApproved: false, alone: false });
+    expect(decide("work", keys("someone"))).toEqual({ ok: false, refusal: contract.APPROVAL_REFUSALS.noKey });
+    expect(decide("invoice", keys("ops2", { approve: true }), "ops")).toEqual({ ok: false, refusal: contract.APPROVAL_REFUSALS.noKey });
   });
-  it("cash.pay approves work only when no other moon.approve holder can, so the Finance holder's own recap can finish", () => {
-    expect(mayApproveWork({ actorUserId: "fin", memberUserId: "u1", actorHoldsApprove: false, actorHoldsPay: true, approveHolders: ["ops"] })).toBe(false);
-    expect(mayApproveWork({ actorUserId: "fin", memberUserId: "ops", actorHoldsApprove: false, actorHoldsPay: true, approveHolders: ["ops"] })).toBe(true);
-    expect(eligibleApprovers({ memberUserId: "fin", approveHolders: ["ops"], payHolders: ["fin", "fin2"], workApprovedBy: "ops" })).toEqual({ work: ["ops"], invoice: ["fin2"] });
-    expect(eligibleApprovers({ memberUserId: "fin", approveHolders: ["ops"], payHolders: ["fin"], workApprovedBy: "ops" }).invoice).toEqual([]);
+
+  it("cash.pay approves the work only when no other moon.approve holder can", () => {
+    expect(decide("work", keys("fin", { pay: true })).ok).toBe(false);
+    expect(decide("work", keys("fin", { pay: true }), null, ["u1"]).ok).toBe(true);
   });
+
+  it("moon.approve_alone gives both approvals by one person, never on their own recap (decision 18)", () => {
+    const steward = keys("st", { alone: true });
+    expect(decide("work", steward)).toEqual({ ok: true, selfApproved: false, alone: false });
+    expect(decide("invoice", steward, "st")).toEqual({ ok: true, selfApproved: false, alone: true });
+    expect(decide("work", keys("u1", { alone: true, approve: true, pay: true }))).toEqual({ ok: false, refusal: contract.APPROVAL_REFUSALS.own });
+  });
+
+  it("moon.approve_own approves the holder's own recap and invoice, marked selfApproved (decision 19)", () => {
+    const fin = keys("u1", { pay: true, own: true });
+    expect(decide("work", fin)).toEqual({ ok: true, selfApproved: true, alone: false });
+    expect(decide("invoice", fin, "u1")).toEqual({ ok: true, selfApproved: true, alone: true });
+    expect(decide("invoice", keys("u1", { own: true, approve: true }), "ops")).toEqual({ ok: false, refusal: contract.APPROVAL_REFUSALS.noKey });
+    expect(contract.SELF_APPROVED_WORDS).toBe("Approved by the member themselves");
+  });
+
+  it("names who can give each approval, so the Finance holder's own recap can finish", () => {
+    const pool = { approve: ["ops"], pay: ["fin"], alone: ["st"], own: ["fin"] };
+    expect(eligibleApprovers({ memberUserId: "fin", pool, workApprovedBy: null })).toEqual({ work: ["ops", "fin", "st"], invoice: ["fin", "st"] });
+    expect(eligibleApprovers({ memberUserId: "u1", pool: { ...pool, alone: [], own: [] }, workApprovedBy: "ops" })).toEqual({ work: ["ops"], invoice: ["fin"] });
+    expect(eligibleApprovers({ memberUserId: "fin", pool: { approve: ["ops"], pay: ["fin"], alone: [], own: [] }, workApprovedBy: "ops" }).invoice).toEqual([]);
+  });
+
   it("the hash changes with any line, amount, item, route, payer or From change", async () => {
     const base: ApprovalSubject = {
       payerKey: "us-payer", route: "abroad", currency: "USD", from: { legalName: "A", address: "B" },
@@ -191,6 +231,12 @@ describe("approvals (checks 8, 9, 10)", () => {
   it("payer authority is a note and refuses nothing (decision 16)", () => {
     expect("authority" in contract.FINANCE_REFUSALS).toBe(false);
     expect(contract.authorityNote(payer())).toBe("No authority is recorded for this payer.");
+  });
+});
+
+describe("a range Finance changes goes back to the member (decision 16 revised)", () => {
+  it("names the line and the figure, and asks for a reissued invoice", () => {
+    expect(contract.rangeChangedNote(["Steward"], "$700.00")).toBe("Finance set $700.00 on the line for Steward. Void your own invoice, issue a new one with this figure, and send it again with its new number.");
   });
 });
 

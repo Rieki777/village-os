@@ -283,7 +283,7 @@ Once a moon, each member who holds a role gathers what they delivered, checks it
 | Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
 | Requires | nothing |
 | Recommends | `sessions`, `governance`, `saberra` |
-| Capabilities it adds | `moon.approve` |
+| Capabilities it adds | `moon.approve`, `moon.approve_alone`, `moon.approve_own` |
 | Variable keys it owns | none |
 | API prefixes | `/api/me/moon`, `/api/me/pay-route`, `/api/moon-review` |
 | What a village plants | nothing beyond the platform's own layers |
@@ -864,7 +864,7 @@ Ten keys are claimed by more than one module, so switching one module off leaves
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 42 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Fifteen modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 44 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Fifteen modules add keys:
 
 | Module | Capabilities |
 | --- | --- |
@@ -879,7 +879,7 @@ A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which
 | `exchange` | `exchange.buy`, `exchange.swap`, `exchange.manage` |
 | `redemption` | `redemption.confirm` |
 | `events` | `event.rsvp`, `event.manage` |
-| `moon-review` | `moon.approve` |
+| `moon-review` | `moon.approve`, `moon.approve_alone`, `moon.approve_own` |
 | `sessions` | `session.template` |
 | `governance` | `ballot.vote`, `member.vouch` |
 | `comms` | `comms.manage` |
@@ -1537,7 +1537,9 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "saberra"
       ],
       "capabilities": [
-        "moon.approve"
+        "moon.approve",
+        "moon.approve_alone",
+        "moon.approve_own"
       ],
       "variableKeys": [],
       "apiPrefixes": [
