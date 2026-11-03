@@ -27,19 +27,19 @@ export default function StepSeason({ season, orgGoals, onChange }: { season: Sea
   return (
     <div className="grid gap-4">
       <p className={LEDE}>{RP_WORDS.seasonLede}</p>
-      <label className="grid gap-1 text-sm font-semibold text-stone-900">
+      <label className="grid gap-1 text-sm font-semibold text-foreground">
         {RP_WORDS.aim}
-        <span className="text-xs font-normal text-stone-600">{RP_WORDS.aimHelp}</span>
+        <span className="text-xs font-normal text-muted-foreground">{RP_WORDS.aimHelp}</span>
         <textarea rows={3} maxLength={AIM_MAX} value={season.aim} onChange={(e) => onChange({ ...season, aim: e.target.value })} className={INPUT} />
       </label>
       <div className={PANEL}>
         <SeasonalGoalsField rows={season.seasonal} onChange={(seasonal) => onChange({ ...season, seasonal })} />
       </div>
       <div className={`${PANEL} grid gap-2`} data-org-goals="">
-        <h3 className="text-sm font-semibold text-stone-800">{RP_WORDS.orgGoalsHeading}</h3>
+        <h3 className="text-sm font-semibold text-foreground">{RP_WORDS.orgGoalsHeading}</h3>
         {orgGoals.length === 0 ? (
           <>
-            <p className="text-stone-800" data-no-org-goals="">
+            <p className="text-foreground" data-no-org-goals="">
               {RP_WORDS.noOrgGoals}
             </p>
             <p className={LEDE}>{RP_WORDS.noOrgGoalsLine}</p>

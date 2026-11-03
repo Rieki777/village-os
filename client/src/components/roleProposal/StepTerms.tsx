@@ -51,24 +51,24 @@ export default function StepTerms({
       <p className={LEDE}>{RP_WORDS.termsLede}</p>
 
       <section aria-labelledby="rp-load" className={`${PANEL} grid gap-2 ${load.over ? "border-coral" : ""}`} data-load-check={load.over ? "over" : "within"}>
-        <h3 id="rp-load" className="font-semibold text-stone-900">
+        <h3 id="rp-load" className="font-semibold text-foreground">
           {LOAD_WORDS.heading}
         </h3>
         <p className={LEDE}>{LOAD_WORDS.lede}</p>
         {load.counted.length > 0 && (
-          <ul className="grid gap-0.5 text-sm text-stone-800">
+          <ul className="grid gap-0.5 text-sm text-foreground">
             {load.counted.map((c, i) => (
               <li key={i}>{LOAD_WORDS.oneRole(c.name, Math.round(c.hours))}</li>
             ))}
           </ul>
         )}
         {load.lines.map((l, i) => (
-          <p key={i} className={i === 0 ? `font-semibold ${load.over ? "text-coral" : "text-stone-900"}` : "text-sm text-stone-700"} data-load-line={i}>
+          <p key={i} className={i === 0 ? `font-semibold ${load.over ? "text-coral" : "text-foreground"}` : "text-sm text-muted-foreground"} data-load-line={i}>
             {l}
           </p>
         ))}
         {load.notCounted.length > 0 && (
-          <ul className="grid gap-0.5 text-sm text-stone-600">
+          <ul className="grid gap-0.5 text-sm text-muted-foreground">
             {load.notCounted.map((c, i) => (
               <li key={i}>
                 {c.name}: {c.why}
@@ -84,24 +84,24 @@ export default function StepTerms({
       </section>
 
       {roles.length > 0 && (
-        <fieldset className={`${PANEL} grid gap-3`}>
-          <legend className="px-1 font-semibold text-stone-900">{RP_WORDS.reviewDates}</legend>
-          <p className="text-xs text-stone-600">{RP_WORDS.reviewHint}</p>
+        <section aria-labelledby="rp-reviews" className={`${PANEL} grid gap-3 pt-4`}>
+          <h3 id="rp-reviews" className="font-semibold text-foreground">{RP_WORDS.reviewDates}</h3>
+          <p className="text-xs text-muted-foreground">{RP_WORDS.reviewHint}</p>
           {roles.map((r) => (
-            <label key={r.id} className="grid gap-1 text-sm font-medium text-stone-800">
+            <label key={r.id} className="grid gap-1 text-sm font-medium text-foreground">
               <span className="break-words">{r.name}</span>
               <input type="date" value={r.reviewOn} onChange={(e) => onReview(r.id, e.target.value)} className={`min-h-[44px] ${INPUT}`} />
             </label>
           ))}
-        </fieldset>
+        </section>
       )}
 
       {roles.length > 0 && (
         <section className={`${PANEL} grid gap-3`} aria-label={RP_WORDS.hoursQuestion}>
-          <h3 className="font-semibold text-stone-900">{RP_WORDS.hoursQuestion}</h3>
+          <h3 className="font-semibold text-foreground">{RP_WORDS.hoursQuestion}</h3>
           {roles.map((r) => (
-            <fieldset key={r.id} className="grid gap-2">
-              <legend className="text-sm font-medium text-foreground">{r.name}</legend>
+            <div key={r.id} role="group" aria-label={r.name} className="grid gap-2">
+              <p className="text-sm font-medium text-foreground">{r.name}</p>
               <div className="flex flex-wrap gap-2">
                 {[2, 5, 10, 20, 40].map((n) => {
                   const label = RP_WORDS.hoursChoice(n);
@@ -116,13 +116,13 @@ export default function StepTerms({
                   {RP_WORDS.notSureHours}
                 </button>
               </div>
-            </fieldset>
+            </div>
           ))}
         </section>
       )}
 
       <section aria-labelledby="rp-terms" className="grid gap-2">
-        <h3 id="rp-terms" className="font-semibold text-stone-900">
+        <h3 id="rp-terms" className="font-semibold text-foreground">
           {RP_WORDS.termsHeading}
         </h3>
         <p className={LEDE}>{RP_WORDS.notSureLine(partner)}</p>

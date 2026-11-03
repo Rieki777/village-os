@@ -35,7 +35,7 @@ function Page({ children }: { children: ReactNode }) {
   return (
     <Layout>
       <div className="sheet-night min-h-screen bg-background text-foreground">
-        <div className="container max-w-3xl px-4 py-8">{children}</div>
+        <div className="container min-w-0 max-w-3xl overflow-x-clip px-4 py-8">{children}</div>
       </div>
     </Layout>
   );
@@ -44,9 +44,9 @@ function Page({ children }: { children: ReactNode }) {
 function Notice({ heading, line, next }: { heading: string; line?: string; next?: string }) {
   return (
     <Page>
-      <div className="mt-6 rounded-xl border border-stone-200 bg-white p-6 text-center sm:p-8">
-        <h1 className="font-display text-2xl font-bold text-stone-900">{heading}</h1>
-        {line && <p className="mx-auto mt-2 max-w-md leading-relaxed text-stone-600">{line}</p>}
+      <div className="mt-6 rounded-xl border border-border bg-card p-6 text-center sm:p-8">
+        <h1 className="font-display text-2xl text-foreground">{heading}</h1>
+        {line && <p className="mx-auto mt-2 max-w-md leading-relaxed text-muted-foreground">{line}</p>}
         {next && (
           <div className="mt-5">
             <SignInDoors next={next} />

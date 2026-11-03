@@ -104,6 +104,12 @@ export function ProposalPreview({ proposal }: { proposal: ProposalOut }) {
 export default function ProposalEditor({ initial, me }: { initial: ProposalOut; me: string }) {
   const [proposal, setProposal] = useState(initial);
   const [step, setStep] = useState<StepKey>(stepFromUrl);
+  const submitOpen = useRef<() => void>(() => {});
+  const [submitOff, setSubmitOff] = useState(true);
+  const onSubmitGate = useCallback((gate: { open: () => void; off: boolean }) => {
+    submitOpen.current = gate.open;
+    setSubmitOff((prev) => (prev === gate.off ? prev : gate.off));
+  }, []);
   const [path, setPath] = useState<ProposalPath>(pathFromUrl);
   const [front, setFront] = useState<FrontScreen>(() => (pathFromUrl() === "quick" ? "welcome" : "steps"));
   const [picked, setPicked] = useState<string[]>(() => initial.roles.map((r) => r.roleId));
@@ -287,7 +293,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
 
   if (proposal.status === "submitted") {
     return (
-      <div className="grid gap-6">
+      <div className="grid min-w-0 gap-6">
         <ProposalState proposal={proposal} />
         <ProposalPreview proposal={proposal} />
       </div>
@@ -353,7 +359,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
         </p>
       )}
       <header className="grid gap-1">
-        <h1 className="font-display text-3xl font-bold text-stone-900">{RP_WORDS.title}</h1>
+        <h1 className="font-display text-3xl font-bold text-foreground">{RP_WORDS.title}</h1>
         <p className={LEDE}>{target ? RP_WORDS.forSeason(target.name, civilDayWords(target.startsOn)) : proposal.targetWords}</p>
       </header>
 
@@ -381,7 +387,11 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
                 aria-current={s === step ? "step" : undefined}
                 aria-label={RP_WORDS.goToStep(i + 1, STEP_TITLES[s])}
                 className={`inline-flex size-11 items-center justify-center rounded-full border text-sm font-semibold ${FOCUS} ${
-                  s === step ? "border-teal-deep bg-teal-deep text-white" : i < index ? "border-teal-deep text-teal-deep" : "border-stone-300 text-stone-600"
+                  s === step
+                    ? "border-dash-gold bg-dash-gold text-dash-gold-ink"
+                    : i < index
+                      ? "border-dash-gold text-dash-gold-lit"
+                      : "border-border text-foreground"
                 }`}
               >
                 {i + 1}
@@ -393,7 +403,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
 
       <section aria-labelledby="rp-step-title" className="grid gap-4" data-step={step}>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{RP_WORDS.stepOf(index + 1, STEPS.length)}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-dash-gold-lit">{RP_WORDS.stepOf(index + 1, STEPS.length)}</p>
           <h2 id="rp-step-title" tabIndex={-1} className={`${H2} outline-none`}>
             {STEP_TITLES[step]}
           </h2>
@@ -464,6 +474,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             onSubmitted={(p) => p && setProposal(p)}
             termsOpen={settingsWords(settings).every((row) => !row.set)}
             partner={opsPartner(operationsRoleName(org && org !== "failed" ? org.roles : []))}
+            onSubmitGate={onSubmitGate}
           />
         )}
       </section>
@@ -479,7 +490,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
       <div
         data-hides-fab-phone
         data-step-bar=""
-        className="sticky bottom-[var(--rp-bar-bottom)] z-10 -mx-4 grid gap-1 border-t border-stone-200 bg-white/95 px-4 py-2 backdrop-blur md:bottom-0"
+        className="sticky bottom-[var(--rp-bar-bottom)] z-20 -mx-4 grid gap-1 border-t border-border bg-card/95 px-3 py-2 backdrop-blur md:bottom-0"
         style={{ "--rp-bar-bottom": "max(calc(env(safe-area-inset-bottom, 0px) + 4rem), 4rem)" } as React.CSSProperties}
       >
         <SaveLine status={save.status} error={save.error} onRetry={() => void save.flush()} />
@@ -489,10 +500,22 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             {RP_WORDS.back}
           </button>
-          {index < STEPS.length - 1 && (
+          {index < STEPS.length - 1 ? (
             <button type="button" onClick={() => void go(STEPS[index + 1])} className={PRIMARY}>
               {RP_WORDS.next}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={submitOff}
+              className={PRIMARY}
+              onClick={() => {
+                document.getElementById("rp-submit")?.scrollIntoView({ block: "center" });
+                submitOpen.current();
+              }}
+            >
+              {RP_WORDS.submit}
             </button>
           )}
         </div>
