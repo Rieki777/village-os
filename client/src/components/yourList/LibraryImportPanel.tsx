@@ -10,6 +10,7 @@
  * whole batch (restorable for 30 days).
  */
 import { useState } from "react";
+import { DEFAULT_IMPORT_PHRASE } from "@shared/memberTaskFeedback";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, LABEL_CAPS } from "@/components/sessions/roomUi";
 import type { PanelPerson } from "./PersonalListsPanel";
@@ -33,29 +34,34 @@ export default function LibraryImportPanel({ password, players }: { password: st
   const [userId, setUserId] = useState("");
   const [owner, setOwner] = useState("");
   const [pasted, setPasted] = useState("");
+  const [phrase, setPhrase] = useState(DEFAULT_IMPORT_PHRASE);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [dry, setDry] = useState<{ key: string; summary: Summary } | null>(null);
   const [done, setDone] = useState<Summary | null>(null);
   const [undone, setUndone] = useState<number | null>(null);
 
-  const key = `${userId}|${owner}|${pasted}`;
+  const key = `${userId}|${owner}|${pasted}|${phrase}`;
 
   const send = async (dryRun: boolean) => {
     setProblem(null);
-    let answer: unknown;
-    try {
-      answer = JSON.parse(pasted);
-    } catch {
-      setProblem("That is not JSON. Paste the library's answer as it came.");
-      return;
+    // Nothing pasted: read straight from the library, filtered by the evidence phrase.
+    const pull = !pasted.trim();
+    let answer: unknown = null;
+    if (!pull) {
+      try {
+        answer = JSON.parse(pasted);
+      } catch {
+        setProblem("That is not JSON. Paste the library's answer as it came, or leave it empty to read from the library.");
+        return;
+      }
     }
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/admin/member-tasks/import`, {
         method: "POST",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ userId, seraOwnerId: owner.trim(), answer, dryRun }),
+        body: JSON.stringify(pull ? { userId, seraOwnerId: owner.trim(), pull: true, evidenceContains: phrase.trim(), dryRun } : { userId, seraOwnerId: owner.trim(), answer, dryRun }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setProblem(refusal(data, "That did not run."));
@@ -102,11 +108,15 @@ export default function LibraryImportPanel({ password, players }: { password: st
         <input className={FIELD} value={owner} onChange={(e) => setOwner(e.target.value)} />
       </label>
       <label className="mt-3 block">
-        <span className={LABEL_CAPS}>The library's answer (JSON)</span>
+        <span className={LABEL_CAPS}>Only tasks whose evidence contains</span>
+        <input className={FIELD} value={phrase} onChange={(e) => setPhrase(e.target.value)} />
+      </label>
+      <label className="mt-3 block">
+        <span className={LABEL_CAPS}>The library's answer (JSON, optional: leave empty to read from the library)</span>
         <textarea className={`${FIELD} min-h-32 py-2 font-mono text-xs`} value={pasted} onChange={(e) => setPasted(e.target.value)} />
       </label>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" className={BTN_SECONDARY} disabled={busy || !userId || !owner.trim() || !pasted.trim()} onClick={() => send(true)}>Dry run</button>
+        <button type="button" className={BTN_SECONDARY} disabled={busy || !userId || !owner.trim() || (!pasted.trim() && !phrase.trim())} onClick={() => send(true)}>Dry run</button>
         {fresh && (
           <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => send(false)}>Import for real</button>
         )}

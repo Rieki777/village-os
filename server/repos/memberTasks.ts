@@ -11,6 +11,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { forgetMemberTaskFeedback } from "./memberTaskFeedback";
 import {
   RESTORE_DAYS, type Horizon, type RemoveReason, type TaskInput, type TaskSource, type TaskStatus, type Tier,
 } from "../../shared/memberTasks";
@@ -29,6 +30,7 @@ export interface MemberTaskRow {
   status: TaskStatus;
   removeReason: string | null;
   pinned: boolean;
+  memberPinned: boolean;
   source: TaskSource;
   externalId: string | null;
   importBatch: string | null;
@@ -43,7 +45,7 @@ export interface MemberTaskRow {
 }
 
 const COLUMNS =
-  "`id`, `user_id`, `title`, `private_detail`, `tier`, `horizon`, DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `minutes`, `status`, `remove_reason`, `pinned`, `source`, `external_id`, `import_batch`, `member_edited`, `confidence`, `not_now_count`, `version`, DATE_FORMAT(`created_on`, '%Y-%m-%d') AS `created_on`, `done_at`, `removed_at`, `updated_at`";
+  "`id`, `user_id`, `title`, `private_detail`, `tier`, `horizon`, DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `minutes`, `status`, `remove_reason`, `pinned`, `member_pinned`, `source`, `external_id`, `import_batch`, `member_edited`, `confidence`, `not_now_count`, `version`, DATE_FORMAT(`created_on`, '%Y-%m-%d') AS `created_on`, `done_at`, `removed_at`, `updated_at`";
 
 const iso = (v: unknown): string | null => (v == null ? null : v instanceof Date ? v.toISOString() : String(v));
 
@@ -60,6 +62,7 @@ function toRow(r: RowDataPacket): MemberTaskRow {
     status: r.status as TaskStatus,
     removeReason: r.remove_reason == null ? null : String(r.remove_reason),
     pinned: Number(r.pinned) === 1,
+    memberPinned: Number(r.member_pinned ?? 0) === 1,
     source: String(r.source) as TaskSource,
     externalId: r.external_id == null ? null : String(r.external_id),
     importBatch: r.import_batch == null ? null : String(r.import_batch),
@@ -176,7 +179,7 @@ export async function patchTask(
 
 /** Move a task between open, done and removed. Removed keeps the row as a tombstone. */
 export async function setStatus(
-  db: Queryable, userId: string, id: string, version: number, to: TaskStatus, reason: RemoveReason | null = null,
+  db: Queryable, userId: string, id: string, version: number, to: TaskStatus, reason: RemoveReason | string | null = null,
 ): Promise<"ok" | "conflict" | "missing"> {
   const extra =
     to === "done" ? ", `done_at` = NOW(), `removed_at` = NULL, `remove_reason` = NULL"
@@ -194,6 +197,16 @@ export async function setStatus(
     return "ok";
   }
   return (await ownTask(db, userId, id)) ? "conflict" : "missing";
+}
+
+/** The member's own pin to the top of the tier. */
+export async function setMemberPinned(db: Queryable, userId: string, id: string, on: boolean): Promise<boolean> {
+  const [res] = await db.query<ResultSetHeader>(
+    "UPDATE `member_tasks` SET `member_pinned` = ?, `version` = `version` + 1 WHERE `user_id` = ? AND `id` = ? AND `status` = 'open'",
+    [on ? 1 : 0, userId, id],
+  );
+  if (res.affectedRows === 1) await recordTaskEvent(db, id, userId, on ? "pin" : "unpin", null, userId);
+  return res.affectedRows === 1;
 }
 
 /** "Not now": one more push down the list, counted for the feedback slider. */
@@ -257,7 +270,9 @@ export async function forgetMemberTasks(db: Queryable, userId: string): Promise<
   const [t] = await db.query<ResultSetHeader>("DELETE FROM `member_tasks` WHERE `user_id` = ?", [uid]);
   const [a] = await db.query<ResultSetHeader>("DELETE FROM `member_task_access` WHERE `user_id` = ?", [uid]);
   await db.query("UPDATE `member_task_access` SET `set_by_user_id` = NULL WHERE `set_by_user_id` = ?", [uid]);
-  // The library's links for them (drizzle/0311), dropped last.
+  // The feedback bridge (drizzle/0312), then the library's links (0311), dropped last.
+  const [links] = await db.query<RowDataPacket[]>("SELECT `sera_owner_id` FROM `sera_person_links` WHERE `user_id` = ?", [uid]);
+  await forgetMemberTaskFeedback(db, uid, links.map((l) => String(l.sera_owner_id)));
   await db.query("DELETE FROM `sera_person_links` WHERE `user_id` = ?", [uid]);
   await db.query("UPDATE `sera_person_links` SET `linked_by_user_id` = NULL WHERE `linked_by_user_id` = ?", [uid]);
   return e.affectedRows + t.affectedRows + a.affectedRows;

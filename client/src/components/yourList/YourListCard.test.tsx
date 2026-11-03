@@ -46,6 +46,14 @@ describe("Your list", () => {
     expect(screen.getByText("You marked it high.")).toBeTruthy();
   });
 
+  it("asks for a reason before removing", async () => {
+    gameFetch.mockImplementation(() => answer(onList));
+    render(<YourListCard />);
+    await screen.findByText("Your list");
+    await userEvent.click(screen.getAllByText("Remove")[0]);
+    expect((screen.getByText("Remove it") as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("offers Undo once the server saved a removal", async () => {
     gameFetch.mockImplementation((url: string, init?: RequestInit) => {
       if (init?.method === "POST" && url.endsWith("/remove")) return answer({ task: { ...task("b"), status: "removed", version: 2 } });
@@ -54,6 +62,12 @@ describe("Your list", () => {
     render(<YourListCard />);
     await screen.findByText("Your list");
     await userEvent.click(screen.getAllByText("Remove")[1]);
+    await userEvent.click(screen.getByLabelText("Already done"));
+    await userEvent.click(screen.getByText("Remove it"));
     expect(await screen.findByText("Undo")).toBeTruthy();
+    const sent = gameFetch.mock.calls.find(([u, i]) => String(u).endsWith("/remove") && i?.method === "POST");
+    const body = JSON.parse(String(sent![1].body));
+    expect(body).toMatchObject({ reason: "already_done", context: { surface: "profile" } });
+    expect(body.feedbackId).toMatch(/^fb-/);
   });
 });

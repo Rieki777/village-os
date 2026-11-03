@@ -19,14 +19,18 @@
  * changes for anybody until then. The days are the village's, never the
  * server's (`villageDayKey`).
  */
+import { randomUUID } from "node:crypto";
 import type { Express } from "express";
+import { SCREEN_REASONS, parseFeedback, type FeedbackAction, type ScreenReason } from "../../shared/memberTaskFeedback";
+import { pullForImport, recordAction } from "../lib/memberTaskBridge";
+import { importPhrase, latestFeedback, setImportPhrase, undoFeedback, enqueue } from "../repos/memberTaskFeedback";
 import type { AppDeps } from "../lib/appDeps";
 import { itemsOf, planImport, planSummary } from "../../shared/memberTaskImport";
 import { heldFromLibrary, memberExists, removeBatch, runImport } from "../repos/memberTaskImport";
 import { villageDayKey } from "../../shared/companionItems";
 import {
-  PRESETS, REMOVE_REASONS, clampWeights, countsOf, parseTaskInput, parseTaskPatch, rankTasks,
-  type PresetName, type RemoveReason, type TaskSource,
+  PRESETS, clampWeights, countsOf, parseTaskInput, parseTaskPatch, rankTasks,
+  type PresetName, type TaskSource,
 } from "../../shared/memberTasks";
 import {
   bumpNotNow, insertTask, listIsOn, membersWithListOn, ownTask, ownTasks, patchTask, setListOn, setStatus, type MemberTaskRow,
@@ -47,7 +51,7 @@ const MEMBER_SOURCES: readonly TaskSource[] = ["self", "journal"];
 export function taskOut(t: MemberTaskRow) {
   return {
     id: t.id, title: t.title, privateDetail: t.privateDetail, tier: t.tier, horizon: t.horizon, dueOn: t.dueOn,
-    minutes: t.minutes, status: t.status, pinned: t.pinned, source: t.source, version: t.version,
+    minutes: t.minutes, status: t.status, pinned: t.pinned, memberPinned: t.memberPinned, externalId: t.source === "sera" ? t.externalId : null, source: t.source, version: t.version,
     createdOn: t.createdOn, doneAt: t.doneAt, removedAt: t.removedAt, removeReason: t.removeReason,
   };
 }
@@ -101,6 +105,25 @@ export function register(app: Express, deps: Deps): void {
     return Number.isInteger(v) && v > 0 ? v : null;
   };
 
+  /** The feedback a press carries. A client that sends none still gets one, made here. */
+  const feedbackOf = (body: any, action: FeedbackAction) => {
+    const b = { ...(body ?? {}) };
+    if (!b.feedbackId) b.feedbackId = `fb-${randomUUID()}`;
+    if (action === "remove" && !SCREEN_REASONS.includes(b.reason as ScreenReason)) b.reason = "other";
+    return parseFeedback(b, action);
+  };
+
+  /** Tell the bridge, never failing the member's press because of it. */
+  const tell = async (uid: string, id: string, action: FeedbackAction, body: any, extra: { redirectToUserId?: string | null; redirectToRoleId?: string | null } = {}) => {
+    try {
+      const f = feedbackOf(body, action);
+      const task = await ownTask(getPool(), uid, id);
+      if (f.ok && task) await recordAction(getPool(), { userId: uid, task, action, feedback: f.value, ...extra });
+    } catch (err) {
+      console.warn("[member-task-bridge] could not record feedback", (err as Error)?.message);
+    }
+  };
+
   app.get("/api/member-tasks/me", async (req, res) => {
     const uid = await member(req, res, false);
     if (!uid) return;
@@ -129,7 +152,10 @@ export function register(app: Express, deps: Deps): void {
     const parsed = parseTaskPatch(req.body);
     if (!parsed.ok) return res.status(400).json({ error: parsed.problem });
     const id = String(req.params.id);
-    await answer(res, uid, id, await patchTask(getPool(), uid, id, version, parsed.value, { byMember: true }));
+    const before = await ownTask(getPool(), uid, id);
+    const result = await patchTask(getPool(), uid, id, version, parsed.value, { byMember: true });
+    if (result === "ok" && before && parsed.value.tier && parsed.value.tier !== before.tier) await tell(uid, id, "priority_changed", req.body);
+    await answer(res, uid, id, result);
   });
 
   app.post("/api/member-tasks/me/:id/done", async (req, res) => {
@@ -138,7 +164,9 @@ export function register(app: Express, deps: Deps): void {
     const version = versionOf(req.body);
     if (!version) return res.status(400).json({ error: "version_required" });
     const id = String(req.params.id);
-    await answer(res, uid, id, await setStatus(getPool(), uid, id, version, "done"));
+    const result = await setStatus(getPool(), uid, id, version, "done");
+    if (result === "ok") await tell(uid, id, "done", req.body);
+    await answer(res, uid, id, result);
   });
 
   app.post("/api/member-tasks/me/:id/remove", async (req, res) => {
@@ -146,10 +174,12 @@ export function register(app: Express, deps: Deps): void {
     if (!uid) return;
     const version = versionOf(req.body);
     if (!version) return res.status(400).json({ error: "version_required" });
-    const r = String((req.body as any)?.reason ?? "other") as RemoveReason;
-    const reason: RemoveReason = REMOVE_REASONS.includes(r) ? r : "other";
+    const f = feedbackOf(req.body, "remove");
+    if (!f.ok) return res.status(400).json({ error: f.problem });
     const id = String(req.params.id);
-    await answer(res, uid, id, await setStatus(getPool(), uid, id, version, "removed", reason));
+    const result = await setStatus(getPool(), uid, id, version, "removed", f.value.reason);
+    if (result === "ok") await tell(uid, id, "remove", { ...req.body, feedbackId: f.value.feedbackId, reason: f.value.reason });
+    await answer(res, uid, id, result);
   });
 
   app.post("/api/member-tasks/me/:id/undo", async (req, res) => {
@@ -158,7 +188,19 @@ export function register(app: Express, deps: Deps): void {
     const version = versionOf(req.body);
     if (!version) return res.status(400).json({ error: "version_required" });
     const id = String(req.params.id);
-    await answer(res, uid, id, await setStatus(getPool(), uid, id, version, "open"));
+    const result = await setStatus(getPool(), uid, id, version, "open");
+    if (result === "ok") {
+      // The press it undoes is marked undone; what was sent already is taken back.
+      const last = await latestFeedback(getPool(), uid, id).catch(() => null);
+      if (last) {
+        const { wasSent } = await undoFeedback(getPool(), uid, last.feedbackId);
+        const task = await ownTask(getPool(), uid, id);
+        if (wasSent && task?.source === "sera" && task.externalId) {
+          await enqueue(getPool(), uid, last.feedbackId, "undo", { task_id: task.externalId, feedback_id: last.feedbackId, reason_code: "not_now" }).catch(() => {});
+        }
+      }
+    }
+    await answer(res, uid, id, result);
   });
 
   app.post("/api/member-tasks/me/:id/not-now", async (req, res) => {
@@ -195,14 +237,26 @@ export function register(app: Express, deps: Deps): void {
     const seraOwnerId = String(body.seraOwnerId ?? "").trim();
     if (!userId || userId.length > 64) return res.status(400).json({ error: "Which member?" });
     if (!seraOwnerId || seraOwnerId.length > 128) return res.status(400).json({ error: "Which person in the library? Paste their owner id." });
-    const items = itemsOf(body.items ?? body.answer);
-    if (!items.length) return res.status(400).json({ error: "No tasks found in what was pasted." });
+    let items: unknown[];
+    let phrase: string | null = null;
+    if (body.pull === true) {
+      // Read straight from the library, filtered by the evidence phrase (never by date).
+      phrase = typeof body.evidenceContains === "string" ? body.evidenceContains.trim().slice(0, 200) : await importPhrase(getPool());
+      const pulled = await pullForImport(seraOwnerId, phrase);
+      if (!pulled.ok) return res.status(502).json({ error: pulled.error });
+      items = itemsOf(pulled.items);
+      if (!items.length) return res.status(400).json({ error: "The library returned no tasks for that person and phrase." });
+      if (body.dryRun === false && phrase) await setImportPhrase(getPool(), phrase);
+    } else {
+      items = itemsOf(body.items ?? body.answer);
+      if (!items.length) return res.status(400).json({ error: "No tasks found in what was pasted." });
+    }
     if (items.length > 2000) return res.status(400).json({ error: "That is more than 2000 tasks. Split it." });
     if (!(await memberExists(getPool(), userId))) return res.status(404).json({ error: "No member with that id." });
     const plan = planImport(items, seraOwnerId, await heldFromLibrary(getPool(), userId));
     const summary = planSummary(plan);
     // A dry run unless the steward said otherwise in so many words.
-    if (body.dryRun !== false) return res.json({ dryRun: true, ...summary });
+    if (body.dryRun !== false) return res.json({ dryRun: true, pulled: phrase !== null, ...summary });
     const result = await runImport(getPool(), userId, seraOwnerId, plan, today(), adminActor(req)?.id ?? null);
     res.json({ dryRun: false, ...summary, ...result, listOn: await listIsOn(getPool(), userId) });
   });
