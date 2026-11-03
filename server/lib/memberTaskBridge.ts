@@ -22,6 +22,7 @@
  * member linked to a library person) are ever told to it. A member's own
  * tasks, and any journal words, never cross.
  */
+import { boolVar } from "./variables";
 import type { Pool } from "mysql2/promise";
 import { callToolJson, listTools, openSession, type ClientOptions, type ToolInfo } from "./saberraClient";
 import { preflight } from "./saberraSync";
@@ -334,7 +335,7 @@ async function syncLinkedOnce(pool: Pool, today: string): Promise<{ status: stri
   const listing = await listTools(pre.client, session);
   const tools = new Map<string, ToolInfo>((listing.ok ? listing.tools : []).map((t) => [t.name, t]));
   if (!tools.has("list_voice_tasks")) return { ...out, status: "the service does not offer list_voice_tasks" };
-  for (const l of await syncableLinks(pool)) {
+  for (const l of await syncableLinks(pool, boolVar("memberTasks.listDefault"))) {
     const r = await syncMember(pool, pre.client, session, tools, l, today);
     out.members += 1;
     out.created += r.created;

@@ -189,3 +189,35 @@ export async function roomEntryIdsOfRecap(db: Queryable, recapId: string): Promi
   }
   return out;
 }
+
+// ── The backlog, every role's name, and which roles anybody holds ───────────
+
+/**
+ * The member's OPEN Sera tasks set before the moon began: shown once in My
+ * moon for a one-time triage, never in the score (spec section 16). Titles only.
+ */
+export async function openSeraTasksBefore(db: Queryable, userId: string, firstDay: string, limit = 100): Promise<Array<{ taskId: string; title: string; createdOn: string | null }>> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT `id`, `title`, DATE_FORMAT(`created_on`, '%Y-%m-%d') AS `created_on` FROM `member_tasks` " +
+      "WHERE `user_id` = ? AND `source` = 'sera' AND `status` = 'open' AND `created_on` < ? ORDER BY `created_on` ASC, `id` ASC LIMIT ?",
+    [userId, firstDay, limit],
+  );
+  return rows.map((r) => ({ taskId: String(r.id), title: String(r.title ?? ""), createdOn: str(r.created_on) }));
+}
+
+/** Every role that is not an example, by id and name: a pack's Fill verdict names a role the member does not hold. */
+export async function allRoleNames(db: Queryable): Promise<Array<{ roleId: string; name: string }>> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `id`, `name` FROM `org_roles` WHERE `is_example` = 0 ORDER BY `name`, `id`");
+  return rows.map((r) => ({ roleId: String(r.id), name: String(r.name ?? "") }));
+}
+
+/** Of these roles, the ones a member holds today: a seating that has not ended. The rest are empty. */
+export async function rolesHeldNow(db: Queryable, roleIds: readonly string[]): Promise<Set<string>> {
+  if (roleIds.length === 0) return new Set();
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT DISTINCT `org_role_id` FROM `org_role_assignments` WHERE `org_role_id` IN (?) AND `holder_kind` = 'member' " +
+      "AND `is_example` = 0 AND (`ended_at` IS NULL OR `ended_at` > UTC_TIMESTAMP())",
+    [roleIds],
+  );
+  return new Set(rows.map((r) => String(r.org_role_id)));
+}

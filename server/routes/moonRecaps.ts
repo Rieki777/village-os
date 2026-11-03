@@ -3,7 +3,9 @@
  *
  *   GET   /api/me/moon?cycle=                 my moon: recap, items, coverage, the invoice draft
  *   POST  /api/me/moon/:cycle/gather          bring in my tasks: the board first, then the rooms
- *   POST  /api/me/moon/:cycle/ask-sera        not offered yet (spec section 18): answers 404
+ *   POST  /api/me/moon/:cycle/ask-sera        the Sera draft, in-process; poll GET /api/me/moon
+ *   POST  /api/me/moon/:cycle/send-invoice    the draft invoice, with the member's own invoice number
+ *   POST  /api/me/moon/:cycle/import          a moon pack: preview, then confirm with its hash (A2)
  *   POST  /api/me/moon/:cycle/items           add an item by hand
  *   PATCH /api/me/moon/items/:id              edit one of my items
  *   POST  /api/me/moon/:cycle/send-recap      send my recap; needs no pay route
@@ -23,8 +25,8 @@
  * own `use` on its own path.
  *
  * NO CAPABILITY HERE. Every door is the member's own (or, for the members'
- * view, any signed-in member's); the approver doors that ask `moon.approve`
- * and `cash.pay` are the next lane's, through `guardCapability`.
+ * view, any signed-in member's). The approver doors are in
+ * server/routes/moonReview.ts, registered from here behind the same gates.
  *
  * Every sentence a member reads comes from shared/moonRecap.ts. An error that
  * has no sentence there answers a machine code.
@@ -34,13 +36,17 @@ import type { AppDeps } from "../lib/appDeps";
 import { MOON_API_PREFIXES, MOON_REVIEW_MODULE, MOON_ROUTES, type GatherResponse } from "../../shared/moonRecap";
 import { civilDateKey } from "../../shared/lunar";
 import { requireModule, effectiveLifecycle } from "../lib/modules";
+import { preflight } from "../lib/saberraSync";
+import { askSera } from "../lib/moonRecapSera";
+import { importPack, sendInvoice, type KeyHolders } from "../lib/moonReview";
+import { registerReviewDoors } from "./moonReview";
 import { activeClock } from "../lib/gratitude-cycles";
 import { recordEvent } from "../lib/events";
 import { accomplishmentsOf } from "../lib/sessionTasks";
 import { userIdForHandle } from "../lib/profile";
 import {
   addItem, editItem, gatherMoon, invoiceViewOf, loadFrame, memberMoon, myMoon, payRouteResponse, payersDoc, putPayRoute,
-  resolveMoon, defaultCycleId, sendRecap, takeBack, type Moon,
+  resolveMoon, defaultCycleId, rhythmDoc, sendRecap, settingsDoc, takeBack, type Moon,
 } from "../lib/moonRecap";
 import * as store from "../repos/moonRecaps";
 import { exportMoonReviews, forgetMoonReviews } from "../repos/moonRecaps";
@@ -48,9 +54,11 @@ import { exportMoonReviews, forgetMoonReviews } from "../repos/moonRecaps";
 /** The member's data export and the erasure sweep read these through this module. */
 export { exportMoonReviews, forgetMoonReviews };
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "seasonState" | "lapseContext" | "members" | "notify"> & {
+export type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "seasonState" | "lapseContext" | "members" | "notify" | "mayAct"> & {
   /** Who holds `cash.pay` through a role or a badge, admins left out (`liveHoldersOf`, server/index.ts). */
   cashKeyHolders: () => Promise<string[]>;
+  /** Who holds any key through a live seat, admins left out (`liveHoldersOf`, server/index.ts). */
+  keyHolders: KeyHolders;
 };
 
 /** The members' door, which no prefix in MOON_API_PREFIXES covers. */
@@ -84,12 +92,15 @@ export function register(app: Express, deps: Deps): void {
     return uid;
   };
 
-  const moonFor = (raw: unknown, res: Response): Moon | null => {
+  const moonFor = async (raw: unknown, res: Response): Promise<Moon | null> => {
     const id = typeof raw === "string" && raw && raw !== "open" ? raw.slice(0, 32) : null;
-    const moon = resolveMoon(activeClock(), id, timeZone());
+    const rhythm = getPool() ? await rhythmDoc(getPool()).catch(() => undefined) : undefined;
+    const moon = resolveMoon(activeClock(), id, timeZone(), new Date(), rhythm);
     if (!moon) res.status(404).json({ error: "unknown_moon" });
     return moon;
   };
+  const nextCycleId = (moon: Moon) => activeClock().boundsFor(new Date(moon.bounds.endsAt.getTime() + 1000)).id;
+  const nameOf = async (id: string) => String((await members.byId(String(id)).catch(() => null))?.name ?? "A member");
 
   const cashPayHolderNames = async (): Promise<string[]> => {
     const ids = await deps.cashKeyHolders().catch(() => [] as string[]);
@@ -111,7 +122,7 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const asked = (req.query as Record<string, unknown>)?.cycle;
     const cycle = typeof asked === "string" && asked ? asked : defaultCycleId(activeClock(), await store.recapsOf(pool, uid));
-    const moon = moonFor(cycle, res);
+    const moon = await moonFor(cycle, res);
     if (!moon) return;
     res.json(await myMoon(pool, uid, moon, { ...frameDeps(), clock: activeClock(), cashPayHolderNames }));
   });
@@ -119,7 +130,7 @@ export function register(app: Express, deps: Deps): void {
   app.post(MOON_ROUTES.gather, async (req, res) => {
     const uid = await writer(req, res);
     if (!uid) return;
-    const moon = moonFor(req.params.cycle, res);
+    const moon = await moonFor(req.params.cycle, res);
     if (!moon) return;
     const pool = getPool();
     const frame = await loadFrame(pool, uid, moon, frameDeps());
@@ -131,18 +142,53 @@ export function register(app: Express, deps: Deps): void {
     res.json(body);
   });
 
-  // Off until the library offers a per-member read (spec section 18). Nothing
-  // here calls the library, and the door says it is not offered.
+  // On (Rye, 3 November): one ask_sera call, its progress polled through GET /api/me/moon.
   app.post(MOON_ROUTES.askSera, async (req, res) => {
-    const uid = await member(req, res);
+    const uid = await writer(req, res);
     if (!uid) return;
-    res.status(404).json({ error: "not_offered" });
+    const moon = await moonFor(req.params.cycle, res);
+    if (!moon) return;
+    const pool = getPool();
+    const out = await askSera(pool, uid, moon, await loadFrame(pool, uid, moon, frameDeps()), {
+      client: () => {
+        const pre = preflight();
+        return pre.ok ? pre.client : null;
+      },
+      nameOf,
+    });
+    if (!out.ok) return fail(res, out);
+    res.json(out.value);
+  });
+
+  app.post(MOON_ROUTES.sendInvoice, async (req, res) => {
+    const uid = await writer(req, res);
+    if (!uid) return;
+    const moon = await moonFor(req.params.cycle, res);
+    if (!moon) return;
+    const pool = getPool();
+    const out = await sendInvoice(pool, uid, moon, await loadFrame(pool, uid, moon, frameDeps()), req.body, { notify: deps.notify, keyHolders: deps.keyHolders });
+    if (!out.ok) return fail(res, out);
+    res.json(out.value);
+  });
+
+  app.post(MOON_ROUTES.importPack, async (req, res) => {
+    const uid = await writer(req, res);
+    if (!uid) return;
+    const moon = await moonFor(req.params.cycle, res);
+    if (!moon) return;
+    const pool = getPool();
+    const out = await importPack(pool, uid, moon, await loadFrame(pool, uid, moon, frameDeps()), req.body, {
+      nextCycleId: nextCycleId(moon),
+      members: async () => (await members.all()).map((m: any) => ({ userId: String(m.id), name: String(m.name ?? "") })),
+    });
+    if (!out.ok) return fail(res, out);
+    res.json(out.value);
   });
 
   app.post(MOON_ROUTES.addItem, async (req, res) => {
     const uid = await writer(req, res);
     if (!uid) return;
-    const moon = moonFor(req.params.cycle, res);
+    const moon = await moonFor(req.params.cycle, res);
     if (!moon) return;
     const pool = getPool();
     const out = await addItem(pool, uid, moon, await loadFrame(pool, uid, moon, frameDeps()), req.body);
@@ -168,7 +214,7 @@ export function register(app: Express, deps: Deps): void {
   app.post(MOON_ROUTES.sendRecap, async (req, res) => {
     const uid = await writer(req, res);
     if (!uid) return;
-    const moon = moonFor(req.params.cycle, res);
+    const moon = await moonFor(req.params.cycle, res);
     if (!moon) return;
     const pool = getPool();
     const out = await sendRecap(pool, uid, moon, await loadFrame(pool, uid, moon, frameDeps()), req.body, {
@@ -182,13 +228,14 @@ export function register(app: Express, deps: Deps): void {
   app.post(MOON_ROUTES.takeBack, async (req, res) => {
     const uid = await writer(req, res);
     if (!uid) return;
-    const moon = moonFor(req.params.cycle, res);
+    const moon = await moonFor(req.params.cycle, res);
     if (!moon) return;
     const pool = getPool();
     const frame = await loadFrame(pool, uid, moon, frameDeps());
     const route = await store.payRouteOf(pool, uid);
     const payers = await payersDoc(pool);
-    const out = await takeBack(pool, uid, moon, { recordEvent: audit }, (stored) => invoiceViewOf({ stored, terms: frame.terms, moon, route, payers, today: today() }));
+    const settings = await settingsDoc(pool);
+    const out = await takeBack(pool, uid, moon, { recordEvent: audit }, (stored) => invoiceViewOf({ stored, terms: frame.terms, moon, route, payers, settings, today: today() }));
     if (!out.ok) return fail(res, out);
     res.json(out.value);
   });
@@ -214,7 +261,7 @@ export function register(app: Express, deps: Deps): void {
     const handle = String(req.params.handle ?? "").replace(/^@/, "").slice(0, 64);
     const ownerId = handle ? await userIdForHandle(pool, handle) : null;
     if (!ownerId) return res.status(404).json({ error: "not_found" });
-    const moon = moonFor((req.query as Record<string, unknown>)?.cycle ?? null, res);
+    const moon = await moonFor((req.query as Record<string, unknown>)?.cycle ?? null, res);
     if (!moon) return;
     res.json(await memberMoon(pool, ownerId, moon, {
       ...frameDeps(),
@@ -225,4 +272,6 @@ export function register(app: Express, deps: Deps): void {
       },
     }));
   });
+
+  registerReviewDoors(app, { ...deps, moonFor, nextCycleId, nameOf, frameDeps });
 }

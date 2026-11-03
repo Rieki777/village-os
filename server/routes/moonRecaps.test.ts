@@ -60,6 +60,8 @@ const deps = (pool: any, who: () => string | null, seasons: any[] = []) => ({
   members: { byId: async (id: string) => ({ id, name: id }) } as any,
   notify: async () => ({}) as any,
   cashKeyHolders: async () => [] as string[],
+  keyHolders: async () => [] as string[],
+  mayAct: async () => ({ ok: false, reachedPast: false, villageHolds: true, source: "test", message: "No." }) as any,
 });
 
 const ROUTES = [
@@ -73,6 +75,16 @@ const ROUTES = [
   `GET ${MOON_ROUTES.payRoute}`,
   `PUT ${MOON_ROUTES.payRoute}`,
   `GET ${MOON_ROUTES.memberMoon}`,
+  `POST ${MOON_ROUTES.sendInvoice}`,
+  `POST ${MOON_ROUTES.importPack}`,
+  `GET ${MOON_ROUTES.queue}`,
+  `POST ${MOON_ROUTES.work}`,
+  `POST ${MOON_ROUTES.returnRecap}`,
+  `POST ${MOON_ROUTES.approveInvoices}`,
+  `POST ${MOON_ROUTES.setRange}`,
+  `POST ${MOON_ROUTES.voidInvoice}`,
+  `PUT ${MOON_ROUTES.confirmRoute}`,
+  `GET ${MOON_ROUTES.room}`,
 ];
 
 describe("the member doors without a database", () => {
@@ -104,11 +116,12 @@ describe("the member doors without a database", () => {
     for (const r of ROUTES) expect((await call(c.handlers, r, { params: { cycle: "open", id: "x", handle: "wren" } })).status, r).toBe(401);
   });
 
-  it("does not offer the in-app Sera draft, and calls nothing to say so", async () => {
+  it("turns away a signed-in member the gate passes on no review key, at every approver door", async () => {
     const c = collect();
     register(c.app, deps(null, () => "m-wren"));
-    const out = await call(c.handlers, `POST ${MOON_ROUTES.askSera}`, { params: { cycle: "open" } });
-    expect(out).toEqual({ status: 404, body: { error: "not_offered" } });
+    for (const r of [`GET ${MOON_ROUTES.queue}`, `POST ${MOON_ROUTES.work}`, `POST ${MOON_ROUTES.approveInvoices}`, `PUT ${MOON_ROUTES.confirmRoute}`]) {
+      expect((await call(c.handlers, r, { params: { recap: "mr-0000000000000001", id: "x", user: "m-rook" } })).status, r).toBe(403);
+    }
   });
 
   it("refuses a moon that is not one of the clock's, or one not begun", async () => {
@@ -279,7 +292,7 @@ describe.skipIf(!configured)("the member doors against a real schema", () => {
     const out = await call(handlers, `GET ${MOON_ROUTES.memberMoon}`, { params: { handle: "wren" }, query: { cycle: CYCLE } });
     expect(out.status).toBe(200);
     expect(Object.keys(out.body).sort()).toEqual(["moon", "roles"]);
-    expect(Object.keys(out.body.moon).sort()).toEqual(["cycleId", "endOfMoonFriday", "firstDay", "lastDay", "periodWords"]);
+    expect(Object.keys(out.body.moon).sort()).toEqual(["cycleId", "endOfMoonFriday", "firstDay", "halfwayDay", "lastDay", "periodWords", "sendBy"]);
     expect(out.body.roles).toHaveLength(1);
     const role = out.body.roles[0];
     expect(Object.keys(role).sort()).toEqual(["heldPrivately", "items", "name", "roleId"]);

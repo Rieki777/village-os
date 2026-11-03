@@ -17,6 +17,11 @@
  *      approvers-only item, and no Sera evidence (asserted on the object).
  *   14 no shape carries hours or minutes; no origin is a quest.
  *   17 the work summary lists approved, invoiced items, ticked proof, no amount.
+ *   20 the October Moon's counts score 12 and a half of 18, 69% (neutral titles:
+ *      the repository is public).
+ *   21 a goal carried twice is flagged; Let go without a reason is refused.
+ *   22 (pure half) Sera hears only about tasks Sera sent.
+ *   23 an Outside my roles item shows in the role audit with its role named.
  */
 import { describe, expect, it } from "vitest";
 import { CALENDAR_CLOCK, LUNAR_CLOCK } from "./cycleClock";
@@ -25,9 +30,10 @@ import {
   eligibleApprovers, endOfMoonFriday, financeApprovalRefusal, INVOICE_STATUS_WORDS, invoicePaidFrom, invoiceSendRefusal,
   invoiceStatusLine, invoiceTotals, ITEM_ORIGINS, itemDedupeKey, linesFromTerms, memberView, moonDays,
   parseAttestation, parseItemFields, parsePayers, parsePayRouteInput, parseRoleAudit, payersChanges, payerForRoute,
-  PILOT_ACK_VERSION, prorate, RECAP_STATUS_WORDS, routeChangeClearsConfirmation, SEND_REFUSALS, taxFormValidOn,
+  prorate, RECAP_STATUS_WORDS, routeChangeClearsConfirmation, SEND_REFUSALS, taxFormValidOn,
   workSummaryText, workDueOn, type ApprovalSubject, type InvoiceLine, type Payer, type PayRouteRecord, type RecapItem,
-  type TermsInForce,
+  type TermsInForce, taskScore, seatCoverage, goalScore, scoreWords, carriedTooOften, carriedGoals, goalScoreProblem, parseMoonGoals,
+  carriedItems, seraClosures, outsideRolesAudit, sendBy, type MoonGoal,
 } from "./moonRecap";
 import * as contract from "./moonRecap";
 
@@ -37,16 +43,17 @@ const MOON = moonDays(NOV, TZ);
 
 function item(over: Partial<RecapItem>): RecapItem {
   return {
-    id: "mi-0000000000000001", origin: "task", text: "Wrote the water plan", originNote: null, doneOn: null, evidenceUrl: null,
+    id: "mi-0000000000000001", origin: "task", dedupeKey: "task:t1", text: "Wrote the water plan", originNote: null, doneOn: null, evidenceUrl: null,
     evidenceAsset: null, proofInSummary: false, roleId: "r1", accountabilityWords: null, seasonGoalId: null, ownGoalWords: null,
-    state: "kept", visibility: "members", review: "pending", reviewNote: null, position: 0, ...over,
+    state: "kept", visibility: "members", review: "pending", reviewNote: null, position: 0, setOn: null, taskStatus: null,
+    redirectTo: null, letGoReason: null, belongsToRoleId: null, evidenceKind: null, evidenceOn: null, belongsToSeatWords: null, ...over,
   };
 }
 
 function payer(over: Partial<Payer> = {}): Payer {
   return {
     key: "us-payer", legalName: "Example Payer", address: "1 Main St", taxId: null, country: "US", currencies: ["USD"],
-    invoiceTo: "invoices@example.org", invoicing: true, routes: ["abroad", "nomad"],
+    invoiceTo: "invoices@example.org", invoiceCc: [], invoicing: true, routes: ["abroad", "nomad"],
     authority: { kind: "none", date: null, routes: [], monthlyCeilingMinor: null, ceilingCurrency: null, filedWhere: null },
     queueNote: null, ...over,
   };
@@ -55,11 +62,20 @@ function payer(over: Partial<Payer> = {}): Payer {
 function route(over: Partial<PayRouteRecord> = {}): PayRouteRecord {
   return {
     userId: "u1", route: "abroad", payerKey: "us-payer", currency: "USD", legalName: "A Member", address: "Somewhere",
-    statusValidUntil: null, taxFormKind: "W-8BEN", taxFormSignedOn: "2026-01-01", taxFormExpiresOn: "2028-12-31",
-    taxFormFiledWhere: "Finance drive", confirmedAt: "2026-11-02T00:00:00Z", confirmedBy: "u9", pilotAckVersion: PILOT_ACK_VERSION,
+    statusValidUntil: null, taxFormKind: "form-b", taxFormSignedOn: "2026-01-01", taxFormExpiresOn: "2028-12-31",
+    taxFormFiledWhere: "Finance drive", confirmedAt: "2026-11-02T00:00:00Z", confirmedBy: "u9", pilotAckVersion: "v1",
     pilotAckAt: "2026-11-02T00:00:00Z", bankChangedOn: null, bankConfirmedByRole: null, ...over,
   };
 }
+
+/** A village that has filled in its settings, with neutral example values. */
+const SETTINGS: contract.MoonReviewSettings = {
+  hostCountry: { code: "XX", name: "Examplia" }, hostVatRateBp: 1300, hostRateSource: "The central bank's reference rate", hostCurrency: "XXX",
+  pilotAck: { text: "This pay process is a pilot.", version: "v1" },
+  taxForms: [{ key: "form-a", label: "Form A" }, { key: "form-b", label: "Form B" }],
+  taxFormRoutes: ["abroad", "nomad"],
+  holds: [{ taxFormKey: "form-b", workCountry: "YY", note: "Form B holders who worked in YY." }],
+};
 
 function terms(over: Partial<TermsInForce> = {}): TermsInForce {
   return {
@@ -135,22 +151,23 @@ describe("lines from terms (checks 3 and 4)", () => {
 describe("sends (check 7)", () => {
   const lines = linesFromTerms([terms()], MOON);
   const att = parseAttestation({ workCountries: ["us"], daysInHostCountry: 0, statusUnchanged: true }, "abroad", MOON);
-  const ok = { route: "abroad" as const, payer: payer(), lines, attestation: att, pilotAckVersion: PILOT_ACK_VERSION, memberNumber: "INV-2026-11", externalInvoiceKey: null };
+  const ok = { route: "abroad" as const, payer: payer(), lines, attestation: att, pilotAckVersion: "v1", memberNumber: "INV-2026-11", externalInvoiceKey: null, settings: SETTINGS, payers: { payers: [payer()] } };
   it("a complete send passes, with a long digits-only number or key", () => {
     expect(invoiceSendRefusal(ok)).toBeNull();
     expect(invoiceSendRefusal({ ...ok, memberNumber: "0012345678901" })).toBeNull();
-    expect(invoiceSendRefusal({ ...ok, route: "cr_contractor", externalInvoiceKey: "50601112600310123456700100001010000000001100000001" })).toBeNull();
-    expect(invoiceSendRefusal({ ...ok, route: "cr_contractor", externalInvoiceKey: "50-601" })).toContain("digits only");
+    expect(invoiceSendRefusal({ ...ok, route: "local_contractor", externalInvoiceKey: "50601112600310123456700100001010000000001100000001" })).toBeNull();
+    expect(invoiceSendRefusal({ ...ok, route: "local_contractor", externalInvoiceKey: "50-601" })).toContain("digits only");
   });
   it.each([
     ["pending", { route: "pending" as const }, SEND_REFUSALS.pending],
-    ["tourist", { route: "tourist" as const }, SEND_REFUSALS.tourist],
+    ["visitor", { route: "visitor" as const }, SEND_REFUSALS.visitor],
+    ["an older pilot acknowledgement", { pilotAckVersion: "v0" }, SEND_REFUSALS.pilotAck],
     ["invoicing off", { payer: payer({ invoicing: false }) }, SEND_REFUSALS.invoicingOff],
     ["no payable line", { lines: linesFromTerms([terms({ settings: { v: 1, pay: { kind: "honorary" } } })], MOON) }, SEND_REFUSALS.noPayableLine],
     ["no acknowledgement", { pilotAckVersion: null }, SEND_REFUSALS.pilotAck],
     ["no invoice number of their own (decision 16 revised)", { memberNumber: "  " }, SEND_REFUSALS.numberMissing],
     ["an invoice number used before", { usedNumbers: ["INV-2026-11"] }, SEND_REFUSALS.numberUsed],
-    ["the contractor route with no electronic key", { route: "cr_contractor" as const, payer: payer({ routes: ["cr_contractor"] }) }, SEND_REFUSALS.externalKey],
+    ["the contractor route with no electronic key", { route: "local_contractor" as const, payer: payer({ routes: ["local_contractor"] }) }, SEND_REFUSALS.externalKey],
   ])("is refused: %s", (_n, over, sentence) => expect(invoiceSendRefusal({ ...ok, ...over })).toBe(sentence));
   it("is refused with no attestation, and with one that is not whole", () => {
     expect(invoiceSendRefusal({ ...ok, attestation: null })).toBe(contract.ATTESTATION_MISSING);
@@ -218,14 +235,15 @@ describe("approvals (checks 8, 9, 10)", () => {
     ]) expect(await approvalHash(changed)).not.toBe(h);
   });
   it("Finance refuses an unconfirmed route, an ended nomad status, visitor-entry work and a tax form invalid on the expected date", () => {
-    const att = { workCountries: ["US"], daysInHostCountry: 0, statusUnchanged: true, servedAbroad: null, visitorEntryWork: false };
-    const facts = { route: route(), hostCountry: "CR", attestation: att, moonLastDay: MOON.lastDay, expectedOn: "2026-11-20" };
-    expect(financeApprovalRefusal({ ...facts, route: route({ taxFormKind: "W-9" }) })).toBeNull();
+    const att = { workCountries: ["YY"], daysInHostCountry: 0, statusUnchanged: true, servedAbroad: null, visitorEntryWork: false };
+    const facts = { route: route(), settings: SETTINGS, attestation: att, moonLastDay: MOON.lastDay, expectedOn: "2026-11-20" };
+    expect(financeApprovalRefusal({ ...facts, route: route({ taxFormKind: "form-a" }) })).toBeNull();
     expect(financeApprovalRefusal({ ...facts, route: route({ confirmedAt: null }) })).toEqual({ refusal: contract.FINANCE_REFUSALS.unconfirmed });
     expect(financeApprovalRefusal({ ...facts, route: route({ route: "nomad", statusValidUntil: "2026-11-01" }) })).toEqual({ refusal: contract.FINANCE_REFUSALS.nomadEnded });
     expect(financeApprovalRefusal({ ...facts, attestation: { ...att, visitorEntryWork: true } })).toEqual({ refusal: contract.FINANCE_REFUSALS.visitorEntry });
     expect(financeApprovalRefusal({ ...facts, route: route({ taxFormExpiresOn: "2026-11-19" }) })).toEqual({ refusal: contract.FINANCE_REFUSALS.taxForm });
-    expect(financeApprovalRefusal(facts)).toEqual({ hold: contract.FINANCE_REFUSALS.w8benInUs });
+    expect(financeApprovalRefusal(facts)).toEqual({ hold: `${contract.FINANCE_REFUSALS.held} Form B holders who worked in YY.` });
+    expect(financeApprovalRefusal({ ...facts, settings: { ...SETTINGS, taxFormRoutes: [] }, route: route({ taxFormKind: "form-a", taxFormExpiresOn: "2026-11-19" }) })).toBeNull();
     expect(taxFormValidOn(route(), "2025-12-31")).toBe(false);
   });
   it("payer authority is a note and refuses nothing (decision 16)", () => {
@@ -244,7 +262,8 @@ describe("pay routes", () => {
   it("nobody confirms their own, and a change to a confirmed field clears confirmation", () => {
     expect(confirmRouteRefusal("u1", "u1")).toBe(contract.CONFIRM_OWN_ROUTE_REFUSED);
     expect(confirmRouteRefusal("u2", "u1")).toBeNull();
-    const parsed = parsePayRouteInput({ route: "abroad", legalName: "A Member", address: "Somewhere", taxFormKind: "W-9" });
+    expect(parsePayRouteInput({ route: "abroad", taxFormKind: "form-a" }).ok).toBe(false);
+    const parsed = parsePayRouteInput({ route: "abroad", legalName: "A Member", address: "Somewhere", taxFormKind: "form-a" }, { taxFormKeys: ["form-a"] });
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(routeChangeClearsConfirmation(parsed.value, { ...parsed.value })).toBe(false);
@@ -254,6 +273,7 @@ describe("pay routes", () => {
   it("refuses bank details in the legal name and address, and an unknown route", () => {
     expect(parsePayRouteInput({ route: "abroad", address: "Account 1234 5678 9012" }).ok).toBe(false);
     expect(parsePayRouteInput({ route: "salary" }).ok).toBe(false);
+    expect(parsePayRouteInput({ route: "tourist" }).ok).toBe(false);
   });
 });
 
@@ -264,7 +284,7 @@ describe("the payers document", () => {
     if (!doc.ok) return;
     expect(doc.value.payers[0].routes).toEqual(["abroad"]);
     expect(payerForRoute(doc.value, "abroad", null)?.key).toBe("us-payer");
-    expect(payerForRoute(doc.value, "tourist", null)).toBeNull();
+    expect(payerForRoute(doc.value, "visitor", null)).toBeNull();
     const after = { ...doc.value, payers: [{ ...doc.value.payers[0], invoicing: false }] };
     expect(payersChanges(doc.value, after)).toEqual([{ key: "us-payer", field: "invoicing", from: true, to: false }]);
   });
@@ -390,5 +410,346 @@ describe("statuses, one set of words", () => {
     expect(invoicePaidFrom([])).toEqual({ paid: false, paidOn: null });
     expect(invoicePaidFrom([{ state: "paid", paidAt: "2026-11-20T10:00:00Z" }, { state: "claimed", paidAt: null }]).paid).toBe(false);
     expect(invoicePaidFrom([{ state: "paid", paidAt: "2026-11-20T10:00:00Z" }, { state: "paid", paidAt: "2026-11-21T10:00:00Z" }])).toEqual({ paid: true, paidOn: "2026-11-21" });
+  });
+});
+
+describe("the score (decision 20, check 20)", () => {
+  // The October Moon's counts, with neutral titles: 11 Done, 3 Partly and 4
+  // Carry count; 4 Redirect and 7 set in the final week and not done are left
+  // out. 12 and a half of 18 is 69%.
+  const tasks: RecapItem[] = [];
+  let n = 0;
+  const add = (count: number, taskStatus: RecapItem["taskStatus"], setOn: string) => {
+    for (let k = 0; k < count; k++) {
+      n += 1;
+      tasks.push(item({ id: `mi-${String(n).padStart(16, "0")}`, text: `Task ${n}`, dedupeKey: `task:${n}`, taskStatus, setOn }));
+    }
+  };
+  add(11, "done", "2026-10-14");
+  add(3, "partly", "2026-10-20");
+  add(4, "carry", "2026-10-25");
+  add(4, "redirect", "2026-10-18");
+  add(4, "carry", "2026-11-05");
+  add(3, "partly", "2026-11-07");
+
+  it("scores 12 and a half of 18, which is 69%", () => {
+    const s = taskScore(tasks, MOON);
+    expect([s.done, s.partly, s.carry, s.numHalves, s.den, s.pct]).toEqual([11, 3, 4, 25, 18, 69]);
+    expect(s.leftOut).toEqual({ letGo: 0, redirect: 4, lastWeekNotDone: 7, olderThanMoon: 0 });
+    expect(scoreWords(s)).toBe("12\u00bd of 18, 69%");
+  });
+
+  it("counts a last-week task that is Done, and never a task set before the moon", () => {
+    const s = taskScore([...tasks, item({ taskStatus: "done", setOn: "2026-11-08" }), item({ taskStatus: "done", setOn: "2026-10-01" })], MOON);
+    expect([s.done, s.den, s.leftOut.olderThanMoon]).toEqual([12, 19, 1]);
+  });
+
+  it("seat coverage counts accountabilities with a kept item, never Outside my roles work", () => {
+    const seats = [{ roleId: "r1", accountabilities: ["Keep the water plan", "Write the monthly report"] }];
+    expect(seatCoverage(seats, [
+      item({ accountabilityWords: "keep the water plan" }),
+      item({ roleId: null, accountabilityWords: "Write the monthly report" }),
+    ])).toEqual({ on: 1, total: 2, pct: 50 });
+  });
+
+  it("goal score uses the same formula; Let go and Open are left out", () => {
+    const g = goalScore([{ status: "done" }, { status: "partly" }, { status: "carried" }, { status: "let_go" }, { status: "open" }]);
+    expect([g.numHalves, g.den, g.pct, g.unscored]).toEqual([3, 3, 50, 1]);
+  });
+});
+
+describe("goals and carrying (check 21)", () => {
+  const goal = (over: Partial<MoonGoal>): MoonGoal => ({
+    id: "g-1", userId: "u1", cycleId: "lunar-000331", position: 0, text: "Goal 1", doneWhen: null, seasonGoalId: null, status: "open",
+    letGoReason: null, carriedFromId: null, carryCount: 0, setAt: null, scoredAt: null, ...over,
+  });
+  it("flags a goal carried twice, and carries every unfinished goal one count higher", () => {
+    expect(carriedTooOften(goal({ carryCount: 1 }))).toBe(false);
+    expect(carriedTooOften(goal({ carryCount: 2 }))).toBe(true);
+    const next = carriedGoals([goal({ id: "a", status: "done" }), goal({ id: "b", status: "partly", carryCount: 1 }), goal({ id: "c", status: "let_go" })]);
+    expect(next).toEqual([{ carriedFromId: "b", text: "Goal 1", doneWhen: null, seasonGoalId: null, carryCount: 2 }]);
+    expect(carriedTooOften(next[0])).toBe(true);
+  });
+  it("refuses Let go without a reason, for a goal and for a task", () => {
+    expect(goalScoreProblem("let_go", "  ")).toBe(contract.LET_GO_NEEDS_REASON);
+    expect(goalScoreProblem("let_go", "No longer needed")).toBeNull();
+    expect(parseItemFields({ taskStatus: "let_go", letGoReason: "" })).toEqual({ ok: false, field: "letGoReason", error: contract.LET_GO_NEEDS_REASON });
+    expect(parseItemFields({ taskStatus: "redirect", redirectTo: "" }).ok).toBe(false);
+  });
+  it("takes three to five goals for the next moon", () => {
+    const g = (k: number) => Array.from({ length: k }, (_, i) => ({ text: `Goal ${i + 1}` }));
+    expect(parseMoonGoals(g(2)).ok).toBe(false);
+    expect(parseMoonGoals(g(3)).ok).toBe(true);
+    expect(parseMoonGoals(g(6)).ok).toBe(false);
+  });
+  it("rolls every Partly and Carry item into the next moon under a carry key", () => {
+    expect(carriedItems([item({ id: "a", taskStatus: "partly" }), item({ id: "b", taskStatus: "done" }), item({ id: "c", taskStatus: "carry", state: "dropped" })]).map((c) => c.dedupeKey)).toEqual(["carry:a"]);
+  });
+});
+
+describe("closing the loop in Sera (check 22, the pure half)", () => {
+  it("closes only tasks Sera sent, by item id", () => {
+    expect(seraClosures([
+      item({ id: "a", dedupeKey: "sera:ext-1", taskStatus: "done" }),
+      item({ id: "b", dedupeKey: "sera:ext-2", taskStatus: "redirect", redirectTo: "The land role" }),
+      item({ id: "c", dedupeKey: "task:t3", taskStatus: "done" }),
+      item({ id: "d", dedupeKey: "sera:ext-4", taskStatus: "carry" }),
+    ], "2026-10-10")).toEqual([
+      { itemId: "a", externalId: "ext-1", action: "done", reason: "already_done", note: null, redirectTarget: null, idempotencyKey: "moon:2026-10-10:ext-1" },
+      { itemId: "b", externalId: "ext-2", action: "redirect", reason: "not_mine", note: null, redirectTarget: "The land role", idempotencyKey: "moon:2026-10-10:ext-2" },
+    ]);
+  });
+  it("uses the skill's reason codes, and skips a task the board already told Sera about (A3)", () => {
+    expect(contract.SERA_REASONS).toEqual({ done: "already_done", let_go: "not_a_task", redirect: "not_mine" });
+    expect(contract.seraCloseKey("2026-10-10", "abc123")).toBe("moon:2026-10-10:abc123");
+    const items = [item({ id: "a", dedupeKey: "sera:ext-1", taskStatus: "let_go", letGoReason: "Not needed" }), item({ id: "b", dedupeKey: "sera:ext-2", taskStatus: "done" })];
+    expect(seraClosures(items, "2026-10-10", new Set(["ext-2"]))).toEqual([
+      { itemId: "a", externalId: "ext-1", action: "let_go", reason: "not_a_task", note: "Not needed", redirectTarget: null, idempotencyKey: "moon:2026-10-10:ext-1" },
+    ]);
+  });
+});
+
+describe("Outside my roles in the role audit (check 23)", () => {
+  it("names the role each item belongs to, and raises a Fill signal for an empty role named twice", () => {
+    const audit = outsideRolesAudit({
+      items: [
+        item({ id: "a", roleId: null, belongsToRoleId: "r9", text: "Task A" }),
+        item({ id: "b", roleId: null, belongsToRoleId: "r9", text: "Task B" }),
+        item({ id: "c", roleId: null, text: "Task C" }),
+        item({ id: "d", roleId: "r1", text: "Task D" }),
+      ],
+      heldRoleIds: ["r1"], roleNames: { r9: "Land role" }, emptyRoleIds: ["r9"],
+    });
+    expect(audit.items.map((i) => [i.itemId, i.belongsTo])).toEqual([["a", "Land role"], ["b", "Land role"], ["c", contract.NO_ROLE_YET]]);
+    expect(audit.fill).toEqual([{ roleId: "r9", name: "Land role", count: 2 }]);
+  });
+});
+
+describe("the send-by day and the copied addresses (decision 21)", () => {
+  it("is the circle Monday (section 18): Monday 9 November 2026, and Monday 7 December for November", () => {
+    expect(sendBy(NOV, TZ)).toBe("2026-11-09");
+    expect(sendBy(LUNAR_CLOCK.boundsFor(new Date("2026-11-20T12:00:00Z")), TZ)).toBe("2026-12-07");
+    expect(sendBy(NOV, TZ, { sendHour: 9, guideUrl: "", cycles: { [NOV.id]: { circle: "2026-11-10" } } })).toBe("2026-11-10");
+    expect(contract.sendByLine("2026-11-09")).toBe("Send by Monday 9 November 2026. Sending any time before then counts the same as sending in the room.");
+  });
+  it("reads invoiceCc as email addresses, and refuses anything else", () => {
+    const base = { key: "a-1", legalName: "A", address: "x", country: "US", currencies: ["USD"], invoiceTo: "x@example.org" };
+    const ok = parsePayers({ payers: [{ ...base, invoiceCc: ["one@example.org", "two@example.org"] }] });
+    expect(ok.ok && contract.billToOf(ok.value.payers[0]).invoiceCc).toEqual(["one@example.org", "two@example.org"]);
+    expect(parsePayers({ payers: [{ ...base, invoiceCc: ["not an address"] }] }).ok).toBe(false);
+  });
+});
+
+describe("a fresh install names nobody (decision 22)", () => {
+  it("has no payer, no address, no country and no acknowledgement, and refuses an invoice with Name who you pay", () => {
+    expect(contract.EMPTY_PAYERS).toEqual({ payers: [] });
+    expect(parsePayers(undefined)).toEqual({ ok: true, value: { payers: [] } });
+    const fresh = contract.parseMoonReviewSettings(undefined);
+    expect(fresh).toEqual({ ok: true, value: contract.EMPTY_SETTINGS });
+    expect([contract.EMPTY_SETTINGS.hostCountry, contract.EMPTY_SETTINGS.pilotAck, contract.EMPTY_SETTINGS.taxForms]).toEqual([null, null, []]);
+    expect(contract.setupGaps(contract.EMPTY_PAYERS, contract.EMPTY_SETTINGS)).toHaveLength(3);
+    const att = parseAttestation({ workCountries: ["YY"], daysInHostCountry: 0, statusUnchanged: true }, "abroad", MOON);
+    const refusal = invoiceSendRefusal({
+      route: "abroad", payer: null, lines: linesFromTerms([terms()], MOON), attestation: att, pilotAckVersion: null,
+      memberNumber: "INV-1", externalInvoiceKey: null, settings: contract.EMPTY_SETTINGS, payers: contract.EMPTY_PAYERS,
+    });
+    expect(refusal).toBe(SEND_REFUSALS.notConfigured);
+    expect(refusal).toContain("Name who you pay");
+  });
+  it("fills every host-country template from the settings, and names no country before they are set", () => {
+    expect(contract.payRouteWords("local_contractor", SETTINGS)).toBe("I live in Examplia with the right to work there, working as an independent contractor");
+    expect(contract.attestationWords(SETTINGS).daysIn).toBe("Days spent in Examplia this moon");
+    expect(contract.attestationWords(contract.EMPTY_SETTINGS).daysIn).toBe("Days spent in the host country this moon");
+  });
+  it("keeps the route kinds a closed list with neutral ids", () => {
+    expect(contract.PAY_ROUTES).toEqual(["pending", "abroad", "nomad", "local_contractor", "local_employee", "visitor"]);
+  });
+  it("reads settings, refuses a bad acknowledgement or form key, and logs old and new values", () => {
+    const s1 = contract.parseMoonReviewSettings(SETTINGS);
+    expect(s1).toEqual({ ok: true, value: SETTINGS });
+    expect(contract.parseMoonReviewSettings({ pilotAck: { text: "", version: "v1" } }).ok).toBe(false);
+    expect(contract.parseMoonReviewSettings({ taxForms: [{ key: "much-too-long", label: "X" }] }).ok).toBe(false);
+    expect(contract.settingsChanges(SETTINGS, { ...SETTINGS, pilotAck: { text: "New words.", version: "v2" } })).toEqual([
+      { field: "pilotAck", from: SETTINGS.pilotAck, to: { text: "New words.", version: "v2" } },
+    ]);
+  });
+});
+
+describe("the moon pack, version 1 (A2, checks 24 and 25)", () => {
+  const moon = contract.packMoonDates(NOV, TZ);
+  const ctx = (existing: Array<[string, string]> = []): contract.PackContext => ({
+    moon, seats: [{ roleId: "r1", name: "Steward" }], allRoles: [{ roleId: "r1", name: "Steward" }, { roleId: "r9", name: "Land role" }],
+    seasonGoals: [{ id: "gid-1", words: "Goal one" }, { id: "gid-2", words: "Goal two" }], existingKeys: new Map(existing),
+  });
+  const pack = (over: Record<string, unknown> = {}) => ({
+    kind: "moon_pack", version: 1, moon,
+    items: [
+      { text: "Task 1", status: "done", evidence: { kind: "mail", ref: "thread 42", on: "2026-10-20" }, seat: "Steward", season_goal: "g2" },
+      { text: "Task 2", status: "done", evidence: { kind: "build", ref: "https://example.org/build" }, seat: "r1" },
+      { text: "Task 3", outside: true, belongs_to_seat: "Land role" },
+      { text: "Task 4", seat: "Unknown role" },
+      { text: "Task 5", season_goal: "g9" },
+      { text: "Task 6", evidence: { kind: "notes", ref: "x", on: "2026-09-01" } },
+      { text: "Task 7", sera_task_id: "ext-7", status: "carry" },
+    ],
+    role_audit: [{ seat: "Steward", verdict: "keep" }, { seat: "Land role", verdict: "fill", why: "Covered it all moon" }],
+    next_goals: [{ text: "Goal A" }, { text: "Goal B", season_goal: "g1" }],
+    ...over,
+  });
+
+  it("previews adds, merges and skips with reasons, and writes nothing", async () => {
+    const r = await contract.validatePack(JSON.stringify(pack()), ctx([["sera:ext-7", "mi-held"]]));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.preview.add.map((a) => [a.text, a.taskStatus, a.roleId, a.seasonGoalId, a.evidenceKind])).toEqual([
+      ["Task 1", "done", "r1", "gid-2", "mail"],
+      ["Task 2", "partly", "r1", null, "build"],
+      ["Task 3", null, null, null, null],
+    ]);
+    expect(r.preview.add[0].dedupeKey).toMatch(/^claude:[0-9a-f]{32}$/);
+    expect(r.preview.add[1].evidenceUrl).toBe("https://example.org/build");
+    expect(r.preview.add[2].belongsToSeatWords).toBe("Land role");
+    expect(r.preview.merge.map((m) => [m.itemId, m.dedupeKey])).toEqual([["mi-held", "sera:ext-7"]]);
+    expect(r.preview.skip).toEqual([{ index: 3, reason: "seat_unknown" }, { index: 4, reason: "goal_unknown" }, { index: 5, reason: "outside_moon" }]);
+    expect(r.preview.roleAudit).toEqual([{ roleId: "r1", verdict: "keep", why: null }, { roleId: "r9", verdict: "fill", why: "Covered it all moon" }]);
+    expect(r.preview.nextGoals.map((g) => [g.text, g.seasonGoalId])).toEqual([["Goal A", null], ["Goal B", "gid-1"]]);
+    expect(r.previewHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("adds nothing the second time: every key is already on the recap (check 24)", async () => {
+    const first = await contract.validatePack(pack(), ctx([["sera:ext-7", "mi-held"]]));
+    if (!first.ok) throw new Error(first.error);
+    const held: Array<[string, string]> = [["sera:ext-7", "mi-held"], ...first.preview.add.map((a, k): [string, string] => [a.dedupeKey, `mi-${k}`])];
+    const second = await contract.validatePack(pack(), ctx(held));
+    if (!second.ok) throw new Error(second.error);
+    expect(second.preview.add).toEqual([]);
+    expect(second.preview.skip.filter((x) => x.reason === "duplicate")).toHaveLength(3);
+  });
+
+  it("gives the same preview hash for the same pack, and a new one when it changes", async () => {
+    const a = await contract.validatePack(pack(), ctx());
+    const b = await contract.validatePack(JSON.stringify(pack()), ctx());
+    const c = await contract.validatePack(pack({ own_words: "Changed" }), ctx());
+    expect(a.ok && b.ok && c.ok).toBe(true);
+    if (a.ok && b.ok && c.ok) {
+      expect(a.previewHash).toBe(b.previewHash);
+      expect(c.previewHash).not.toBe(a.previewHash);
+    }
+  });
+
+  it.each([
+    ["an amount at any depth", { items: [{ text: "Task 1", evidence: { kind: "file", ref: "x", amountMinor: 1 } }] }, "forbidden_key"],
+    ["a tax field", { tax_form: "x" }, "forbidden_key"],
+    ["a field the pack does not have", { extra: 1 }, "unknown_key"],
+    ["another moon (check 25)", { moon: { start: "2026-11-09", end: "2026-12-08" } }, "moon_mismatch"],
+    ["six next goals", { next_goals: Array.from({ length: 6 }, (_, k) => ({ text: `Goal ${k}` })) }, "too_many_goals"],
+    ["301 items", { items: Array.from({ length: 301 }, (_, k) => ({ text: `Task ${k}` })) }, "too_many_items"],
+    ["a let go with no reason", { items: [{ text: "Task 1", status: "let_go" }] }, "invalid"],
+    ["the wrong kind", { kind: "something_else" }, "not_a_pack"],
+  ])("refuses the whole pack: %s", async (_n, over, code) => {
+    const r = await contract.validatePack(pack(over), ctx());
+    expect(r.ok ? null : r.code).toBe(code);
+  });
+
+  it("refuses a pack over 200 KB", async () => {
+    const r = await contract.validatePack(JSON.stringify(pack({ own_words: "x".repeat(210 * 1024) })), ctx());
+    expect(r.ok ? null : r.code).toBe("too_big");
+  });
+
+  it("keys a deep-dive item by kind, ref and words, or by its Sera task", async () => {
+    const k1 = await contract.claudeItemKey({ evidenceKind: "mail", ref: "a", text: "Task 1" });
+    expect(k1).toBe(await contract.claudeItemKey({ evidenceKind: "mail", ref: "a", text: "Task 1" }));
+    expect(k1).not.toBe(await contract.claudeItemKey({ evidenceKind: "notes", ref: "a", text: "Task 1" }));
+    expect(await contract.claudeItemKey({ seraTaskId: "ext-1", evidenceKind: "sera", ref: null, text: "x" })).toBe("sera:ext-1");
+  });
+});
+
+describe("another member never reads a private kind of proof (A1, check 26)", () => {
+  it("drops mail, notes, drive and file links from a members item, and keeps an artifact link", () => {
+    const view = memberView({
+      status: "waiting", roles: [{ roleId: "r1", name: "Steward" }], roomVisible: () => true,
+      items: (["mail", "notes", "drive", "file", "artifact"] as const).map((k, n) => item({ id: `i${n}`, evidenceKind: k, evidenceUrl: `https://example.org/${k}` })),
+    });
+    expect(view[0].items.map((i) => i.evidenceUrl)).toEqual([null, null, null, null, "https://example.org/artifact"]);
+  });
+  it("lets Fill name a role the member does not hold, and only that", () => {
+    expect(parseRoleAudit({ roles: [{ roleId: "r9", choice: "fill" }] }, ["r1"], ["r1", "r9"]).ok).toBe(true);
+    expect(parseRoleAudit({ roles: [{ roleId: "r1", choice: "fill" }] }, ["r1"], ["r1", "r9"]).ok).toBe(false);
+    expect(parseRoleAudit({ roles: [{ roleId: "r9", choice: "keep" }] }, ["r1"], ["r1", "r9"]).ok).toBe(false);
+  });
+});
+
+describe("reading the score (A4, check 34)", () => {
+  const ctx0 = { done: 10, counted: 20, outside: 0, redirected: 0, lastWeek: 0, letGo: 0 };
+  it("puts each band edge in the higher band, on half-points", () => {
+    const band = (done: number, den: number) => contract.readingOf({ numHalves: done * 2, den }, ctx0)?.label;
+    expect(band(17, 20)).toBe("Very full");
+    expect(band(6, 10)).toBe("Steady");
+    expect(band(4, 10)).toBe("Pulled");
+    expect(band(3, 10)).toBe("Rethink the plan");
+    expect(contract.readingOf({ numHalves: 25, den: 18 }, ctx0)?.label).toBe("Steady");
+    expect(contract.seatReadingOf(11, 12)?.label).toBe("Role well held");
+    expect(contract.seatReadingOf(7, 10)?.label).toBe("Mostly held");
+    expect(contract.seatReadingOf(6, 10)?.label).toBe("Role bigger than the moon");
+    expect(contract.readingOf({ numHalves: 0, den: 0 }, ctx0)).toBeNull();
+  });
+  it("adds the context lines at their thresholds", () => {
+    const r = contract.readingOf({ numHalves: 4, den: 4 }, { done: 2, counted: 4, outside: 3, redirected: 0, lastWeek: 3, letGo: 0 });
+    expect(r?.lines).toEqual([contract.CONTEXT_WORDS.few, contract.CONTEXT_WORDS.outside, contract.CONTEXT_WORDS.lastWeek]);
+    const shed = contract.readingOf({ numHalves: 20, den: 10 }, { done: 10, counted: 10, outside: 0, redirected: 3, lastWeek: 0, letGo: 3 });
+    expect(shed?.lines.slice(1)).toEqual([contract.CONTEXT_WORDS.redirected, contract.CONTEXT_WORDS.letGo]);
+    expect(contract.readingOf({ numHalves: 6, den: 5 }, { done: 3, counted: 5, outside: 2, redirected: 1, lastWeek: 2, letGo: 1 })?.lines).toEqual([]);
+  });
+  it("check 47: the let-go cap stops 5 Done and 5 Let go at Steady, and leaves 5 Done and 1 Let go Very full", () => {
+    const capped = contract.readingOf({ numHalves: 10, den: 5 }, { done: 5, counted: 5, outside: 0, redirected: 0, lastWeek: 0, letGo: 5 });
+    expect([capped?.label, capped?.says, capped?.capped, capped?.lines[0]]).toEqual(["Steady", contract.CAPPED_BAND.says, true, contract.CAPPED_BAND.line]);
+    const fine = contract.readingOf({ numHalves: 10, den: 5 }, { done: 5, counted: 5, outside: 0, redirected: 0, lastWeek: 0, letGo: 1 });
+    expect([fine?.label, fine?.capped]).toEqual(["Very full", false]);
+  });
+  it("check 48: 3 Done, 5 Carry and 7 outside-role items read Covering an empty role; with 2 outside it reads Rethink the plan", () => {
+    const covering = contract.readingOf({ numHalves: 6, den: 8 }, { done: 3, counted: 8, outside: 7, redirected: 0, lastWeek: 0, letGo: 0 });
+    expect([covering?.label, covering?.says]).toEqual(["Covering an empty role", contract.COVERING_BAND.says]);
+    expect(contract.readingOf({ numHalves: 6, den: 8 }, { done: 3, counted: 8, outside: 2, redirected: 0, lastWeek: 0, letGo: 0 })?.label).toBe("Rethink the plan");
+  });
+  it("never reaches the approval hash, which binds lines and items only (check 35, the pure half)", () => {
+    const bytes = contract.approvalSubjectBytes({ payerKey: "p", route: "abroad", currency: "USD", from: null, lines: [], items: [] });
+    expect(Object.keys(JSON.parse(bytes)).sort()).toEqual(["currency", "from", "items", "lines", "payerKey", "route"]);
+  });
+});
+
+describe("the thank-you step (A7, check 51 pure half)", () => {
+  it("reads up to ten thank-yous, a member or a named person, notes kept to approvers unless chosen", () => {
+    const t = contract.parseThanks([{ userId: "u2", note: "Held the gate" }, { name: "A neighbour", note: "Lent the truck", visibility: "members" }, { userId: "u2" }], ["u2"]);
+    expect(t).toEqual({ ok: true, value: [
+      { userId: "u2", name: null, note: "Held the gate", visibility: "approvers" },
+      { userId: null, name: "A neighbour", note: "Lent the truck", visibility: "members" },
+    ] });
+    expect(contract.parseThanks(Array.from({ length: 11 }, (_, k) => ({ name: `Person ${k}` }))).ok).toBe(false);
+    expect(contract.parseThanks([{ userId: "u9" }], ["u2"]).ok).toBe(false);
+    expect(contract.parseThanks([{ note: "Nobody named" }]).ok).toBe(false);
+    expect(contract.thanksDedupeKey("mr-1", "u2")).toBe("moon-thanks:mr-1:u2");
+  });
+  it("writes a THANK YOU section, with notes only when asked", () => {
+    const entries = [{ userId: "u2", name: null, note: "Held the gate", visibility: "members" as const }, { userId: null, name: "A neighbour", note: null, visibility: "approvers" as const }];
+    expect(contract.thankYouLines(entries, () => "Member Two", true)).toEqual(["THANK YOU", "- Member Two: Held the gate", "- A neighbour"]);
+    expect(contract.thankYouLines(entries, () => "Member Two", false)).toEqual(["THANK YOU", "- Member Two", "- A neighbour"]);
+    expect(contract.thankYouLines([], () => "", true)).toEqual([]);
+  });
+  it("matches a pack's thanked names to members, and keeps an unmatched name as words", async () => {
+    const moon = contract.packMoonDates(NOV, TZ);
+    const r = await contract.validatePack({ kind: "moon_pack", version: 1, moon, items: [], thanks: [{ name: "Member Two", note: "Thanks" }, { name: "A neighbour" }] }, {
+      moon, seats: [], allRoles: [], seasonGoals: [], existingKeys: new Map(), members: [{ userId: "u2", name: "Member Two" }],
+    });
+    expect(r.ok && r.preview.thanks).toEqual([
+      { userId: "u2", name: null, note: "Thanks", visibility: "approvers" },
+      { userId: null, name: "A neighbour", note: null, visibility: "approvers" },
+    ]);
+  });
+});
+
+describe("reminder words (B1, check 50 pure half)", () => {
+  it("names the guide's worksheet only when the village set a guide, and keys each reminder once", () => {
+    expect(contract.nudgeText("eom_prep", { guideUrl: "" })).toBe(contract.NUDGE_WORDS.eom_prep);
+    expect(contract.nudgeText("eom_prep", { guideUrl: "https://example.org/g" })).toBe(`${contract.NUDGE_WORDS.eom_prep} The worksheet: https://example.org/g#sheet`);
+    expect(contract.nudgeDedupeKey("lunar-000331", "eom_day", "u1")).toBe("moon:lunar-000331:eom_day:u1");
   });
 });

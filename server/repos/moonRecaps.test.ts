@@ -21,6 +21,7 @@ import {
   clearApprovals, confirmPayRoute, doneTasksBetween, ensureRecap, forgetMoonReviews, insertInvoice, insertItem, insertReviewEvent,
   invoiceById, itemsOf, keysInOtherRecaps, markRecapSent, memberNumbersOf, nextBillRefSeq, payRouteOf, recapById,
   setFinanceApproved, setInvoiceApproved, setWorkApproved, takeBackRecap, upsertPayRoute, type ItemInsert,
+  goalsFor, insertGoal, scoreGoal, updateItem, writeScoreSnapshot, claimNudge, itemKeysOf, mergePackItem, saveThanks,
 } from "./moonRecaps";
 
 const configured = testDbConfigured();
@@ -34,7 +35,7 @@ const item = (over: Partial<ItemInsert>): ItemInsert => ({
 
 const ROUTE = {
   route: "abroad" as const, payerKey: "us-payer", currency: "USD", legalName: "A Member", address: "Somewhere", statusValidUntil: null,
-  taxFormKind: "W-9" as const, taxFormSignedOn: "2026-01-01", taxFormExpiresOn: null, taxFormFiledWhere: "Finance drive",
+  taxFormKind: "form-a", taxFormSignedOn: "2026-01-01", taxFormExpiresOn: null, taxFormFiledWhere: "Finance drive",
 };
 
 describe.skipIf(!configured)("moon review store on a real database", () => {
@@ -156,6 +157,56 @@ describe.skipIf(!configured)("moon review store on a real database", () => {
     expect((await invoiceById(pool, "mv-0000000000000005"))?.selfApproved).toBe(true);
   });
 
+  it("keeps an item's task status and set day, and writes the score snapshot in half-points (decision 20)", async () => {
+    await insertItem(pool, item({ id: "mi-0000000000000010", dedupeKey: "task:t10", setOn: "2026-10-15" }));
+    expect(await updateItem(pool, "mi-0000000000000010", { taskStatus: "let_go", letGoReason: "No longer needed", belongsToRoleId: "r9" })).toBe(1);
+    const it10 = (await itemsOf(pool, "mr-0000000000000001")).find((i) => i.id === "mi-0000000000000010");
+    expect([it10?.setOn, it10?.taskStatus, it10?.letGoReason, it10?.belongsToRoleId, it10?.dedupeKey]).toEqual(["2026-10-15", "let_go", "No longer needed", "r9", "task:t10"]);
+    await writeScoreSnapshot(pool, "mr-0000000000000001", { taskNumHalves: 25, taskDen: 18, seatOn: 3, seatTotal: 4, goalNumHalves: 5, goalDen: 4 });
+    expect((await recapById(pool, "mr-0000000000000001"))?.score).toEqual({ taskNumHalves: 25, taskDen: 18, seatOn: 3, seatTotal: 4, goalNumHalves: 5, goalDen: 4 });
+  });
+
+  it("holds one goal per position, carries a goal once, and scores it (check 21's rows)", async () => {
+    const g = { userId: "u1", cycleId: "lunar-000332", text: "Goal 1", doneWhen: null, seasonGoalId: null, carriedFromId: null, carryCount: 0 };
+    expect(await insertGoal(pool, { ...g, id: "mg-1", position: 0 })).toBe(true);
+    expect(await insertGoal(pool, { ...g, id: "mg-2", position: 0 })).toBe(false);
+    expect(await insertGoal(pool, { ...g, id: "mg-3", position: 1, carriedFromId: "mg-old", carryCount: 2 })).toBe(true);
+    expect(await insertGoal(pool, { ...g, id: "mg-4", position: 2, carriedFromId: "mg-old", carryCount: 2 })).toBe(false);
+    expect(await scoreGoal(pool, "mg-1", "u1", "done", null)).toBe(1);
+    expect((await goalsFor(pool, "u1", "lunar-000332")).map((x) => [x.id, x.status, x.carryCount])).toEqual([["mg-1", "done", 0], ["mg-3", "open", 2]]);
+  });
+
+  it("writes a deep-dive item with its proof kind and day, and merges a pack's Sera task into the one already held (A1, check 25)", async () => {
+    expect(await insertItem(pool, item({
+      id: "mi-0000000000000020", origin: "claude", dedupeKey: "claude:0123456789abcdef0123456789abcdef", state: "kept", visibility: "approvers",
+      taskStatus: "partly", evidenceKind: "mail", evidenceOn: "2026-10-20", belongsToSeatWords: "Land role", roleId: null,
+    }))).toBe(true);
+    await insertItem(pool, item({ id: "mi-0000000000000021", origin: "sera", dedupeKey: "sera:ext-21", text: "From the sync" }));
+    const keys = await itemKeysOf(pool, "mr-0000000000000001");
+    expect(keys.get("sera:ext-21")).toBe("mi-0000000000000021");
+    expect(await mergePackItem(pool, "mi-0000000000000021", "mr-0000000000000001", { text: "From the pack", taskStatus: "done", redirectTo: null, letGoReason: null, evidenceKind: "sera", evidenceUrl: null, evidenceOn: "2026-10-22", roleId: "r1", seasonGoalId: null })).toBe(1);
+    const all = await itemsOf(pool, "mr-0000000000000001");
+    const deep = all.find((i) => i.id === "mi-0000000000000020");
+    expect([deep?.origin, deep?.evidenceKind, deep?.evidenceOn, deep?.belongsToSeatWords, deep?.visibility, deep?.taskStatus]).toEqual(["claude", "mail", "2026-10-20", "Land role", "approvers", "partly"]);
+    const merged = all.filter((i) => i.dedupeKey === "sera:ext-21");
+    expect(merged.map((i) => [i.text, i.taskStatus, i.state, i.evidenceOn])).toEqual([["From the pack", "done", "kept", "2026-10-22"]]);
+  });
+
+  it("keeps who helped while the recap is the member's to edit (A7)", async () => {
+    await ensureRecap(pool, { id: "mr-0000000000000030", userId: "u30", cycleId: "lunar-000331", seasonId: null });
+    expect(await saveThanks(pool, "mr-0000000000000030", JSON.stringify([{ userId: "u2", note: "Held the gate" }]))).toBe(1);
+    expect((await recapById(pool, "mr-0000000000000030"))?.thanksJson).toBe('[{"userId":"u2","note":"Held the gate"}]');
+    await markRecapSent(pool, "mr-0000000000000030", 0);
+    expect(await saveThanks(pool, "mr-0000000000000030", null)).toBe(0);
+  });
+
+  it("claims each reminder once per member, cycle and kind (B1, check 28's store)", async () => {
+    expect(await claimNudge(pool, "u1", "lunar-000331", "eom_prep")).toBe(true);
+    expect(await claimNudge(pool, "u1", "lunar-000331", "eom_prep")).toBe(false);
+    expect(await claimNudge(pool, "u1", "lunar-000331", "eom_day")).toBe(true);
+    expect(await claimNudge(pool, "u2", "lunar-000331", "eom_prep")).toBe(true);
+  });
+
   it("erasure clears words and the route, and keeps amounts, numbers and events (check 16)", async () => {
     await insertReviewEvent(pool, { recapId: "mr-0000000000000001", invoiceId: "mv-0000000000000001", userId: "u1", kind: "sent", actorUserId: "u1", actorRole: null, amountMinor: 100_000, currency: "USD", hash: null, note: "a note" });
     await insertReviewEvent(pool, { recapId: "mr-0000000000000005", invoiceId: null, userId: "fin", kind: "self_approved", actorUserId: "fin", actorRole: "treasury", amountMinor: null, currency: null, hash: "h", note: null, selfApproved: true });
@@ -165,7 +216,10 @@ describe.skipIf(!configured)("moon review store on a real database", () => {
     await insertItem(pool, item({ id: "mi-0000000000000009", recapId: "mr-0000000000000009", text: "Bystander's work" }));
     expect((await itemsOf(pool, "mr-0000000000000001"))[0].text).toBe("Wrote the water plan");
     expect(await forgetMoonReviews(pool, "u1")).toBeGreaterThan(0);
-    expect((await itemsOf(pool, "mr-0000000000000001")).map((i) => i.text)).toEqual(["", ""]);
+    expect((await itemsOf(pool, "mr-0000000000000001")).every((i) => i.text === "" && i.letGoReason === null)).toBe(true);
+    expect((await goalsFor(pool, "u1", "lunar-000332")).every((x) => x.text === "")).toBe(true);
+    const [nudges] = await pool.query<mysql.RowDataPacket[]>("SELECT `user_id` FROM `moon_nudges` ORDER BY `user_id`"); // module-review-ok: fixture read against the S5 scratch schema
+    expect(nudges.map((r) => String(r.user_id))).toEqual(["u2"]);
     expect(await payRouteOf(pool, "u1")).toBeNull();
     const inv = await invoiceById(pool, "mv-0000000000000001");
     expect([inv?.totalMinor, inv?.memberNumber, inv?.billRefSeq, inv?.fromJson, inv?.attestation]).toEqual([100_000, "2026-001", 1, null, null]);

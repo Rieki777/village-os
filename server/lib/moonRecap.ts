@@ -31,17 +31,19 @@
 import crypto from "node:crypto";
 import type { Pool } from "mysql2/promise";
 import {
-  ATTESTATION_MISSING, ITEM_TEXT_EMPTY, LIMITS, MOON_WORDS, NO_TERMS, PAYERS_DOC_KEY, EMPTY_PAYERS, PAY_ROUTES,
-  PILOT_ACK_TEXT, PILOT_ACK_VERSION, RECAP_STATUS_WORDS, SERA_CLOSED_NOTE, SUPPORT_LINE, auditTensions, billRef, billToOf,
-  coverage, daysHeldIn, deliverableLines, endOfMoonFriday, heldDuring, invoiceDueOn, invoiceSendRefusal, invoiceStatusLine,
-  invoiceTotals, itemDedupeKey, linesFromTerms, memberView, moonDays, parseItemFields, parsePayRouteInput, parsePayers,
-  parseRoleAudit, payRouteWords, payerForRoute, periodWords, recapEditable, routeChangeClearsConfirmation, termsCarryMoney,
-  waitingLine, waitingStage, workDueOn,
+  ATTESTATION_MISSING, EMPTY_SETTINGS, ITEM_TEXT_EMPTY, LIMITS, MOON_WORDS, NO_TERMS, PAYERS_DOC_KEY, EMPTY_PAYERS, PAY_ROUTES,
+  RECAP_STATUS_WORDS, SERA_CLOSED_NOTE, SETTINGS_DOC_KEY, SUPPORT_LINE, attestationWords, auditTensions, billRef, billToOf,
+  carriedTooOften, coverage, daysHeldIn, deliverableLines, endOfMoonFriday, goalScore, halfwayDay, heldDuring, invoiceDueOn,
+  invoiceSendRefusal, invoiceStatusLine, invoiceTotals, itemDedupeKey, linesFromTerms, memberView, moonDays, outsideRolesAudit,
+  parseItemFields, parseMoonReviewSettings, parsePayRouteInput, parsePayers, parseRoleAudit, payRouteWords, payerForRoute,
+  periodWords, readingOf, recapEditable, routeChangeClearsConfirmation, scoreContextOf, seatCoverage, seatReadingOf, sendBy,
+  setupGaps, taskScore, termsCarryMoney, waitingLine, waitingStage, workDueOn, workSummaryHtml, workSummaryText,
   type AssignmentRow, type FromBlock, type InvoiceLine, type InvoiceView, type ItemOrigin, type ItemResponse, type ItemState,
-  type MemberMoonResponse, type MoonDays, type PayRouteRecord, type MoonRef, type MyMoonResponse, type PayRouteResponse, type PayersDoc,
-  type RecapItem, type RecapView, type RoleAudit, type RoleHeld, type SeasonGoalRef, type SendRecapResponse, type SeraState,
-  type TakeBackResponse, type TermsInForce,
+  type MemberMoonResponse, type MoonDays, type MoonReviewSettings, type PayRouteRecord, type MoonRef, type MyMoonResponse,
+  type PayRouteResponse, type PayersDoc, type RecapItem, type RecapView, type RoleAudit, type RoleHeld, type SeasonGoalRef,
+  type SendRecapResponse, type SeraState, type TakeBackResponse, type TaskStatus, type TermsInForce,
 } from "../../shared/moonRecap";
+import { EMPTY_RHYTHM, RHYTHM_DOC_KEY, parseRhythm, type RhythmDoc } from "../../shared/moonRhythm";
 import type { CycleBounds, CycleClock } from "../../shared/cycleClock";
 import { civilDateKey } from "../../shared/lunar";
 import type { AccomplishmentMoon } from "../../shared/taskAccomplishments";
@@ -76,7 +78,8 @@ export interface Moon {
   timeZone: string;
 }
 
-export function moonOf(bounds: CycleBounds, timeZone: string): Moon {
+/** The moon's days and dates. `rhythm` is the village's moved walkthrough and circle days (`moon_rhythm`). */
+export function moonOf(bounds: CycleBounds, timeZone: string, rhythm: RhythmDoc = EMPTY_RHYTHM): Moon {
   const days = moonDays(bounds, timeZone);
   return {
     bounds,
@@ -87,16 +90,34 @@ export function moonOf(bounds: CycleBounds, timeZone: string): Moon {
       firstDay: days.firstDay,
       lastDay: days.lastDay,
       periodWords: periodWords(days.firstDay, days.lastDay),
-      endOfMoonFriday: endOfMoonFriday(bounds, timeZone),
+      endOfMoonFriday: endOfMoonFriday(bounds, timeZone, rhythm),
+      sendBy: sendBy(bounds, timeZone, rhythm),
+      halfwayDay: halfwayDay(bounds, timeZone),
     },
   };
 }
 
 /** The moon a cycle id names, never one that has not begun. Null for an unknown id. */
-export function resolveMoon(clock: CycleClock, cycleId: string | null, timeZone: string, now = new Date()): Moon | null {
+export function resolveMoon(clock: CycleClock, cycleId: string | null, timeZone: string, now = new Date(), rhythm: RhythmDoc = EMPTY_RHYTHM): Moon | null {
   const bounds = cycleId ? boundsForCycleId(clock, cycleId) : clock.boundsFor(now);
   if (!bounds || bounds.startsAt.getTime() > now.getTime()) return null;
-  return moonOf(bounds, timeZone);
+  return moonOf(bounds, timeZone, rhythm);
+}
+
+/** The village's moon-review settings (decision 22). Empty until a cash power holder fills them in. */
+export async function settingsDoc(pool: Pool): Promise<MoonReviewSettings> {
+  const doc = dbDocument(pool, SETTINGS_DOC_KEY, EMPTY_SETTINGS as unknown as Record<string, unknown>);
+  await doc.load();
+  const parsed = parseMoonReviewSettings(doc.exists() ? doc.get() : null);
+  return parsed.ok ? parsed.value : EMPTY_SETTINGS;
+}
+
+/** The village's moved walkthrough and circle days (B1). Empty means the platform's rule. */
+export async function rhythmDoc(pool: Pool): Promise<RhythmDoc> {
+  const doc = dbDocument(pool, RHYTHM_DOC_KEY, EMPTY_RHYTHM as unknown as Record<string, unknown>);
+  await doc.load();
+  const parsed = parseRhythm(doc.exists() ? doc.get() : null);
+  return parsed.ok ? parsed.value : EMPTY_RHYTHM;
 }
 
 /**
@@ -207,12 +228,10 @@ export interface GatherCandidate {
   roleId: string | null;
   seasonGoalId: string | null;
   state: ItemState;
-  /**
-   * The section 16 status. TODO(lane A, #836): `moon_recap_items.task_status`
-   * (with `let_go_reason` and `redirect_to`) is not on main, so this is
-   * computed and not stored yet. Store it once `insertItem` takes it.
-   */
-  taskStatus: "done" | "carry" | "let_go" | "redirect";
+  /** The section 16 status, stored on the item (`moon_recap_items.task_status`). */
+  taskStatus: Extract<TaskStatus, "done" | "carry" | "let_go" | "redirect">;
+  /** The day the task was set, for the score's this-moon rule. Null for a room task. */
+  setOn: string | null;
 }
 
 /**
@@ -244,6 +263,7 @@ export function boardCandidates(
     const text = t.title.replace(/\s+/g, " ").trim().slice(0, LIMITS.itemText);
     if (!text) continue;
     const base = {
+      setOn: t.createdOn,
       origin: (t.source === "sera" && t.externalId ? "sera" : "task") as ItemOrigin,
       dedupeKey: t.source === "sera" && t.externalId ? itemDedupeKey("sera", t.externalId) : itemDedupeKey("task", t.id),
       text,
@@ -298,6 +318,7 @@ export function roomCandidates(moons: readonly AccomplishmentMoon[], bounds: Pic
         seasonGoalId: null,
         state: "kept",
         taskStatus: "done",
+        setOn: null,
       });
     }
   }
@@ -396,6 +417,10 @@ export async function gatherMoon(pool: Pool, userId: string, moon: Moon, frame: 
     const wrote = await store.insertItem(pool, {
       id: newId("mi"), recapId: recap.id, origin: c.origin, dedupeKey: c.dedupeKey, text: c.text, originNote: c.originNote,
       doneOn: c.doneOn, evidenceUrl: null, roleId: c.roleId, seasonGoalId: c.seasonGoalId, state: c.state, visibility: "members", position,
+      setOn: c.setOn, taskStatus: c.taskStatus,
+      // The press's reason is the let go's reason and the redirect's who, in the board's own words.
+      letGoReason: c.taskStatus === "let_go" ? c.originNote : null,
+      redirectTo: c.taskStatus === "redirect" ? c.originNote ?? "Redirected on the task board" : null,
     });
     if (wrote) {
       added += 1;
@@ -478,25 +503,22 @@ export function invoiceViewOf(input: {
   moon: Moon;
   route: PayRouteRecord | null;
   payers: PayersDoc;
+  settings: MoonReviewSettings;
   today: string;
+  /** Once both approvals are in: the work summary, built by the caller from the approved items. */
+  summary?: { text: string; html: string } | null;
 }): InvoiceView | null {
   const { stored, moon, payers, today } = input;
   const period = moon.ref.periodWords;
   if (stored) {
-    let lines: InvoiceLine[] = [];
-    try {
-      lines = JSON.parse(stored.linesJson) as InvoiceLine[];
-    } catch {
-      lines = [];
-    }
+    const lines = linesOf(stored);
     const payer = payers.payers.find((p) => p.key === stored.payerKey) ?? null;
     return {
       id: stored.id, status: stored.status, statusLine: invoiceStatusLine({ status: stored.status, expectedOn: stored.expectedOn, paidOn: stored.paidOn }, today),
       memberNumber: stored.memberNumber, billRef: billRef(stored.payerKey, stored.billRefSeq), billTo: payer ? billToOf(payer) : null,
       from: fromOf(stored.fromJson), period, lines, currency: stored.currency, totalMinor: stored.totalMinor, expectedOn: stored.expectedOn,
       paidOn: stored.paidOn, selfApproved: stored.selfApproved, supportLine: SUPPORT_LINE, externalInvoiceKey: stored.externalInvoiceKey,
-      // TODO(lane B, by Tuesday): the work summary once both approvals are in.
-      workSummary: null, workSummaryHtml: null, sendRefusal: null,
+      workSummary: input.summary?.text ?? null, workSummaryHtml: input.summary?.html ?? null, sendRefusal: null,
     };
   }
   if (!termsCarryMoney(input.terms)) return null;
@@ -506,14 +528,60 @@ export function invoiceViewOf(input: {
   const totals = invoiceTotals(lines);
   const refusal = invoiceSendRefusal({
     route: route?.route ?? "pending", payer, lines, attestation: null, pilotAckVersion: route?.pilotAckVersion ?? null, memberNumber: null, externalInvoiceKey: null,
+    settings: input.settings, payers,
   });
   return {
     id: null, status: "draft", statusLine: RECAP_STATUS_WORDS.draft, memberNumber: null, billRef: null, billTo: payer ? billToOf(payer) : null,
     from: route?.legalName ? { legalName: route.legalName, address: route.address ?? "" } : null, period, lines,
     currency: totals.length === 1 ? totals[0].currency : null, totalMinor: totals.length === 1 ? totals[0].minor : null,
     expectedOn: null, paidOn: null, selfApproved: false, supportLine: SUPPORT_LINE, externalInvoiceKey: null, workSummary: null, workSummaryHtml: null,
+    // The attestation, the pilot note and the number are typed at send, so a draft is not refused for them.
     sendRefusal: refusal === ATTESTATION_MISSING ? null : refusal,
   };
+}
+
+/** The lines a stored invoice carries, or none when its JSON cannot be read. */
+export function linesOf(stored: Pick<store.InvoiceRow, "linesJson">): InvoiceLine[] {
+  try {
+    const v = JSON.parse(stored.linesJson);
+    return Array.isArray(v) ? (v as InvoiceLine[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * THE WORK SUMMARY, once both approvals are in: the approved items under the
+ * invoiced lines, no amounts, and the `READING:` line (A4). Null before then.
+ */
+export function summaryFor(input: {
+  stored: store.InvoiceRow | null;
+  recap: store.RecapRow;
+  items: readonly RecapItem[];
+  seasonGoals: readonly SeasonGoalRef[];
+  payers: PayersDoc;
+  moon: Moon;
+  timeZone: string;
+}): { text: string; html: string } | null {
+  const { stored, recap } = input;
+  if (!stored || !recap.financeApprovedAt || (stored.status !== "approved" && stored.status !== "paid")) return null;
+  const from = fromOf(stored.fromJson);
+  const payer = input.payers.payers.find((p) => p.key === stored.payerKey) ?? null;
+  const t = taskScore(input.items, input.moon.days);
+  const summary = {
+    firstDay: input.moon.days.firstDay,
+    lastDay: input.moon.days.lastDay,
+    memberNumber: stored.memberNumber,
+    recapId: recap.id,
+    memberLegalName: from?.legalName ?? "",
+    billToName: payer?.legalName ?? stored.payerKey,
+    lines: linesOf(stored),
+    items: input.items,
+    seasonGoals: input.seasonGoals,
+    approvedOn: dayIn(recap.financeApprovedAt, input.timeZone) ?? input.moon.days.lastDay,
+    reading: readingOf(t, scoreContextOf(t, input.items.filter((i) => i.state === "kept" && !i.roleId).length)),
+  };
+  return { text: workSummaryText(summary), html: workSummaryHtml(summary) };
 }
 
 export interface MyMoonDeps extends FrameDeps {
@@ -530,6 +598,7 @@ export async function myMoon(pool: Pool, userId: string, moon: Moon, deps: MyMoo
   const stored = recap ? await store.invoiceForRecap(pool, recap.id) : null;
   const route = await store.payRouteOf(pool, userId);
   const payers = await payersDoc(pool);
+  const settings = await settingsDoc(pool);
   const today = civilDateKey(deps.now ?? new Date(), deps.timeZone);
   const invoiceNeeded = termsCarryMoney(frame.terms);
 
@@ -546,6 +615,20 @@ export async function myMoon(pool: Pool, userId: string, moon: Moon, deps: MyMoo
     moons.push({ cycleId: id, periodWords: periodWords(d.firstDay, d.lastDay), status: r?.status ?? null, statusWords: r ? RECAP_STATUS_WORDS[r.status] : RECAP_STATUS_WORDS.draft });
   }
 
+  // The two rings and their readings (decision 20, A4). The member's own view only.
+  const heldRoleIds = frame.roles.map((r) => r.roleId);
+  const tScore = taskScore(items, moon.days);
+  const outside = items.filter((i) => i.state === "kept" && (!i.roleId || !heldRoleIds.includes(i.roleId))).length;
+  const seats = seatCoverage(frame.roles, items);
+  const belongsIds = Array.from(new Set(items.map((i) => i.belongsToRoleId).filter((x): x is string => !!x)));
+  const belongsCards = await gatherStore.roleCardsFor(pool, belongsIds);
+  const heldNow = await gatherStore.rolesHeldNow(pool, belongsIds);
+  const roleNames: Record<string, string> = Object.fromEntries([...frame.roles.map((r) => [r.roleId, r.name]), ...belongsCards.map((c) => [c.id, c.name])]);
+  const lastGoals = await store.goalsFor(pool, userId, moon.bounds.id);
+  const nextBounds = deps.clock.boundsFor(new Date(moon.bounds.endsAt.getTime() + 1000));
+  const nextGoals = await store.goalsFor(pool, userId, nextBounds.id);
+  const flag = <G extends { carryCount: number }>(g: G) => ({ ...g, flagged: carriedTooOften(g) });
+
   return {
     moon: moon.ref,
     moons,
@@ -556,12 +639,23 @@ export async function myMoon(pool: Pool, userId: string, moon: Moon, deps: MyMoo
     seasonGoals: frame.seasonGoals,
     ownGoals: frame.ownGoals,
     moonLoad: (await moonLoadOf(pool, userId, moon.bounds.id))?.level ?? null,
+    taskScore: tScore,
+    taskReading: readingOf(tScore, scoreContextOf(tScore, outside)),
+    seatReading: seatReadingOf(seats.on, seats.total),
+    seatCoverage: seats,
+    lastMoonGoals: lastGoals.map(flag),
+    goalScore: goalScore(lastGoals),
+    nextMoonGoals: [...nextGoals.filter((g) => g.carriedFromId), ...nextGoals.filter((g) => !g.carriedFromId)].map(flag),
+    backlog: await gatherStore.openSeraTasksBefore(pool, userId, moon.days.firstDay),
+    outsideRoles: outsideRolesAudit({ items, heldRoleIds, roleNames, emptyRoleIds: belongsIds.filter((id) => !heldNow.has(id)) }),
     invoiceNeeded,
     noTermsLine: !invoiceNeeded && frame.roles.length > 0 ? NO_TERMS : null,
-    invoice: invoiceViewOf({ stored, terms: frame.terms, moon, route, payers, today }),
+    invoice: invoiceViewOf({ stored, terms: frame.terms, moon, route, payers, settings, today, summary: recap ? summaryFor({ stored, recap, items, seasonGoals: frame.seasonGoals, payers, moon, timeZone: deps.timeZone }) : null }),
     payRoute: route,
-    routeChoices: PAY_ROUTES.map((r) => ({ route: r, words: payRouteWords(r, payers.hostCountryName) })),
-    pilotAck: { version: PILOT_ACK_VERSION, text: PILOT_ACK_TEXT, acceptedVersion: route?.pilotAckVersion ?? null },
+    routeChoices: PAY_ROUTES.map((r) => ({ route: r, words: payRouteWords(r, settings) })),
+    pilotAck: settings.pilotAck ? { version: settings.pilotAck.version, text: settings.pilotAck.text, acceptedVersion: route?.pilotAckVersion ?? null } : null,
+    setupGaps: setupGaps(payers, settings),
+    attestationWords: attestationWords(settings),
     cashPayHolders: await deps.cashPayHolderNames(),
   };
 }
@@ -572,8 +666,8 @@ export async function myMoon(pool: Pool, userId: string, moon: Moon, deps: MyMoo
  * Approvers only ones, and a room item only where `canSeeTask` passes for
  * this reader (`visibleRoomEntries` is `accomplishmentsOf` read AS the reader).
  *
- * TODO(lane A, A1): once `moon_recap_items.evidence_kind` exists, drop
- * `evidenceUrl` for kinds mail, notes, drive and file here (check 26).
+ * The contract's `memberView` drops `evidenceUrl` for the private evidence
+ * kinds (mail, notes, Drive, file) and for Sera items (check 26).
  */
 export async function memberMoon(
   pool: Pool,
@@ -719,18 +813,20 @@ export async function takeBack(pool: Pool, userId: string, moon: Moon, deps: Pic
 export async function payRouteResponse(pool: Pool, userId: string, cashPayHolders: string[]): Promise<PayRouteResponse> {
   const route = await store.payRouteOf(pool, userId);
   const payers = await payersDoc(pool);
+  const settings = await settingsDoc(pool);
   const payer = route ? payerForRoute(payers, route.route, route.payerKey) : null;
   return {
     payRoute: route,
     billTo: payer ? billToOf(payer) : null,
-    routeChoices: PAY_ROUTES.map((r) => ({ route: r, words: payRouteWords(r, payers.hostCountryName) })),
+    routeChoices: PAY_ROUTES.map((r) => ({ route: r, words: payRouteWords(r, settings) })),
     cashPayHolders,
   };
 }
 
 /** The member's own route. A change to a confirmed field clears the confirmation; the pilot note rides along. */
 export async function putPayRoute(pool: Pool, userId: string, body: unknown): Promise<Outcome<null>> {
-  const parsed = parsePayRouteInput(body);
+  const settings = await settingsDoc(pool);
+  const parsed = parsePayRouteInput(body, { taxFormKeys: settings.taxForms.map((f) => f.key) });
   if (!parsed.ok) return refuse(400, parsed.error);
   const next = parsed.value;
   if (next.payerKey && !(await payersDoc(pool)).payers.some((p) => p.key === next.payerKey)) return refuse(400, "Choose one of the payers listed.");
@@ -738,7 +834,7 @@ export async function putPayRoute(pool: Pool, userId: string, body: unknown): Pr
   const clear = routeChangeClearsConfirmation(before, next);
   await store.upsertPayRoute(pool, userId, next, clear);
   const ack = (body as Record<string, unknown>).pilotAckVersion;
-  if (ack === PILOT_ACK_VERSION) await store.setPilotAck(pool, userId, PILOT_ACK_VERSION);
+  if (settings.pilotAck && ack === settings.pilotAck.version) await store.setPilotAck(pool, userId, settings.pilotAck.version);
   if (clear) {
     await store.insertReviewEvent(pool, {
       recapId: null, invoiceId: null, userId, kind: "route_changed", actorUserId: userId, actorRole: null, amountMinor: null, currency: null, hash: null, note: null,
