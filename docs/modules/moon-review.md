@@ -6,7 +6,8 @@ Provenance: platform
 > coverage, invoice lines from terms, the route and payer checks, `endOfMoonFriday`, the approval hash, the work
 > summary, and the request and response shapes of every route). Every SQL statement for its tables is in
 > `server/repos/moonRecaps.ts`; the schema is `drizzle/0313_a_member_reviews_their_moon.sql`,
-> `drizzle/0314_a_member_tags_a_task_to_a_role.sql` and `drizzle/0315_an_approval_can_be_the_members_own.sql`.
+> `drizzle/0314_a_member_tags_a_task_to_a_role.sql`, `drizzle/0315_an_approval_can_be_the_members_own.sql` and
+> `drizzle/0316_a_member_sets_the_next_moons_goals.sql`.
 
 **Once a moon, each member who holds a role gathers what they delivered, checks it against their role cards and
 the season goals, does a role audit and sends a recap. When the adopted terms of one of their roles carry money,
@@ -33,8 +34,10 @@ launch, `members` takes a `module.switch` holder or a vote.
 
 1. The member keeps their tasks on the profile through the moon, tagged to a role and a season goal where they like
    (`member_tasks.role_id`, `member_tasks.serves_goal_id`).
-2. On the end-of-moon Friday (`endOfMoonFriday`: the last Friday on or before the moon's last day, in village time),
-   or by Sunday, they open My moon, bring in their tasks, ask Sera, keep and tag items, and do the role audit.
+2. By the end-of-moon Friday (`endOfMoonFriday`, the prepare-by day: the last Friday on or before the moon's last day,
+   in village time) they open My moon, bring in their tasks, ask Sera, keep and tag items, mark each task Done, Partly,
+   Carry, Let go or Redirect, score last moon's goals, set three to five for the next, and do the role audit. They send
+   by `sendBy`: the new moon circle day, or the first all-staff on or after it.
 3. They send the recap. It needs no pay route.
 4. If a role's terms carry money, they issue their own invoice (by email, through the electronic invoice system, or
    however they invoice today) and send the app's draft for approval with that invoice's number, the moon attestation
@@ -64,6 +67,19 @@ launch, `members` takes a `module.switch` holder or a vote.
 - **Payer authority is a note**, never a refusal (`authorityNote`).
 - **Who reads what.** Members read sent, kept items marked Members (`memberView`); an Approvers only item shows as
   "1 item held privately". Amounts, routes, legal details and invoices are for the member and `cash.pay` holders.
+
+## The score (decision 20)
+
+- **Task score** (`taskScore`): (Done + half of Partly) over (Done + Partly + Carry), stored at send in half-points.
+  Only tasks set this moon count; a task set in the final seven days counts only when Done. Let go (which needs a
+  reason) and Redirect (which names who it belongs to) are left out.
+- **Role coverage** (`seatCoverage`): the share of the member's role accountabilities with a kept item. Outside my
+  roles work counts toward season goals and never here; it feeds the role audit (`outsideRolesAudit`), where two or
+  more items under a role nobody holds raise a Fill signal.
+- **Goals** (`goalScore`, `moon_goals`): the same formula over the member's moon goals. Partly and Carry roll into the
+  next moon with one more carry; a goal carried twice is flagged for the circle.
+- **Closing the loop in Sera** (`seraClosures`): once the work is approved, each item Sera sent that the member marked
+  Done or Let go closes through the feedback outbox, and each Redirect goes with its words. Only tasks Sera sent.
 
 ## Setup
 

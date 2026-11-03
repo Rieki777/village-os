@@ -121,6 +121,11 @@ export const LIMITS = {
   payers: 10,
   payerText: 300,
   payerNote: 1000,
+  redirectTo: 120,
+  letGoReason: 300,
+  goalText: 200,
+  goalDoneWhen: 300,
+  invoiceCc: 5,
 } as const;
 
 /** The Sera draft stops waiting after this long and keeps whatever arrived. */
@@ -238,7 +243,7 @@ export function invoicePaidFrom(rows: readonly { state: string; paidAt: string |
 // ── Items ────────────────────────────────────────────────────────────────────
 
 /** Where a piece of work came from. A quest is never one of them. */
-export const ITEM_ORIGINS = ["task", "room", "sera", "hand"] as const;
+export const ITEM_ORIGINS = ["task", "room", "sera", "hand", "carry"] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 
 export const ITEM_STATES = ["suggested", "kept", "dropped"] as const;
@@ -255,6 +260,7 @@ export const ITEM_ORIGIN_WORDS: Record<ItemOrigin, string> = {
   room: "From a room",
   sera: "From Sera",
   hand: "Added by hand",
+  carry: "Carried from last moon",
 };
 
 export const ITEM_STATE_WORDS: Record<ItemState, string> = {
@@ -279,7 +285,7 @@ export const ITEM_REVIEW_WORDS: Record<ItemReview, string> = {
  * on its library id whichever path finds it: through the profile list or
  * through the Sera draft.
  */
-export function itemDedupeKey(origin: "task" | "room" | "hand", ref: string): string;
+export function itemDedupeKey(origin: "task" | "room" | "hand" | "carry", ref: string): string;
 export function itemDedupeKey(origin: "sera", externalId: string): string;
 export function itemDedupeKey(origin: ItemOrigin, ref: string): string {
   return `${origin}:${String(ref).slice(0, 150)}`;
@@ -292,9 +298,23 @@ export function itemDedupeKey(origin: ItemOrigin, ref: string): string {
  */
 export const SERA_CLOSED_NOTE = "Closed in Sera";
 
+/** How a piece of work ended this moon (decision 20). Null until the member says. */
+export const TASK_STATUSES = ["done", "partly", "carry", "let_go", "redirect"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const TASK_STATUS_WORDS: Record<TaskStatus, string> = {
+  done: "Done",
+  partly: "Partly",
+  carry: "Carry",
+  let_go: "Let go",
+  redirect: "Redirect",
+};
+
 export interface RecapItem {
   id: string;
   origin: ItemOrigin;
+  /** `task:`, `sera:`, `room:`, `hand:` or `carry:` and the source's id. */
+  dedupeKey: string;
   text: string;
   originNote: string | null;
   /** YYYY-MM-DD, the day the work was done, when the source knows it. */
@@ -313,6 +333,14 @@ export interface RecapItem {
   review: ItemReview;
   reviewNote: string | null;
   position: number;
+  /** YYYY-MM-DD the task was set: the score counts this moon's tasks only. */
+  setOn: string | null;
+  taskStatus: TaskStatus | null;
+  /** Redirect: who or which role it really belongs to, in words. */
+  redirectTo: string | null;
+  letGoReason: string | null;
+  /** Outside my roles: the role this work really belongs to, for the role audit. */
+  belongsToRoleId: string | null;
 }
 
 /** The fields a member may set on an item while the recap is theirs to edit. */
@@ -328,6 +356,10 @@ export interface ItemFields {
   state?: ItemState;
   visibility?: ItemVisibility;
   position?: number;
+  taskStatus?: TaskStatus | null;
+  redirectTo?: string | null;
+  letGoReason?: string | null;
+  belongsToRoleId?: string | null;
 }
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; field: string; error: string };
@@ -359,6 +391,9 @@ const FIELD_WORDS: Record<string, string> = {
   externalInvoiceKey: "The electronic invoice key",
   fundsSource: "Where the funds came from",
   fxSource: "The rate's source",
+  redirectTo: "Who it belongs to",
+  letGoReason: "Why it was let go",
+  belongsToRoleId: "The role it belongs to",
 };
 
 /** A proof link: http or https, or a path on this village. */
@@ -413,6 +448,19 @@ export function parseItemFields(body: unknown): Parsed<ItemFields> {
     if (!Number.isInteger(n) || n < 0 || n > 10_000) return { ok: false, field: "position", error: "The position is a whole number." };
     out.position = n;
   }
+  if ("taskStatus" in body) {
+    if (body.taskStatus !== null && !(TASK_STATUSES as readonly unknown[]).includes(body.taskStatus)) return { ok: false, field: "taskStatus", error: "A task is Done, Partly, Carry, Let go or Redirect." };
+    out.taskStatus = (body.taskStatus as TaskStatus | null) ?? null;
+  }
+  for (const [key, max] of [["redirectTo", LIMITS.redirectTo], ["letGoReason", LIMITS.letGoReason], ["belongsToRoleId", 64]] as const) {
+    if (key in body) {
+      const t = optText(body[key], max, key);
+      if (!t.ok) return t;
+      out[key] = t.value;
+    }
+  }
+  if (out.taskStatus === "let_go" && "letGoReason" in out && !out.letGoReason) return { ok: false, field: "letGoReason", error: LET_GO_NEEDS_REASON };
+  if (out.taskStatus === "redirect" && "redirectTo" in out && !out.redirectTo) return { ok: false, field: "redirectTo", error: REDIRECT_NEEDS_WHO };
   if (out.text && looksLikePaymentDetails(out.text)) return { ok: false, field: "text", error: PAYMENT_DETAILS_REFUSED };
   return { ok: true, value: out };
 }
@@ -480,6 +528,20 @@ export function endOfMoonFriday(bounds: Pick<CycleBounds, "id" | "clock" | "star
   const { lastDay } = moonDays(bounds, timeZone);
   const back = (weekdayOf(lastDay) - 5 + 7) % 7;
   return addDays(lastDay, -back);
+}
+
+/**
+ * THE SEND-BY DAY (decision 21): the new moon circle day, which is the first
+ * day of the next moon, or the first all-staff on or after it when the
+ * village names one (its weekday, 0 Sunday to 6 Saturday). The moon ending
+ * with the 9 November 2026 new moon gives Monday 9 November. Sending any time
+ * before then counts the same as sending in the room. `endOfMoonFriday` stays
+ * the prepare-by day.
+ */
+export function sendBy(bounds: Pick<CycleBounds, "id" | "clock" | "startsAt" | "endsAt">, timeZone: string, allStaffWeekday: number | null = null): string {
+  const newMoonDay = addDays(moonDays(bounds, timeZone).lastDay, 1);
+  if (allStaffWeekday === null || !Number.isInteger(allStaffWeekday) || allStaffWeekday < 0 || allStaffWeekday > 6) return newMoonDay;
+  return addDays(newMoonDay, (allStaffWeekday - weekdayOf(newMoonDay) + 7) % 7);
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -922,6 +984,7 @@ export function parseAttestation(raw: unknown, route: PayRoute, moon: Pick<MoonD
 // ── The payers document ──────────────────────────────────────────────────────
 
 export const PAYER_KEY = /^[a-z][a-z0-9-]{1,40}$/;
+const EMAIL_RE = /^[^\s@<>(),;:]+@[^\s@<>(),;:]+\.[A-Za-z]{2,}$/;
 
 export const AUTHORITY_KINDS = ["none", "bridge_agreement", "written_authorization"] as const;
 export type AuthorityKind = (typeof AUTHORITY_KINDS)[number];
@@ -950,6 +1013,8 @@ export interface Payer {
   currencies: string[];
   /** Where invoices go: an email address or a link. */
   invoiceTo: string;
+  /** Who is copied on each invoice: email addresses, data only (decision 21). */
+  invoiceCc: string[];
   /** Off means no invoice may be sent to this payer. */
   invoicing: boolean;
   /** The routes this payer pays. */
@@ -996,6 +1061,9 @@ export function parsePayers(raw: unknown): Parsed<PayersDoc> {
     if (!address.ok) return address;
     const invoiceTo = reqText(p.invoiceTo, LIMITS.payerText, "a place invoices go");
     if (!invoiceTo.ok) return invoiceTo;
+    const cc = Array.isArray(p.invoiceCc) ? Array.from(new Set(p.invoiceCc.map((c) => String(c).trim()).filter(Boolean))) : [];
+    if (cc.length > LIMITS.invoiceCc) return { ok: false, field: "invoiceCc", error: `A payer copies ${LIMITS.invoiceCc} addresses at most.` };
+    if (cc.some((c) => !EMAIL_RE.test(c))) return { ok: false, field: "invoiceCc", error: "Each copied address is an email address." };
     const country = String(p.country ?? "").trim().toUpperCase();
     if (!COUNTRY_RE.test(country)) return { ok: false, field: "country", error: "A payer's country is a two-letter code." };
     const currencies = Array.isArray(p.currencies) ? Array.from(new Set(p.currencies.map((c) => String(c).toUpperCase()))) : [];
@@ -1021,6 +1089,7 @@ export function parsePayers(raw: unknown): Parsed<PayersDoc> {
       country,
       currencies,
       invoiceTo: invoiceTo.value,
+      invoiceCc: cc,
       invoicing: p.invoicing === true,
       routes,
       authority: {
@@ -1078,11 +1147,14 @@ export interface BillTo {
   legalName: string;
   address: string;
   taxId: string | null;
+  /** To, beside the work summary. */
   invoiceTo: string;
+  /** Cc, beside the work summary. */
+  invoiceCc: string[];
 }
 
 export function billToOf(p: Payer): BillTo {
-  return { payerKey: p.key, legalName: p.legalName, address: p.address, taxId: p.taxId, invoiceTo: p.invoiceTo };
+  return { payerKey: p.key, legalName: p.legalName, address: p.address, taxId: p.taxId, invoiceTo: p.invoiceTo, invoiceCc: [...p.invoiceCc] };
 }
 
 /** The From block: the member's legal name and address. No tax id. */
@@ -1587,6 +1659,240 @@ export function reviewDedupeKey(kind: string, recapId: string, round: number, re
   return `moon:${kind}:${recapId}:${round}:${recipientUserId}`;
 }
 
+// ── The score (decision 20, spec section 16) ─────────────────────────────────
+
+/**
+ * A score in half-points, so nothing stored is a decimal: Done counts 2
+ * halves, Partly 1, Carry 0. `den` is Done + Partly + Carry.
+ */
+export interface Score {
+  numHalves: number;
+  den: number;
+  /** Whole percent, or null when there is nothing to count. */
+  pct: number | null;
+}
+
+export function scoreOf(numHalves: number, den: number): Score {
+  return { numHalves, den, pct: den > 0 ? Math.round((numHalves / 2 / den) * 100) : null };
+}
+
+/** "12½ of 18, 69%". */
+export function scoreWords(s: Score): string {
+  if (s.den === 0 || s.pct === null) return "Nothing to count yet";
+  const whole = Math.floor(s.numHalves / 2);
+  const half = s.numHalves % 2 === 1 ? "\u00bd" : "";
+  return `${whole}${half} of ${s.den}, ${s.pct}%`;
+}
+
+/** The days at the end of a moon whose new tasks count only when already done. */
+export const LAST_WEEK_DAYS = 7;
+
+export interface TaskScore extends Score {
+  done: number;
+  partly: number;
+  carry: number;
+  /** Left out of the count, and why. */
+  leftOut: { letGo: number; redirect: number; lastWeekNotDone: number; olderThanMoon: number };
+}
+
+/**
+ * THE TASK SCORE: (Done + half of Partly) over (Done + Partly + Carry).
+ *
+ *   1. This moon only: a task set before the moon's first day never counts
+ *      (it is triaged once). An item with no set day was made in this recap,
+ *      so it counts.
+ *   2. The last week: a task set in the moon's final seven days counts only
+ *      if it is Done; otherwise it moves to the next moon untouched.
+ *   Let go and Redirect are left out. Dropped items and items with no status
+ *   are not tasks scored this moon.
+ */
+export function taskScore(items: readonly Pick<RecapItem, "state" | "taskStatus" | "setOn">[], moon: Pick<MoonDays, "firstDay" | "lastDay">): TaskScore {
+  const lastWeekFrom = addDays(moon.lastDay, -(LAST_WEEK_DAYS - 1));
+  const out: TaskScore = { numHalves: 0, den: 0, pct: null, done: 0, partly: 0, carry: 0, leftOut: { letGo: 0, redirect: 0, lastWeekNotDone: 0, olderThanMoon: 0 } };
+  for (const i of items) {
+    if (i.state === "dropped" || !i.taskStatus) continue;
+    if (i.setOn && i.setOn < moon.firstDay) { out.leftOut.olderThanMoon += 1; continue; }
+    if (i.taskStatus === "let_go") { out.leftOut.letGo += 1; continue; }
+    if (i.taskStatus === "redirect") { out.leftOut.redirect += 1; continue; }
+    if (i.setOn && i.setOn >= lastWeekFrom && i.taskStatus !== "done") { out.leftOut.lastWeekNotDone += 1; continue; }
+    out[i.taskStatus] += 1;
+  }
+  return { ...out, ...scoreOf(out.done * 2 + out.partly, out.done + out.partly + out.carry) };
+}
+
+/**
+ * SEAT COVERAGE: the share of the member's role accountabilities with at
+ * least one kept item this moon. Outside my roles work never counts here; it
+ * counts toward season goals and feeds the role audit.
+ */
+export function seatCoverage(seats: readonly Pick<RoleCardForCoverage, "roleId" | "accountabilities">[], items: readonly Pick<RecapItem, "state" | "roleId" | "accountabilityWords" | "review">[]): { on: number; total: number; pct: number | null } {
+  let on = 0;
+  let total = 0;
+  for (const r of seats) {
+    for (const a of r.accountabilities) {
+      total += 1;
+      if (items.some((i) => i.state === "kept" && i.review !== "returned" && i.roleId === r.roleId && !!i.accountabilityWords && norm(i.accountabilityWords) === norm(a))) on += 1;
+    }
+  }
+  return { on, total, pct: total > 0 ? Math.round((on / total) * 100) : null };
+}
+
+// ── Moon goals (decision 20) ─────────────────────────────────────────────────
+
+export const GOAL_STATUSES = ["open", "done", "partly", "carried", "let_go"] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
+
+export const GOAL_STATUS_WORDS: Record<GoalStatus, string> = {
+  open: "Open",
+  done: "Done",
+  partly: "Partly",
+  carried: "Carry",
+  let_go: "Let go",
+};
+
+/** Each member sets three to five goals for the next moon. */
+export const GOALS_MIN = 3;
+export const GOALS_MAX = 5;
+/** A goal carried this many times is flagged for the circle. */
+export const CARRY_FLAG_AT = 2;
+
+export interface MoonGoal {
+  id: string;
+  userId: string;
+  cycleId: string;
+  position: number;
+  text: string;
+  doneWhen: string | null;
+  seasonGoalId: string | null;
+  status: GoalStatus;
+  letGoReason: string | null;
+  carriedFromId: string | null;
+  carryCount: number;
+  setAt: string | null;
+  scoredAt: string | null;
+}
+
+/**
+ * THE GOAL SCORE, the task formula over the member's moon goals. Let go is
+ * left out. An Open goal has not been scored yet and is left out too, and
+ * `unscored` says how many.
+ */
+export function goalScore(goals: readonly Pick<MoonGoal, "status">[]): Score & { unscored: number } {
+  const n = (st: GoalStatus) => goals.filter((g) => g.status === st).length;
+  const done = n("done");
+  const partly = n("partly");
+  const carried = n("carried");
+  return { ...scoreOf(done * 2 + partly, done + partly + carried), unscored: n("open") };
+}
+
+/** A goal or task carried twice is flagged: do it, reshape it, hand it on, or let it go. */
+export function carriedTooOften(g: Pick<MoonGoal, "carryCount">): boolean {
+  return g.carryCount >= CARRY_FLAG_AT;
+}
+
+export const CARRY_FLAG_WORDS = "Carried twice. Do it, reshape it, hand it on, or let it go.";
+
+/** Score one goal. Let go needs a reason. */
+export function goalScoreProblem(status: GoalStatus, letGoReason: string | null | undefined): string | null {
+  if (status === "let_go" && !String(letGoReason ?? "").trim()) return LET_GO_NEEDS_REASON;
+  return null;
+}
+
+export interface GoalInput {
+  text: string;
+  doneWhen: string | null;
+  seasonGoalId: string | null;
+}
+
+/** Read the next moon's goals: three to five, each with words, a done-when line optional. */
+export function parseMoonGoals(raw: unknown): Parsed<GoalInput[]> {
+  if (!Array.isArray(raw)) return { ok: false, field: "goals", error: "Send the next moon's goals as a list." };
+  const out: GoalInput[] = [];
+  for (const g of raw) {
+    if (!isObj(g)) return { ok: false, field: "goals", error: "Each goal is a set of fields." };
+    const text = optText(g.text, LIMITS.goalText, "text");
+    if (!text.ok) return text;
+    if (!text.value) continue;
+    const doneWhen = optText(g.doneWhen, LIMITS.goalDoneWhen, "note");
+    if (!doneWhen.ok) return doneWhen;
+    const goalId = optText(g.seasonGoalId, 64, "seasonGoalId");
+    if (!goalId.ok) return goalId;
+    out.push({ text: text.value, doneWhen: doneWhen.value, seasonGoalId: goalId.value });
+  }
+  if (out.length < GOALS_MIN || out.length > GOALS_MAX) return { ok: false, field: "goals", error: `Set ${GOALS_MIN} to ${GOALS_MAX} goals for the next moon.` };
+  return { ok: true, value: out };
+}
+
+// ── Rolling over at send ─────────────────────────────────────────────────────
+
+/** The items a sent recap carries into the next moon: every Partly and Carry. */
+export function carriedItems(items: readonly RecapItem[]): Array<{ dedupeKey: string; text: string; roleId: string | null; seasonGoalId: string | null; setOn: string | null }> {
+  return items
+    .filter((i) => i.state !== "dropped" && (i.taskStatus === "partly" || i.taskStatus === "carry"))
+    .map((i) => ({ dedupeKey: itemDedupeKey("carry", i.id), text: i.text, roleId: i.roleId, seasonGoalId: i.seasonGoalId, setOn: i.setOn }));
+}
+
+/** The goals a scored moon carries into the next: every goal not Done and not Let go, one carry more. */
+export function carriedGoals(goals: readonly MoonGoal[]): Array<{ carriedFromId: string; text: string; doneWhen: string | null; seasonGoalId: string | null; carryCount: number }> {
+  return goals
+    .filter((g) => g.status === "partly" || g.status === "carried" || g.status === "open")
+    .map((g) => ({ carriedFromId: g.id, text: g.text, doneWhen: g.doneWhen, seasonGoalId: g.seasonGoalId, carryCount: g.carryCount + 1 }));
+}
+
+// ── Closing the loop in Sera ─────────────────────────────────────────────────
+
+/** The library id behind an item, when Sera sent it. */
+export function seraExternalId(item: Pick<RecapItem, "dedupeKey">): string | null {
+  return item.dedupeKey.startsWith("sera:") ? item.dedupeKey.slice(5) : null;
+}
+
+/**
+ * What to tell Sera once the work is approved: each item Sera sent that the
+ * member marked Done or Let go closes, and each Redirect goes with its words.
+ * Only tasks Sera sent. The caller sends these through the feedback outbox
+ * (server/lib/memberTaskBridge.ts), keyed on the item id so a repeat is a
+ * no-op.
+ */
+export function seraClosures(items: readonly RecapItem[]): Array<{ itemId: string; externalId: string; action: "done" | "let_go" | "redirect"; note: string | null }> {
+  const out: Array<{ itemId: string; externalId: string; action: "done" | "let_go" | "redirect"; note: string | null }> = [];
+  for (const i of items) {
+    const ext = seraExternalId(i);
+    if (!ext || i.state === "dropped") continue;
+    if (i.taskStatus === "done") out.push({ itemId: i.id, externalId: ext, action: "done", note: null });
+    else if (i.taskStatus === "let_go") out.push({ itemId: i.id, externalId: ext, action: "let_go", note: i.letGoReason });
+    else if (i.taskStatus === "redirect") out.push({ itemId: i.id, externalId: ext, action: "redirect", note: i.redirectTo });
+  }
+  return out;
+}
+
+// ── Outside my roles in the role audit (check 23) ────────────────────────────
+
+/**
+ * Every kept Outside my roles item, with the role it really belongs to named
+ * (or "No role yet"), and the Fill signals: a role with no holder that two or
+ * more such items name.
+ */
+export function outsideRolesAudit(input: {
+  items: readonly Pick<RecapItem, "id" | "text" | "state" | "roleId" | "belongsToRoleId">[];
+  heldRoleIds: readonly string[];
+  roleNames: Readonly<Record<string, string>>;
+  emptyRoleIds: readonly string[];
+}): { items: Array<{ itemId: string; text: string; belongsToRoleId: string | null; belongsTo: string }>; fill: Array<{ roleId: string; name: string; count: number }> } {
+  const outside = input.items.filter((i) => i.state === "kept" && (!i.roleId || !input.heldRoleIds.includes(i.roleId)));
+  const items = outside.map((i) => ({ itemId: i.id, text: i.text, belongsToRoleId: i.belongsToRoleId, belongsTo: i.belongsToRoleId ? input.roleNames[i.belongsToRoleId] ?? i.belongsToRoleId : NO_ROLE_YET }));
+  const counts = new Map<string, number>();
+  for (const i of outside) if (i.belongsToRoleId && input.emptyRoleIds.includes(i.belongsToRoleId)) counts.set(i.belongsToRoleId, (counts.get(i.belongsToRoleId) ?? 0) + 1);
+  const fill = Array.from(counts, ([roleId, count]) => ({ roleId, name: input.roleNames[roleId] ?? roleId, count })).filter((f) => f.count >= 2);
+  return { items, fill };
+}
+
+export const NO_ROLE_YET = "No role yet";
+
+/** "Fill this role: 3 pieces of work this moon sat under it." */
+export function fillSignalWords(name: string, count: number): string {
+  return `Fill ${name}: ${count} pieces of work this moon belonged to it.`;
+}
+
 // ── The routes: request and response shapes ──────────────────────────────────
 
 /**
@@ -1603,6 +1909,9 @@ export const MOON_ROUTES = {
   sendInvoice: "/api/me/moon/:cycle/send-invoice",
   takeBack: "/api/me/moon/:cycle/take-back",
   rangeAnswer: "/api/me/moon/:cycle/range-answer",
+  nextGoals: "/api/me/moon/:cycle/goals",
+  scoreGoal: "/api/me/moon/goals/:id",
+  triage: "/api/me/moon/:cycle/triage",
   payRoute: "/api/me/pay-route",
   memberMoon: "/api/members/:handle/moon",
   queue: "/api/moon-review/queue",
@@ -1626,7 +1935,10 @@ export interface MoonRef {
   firstDay: string;
   lastDay: string;
   periodWords: string;
+  /** The prepare-by day. */
   endOfMoonFriday: string;
+  /** The send-by day: the new moon circle (decision 21). */
+  sendBy: string;
 }
 
 export interface RoleHeld {
@@ -1704,6 +2016,16 @@ export interface MyMoonResponse {
   seasonGoals: SeasonGoalRef[];
   ownGoals: string[];
   moonLoad: number | null;
+  /** The two rings at the top (decision 20). */
+  taskScore: TaskScore;
+  seatCoverage: { on: number; total: number; pct: number | null };
+  lastMoonGoals: Array<MoonGoal & { flagged: boolean }>;
+  goalScore: Score & { unscored: number };
+  /** Carried goals first. */
+  nextMoonGoals: Array<MoonGoal & { flagged: boolean }>;
+  /** Older open Sera tasks, shown once for triage. Never in the score. */
+  backlog: Array<{ taskId: string; title: string; createdOn: string | null }>;
+  outsideRoles: ReturnType<typeof outsideRolesAudit>;
   /** Shown only when a role's terms carry money. */
   invoiceNeeded: boolean;
   noTermsLine: string | null;
@@ -1737,6 +2059,22 @@ export interface ItemResponse {
 export interface SendRecapRequest {
   ownWords?: string | null;
   roleAudit?: RoleAudit;
+}
+
+/** `PUT /api/me/moon/:cycle/goals`: the next moon's three to five goals. */
+export interface NextGoalsRequest {
+  goals: GoalInput[];
+}
+
+/** `PATCH /api/me/moon/goals/:id`: score one of last moon's goals. */
+export interface ScoreGoalRequest {
+  status: Exclude<GoalStatus, "open">;
+  letGoReason?: string | null;
+}
+
+/** `POST /api/me/moon/:cycle/triage`: the one-time triage of older open Sera tasks. */
+export interface TriageRequest {
+  tasks: Array<{ taskId: string; action: "done" | "let_go" | "redirect"; note?: string | null }>;
 }
 
 export interface SendRecapResponse {
@@ -1862,6 +2200,12 @@ export interface RoomResponse {
   } | null;
   /** Who is ready to share. Nobody is marked as not ready. */
   ready: Array<{ userId: string; name: string }>;
+  /** The `moon_goals` section: the holder's last-moon goals with their score, then the next moon's. */
+  goals: {
+    last: Array<{ text: string; status: GoalStatus; flagged: boolean }>;
+    score: Score;
+    next: Array<{ text: string; doneWhen: string | null }>;
+  } | null;
   /** This viewer's own row in the sending section. */
   mine: { recapStatus: RecapStatus | null; statusWords: string; invoiceNeeded: boolean } | null;
   sentCount: number;
@@ -1889,6 +2233,16 @@ export const ITEM_TEXT_EMPTY = "Say what the work was, in a few words.";
 export const PAYMENT_DETAILS_REFUSED = "This looks like a bank or card number. Payment details are never stored here.";
 export const ATTESTATION_MISSING = "Fill in the moon attestation before you send the invoice.";
 export const NAMES_A_MEMBER = "This item names another member. Reword it to say what you delivered.";
+
+/** "Send by Monday 9 November 2026. Sending any time before then counts the same as sending in the room." */
+export function sendByLine(day: string): string {
+  return `Send by ${WEEKDAYS[weekdayOf(day)]} ${dayWords(day)}. Sending any time before then counts the same as sending in the room.`;
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export const LET_GO_NEEDS_REASON = "Say why it was let go, in a few words.";
+export const REDIRECT_NEEDS_WHO = "Say who or which role it belongs to.";
 
 export const SUPPORT_LINE = "A support document for your own invoice. The invoice you issue yourself is the legal one.";
 
@@ -1932,7 +2286,10 @@ export const MOON_WORDS = {
   copyEmail: "Copy for email",
   printable: "Open printable invoice",
   noRecapRoles: "You held no role this moon, so there is nothing to recap.",
-  sundayLine: "Sending by Sunday counts the same as sending in the room.",
+  prepareBy: "Prepare by",
+  sendBy: "Send by",
+  to: "To",
+  cc: "Cc",
   acceptRange: "Accept",
   talkRange: "Ask to talk",
 } as const;
