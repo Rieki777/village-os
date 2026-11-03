@@ -69,16 +69,18 @@ export function register(app: Express, deps: Deps): void {
     return parsed.ok ? parsed.value : spec.empty;
   }
 
-  /** The two handlers for one document. Registered below with literal paths, so the route walkers can read them. */
+  /**
+   * The two bodies for one document. Each route below is registered with its
+   * literal path and asks the cash key on its own line, so the route walkers
+   * (the PII walk and the route-limit check) can read both from the source.
+   */
   function handlers<T>(spec: DocSpec<T>, extra: (doc: T) => Record<string, unknown> = () => ({})) {
-    const get: RequestHandler = async (req, res) => {
-      if (!(await guardCapability(req, res, "cash.pay"))) return;
+    const get: RequestHandler = async (_req, res) => {
       const doc = await read(spec);
       res.json({ document: doc, ...extra(doc) });
     };
 
     const put: RequestHandler = async (req, res) => {
-      if (!(await guardCapability(req, res, "cash.pay"))) return;
       const actor = await authedUser(req);
       if (!actor) return res.status(401).json({ error: "auth_required" });
       if (await overLimit(`moon-settings:${actor.id}`, 60, 60 * 60 * 1000)) {
@@ -113,10 +115,28 @@ export function register(app: Express, deps: Deps): void {
   const payersDoor = handlers(payers, (doc) => ({ gaps: words(payerGapKeys(doc)) }));
   const settingsDoor = handlers(settings, (doc) => ({ gaps: words(settingsGapKeys(doc)) }));
   const rhythmDoor = handlers(rhythm);
-  app.get("/api/moon-review/payers", payersDoor.get);
-  app.put("/api/moon-review/payers", payersDoor.put);
-  app.get("/api/moon-review/settings", settingsDoor.get);
-  app.put("/api/moon-review/settings", settingsDoor.put);
-  app.get("/api/moon-review/rhythm", rhythmDoor.get);
-  app.put("/api/moon-review/rhythm", rhythmDoor.put);
+  app.get("/api/moon-review/payers", async (req, res, next) => {
+    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    return payersDoor.get(req, res, next);
+  });
+  app.put("/api/moon-review/payers", async (req, res, next) => {
+    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    return payersDoor.put(req, res, next);
+  });
+  app.get("/api/moon-review/settings", async (req, res, next) => {
+    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    return settingsDoor.get(req, res, next);
+  });
+  app.put("/api/moon-review/settings", async (req, res, next) => {
+    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    return settingsDoor.put(req, res, next);
+  });
+  app.get("/api/moon-review/rhythm", async (req, res, next) => {
+    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    return rhythmDoor.get(req, res, next);
+  });
+  app.put("/api/moon-review/rhythm", async (req, res, next) => {
+    if (!(await guardCapability(req, res, "cash.pay"))) return;
+    return rhythmDoor.put(req, res, next);
+  });
 }
