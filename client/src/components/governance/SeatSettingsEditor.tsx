@@ -65,7 +65,7 @@ export const EDITOR_WORDS = {
 } as const;
 
 const quietButton =
-  "inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-teal-deep hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep";
+  "inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-notice hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 const asSettings = (v: unknown): SeatSettings =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as SeatSettings) : emptySettings();
@@ -114,21 +114,21 @@ function GroupRow({
   const open = honest !== null && !row.set;
 
   return (
-    <section aria-labelledby={headId} className="rounded-xl border border-stone-200 bg-white p-3" data-settings-group={group}>
+    <section aria-labelledby={headId} className="rounded-xl border border-border bg-card p-3" data-settings-group={group}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 id={headId} className="text-xs font-semibold uppercase tracking-wide text-stone-800">
+          <h4 id={headId} className="text-xs font-semibold uppercase tracking-wide text-foreground">
             {GROUP_LABELS[group]}
           </h4>
           {honest && <p className="mt-0.5 text-xs text-muted-foreground">{GROUP_PLAIN[group]}</p>}
-          <p className={`mt-0.5 text-sm ${row.set ? "text-stone-900" : "text-stone-500"}`}>{open ? honest : row.headline}</p>
-          {row.moneyLine && <p className="mt-0.5 text-xs text-stone-600">{row.moneyLine}</p>}
+          <p className={`mt-0.5 break-words text-sm ${row.set ? "text-foreground" : "text-muted-foreground"}`}>{open ? honest : row.headline}</p>
+          {row.moneyLine && <p className="mt-0.5 text-xs text-muted-foreground">{row.moneyLine}</p>}
           {honest && row.set && <p className="mt-0.5 text-xs text-muted-foreground">{honest}</p>}
           {(honest === null || customised) && (
-            <p className="mt-0.5 text-xs text-stone-500">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {honest === null && (preset ? `${EDITOR_WORDS.startedFrom} ${preset.label}` : EDITOR_WORDS.noPreset)}
               {customised && (
-                <span className="ml-1.5 rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
+                <span className="ml-1.5 rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-foreground">
                   {EDITOR_WORDS.customised}
                 </span>
               )}
@@ -175,7 +175,7 @@ function GroupRow({
       </div>
 
       <div id={presetsId} role="group" aria-labelledby={`${presetsId}-head`} hidden={panel !== "presets"} className="mt-3">
-        <p id={`${presetsId}-head`} className="mb-2 text-sm font-semibold text-stone-900">
+        <p id={`${presetsId}-head`} className="mb-2 text-sm font-semibold text-foreground">
           {EDITOR_WORDS.choosePreset(GROUP_LABELS[group])}
         </p>
         <ul className="grid gap-2 sm:grid-cols-2">
@@ -190,16 +190,16 @@ function GroupRow({
                     onChange(applyPreset(settings, o));
                     setPanel("none");
                   }}
-                  className={`flex min-h-[44px] w-full flex-col items-start rounded-lg border-2 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep ${
-                    current ? "border-teal-deep bg-teal-deep/5" : "border-stone-200 hover:border-stone-400"
+                  className={`flex min-h-[44px] w-full flex-col items-start rounded-lg border-2 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    current ? "border-notice bg-notice/10" : "border-border hover:bg-muted"
                   }`}
                 >
-                  <span className="flex items-center gap-1.5 text-sm font-semibold text-stone-900">
+                  <span className="flex items-center gap-1.5 break-words text-sm font-semibold text-foreground">
                     {o.label}
-                    {current && <Check className="size-4 text-teal-deep" aria-hidden="true" />}
+                    {current && <Check className="size-4 text-notice" aria-hidden="true" />}
                   </span>
-                  <span className="mt-0.5 text-xs text-stone-600">{o.blurb}</span>
-                  {previewOf(o) && <span className="mt-1 text-xs font-medium text-stone-800">{previewOf(o)}</span>}
+                  <span className="mt-0.5 text-xs text-muted-foreground">{o.blurb}</span>
+                  {previewOf(o) && <span className="mt-1 break-words text-xs font-medium text-foreground">{previewOf(o)}</span>}
                 </button>
               </li>
             );
@@ -208,7 +208,7 @@ function GroupRow({
       </div>
 
       <div id={fieldsId} hidden={panel !== "fields"} className="mt-3">
-        {group === "pay" && <p className="mb-2 text-xs text-stone-600 leading-relaxed">{EDITOR_WORDS.payHelp}</p>}
+        {group === "pay" && <p className="mb-2 text-xs leading-relaxed text-muted-foreground">{EDITOR_WORDS.payHelp}</p>}
         {panel === "fields" && <SeatSettingsFields group={group} settings={settings} onChange={onChange} />}
       </div>
 
@@ -265,9 +265,9 @@ export default function SeatSettingsEditor({
 
   return (
     <div className="space-y-3" data-seat-settings-editor="">
-      <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
-        <p className="text-sm font-semibold text-stone-900">{EDITOR_WORDS.wholeLead}</p>
-        <p className="text-xs text-stone-600">{EDITOR_WORDS.wholeSub}</p>
+      <div className="rounded-xl border border-border bg-muted p-3">
+        <p className="text-sm font-semibold text-foreground">{EDITOR_WORDS.wholeLead}</p>
+        <p className="text-xs text-muted-foreground">{EDITOR_WORDS.wholeSub}</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {WHOLE_PRESETS.map((w) => (
             <button
@@ -275,7 +275,7 @@ export default function SeatSettingsEditor({
               type="button"
               title={w.blurb}
               onClick={() => onChange(applyWholePreset(settings, w, villagePresets))}
-              className="inline-flex min-h-[44px] items-center rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+              className="inline-flex min-h-[44px] max-w-full items-center whitespace-normal rounded-lg border border-border bg-card px-3 text-left text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {w.label}
             </button>

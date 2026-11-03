@@ -112,7 +112,7 @@ function SharePanel({
           <fieldset className="grid gap-2">
             <legend className="mb-1 text-sm font-semibold text-foreground">{RP_WORDS.whoReads}</legend>
             {audiences.map((a) => (
-              <label key={a.key} className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-lg border p-3 ${share.audience === a.key ? "border-teal-deep bg-teal-deep/5" : "border-border"}`}>
+              <label key={a.key} className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-lg border p-3 ${share.audience === a.key ? "border-dash-gold bg-dash-gold/10" : "border-border"}`}>
                 <input
                   type="radio"
                   name="rp-audience"
@@ -127,7 +127,7 @@ function SharePanel({
                       if (!ok) onShare(before);
                     });
                   }}
-                  className={`mt-0.5 size-5 shrink-0 accent-teal-deep ${FOCUS}`}
+                  className={`mt-0.5 size-5 shrink-0 accent-dash-gold ${FOCUS}`}
                 />
                 <span className="grid gap-0.5">
                   <span className="font-medium text-foreground">{a.label}</span>

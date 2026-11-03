@@ -167,7 +167,7 @@ export default function BringInRole({
       aria-pressed={mode === m}
       onClick={() => setMode(m)}
       className={`inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium ${FOCUS} ${
-        mode === m ? "border-teal-deep bg-teal-deep text-white" : "border-border bg-card text-foreground"
+        mode === m ? "border-dash-gold bg-dash-gold text-dash-gold-ink" : "border-border bg-card text-foreground"
       }`}
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
@@ -305,7 +305,7 @@ export default function BringInRole({
                     return (
                       <li key={c.path} data-change={c.path} data-ticked={on ? "true" : "false"} className={`min-w-0 rounded-xl border p-3 ${on ? "border-notice border-l-4 bg-notice/10" : "border-border bg-card"}`}>
                         <label className="flex min-h-[44px] items-start gap-3">
-                          <input type="checkbox" className="mt-1 size-5 shrink-0 accent-teal-deep" checked={on} disabled={blocked} onChange={() => toggle(c.path)} aria-label={RC_WORDS.keep(title)} />
+                          <input type="checkbox" className="mt-1 size-5 shrink-0 accent-dash-gold" checked={on} disabled={blocked} onChange={() => toggle(c.path)} aria-label={RC_WORDS.keep(title)} />
                           <span className="grid min-w-0 gap-1">
                             <span className="break-words font-semibold text-foreground">{title}</span>
                             {c.kind === "role" ? (

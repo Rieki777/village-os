@@ -1568,6 +1568,10 @@ html {
   --sheet-earned-lit: var(--sheet-earned-highlight, #f2ce85);
   --destructive: var(--sheet-warn, #e0805e);
   --destructive-foreground: var(--sheet-ground, #0d1411);
+  /* Platform coral (#9b4030) is a dark ink measured on white. On this ground
+     it falls under 3:1, so an error line disappears. .text-coral reads
+     --color-coral, and the sheet's warn already clears 5.80:1 on the panel. */
+  --color-coral: var(--sheet-warn, #e0805e);
 
   /* The two accents this world is built on. --sheet-earned is live: it is the
      focus ring, the ring on the fronted character, and (through --sheet-notice
@@ -1651,6 +1655,14 @@ html {
  */
 .sheet-night .shadow-sm {
   box-shadow: var(--sheet-shadow, 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 40px -22px rgb(0 0 0 / 0.9));
+}
+
+/* Pay chips and other `text-primary` labels. --primary stays the village's
+   brand (a button fill), and on an unbranded fork that fill is #404040.
+   As text on this ground that is about 1.7:1. Text only: a filled primary
+   button keeps its own foreground. */
+.sheet-night .text-primary {
+  color: var(--foreground);
 }
 
 /* The foil around a seat card. Read off the night tokens on the same element,

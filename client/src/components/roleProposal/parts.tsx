@@ -15,10 +15,10 @@ import type { SaveStatus } from "./useAutosave";
 import type { WordValue } from "@shared/roleProposals";
 
 export const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-export const INPUT = `w-full rounded-lg border border-border bg-card px-3 py-2 text-base text-foreground ${FOCUS}`;
-export const PRIMARY = `inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-dash-gold px-4 font-semibold text-dash-gold-ink hover:opacity-90 disabled:opacity-50 ${FOCUS}`;
-export const SECONDARY = `inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-4 font-medium text-foreground hover:bg-muted disabled:opacity-50 ${FOCUS}`;
-export const QUIET = `inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-dash-gold-lit hover:bg-muted ${FOCUS}`;
+export const INPUT = `min-h-[44px] w-full rounded-lg border border-border bg-card px-3 py-2 text-base text-foreground ${FOCUS}`;
+export const PRIMARY = `inline-flex min-h-[44px] max-w-full items-center justify-center gap-1.5 whitespace-normal rounded-lg bg-dash-gold px-4 text-center font-semibold text-dash-gold-ink hover:opacity-90 disabled:opacity-50 ${FOCUS}`;
+export const SECONDARY = `inline-flex min-h-[44px] max-w-full items-center justify-center gap-1.5 whitespace-normal rounded-lg border border-border bg-card px-4 text-center font-medium text-foreground hover:bg-muted disabled:opacity-50 ${FOCUS}`;
+export const QUIET = `inline-flex min-h-[44px] max-w-full items-center gap-1.5 whitespace-normal rounded-lg px-3 text-sm font-medium text-dash-gold-lit hover:bg-muted ${FOCUS}`;
 export const PANEL = "rounded-xl border border-border bg-card p-4 text-foreground";
 export const H2 = "font-display text-xl text-foreground";
 export const LEDE = "text-sm leading-relaxed text-muted-foreground";

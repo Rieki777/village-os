@@ -106,7 +106,7 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
       <li key={r.id}>
         <label
           htmlFor={id}
-          className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-lg border p-3 ${on ? "border-teal-deep bg-teal-deep/5" : "border-border bg-card hover:bg-muted"}`}
+          className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-lg border p-3 ${on ? "border-dash-gold bg-dash-gold/10" : "border-border bg-card hover:bg-muted"}`}
         >
           <input
             id={id}
@@ -114,7 +114,7 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
             checked={on}
             disabled={!on && atMost}
             onChange={() => onToggle(r.id)}
-            className={`mt-0.5 size-5 shrink-0 accent-teal-deep ${FOCUS}`}
+            className={`mt-0.5 size-5 shrink-0 accent-dash-gold ${FOCUS}`}
           />
           <span className="grid min-w-0 gap-0.5">
             <span className="break-words font-semibold text-foreground">{r.name}</span>
@@ -157,8 +157,8 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
               {g.key === "youHold" &&
                 strays.map((s) => (
                   <li key={s.roleId}>
-                    <label className="flex min-h-[44px] items-center gap-3 rounded-lg border border-teal-deep bg-teal-deep/5 p-3">
-                      <input type="checkbox" checked onChange={() => onToggle(s.roleId)} className={`size-5 accent-teal-deep ${FOCUS}`} />
+                    <label className="flex min-h-[44px] items-center gap-3 rounded-lg border border-dash-gold bg-dash-gold/10 p-3">
+                      <input type="checkbox" checked onChange={() => onToggle(s.roleId)} className={`size-5 accent-dash-gold ${FOCUS}`} />
                       <span className="break-words font-semibold text-foreground">{s.name}</span>
                     </label>
                   </li>
