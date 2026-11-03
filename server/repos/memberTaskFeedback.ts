@@ -304,3 +304,16 @@ export async function recentRemovalSent(db: Queryable, userId: string, seconds =
   );
   return rows.length > 0;
 }
+
+/** The last linked-members sync, as a short JSON record (member_task_bridge setting). */
+export async function setSyncRecord(db: Queryable, json: string): Promise<void> {
+  await db.query(
+    "INSERT INTO `member_task_bridge` (`setting`, `value`) VALUES ('member_sync_last', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
+    [json.slice(0, 200)],
+  );
+}
+
+export async function syncRecord(db: Queryable): Promise<string | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `value` FROM `member_task_bridge` WHERE `setting` = 'member_sync_last'");
+  return rows.length ? String(rows[0].value) : null;
+}

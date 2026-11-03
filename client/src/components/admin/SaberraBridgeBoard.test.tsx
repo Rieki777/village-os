@@ -97,3 +97,11 @@ describe("the quest feed card", () => {
     expect(screen.getByText("3 quests from Sera waiting for a steward.")).toBeTruthy();
   });
 });
+
+describe("the sync health card", () => {
+  it("raises an alert when the sync is behind", () => {
+    const a: BridgeAnswer = { ...base, sync: { at: new Date(before - 9 * 3_600_000).toISOString(), ok: true, status: "ok", members: 1, errors: 0 } };
+    render(<BridgeView a={a} now={before} />);
+    expect(screen.getByRole("alert").textContent).toMatch(/^Behind/);
+  });
+});
