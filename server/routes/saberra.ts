@@ -69,6 +69,7 @@ import { moduleConfig } from "../lib/modules";
 import { httpsAddress } from "@shared/modules";
 import { factsForEntity, moduleFactCount } from "../repos/moduleFacts";
 import { outboxView } from "../lib/saberraOutbox";
+import { bridgeReading } from "../repos/saberraBridge";
 
 type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser">;
 
@@ -99,6 +100,23 @@ export function register(app: Express, deps: Deps): void {
       res.json({ connection, held, addressSet: addressSet() });
     } catch {
       res.status(500).json({ error: "Could not read the connection." });
+    }
+  });
+
+  /**
+   * The bridge board: counts only, the same gate as the status read. Nothing
+   * is sent to the service and nothing is written.
+   */
+  app.get("/api/saberra/bridge", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    try {
+      const pool = getPool();
+      const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
+      const held = await moduleFactCount(pool, MODULE_ID);
+      const rest = await bridgeReading(pool);
+      res.json({ connection: { mayCall: connection.mayCall, addressSet: addressSet(), held }, ...rest });
+    } catch {
+      res.status(500).json({ error: "Could not read the bridge." });
     }
   });
 
