@@ -49,7 +49,13 @@ export const TOKEN_PREFIX = "vat_";
  * the holder does that on the map. Only a holder who may draft the land
  * (`map.edit`) gets anything from it, like every scope here.
  */
-export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft"] as const;
+/*
+ * `moon.read` and `tasks.write` open the village connector
+ * (server/lib/agentMcp.ts, `POST /api/agent/v1/mcp`): the holder's own moon,
+ * roles and season, and the holder's own task board pressed through the two
+ * calls. Both are opt-in, unlike the three reads below (addendum v6, B4).
+ */
+export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write"] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 /** Read scopes are on by default in the panel; writes are opt-in. */

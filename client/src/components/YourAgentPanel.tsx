@@ -50,6 +50,8 @@ const SCOPE_WORDS: Record<string, string> = {
   "rsvp.write": "answer a gathering, after your yes",
   "intents.write": "post what you seek or offer, after your yes",
   "map.draft": "read the masterplan and draft the village map for you to review and publish",
+  "moon.read": "read your moon, your roles, the season and your task board",
+  "tasks.write": "mark your own board tasks Done, Let go or Undo, after your yes",
 };
 
 const TIER_WORDS: Record<Profile["aboutTier"], string> = {

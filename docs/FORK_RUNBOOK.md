@@ -2060,3 +2060,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## Task boards start on (`memberTasks.listDefault`, 2026-11-03, no migration)
 
 - The game variable `memberTasks.listDefault` (boolean, default `true`, "Every member has a task board unless a steward turns one off") decides a member's task board when they have no `member_task_access` row. A steward's explicit off still keeps a board off. No rows are written, so a village that sets the variable to `false` gets exactly the earlier behaviour back, where a board stays off until a steward turns it on.
+
+## The village connector (`POST /api/agent/v1/mcp`, 2026-11-03, no migration)
+
+- A remote MCP server on the existing `vat_` agent tokens. A member mints a token under Your agent with `moon.read` (their moon, roles, season and task board) and, if they want, `tasks.write` (their own board pressed Done, Let go or Undo, each write asked first and confirmed), then adds `<origin>/api/agent/v1/mcp` to their client with `Authorization: Bearer <token>`. Every tool runs the member's own route over the loopback at `127.0.0.1:$PORT`, so nothing new needs provisioning, and the connector's name is the village's own name setting. OAuth sign-in for Claude's custom connectors comes with the next piece.
