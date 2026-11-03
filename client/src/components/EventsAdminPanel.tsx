@@ -403,7 +403,7 @@ export default function EventsAdminPanel({ password }: { password: string }) {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Calendar</h2>
+      <h2 id="integration-calendar" tabIndex={-1} className="text-xl font-bold text-gray-900 mb-1">Calendar</h2>
       <p className="text-sm text-gray-500 mb-5">
         The village calendar: gatherings you write here, the thirteen moons by name, and calendars you attach
         from elsewhere. Everything starts as a draft, so nothing reaches the calendar until you publish it.

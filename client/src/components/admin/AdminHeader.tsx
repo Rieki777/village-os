@@ -13,7 +13,7 @@ import "./adminNight.css";
 
 const DAY = "bg-teal-deep text-white shadow-md";
 const NIGHT = "border-b border-border bg-card text-card-foreground shadow-sm";
-const CONTROL = "inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium";
+const CONTROL = "min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium";
 
 export default function AdminHeader({
   villageName,
@@ -47,14 +47,14 @@ export default function AdminHeader({
   const quiet = night ? "text-muted-foreground" : "text-white";
 
   return (
-    <header className={`px-4 py-2 sm:px-6 sm:py-4 ${night ? NIGHT : DAY}`}>
+    <header className={`sticky top-0 z-30 px-3 py-2 sm:px-6 sm:py-4 ${night ? NIGHT : DAY}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-3">
           <div className={`hidden h-11 w-11 shrink-0 items-center justify-center rounded-lg border sm:flex ${night ? "border-border bg-muted" : "border-white"}`}>
             <Lock className="h-4 w-4" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-base font-semibold leading-tight sm:text-lg">{villageName ? `${villageName} Admin` : "Admin"}</h1>
+            <h1 className="truncate text-base font-semibold leading-tight sm:text-lg">{villageName ? `${villageName} Admin` : "Admin"}</h1>
             {host && <p className={`hidden text-sm sm:block ${quiet}`}>{host}</p>}
             <p className={`hidden text-sm sm:block ${quiet}`}>
               You choose what this village shows people.{" "}
@@ -64,21 +64,26 @@ export default function AdminHeader({
             </p>
           </div>
         </div>
-        <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto sm:w-auto">
-          {extra}
-          <p className={`whitespace-nowrap text-xs sm:text-sm ${quiet}`}>Handled today: {handled}, on this device</p>
+        <div className="flex items-center gap-2">
+          <div className="hidden sm:contents">{extra}</div>
+          <p className={`whitespace-nowrap text-xs sm:text-sm ${quiet}`}>
+            <span className="sm:hidden">{handled} today</span>
+            <span className="hidden sm:inline">Handled today: {handled}, on this device</span>
+          </p>
           <button
             type="button"
             aria-pressed={night}
+            aria-label={night ? "Night look, on" : "Night look, off"}
             onClick={() => onNight(!night)}
-            className={`${CONTROL} border ${night ? "border-border bg-muted text-card-foreground" : "border-white text-white"}`}
+            className={`${CONTROL} inline-flex min-w-11 justify-center border px-2 sm:px-3 ${night ? "border-border bg-muted text-card-foreground" : "border-white text-white"}`}
           >
-            {night ? "Night look, on" : "Night look, off"}
+            <span className="sm:hidden">{night ? "Night" : "Day"}</span>
+            <span className="hidden sm:inline">{night ? "Night look, on" : "Night look, off"}</span>
           </button>
           <button
             type="button"
             onClick={onSignOut}
-            className={`${CONTROL} ${night ? "text-card-foreground" : "text-white"}`}
+            className={`${CONTROL} hidden sm:inline-flex ${night ? "text-card-foreground" : "text-white"}`}
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />
             Sign Out
