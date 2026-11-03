@@ -11,6 +11,7 @@
  *   POST   /api/session-templates/:id/move              { direction } -> { templates }
  *   GET    /api/session-templates/rooms/:sessionId      TemplateRoomView
  *   POST   /api/session-templates/rooms/:sessionId/stick
+ *   POST   /api/session-templates/rooms/:sessionId/moon-share
  *   POST   /api/session-templates/rooms/:sessionId/priorities
  *   PATCH  /api/session-templates/rooms/:sessionId/priorities/:pid
  *   POST   /api/session-templates/rooms/:sessionId/shares
@@ -34,7 +35,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { isAdmitted } from "../lib/admission";
 import { GAME_CONFIG } from "../../shared/gameConfig";
-import { requireModule } from "../lib/modules";
+import { effectiveLifecycle, requireModule } from "../lib/modules";
 import { bringItem } from "../lib/sessionLibrary";
 import { ensureMemberNo, memberNo, parseId, type MemberLookup, type Outcome } from "../lib/liveSessions";
 import {
@@ -45,8 +46,10 @@ import {
   changeTemplate,
   createTemplate,
   duplicateTemplate,
+  ensureMoonSeeded,
   ensureSeeded,
   listTemplates,
+  moonShareAct,
   moveTemplate,
   patchPriority,
   patchEntryServes,
@@ -58,7 +61,7 @@ import {
   stickAct,
 } from "../lib/sessionTemplates";
 import { liveCircles } from "./sessionRhythm";
-import { SEASON_VIEW_API, TEMPLATES_API, TEMPLATE_LIMITS, TEMPLATE_REFUSALS as R } from "../../shared/sessionTemplates";
+import { MOON_REVIEW_MODULE_ID, SEASON_VIEW_API, TEMPLATES_API, TEMPLATE_LIMITS, TEMPLATE_REFUSALS as R } from "../../shared/sessionTemplates";
 
 type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "getPool" | "overLimit" | "members" | "circlesRepo" | "guardCapability" | "mayAct" | "lapseContext" | "seasonState">;
 
@@ -132,6 +135,8 @@ export function register(app: Express, deps: Deps): void {
     if (!who) return;
     const pool = getPool();
     await ensureSeeded(pool);
+    // The End of moon template, written once and only while the moon-review module is on.
+    await ensureMoonSeeded(pool, effectiveLifecycle(MOON_REVIEW_MODULE_ID) !== "off");
     const verdict = await mayAct(req, "session.template");
     res.setHeader("Cache-Control", "private, no-cache");
     res.json({ templates: await listTemplates(pool), mayKeep: verdict.ok });
@@ -252,6 +257,12 @@ export function register(app: Express, deps: Deps): void {
     const w = await roomWriter(req, res);
     if (!w) return;
     await afterWrite(res, w.sessionId, w.asker, await stickAct(getPool(), w.sessionId, w.asker, req.body));
+  });
+
+  app.post(`${ROOM}/moon-share`, async (req, res) => {
+    const w = await roomWriter(req, res);
+    if (!w) return;
+    await afterWrite(res, w.sessionId, w.asker, await moonShareAct(getPool(), w.sessionId, w.asker, req.body));
   });
 
   app.post(`${ROOM}/priorities`, async (req, res) => {

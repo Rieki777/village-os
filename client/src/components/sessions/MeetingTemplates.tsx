@@ -16,12 +16,13 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import {
+  MOON_REVIEW_MODULE_ID,
   SEASON_COPY,
-  SECTION_KINDS,
   SECTION_KIND_DEFS,
   TEMPLATES_API,
   TEMPLATE_COPY,
   TEMPLATE_LIMITS,
+  editorKinds,
   flowMinutes,
   groupByCategory,
   templateApi,
@@ -31,6 +32,7 @@ import {
   type TemplatesPayload,
 } from "@shared/sessionTemplates";
 import { gameFetch } from "@/lib/gameApi";
+import { useModuleOn } from "@/modules/ModuleProvider";
 import { BTN_ICON, BTN_QUIET, CHIP, HINT, LABEL, TEXTBOX } from "./roomUi";
 import { LIST_UI } from "./SessionList";
 
@@ -75,6 +77,8 @@ export default function MeetingTemplates({
   onChanged(): Promise<void> | void;
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
+  /** The End of moon kinds are offered only while the moon-review module is on. */
+  const moonOn = useModuleOn(MOON_REVIEW_MODULE_ID);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -301,7 +305,7 @@ export default function MeetingTemplates({
                     <label className="text-xs font-semibold text-foreground">
                       {TEMPLATE_COPY.sectionKind}
                       <select className={LIST_UI.input} value={s.kind} onChange={(e) => setSection(i, { kind: e.target.value as SectionKind })}>
-                        {SECTION_KINDS.map((k) => (
+                        {editorKinds(moonOn, s.kind).map((k) => (
                           <option key={k} value={k}>
                             {SECTION_KIND_DEFS[k].label}
                           </option>

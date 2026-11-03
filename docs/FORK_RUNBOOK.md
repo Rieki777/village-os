@@ -2065,3 +2065,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 
 - `payers`, `moon-review-settings` and `moon_rhythm` in `app_config` all ship empty and are edited on the admin Cash payouts desk, under "End-of-moon review settings", by a `cash.pay` holder (`GET`/`PUT /api/moon-review/payers`, `/settings` and `/rhythm`, in `server/routes/moonReviewSettings.ts`, behind the `moon-review` module). Each save is checked by the contract's parser, and every change writes a `moon_review_events` row (`payers_changed`, `settings_changed`, `rhythm_changed`) with the old and new value of each field that moved. A village fills in its payers, its host country and pilot acknowledgement, and, if it wants them, its moved moon days and guide link; nothing village-specific is set in code or in the environment.
 
+
+## The End of moon meeting template (module `moon-review`, 2026-11-03, no migration)
+
+- A fourth meeting template, End of moon (category Moon rhythm, `seed_key` `end-of-moon`, flow in `MOON_TEMPLATE` in `shared/sessionTemplates.ts`), is written into `live_session_templates` the first time anyone opens the templates (`GET /api/session-templates`) while the `moon-review` module is on (any lifecycle but off). While the module is off nothing is written, and its three section kinds (Our moons, Moon goals, Sending together) are hidden in the template editor. Once written it is an ordinary row: turning the module off later leaves it, and an edited or archived copy is never written again. No env var and no manual step.
