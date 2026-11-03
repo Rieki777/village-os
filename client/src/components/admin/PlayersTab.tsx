@@ -5,12 +5,14 @@
  * without growing a file that sits at its line ratchet. The card and the key
  * live in ./PlayerCard.tsx.
  */
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { BulkStageGrant } from "./StageFloorPicker";
 import PersonalListsPanel from "@/components/yourList/PersonalListsPanel";
+
+const AgentsPanel = lazy(() => import("./AgentsPanel"));
 import { NO_FILTER, PlayerCard, PlayersFilters, PlayersKey, filterPlayers, type LadderStage, type PathOption, type Player, type PlayerDetail } from "./PlayerCard";
 
 export default function PlayersTab({ password }: { password: string }) {
@@ -138,6 +140,7 @@ export default function PlayersTab({ password }: { password: string }) {
       ) : (
         <>
           <PersonalListsPanel password={password} players={players} />
+          <Suspense fallback={null}><AgentsPanel password={password} players={players} /></Suspense>
           <PlayersKey players={players} stages={stages} gameStarted={gameStarted} />
           <PlayersFilters value={filter} onChange={setFilter} stages={stages} paths={paths} shown={filterPlayers(players, filter).length} total={players.length} />
           <div className="space-y-3">

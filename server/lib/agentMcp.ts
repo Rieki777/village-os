@@ -41,8 +41,9 @@
  * pay route, a legal name or an address, at any depth. It runs for every
  * holder, a `cash.pay` holder included.
  */
+import { adminRequestDecision, type AgentAdminPathsDoc } from "../../shared/agentAdmin";
 import { PACK_FORBIDDEN_KEY } from "../../shared/moonRecap";
-import type { AgentScope } from "./agentTokens";
+import { echoHash, type AgentScope } from "./agentTokens";
 
 /** The protocol revisions this server speaks, newest first. */
 export const MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
@@ -91,11 +92,17 @@ export interface RouteAnswer {
 
 export interface ToolContext {
   /** Runs `method path` as the holder and answers with the route's status and JSON. */
-  dispatch: (method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown) => Promise<RouteAnswer>;
+  dispatch: (method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", path: string, body?: unknown) => Promise<RouteAnswer>;
   /** A confirm token bound to this tool, this holder and this echo. */
   mintConfirm: (tool: string, echo: unknown) => { token: string; expiresAt: string };
   /** Whether `token` binds this tool, this holder and this echo, and why not. */
   verifyConfirm: (tool: string, token: unknown, echo: unknown) => { ok: true } | { ok: false; reason: string; sentence: string };
+  /** The token's holder. `admin_request` refuses any path naming them. */
+  holderId?: string;
+  /** The village's agent paths list (shared/agentAdmin.ts). Only `admin_request` reads it. */
+  adminPaths?: () => Promise<AgentAdminPathsDoc>;
+  /** Writes one `agent_actions` row. Only the admin and Sera tools record through it. */
+  recordAction?: (a: { scope: string; tool: string; method: string | null; path: string | null; echoHash: string; state: "done" | "refused" | "asked" }) => Promise<void>;
 }
 
 /** What a tool answers: a result to show, or a refusal in words. */
@@ -114,6 +121,8 @@ export interface ToolDef {
   inputSchema: Record<string, unknown>;
   /** Every route this tool may call, as `METHOD /path` with `:param` holes. The table test reads these. */
   routes: readonly string[];
+  /** For a tool that reads or writes by its arguments: whether THIS call writes. */
+  writes?: (args: Record<string, unknown>) => boolean;
   run: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolOutcome>;
 }
 
@@ -270,6 +279,80 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       return { ok: true, result: { written: true, echo, board: done.body } };
     },
   },
+  {
+    name: "admin_request",
+    scope: "admin",
+    kind: "write",
+    title: "Call an admin path",
+    description:
+      "Calls one admin path the village has opened to agents, as the holder, with the holder's own admin checks. GET answers at once. A write answers first with what it would do and a confirmToken; call again with the same arguments and the token to make it. Some writes a person makes in the app, and the answer says so. Erasure, powers, money, secrets and the agent accounts are never reachable here.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+        path: { type: "string", description: "The admin path, such as /api/admin/member-tasks/access. No query string." },
+        body: { type: "object", description: "The JSON body for a write." },
+        confirmToken: { type: "string", description: "From the first call of a write. Leave it out to see what would be written." },
+      },
+      required: ["method", "path"],
+      additionalProperties: false,
+    },
+    // The routes this tool may reach are the village's list, not this table. "Always a person" is in shared/agentAdmin.ts.
+    routes: [],
+    writes: (args) => String(args.method ?? "").toUpperCase() !== "GET",
+    async run(args, ctx) {
+      if (!ctx.adminPaths || !ctx.recordAction) return { ok: false, error: "The admin tool is not open on this server." };
+      const method = String(args.method ?? "").toUpperCase();
+      const path = typeof args.path === "string" ? args.path : "";
+      const body = args.body && typeof args.body === "object" && !Array.isArray(args.body) ? (args.body as Record<string, unknown>) : undefined;
+      const echo = { method, path, body: body ?? null };
+      const hash = echoHash(echo);
+      const record = (state: "done" | "refused" | "asked") =>
+        ctx.recordAction!({ scope: "admin", tool: "admin_request", method: method.slice(0, 8) || null, path: path.slice(0, 500) || null, echoHash: hash, state });
+
+      const decision = adminRequestDecision(method, path, await ctx.adminPaths(), ctx.holderId ?? null);
+      if (!decision.ok) {
+        await record("refused");
+        return { ok: false, error: decision.words, detail: { code: decision.code } };
+      }
+      if (!decision.write) {
+        const a = await ctx.dispatch("GET", path);
+        await record(a.status < 300 ? "done" : "refused");
+        return a.status < 300 ? { ok: true, result: a.body } : refusal("The admin path refused", a);
+      }
+      if (decision.confirm === "person") {
+        await record("refused");
+        return {
+          ok: false,
+          error: `A person makes this change in the app: ${decision.entry.label}. Tell them what you would change, and they press it there.`,
+          detail: { code: "person_confirms", echo },
+        };
+      }
+      if (args.confirmToken === undefined) {
+        const { token, expiresAt } = ctx.mintConfirm("admin_request", echo);
+        await record("asked");
+        return {
+          ok: true,
+          result: {
+            confirmRequired: true,
+            echo,
+            confirmToken: token,
+            expiresAt,
+            message: "Nothing was written. Call admin_request again with the same arguments and this confirmToken to make it.",
+          },
+        };
+      }
+      const check = ctx.verifyConfirm("admin_request", args.confirmToken, echo);
+      if (!check.ok) {
+        await record("refused");
+        return { ok: false, error: check.sentence, detail: { reason: check.reason } };
+      }
+      const a = await ctx.dispatch(method as "POST" | "PUT" | "PATCH" | "DELETE", path, body ?? {});
+      await record(a.status < 300 ? "done" : "refused");
+      if (a.status >= 300) return refusal("The admin path refused", a);
+      return { ok: true, result: { written: true, echo, answer: a.body } };
+    },
+  },
 ];
 
 /** The tools a token with these scopes may list and call. */
@@ -282,7 +365,10 @@ export function callsWriteTool(message: unknown): boolean {
   const m = (message && typeof message === "object" ? message : {}) as Record<string, any>;
   if (m.method !== "tools/call") return false;
   const name = String(m.params?.name ?? "");
-  return MCP_TOOLS.some((t) => t.name === name && t.kind === "write");
+  const tool = MCP_TOOLS.find((t) => t.name === name);
+  if (!tool || tool.kind !== "write") return false;
+  const args = (m.params?.arguments && typeof m.params.arguments === "object" ? m.params.arguments : {}) as Record<string, unknown>;
+  return tool.writes ? tool.writes(args) : true;
 }
 
 // ── The protocol ─────────────────────────────────────────────────────────────

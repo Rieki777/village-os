@@ -14,6 +14,7 @@
 import { describe, expect, it } from "vitest";
 import { handleMcpMessage, MCP_TOOLS, redactToolResult, toolsFor, type RouteAnswer, type ToolContext } from "./agentMcp";
 import { CONFIRM_REASON_SENTENCE, mintConfirmToken, verifyConfirmToken, type AgentScope } from "./agentTokens";
+import { DEFAULT_AGENT_ADMIN_PATHS } from "../../shared/agentAdmin";
 
 const SECRET = "test-secret-for-confirm-tokens";
 
@@ -169,5 +170,76 @@ describe("no tool sends, approves, issues, pays or touches a pay route (check 32
   it("redacts the pack's forbidden keys and the connector's own", () => {
     const out = redactToolResult({ ok: 1, nested: [{ currency: "USD", taxId: "x", legalName: "y", address: "z", route: "r", keep: true }] });
     expect(out).toEqual({ ok: 1, nested: [{ keep: true }] });
+  });
+});
+
+describe("admin_request (check 52)", () => {
+  function admin() {
+    const h = holder();
+    const actions: Array<{ state: string; method: string | null; path: string | null }> = [];
+    const routeCalls: Array<{ method: string; path: string; body?: unknown }> = [];
+    const ctx: ToolContext = {
+      ...h.ctx,
+      holderId: "agent-1",
+      adminPaths: async () => DEFAULT_AGENT_ADMIN_PATHS,
+      recordAction: async (a) => {
+        actions.push({ state: a.state, method: a.method, path: a.path });
+      },
+      dispatch: async (method, path, body) => {
+        routeCalls.push({ method, path, body });
+        if (method === "GET" && path === "/api/admin/member-tasks/access") return { status: 200, body: { on: ["u-1"] } };
+        if (method === "PUT" && path === "/api/admin/member-tasks/access/u-2") return { status: 200, body: { userId: "u-2", on: true } };
+        return { status: 404, body: { error: "Not found" } };
+      },
+    };
+    return { ctx, actions, routeCalls };
+  }
+
+  it("is listed only for the admin scope", () => {
+    expect(toolsFor(["moon.read", "tasks.write"]).map((t) => t.name)).not.toContain("admin_request");
+    expect(toolsFor(["admin"]).map((t) => t.name)).toEqual(["admin_request"]);
+  });
+
+  it("reads an allowed path at once and records the call", async () => {
+    const a = admin();
+    const r = await ask(callTool("admin_request", { method: "GET", path: "/api/admin/member-tasks/access" }), ["admin"], a.ctx);
+    expect(r.result.isError).toBe(false);
+    expect(r.result.structuredContent).toEqual({ on: ["u-1"] });
+    expect(a.actions).toEqual([{ state: "done", method: "GET", path: "/api/admin/member-tasks/access" }]);
+  });
+
+  it("writes nothing without the confirm token, then once on the confirm, recording each call", async () => {
+    const a = admin();
+    const args = { method: "PUT", path: "/api/admin/member-tasks/access/u-2", body: { on: true } };
+    const first = await ask(callTool("admin_request", args), ["admin"], a.ctx);
+    expect(first.result.structuredContent.confirmRequired).toBe(true);
+    expect(a.routeCalls).toEqual([]);
+    const second = await ask(callTool("admin_request", { ...args, confirmToken: first.result.structuredContent.confirmToken }), ["admin"], a.ctx);
+    expect(second.result.structuredContent.written).toBe(true);
+    expect(a.routeCalls).toEqual([{ method: "PUT", path: "/api/admin/member-tasks/access/u-2", body: { on: true } }]);
+    const changed = await ask(callTool("admin_request", { ...args, body: { on: false }, confirmToken: first.result.structuredContent.confirmToken }), ["admin"], a.ctx);
+    expect(changed.result.isError).toBe(true);
+    expect(a.routeCalls).toHaveLength(1);
+    expect(a.actions.map((x) => x.state)).toEqual(["asked", "done", "refused"]);
+  });
+
+  it("refuses a path a person must take, and one not on the list, calling no route", async () => {
+    const a = admin();
+    const erase = await ask(callTool("admin_request", { method: "DELETE", path: "/api/admin/players/u-9" }), ["admin"], a.ctx);
+    expect(erase.result.isError).toBe(true);
+    expect(erase.result.structuredContent.detail.code).toBe("always_a_person");
+    const fresh = await ask(callTool("admin_request", { method: "POST", path: "/api/admin/events", body: {} }), ["admin"], a.ctx);
+    expect(fresh.result.structuredContent.detail.code).toBe("not_allowed");
+    expect(a.routeCalls).toEqual([]);
+    expect(a.actions.map((x) => x.state)).toEqual(["refused", "refused"]);
+  });
+
+  it("leaves a write marked for a person to a person", async () => {
+    const a = admin();
+    a.ctx.adminPaths = async () => ({ paths: [{ method: "POST", path: "/api/admin/events", confirm: "person", label: "Put a gathering on the calendar" }] });
+    const r = await ask(callTool("admin_request", { method: "POST", path: "/api/admin/events", body: { title: "x" } }), ["admin"], a.ctx);
+    expect(r.result.isError).toBe(true);
+    expect(r.result.structuredContent.detail.code).toBe("person_confirms");
+    expect(a.routeCalls).toEqual([]);
   });
 });

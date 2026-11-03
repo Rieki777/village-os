@@ -19,6 +19,7 @@
  * village genuinely knows better than the derivation, and it carries an
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
+import { isAgentAccount } from "../repos/agentAccounts";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
@@ -1106,6 +1107,19 @@ export async function seatHolder(
      * the first river got a vote.
      */
     return { ok: false, reason: "A role-plane agent holds its role as documented, with no member account" };
+  }
+  if (h.userId && (await isAgentAccount(pool, String(h.userId)))) {
+    /*
+     * AN AGENT ACCOUNT HOLDS NO ROLE (0319; addendum v6, B6 and B7). The
+     * Operations agent and Sera's agent are member accounts with `is_agent`,
+     * and the refusal above explains why a member-account agent must never be
+     * seated: it would pass the settlement job's `holder_kind = 'member'`
+     * filter and could open the declare door. The addendum asks only that it
+     * never hold a role carrying `moon.approve` or `cash.pay`; refusing every
+     * role keeps the settlement and declare paths closed as well, and an
+     * agent account needs no role to do its work.
+     */
+    return { ok: false, reason: "An agent account holds no role. Its access comes from its own scopes" };
   }
   const kind = h.userId ? "member" : "documented";
   if (kind === "documented" && !String(h.displayName ?? "").trim()) {

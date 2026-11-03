@@ -116,12 +116,16 @@ describe("the token value", () => {
 
 describe("scopes", () => {
   it("is a closed list", () => {
-    expect([...AGENT_SCOPES]).toEqual(["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write"]);
+    expect([...AGENT_SCOPES]).toEqual(["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin"]);
   });
   it("refuses unknown scopes and dedupes", () => {
     expect(cleanScopes(["calendar.read", "calendar.read"], { intentsAllowed: false })).toEqual({ ok: true, scopes: ["calendar.read"] });
     expect(cleanScopes(["admin.everything"], { intentsAllowed: false }).ok).toBe(false);
     expect(cleanScopes([], { intentsAllowed: false }).ok).toBe(false);
+    // The admin scope is an admin's to give (addendum v6, B6).
+    expect(cleanScopes(["admin"], { intentsAllowed: false }).ok).toBe(false);
+    expect(cleanScopes(["admin"], { intentsAllowed: false, adminAllowed: false }).ok).toBe(false);
+    expect(cleanScopes(["admin"], { intentsAllowed: false, adminAllowed: true })).toEqual({ ok: true, scopes: ["admin"] });
   });
   it("holds intents.write behind the flag", () => {
     expect(cleanScopes(["intents.write"], { intentsAllowed: false }).ok).toBe(false);

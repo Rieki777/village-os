@@ -32,6 +32,11 @@
  *                      the assistant got wrong.
  *   assistant_statements  sentences the assistant wrote ABOUT the member, built
  *                      from that note.
+ *   agent_oauth_codes  sign-in codes a connector client was given for the
+ *                      member (0319), used or not.
+ *   agent_actions      what an agent did through the connector's admin and Sera
+ *                      scopes (0319), where the member is the agent account or
+ *                      the member the action was about.
  *
  * A module per table would put the ORDER these have to come out in nowhere, and
  * the order is the load-bearing part: deliveries before the inbox they point at.
@@ -61,6 +66,8 @@ export interface AgentSweepCounts {
   tokens: number;
   profiles: number;
   statements: number;
+  oauthCodes: number;
+  actions: number;
 }
 
 const affected = (res: unknown): number => Number((res as { affectedRows?: number })?.affectedRows ?? 0);
@@ -164,6 +171,8 @@ export async function forgetAgentForMember(pool: Pool, userId: string): Promise<
   const [tokens] = await pool.query("DELETE FROM `agent_tokens` WHERE `user_id` = ?", [userId]);
   const [profiles] = await pool.query("DELETE FROM `agent_profiles` WHERE `user_id` = ?", [userId]);
   const [statements] = await pool.query("DELETE FROM `assistant_statements` WHERE `subject_user_id` = ?", [userId]);
+  const [oauthCodes] = await pool.query("DELETE FROM `agent_oauth_codes` WHERE `user_id` = ?", [userId]);
+  const [actions] = await pool.query("DELETE FROM `agent_actions` WHERE `actor_user_id` = ? OR `subject_user_id` = ?", [userId, userId]);
   return {
     deliveries: inbox.deliveries,
     inboxes: inbox.inboxes,
@@ -172,6 +181,8 @@ export async function forgetAgentForMember(pool: Pool, userId: string): Promise<
     tokens: affected(tokens),
     profiles: affected(profiles),
     statements: affected(statements),
+    oauthCodes: affected(oauthCodes),
+    actions: affected(actions),
   };
 }
 
@@ -183,8 +194,8 @@ export async function forgetAgentForMember(pool: Pool, userId: string): Promise<
  * tables were in it.
  */
 export async function agentRowsRemaining(pool: Pool, userId: string): Promise<AgentSweepCounts> {
-  const one = async (sql: string): Promise<number> => {
-    const [rows] = await pool.query<Array<{ n: number }> & import("mysql2/promise").RowDataPacket[]>(sql, [userId]);
+  const one = async (sql: string, times = 1): Promise<number> => {
+    const [rows] = await pool.query<Array<{ n: number }> & import("mysql2/promise").RowDataPacket[]>(sql, Array(times).fill(userId));
     return Number(rows[0]?.n ?? 0);
   };
   return {
@@ -197,5 +208,7 @@ export async function agentRowsRemaining(pool: Pool, userId: string): Promise<Ag
     tokens: await one("SELECT COUNT(*) AS n FROM `agent_tokens` WHERE `user_id` = ?"),
     profiles: await one("SELECT COUNT(*) AS n FROM `agent_profiles` WHERE `user_id` = ?"),
     statements: await one("SELECT COUNT(*) AS n FROM `assistant_statements` WHERE `subject_user_id` = ?"),
+    oauthCodes: await one("SELECT COUNT(*) AS n FROM `agent_oauth_codes` WHERE `user_id` = ?"),
+    actions: await one("SELECT COUNT(*) AS n FROM `agent_actions` WHERE `actor_user_id` = ? OR `subject_user_id` = ?", 2),
   };
 }
