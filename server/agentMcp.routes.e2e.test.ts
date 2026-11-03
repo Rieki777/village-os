@@ -262,8 +262,9 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     const off = await call("GET", "/api/member-tasks/me", undefined, ben.token);
     expect(off.json?.on === false || off.status === 403, off.text).toBe(true);
 
-    const [rows] = await pool.query<any[]>("SELECT state FROM agent_actions WHERE actor_user_id = ? ORDER BY created_at, id", [agent.id]);
-    expect(rows.map((r: any) => r.state)).toEqual(["done", "asked", "done"]);
+    // Three calls inside one second share a created_at, so compare the states as a set of counts.
+    const [rows] = await pool.query<any[]>("SELECT state FROM agent_actions WHERE actor_user_id = ?", [agent.id]);
+    expect(rows.map((r: any) => r.state).sort()).toEqual(["asked", "done", "done"]);
   });
 
   it("refuses what is always a person's, for the agent and through the agent's own session (check 53)", async () => {
