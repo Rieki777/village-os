@@ -117,7 +117,7 @@ function GroupRow({
     <section aria-labelledby={headId} className="rounded-xl border border-stone-200 bg-white p-3" data-settings-group={group}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 id={headId} className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+          <h4 id={headId} className="text-xs font-semibold uppercase tracking-wide text-stone-800">
             {GROUP_LABELS[group]}
           </h4>
           {honest && <p className="mt-0.5 text-xs text-muted-foreground">{GROUP_PLAIN[group]}</p>}

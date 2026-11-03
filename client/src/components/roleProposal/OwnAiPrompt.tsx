@@ -46,7 +46,7 @@ export default function OwnAiPrompt({ proposal, org }: { proposal: ProposalOut; 
   const copy = async () => setSaid((await copyText(prompt)) ? RC_WORDS.copied : RC_WORDS.copyFailed);
   return (
     <details className={`${PANEL} grid gap-3`} data-own-ai="">
-      <summary className={`flex min-h-[44px] cursor-pointer items-center font-display text-lg font-bold text-stone-900 ${FOCUS}`}>{RC_WORDS.ownAi}</summary>
+      <summary className={`flex min-h-[44px] cursor-pointer items-center font-display text-lg font-bold text-foreground ${FOCUS}`}>{RC_WORDS.ownAi}</summary>
       <div className="mt-2 grid gap-3">
         <p className={LEDE}>{RC_WORDS.ownAiLede}</p>
         <div className="flex flex-wrap items-center gap-3">
@@ -54,13 +54,13 @@ export default function OwnAiPrompt({ proposal, org }: { proposal: ProposalOut; 
             <Copy className="h-4 w-4" aria-hidden="true" />
             {RC_WORDS.copyPrompt}
           </button>
-          <span role="status" aria-live="polite" className="text-sm text-stone-700">
+          <span role="status" aria-live="polite" className="text-sm text-muted-foreground">
             {said}
           </span>
         </div>
         <details>
-          <summary className={`inline-flex min-h-[44px] cursor-pointer items-center text-sm font-medium text-stone-700 ${FOCUS}`}>{RC_WORDS.readPrompt}</summary>
-          <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800" data-prompt-text="">
+          <summary className={`inline-flex min-h-[44px] cursor-pointer items-center text-sm font-medium text-muted-foreground ${FOCUS}`}>{RC_WORDS.readPrompt}</summary>
+          <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-muted p-3 text-xs text-foreground" data-prompt-text="">
             {prompt}
           </pre>
         </details>

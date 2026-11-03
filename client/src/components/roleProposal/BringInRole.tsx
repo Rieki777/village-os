@@ -167,7 +167,7 @@ export default function BringInRole({
       aria-pressed={mode === m}
       onClick={() => setMode(m)}
       className={`inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium ${FOCUS} ${
-        mode === m ? "border-teal-deep bg-teal-deep text-white" : "border-stone-300 bg-white text-stone-800"
+        mode === m ? "border-teal-deep bg-teal-deep text-white" : "border-border bg-card text-foreground"
       }`}
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
@@ -180,10 +180,10 @@ export default function BringInRole({
 
   return (
     <details className={`${PANEL} grid gap-3`} open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)} data-bring-in="">
-      <summary className={`flex min-h-[44px] cursor-pointer items-center font-display text-lg font-bold text-stone-900 ${FOCUS}`}>{RC_WORDS.bringIn}</summary>
+      <summary className={`flex min-h-[44px] cursor-pointer items-center font-display text-lg font-bold text-foreground ${FOCUS}`}>{RC_WORDS.bringIn}</summary>
       <div className="mt-2 grid gap-3">
         <p className={LEDE}>{RC_WORDS.bringInLede}</p>
-        <p className="text-sm font-medium text-stone-800" data-keeps-nothing="">
+        <p className="text-sm font-medium text-foreground" data-keeps-nothing="">
           {RC_WORDS.keepsNothing(village)}
         </p>
         <div className="flex gap-2" role="group" aria-label={RC_WORDS.how}>
@@ -212,12 +212,12 @@ export default function BringInRole({
                 if (file) void bringIn(() => importRoleFile(proposal.id, file));
               }}
             />
-            <p className="text-xs text-stone-600">{RC_WORDS.fileHint}</p>
+            <p className="text-xs text-muted-foreground">{RC_WORDS.fileHint}</p>
           </div>
         )}
         {mode === "paste" && (
           <div className="grid gap-2">
-            <label className="grid gap-1 text-sm font-medium text-stone-800">
+            <label className="grid gap-1 text-sm font-medium text-foreground">
               {RC_WORDS.pasteLabel}
               <textarea value={pasted} onChange={(e) => setPasted(e.target.value)} rows={8} className={`${INPUT} font-mono text-sm`} data-role-paste="" />
             </label>
@@ -230,11 +230,11 @@ export default function BringInRole({
         )}
         {mode === "link" && (
           <div className="grid gap-2">
-            <label className="grid gap-1 text-sm font-medium text-stone-800">
+            <label className="grid gap-1 text-sm font-medium text-foreground">
               {RC_WORDS.linkLabel}
               <input type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste the Google Doc link" className={INPUT} data-role-link="" />
             </label>
-            <p className="text-xs text-stone-600">{RC_WORDS.linkHint}</p>
+            <p className="text-xs text-muted-foreground">{RC_WORDS.linkHint}</p>
             <div>
               <button type="button" disabled={busy || !link.trim()} onClick={() => void bringIn(() => importRoleText(proposal.id, { link }))} className={PRIMARY}>
                 {RC_WORDS.fetchLink}
@@ -243,7 +243,7 @@ export default function BringInRole({
           </div>
         )}
 
-        <div role="status" aria-live="polite" className="text-sm text-stone-700">
+        <div role="status" aria-live="polite" className="text-sm text-muted-foreground">
           {busy ? RC_WORDS.reading : said}
         </div>
         {error && (
@@ -253,13 +253,13 @@ export default function BringInRole({
         )}
 
         {handedTo && (
-          <p className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-sm text-stone-800" data-handed-to="">
+          <p className="rounded-xl border border-border bg-muted p-3 text-sm text-foreground" data-handed-to="">
             {RC_WORDS.guideReads(handedTo)}
           </p>
         )}
         {fallback && (
-          <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3" data-ai-fallback="">
-            <p className="text-sm text-stone-800">{RC_WORDS.fallback(village)}</p>
+          <div className="grid gap-2 rounded-xl border border-border bg-muted p-3" data-ai-fallback="">
+            <p className="text-sm text-foreground">{RC_WORDS.fallback(village)}</p>
             <div>
               <button
                 type="button"
@@ -274,22 +274,22 @@ export default function BringInRole({
 
         {reading && (
           <section aria-labelledby="rc-fills" className="grid gap-3" data-card-preview="">
-            <h3 id="rc-fills" className="font-display text-lg font-bold text-stone-900">
+            <h3 id="rc-fills" className="font-display text-lg font-bold text-foreground">
               {RC_WORDS.whatFills}
             </h3>
             {loose.length > 0 && (
               <div role="alert" className="grid gap-1 rounded-xl border border-coral/40 bg-coral/5 p-3 text-sm" data-loose-problems="">
-                <p className="font-semibold text-stone-900">{RC_WORDS.checkFirst}</p>
+                <p className="font-semibold text-foreground">{RC_WORDS.checkFirst}</p>
                 <ul className="grid list-disc gap-1 pl-5">
                   {loose.map((p, i) => (
-                    <li key={`${p.field}-${i}`} className="break-words text-stone-800">
+                    <li key={`${p.field}-${i}`} className="break-words text-foreground">
                       {p.sentence}
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            {reading.read.ignored.length > 0 && <p className="text-sm text-stone-600">{RC_WORDS.notRead(reading.read.ignored.join(", "))}</p>}
+            {reading.read.ignored.length > 0 && <p className="text-sm text-muted-foreground">{RC_WORDS.notRead(reading.read.ignored.join(", "))}</p>}
             {reading.changes.length === 0 ? (
               <p className={LEDE}>{RC_WORDS.nothingNew}</p>
             ) : (
@@ -303,11 +303,11 @@ export default function BringInRole({
                     const on = ticked.has(c.path) && !blocked;
                     const title = c.roleTitle && c.kind !== "role" ? `${c.roleTitle}: ${c.label}` : c.label;
                     return (
-                      <li key={c.path} data-change={c.path} data-ticked={on ? "true" : "false"} className={`min-w-0 rounded-xl border p-3 ${on ? "border-notice border-l-4 bg-notice/10" : "border-stone-200 bg-white"}`}>
+                      <li key={c.path} data-change={c.path} data-ticked={on ? "true" : "false"} className={`min-w-0 rounded-xl border p-3 ${on ? "border-notice border-l-4 bg-notice/10" : "border-border bg-card"}`}>
                         <label className="flex min-h-[44px] items-start gap-3">
                           <input type="checkbox" className="mt-1 size-5 shrink-0 accent-teal-deep" checked={on} disabled={blocked} onChange={() => toggle(c.path)} aria-label={RC_WORDS.keep(title)} />
                           <span className="grid min-w-0 gap-1">
-                            <span className="break-words font-semibold text-stone-900">{title}</span>
+                            <span className="break-words font-semibold text-foreground">{title}</span>
                             {c.kind === "role" ? (
                               <>
                                 <span className="text-xs font-semibold uppercase tracking-wide text-notice">{RC_WORDS.addsRole}</span>
@@ -315,18 +315,18 @@ export default function BringInRole({
                                   .filter((w) => !w.path.endsWith(".name"))
                                   .map((w) => (
                                     <span key={w.path} className="grid gap-0.5 text-sm">
-                                      <span className="font-medium text-stone-700">{w.label}</span>
-                                      <span className="whitespace-pre-line break-words text-stone-800">{w.value}</span>
+                                      <span className="font-medium text-muted-foreground">{w.label}</span>
+                                      <span className="whitespace-pre-line break-words text-foreground">{w.value}</span>
                                     </span>
                                   ))}
                               </>
                             ) : (
-                              <span className="whitespace-pre-line break-words text-sm text-stone-800">{c.value ?? RC_WORDS.backToPosted}</span>
+                              <span className="whitespace-pre-line break-words text-sm text-foreground">{c.value ?? RC_WORDS.backToPosted}</span>
                             )}
                           </span>
                         </label>
                         {circleAsked && (
-                          <label className="mt-2 grid gap-1 text-sm font-medium text-stone-800">
+                          <label className="mt-2 grid gap-1 text-sm font-medium text-foreground">
                             {RC_WORDS.pickCircle}
                             <select
                               value={picks[c.path] ?? ""}
@@ -349,7 +349,7 @@ export default function BringInRole({
                         {problems
                           .filter((p) => !(circleAsked && p.kind === "circle" && picks[c.path]))
                           .map((p, i) => (
-                            <p key={`${p.field}-${i}`} className={`mt-2 break-words text-sm ${p.blocks ? "font-medium text-coral" : "text-stone-700"}`}>
+                            <p key={`${p.field}-${i}`} className={`mt-2 break-words text-sm ${p.blocks ? "font-medium text-coral" : "text-muted-foreground"}`}>
                               {p.sentence}
                               {p.blocks && p.kind !== "circle" ? ` ${RC_WORDS.fix}` : ""}
                             </p>

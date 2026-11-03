@@ -250,7 +250,7 @@ describe("step 4, terms and review dates", () => {
 
   it("a review date autosaves with its role", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "terms");
-    const reviews = (await screen.findByText(RP_WORDS.reviewDates)).closest("fieldset") as HTMLElement;
+    const reviews = (await screen.findByText(RP_WORDS.reviewDates)).closest("section") as HTMLElement;
     fireEvent.change(within(reviews).getByLabelText("Kitchen keeper"), { target: { value: "2027-02-08" } });
     await waitFor(() => expect(lastPut()).toEqual({ roles: [{ roleId: "r1", words: {}, reviewOn: "2027-02-08" }] }));
   });
