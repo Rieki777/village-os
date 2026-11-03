@@ -36,12 +36,12 @@ import {
   carriedTooOften, coverage, daysHeldIn, deliverableLines, endOfMoonFriday, goalScore, halfwayDay, heldDuring, invoiceDueOn,
   invoiceSendRefusal, invoiceStatusLine, invoiceTotals, itemDedupeKey, linesFromTerms, memberView, moonDays, outsideRolesAudit,
   parseItemFields, parseMoonReviewSettings, parsePayRouteInput, parsePayers, parseRoleAudit, payRouteWords, payerForRoute,
-  periodWords, readingOf, recapEditable, routeChangeClearsConfirmation, scoreContextOf, seatCoverage, seatReadingOf, sendBy,
+  THANKS_WORDS, parseThanks, periodWords, thanksDedupeKey, readingOf, recapEditable, routeChangeClearsConfirmation, scoreContextOf, seatCoverage, seatReadingOf, sendBy,
   setupGaps, taskScore, termsCarryMoney, waitingLine, waitingStage, workDueOn, workSummaryHtml, workSummaryText,
   type AssignmentRow, type FromBlock, type InvoiceLine, type InvoiceView, type ItemOrigin, type ItemResponse, type ItemState,
   type MemberMoonResponse, type MoonDays, type MoonReviewSettings, type PayRouteRecord, type MoonRef, type MyMoonResponse,
   type PayRouteResponse, type PayersDoc, type RecapItem, type RecapView, type RoleAudit, type RoleHeld, type SeasonGoalRef,
-  type SendRecapResponse, type SeraState, type TakeBackResponse, type TaskStatus, type TermsInForce,
+  type SendRecapResponse, type SeraState, type TakeBackResponse, type TaskStatus, type TermsInForce, type ThanksEntry,
 } from "../../shared/moonRecap";
 import { EMPTY_RHYTHM, RHYTHM_DOC_KEY, parseRhythm, type RhythmDoc } from "../../shared/moonRhythm";
 import type { CycleBounds, CycleClock } from "../../shared/cycleClock";
@@ -657,7 +657,19 @@ export async function myMoon(pool: Pool, userId: string, moon: Moon, deps: MyMoo
     setupGaps: setupGaps(payers, settings),
     attestationWords: attestationWords(settings),
     cashPayHolders: await deps.cashPayHolderNames(),
+    guideUrl: (await rhythmDoc(pool)).guideUrl || null,
+    thanks: thanksOf(recap?.thanksJson ?? null),
   };
+}
+
+/** The thanks a recap holds, read back through the contract's own parser. */
+export function thanksOf(raw: string | null): ThanksEntry[] {
+  try {
+    const v = parseThanks(raw ? JSON.parse(raw) : null);
+    return v.ok ? v.value : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -746,6 +758,9 @@ export async function editItem(pool: Pool, userId: string, itemId: string, body:
 export interface SendDeps {
   tensionDeps: TensionDeps;
   recordEvent(e: { kind: string; text: string; actorUserId: string; entityType: string; entityRef: string; audience: "admin" }): Promise<void>;
+  /** A7: the thanked members are told once each (`thanksDedupeKey`). */
+  notify?(n: { userId: string; type: string; title: string; link?: string | null; actorUserId?: string | null; dedupeKey: string }): Promise<unknown>;
+  nameOf?(userId: string): Promise<string>;
 }
 
 /**
@@ -767,16 +782,28 @@ export async function sendRecap(pool: Pool, userId: string, moon: Moon, frame: F
   if (words.length > LIMITS.ownWords) return refuse(400, `In my own words runs to ${LIMITS.ownWords} characters at most.`);
   const audit = parseRoleAudit(b.roleAudit, frame.roles.map((r) => r.roleId));
   if (!audit.ok) return refuse(400, audit.error);
+  const thanks = b.thanks === undefined ? null : parseThanks(b.thanks);
+  if (thanks && !thanks.ok) return refuse(400, thanks.error);
 
   const recap = await store.ensureRecap(pool, { id: newId("mr"), userId, cycleId: moon.bounds.id, seasonId: frame.seasonId });
   if (!recapEditable(recap.status)) return refuse(409, "not_editable");
   await store.saveRecapWords(pool, recap.id, words || null, JSON.stringify(audit.value));
+  if (thanks?.ok) await store.saveThanks(pool, recap.id, JSON.stringify(thanks.value.filter((t) => t.userId !== userId)));
   if (recap.status === "returned") await store.resetItemReviews(pool, recap.id);
   if ((await store.markRecapSent(pool, recap.id, recap.round)) === 0) return refuse(409, "not_editable");
   await store.insertReviewEvent(pool, {
     recapId: recap.id, invoiceId: null, userId, kind: "sent", actorUserId: userId, actorRole: null, amountMinor: null, currency: null, hash: null, note: null,
   });
   await deps.recordEvent({ kind: "audit", text: `moon:recap-sent:${recap.id}`, actorUserId: userId, entityType: "moon_recap", entityRef: recap.id, audience: "admin" });
+
+  // A7: each thanked member is told once per recap, whatever the round. Nothing moves: gratitude is its own flow.
+  if (thanks?.ok && deps.notify) {
+    const name = deps.nameOf ? await deps.nameOf(userId) : "A member";
+    for (const t of thanks.value) {
+      if (!t.userId || t.userId === userId) continue;
+      await deps.notify({ userId: t.userId, type: "moon_review", title: THANKS_WORDS.notice(name), link: null, actorUserId: userId, dedupeKey: thanksDedupeKey(recap.id, t.userId) }).catch(() => undefined);
+    }
+  }
 
   let tensionsRaised = 0;
   if (recap.round === 0) {
@@ -820,6 +847,7 @@ export async function payRouteResponse(pool: Pool, userId: string, cashPayHolder
     billTo: payer ? billToOf(payer) : null,
     routeChoices: PAY_ROUTES.map((r) => ({ route: r, words: payRouteWords(r, settings) })),
     cashPayHolders,
+    taxForms: settings.taxForms,
   };
 }
 

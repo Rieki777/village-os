@@ -2781,6 +2781,10 @@ export interface MyMoonResponse {
   attestationWords: ReturnType<typeof attestationWords>;
   /** Who can read the member's route and invoice, by name. */
   cashPayHolders: string[];
+  /** B1: the village's End of Moon guide, or null when it has set none (`moon_rhythm`). */
+  guideUrl: string | null;
+  /** A7: who helped this moon, as the member saved it. */
+  thanks: ThanksEntry[];
 }
 
 export interface GatherResponse {
@@ -2805,11 +2809,13 @@ export interface ItemResponse {
 export interface SendRecapRequest {
   ownWords?: string | null;
   roleAudit?: RoleAudit;
+  /** A7: who helped, read with `parseThanks`. */
+  thanks?: ThanksEntry[];
 }
 
 /** `PUT /api/me/moon/:cycle/goals`: the next moon's three to five goals. */
 export interface NextGoalsRequest {
-  goals: GoalInput[];
+  goals: Array<GoalInput & { carriedFromId?: string | null }>;
 }
 
 /** `PATCH /api/me/moon/goals/:id`: score one of last moon's goals. */
@@ -2860,6 +2866,8 @@ export interface PayRouteResponse {
   billTo: BillTo | null;
   routeChoices: Array<{ route: PayRoute; words: string }>;
   cashPayHolders: string[];
+  /** The tax forms the village keeps on file (`settings.taxForms`), for the form to offer. */
+  taxForms: TaxFormDef[];
 }
 
 /** `PUT /api/me/pay-route`. A pilot acknowledgement rides with it the first time. */
@@ -2894,11 +2902,13 @@ export interface QueueRow {
    */
   hash: string;
   /** A4: the reading first, the numbers second. Never an amount. */
-  reading: Reading | null;
+  taskReading: Reading | null;
   seatReading: Reading | null;
   score: Score;
-  /** `cash.pay` view only. */
-  invoice: (InvoiceView & { routeCheck: string | null; taxFormValid: boolean; authorityNote: string | null; queueNote: string | null }) | null;
+  /** The recap's items, for an approver to approve or return each one (lane B, for the client lane). */
+  items: RecapItem[];
+  /** `cash.pay` view only. `hash` is the row's, for `BulkApproveRequest`. */
+  invoice: (InvoiceView & { routeCheck: string | null; taxFormValid: boolean; authorityNote: string | null; queueNote: string | null; hash: string }) | null;
 }
 
 /** `GET /api/moon-review/queue?cycle=`. The `moon.approve` view carries no invoice. */

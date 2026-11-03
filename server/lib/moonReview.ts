@@ -38,7 +38,7 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import {
   APPROVAL_REFUSALS, APPROVE_ALONE_CAPABILITY, APPROVE_OWN_CAPABILITY, CONFIRM_OWN_ROUTE_REFUSED, INVOICE_APPROVE_CAPABILITY,
   LIMITS, NOTICE_WORDS, PAYMENT_DETAILS_REFUSED, RECAP_ID, RECAP_STATUS_WORDS, SELF_APPROVED_WORDS, WORK_APPROVE_CAPABILITY,
-  approvalDecision, approvalHash, invoicePaidFrom, rowExistsRefusal, authorityNote, carriedTooOften, confirmRouteRefusal, coverage, eligibleApprovers,
+  approvalDecision, approvalHash, goalScoreProblem, invoicePaidFrom, parseMoonGoals, rowExistsRefusal, authorityNote, carriedTooOften, confirmRouteRefusal, coverage, eligibleApprovers,
   financeApprovalRefusal, goalScore, invoiceSendRefusal, invoiceTotals, isPayableLine, linesFromTerms, memberView, packMoonDates,
   parseAttestation, payerForRoute, rangeChangedNote, readingOf, recapEditable, recapStatusAfterWork, reviewDedupeKey,
   scoreContextOf, seatCoverage, seatReadingOf, taskScore, termsCarryMoney, validatePack, waitingStage,
@@ -373,6 +373,7 @@ export async function reviewQueue(pool: Pool, moon: Moon, reader: QueueReader, d
     const t = taskScore(items, moon.days);
     const seats = seatCoverage(frame.roles, items);
     for (const roleId of cov.rolesWithNoItems) rolesWithNoItems.push({ userId: r.userId, roleId, name: frame.roles.find((x) => x.roleId === roleId)?.name ?? roleId });
+    const hash = await approvalHash(subjectOf(invoice, route, items));
     let cash: QueueRow["invoice"] = null;
     if (reader.cashView && invoice) {
       const base = invoiceViewOf({ stored: invoice, terms: frame.terms, moon, route, payers, settings, today, summary: summaryFor({ stored: invoice, recap: r, items, seasonGoals: frame.seasonGoals, payers, moon, timeZone: moon.timeZone }) }) as InvoiceView;
@@ -384,16 +385,18 @@ export async function reviewQueue(pool: Pool, moon: Moon, reader: QueueReader, d
         taxFormValid: !!route && (route.taxFormKind === "none" ? !settings.taxFormRoutes.includes(route.route) : !!route.taxFormSignedOn && (!route.taxFormExpiresOn || route.taxFormExpiresOn >= (invoice.expectedOn ?? today))),
         authorityNote: payer ? authorityNote(payer) : null,
         queueNote: payer?.queueNote ?? null,
+        hash,
       };
-      if (invoice.selfApproved) cash.statusLine = `${cash.statusLine}. ${SELF_APPROVED_WORDS}`;
+      if (invoice.selfApproved) cash = { ...cash, statusLine: `${cash.statusLine}. ${SELF_APPROVED_WORDS}` };
     }
     const names = async (ids: readonly string[]) => Promise.all(ids.map((id) => deps.nameOf(id)));
     rows.push({
       recapId: r.id, userId: r.userId, name: await deps.nameOf(r.userId), status: r.status, waitingOn: view.waitingOn, dueOn: view.dueOn,
       selfApproved: r.selfApproved, workApprovers: await names(eligible.work), invoiceApprovers: invoice ? await names(eligible.invoice) : [],
       roles: cov.roles.map((x) => ({ roleId: x.roleId, name: x.name, itemCount: x.itemCount })), outsideMyRoles: outside,
-      hash: await approvalHash(subjectOf(invoice, route, items)),
-      reading: readingOf(t, scoreContextOf(t, outside)), seatReading: seatReadingOf(seats.on, seats.total), score: { numHalves: t.numHalves, den: t.den, pct: t.pct },
+      hash,
+      taskReading: readingOf(t, scoreContextOf(t, outside)), seatReading: seatReadingOf(seats.on, seats.total), score: { numHalves: t.numHalves, den: t.den, pct: t.pct },
+      items,
       invoice: cash,
     });
   }
@@ -767,3 +770,64 @@ export async function roomPanel(pool: Pool, sessionId: number, viewerId: string,
 
 /** Used by the tests: a line that carries money. */
 export { isPayableLine };
+
+// ── Moon goals (decision 20): the next moon's, and scoring last moon's ───────
+
+export type GoalView = Awaited<ReturnType<typeof store.goalsFor>>[number] & { flagged: boolean };
+const flagged = (g: Awaited<ReturnType<typeof store.goalsFor>>[number]): GoalView => ({ ...g, flagged: carriedTooOften(g) });
+
+/** The next moon's goals, carried ones first. */
+export async function nextGoals(pool: Pool, userId: string, nextCycleId: string): Promise<{ goals: GoalView[] }> {
+  const all = await store.goalsFor(pool, userId, nextCycleId);
+  return { goals: [...all.filter((g) => g.carriedFromId), ...all.filter((g) => !g.carriedFromId)].map(flagged) };
+}
+
+/**
+ * SET THE NEXT MOON'S GOALS: three to five (`parseMoonGoals`). A goal naming
+ * `carriedFromId` is one of the member's own earlier goals carried in, one
+ * carry more; a carried goal already there takes the new words. The member's
+ * own open goals that are not carried are replaced. At most five stay open.
+ */
+export async function putNextGoals(pool: Pool, userId: string, nextCycleId: string, body: unknown): Promise<Outcome<{ goals: GoalView[] }>> {
+  const raw = (body && typeof body === "object" ? (body as Record<string, unknown>).goals : undefined) as unknown;
+  const parsed = parseMoonGoals(raw);
+  if (!parsed.ok) return refuse(400, parsed.error);
+  const rawKept = (Array.isArray(raw) ? raw : []).filter((g) => g && typeof g === "object" && typeof (g as Record<string, unknown>).text === "string" && ((g as Record<string, unknown>).text as string).trim()) as Array<Record<string, unknown>>;
+  const existing = await store.goalsFor(pool, userId, nextCycleId);
+  for (const g of existing) if (g.status === "open" && !g.carriedFromId) await store.removeOpenGoal(pool, g.id, userId);
+  const kept = await store.goalsFor(pool, userId, nextCycleId);
+  let position = kept.reduce((m, g) => Math.max(m, g.position + 1), 0);
+  let open = kept.filter((g) => g.status === "open").length;
+  for (let i = 0; i < parsed.value.length; i++) {
+    const g = parsed.value[i];
+    const from = typeof rawKept[i]?.carriedFromId === "string" ? String(rawKept[i].carriedFromId) : null;
+    const already = from ? kept.find((k) => k.carriedFromId === from) : undefined;
+    if (already) {
+      await store.updateGoalWords(pool, already.id, userId, g);
+      continue;
+    }
+    const source = from ? await store.goalById(pool, from) : null;
+    if (from && (!source || source.userId !== userId)) return refuse(400, "carried_goal_not_yours");
+    if (open >= 5) return refuse(400, "Set 3 to 5 goals for the next moon.");
+    if (await store.insertGoal(pool, { id: newId("mg"), userId, cycleId: nextCycleId, position, text: g.text, doneWhen: g.doneWhen, seasonGoalId: g.seasonGoalId, carriedFromId: from, carryCount: source ? source.carryCount + 1 : 0 })) {
+      position += 1;
+      open += 1;
+    }
+  }
+  return { ok: true, value: await nextGoals(pool, userId, nextCycleId) };
+}
+
+/** SCORE ONE OF LAST MOON'S GOALS. Let go needs its reason. Only the member's own. */
+export async function scoreOneGoal(pool: Pool, userId: string, goalId: string, body: unknown): Promise<Outcome<{ goal: GoalView }>> {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const goal = await store.goalById(pool, goalId);
+  if (!goal || goal.userId !== userId) return refuse(404, "not_found");
+  const status = b.status;
+  if (status !== "done" && status !== "partly" && status !== "carried" && status !== "let_go") return refuse(400, "A goal is Done, Partly, Carry or Let go.");
+  const reason = typeof b.letGoReason === "string" ? b.letGoReason.replace(/\s+/g, " ").trim().slice(0, LIMITS.letGoReason) : null;
+  const problem = goalScoreProblem(status, reason);
+  if (problem) return refuse(400, problem);
+  await store.scoreGoal(pool, goalId, userId, status, status === "let_go" ? reason : null);
+  const after = await store.goalById(pool, goalId);
+  return { ok: true, value: { goal: flagged(after ?? goal) } };
+}

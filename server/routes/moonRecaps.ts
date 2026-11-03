@@ -6,6 +6,9 @@
  *   POST  /api/me/moon/:cycle/ask-sera        the Sera draft, in-process; poll GET /api/me/moon
  *   POST  /api/me/moon/:cycle/send-invoice    the draft invoice, with the member's own invoice number
  *   POST  /api/me/moon/:cycle/import          a moon pack: preview, then confirm with its hash (A2)
+ *   GET   /api/me/moon/:cycle/goals           the next moon's goals, carried ones first
+ *   PUT   /api/me/moon/:cycle/goals           set them: three to five
+ *   PATCH /api/me/moon/goals/:id              score one of last moon's goals
  *   POST  /api/me/moon/:cycle/items           add an item by hand
  *   PATCH /api/me/moon/items/:id              edit one of my items
  *   POST  /api/me/moon/:cycle/send-recap      send my recap; needs no pay route
@@ -38,7 +41,7 @@ import { civilDateKey } from "../../shared/lunar";
 import { requireModule, effectiveLifecycle } from "../lib/modules";
 import { preflight } from "../lib/saberraSync";
 import { askSera } from "../lib/moonRecapSera";
-import { importPack, sendInvoice, type KeyHolders } from "../lib/moonReview";
+import { importPack, nextGoals, putNextGoals, scoreOneGoal, sendInvoice, type KeyHolders } from "../lib/moonReview";
 import { registerReviewDoors } from "./moonReview";
 import { activeClock } from "../lib/gratitude-cycles";
 import { recordEvent } from "../lib/events";
@@ -171,6 +174,32 @@ export function register(app: Express, deps: Deps): void {
     res.json(out.value);
   });
 
+  app.get(MOON_ROUTES.nextGoals, async (req, res) => {
+    const uid = await member(req, res);
+    if (!uid) return;
+    const moon = await moonFor(req.params.cycle, res);
+    if (!moon) return;
+    res.json(await nextGoals(getPool(), uid, nextCycleId(moon)));
+  });
+
+  app.put(MOON_ROUTES.nextGoals, async (req, res) => {
+    const uid = await writer(req, res);
+    if (!uid) return;
+    const moon = await moonFor(req.params.cycle, res);
+    if (!moon) return;
+    const out = await putNextGoals(getPool(), uid, nextCycleId(moon), req.body);
+    if (!out.ok) return fail(res, out);
+    res.json(out.value);
+  });
+
+  app.patch(MOON_ROUTES.scoreGoal, async (req, res) => {
+    const uid = await writer(req, res);
+    if (!uid) return;
+    const out = await scoreOneGoal(getPool(), uid, String(req.params.id ?? ""), req.body);
+    if (!out.ok) return fail(res, out);
+    res.json(out.value);
+  });
+
   app.post(MOON_ROUTES.importPack, async (req, res) => {
     const uid = await writer(req, res);
     if (!uid) return;
@@ -219,6 +248,8 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const out = await sendRecap(pool, uid, moon, await loadFrame(pool, uid, moon, frameDeps()), req.body, {
       recordEvent: audit,
+      notify: deps.notify,
+      nameOf,
       tensionDeps: { notify: deps.notify, timeZone, sessionsOn: () => effectiveLifecycle("sessions") !== "off" },
     });
     if (!out.ok) return fail(res, out);

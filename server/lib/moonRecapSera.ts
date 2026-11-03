@@ -119,7 +119,7 @@ export function seraDraftItems(answer: string, existing: readonly Pick<RecapItem
   for (const c of chunks) {
     const found = LINK.exec(c)?.[0]?.replace(/[.,;:)\]]+$/, "") ?? null;
     const link = found && found.length <= LIMITS.evidenceUrl && evidenceUrlProblem(found) === null ? found : null;
-    const words = stripContact(c.replace(LINK, " ").replace(/\[\s*\]|\(\s*\)/g, " ")).replace(/\s+/g, " ").replace(/^[\s,;:.-]+|[\s,;:-]+$/g, "").trim().slice(0, LIMITS.itemText);
+    const words = stripContact(c.replace(LINK, " ").replace(/\[\s*\]|\(\s*\)/g, " ")).replace(/\s+/g, " ").replace(/\s+([.,;:])/g, "$1").replace(/^[\s,;:.-]+|[\s,;:-]+$/g, "").trim().slice(0, LIMITS.itemText);
     if (!words || looksLikePaymentDetails(words)) continue;
     if (link && (urls.has(link) || seraIds.some((id) => link.includes(id)))) continue;
     const key = (link ?? words).toLowerCase();
