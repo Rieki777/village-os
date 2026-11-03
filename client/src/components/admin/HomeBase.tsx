@@ -10,6 +10,7 @@ import { API_BASE, authHeaders } from "@/components/admin/adminApi";
 import type { NavGroup } from "@/components/admin/adminNavGroups";
 import { ADMIN_AREAS, setHomeBaseOn, tabsInArea, type AreaId } from "./adminAreas";
 import { connectionRows, glanceSentence, readLastGlance, rememberGlance, sinceLastVisit } from "./todayGlance";
+import UnifiedInbox from "./UnifiedInbox";
 
 interface Needs {
   sentence: string;
@@ -110,6 +111,7 @@ export default function HomeBase({
         ))}
       </div>
       <div>
+        {area === "inbox" && <UnifiedInbox password={password} onOpen={onOpenTab} />}
         <p className="text-sm text-gray-700">{ADMIN_AREAS.find((item) => item.id === area)?.help}</p>
         <ul className="mt-2 space-y-1">
           {tabs.filter((tab) => tab.key !== "home").map((tab) => (
