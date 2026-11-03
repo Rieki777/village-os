@@ -174,7 +174,7 @@ export default function PlayersTab({ password }: { password: string }) {
                 onAccess={(role) => setRole(p.id, role, p.name)}
                 onStage={(id) => grant(p.id, id ?? "")}
                 onSignOut={() => revokeSessions(p.id, p.name)}
-                onDelete={() => { setErasing({ id: p.id, email: p.email }); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                onDelete={() => { setErasing({ id: p.id, email: p.email }); window.scrollTo(0, 0); }}
               />
             ))}
           </div>
