@@ -1,0 +1,55 @@
+/*
+ * ADMIN NIGHT. The panel stays light until Night look is on. Then the page
+ * root carries `sheet-night` (the profile's colours) plus `admin-root`.
+ *
+ * `bg-white` inside that world is a white slab on the forest ground. The
+ * profile found those slabs by reading the live page. Admin still paints
+ * with fixed light classes, so these patches move the ones the panel uses
+ * onto the sheet tokens. White text on a brand-coloured button is left
+ * alone: that pair is already measured, and a dark brand colour used as
+ * text would disappear on the night ground, so those links take the earned
+ * gold instead.
+ */
+.admin-root.sheet-night.bg-gray-50,
+.admin-root.sheet-night .bg-gray-50 {
+  background-color: var(--background);
+}
+
+.admin-root.sheet-night .bg-white,
+.admin-root.sheet-night .bg-white\/95,
+.admin-root.sheet-night .hover\:bg-white:hover {
+  background-color: var(--card);
+}
+
+.admin-root.sheet-night .bg-gray-100,
+.admin-root.sheet-night .bg-gray-200,
+.admin-root.sheet-night .hover\:bg-gray-50:hover,
+.admin-root.sheet-night .hover\:bg-gray-100:hover {
+  background-color: var(--muted);
+}
+
+.admin-root.sheet-night .text-gray-900,
+.admin-root.sheet-night .text-gray-800,
+.admin-root.sheet-night .hover\:text-gray-900:hover {
+  color: var(--foreground);
+}
+
+.admin-root.sheet-night .text-gray-700,
+.admin-root.sheet-night .text-gray-600,
+.admin-root.sheet-night .text-gray-500,
+.admin-root.sheet-night .text-gray-400,
+.admin-root.sheet-night .hover\:text-gray-700:hover,
+.admin-root.sheet-night .hover\:text-gray-600:hover {
+  color: var(--muted-foreground);
+}
+
+.admin-root.sheet-night .border-gray-100,
+.admin-root.sheet-night .border-gray-200,
+.admin-root.sheet-night .border-gray-300 {
+  border-color: var(--border);
+}
+
+.admin-root.sheet-night .text-teal-deep,
+.admin-root.sheet-night .hover\:text-teal-deep:hover {
+  color: var(--sheet-earned, var(--ring));
+}

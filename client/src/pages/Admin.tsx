@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 // Nineteen icons left this list when navGroups and CONTENT_SECTIONS moved to
 // client/src/components/admin/: they were the nav's icons, not this file's.
-import { Lock, Inbox, Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, LogOut, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Inbox, Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { linesToList, listToLines } from "@/lib/questBoard";
@@ -37,6 +37,8 @@ import { currencySymbol, figureWithCurrency } from "@shared/money";
 import { holdCancelled, swipeIntent } from "@/lib/gestures";
 import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
+import AdminHeader from "@/components/admin/AdminHeader";
+import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
 import { TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
@@ -7888,6 +7890,8 @@ export default function Admin() {
     return window.innerWidth >= 1024;
   });
   useEffect(() => { writeStored("local", "admin.navOpen", navOpen ? "1" : "0"); }, [navOpen]);
+  const [night, setNight] = useState<boolean>(() => readAdminNight());
+  useEffect(() => { writeAdminNight(night); }, [night]);
 
   useEffect(() => {
     if (!password) return;
@@ -7910,31 +7914,18 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={adminRootClass(night)}>
       {/* S64: the journey banner. Every admin sees the road to launch at the
           top of every admin visit until a founder marks the village launched —
           then it retires itself. */}
       <LaunchBanner password={password} />
-      <header className="bg-teal-deep text-white px-6 py-4 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-            <Lock className="w-4 h-4" />
-          </div>
-          <div>
-            <h1 className="font-semibold text-lg leading-tight">{villageName ? `${villageName} Admin` : "Admin"}</h1>
-            {siteUrl && (
-              <p className="text-xs text-white/60">{siteUrl.replace(/^https?:\/\//, "")}</p>
-            )}
-          </div>
-        </div>
-        <button
-          onClick={() => setPassword(null)}
-          className="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Sign Out
-        </button>
-      </header>
+      <AdminHeader
+        villageName={villageName}
+        siteUrl={siteUrl}
+        night={night}
+        onNight={setNight}
+        onSignOut={() => setPassword(null)}
+      />
 
       <div className="flex">
         <AdminNav
