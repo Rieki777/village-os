@@ -25,13 +25,14 @@ describe("the bridge reading", () => {
   it("counts lists, feedback, the review queue and Needs Owner", async () => {
     const r = await bridgeReading(
       fakePool(
-        ["member_tasks", "member_task_access", "sera_person_links", "member_task_import_queue", "member_task_feedback", "external_proposals"],
+        ["member_tasks", "member_task_access", "sera_person_links", "member_task_import_queue", "member_task_outbox", "member_task_bridge", "external_proposals"],
         [
           [/sera_person_links/, [{ n: 1 }]],
           [/member_task_access/, [{ n: 1 }]],
           [/GROUP BY `import_batch`/, [{ b: "batch-1", at: new Date("2026-11-02T20:00:00Z"), n: 33 }]],
           [/FROM `member_tasks`/, [{ n: 33, o: 30 }]],
-          [/member_task_feedback/, [{ s: "sent", n: 4 }, { s: "queued", n: 2 }, { s: "failed", n: 1 }]],
+          [/member_task_outbox/, [{ kind: "feedback", status: "sent", n: 4 }, { kind: "feedback", status: "queued", n: 2 }, { kind: "feedback", status: "failed", n: 1 }, { kind: "note", status: "held", n: 3 }]],
+          [/member_task_bridge/, [{ value: "held" }]],
           [/external_proposals/, [{ n: 5 }]],
           [/member_task_import_queue/, [{ n: 2 }]],
         ],
@@ -39,7 +40,7 @@ describe("the bridge reading", () => {
     );
     expect(r.lists).toMatchObject({ ready: true, linkedPeople: 1, listsOn: 1, imported: 33, importedOpen: 30 });
     expect(r.lists.lastBatch).toEqual({ id: "batch-1", at: "2026-11-02T20:00:00.000Z", tasks: 33 });
-    expect(r.feedback).toMatchObject({ ready: true, sent: 4, queued: 2, failed: 1 });
+    expect(r.feedback).toEqual({ ready: true, sent: 4, queued: 2, failed: 1, notesHeld: 3, notesReleased: false });
     expect(r.reviewQueue.waiting).toBe(5);
     expect(r.needsOwner).toEqual({ ready: true, waiting: 2 });
   });

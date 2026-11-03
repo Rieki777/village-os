@@ -39,9 +39,9 @@ describe("the Sera bridge board", () => {
   });
 
   it("reads the feedback counts once the bridge lands", () => {
-    const a = { ...base, feedback: { ready: true, sent: 3, queued: 1, failed: 0, notesHeld: 2, notesReleased: null } };
+    const a = { ...base, feedback: { ready: true, sent: 3, queued: 1, failed: 0, notesHeld: 2, notesReleased: false } };
     render(<BridgeView a={a} now={before} />);
     expect(screen.getByText("3 sent, 1 queued, 0 failed.")).toBeTruthy();
-    expect(screen.getByText("2 notes held until the agreement.")).toBeTruthy();
+    expect(screen.getByText("Notes held until the agreement: 2.")).toBeTruthy();
   });
 });

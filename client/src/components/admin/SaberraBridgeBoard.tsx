@@ -99,7 +99,11 @@ export function BridgeView({ a, now }: { a: BridgeAnswer; now: number }) {
               <p>
                 {a.feedback.sent} sent, {a.feedback.queued} queued, {a.feedback.failed} failed.
               </p>
-              <p>{plural(a.feedback.notesHeld, "note")} held until the agreement.</p>
+              <p>
+                {a.feedback.notesReleased
+                  ? "Notes are released to Sera."
+                  : `Notes held until the agreement: ${a.feedback.notesHeld}.`}
+              </p>
             </>
           ) : (
             <p>Being built. Remove and Redirect reasons will be sent from day one; notes are held until the agreement.</p>

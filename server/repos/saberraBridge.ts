@@ -5,6 +5,7 @@
  */
 import type { Pool } from "mysql2/promise";
 import type { BridgeAnswer } from "@shared/seraBridgeBoard";
+import { notesRelease, outboxCounts } from "./memberTaskFeedback";
 
 type Row = Record<string, unknown>;
 
@@ -22,14 +23,6 @@ async function one(pool: Pool, sql: string, args: unknown[] = []): Promise<Row> 
 }
 
 const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-
-async function columns(pool: Pool, table: string): Promise<Set<string>> {
-  const [rows] = await pool.query(
-    "SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
-    [table],
-  );
-  return new Set((rows as Row[]).map((r) => String(r.c ?? r.COLUMN_NAME)));
-}
 
 export async function bridgeLists(pool: Pool, have: Set<string>): Promise<BridgeAnswer["lists"]> {
   const empty = { ready: false, linkedPeople: 0, listsOn: 0, imported: 0, importedOpen: 0, lastBatch: null };
@@ -57,26 +50,21 @@ export async function bridgeLists(pool: Pool, have: Set<string>): Promise<Bridge
 
 export async function bridgeFeedback(pool: Pool, have: Set<string>): Promise<BridgeAnswer["feedback"]> {
   const off = { ready: false, sent: 0, queued: 0, failed: 0, notesHeld: 0, notesReleased: null };
-  if (!have.has("member_task_feedback")) return off;
-  const cols = await columns(pool, "member_task_feedback");
-  const statusCol = ["sera_status", "send_status", "status"].find((c) => cols.has(c));
-  if (!statusCol) return { ...off, ready: true };
-  const [rows] = await pool.query(
-    `SELECT \`${statusCol}\` AS s, COUNT(*) AS n FROM \`member_task_feedback\` GROUP BY \`${statusCol}\``,
-  );
-  const by = new Map((rows as Row[]).map((r) => [String(r.s), n(r.n)]));
-  const sum = (...keys: string[]) => keys.reduce((t, k) => t + (by.get(k) ?? 0), 0);
-  let notesHeld = 0;
-  const noteCol = ["note_status", "note_held"].find((c) => cols.has(c));
-  if (noteCol === "note_status") notesHeld = n((await one(pool, "SELECT COUNT(*) AS n FROM `member_task_feedback` WHERE `note_status` = 'held'")).n);
-  if (noteCol === "note_held") notesHeld = n((await one(pool, "SELECT COUNT(*) AS n FROM `member_task_feedback` WHERE `note_held` = 1")).n);
+  if (!have.has("member_task_outbox") || !have.has("member_task_bridge")) return off;
+  // The outbox is what goes to Sera; `member_task_feedback` is what members said.
+  const counts = await outboxCounts(pool);
+  const sum = (status: string, kind?: string) =>
+    Object.entries(counts).reduce((t, [k, v]) => {
+      const [kk, ss] = k.split(":");
+      return ss === status && (!kind || kk === kind) ? t + v : t;
+    }, 0);
   return {
     ready: true,
-    sent: sum("sent", "accepted", "delivered"),
-    queued: sum("queued", "pending", "waiting"),
-    failed: sum("failed", "error", "refused"),
-    notesHeld,
-    notesReleased: null,
+    sent: sum("sent"),
+    queued: sum("queued"),
+    failed: sum("failed"),
+    notesHeld: sum("held", "note"),
+    notesReleased: (await notesRelease(pool)) === "released",
   };
 }
 
@@ -86,7 +74,8 @@ export async function bridgeReading(pool: Pool): Promise<Omit<BridgeAnswer, "con
     "member_task_access",
     "sera_person_links",
     "member_task_import_queue",
-    "member_task_feedback",
+    "member_task_outbox",
+    "member_task_bridge",
     "external_proposals",
   ]);
   const lists = await bridgeLists(pool, have);
