@@ -13,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const LIGHT_ONLY = /\b(?:text|bg|border|from|to|ring|hover:bg|hover:border)-stone-|\bbg-white\b|\btext-white\b|\bbg-amber-\d+\b/;
 
 describe("the terms editor uses the night sheet's tokens", () => {
-  it.each(["SeatSettingsEditor.tsx", "SeatSettingsFields.tsx"])("%s has no light-only colour class", (name) => {
+  it.each(["SeatSettingsEditor.tsx", "SeatSettingsFields.tsx", "WholePresetCards.tsx", "TermGlossary.tsx"])("%s has no light-only colour class", (name) => {
     const text = readFileSync(join(here, name), "utf8");
     expect(text.match(LIGHT_ONLY)).toBeNull();
   });
