@@ -11,6 +11,8 @@ import { REDIRECT_CHOICES, REMOVE_CHOICES, SCREEN_REASON_WORDS, type ScreenReaso
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { putSubmissionStatus } from "@/components/admin/submissionStatus";
 import { storedText, writeStored } from "@/lib/safeStorage";
+import { holdUndo } from "./adminUndo";
+import { nextWeek, snoozeUntil, tomorrow } from "./adminSnooze";
 
 const TAP = "inline-flex min-h-[44px] items-center justify-center rounded-lg px-3 text-sm font-medium";
 const FIELD = "mt-1 block min-h-[44px] w-full rounded-lg border border-gray-200 bg-white px-3 text-base text-gray-900";
@@ -147,9 +149,11 @@ export default function SubmissionHandling({
   return (
     <div className="border-t border-gray-100 px-4 py-3">
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={`${TAP} bg-teal-deep text-white`} disabled={busy} onClick={() => void finish("done")}>Done</button>
+        <button type="button" className={`${TAP} bg-teal-deep text-white`} disabled={busy} onClick={() => holdUndo("Marking this done.", () => { void finish("done"); })}>Done</button>
         <button type="button" className={`${TAP} border border-gray-300 bg-white text-gray-900`} aria-expanded={mode === "remove"} disabled={busy} onClick={() => { setMode(mode === "remove" ? null : "remove"); setReason("already_done"); }}>Remove</button>
         <button type="button" className={`${TAP} border border-gray-300 bg-white text-gray-900`} aria-expanded={mode === "redirect"} disabled={busy} onClick={() => { setMode(mode === "redirect" ? null : "redirect"); setReason("better_for_someone_else"); }}>Redirect</button>
+        <button type="button" className={`${TAP} border border-gray-300 bg-white text-gray-900`} disabled={busy} onClick={() => { snoozeUntil(submission.id, tomorrow()); onChanged(); }}>Tomorrow</button>
+        <button type="button" className={`${TAP} border border-gray-300 bg-white text-gray-900`} disabled={busy} onClick={() => { snoozeUntil(submission.id, nextWeek()); onChanged(); }}>Next week</button>
       </div>
       {mode && (
         <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-50 max-sm:mt-0 max-sm:rounded-b-none max-sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -202,7 +206,7 @@ export default function SubmissionHandling({
           </label>
           {problem && <p role="status" className="mt-2 text-sm text-gray-900">{problem}</p>}
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" className={`${TAP} bg-teal-deep text-white disabled:opacity-40`} disabled={busy || !ready} onClick={() => void finish(mode)}>
+            <button type="button" className={`${TAP} bg-teal-deep text-white disabled:opacity-40`} disabled={busy || !ready} onClick={() => holdUndo(mode === "remove" ? "Removing this request." : "Handing this on.", () => { void finish(mode); })}>
               {mode === "remove" ? "Remove it" : "Hand it on"}
             </button>
             <button type="button" className={`${TAP} border border-gray-300 bg-white text-gray-900`} onClick={() => setMode(null)}>Cancel</button>

@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SubmissionDesk, { Pick } from "./SubmissionDesk";
+import { setUndoWaitMs } from "./adminUndo";
+import { act } from "@testing-library/react";
 
 beforeEach(() => {
+  setUndoWaitMs(0);
   localStorage.clear();
   window.history.replaceState({}, "", "/admin?tab=submissions");
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
@@ -48,6 +51,7 @@ describe("bulk select and saved views", () => {
     await userEvent.click(boxes[1]);
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
     await userEvent.click(screen.getByRole("button", { name: "Remove them" }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     const handling = vi.mocked(fetch).mock.calls.filter((c) => String(c[0]).endsWith("/handling"));
     expect(handling).toHaveLength(2);
     const reasons = handling.map((c) => JSON.parse(String(c[1]?.body)).reason);

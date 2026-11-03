@@ -18,6 +18,7 @@ import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, LABEL_CAPS, PANEL } from "
 import { daysBetween } from "@shared/memberTasks";
 import type { FeedbackContext } from "@shared/memberTaskFeedback";
 import ReasonSheet, { type ReasonPick } from "./ReasonSheet";
+import { holdUndo } from "@/components/admin/adminUndo";
 import {
   addTask, changeTier, markDone, newFeedbackId, pinTask, readFeedbackSwitch, readList, redirectTask, removeTask, saveFeedbackSwitch, undoTask,
   type ListPayload, type ListTask, type RankedTask,
@@ -228,7 +229,7 @@ export default function YourListCard() {
         <div className="mt-4 rounded-xl border border-border bg-background p-3">
           <p className="text-sm text-foreground">{chosen.length} selected. One reason covers all of them.</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void applyBulk("done")}>Done</button>
+            <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => holdUndo(`Applying this to ${chosen.length} tasks.`, () => { void applyBulk("done"); })}>Done</button>
             <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => setBulk(bulk === "remove" ? null : "remove")}>Remove</button>
             <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => setBulk(bulk === "redirect" ? null : "redirect")}>Redirect</button>
           </div>
@@ -238,7 +239,7 @@ export default function YourListCard() {
               busy={busy}
               others={chosen.map((t) => ({ id: t.id, title: t.title }))}
               onCancel={() => setBulk(null)}
-              onPick={(p) => void applyBulk(bulk, p)}
+              onPick={(p) => holdUndo(`Applying this to ${chosen.length} tasks.`, () => { void applyBulk(bulk, p); })}
             />
           )}
         </div>
@@ -267,8 +268,8 @@ export default function YourListCard() {
                           busy={busy}
                           selected={selected.includes(t.id)}
                           onToggle={() => setSelected((cur) => cur.includes(t.id) ? cur.filter((id) => id !== t.id) : [...cur, t.id])}
-                          onDone={() => act(() => markDone(t))}
-                          onPick={(mode, p) => pressed(t, mode, p)}
+                          onDone={() => holdUndo("Marking this done.", () => { void act(() => markDone(t)); })}
+                          onPick={(mode, p) => holdUndo(mode === "remove" ? "Removing this task." : "Handing this task on.", () => { void pressed(t, mode, p); })}
                           onPin={() => act(() => pinTask(t, !t.memberPinned))}
                           onTier={(tr2) => act(() => changeTier(t, tr2, contextOf(t)))}
                         />

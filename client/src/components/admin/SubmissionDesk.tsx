@@ -9,6 +9,7 @@ import { REDIRECT_CHOICES, REMOVE_CHOICES, SCREEN_REASON_WORDS, type ScreenReaso
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { FORM_TYPES, putSubmissionStatus } from "@/components/admin/submissionStatus";
 import { readSavedViews, rememberView, type SavedView } from "./savedViews";
+import { holdUndo } from "./adminUndo";
 
 const TAP = "inline-flex min-h-[44px] items-center justify-center rounded-lg px-3 text-sm font-medium";
 
@@ -200,7 +201,7 @@ export default function SubmissionDesk({
           )}
           {mode && (
             <div className="mt-2 flex flex-wrap gap-2">
-              <button type="button" className={`${TAP} bg-teal-deep text-white disabled:opacity-40`} disabled={busy || (mode === "redirect" && !to)} onClick={() => void run()}>
+              <button type="button" className={`${TAP} bg-teal-deep text-white disabled:opacity-40`} disabled={busy || (mode === "redirect" && !to)} onClick={() => holdUndo(`Applying this to ${targets.length} requests.`, () => { void run(); })}>
                 {mode === "done" ? "Mark them done" : mode === "remove" ? "Remove them" : "Hand them on"}
               </button>
               <button type="button" className={`${TAP} border border-gray-300 bg-white text-gray-900`} onClick={() => setMode(null)}>Cancel</button>

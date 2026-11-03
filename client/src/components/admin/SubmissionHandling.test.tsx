@@ -3,10 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SubmissionHandling from "./SubmissionHandling";
+import { setUndoWaitMs } from "./adminUndo";
+import { act } from "@testing-library/react";
 
 const fetchMock = vi.fn();
 
+async function flushUndo() {
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+}
+
 beforeEach(() => {
+  setUndoWaitMs(0);
   localStorage.clear();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
@@ -29,6 +36,7 @@ describe("submission reasons", () => {
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect(screen.getByText("Why remove it?")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Remove it" }));
+    await flushUndo();
     const handling = fetchMock.mock.calls.find((c) => String(c[0]).endsWith("/handling"));
     expect(handling).toBeTruthy();
     const sent = JSON.parse(String(handling?.[1].body));
@@ -46,6 +54,7 @@ describe("submission reasons", () => {
     expect(await screen.findByRole("option", { name: "Nia" })).toBeTruthy();
     await userEvent.selectOptions(screen.getByRole("combobox"), "p:u2");
     await userEvent.click(screen.getByRole("button", { name: "Hand it on" }));
+    await flushUndo();
     const handling = fetchMock.mock.calls.find((c) => String(c[0]).endsWith("/handling") && c[1]?.method === "POST");
     const sent = JSON.parse(String(handling?.[1].body));
     expect(sent.action).toBe("redirect");

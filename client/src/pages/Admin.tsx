@@ -43,6 +43,8 @@ import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
 import { tabFromSearch } from "@/components/admin/adminAreas";
 import HealthStrip from "@/components/admin/HealthStrip";
 import AdminHelp from "@/components/admin/AdminHelp";
+import UndoBar from "@/components/admin/UndoBar";
+import { isSnoozed } from "@/components/admin/adminSnooze";
 
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
 import { TIER_PILL } from "@shared/moduleCatalog";
@@ -730,6 +732,13 @@ export function SubmissionsTab({ password }: { password: string }) {
   const [loading, setLoading] = useState(true);
   const [problem, setProblem] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [snoozeTick, setSnoozeTick] = useState(0);
+  useEffect(() => {
+    const on = () => setSnoozeTick((n) => n + 1);
+    window.addEventListener("admin:snooze", on);
+    return () => window.removeEventListener("admin:snooze", on);
+  }, []);
+  const visible = submissions.filter((s) => snoozeTick >= 0 && !isSnoozed(s.id));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -745,17 +754,17 @@ export function SubmissionsTab({ password }: { password: string }) {
   const setStatus = async (id: string, status: string, type = "") => { if (await putSubmissionStatus(password, id, status, type)) load(); };
 
   return (
-    <SubmissionDesk password={password} filter={filter} onFilter={setFilter} rows={submissions} onChanged={load}>
+    <SubmissionDesk password={password} filter={filter} onFilter={setFilter} rows={visible} onChanged={load}>
       <OpenProposalsPanel password={password} />
       {loading ? (
         <div className="text-center py-12 text-gray-400">Loading...</div>
       ) : problem ? (
         <AdminQueueState kind="error" message={problem} onRetry={load} />
-      ) : submissions.length === 0 ? (
+      ) : visible.length === 0 ? (
         <AdminQueueState kind="empty" />
       ) : (
         <div className="space-y-3">
-          {submissions.map((s) => (
+          {visible.map((s) => (
             <div key={s.id} className="flex items-start border border-gray-200 rounded-xl overflow-hidden">
               <Pick id={s.id} />
               <div className="min-w-0 flex-1">
@@ -7908,6 +7917,7 @@ export default function Admin() {
           open={navOpen}
           setOpen={setNavOpen}
         />
+        <UndoBar />
         <AdminMobileNav
           groups={filterNavByModules(navGroups(setupComplete), moduleLifecycles)}
           activeTab={activeTab}
