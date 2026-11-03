@@ -1514,6 +1514,17 @@ export const MODULES: ModuleDef[] = [
     capabilities: ["moon.approve", "moon.approve_alone", "moon.approve_own"],
     variableKeys: [],
     apiPrefixes: ["/api/me/moon", "/api/me/pay-route", "/api/moon-review"],
+    // The send-by rule (decision 22): the new moon day, or the first all-staff
+    // on or after it when the village names its weekday. The same check is
+    // `moonReviewConfigProblem` in shared/moonRecap.ts, which this file does
+    // not import so the registry stays free of the review's code.
+    defaultConfig: { allStaffWeekday: null },
+    validateConfig: (c: any) => {
+      if (!c || typeof c !== "object") return "config must be an object";
+      const w = c.allStaffWeekday;
+      if (w === undefined || w === null) return null;
+      return Number.isInteger(w) && w >= 0 && w <= 6 ? null : "allStaffWeekday runs from 0 (Sunday) to 6 (Saturday)";
+    },
     // No openStateCheck yet: what a member is owed lives in cash_owed, which
     // the cash payouts desk reads whether this module is on or off.
   },
