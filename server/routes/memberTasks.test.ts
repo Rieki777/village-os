@@ -82,6 +82,10 @@ describe.skipIf(!configured)("your list against a real schema", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 });
+    await q( // module-review-ok: fixture SQL against the S5 scratch schema
+      "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `handle`) VALUES (?,?,?,'x',?)",
+      ["m-wren", "Wren Alder", "wren@example.test", "wren"],
+    );
     const c = collect();
     register(c.app, deps(pool, () => whoami));
     handlers = c.handlers;
@@ -97,6 +101,47 @@ describe.skipIf(!configured)("your list against a real schema", () => {
     await q("DELETE FROM `member_tasks`"); // module-review-ok: fixture SQL against the S5 scratch schema
     await q("DELETE FROM `member_task_events`"); // module-review-ok: fixture SQL against the S5 scratch schema
     await q("DELETE FROM `member_task_access`"); // module-review-ok: fixture SQL against the S5 scratch schema
+    await q("DELETE FROM `member_task_import_queue`"); // module-review-ok: fixture SQL against the S5 scratch schema
+    await q("DELETE FROM `sera_person_links`"); // module-review-ok: fixture SQL against the S5 scratch schema
+  });
+
+  const IMPORT = "POST /api/admin/member-tasks/import";
+  const answer = { tasks: [
+    { id: "s-1", title: "Draft the season letter", priority: "High", status: "Open", owner_id: "own-wren" },
+    { id: "s-2", title: "Call the plumber", priority: "Low", status: "Open", owner_id: "own-wren" },
+    { id: "s-3", title: "Old thing", priority: "Medium", status: "Done", owner_id: "own-wren" },
+    { id: "s-4", title: "Who takes the compost?", priority: "Medium", status: "Needs Owner" },
+  ] };
+
+  it("imports dry first, writes once, and a second run changes nothing", async () => {
+    whoami = "m-steward";
+    const dry = await call(handlers, IMPORT, { body: { userId: "m-wren", seraOwnerId: "own-wren", answer } });
+    expect(dry.body.dryRun).toBe(true);
+    expect(dry.body.counts).toMatchObject({ create: 2, skipped: 1, needsOwner: 1 });
+    expect(await q("SELECT `id` FROM `member_tasks`")).toEqual([]); // module-review-ok: fixture SQL against the S5 scratch schema
+    const real = await call(handlers, IMPORT, { body: { userId: "m-wren", seraOwnerId: "own-wren", answer, dryRun: false } });
+    expect(real.body).toMatchObject({ dryRun: false, created: 2, queued: 1 });
+    const again = await call(handlers, IMPORT, { body: { userId: "m-wren", seraOwnerId: "own-wren", answer, dryRun: false } });
+    expect(again.body).toMatchObject({ created: 0, updated: 0 });
+    expect(again.body.counts.unchanged).toBe(2);
+    expect(await q("SELECT `id` FROM `member_tasks` WHERE `user_id` = 'm-wren'")).toHaveLength(2); // module-review-ok: fixture SQL against the S5 scratch schema
+    const undone = await call(handlers, "POST /api/admin/member-tasks/import/:batch/remove", { params: { batch: real.body.batch } });
+    expect(undone.body.removed).toBe(2);
+  });
+
+  it("keeps a member's edit through a rerun", async () => {
+    whoami = "m-steward";
+    await call(handlers, IMPORT, { body: { userId: "m-wren", seraOwnerId: "own-wren", answer, dryRun: false } });
+    await setListOn(pool, "m-wren", true, "m-steward");
+    whoami = "m-wren";
+    const list = (await call(handlers, "GET /api/member-tasks/me")).body;
+    const t = list.open.find((x: any) => x.title === "Call the plumber");
+    await call(handlers, "PATCH /api/member-tasks/me/:id", { params: { id: t.id }, body: { version: t.version, title: "Call Marco about the pipe" } });
+    whoami = "m-steward";
+    const again = await call(handlers, IMPORT, { body: { userId: "m-wren", seraOwnerId: "own-wren", answer, dryRun: false } });
+    expect(again.body.counts.keptEdits).toBe(1);
+    const [row] = await q("SELECT `title` FROM `member_tasks` WHERE `id` = ?", [t.id]); // module-review-ok: fixture SQL against the S5 scratch schema
+    expect(row.title).toBe("Call Marco about the pipe");
   });
 
   it("says off and refuses writes until a steward turns the list on", async () => {
