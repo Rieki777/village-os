@@ -91,6 +91,9 @@ export const TARGETS = [
   // fork until that review closes and Rye signs off; then this line becomes
   // ["session-card", "members"] (it requires sessions and gene-keys).
   ["session-card", "held", "security review pending (Module Library Contract clause 13)"],
+  // HELD on the same terms. A member-pii module holding pay routes and
+  // invoices, which a village turns on for its own team deliberately.
+  ["moon-review", "held", "security review pending (Module Library Contract clause 13)"],
 ];
 
 /** A public probe per module: what a signed-out visitor should be able to reach. */
