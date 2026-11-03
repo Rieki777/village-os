@@ -34,7 +34,9 @@ const GATE_LINE = "Each member's proposal for the roles they will hold next seas
 function Page({ children }: { children: ReactNode }) {
   return (
     <Layout>
-      <div className="container max-w-3xl px-4 py-8">{children}</div>
+      <div className="sheet-night min-h-screen bg-background text-foreground">
+        <div className="container max-w-3xl px-4 py-8">{children}</div>
+      </div>
     </Layout>
   );
 }

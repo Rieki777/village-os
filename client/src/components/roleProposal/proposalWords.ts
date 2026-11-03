@@ -45,6 +45,7 @@ export const RP_WORDS = {
   next: "Next",
   saving: "Saving",
   saved: "Saved",
+  savedReturn: "Saved. Come back from your profile.",
   // The quick path, in front of the six steps.
   welcomeTitle: "Let's draft your roles",
   welcomeLede: "Three short questions, then we draft it with you. Save and come back any time.",

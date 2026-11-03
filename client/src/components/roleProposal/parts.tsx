@@ -28,7 +28,12 @@ export function SaveLine({ status, error, onRetry }: { status: SaveStatus; error
   return (
     <div role="status" aria-live="polite" data-save-status={status} className="flex min-h-[44px] flex-wrap items-center gap-x-3 text-sm">
       {status === "saving" && <span className="text-stone-600">{RP_WORDS.saving}</span>}
-      {status === "saved" && <span className="font-medium text-teal-deep">{RP_WORDS.saved}</span>}
+      {status === "saved" && (
+        <>
+          <span className="font-medium text-teal-deep">{RP_WORDS.saved}</span>
+          <span>{RP_WORDS.savedReturn}</span>
+        </>
+      )}
       {status === "failed" && (
         <>
           <span className="font-semibold text-coral">{RP_WORDS.notSaved}</span>

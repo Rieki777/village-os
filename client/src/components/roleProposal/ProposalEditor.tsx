@@ -232,6 +232,11 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
     };
   }, []);
 
+  useEffect(() => {
+    const id = front === "steps" ? "rp-step-title" : front === "yours" ? "rp-your-words" : "rp-welcome";
+    document.getElementById(id)?.focus();
+  }, [step, front]);
+
   const go = async (next: StepKey) => {
     await save.flush();
     setStep(next);
@@ -327,6 +332,26 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   return (
     <div className="grid gap-5">
       <PathToggle path={path} onPath={choosePath} />
+      <div className="grid gap-1">
+        <div
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={STEPS.length}
+          aria-valuenow={front === "welcome" ? 1 : front === "yours" ? 2 : index + 1}
+          aria-label={front === "steps" ? RP_WORDS.stepOf(index + 1, STEPS.length) : front === "yours" ? RP_WORDS.yourWordsTitle : RP_WORDS.welcomeTitle}
+          className="h-2.5 overflow-hidden rounded-md border border-dash-edge bg-dash-track"
+        >
+          <div
+            className="h-full bg-[linear-gradient(90deg,var(--color-dash-gold),var(--color-dash-gold-lit))]"
+            style={{ width: `${Math.round(((front === "welcome" ? 1 : front === "yours" ? 2 : index + 1) / STEPS.length) * 100)}%` }}
+          />
+        </div>
+      </div>
+      {save.status === "saved" && (
+        <p className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground" data-done-card="">
+          {RP_WORDS.savedReturn}
+        </p>
+      )}
       <header className="grid gap-1">
         <h1 className="font-display text-3xl font-bold text-stone-900">{RP_WORDS.title}</h1>
         <p className={LEDE}>{target ? RP_WORDS.forSeason(target.name, civilDayWords(target.startsOn)) : proposal.targetWords}</p>
@@ -369,7 +394,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
       <section aria-labelledby="rp-step-title" className="grid gap-4" data-step={step}>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{RP_WORDS.stepOf(index + 1, STEPS.length)}</p>
-          <h2 id="rp-step-title" className={H2}>
+          <h2 id="rp-step-title" tabIndex={-1} className={`${H2} outline-none`}>
             {STEP_TITLES[step]}
           </h2>
         </div>
