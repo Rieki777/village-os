@@ -12,6 +12,7 @@
  * is read by anyone holding it, so it stays counts and role titles.
  */
 import type { ConsentState } from "@shared/roleProposalConsent";
+import { seasonHeading } from "@shared/roleProposalHonesty";
 
 export const STEPS = ["roles", "words", "season", "terms", "preview", "share"] as const;
 export type StepKey = (typeof STEPS)[number];
@@ -31,7 +32,7 @@ export const RP_WORDS = {
   continue: "Continue my proposal for next season",
   // The page.
   title: "Propose my roles for next season",
-  forSeason: (name: string, starts: string) => `For ${name}, starting ${starts}.`,
+  forSeason: (name: string, starts: string) => seasonHeading(name, starts),
   signIn: "Sign in to propose your roles.",
   signInLine: "Propose the roles you will hold next season, and share the draft for feedback before you submit it.",
   membersOnly: "Proposing roles opens at the member rung.",

@@ -209,6 +209,22 @@ describe("step 4, terms and review dates", () => {
     expect(check.getAttribute("data-load-check")).toBe("within");
     expect(within(check).getByText(LOAD_WORDS.within(30))).toBeTruthy();
     expect(within(check).getByText("Gate keeper: No time written yet")).toBeTruthy();
+    fireEvent.click(within(check).getByRole("button", { name: LOAD_WORDS.writeHours }));
+    expect(await screen.findByText(RP_WORDS.wordsLede)).toBeTruthy();
+  });
+
+  it("an open row names who fills it, a preset names its source, and a blank season name leaves no hole", async () => {
+    draw({ roles: [{ roleId: "r1" }] }, "terms", {
+      target: { seasonId: "s3", name: "", startsOn: "2027-01-01", endsOn: "2027-03-31", ended: false },
+    });
+    expect(await screen.findByText("For next season, starting 1 January 2027.")).toBeTruthy();
+    const term = (await screen.findByText("How long you hold this role")).closest("[data-settings-group]") as HTMLElement;
+    expect(term.textContent).toContain("We'll fill this together with the village's operations role.");
+    expect(term.textContent).not.toContain("No preset");
+    fireEvent.click(screen.getByRole("button", { name: "Volunteer role" }));
+    expect(term.textContent).toContain("Suggested from Until the season ends.");
+    const pay = screen.getByText("Money for the work, if the role has any").closest("[data-settings-group]") as HTMLElement;
+    expect(pay.textContent).toContain("Suggested from Unpaid. A proposal, confirmed with the village's operations role.");
   });
 
   it("a review date autosaves with its role", async () => {

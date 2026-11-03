@@ -25,8 +25,10 @@
  */
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, RotateCcw } from "lucide-react";
+import { GROUP_PLAIN, honestyLine } from "@shared/roleProposalHonesty";
 import {
   GROUP_LABELS,
+  MONEY_GROUPS,
   SETTINGS_GROUPS,
   emptySettings,
   parseSeatSettings,
@@ -81,12 +83,15 @@ function GroupRow({
   villagePresets,
   problems,
   onChange,
+  partner,
 }: {
   group: SettingsGroup;
   settings: SeatSettings;
   villagePresets: readonly SeatPreset[];
   problems: string[];
   onChange: (next: SeatSettings) => void;
+  /** Set on a role proposal: an open row names who fills it, a filled row names its source. */
+  partner?: string;
 }) {
   const [panel, setPanel] = useState<"none" | "presets" | "fields">("none");
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -97,6 +102,16 @@ function GroupRow({
   const preset = presetFor(settings, group, villagePresets);
   const customised = isCustomised(settings, group, villagePresets);
   const options = presetsFor(group, villagePresets);
+  const honest = partner !== undefined
+    ? honestyLine({
+        set: row.set,
+        presetLabel: preset?.label ?? null,
+        customised,
+        partner,
+        money: MONEY_GROUPS.includes(group),
+      })
+    : null;
+  const open = honest !== null && !row.set;
 
   return (
     <section aria-labelledby={headId} className="rounded-xl border border-stone-200 bg-white p-3" data-settings-group={group}>
@@ -105,16 +120,20 @@ function GroupRow({
           <h4 id={headId} className="text-xs font-semibold uppercase tracking-wide text-stone-500">
             {GROUP_LABELS[group]}
           </h4>
-          <p className={`mt-0.5 text-sm ${row.set ? "text-stone-900" : "text-stone-500"}`}>{row.headline}</p>
+          {honest && <p className="mt-0.5 text-xs text-muted-foreground">{GROUP_PLAIN[group]}</p>}
+          <p className={`mt-0.5 text-sm ${row.set ? "text-stone-900" : "text-stone-500"}`}>{open ? honest : row.headline}</p>
           {row.moneyLine && <p className="mt-0.5 text-xs text-stone-600">{row.moneyLine}</p>}
-          <p className="mt-0.5 text-xs text-stone-500">
-            {preset ? `${EDITOR_WORDS.startedFrom} ${preset.label}` : EDITOR_WORDS.noPreset}
-            {customised && (
-              <span className="ml-1.5 rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
-                {EDITOR_WORDS.customised}
-              </span>
-            )}
-          </p>
+          {honest && row.set && <p className="mt-0.5 text-xs text-muted-foreground">{honest}</p>}
+          {(honest === null || customised) && (
+            <p className="mt-0.5 text-xs text-stone-500">
+              {honest === null && (preset ? `${EDITOR_WORDS.startedFrom} ${preset.label}` : EDITOR_WORDS.noPreset)}
+              {customised && (
+                <span className="ml-1.5 rounded-full border border-stone-300 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
+                  {EDITOR_WORDS.customised}
+                </span>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-1">
           {options.length > 0 && (
@@ -211,6 +230,7 @@ export default function SeatSettingsEditor({
   onChange,
   villagePresets = [],
   prefillWholeId,
+  partner,
 }: {
   /** The settings as the wizard holds them. May be mid-edit and not yet valid. */
   value: unknown;
@@ -219,6 +239,11 @@ export default function SeatSettingsEditor({
   villagePresets?: readonly SeatPreset[];
   /** A whole preset to start from when nothing has been written yet. */
   prefillWholeId?: string;
+  /**
+   * On a role proposal: who fills a row the member leaves open. Absent
+   * everywhere else, which keeps "Not set" and "No preset".
+   */
+  partner?: string;
 }) {
   const settings = asSettings(value);
   const parsed = parseSeatSettings(value);
@@ -265,6 +290,7 @@ export default function SeatSettingsEditor({
           villagePresets={villagePresets}
           problems={problemsFor(group)}
           onChange={onChange}
+          partner={partner}
         />
       ))}
       {loose.length > 0 && (

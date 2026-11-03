@@ -81,7 +81,8 @@ export const LOAD_WORDS = {
   over: (hours: number) =>
     `Together these roles ask for about ${hours} hours a week. That is more than a full season of ${FULL_SEASON_HOURS} hours a week.`,
   within: (hours: number) => `Together these roles ask for about ${hours} hours a week. That fits in a full season of ${FULL_SEASON_HOURS} hours a week.`,
-  noneCounted: "None of these roles says its time in hours or days yet, so there is nothing to add up.",
+  noneCounted: "None of these roles says its time in hours yet. That is fine. Write it on the Words step and it adds up here.",
+  writeHours: "Write the hours on the Words step",
   leftOut: "The roles below are left out of that sum.",
   noTime: "No time written yet",
   notHours: (words: string) => `"${words}" does not say how many hours`,

@@ -13,7 +13,7 @@ import { useVillagePresets } from "@/lib/seatPresetsRead";
 import { loadCheck, LOAD_WORDS } from "@shared/roleProposalLoad";
 import { parseSeatSettings, type SeatSettings } from "@shared/seatSettings";
 import { RP_WORDS } from "./proposalWords";
-import { INPUT, LEDE, PANEL } from "./parts";
+import { INPUT, LEDE, PANEL, QUIET } from "./parts";
 
 export interface TermsRole {
   id: string;
@@ -28,11 +28,17 @@ export default function StepTerms({
   settings,
   onReview,
   onSettings,
+  partner,
+  onOpenWords,
 }: {
   roles: readonly TermsRole[];
   settings: SeatSettings;
   onReview: (roleId: string, day: string) => void;
   onSettings: (next: SeatSettings) => void;
+  /** Who fills a row left open. The chart's operations role, or the fallback. */
+  partner: string;
+  /** Opens the Words step, where each role's hours are written. */
+  onOpenWords: () => void;
 }) {
   const presets = useVillagePresets();
   const load = loadCheck(roles.map((r) => ({ name: r.name, time: r.time })));
@@ -67,6 +73,11 @@ export default function StepTerms({
             ))}
           </ul>
         )}
+        {load.notCounted.length > 0 && (
+          <button type="button" className={QUIET} onClick={onOpenWords}>
+            {LOAD_WORDS.writeHours}
+          </button>
+        )}
       </section>
 
       {roles.length > 0 && (
@@ -87,7 +98,7 @@ export default function StepTerms({
           {RP_WORDS.termsHeading}
         </h3>
         {!parsed.ok && <p className="text-sm font-medium text-coral">{RP_WORDS.termsNotSaved}</p>}
-        <SeatSettingsEditor value={settings} onChange={onSettings} villagePresets={presets} />
+        <SeatSettingsEditor value={settings} onChange={onSettings} villagePresets={presets} partner={partner} />
       </section>
     </div>
   );
