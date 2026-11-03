@@ -391,7 +391,14 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
           <>
             <BringInRole proposal={proposal} org={org} beforeImport={save.flush} onFilled={adopt} />
             <OwnAiPrompt proposal={proposal} org={org} />
-            <StepWords roles={wordsRoles} typed={typed} frameworkTerms={proposal.frameworkTerms === true} onType={type} onReview={review} />
+            <StepWords
+              roles={wordsRoles}
+              typed={typed}
+              frameworkTerms={proposal.frameworkTerms === true}
+              onType={type}
+              onReview={review}
+              ownText={[season.ownWords.love, season.ownWords.offer, season.ownWords.why].map((s) => s.trim()).filter(Boolean).join("\n")}
+            />
           </>
         )}
         {step === "season" && (
@@ -415,6 +422,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             }}
             partner={opsPartner(operationsRoleName(org && org !== "failed" ? org.roles : []))}
             onOpenWords={() => void go("words")}
+            onHours={(roleId, text) => type(roleId, "timeCommitment", text)}
           />
         )}
         {step === "preview" && (

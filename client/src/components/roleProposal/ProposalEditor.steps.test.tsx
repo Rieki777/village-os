@@ -241,6 +241,13 @@ describe("step 4, terms and review dates", () => {
     expect(pay.textContent).toContain("Suggested from Unpaid. A proposal, confirmed with the village's operations role.");
   });
 
+  it("an hours chip writes the role's time, which the load check can read", async () => {
+    draw({ roles: [{ roleId: "r3" }] }, "terms");
+    fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.hoursChoice(5) }));
+    await waitFor(() => expect(lastPut()?.roles?.[0]?.words.timeCommitment).toBe("5 hours a week"));
+    expect(screen.getByText(/Gate keeper: about 5 hours a week/)).toBeTruthy();
+  });
+
   it("a review date autosaves with its role", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "terms");
     const reviews = (await screen.findByText(RP_WORDS.reviewDates)).closest("fieldset") as HTMLElement;

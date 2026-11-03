@@ -135,6 +135,8 @@ describe("what is missing, the conversation and the document", () => {
     expect(p).toContain("never a person's name");
     expect(p).toContain("no dashes");
     expect(p).toContain("never save or submit");
+    expect(p).toContain("Keep the member's own phrases");
+    expect(p).toContain("Never suggest pay, an allowance, or a bonus");
   });
 });
 

@@ -61,6 +61,11 @@ export const RP_WORDS = {
   startQuestions: "Start the three questions",
   onToRoles: "Pick the roles",
   proposeThisRole: "Propose this role for next season",
+  hoursQuestion: "About how many hours a week?",
+  hoursChoice: (n: number) => `${n} hours a week`,
+  notSureHours: "Not sure",
+  notSureYet: "Not sure yet",
+  notSureLine: (partner: string) => `Leave these open. We'll fill them together with ${partner}.`,
   notSaved: "Not saved, try again",
   tryAgain: "Try again",
 

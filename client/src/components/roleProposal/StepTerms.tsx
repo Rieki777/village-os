@@ -11,9 +11,9 @@
 import SeatSettingsEditor from "@/components/governance/SeatSettingsEditor";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 import { loadCheck, LOAD_WORDS } from "@shared/roleProposalLoad";
-import { parseSeatSettings, type SeatSettings } from "@shared/seatSettings";
+import { emptySettings, parseSeatSettings, type SeatSettings } from "@shared/seatSettings";
 import { RP_WORDS } from "./proposalWords";
-import { INPUT, LEDE, PANEL, QUIET } from "./parts";
+import { INPUT, LEDE, PANEL, PRIMARY, QUIET, SECONDARY } from "./parts";
 
 export interface TermsRole {
   id: string;
@@ -30,6 +30,7 @@ export default function StepTerms({
   onSettings,
   partner,
   onOpenWords,
+  onHours,
 }: {
   roles: readonly TermsRole[];
   settings: SeatSettings;
@@ -39,6 +40,8 @@ export default function StepTerms({
   partner: string;
   /** Opens the Words step, where each role's hours are written. */
   onOpenWords: () => void;
+  /** Writes one role's time, which the load check adds up. */
+  onHours: (roleId: string, text: string) => void;
 }) {
   const presets = useVillagePresets();
   const load = loadCheck(roles.map((r) => ({ name: r.name, time: r.time })));
@@ -93,10 +96,39 @@ export default function StepTerms({
         </fieldset>
       )}
 
+      {roles.length > 0 && (
+        <section className={`${PANEL} grid gap-3`} aria-label={RP_WORDS.hoursQuestion}>
+          <h3 className="font-semibold text-stone-900">{RP_WORDS.hoursQuestion}</h3>
+          {roles.map((r) => (
+            <fieldset key={r.id} className="grid gap-2">
+              <legend className="text-sm font-medium text-foreground">{r.name}</legend>
+              <div className="flex flex-wrap gap-2">
+                {[2, 5, 10, 20, 40].map((n) => {
+                  const label = RP_WORDS.hoursChoice(n);
+                  const on = (r.time ?? "").trim().toLowerCase() === label;
+                  return (
+                    <button key={n} type="button" className={on ? PRIMARY : SECONDARY} aria-pressed={on} onClick={() => onHours(r.id, label)}>
+                      {label}
+                    </button>
+                  );
+                })}
+                <button type="button" className={!r.time ? PRIMARY : SECONDARY} aria-pressed={!r.time} onClick={() => onHours(r.id, "")}>
+                  {RP_WORDS.notSureHours}
+                </button>
+              </div>
+            </fieldset>
+          ))}
+        </section>
+      )}
+
       <section aria-labelledby="rp-terms" className="grid gap-2">
         <h3 id="rp-terms" className="font-semibold text-stone-900">
           {RP_WORDS.termsHeading}
         </h3>
+        <p className={LEDE}>{RP_WORDS.notSureLine(partner)}</p>
+        <button type="button" className={SECONDARY} onClick={() => onSettings(emptySettings())}>
+          {RP_WORDS.notSureYet}
+        </button>
         {!parsed.ok && <p className="text-sm font-medium text-coral">{RP_WORDS.termsNotSaved}</p>}
         <SeatSettingsEditor value={settings} onChange={onSettings} villagePresets={presets} partner={partner} />
       </section>
