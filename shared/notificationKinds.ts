@@ -482,6 +482,20 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // a gentle note near a task's date, a task handed back to its circle, and a
   // task sitting with a seat nobody holds. None of them celebrate: each one
   // asks somebody to look at work, and none happened TO the reader.
+  // Your own list (server/lib/memberTaskNudges.ts): a task near its date, and
+  // a task somebody asked you for. In-app only; nothing celebrates.
+  my_task_due: {
+    group: "work",
+    blurb: "A task on your own list is due soon. Open your list to see it.",
+    many: "{n} tasks on your list are due soon.",
+    celebrate: false,
+  },
+  my_task_asked: {
+    group: "work",
+    blurb: "Someone asked you for a task on your own list. Open your list to see who.",
+    many: "{n} tasks on your list are waiting on you.",
+    celebrate: false,
+  },
   session_action_due: {
     group: "work",
     blurb: "A task you hold from a live session is near its date, or its date just passed. Answer it on your task board.",

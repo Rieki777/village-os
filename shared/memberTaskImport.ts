@@ -27,6 +27,8 @@ export interface LibraryTask {
   status: string;
   /** 0 to 1 when the library sends one. */
   confidence: number | null;
+  /** Who asked for it, in the library's own words (requested_by). Display only; emails taken out. */
+  requestedBy: string | null;
 }
 
 export interface HeldTask {
@@ -37,6 +39,7 @@ export interface HeldTask {
   dueOn: string | null;
   status: TaskStatus;
   memberEdited: boolean;
+  requestedBy?: string | null;
 }
 
 export interface ImportPlan {
@@ -74,6 +77,10 @@ export function readLibraryTask(raw: unknown): LibraryTask | null {
     dueOn: isDayKey(dueRaw) ? dueRaw : null,
     ownerId: owner || null,
     status: str(pick(o, ["status", "Status", "state"])).toLowerCase(),
+    requestedBy: (() => {
+      const r = str(pick(o, ["requested_by", "requestedBy"])).replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
+      return r || null;
+    })(),
     confidence: (() => { const c = Number(pick(o, ["confidence"])); return Number.isFinite(c) && c >= 0 && c <= 1 ? c : null; })(),
   };
 }
@@ -112,7 +119,7 @@ export function planImport(rawItems: readonly unknown[], ownerId: string, held: 
     if (!h) { plan.create.push(item); continue; }
     if (h.status !== "open") { plan.tombstoned.push(item); continue; }
     if (h.memberEdited) { plan.keptEdits.push(item); continue; }
-    if (h.title === item.title && h.tier === item.tier && h.dueOn === item.dueOn) plan.unchanged.push(item);
+    if (h.title === item.title && h.tier === item.tier && h.dueOn === item.dueOn && (h.requestedBy ?? null) === item.requestedBy) plan.unchanged.push(item);
     else plan.update.push({ id: h.id, next: item });
   }
   return plan;

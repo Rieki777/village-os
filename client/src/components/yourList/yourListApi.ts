@@ -19,6 +19,8 @@ export interface ListTask {
   status: TaskStatus;
   pinned: boolean;
   memberPinned?: boolean;
+  /** Who asked for it, from the knowledge library. */
+  requestedBy?: string | null;
   source: TaskSource;
   version: number;
   createdOn: string;

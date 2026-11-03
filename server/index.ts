@@ -18196,7 +18196,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
   registerMemberTaskRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
-  registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
+  registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, notify, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
   registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: guidePromptName(getWorkWithUs().assistantName), timeZone: getSeasonConfig().timezone }) });
