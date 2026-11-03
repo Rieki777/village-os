@@ -196,7 +196,11 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
     const now = latest.current;
     if (now.picked.includes(role)) return;
     if (now.picked.length + now.newRoles.length >= now.proposal.limits.maxRoles) return;
-    setPicked([...now.picked, role]);
+    // The save reads this ref, and it is only rewritten on the next render.
+    // Write the pick in before the save is asked, or the save can leave with the old list.
+    const picked = [...now.picked, role];
+    latest.current = { ...now, picked };
+    setPicked(picked);
     save.touch("roles");
   }, [org, save]);
 

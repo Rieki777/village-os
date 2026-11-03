@@ -239,6 +239,7 @@ describe.skipIf(!configured)("role proposals, on a real schema", () => {
       aim: "Cook for every work day.",
       seasonalGoals: [{ title: "A cook rota", doneWhen: "four people share it" }],
       servesGoals: [{ goal: GOAL_FOOD, howItHelps: "Meals keep people coming." }],
+      ownWords: { love: "", offer: "", why: "" },
     });
   });
 
