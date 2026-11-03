@@ -49,6 +49,7 @@ import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { FORM_TYPES, putSubmissionStatus } from "@/components/admin/submissionStatus";
+import SubmissionHandling from "@/components/admin/SubmissionHandling";
 import OpenProposalsPanel from "@/components/admin/OpenProposalsPanel";
 import ProposalAcceptCash from "@/components/admin/ProposalAcceptCash";
 import LandTab from "@/components/admin/LandTab";
@@ -733,24 +734,6 @@ export function SubmissionsTab({ password }: { password: string }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const deleteSubmission = async (id: string) => {
-    if (!confirm("Delete this submission?")) return;
-    // The reload was standing in for an answer: a refused delete redrew the
-    // same row and said nothing, so it read as a click that missed.
-    try {
-      const res = await fetch(`${API_BASE}/admin/submissions/${id}`, { method: "DELETE", headers: authHeaders(password) });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        toast.error(refusal(body, `The server refused that (${res.status}). The submission is still here.`));
-        return;
-      }
-    } catch {
-      toast.error("That did not reach the server. The submission is still here.");
-      return;
-    }
-    load();
-  };
-
   // Moved to submissionStatus.ts, so the proposal cash control shares its sentences (0285).
   const setStatus = async (id: string, status: string, type = "") => { if (await putSubmissionStatus(password, id, status, type)) load(); };
 
@@ -823,15 +806,10 @@ export function SubmissionsTab({ password }: { password: string }) {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteSubmission(s.id); }}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
                   {expanded === s.id ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                 </div>
               </button>
+              <SubmissionHandling password={password} submission={s} onChanged={load} />
 
               {expanded === s.id && (
                 <div className="px-5 py-4 border-t border-gray-100 bg-gray-50">

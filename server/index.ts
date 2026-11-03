@@ -205,6 +205,7 @@ import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./li
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
+import { register as registerSubmissionHandlingRoutes } from "./routes/submissionHandling";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerCompanionRoutes } from "./routes/companions";
 import { exportMemberTasks, register as registerMemberTaskRoutes } from "./routes/memberTasks";
@@ -12735,6 +12736,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
 
   // ── S66: feedback — the local queue is the feature, the relay is a copy ──
   registerFeedbackRoutes(app, { isAdmin, authedUser, getPool, notify, overLimit, clientIp, projectName: notifyDeps.projectName });
+  registerSubmissionHandlingRoutes(app, { isAdmin, getPool, adminActor });
 
   /**
    * S70: Maia's organizing counsel. Two shelves, one priority rule: the
