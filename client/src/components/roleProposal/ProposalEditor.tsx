@@ -447,6 +447,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             onAddNew={addNew}
             onRemoveNew={removeNew}
             onRetry={() => setOrgAttempt((n) => n + 1)}
+            ownWords={season.ownWords}
           />
         )}
         {step === "words" && (
