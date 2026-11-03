@@ -137,6 +137,9 @@ describe("what is missing, the conversation and the document", () => {
     expect(p).toContain("never save or submit");
     expect(p).toContain("Keep the member's own phrases");
     expect(p).toContain("Never suggest pay, an allowance, or a bonus");
+    expect(p).toContain("any language");
+    expect(p).toContain("Reply and draft in the language they wrote in");
+    expect(p).toContain("exactly as they wrote it");
   });
 });
 

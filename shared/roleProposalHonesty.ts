@@ -86,5 +86,5 @@ export function honestyLine(input: {
       ? `You changed this. It started from ${input.presetLabel}.`
       : `Suggested from ${input.presetLabel}.`
     : "Written by you.";
-  return input.money ? `${source} A proposal, confirmed with ${partner}.` : source;
+  return input.money ? `${source} A proposal, not a promise. Confirmed with ${partner}.` : source;
 }

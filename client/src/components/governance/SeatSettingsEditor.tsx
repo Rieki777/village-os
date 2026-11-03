@@ -26,6 +26,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, RotateCcw } from "lucide-react";
 import { GROUP_PLAIN, honestyLine } from "@shared/roleProposalHonesty";
+import { MONEY_PROMISE, plainTerm } from "@shared/termCards";
+import TermGlossary from "./TermGlossary";
+import WholePresetCards from "./WholePresetCards";
+import { useOpsPartner } from "./useOpsPartner";
 import {
   GROUP_LABELS,
   MONEY_GROUPS,
@@ -37,7 +41,6 @@ import {
   type SettingsGroup,
 } from "@shared/seatSettings";
 import {
-  WHOLE_PRESETS,
   applyPreset,
   applyWholePreset,
   clearGroup,
@@ -58,8 +61,6 @@ export const EDITOR_WORDS = {
   reset: "Reset to preset",
   clear: "Clear",
   customised: "customised",
-  startedFrom: "Started from",
-  noPreset: "No preset",
   choosePreset: (group: string) => `Choose a ${group.toLowerCase()} preset`,
   payHelp: "Recorded here and settled off the platform. Money never flows out of this village through this software.",
 } as const;
@@ -90,8 +91,8 @@ function GroupRow({
   villagePresets: readonly SeatPreset[];
   problems: string[];
   onChange: (next: SeatSettings) => void;
-  /** Set on a role proposal: an open row names who fills it, a filled row names its source. */
-  partner?: string;
+  /** Who fills an open row. */
+  partner: string;
 }) {
   const [panel, setPanel] = useState<"none" | "presets" | "fields">("none");
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -102,36 +103,31 @@ function GroupRow({
   const preset = presetFor(settings, group, villagePresets);
   const customised = isCustomised(settings, group, villagePresets);
   const options = presetsFor(group, villagePresets);
-  const honest = partner !== undefined
-    ? honestyLine({
-        set: row.set,
-        presetLabel: preset?.label ?? null,
-        customised,
-        partner,
-        money: MONEY_GROUPS.includes(group),
-      })
-    : null;
-  const open = honest !== null && !row.set;
+  const honest = honestyLine({
+    set: row.set,
+    presetLabel: preset?.label ?? null,
+    customised,
+    partner,
+    money: MONEY_GROUPS.includes(group),
+  });
+  const open = !row.set;
 
   return (
     <section aria-labelledby={headId} className="rounded-xl border border-border bg-card p-3" data-settings-group={group}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 id={headId} className="text-xs font-semibold uppercase tracking-wide text-foreground">
-            {GROUP_LABELS[group]}
+          <h4 id={headId} className="text-sm font-semibold text-foreground">
+            {GROUP_PLAIN[group]}
           </h4>
-          {honest && <p className="mt-0.5 text-xs text-muted-foreground">{GROUP_PLAIN[group]}</p>}
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{GROUP_LABELS[group]}</p>
           <p className={`mt-0.5 break-words text-sm ${row.set ? "text-foreground" : "text-muted-foreground"}`}>{open ? honest : row.headline}</p>
           {row.moneyLine && <p className="mt-0.5 text-xs text-muted-foreground">{row.moneyLine}</p>}
-          {honest && row.set && <p className="mt-0.5 text-xs text-muted-foreground">{honest}</p>}
-          {(honest === null || customised) && (
+          {row.set && <p className="mt-0.5 text-xs text-muted-foreground">{honest}</p>}
+          {customised && (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {honest === null && (preset ? `${EDITOR_WORDS.startedFrom} ${preset.label}` : EDITOR_WORDS.noPreset)}
-              {customised && (
-                <span className="ml-1.5 rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-foreground">
-                  {EDITOR_WORDS.customised}
-                </span>
-              )}
+              <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-foreground">
+                {EDITOR_WORDS.customised}
+              </span>
             </p>
           )}
         </div>
@@ -175,31 +171,36 @@ function GroupRow({
       </div>
 
       <div id={presetsId} role="group" aria-labelledby={`${presetsId}-head`} hidden={panel !== "presets"} className="mt-3">
+        <p className="mb-1 text-sm text-foreground">{plainTerm(group)}</p>
         <p id={`${presetsId}-head`} className="mb-2 text-sm font-semibold text-foreground">
           {EDITOR_WORDS.choosePreset(GROUP_LABELS[group])}
         </p>
         <ul className="grid gap-2 sm:grid-cols-2">
           {options.map((o) => {
             const current = preset?.id === o.id;
+            const labelId = `${uid}-${o.id}-label`;
             return (
               <li key={o.id}>
                 <button
                   type="button"
                   aria-pressed={current}
+                  aria-labelledby={labelId}
                   onClick={() => {
                     onChange(applyPreset(settings, o));
                     setPanel("none");
                   }}
-                  className={`flex min-h-[44px] w-full flex-col items-start rounded-lg border-2 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  className={`flex min-h-[44px] w-full max-w-full flex-col items-start rounded-lg border-2 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     current ? "border-notice bg-notice/10" : "border-border hover:bg-muted"
                   }`}
                 >
-                  <span className="flex items-center gap-1.5 break-words text-sm font-semibold text-foreground">
+                  <span id={labelId} className="flex items-center gap-1.5 break-words text-sm font-semibold text-foreground">
                     {o.label}
                     {current && <Check className="size-4 text-notice" aria-hidden="true" />}
                   </span>
-                  <span className="mt-0.5 text-xs text-muted-foreground">{o.blurb}</span>
-                  {previewOf(o) && <span className="mt-1 break-words text-xs font-medium text-foreground">{previewOf(o)}</span>}
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{GROUP_LABELS[group]}</span>
+                  <span className="mt-0.5 break-words text-xs text-muted-foreground">{o.blurb}</span>
+                  {previewOf(o) && <span className="mt-1 break-words text-xs font-medium text-foreground">Example: {previewOf(o)}</span>}
+                  {MONEY_GROUPS.includes(group) && <span className="mt-1 break-words text-xs font-medium text-foreground">{MONEY_PROMISE}</span>}
                 </button>
               </li>
             );
@@ -209,7 +210,14 @@ function GroupRow({
 
       <div id={fieldsId} hidden={panel !== "fields"} className="mt-3">
         {group === "pay" && <p className="mb-2 text-xs leading-relaxed text-muted-foreground">{EDITOR_WORDS.payHelp}</p>}
-        {panel === "fields" && <SeatSettingsFields group={group} settings={settings} onChange={onChange} />}
+        {panel === "fields" && (
+          <SeatSettingsFields
+            group={group}
+            settings={settings}
+            onChange={onChange}
+            openLabel={honestyLine({ set: false, presetLabel: null, customised: false, partner, money: false })}
+          />
+        )}
       </div>
 
       {problems.length > 0 && (
@@ -240,11 +248,13 @@ export default function SeatSettingsEditor({
   /** A whole preset to start from when nothing has been written yet. */
   prefillWholeId?: string;
   /**
-   * On a role proposal: who fills a row the member leaves open. Absent
-   * everywhere else, which keeps "Not set" and "No preset".
+   * Who fills a row left open. Left out, the chart's operations role is used,
+   * or the fallback with no village name when the chart has none.
    */
   partner?: string;
 }) {
+  const lookedUp = useOpsPartner();
+  const who = partner ?? lookedUp;
   const settings = asSettings(value);
   const parsed = parseSeatSettings(value);
 
@@ -268,20 +278,13 @@ export default function SeatSettingsEditor({
       <div className="rounded-xl border border-border bg-muted p-3">
         <p className="text-sm font-semibold text-foreground">{EDITOR_WORDS.wholeLead}</p>
         <p className="text-xs text-muted-foreground">{EDITOR_WORDS.wholeSub}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {WHOLE_PRESETS.map((w) => (
-            <button
-              key={w.id}
-              type="button"
-              title={w.blurb}
-              onClick={() => onChange(applyWholePreset(settings, w, villagePresets))}
-              className="inline-flex min-h-[44px] max-w-full items-center whitespace-normal rounded-lg border border-border bg-card px-3 text-left text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {w.label}
-            </button>
-          ))}
-        </div>
+        <WholePresetCards
+          partner={who}
+          onPick={(w) => onChange(applyWholePreset(settings, w, villagePresets))}
+          onUnsure={() => onChange(emptySettings())}
+        />
       </div>
+      <TermGlossary />
       {SETTINGS_GROUPS.map((group) => (
         <GroupRow
           key={group}
@@ -290,7 +293,7 @@ export default function SeatSettingsEditor({
           villagePresets={villagePresets}
           problems={problemsFor(group)}
           onChange={onChange}
-          partner={partner}
+          partner={who}
         />
       ))}
       {loose.length > 0 && (

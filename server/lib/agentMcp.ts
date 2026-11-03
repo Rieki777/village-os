@@ -42,7 +42,7 @@
  * holder, a `cash.pay` holder included.
  */
 import { adminRequestDecision, type AgentAdminPathsDoc } from "../../shared/agentAdmin";
-import { PACK_FORBIDDEN_KEY } from "../../shared/moonRecap";
+import { MOON_ROUTES, PACK_FORBIDDEN_KEY } from "../../shared/moonRecap";
 import { echoHash, type AgentScope } from "./agentTokens";
 
 /** The protocol revisions this server speaks, newest first. */
@@ -174,9 +174,9 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     description:
       "The holder's recap for the current moon, when the moon review is open in this village, and the holder's task board with each task's status and when it was done. Read only.",
     inputSchema: NO_ARGS,
-    routes: ["GET /api/me/moon", "GET /api/member-tasks/me"],
+    routes: [`GET ${MOON_ROUTES.myMoon}`, "GET /api/member-tasks/me"],
     async run(_args, ctx) {
-      const [moon, board] = await Promise.all([ctx.dispatch("GET", "/api/me/moon"), ctx.dispatch("GET", "/api/member-tasks/me")]);
+      const [moon, board] = await Promise.all([ctx.dispatch("GET", MOON_ROUTES.myMoon), ctx.dispatch("GET", "/api/member-tasks/me")]);
       if (moon.status >= 500) return refusal("My moon could not be read", moon);
       if (board.status >= 500) return refusal("The task board could not be read", board);
       const b = (board.body && typeof board.body === "object" ? board.body : {}) as Record<string, unknown>;

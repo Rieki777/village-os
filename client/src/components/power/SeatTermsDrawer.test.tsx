@@ -69,7 +69,7 @@ describe("SeatTermsDrawer", () => {
     expect(b.getByText("3 to 5 quests a moon")).toBeInTheDocument();
     // Pay and bonus are both money rows; term and quests are not.
     expect(b.getAllByText(MONEY_LINE)).toHaveLength(2);
-    expect(b.getByText(/Not set yet: Clocks, Rhythm, Allowance, Scoreboard, Ending/)).toBeInTheDocument();
+    expect(b.getByText(/We'll fill this together with the village's operations role: Clocks, Rhythm, Allowance, Scoreboard, Ending/)).toBeInTheDocument();
     expect(body.textContent).not.toMatch(/\b0\b/);
   });
 

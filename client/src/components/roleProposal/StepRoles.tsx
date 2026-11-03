@@ -17,6 +17,8 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import type { ProposalOut, OrgCircleIn, OrgRoleIn } from "./proposalApi";
+import type { OwnAnswers, SuggestRoleIn } from "@shared/roleSuggestions";
+import { RoleSuggestions } from "./RoleSuggestions";
 import { RP_WORDS } from "./proposalWords";
 import { FOCUS, INPUT, LEDE, PANEL, PRIMARY, QUIET } from "./parts";
 
@@ -41,6 +43,8 @@ export interface StepRolesProps {
   onRemoveNew: (id: string) => void;
   /** Asked again after the chart did not load. */
   onRetry?: () => void;
+  /** The three answers, so a guide can suggest roles from them. */
+  ownWords?: OwnAnswers;
 }
 
 const holderIds = (r: OrgRoleIn): string[] => (r.holders ?? []).map((h) => String(h?.userId ?? "")).filter(Boolean);
@@ -66,7 +70,12 @@ export function roleFacts(r: OrgRoleIn, me: string, applying: number): string[] 
   return out;
 }
 
-export default function StepRoles({ proposal, picked, newRoles, org, applying, me, onToggle, onAddNew, onRemoveNew, onRetry }: StepRolesProps) {
+/** A role the suggestions may rank. Holders stay off this object. */
+export function suggestInput(r: OrgRoleIn, me: string, about: string): SuggestRoleIn {
+  return { id: r.id, name: r.name, about, open: groupOf(r, me) === "open" };
+}
+
+export default function StepRoles({ proposal, picked, newRoles, org, applying, me, onToggle, onAddNew, onRemoveNew, onRetry, ownWords }: StepRolesProps) {
   const max = proposal.limits.maxRoles;
   const count = picked.length + newRoles.length;
   const atMost = count >= max;
@@ -139,6 +148,15 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
   return (
     <div className="grid gap-4">
       <p className={LEDE}>{RP_WORDS.rolesLede}</p>
+      {ownWords && org && org !== "failed" && (
+        <RoleSuggestions
+          answers={ownWords}
+          roles={roles.map((r) => suggestInput(r, me, circleOf(r.circleId)?.purpose ?? ""))}
+          picked={picked}
+          atMost={atMost}
+          onToggle={onToggle}
+        />
+      )}
       <p className="text-sm font-medium text-foreground" aria-live="polite" data-picked-count="">
         {RP_WORDS.picked(count, max)}
         {atMost ? ` ${RP_WORDS.atMost(max)}` : ""}
@@ -221,7 +239,7 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
             <div>
               <button type="button" onClick={() => void add()} disabled={atMost || adding || !circleId || !name.trim()} className={PRIMARY}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                {RP_WORDS.addNewRole}
+                {count > 0 ? RP_WORDS.addAnotherRole : RP_WORDS.addNewRole}
               </button>
             </div>
             {said && (
