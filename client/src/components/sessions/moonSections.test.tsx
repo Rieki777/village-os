@@ -19,7 +19,9 @@ import { memoryLocation } from "wouter/memory-location";
 import { MOON_TEMPLATE, SECTION_KIND_DEFS, type SessionTemplate, type TemplateRoomView, type TemplatesPayload } from "@shared/sessionTemplates";
 
 const modules = vi.hoisted(() => ({ on: true }));
-vi.mock("@/modules/ModuleProvider", () => ({ useModuleOn: (id: string) => id === "moon-review" && modules.on }));
+vi.mock("@/modules/ModuleProvider", () => ({
+  useModules: () => ({ loaded: true, failed: false, modules: modules.on ? [{ id: "moon-review", lifecycle: "members" }] : [] }),
+}));
 
 const api = vi.hoisted(() => ({ view: null as unknown, room: null as unknown, roomStatus: 200, calls: [] as string[], posts: [] as Array<{ url: string; body: unknown }> }));
 vi.mock("@/lib/gameApi", () => ({

@@ -16,7 +16,6 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import {
-  MOON_REVIEW_MODULE_ID,
   SEASON_COPY,
   SECTION_KIND_DEFS,
   TEMPLATES_API,
@@ -32,7 +31,7 @@ import {
   type TemplatesPayload,
 } from "@shared/sessionTemplates";
 import { gameFetch } from "@/lib/gameApi";
-import { useModuleOn } from "@/modules/ModuleProvider";
+import { useMoonReviewOn } from "./useMoonReviewOn";
 import { BTN_ICON, BTN_QUIET, CHIP, HINT, LABEL, TEXTBOX } from "./roomUi";
 import { LIST_UI } from "./SessionList";
 
@@ -78,7 +77,7 @@ export default function MeetingTemplates({
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   /** The End of moon kinds are offered only while the moon-review module is on. */
-  const moonOn = useModuleOn(MOON_REVIEW_MODULE_ID);
+  const moonOn = useMoonReviewOn();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);

@@ -40,7 +40,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Feather } from "lucide-react";
 import {
-  MOON_REVIEW_MODULE_ID,
   MOON_ROOM_COPY,
   PRIORITY_OUTCOMES,
   PRIORITY_OUTCOME_LABEL,
@@ -62,7 +61,7 @@ import {
 import type { SessionItem } from "@shared/sessions";
 import { moonRoomPanel } from "@shared/moonRoom";
 import { gameFetch } from "@/lib/gameApi";
-import { useModuleOn } from "@/modules/ModuleProvider";
+import { useMoonReviewOn } from "./useMoonReviewOn";
 import { MoonGoalsBody, MoonInvoicesBody, MoonRecapBody, MoonShareChoice, useMoonRoom } from "./MoonSections";
 import { ServesChip, ServesPicker } from "./ServesPicker";
 import { BTN_FORWARD, BTN_QUIET, BTN_SECONDARY, CHIP, EYEBROW, HINT, INPUT, LABEL_CAPS, PANEL, SOFT } from "./roomUi";
@@ -176,7 +175,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
   const [winText, setWinText] = useState("");
   const [winServes, setWinServes] = useState<string | null>(null);
   const alive = useRef(true);
-  const moonOn = useModuleOn(MOON_REVIEW_MODULE_ID);
+  const moonOn = useMoonReviewOn();
   const wantsMoon = moonOn && !!view?.template?.flow.some((s) => isMoonKind(s.kind));
   const moonRoom = useMoonRoom(sessionId, wantsMoon);
 
