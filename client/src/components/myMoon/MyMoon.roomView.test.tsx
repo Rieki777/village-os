@@ -11,6 +11,7 @@ import { formatMoney } from "@shared/money";
 import { MOON_WORDS, MY_MOON_WORDS } from "@shared/moonRecap";
 import { MyMoonView } from "./MyMoon";
 import { invoice, myMoon } from "./myMoon.fixture";
+import { normalizeMyMoon } from "./moonApi";
 
 afterEach(cleanup);
 
@@ -63,6 +64,15 @@ describe("My moon, Room view", () => {
     renderMoon({ invoiceNeeded: false, invoice: null, noTermsLine: null });
     expect(screen.queryByTestId("invoice")).toBeNull();
     expect(text()).not.toContain(AMOUNT);
+  });
+
+  it("draws a payload from an earlier copy of the contract, with no score, goals or Outside my roles", () => {
+    const full = myMoon();
+    const { moon, moons, recap, items, roles, coverage, seasonGoals, ownGoals, moonLoad, invoiceNeeded, noTermsLine, invoice: inv, payRoute, routeChoices, pilotAck, cashPayHolders } = full;
+    const data = normalizeMyMoon({ moon, moons, recap, items, roles, coverage, seasonGoals, ownGoals, moonLoad, invoiceNeeded, noTermsLine, invoice: inv, payRoute, routeChoices, pilotAck, cashPayHolders });
+    render(<MyMoonView data={data} villageRoles={[]} onCycle={() => {}} reload={async () => null} />);
+    expect(screen.getByTestId("my-moon")).toBeTruthy();
+    expect(screen.getByTestId("moon-score").textContent).toContain("Nothing to count yet");
   });
 
   it("names the walkthrough day, the send-by day and the guide only when the village set one", () => {

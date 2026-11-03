@@ -20,8 +20,10 @@
  */
 import { gameFetch } from "@/lib/gameApi";
 import {
+  EMPTY_SETTINGS,
   MOON_ROUTES,
   PACK_REFUSAL_WORDS,
+  attestationWords,
   type AskSeraResponse,
   type BulkApproveRequest,
   type BulkApproveResponse,
@@ -104,7 +106,52 @@ const withCycle = (path: string, cycle: string | null) => (cycle ? `${path}?cycl
 
 // ── The member's own doors ─────────────────────────────────────────────────
 
-export const fetchMyMoon = (cycle: string | null) => call<MyMoonData>(withCycle(MOON_ROUTES.myMoon, cycle));
+/**
+ * The payload with every list and score present. A server built against an
+ * earlier copy of the contract can leave the newer fields out (the member
+ * lane's first cut sends no score, goals or Outside my roles), and the page
+ * draws an empty part for each of those instead of failing whole.
+ */
+export function normalizeMyMoon(raw: Partial<MyMoonData> & Pick<MyMoonData, "moon">): MyMoonData {
+  const empty = { numHalves: 0, den: 0, pct: null };
+  const defaults: Omit<MyMoonData, "moon"> = {
+    moons: [],
+    recap: null,
+    items: [],
+    roles: [],
+    coverage: { roles: [], outsideMyRoles: [], seasonGoals: [], ownGoals: [], rolesWithNoItems: [] },
+    seasonGoals: [],
+    ownGoals: [],
+    moonLoad: null,
+    taskScore: { ...empty, done: 0, partly: 0, carry: 0, leftOut: { letGo: 0, redirect: 0, lastWeekNotDone: 0, olderThanMoon: 0 } },
+    taskReading: null,
+    seatReading: null,
+    seatCoverage: { on: 0, total: 0, pct: null },
+    lastMoonGoals: [],
+    goalScore: { ...empty, unscored: 0 },
+    nextMoonGoals: [],
+    backlog: [],
+    outsideRoles: { items: [], fill: [] },
+    invoiceNeeded: false,
+    noTermsLine: null,
+    invoice: null,
+    payRoute: null,
+    routeChoices: [],
+    pilotAck: null,
+    setupGaps: [],
+    attestationWords: attestationWords(EMPTY_SETTINGS),
+    cashPayHolders: [],
+  };
+  const given = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined)) as Partial<MyMoonData>;
+  return { ...defaults, ...given, moon: raw.moon };
+}
+
+export async function fetchMyMoon(cycle: string | null): Promise<Answer<MyMoonData>> {
+  const r = await call<MyMoonData>(withCycle(MOON_ROUTES.myMoon, cycle));
+  if (!r.ok) return r;
+  if (!r.data || typeof r.data !== "object" || !r.data.moon) return { ok: false, status: 0, error: MY_MOON_WORDS.failed, code: null };
+  return { ok: true, data: normalizeMyMoon(r.data) };
+}
 export const gather = (cycle: string) => call<GatherResponse>(door(MOON_ROUTES.gather, { cycle }), "POST", {});
 export const askSera = (cycle: string) => call<AskSeraResponse>(door(MOON_ROUTES.askSera, { cycle }), "POST", {});
 export const addItem = (cycle: string, text: string) => call<ItemResponse>(door(MOON_ROUTES.addItem, { cycle }), "POST", { text, state: "kept" });
@@ -141,7 +188,12 @@ export async function fetchVillageRoles(): Promise<Array<{ id: string; name: str
 // ── The approvers' doors ───────────────────────────────────────────────────
 
 /** `headers` lets the admin desk pass its own session header. */
-export const fetchQueue = (cycle: string | null, init: RequestInit = {}) => call<QueueData>(withCycle(MOON_ROUTES.queue, cycle), "GET", undefined, init);
+export async function fetchQueue(cycle: string | null, init: RequestInit = {}): Promise<Answer<QueueData>> {
+  const r = await call<QueueData>(withCycle(MOON_ROUTES.queue, cycle), "GET", undefined, init);
+  if (!r.ok) return r;
+  if (!r.data || typeof r.data !== "object" || !r.data.moon) return { ok: false, status: 0, error: MY_MOON_WORDS.failed, code: null };
+  return { ok: true, data: { ...r.data, rows: r.data.rows ?? [], rolesWithNoItems: r.data.rolesWithNoItems ?? [], noEligible: r.data.noEligible ?? [] } };
+}
 export const reviewWork = (recap: string, body: WorkReviewRequest, init: RequestInit = {}) => call<unknown>(door(MOON_ROUTES.work, { recap }), "POST", body, init);
 export const returnRecap = (recap: string, body: ReturnRequest, init: RequestInit = {}) => call<unknown>(door(MOON_ROUTES.returnRecap, { recap }), "POST", body, init);
 export const approveInvoices = (body: BulkApproveRequest, init: RequestInit = {}) => call<BulkApproveResponse>(MOON_ROUTES.approveInvoices, "POST", body, init);

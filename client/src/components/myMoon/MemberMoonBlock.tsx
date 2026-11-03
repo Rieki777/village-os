@@ -42,7 +42,7 @@ export default function MemberMoonBlock({ handle }: { handle: string }) {
   const [data, setData] = useState<MemberMoonResponse | null>(null);
   useEffect(() => {
     let live = true;
-    void api.fetchMemberMoon(handle).then((r) => live && setData(r.ok ? r.data : null));
+    void api.fetchMemberMoon(handle).then((r) => live && setData(r.ok && Array.isArray(r.data?.roles) && r.data.moon ? r.data : null));
     return () => { live = false; };
   }, [handle]);
   return data ? <MemberMoonView data={data} /> : null;
