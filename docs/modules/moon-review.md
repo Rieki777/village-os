@@ -6,7 +6,8 @@ Provenance: platform
 > coverage, invoice lines from terms, the route and payer checks, `endOfMoonFriday`, the approval hash, the work
 > summary, and the request and response shapes of every route). Every SQL statement for its tables is in
 > `server/repos/moonRecaps.ts`; the schema is `drizzle/0313_a_member_reviews_their_moon.sql`,
-> `drizzle/0314_a_member_tags_a_task_to_a_role.sql` and `drizzle/0315_an_approval_can_be_the_members_own.sql`.
+> `drizzle/0314_a_member_tags_a_task_to_a_role.sql`, `drizzle/0315_an_approval_can_be_the_members_own.sql` and
+> `drizzle/0317_a_member_sets_the_next_moons_goals.sql`.
 
 **Once a moon, each member who holds a role gathers what they delivered, checks it against their role cards and
 the season goals, does a role audit and sends a recap. When the adopted terms of one of their roles carry money,
@@ -33,8 +34,10 @@ launch, `members` takes a `module.switch` holder or a vote.
 
 1. The member keeps their tasks on the profile through the moon, tagged to a role and a season goal where they like
    (`member_tasks.role_id`, `member_tasks.serves_goal_id`).
-2. On the end-of-moon Friday (`endOfMoonFriday`: the last Friday on or before the moon's last day, in village time),
-   or by Sunday, they open My moon, bring in their tasks, ask Sera, keep and tag items, and do the role audit.
+2. By the end-of-moon Friday (`endOfMoonFriday`, the prepare-by day: the last Friday on or before the moon's last day,
+   in village time) they open My moon, bring in their tasks, ask Sera, keep and tag items, mark each task Done, Partly,
+   Carry, Let go or Redirect, score last moon's goals, set three to five for the next, and do the role audit. They send
+   by `sendBy`: the new moon circle day, or the first all-staff on or after it.
 3. They send the recap. It needs no pay route.
 4. If a role's terms carry money, they issue their own invoice (by email, through the electronic invoice system, or
    however they invoice today) and send the app's draft for approval with that invoice's number, the moon attestation
@@ -65,6 +68,37 @@ launch, `members` takes a `module.switch` holder or a vote.
 - **Who reads what.** Members read sent, kept items marked Members (`memberView`); an Approvers only item shows as
   "1 item held privately". Amounts, routes, legal details and invoices are for the member and `cash.pay` holders.
 
+## The score (decision 20)
+
+- **Task score** (`taskScore`): (Done + half of Partly) over (Done + Partly + Carry), stored at send in half-points.
+  Only tasks set this moon count; a task set in the final seven days counts only when Done. Let go (which needs a
+  reason) and Redirect (which names who it belongs to) are left out.
+- **Role coverage** (`seatCoverage`): the share of the member's role accountabilities with a kept item. Outside my
+  roles work counts toward season goals and never here; it feeds the role audit (`outsideRolesAudit`), where two or
+  more items under a role nobody holds raise a Fill signal.
+- **Goals** (`goalScore`, `moon_goals`): the same formula over the member's moon goals. Partly and Carry roll into the
+  next moon with one more carry; a goal carried twice is flagged for the circle.
+- **Closing the loop in Sera** (`seraClosures`): once the work is approved, each item Sera sent that the member marked
+  Done or Let go closes through the feedback outbox, and each Redirect goes with its words. Only tasks Sera sent.
+
+## Nothing village-specific in code (decision 22)
+
+Every value one village decides is data with an admin editor on the Cash payouts desk, edited by `cash.pay` holders,
+and every change writes a `moon_review_events` row with old and new values:
+
+- **Payers** (`payers` in `app_config`, `PUT /api/moon-review/payers`): legal name, address, tax number, country,
+  currencies, invoicing on or off, the authority note, `invoiceTo` and `invoiceCc`, and the routes each payer pays.
+- **Settings** (`moon-review-settings` in `app_config`, `PUT /api/moon-review/settings`): the host country (code and
+  name), its VAT rate, its exchange-rate source and its currency, the tax forms kept on file, the routes that need one,
+  the hold rules, and the pilot acknowledgement with its version. A new version asks every member to accept again.
+  The attestation and the route words are templates filled from these.
+- **The send-by rule** is the module's own config (`allStaffWeekday`).
+
+What stays in code: the closed list of route kinds (`pending`, `abroad`, `nomad`, `local_contractor`,
+`local_employee`, `visitor`), the status words, the scoring rules and the safety checks. Defaults ship empty: until a
+payer, the host country and the acknowledgement are filled in, an invoice is refused with "Name who you pay first", and
+a recap still sends.
+
 ## Setup
 
 - An admin creates a power group carrying `moon.approve` and seats someone in it to approve the work. Capabilities live on
@@ -74,8 +108,8 @@ launch, `members` takes a `module.switch` holder or a vote.
   capabilities column needs a SQL function production has never run), so a village that takes one off a group keeps
   it off.
 - Someone holds `cash.pay` (the Treasury role, and the founding stewards at launch).
-- The `payers` document in `app_config` is filled through `PUT /api/moon-review/payers` (see
-  `docs/FORK_RUNBOOK.md`). Entity names live there and nowhere in code.
+- The `payers` and `moon-review-settings` documents are filled on the Cash payouts desk (see
+  `docs/FORK_RUNBOOK.md`). Entity, country, tax and rate names live there and nowhere in code.
 - Roles paid through this flow carry no `org_roles.cash_minor`, so the hourly settlement never owes them.
 
 ## Erasure and export

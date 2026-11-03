@@ -21,6 +21,9 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { registerJob } from "../lib/scheduler";
 import { runListNudges } from "../lib/memberTaskNudges";
+import { randomUUID } from "node:crypto";
+import { HARD_DELETE_TOOL, callPrivacyTool, libraryExportFor, readHardDelete } from "../lib/saberraPrivacy";
+import { exportMemberTasks } from "../repos/memberTasks";
 import { villageDayKey } from "../../shared/companionItems";
 import { REDIRECT_CHOICES, parseFeedback, type ScreenReason } from "../../shared/memberTaskFeedback";
 import { heldFromLibrary } from "../repos/memberTaskImport";
@@ -36,6 +39,9 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "isAdmin" | "
 
 const HOUR_MS = 60 * 60 * 1000;
 const WRITES_PER_HOUR = 600;
+
+/** One pending hard-delete confirmation per member, in memory: a restart means a fresh dry run. */
+const hardDeletePending = new Map<string, { code: string; at: number }>();
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone } = deps;
@@ -175,6 +181,50 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/admin/member-tasks/bridge/sync", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     res.json(await syncLinked(getPool(), today()));
+  });
+
+  // ── Before erasing a member: their tasks, exported and (in Sera) removed ──
+
+  /** A steward-only file of the village's own copy of a member's tasks. Nothing is sent anywhere. */
+  app.get("/api/admin/member-tasks/:userId/export", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const userId = String(req.params.userId).slice(0, 64);
+    const rows = await exportMemberTasks(getPool(), userId);
+    const owner = await libraryOwnerOf(getPool(), userId);
+    // The member's private detail is theirs alone (their own export carries it); a steward's file never does.
+    const tasks = rows.map(({ privateDetail: _p, ...t }) => t);
+    const sera = owner ? await libraryExportFor(owner).catch(() => ({ offered: false as const, note: "Sera did not answer." })) : { offered: false as const, note: "Not linked to Sera." };
+    res.setHeader("Content-Disposition", `attachment; filename="member-tasks-${userId.replace(/[^A-Za-z0-9_-]/g, "")}.json"`);
+    res.json({ exportedAt: new Date().toISOString(), userId, tasks, sera });
+  });
+
+  /**
+   * Hard delete of a member's tasks in Sera, over the privacy connection only.
+   * A dry run first, always: it answers the count and a one-time code. Only a
+   * second press carrying `confirm: true` and that code, within 10 minutes,
+   * asks Sera to archive them.
+   */
+  app.post("/api/admin/member-tasks/:userId/sera-hard-delete", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const userId = String(req.params.userId).slice(0, 64);
+    const owner = await libraryOwnerOf(getPool(), userId);
+    if (!owner) return res.status(404).json({ error: "This member is not linked to Sera, so Sera holds no tasks under them that we know of." });
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const pending = hardDeletePending.get(userId);
+    const confirming = body.confirm === true;
+    if (confirming && (!pending || pending.code !== body.code || Date.now() - pending.at > 10 * 60_000)) {
+      return res.status(409).json({ error: "Run the dry run again first; the confirmation has expired or does not match." });
+    }
+    const r = await callPrivacyTool(HARD_DELETE_TOOL, confirming ? { owner_id: owner, confirm: true } : { owner_id: owner });
+    if (!r.ok) return res.status(r.needsFullScope ? 412 : 502).json({ error: r.error, needsFullScope: !!r.needsFullScope });
+    const read = readHardDelete(r.value);
+    if (confirming) {
+      hardDeletePending.delete(userId);
+      return res.json({ dryRun: false, count: read.count, archived: true });
+    }
+    const code = randomUUID().slice(0, 8);
+    hardDeletePending.set(userId, { code, at: Date.now() });
+    res.json({ dryRun: true, count: read.count, code });
   });
 
   app.post("/api/admin/member-tasks/review/:feedbackId", async (req, res) => {

@@ -58,8 +58,19 @@
  * form and the invoice are for the member and the holders of `cash.pay`. No
  * room panel shape below has a field that can hold an amount.
  *
- * The platform records money and never moves it. Entity names live only in
- * the `payers` document in `app_config`, never in this file.
+ * The platform records money and never moves it.
+ *
+ * ── NOTHING VILLAGE-SPECIFIC LIVES HERE (decision 22) ─────────────────────
+ *
+ * Every value one village decides is data with an admin editor: the payers
+ * (`payers` in `app_config`) and the village's moon-review settings
+ * (`moon-review-settings`: the host country, its VAT rate, rate source and
+ * currency, the tax forms on file, the hold rules and the pilot
+ * acknowledgement). What stays here is the closed list of route kinds, the
+ * status words, the scoring rules and the safety checks, worded with no
+ * village, country, entity, tax or rate name. Defaults ship EMPTY: a fresh
+ * install refuses an invoice with `SEND_REFUSALS.notConfigured` until a
+ * `cash.pay` holder fills them in.
  */
 import { canonicalJson } from "./canonicalJson";
 import { looksLikePaymentDetails, moneyWords, type SeatSettings } from "./seatSettings";
@@ -91,6 +102,8 @@ export const INVOICE_ID = /^mv-[0-9a-f]{16}$/;
 
 /** The `app_config` key the payers document lives under. */
 export const PAYERS_DOC_KEY = "payers";
+/** The `app_config` key the village's moon-review settings live under (decision 22). */
+export const SETTINGS_DOC_KEY = "moon-review-settings";
 
 export const LIMITS = {
   ownWords: 2000,
@@ -121,6 +134,12 @@ export const LIMITS = {
   payers: 10,
   payerText: 300,
   payerNote: 1000,
+  redirectTo: 120,
+  letGoReason: 300,
+  goalText: 200,
+  goalDoneWhen: 300,
+  invoiceCc: 5,
+  pilotAckText: 2000,
 } as const;
 
 /** The Sera draft stops waiting after this long and keeps whatever arrived. */
@@ -238,7 +257,7 @@ export function invoicePaidFrom(rows: readonly { state: string; paidAt: string |
 // ── Items ────────────────────────────────────────────────────────────────────
 
 /** Where a piece of work came from. A quest is never one of them. */
-export const ITEM_ORIGINS = ["task", "room", "sera", "hand"] as const;
+export const ITEM_ORIGINS = ["task", "room", "sera", "hand", "carry", "claude"] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 
 export const ITEM_STATES = ["suggested", "kept", "dropped"] as const;
@@ -255,6 +274,8 @@ export const ITEM_ORIGIN_WORDS: Record<ItemOrigin, string> = {
   room: "From a room",
   sera: "From Sera",
   hand: "Added by hand",
+  carry: "Carried from last moon",
+  claude: "From the deep dive",
 };
 
 export const ITEM_STATE_WORDS: Record<ItemState, string> = {
@@ -279,7 +300,7 @@ export const ITEM_REVIEW_WORDS: Record<ItemReview, string> = {
  * on its library id whichever path finds it: through the profile list or
  * through the Sera draft.
  */
-export function itemDedupeKey(origin: "task" | "room" | "hand", ref: string): string;
+export function itemDedupeKey(origin: "task" | "room" | "hand" | "carry" | "claude", ref: string): string;
 export function itemDedupeKey(origin: "sera", externalId: string): string;
 export function itemDedupeKey(origin: ItemOrigin, ref: string): string {
   return `${origin}:${String(ref).slice(0, 150)}`;
@@ -292,9 +313,23 @@ export function itemDedupeKey(origin: ItemOrigin, ref: string): string {
  */
 export const SERA_CLOSED_NOTE = "Closed in Sera";
 
+/** How a piece of work ended this moon (decision 20). Null until the member says. */
+export const TASK_STATUSES = ["done", "partly", "carry", "let_go", "redirect"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const TASK_STATUS_WORDS: Record<TaskStatus, string> = {
+  done: "Done",
+  partly: "Partly",
+  carry: "Carry",
+  let_go: "Let go",
+  redirect: "Redirect",
+};
+
 export interface RecapItem {
   id: string;
   origin: ItemOrigin;
+  /** `task:`, `sera:`, `room:`, `hand:` or `carry:` and the source's id. */
+  dedupeKey: string;
   text: string;
   originNote: string | null;
   /** YYYY-MM-DD, the day the work was done, when the source knows it. */
@@ -313,6 +348,14 @@ export interface RecapItem {
   review: ItemReview;
   reviewNote: string | null;
   position: number;
+  /** YYYY-MM-DD the task was set: the score counts this moon's tasks only. */
+  setOn: string | null;
+  taskStatus: TaskStatus | null;
+  /** Redirect: who or which role it really belongs to, in words. */
+  redirectTo: string | null;
+  letGoReason: string | null;
+  /** Outside my roles: the role this work really belongs to, for the role audit. */
+  belongsToRoleId: string | null;
 }
 
 /** The fields a member may set on an item while the recap is theirs to edit. */
@@ -328,6 +371,10 @@ export interface ItemFields {
   state?: ItemState;
   visibility?: ItemVisibility;
   position?: number;
+  taskStatus?: TaskStatus | null;
+  redirectTo?: string | null;
+  letGoReason?: string | null;
+  belongsToRoleId?: string | null;
 }
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; field: string; error: string };
@@ -359,6 +406,9 @@ const FIELD_WORDS: Record<string, string> = {
   externalInvoiceKey: "The electronic invoice key",
   fundsSource: "Where the funds came from",
   fxSource: "The rate's source",
+  redirectTo: "Who it belongs to",
+  letGoReason: "Why it was let go",
+  belongsToRoleId: "The role it belongs to",
 };
 
 /** A proof link: http or https, or a path on this village. */
@@ -413,6 +463,19 @@ export function parseItemFields(body: unknown): Parsed<ItemFields> {
     if (!Number.isInteger(n) || n < 0 || n > 10_000) return { ok: false, field: "position", error: "The position is a whole number." };
     out.position = n;
   }
+  if ("taskStatus" in body) {
+    if (body.taskStatus !== null && !(TASK_STATUSES as readonly unknown[]).includes(body.taskStatus)) return { ok: false, field: "taskStatus", error: "A task is Done, Partly, Carry, Let go or Redirect." };
+    out.taskStatus = (body.taskStatus as TaskStatus | null) ?? null;
+  }
+  for (const [key, max] of [["redirectTo", LIMITS.redirectTo], ["letGoReason", LIMITS.letGoReason], ["belongsToRoleId", 64]] as const) {
+    if (key in body) {
+      const t = optText(body[key], max, key);
+      if (!t.ok) return t;
+      out[key] = t.value;
+    }
+  }
+  if (out.taskStatus === "let_go" && "letGoReason" in out && !out.letGoReason) return { ok: false, field: "letGoReason", error: LET_GO_NEEDS_REASON };
+  if (out.taskStatus === "redirect" && "redirectTo" in out && !out.redirectTo) return { ok: false, field: "redirectTo", error: REDIRECT_NEEDS_WHO };
   if (out.text && looksLikePaymentDetails(out.text)) return { ok: false, field: "text", error: PAYMENT_DETAILS_REFUSED };
   return { ok: true, value: out };
 }
@@ -480,6 +543,20 @@ export function endOfMoonFriday(bounds: Pick<CycleBounds, "id" | "clock" | "star
   const { lastDay } = moonDays(bounds, timeZone);
   const back = (weekdayOf(lastDay) - 5 + 7) % 7;
   return addDays(lastDay, -back);
+}
+
+/**
+ * THE SEND-BY DAY (decision 21): the new moon circle day, which is the first
+ * day of the next moon, or the first all-staff on or after it when the
+ * village names one (its weekday, 0 Sunday to 6 Saturday). The moon ending
+ * with the 9 November 2026 new moon gives Monday 9 November. Sending any time
+ * before then counts the same as sending in the room. `endOfMoonFriday` stays
+ * the prepare-by day.
+ */
+export function sendBy(bounds: Pick<CycleBounds, "id" | "clock" | "startsAt" | "endsAt">, timeZone: string, allStaffWeekday: number | null = null): string {
+  const newMoonDay = addDays(moonDays(bounds, timeZone).lastDay, 1);
+  if (allStaffWeekday === null || !Number.isInteger(allStaffWeekday) || allStaffWeekday < 0 || allStaffWeekday > 6) return newMoonDay;
+  return addDays(newMoonDay, (allStaffWeekday - weekdayOf(newMoonDay) + 7) % 7);
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -751,30 +828,57 @@ export function auditTensions(audit: RoleAudit): Array<{ roleId: string | null; 
 // ── Pay routes ───────────────────────────────────────────────────────────────
 
 /** A closed list. `pending` is the default. */
-export const PAY_ROUTES = ["pending", "abroad", "nomad", "cr_contractor", "cr_employee", "tourist"] as const;
+/**
+ * A closed list, with neutral ids (decision 22). `pending` is the default.
+ * `local_*` is the village's host country, named only in its settings.
+ */
+export const PAY_ROUTES = ["pending", "abroad", "nomad", "local_contractor", "local_employee", "visitor"] as const;
 export type PayRoute = (typeof PAY_ROUTES)[number];
 
-/** The routes that can carry a paid line. `pending`, `tourist` and `cr_employee` never do. */
-export const INVOICING_ROUTES: readonly PayRoute[] = ["abroad", "nomad", "cr_contractor"];
-
-export const TAX_FORM_KINDS = ["W-9", "W-8BEN", "none"] as const;
-export type TaxFormKind = (typeof TAX_FORM_KINDS)[number];
+/** The routes that can carry a paid line. `pending`, `visitor` and `local_employee` never do. */
+export const INVOICING_ROUTES: readonly PayRoute[] = ["abroad", "nomad", "local_contractor"];
 
 /**
- * The route form's choices, in the member's words. `{country}` is the host
- * country the payers document names.
+ * A tax form's key, from the village's settings (`taxForms`), or `none`.
+ * The column holds eight characters.
+ */
+export type TaxFormKind = string;
+export const NO_TAX_FORM = "none";
+
+/**
+ * The route form's choices, in the member's words. `{country}` is filled
+ * from the village's settings, and reads "the host country" until set.
  */
 export const PAY_ROUTE_WORDS: Record<PayRoute, string> = {
   pending: "Not chosen yet",
   abroad: "I live outside {country}, and did all the invoiced work outside it this moon",
   nomad: "I live in {country} on granted digital nomad status, and invoice only work that serves people abroad",
-  cr_contractor: "I am from {country} or a resident with work rights, working as an independent contractor",
-  cr_employee: "I am from {country} or a resident, working as an employee",
-  tourist: "I am on tourist status, or my status application is still pending",
+  local_contractor: "I live in {country} with the right to work there, working as an independent contractor",
+  local_employee: "I live in {country}, working as an employee",
+  visitor: "I am in {country} on a visitor entry, or my status application is still pending",
 };
 
-export function payRouteWords(route: PayRoute, country: string): string {
-  return PAY_ROUTE_WORDS[route].replace("{country}", country);
+/** The words a host-country template takes when the village has not named one. */
+export const HOST_FALLBACK = "the host country";
+
+export function hostName(settings: Pick<MoonReviewSettings, "hostCountry">): string {
+  return settings.hostCountry?.name || HOST_FALLBACK;
+}
+
+export function payRouteWords(route: PayRoute, settings: Pick<MoonReviewSettings, "hostCountry">): string {
+  return PAY_ROUTE_WORDS[route].replace("{country}", hostName(settings));
+}
+
+/** The attestation's lines, filled from the village's settings. */
+export function attestationWords(settings: Pick<MoonReviewSettings, "hostCountry">): { workCountries: string; daysIn: string; statusUnchanged: string; servedAbroad: string; visitorEntryWork: string } {
+  const c = hostName(settings);
+  return {
+    workCountries: "The countries where the invoiced work was done",
+    daysIn: `Days spent in ${c} this moon`,
+    statusUnchanged: "My status is unchanged",
+    servedAbroad: "The invoiced work served people abroad",
+    visitorEntryWork: `Some invoiced work was done in ${c} on a visitor entry`,
+  };
 }
 
 export function isPayRoute(v: unknown): v is PayRoute {
@@ -826,7 +930,7 @@ function optDate(v: unknown, field: string): Parsed<string | null> {
  * Read a member's pay route. Legal name and address run the payment-details
  * check, so a bank or card number never lands in them.
  */
-export function parsePayRouteInput(body: unknown): Parsed<PayRouteInput> {
+export function parsePayRouteInput(body: unknown, opts: { taxFormKeys?: readonly string[] } = {}): Parsed<PayRouteInput> {
   if (!isObj(body)) return { ok: false, field: "body", error: "Send your pay route." };
   if (!isPayRoute(body.route)) return { ok: false, field: "route", error: "Choose one of the pay routes listed." };
   const legalName = optText(body.legalName, LIMITS.legalName, "legalName");
@@ -843,8 +947,8 @@ export function parsePayRouteInput(body: unknown): Parsed<PayRouteInput> {
   if (payerKey !== null && !PAYER_KEY.test(payerKey)) return { ok: false, field: "payerKey", error: "Choose one of the payers listed." };
   const currency = body.currency === undefined || body.currency === null || body.currency === "" ? null : String(body.currency).toUpperCase();
   if (currency !== null && !CURRENCY_RE.test(currency)) return { ok: false, field: "currency", error: "A currency is a three-letter code, such as USD." };
-  const kind = body.taxFormKind === undefined || body.taxFormKind === null ? "none" : body.taxFormKind;
-  if (!(TAX_FORM_KINDS as readonly unknown[]).includes(kind)) return { ok: false, field: "taxFormKind", error: "The tax form is a W-9, a W-8BEN, or none." };
+  const kind = body.taxFormKind === undefined || body.taxFormKind === null ? NO_TAX_FORM : body.taxFormKind;
+  if (typeof kind !== "string" || (kind !== NO_TAX_FORM && !(opts.taxFormKeys ?? []).includes(kind))) return { ok: false, field: "taxFormKind", error: "Choose one of the tax forms listed, or none." };
   const dates: Record<string, string | null> = {};
   for (const f of ["statusValidUntil", "taxFormSignedOn", "taxFormExpiresOn"] as const) {
     const d = optDate(body[f], f);
@@ -875,19 +979,137 @@ export function confirmRouteRefusal(actorUserId: string, memberUserId: string): 
 
 /** Is the member's tax form valid on a day? A route with no form needs none. */
 export function taxFormValidOn(r: Pick<PayRouteRecord, "taxFormKind" | "taxFormSignedOn" | "taxFormExpiresOn">, day: string): boolean {
-  if (r.taxFormKind === "none") return false;
+  if (r.taxFormKind === NO_TAX_FORM) return false;
   if (!r.taxFormSignedOn || r.taxFormSignedOn > day) return false;
   return !r.taxFormExpiresOn || r.taxFormExpiresOn >= day;
 }
 
-/** The routes paid by a foreign payer, which need a W-9 or W-8BEN on file. */
-export const TAX_FORM_ROUTES: readonly PayRoute[] = ["abroad", "nomad"];
+// ── The village's moon-review settings (decision 22) ─────────────────────────
 
-// ── The pilot acknowledgement ────────────────────────────────────────────────
+/** A tax form the village keeps on file, by key (eight characters at most) and the label members read. */
+export interface TaxFormDef {
+  key: string;
+  label: string;
+}
 
-export const PILOT_ACK_VERSION = "2026-11-03";
-export const PILOT_ACK_TEXT =
-  "This pay process is a pilot. Costa Rican counsel has not yet confirmed the deliverable-based model. Your pay route is your own declaration; tell Finance at once if your status or place of work changes.";
+/**
+ * A hold: an invoice whose member holds this tax form and did invoiced work
+ * in this country waits for Finance to decide with the accountant.
+ */
+export interface HoldRule {
+  taxFormKey: string;
+  workCountry: string;
+  note: string;
+}
+
+export interface MoonReviewSettings {
+  hostCountry: { code: string; name: string } | null;
+  /** The host country's VAT rate, in basis points (1300 is 13%). Local contractor terms are before it. */
+  hostVatRateBp: number | null;
+  /** Where the exchange rate comes from, in the village's words. */
+  hostRateSource: string | null;
+  hostCurrency: string | null;
+  /** A new version asks every member to accept again. */
+  pilotAck: { text: string; version: string } | null;
+  taxForms: TaxFormDef[];
+  /** The routes that need a valid tax form on the expected payment date. */
+  taxFormRoutes: PayRoute[];
+  holds: HoldRule[];
+}
+
+/** Platform defaults: EMPTY. A fresh install names no country, no form and no acknowledgement. */
+export const EMPTY_SETTINGS: MoonReviewSettings = {
+  hostCountry: null, hostVatRateBp: null, hostRateSource: null, hostCurrency: null, pilotAck: null, taxForms: [], taxFormRoutes: [], holds: [],
+};
+
+const TAX_FORM_KEY = /^[A-Za-z0-9-]{1,8}$/;
+
+/** Read the settings document, from storage or from `PUT /api/moon-review/settings`. */
+export function parseMoonReviewSettings(raw: unknown): Parsed<MoonReviewSettings> {
+  if (raw === undefined || raw === null) return { ok: true, value: EMPTY_SETTINGS };
+  if (!isObj(raw)) return { ok: false, field: "settings", error: "The settings are a set of fields." };
+  let hostCountry: MoonReviewSettings["hostCountry"] = null;
+  if (raw.hostCountry !== undefined && raw.hostCountry !== null) {
+    const h = isObj(raw.hostCountry) ? raw.hostCountry : {};
+    const code = String(h.code ?? "").trim().toUpperCase();
+    const name = typeof h.name === "string" ? h.name.replace(/\s+/g, " ").trim() : "";
+    if (!COUNTRY_RE.test(code) || !name || name.length > 60) return { ok: false, field: "hostCountry", error: "The host country is a two-letter code and its name." };
+    hostCountry = { code, name };
+  }
+  let vat: number | null = null;
+  if (raw.hostVatRateBp !== undefined && raw.hostVatRateBp !== null) {
+    vat = Number(raw.hostVatRateBp);
+    if (!Number.isInteger(vat) || vat < 0 || vat > 10_000) return { ok: false, field: "hostVatRateBp", error: "The VAT rate is in basis points, from 0 to 10000." };
+  }
+  const source = optText(raw.hostRateSource, LIMITS.fxSource, "fxSource");
+  if (!source.ok) return source;
+  const currency = raw.hostCurrency === undefined || raw.hostCurrency === null || raw.hostCurrency === "" ? null : String(raw.hostCurrency).toUpperCase();
+  if (currency !== null && !CURRENCY_RE.test(currency)) return { ok: false, field: "hostCurrency", error: "A currency is a three-letter code." };
+  let pilotAck: MoonReviewSettings["pilotAck"] = null;
+  if (raw.pilotAck !== undefined && raw.pilotAck !== null) {
+    const a = isObj(raw.pilotAck) ? raw.pilotAck : {};
+    const text = typeof a.text === "string" ? a.text.trim() : "";
+    const version = typeof a.version === "string" ? a.version.trim() : "";
+    if (!text || text.length > LIMITS.pilotAckText || !/^[A-Za-z0-9._-]{1,16}$/.test(version)) return { ok: false, field: "pilotAck", error: "The pilot acknowledgement needs its words and a version of up to 16 letters, digits, dots or dashes." };
+    pilotAck = { text, version };
+  }
+  const taxForms: TaxFormDef[] = [];
+  for (const f of Array.isArray(raw.taxForms) ? raw.taxForms : []) {
+    const key = isObj(f) ? String(f.key ?? "").trim() : "";
+    const label = isObj(f) && typeof f.label === "string" ? f.label.trim() : "";
+    if (!TAX_FORM_KEY.test(key) || key === NO_TAX_FORM || !label || label.length > 80) return { ok: false, field: "taxForms", error: "Each tax form has a key of up to 8 letters, digits or dashes, and a label." };
+    if (!taxForms.some((x) => x.key === key)) taxForms.push({ key, label });
+  }
+  const taxFormRoutes = (Array.isArray(raw.taxFormRoutes) ? raw.taxFormRoutes : []).filter(isPayRoute).filter((r) => INVOICING_ROUTES.includes(r));
+  const holds: HoldRule[] = [];
+  for (const h of Array.isArray(raw.holds) ? raw.holds : []) {
+    if (!isObj(h)) continue;
+    const taxFormKey = String(h.taxFormKey ?? "");
+    const workCountry = String(h.workCountry ?? "").toUpperCase();
+    const note = typeof h.note === "string" ? h.note.trim().slice(0, LIMITS.payerText) : "";
+    if (!taxForms.some((f) => f.key === taxFormKey) || !COUNTRY_RE.test(workCountry) || !note) return { ok: false, field: "holds", error: "Each hold names a listed tax form, a two-letter country and a note." };
+    holds.push({ taxFormKey, workCountry, note });
+  }
+  return { ok: true, value: { hostCountry, hostVatRateBp: vat, hostRateSource: source.value, hostCurrency: currency, pilotAck, taxForms, taxFormRoutes: Array.from(new Set(taxFormRoutes)), holds } };
+}
+
+/** Old and new values for every settings field a `PUT` changed, for the event note. */
+export function settingsChanges(before: MoonReviewSettings, after: MoonReviewSettings): Array<{ field: string; from: unknown; to: unknown }> {
+  return (Object.keys(after) as Array<keyof MoonReviewSettings>).filter((k) => canonicalJson(before[k]) !== canonicalJson(after[k])).map((k) => ({ field: k, from: before[k], to: after[k] }));
+}
+
+/**
+ * What a village still has to name before an invoice can go, in order. Empty
+ * means ready. Payers come from the payers document; the rest from settings.
+ */
+export function setupGaps(payers: PayersDoc, settings: MoonReviewSettings): string[] {
+  const gaps: string[] = [];
+  if (!payers.payers.some((p) => p.invoicing && p.routes.length > 0)) gaps.push(SETUP_GAP_WORDS.payer);
+  if (!settings.hostCountry) gaps.push(SETUP_GAP_WORDS.country);
+  if (!settings.pilotAck) gaps.push(SETUP_GAP_WORDS.pilotAck);
+  return gaps;
+}
+
+export const SETUP_GAP_WORDS = {
+  payer: "Name who you pay: a payer with invoicing on and the routes it pays",
+  country: "Name the host country",
+  pilotAck: "Write the pilot acknowledgement and its version",
+} as const;
+
+/** The module's own config (module_settings): the send-by rule. */
+export interface MoonReviewModuleConfig {
+  /** The weekday of the village's all-staff, 0 Sunday to 6 Saturday, or null for the new moon day itself. */
+  allStaffWeekday: number | null;
+}
+
+export const MOON_REVIEW_DEFAULT_CONFIG: MoonReviewModuleConfig = { allStaffWeekday: null };
+
+export function moonReviewConfigProblem(config: unknown): string | null {
+  if (!isObj(config)) return "The moon review settings are a set of fields.";
+  const w = config.allStaffWeekday;
+  if (w === undefined || w === null) return null;
+  return Number.isInteger(w) && (w as number) >= 0 && (w as number) <= 6 ? null : "The all-staff weekday runs from 0 (Sunday) to 6 (Saturday).";
+}
 
 // ── The moon attestation ─────────────────────────────────────────────────────
 
@@ -922,6 +1144,7 @@ export function parseAttestation(raw: unknown, route: PayRoute, moon: Pick<MoonD
 // ── The payers document ──────────────────────────────────────────────────────
 
 export const PAYER_KEY = /^[a-z][a-z0-9-]{1,40}$/;
+const EMAIL_RE = /^[^\s@<>(),;:]+@[^\s@<>(),;:]+\.[A-Za-z]{2,}$/;
 
 export const AUTHORITY_KINDS = ["none", "bridge_agreement", "written_authorization"] as const;
 export type AuthorityKind = (typeof AUTHORITY_KINDS)[number];
@@ -950,6 +1173,8 @@ export interface Payer {
   currencies: string[];
   /** Where invoices go: an email address or a link. */
   invoiceTo: string;
+  /** Who is copied on each invoice: email addresses, data only (decision 21). */
+  invoiceCc: string[];
   /** Off means no invoice may be sent to this payer. */
   invoicing: boolean;
   /** The routes this payer pays. */
@@ -960,13 +1185,11 @@ export interface Payer {
 }
 
 export interface PayersDoc {
-  /** The country the routes' words name, ISO alpha-2, and its name. */
-  hostCountry: string;
-  hostCountryName: string;
   payers: Payer[];
 }
 
-export const EMPTY_PAYERS: PayersDoc = { hostCountry: "CR", hostCountryName: "Costa Rica", payers: [] };
+/** Platform defaults: EMPTY (decision 22). */
+export const EMPTY_PAYERS: PayersDoc = { payers: [] };
 
 function reqText(v: unknown, max: number, what: string): Parsed<string> {
   const t = typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
@@ -979,9 +1202,6 @@ function reqText(v: unknown, max: number, what: string): Parsed<string> {
 export function parsePayers(raw: unknown): Parsed<PayersDoc> {
   if (raw === undefined || raw === null) return { ok: true, value: EMPTY_PAYERS };
   if (!isObj(raw)) return { ok: false, field: "payers", error: "The payers document is a list of payers." };
-  const hostCountry = typeof raw.hostCountry === "string" ? raw.hostCountry.trim().toUpperCase() : EMPTY_PAYERS.hostCountry;
-  if (!COUNTRY_RE.test(hostCountry)) return { ok: false, field: "hostCountry", error: "The host country is a two-letter code." };
-  const hostName = typeof raw.hostCountryName === "string" && raw.hostCountryName.trim() ? raw.hostCountryName.trim().slice(0, 60) : EMPTY_PAYERS.hostCountryName;
   const list = Array.isArray(raw.payers) ? raw.payers : [];
   if (list.length > LIMITS.payers) return { ok: false, field: "payers", error: `The document holds ${LIMITS.payers} payers at most.` };
   const payers: Payer[] = [];
@@ -996,6 +1216,9 @@ export function parsePayers(raw: unknown): Parsed<PayersDoc> {
     if (!address.ok) return address;
     const invoiceTo = reqText(p.invoiceTo, LIMITS.payerText, "a place invoices go");
     if (!invoiceTo.ok) return invoiceTo;
+    const cc = Array.isArray(p.invoiceCc) ? Array.from(new Set(p.invoiceCc.map((c) => String(c).trim()).filter(Boolean))) : [];
+    if (cc.length > LIMITS.invoiceCc) return { ok: false, field: "invoiceCc", error: `A payer copies ${LIMITS.invoiceCc} addresses at most.` };
+    if (cc.some((c) => !EMAIL_RE.test(c))) return { ok: false, field: "invoiceCc", error: "Each copied address is an email address." };
     const country = String(p.country ?? "").trim().toUpperCase();
     if (!COUNTRY_RE.test(country)) return { ok: false, field: "country", error: "A payer's country is a two-letter code." };
     const currencies = Array.isArray(p.currencies) ? Array.from(new Set(p.currencies.map((c) => String(c).toUpperCase()))) : [];
@@ -1021,6 +1244,7 @@ export function parsePayers(raw: unknown): Parsed<PayersDoc> {
       country,
       currencies,
       invoiceTo: invoiceTo.value,
+      invoiceCc: cc,
       invoicing: p.invoicing === true,
       routes,
       authority: {
@@ -1034,7 +1258,7 @@ export function parsePayers(raw: unknown): Parsed<PayersDoc> {
       queueNote: note.value,
     });
   }
-  return { ok: true, value: { hostCountry, hostCountryName: hostName, payers } };
+  return { ok: true, value: { payers } };
 }
 
 /** The payer for a route: the member's chosen one when it pays that route, else the only one that does. */
@@ -1058,7 +1282,6 @@ export function authorityNote(p: Payer): string {
 /** Old and new values for every payer field a `PUT` changed, for the event note. */
 export function payersChanges(before: PayersDoc, after: PayersDoc): Array<{ key: string; field: string; from: unknown; to: unknown }> {
   const out: Array<{ key: string; field: string; from: unknown; to: unknown }> = [];
-  for (const f of ["hostCountry", "hostCountryName"] as const) if (before[f] !== after[f]) out.push({ key: "*", field: f, from: before[f], to: after[f] });
   const keys = Array.from(new Set([...before.payers.map((p) => p.key), ...after.payers.map((p) => p.key)]));
   for (const k of keys) {
     const a = before.payers.find((p) => p.key === k) as Record<string, unknown> | undefined;
@@ -1078,11 +1301,14 @@ export interface BillTo {
   legalName: string;
   address: string;
   taxId: string | null;
+  /** To, beside the work summary. */
   invoiceTo: string;
+  /** Cc, beside the work summary. */
+  invoiceCc: string[];
 }
 
 export function billToOf(p: Payer): BillTo {
-  return { payerKey: p.key, legalName: p.legalName, address: p.address, taxId: p.taxId, invoiceTo: p.invoiceTo };
+  return { payerKey: p.key, legalName: p.legalName, address: p.address, taxId: p.taxId, invoiceTo: p.invoiceTo, invoiceCc: [...p.invoiceCc] };
 }
 
 /** The From block: the member's legal name and address. No tax id. */
@@ -1241,6 +1467,9 @@ export interface InvoiceSendFacts {
   lines: readonly InvoiceLine[];
   attestation: Parsed<MoonAttestation> | null;
   pilotAckVersion: string | null;
+  /** The village's settings and payers, for `setupGaps` and the acknowledgement's version. */
+  settings: MoonReviewSettings;
+  payers: PayersDoc;
   /** The member's own invoice number, typed at send (decision 16 revised). */
   memberNumber: string | null;
   /** The electronic invoice key, needed on the contractor route. */
@@ -1254,19 +1483,20 @@ export interface InvoiceSendFacts {
  * needs none of this: it sends with no pay route at all.
  */
 export function invoiceSendRefusal(f: InvoiceSendFacts): string | null {
+  if (setupGaps(f.payers, f.settings).length > 0) return SEND_REFUSALS.notConfigured;
   if (f.route === "pending") return SEND_REFUSALS.pending;
-  if (f.route === "tourist") return SEND_REFUSALS.tourist;
-  if (f.route === "cr_employee") return SEND_REFUSALS.employee;
+  if (f.route === "visitor") return SEND_REFUSALS.visitor;
+  if (f.route === "local_employee") return SEND_REFUSALS.employee;
   if (!f.payer) return SEND_REFUSALS.noPayer;
   if (!f.payer.invoicing) return SEND_REFUSALS.invoicingOff;
   if (!f.lines.some(isPayableLine)) return SEND_REFUSALS.noPayableLine;
   if (invoiceTotals(f.lines).length > 1) return SEND_REFUSALS.twoCurrencies;
   if (!f.attestation || !f.attestation.ok) return f.attestation && !f.attestation.ok ? f.attestation.error : ATTESTATION_MISSING;
-  if (f.pilotAckVersion !== PILOT_ACK_VERSION) return SEND_REFUSALS.pilotAck;
+  if (f.pilotAckVersion !== f.settings.pilotAck?.version) return SEND_REFUSALS.pilotAck;
   const numberProblem = memberNumberProblem(f.memberNumber);
   if (numberProblem) return numberProblem;
   if (f.usedNumbers?.includes((f.memberNumber as string).trim())) return SEND_REFUSALS.numberUsed;
-  if (f.route === "cr_contractor") {
+  if (f.route === "local_contractor") {
     if (!f.externalInvoiceKey) return SEND_REFUSALS.externalKey;
     const keyProblem = externalInvoiceKeyProblem(f.externalInvoiceKey);
     if (keyProblem) return keyProblem;
@@ -1276,13 +1506,14 @@ export function invoiceSendRefusal(f: InvoiceSendFacts): string | null {
 
 export const SEND_REFUSALS = {
   pending: "Choose your pay route before you send an invoice. Your recap sends without one.",
-  tourist: "Work done on tourist status, or with a status application still pending, carries no paid line. Your recap still counts.",
+  visitor: "Work done on a visitor entry, or with a status application still pending, carries no paid line. Your recap still counts.",
+  notConfigured: "Name who you pay first. A cash power holder fills in the payers and the village settings on the Cash payouts desk. Your recap still sends.",
   employee: "Employees are paid through payroll, so there is no invoice to send. Your recap still counts.",
   noPayer: "No payer pays your route yet. Finance has been told.",
   invoicingOff: "Invoicing is off for this payer. Finance has been told.",
   noPayableLine: "There is no line that carries money this moon, so there is no invoice to send.",
   twoCurrencies: "These lines carry two currencies. Finance splits them before the invoice can go.",
-  pilotAck: "Read and accept the pilot note before your first invoice.",
+  pilotAck: "Read and accept the pilot note before you send this invoice.",
   numberMissing: "Type the number of the invoice you issued, so Finance can match it to this one.",
   numberUsed: "You have used this invoice number before. A new invoice takes a new number.",
   externalKey: "Type the key of the electronic invoice you issued.",
@@ -1370,7 +1601,7 @@ export const SELF_APPROVED_WORDS = "Approved by the member themselves";
 
 export interface FinanceCheckFacts {
   route: PayRouteRecord;
-  hostCountry: string;
+  settings: MoonReviewSettings;
   attestation: MoonAttestation | null;
   moonLastDay: string;
   expectedOn: string;
@@ -1385,9 +1616,10 @@ export function financeApprovalRefusal(f: FinanceCheckFacts): { refusal: string 
   if (!f.route.confirmedAt || !f.route.confirmedBy) return { refusal: FINANCE_REFUSALS.unconfirmed };
   if (f.route.route === "nomad" && (!f.route.statusValidUntil || f.route.statusValidUntil < f.moonLastDay)) return { refusal: FINANCE_REFUSALS.nomadEnded };
   if (f.attestation?.visitorEntryWork) return { refusal: FINANCE_REFUSALS.visitorEntry };
-  if (TAX_FORM_ROUTES.includes(f.route.route) && !taxFormValidOn(f.route, f.expectedOn)) return { refusal: FINANCE_REFUSALS.taxForm };
+  if (f.settings.taxFormRoutes.includes(f.route.route) && !taxFormValidOn(f.route, f.expectedOn)) return { refusal: FINANCE_REFUSALS.taxForm };
   if (!DATE_RE.test(f.expectedOn)) return { refusal: FINANCE_REFUSALS.expectedOn };
-  if (f.route.taxFormKind === "W-8BEN" && f.attestation?.workCountries.includes("US")) return { hold: FINANCE_REFUSALS.w8benInUs };
+  const hold = f.settings.holds.find((h) => h.taxFormKey === f.route.taxFormKind && !!f.attestation?.workCountries.includes(h.workCountry));
+  if (hold) return { hold: `${FINANCE_REFUSALS.held} ${hold.note}` };
   return null;
 }
 
@@ -1403,10 +1635,10 @@ export const APPROVAL_REFUSALS = {
 export const FINANCE_REFUSALS = {
   unconfirmed: "The pay route is not confirmed yet. Another person holding the cash power confirms it.",
   nomadEnded: "The nomad status ends before the moon's last day.",
-  visitorEntry: "Invoiced work was done in the country on a visitor entry, so it carries no paid line.",
+  visitorEntry: "Invoiced work was done in the host country on a visitor entry, so it carries no paid line.",
   taxForm: "The tax form is not valid on the expected payment date.",
   expectedOn: "Set the expected payment date.",
-  w8benInUs: "A W-8BEN holder worked inside the US this moon. Held for Finance to decide with the accountant.",
+  held: "Held for Finance to decide with the accountant.",
   rowExists: "A cash owed row already holds this key and this invoice did not write it",
 } as const;
 
@@ -1578,13 +1810,260 @@ export function workSummaryHtml(s: SummaryInput): string {
 
 export const REVIEW_EVENT_KINDS = [
   "sent", "taken_back", "work_approved", "returned", "amount_set", "range_answered", "invoice_sent",
-  "invoice_approved", "paid", "void", "route_confirmed", "route_changed", "payers_changed", "self_approved",
+  "invoice_approved", "paid", "void", "route_confirmed", "route_changed", "payers_changed", "settings_changed", "self_approved", "pack_imported",
 ] as const;
 export type ReviewEventKind = (typeof REVIEW_EVENT_KINDS)[number];
 
 /** One notification key per (event, recipient, round), so a resend notifies again. */
 export function reviewDedupeKey(kind: string, recapId: string, round: number, recipientUserId: string): string {
   return `moon:${kind}:${recapId}:${round}:${recipientUserId}`;
+}
+
+// ── The score (decision 20, spec section 16) ─────────────────────────────────
+
+/**
+ * A score in half-points, so nothing stored is a decimal: Done counts 2
+ * halves, Partly 1, Carry 0. `den` is Done + Partly + Carry.
+ */
+export interface Score {
+  numHalves: number;
+  den: number;
+  /** Whole percent, or null when there is nothing to count. */
+  pct: number | null;
+}
+
+export function scoreOf(numHalves: number, den: number): Score {
+  return { numHalves, den, pct: den > 0 ? Math.round((numHalves / 2 / den) * 100) : null };
+}
+
+/** "12½ of 18, 69%". */
+export function scoreWords(s: Score): string {
+  if (s.den === 0 || s.pct === null) return "Nothing to count yet";
+  const whole = Math.floor(s.numHalves / 2);
+  const half = s.numHalves % 2 === 1 ? "\u00bd" : "";
+  return `${whole}${half} of ${s.den}, ${s.pct}%`;
+}
+
+/** The days at the end of a moon whose new tasks count only when already done. */
+export const LAST_WEEK_DAYS = 7;
+
+export interface TaskScore extends Score {
+  done: number;
+  partly: number;
+  carry: number;
+  /** Left out of the count, and why. */
+  leftOut: { letGo: number; redirect: number; lastWeekNotDone: number; olderThanMoon: number };
+}
+
+/**
+ * THE TASK SCORE: (Done + half of Partly) over (Done + Partly + Carry).
+ *
+ *   1. This moon only: a task set before the moon's first day never counts
+ *      (it is triaged once). An item with no set day was made in this recap,
+ *      so it counts.
+ *   2. The last week: a task set in the moon's final seven days counts only
+ *      if it is Done; otherwise it moves to the next moon untouched.
+ *   Let go and Redirect are left out. Dropped items and items with no status
+ *   are not tasks scored this moon.
+ */
+export function taskScore(items: readonly Pick<RecapItem, "state" | "taskStatus" | "setOn">[], moon: Pick<MoonDays, "firstDay" | "lastDay">): TaskScore {
+  const lastWeekFrom = addDays(moon.lastDay, -(LAST_WEEK_DAYS - 1));
+  const out: TaskScore = { numHalves: 0, den: 0, pct: null, done: 0, partly: 0, carry: 0, leftOut: { letGo: 0, redirect: 0, lastWeekNotDone: 0, olderThanMoon: 0 } };
+  for (const i of items) {
+    if (i.state === "dropped" || !i.taskStatus) continue;
+    if (i.setOn && i.setOn < moon.firstDay) { out.leftOut.olderThanMoon += 1; continue; }
+    if (i.taskStatus === "let_go") { out.leftOut.letGo += 1; continue; }
+    if (i.taskStatus === "redirect") { out.leftOut.redirect += 1; continue; }
+    if (i.setOn && i.setOn >= lastWeekFrom && i.taskStatus !== "done") { out.leftOut.lastWeekNotDone += 1; continue; }
+    out[i.taskStatus] += 1;
+  }
+  return { ...out, ...scoreOf(out.done * 2 + out.partly, out.done + out.partly + out.carry) };
+}
+
+/**
+ * SEAT COVERAGE: the share of the member's role accountabilities with at
+ * least one kept item this moon. Outside my roles work never counts here; it
+ * counts toward season goals and feeds the role audit.
+ */
+export function seatCoverage(seats: readonly Pick<RoleCardForCoverage, "roleId" | "accountabilities">[], items: readonly Pick<RecapItem, "state" | "roleId" | "accountabilityWords" | "review">[]): { on: number; total: number; pct: number | null } {
+  let on = 0;
+  let total = 0;
+  for (const r of seats) {
+    for (const a of r.accountabilities) {
+      total += 1;
+      if (items.some((i) => i.state === "kept" && i.review !== "returned" && i.roleId === r.roleId && !!i.accountabilityWords && norm(i.accountabilityWords) === norm(a))) on += 1;
+    }
+  }
+  return { on, total, pct: total > 0 ? Math.round((on / total) * 100) : null };
+}
+
+// ── Moon goals (decision 20) ─────────────────────────────────────────────────
+
+export const GOAL_STATUSES = ["open", "done", "partly", "carried", "let_go"] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
+
+export const GOAL_STATUS_WORDS: Record<GoalStatus, string> = {
+  open: "Open",
+  done: "Done",
+  partly: "Partly",
+  carried: "Carry",
+  let_go: "Let go",
+};
+
+/** Each member sets three to five goals for the next moon. */
+export const GOALS_MIN = 3;
+export const GOALS_MAX = 5;
+/** A goal carried this many times is flagged for the circle. */
+export const CARRY_FLAG_AT = 2;
+
+export interface MoonGoal {
+  id: string;
+  userId: string;
+  cycleId: string;
+  position: number;
+  text: string;
+  doneWhen: string | null;
+  seasonGoalId: string | null;
+  status: GoalStatus;
+  letGoReason: string | null;
+  carriedFromId: string | null;
+  carryCount: number;
+  setAt: string | null;
+  scoredAt: string | null;
+}
+
+/**
+ * THE GOAL SCORE, the task formula over the member's moon goals. Let go is
+ * left out. An Open goal has not been scored yet and is left out too, and
+ * `unscored` says how many.
+ */
+export function goalScore(goals: readonly Pick<MoonGoal, "status">[]): Score & { unscored: number } {
+  const n = (st: GoalStatus) => goals.filter((g) => g.status === st).length;
+  const done = n("done");
+  const partly = n("partly");
+  const carried = n("carried");
+  return { ...scoreOf(done * 2 + partly, done + partly + carried), unscored: n("open") };
+}
+
+/** A goal or task carried twice is flagged: do it, reshape it, hand it on, or let it go. */
+export function carriedTooOften(g: Pick<MoonGoal, "carryCount">): boolean {
+  return g.carryCount >= CARRY_FLAG_AT;
+}
+
+export const CARRY_FLAG_WORDS = "Carried twice. Do it, reshape it, hand it on, or let it go.";
+
+/** Score one goal. Let go needs a reason. */
+export function goalScoreProblem(status: GoalStatus, letGoReason: string | null | undefined): string | null {
+  if (status === "let_go" && !String(letGoReason ?? "").trim()) return LET_GO_NEEDS_REASON;
+  return null;
+}
+
+export interface GoalInput {
+  text: string;
+  doneWhen: string | null;
+  seasonGoalId: string | null;
+}
+
+/** Read the next moon's goals: three to five, each with words, a done-when line optional. */
+export function parseMoonGoals(raw: unknown): Parsed<GoalInput[]> {
+  if (!Array.isArray(raw)) return { ok: false, field: "goals", error: "Send the next moon's goals as a list." };
+  const out: GoalInput[] = [];
+  for (const g of raw) {
+    if (!isObj(g)) return { ok: false, field: "goals", error: "Each goal is a set of fields." };
+    const text = optText(g.text, LIMITS.goalText, "text");
+    if (!text.ok) return text;
+    if (!text.value) continue;
+    const doneWhen = optText(g.doneWhen, LIMITS.goalDoneWhen, "note");
+    if (!doneWhen.ok) return doneWhen;
+    const goalId = optText(g.seasonGoalId, 64, "seasonGoalId");
+    if (!goalId.ok) return goalId;
+    out.push({ text: text.value, doneWhen: doneWhen.value, seasonGoalId: goalId.value });
+  }
+  if (out.length < GOALS_MIN || out.length > GOALS_MAX) return { ok: false, field: "goals", error: `Set ${GOALS_MIN} to ${GOALS_MAX} goals for the next moon.` };
+  return { ok: true, value: out };
+}
+
+// ── Rolling over at send ─────────────────────────────────────────────────────
+
+/** The items a sent recap carries into the next moon: every Partly and Carry. */
+export function carriedItems(items: readonly RecapItem[]): Array<{ dedupeKey: string; text: string; roleId: string | null; seasonGoalId: string | null; setOn: string | null }> {
+  return items
+    .filter((i) => i.state !== "dropped" && (i.taskStatus === "partly" || i.taskStatus === "carry"))
+    .map((i) => ({ dedupeKey: itemDedupeKey("carry", i.id), text: i.text, roleId: i.roleId, seasonGoalId: i.seasonGoalId, setOn: i.setOn }));
+}
+
+/** The goals a scored moon carries into the next: every goal not Done and not Let go, one carry more. */
+export function carriedGoals(goals: readonly MoonGoal[]): Array<{ carriedFromId: string; text: string; doneWhen: string | null; seasonGoalId: string | null; carryCount: number }> {
+  return goals
+    .filter((g) => g.status === "partly" || g.status === "carried" || g.status === "open")
+    .map((g) => ({ carriedFromId: g.id, text: g.text, doneWhen: g.doneWhen, seasonGoalId: g.seasonGoalId, carryCount: g.carryCount + 1 }));
+}
+
+// ── Closing the loop in Sera ─────────────────────────────────────────────────
+
+/** The library id behind an item, when Sera sent it. */
+export function seraExternalId(item: Pick<RecapItem, "dedupeKey">): string | null {
+  return item.dedupeKey.startsWith("sera:") ? item.dedupeKey.slice(5) : null;
+}
+
+/**
+ * What to tell Sera once the work is approved: each item Sera sent that the
+ * member marked Done or Let go closes, and each Redirect goes with its words.
+ * Only tasks Sera sent. The caller sends these through the feedback outbox
+ * (server/lib/memberTaskBridge.ts), keyed on the item id so a repeat is a
+ * no-op.
+ */
+export function seraClosures(items: readonly RecapItem[], cycleId: string): Array<{ itemId: string; externalId: string; action: "done" | "let_go" | "redirect"; note: string | null; idempotencyKey: string }> {
+  const out: Array<{ itemId: string; externalId: string; action: "done" | "let_go" | "redirect"; note: string | null; idempotencyKey: string }> = [];
+  for (const i of items) {
+    const ext = seraExternalId(i);
+    if (!ext || i.state === "dropped") continue;
+    const base = { itemId: i.id, externalId: ext, idempotencyKey: seraCloseKey(cycleId, ext) };
+    if (i.taskStatus === "done") out.push({ ...base, action: "done", note: null });
+    else if (i.taskStatus === "let_go") out.push({ ...base, action: "let_go", note: i.letGoReason });
+    else if (i.taskStatus === "redirect") out.push({ ...base, action: "redirect", note: i.redirectTo });
+  }
+  return out;
+}
+
+/**
+ * ONE KEY FOR A SERA CLOSE (spec section 16): the platform's outbox and the
+ * end-of-moon skill both close a task with `moon:<cycle>:<sera task id>`, so a
+ * task closed from either side is never closed twice.
+ */
+export function seraCloseKey(cycleId: string, externalId: string): string {
+  return `moon:${cycleId}:${externalId}`;
+}
+
+// The moon pack itself (its v1 shape, validation, preview and the
+// `claude:<32 hex>` key) lands with part 3 of lane A, from spec section 17 A2.
+
+// ── Outside my roles in the role audit (check 23) ────────────────────────────
+
+/**
+ * Every kept Outside my roles item, with the role it really belongs to named
+ * (or "No role yet"), and the Fill signals: a role with no holder that two or
+ * more such items name.
+ */
+export function outsideRolesAudit(input: {
+  items: readonly Pick<RecapItem, "id" | "text" | "state" | "roleId" | "belongsToRoleId">[];
+  heldRoleIds: readonly string[];
+  roleNames: Readonly<Record<string, string>>;
+  emptyRoleIds: readonly string[];
+}): { items: Array<{ itemId: string; text: string; belongsToRoleId: string | null; belongsTo: string }>; fill: Array<{ roleId: string; name: string; count: number }> } {
+  const outside = input.items.filter((i) => i.state === "kept" && (!i.roleId || !input.heldRoleIds.includes(i.roleId)));
+  const items = outside.map((i) => ({ itemId: i.id, text: i.text, belongsToRoleId: i.belongsToRoleId, belongsTo: i.belongsToRoleId ? input.roleNames[i.belongsToRoleId] ?? i.belongsToRoleId : NO_ROLE_YET }));
+  const counts = new Map<string, number>();
+  for (const i of outside) if (i.belongsToRoleId && input.emptyRoleIds.includes(i.belongsToRoleId)) counts.set(i.belongsToRoleId, (counts.get(i.belongsToRoleId) ?? 0) + 1);
+  const fill = Array.from(counts, ([roleId, count]) => ({ roleId, name: input.roleNames[roleId] ?? roleId, count })).filter((f) => f.count >= 2);
+  return { items, fill };
+}
+
+export const NO_ROLE_YET = "No role yet";
+
+/** "Fill this role: 3 pieces of work this moon sat under it." */
+export function fillSignalWords(name: string, count: number): string {
+  return `Fill ${name}: ${count} pieces of work this moon belonged to it.`;
 }
 
 // ── The routes: request and response shapes ──────────────────────────────────
@@ -1603,6 +2082,9 @@ export const MOON_ROUTES = {
   sendInvoice: "/api/me/moon/:cycle/send-invoice",
   takeBack: "/api/me/moon/:cycle/take-back",
   rangeAnswer: "/api/me/moon/:cycle/range-answer",
+  nextGoals: "/api/me/moon/:cycle/goals",
+  scoreGoal: "/api/me/moon/goals/:id",
+  triage: "/api/me/moon/:cycle/triage",
   payRoute: "/api/me/pay-route",
   memberMoon: "/api/members/:handle/moon",
   queue: "/api/moon-review/queue",
@@ -1614,6 +2096,8 @@ export const MOON_ROUTES = {
   invoice: "/api/moon-review/invoices/:id",
   confirmRoute: "/api/moon-review/pay-routes/:user/confirm",
   payers: "/api/moon-review/payers",
+  settings: "/api/moon-review/settings",
+  importPack: "/api/me/moon/:cycle/import",
   room: "/api/moon-review/rooms/:sessionId",
   exportYear: "/api/moon-review/export",
 } as const;
@@ -1626,7 +2110,10 @@ export interface MoonRef {
   firstDay: string;
   lastDay: string;
   periodWords: string;
+  /** The prepare-by day. */
   endOfMoonFriday: string;
+  /** The send-by day: the new moon circle (decision 21). */
+  sendBy: string;
 }
 
 export interface RoleHeld {
@@ -1704,13 +2191,27 @@ export interface MyMoonResponse {
   seasonGoals: SeasonGoalRef[];
   ownGoals: string[];
   moonLoad: number | null;
+  /** The two rings at the top (decision 20). */
+  taskScore: TaskScore;
+  seatCoverage: { on: number; total: number; pct: number | null };
+  lastMoonGoals: Array<MoonGoal & { flagged: boolean }>;
+  goalScore: Score & { unscored: number };
+  /** Carried goals first. */
+  nextMoonGoals: Array<MoonGoal & { flagged: boolean }>;
+  /** Older open Sera tasks, shown once for triage. Never in the score. */
+  backlog: Array<{ taskId: string; title: string; createdOn: string | null }>;
+  outsideRoles: ReturnType<typeof outsideRolesAudit>;
   /** Shown only when a role's terms carry money. */
   invoiceNeeded: boolean;
   noTermsLine: string | null;
   invoice: InvoiceView | null;
   payRoute: PayRouteRecord | null;
   routeChoices: Array<{ route: PayRoute; words: string }>;
-  pilotAck: { version: string; text: string; acceptedVersion: string | null };
+  /** Null until a cash.pay holder writes it in the settings. */
+  pilotAck: { version: string; text: string; acceptedVersion: string | null } | null;
+  /** What the village still has to name before invoices can go (`setupGaps`). */
+  setupGaps: string[];
+  attestationWords: ReturnType<typeof attestationWords>;
   /** Who can read the member's route and invoice, by name. */
   cashPayHolders: string[];
 }
@@ -1737,6 +2238,22 @@ export interface ItemResponse {
 export interface SendRecapRequest {
   ownWords?: string | null;
   roleAudit?: RoleAudit;
+}
+
+/** `PUT /api/me/moon/:cycle/goals`: the next moon's three to five goals. */
+export interface NextGoalsRequest {
+  goals: GoalInput[];
+}
+
+/** `PATCH /api/me/moon/goals/:id`: score one of last moon's goals. */
+export interface ScoreGoalRequest {
+  status: Exclude<GoalStatus, "open">;
+  letGoReason?: string | null;
+}
+
+/** `POST /api/me/moon/:cycle/triage`: the one-time triage of older open Sera tasks. */
+export interface TriageRequest {
+  tasks: Array<{ taskId: string; action: "done" | "let_go" | "redirect"; note?: string | null }>;
 }
 
 export interface SendRecapResponse {
@@ -1851,6 +2368,9 @@ export interface VoidRequest {
 
 export type PayersResponse = PayersDoc;
 export type PayersRequest = PayersDoc;
+/** `GET` / `PUT /api/moon-review/settings` (cash.pay). Each change writes a `settings_changed` event with old and new values. */
+export type SettingsResponse = MoonReviewSettings;
+export type SettingsRequest = MoonReviewSettings;
 
 /** `GET /api/moon-review/rooms/:sessionId`. Never an amount, a quiet accountability or the moon load. */
 export interface RoomResponse {
@@ -1862,6 +2382,12 @@ export interface RoomResponse {
   } | null;
   /** Who is ready to share. Nobody is marked as not ready. */
   ready: Array<{ userId: string; name: string }>;
+  /** The `moon_goals` section: the holder's last-moon goals with their score, then the next moon's. */
+  goals: {
+    last: Array<{ text: string; status: GoalStatus; flagged: boolean }>;
+    score: Score;
+    next: Array<{ text: string; doneWhen: string | null }>;
+  } | null;
   /** This viewer's own row in the sending section. */
   mine: { recapStatus: RecapStatus | null; statusWords: string; invoiceNeeded: boolean } | null;
   sentCount: number;
@@ -1889,6 +2415,16 @@ export const ITEM_TEXT_EMPTY = "Say what the work was, in a few words.";
 export const PAYMENT_DETAILS_REFUSED = "This looks like a bank or card number. Payment details are never stored here.";
 export const ATTESTATION_MISSING = "Fill in the moon attestation before you send the invoice.";
 export const NAMES_A_MEMBER = "This item names another member. Reword it to say what you delivered.";
+
+/** "Send by Monday 9 November 2026. Sending any time before then counts the same as sending in the room." */
+export function sendByLine(day: string): string {
+  return `Send by ${WEEKDAYS[weekdayOf(day)]} ${dayWords(day)}. Sending any time before then counts the same as sending in the room.`;
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export const LET_GO_NEEDS_REASON = "Say why it was let go, in a few words.";
+export const REDIRECT_NEEDS_WHO = "Say who or which role it belongs to.";
 
 export const SUPPORT_LINE = "A support document for your own invoice. The invoice you issue yourself is the legal one.";
 
@@ -1932,7 +2468,10 @@ export const MOON_WORDS = {
   copyEmail: "Copy for email",
   printable: "Open printable invoice",
   noRecapRoles: "You held no role this moon, so there is nothing to recap.",
-  sundayLine: "Sending by Sunday counts the same as sending in the room.",
+  prepareBy: "Prepare by",
+  sendBy: "Send by",
+  to: "To",
+  cc: "Cc",
   acceptRange: "Accept",
   talkRange: "Ask to talk",
 } as const;

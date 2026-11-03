@@ -70,6 +70,7 @@ import { httpsAddress } from "@shared/modules";
 import { factsForEntity, moduleFactCount } from "../repos/moduleFacts";
 import { outboxView } from "../lib/saberraOutbox";
 import { bridgeReading } from "../repos/saberraBridge";
+import { privacyTokenSet } from "../lib/saberraPrivacy";
 import { lastQuestFeed, runQuestFeed, QUEST_FEED_MODULE } from "../lib/seraQuestFeed";
 import { waitingSeraQuests } from "../repos/seraQuestFeed";
 import { recordEvent } from "../lib/events";
@@ -121,7 +122,7 @@ export function register(app: Express, deps: Deps): void {
       const held = await moduleFactCount(pool, MODULE_ID);
       const rest = await bridgeReading(pool);
       const questFeed = { last: await lastQuestFeed(pool), waiting: await waitingSeraQuests(pool, QUEST_FEED_MODULE).catch(() => 0) };
-      res.json({ connection: { mayCall: connection.mayCall, addressSet: addressSet(), held }, ...rest, questFeed });
+      res.json({ connection: { mayCall: connection.mayCall, addressSet: addressSet(), held, privacySet: privacyTokenSet() }, ...rest, questFeed });
     } catch {
       res.status(500).json({ error: "Could not read the bridge." });
     }
