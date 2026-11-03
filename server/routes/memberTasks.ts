@@ -19,6 +19,7 @@
  * changes for anybody until then. The days are the village's, never the
  * server's (`villageDayKey`).
  */
+import { boolVar } from "../lib/variables";
 import { randomUUID } from "node:crypto";
 import type { Express } from "express";
 import { SCREEN_REASONS, parseFeedback, type FeedbackAction, type ScreenReason } from "../../shared/memberTaskFeedback";
@@ -86,7 +87,7 @@ export function register(app: Express, deps: Deps): void {
       res.status(429).json({ error: "That is a lot of changes for one hour. Try again a little later." });
       return null;
     }
-    if (!(await listIsOn(getPool(), uid))) {
+    if (!(await listIsOn(getPool(), uid, boolVar("memberTasks.listDefault")))) {
       res.status(write ? 403 : 200).json(write ? { error: "list_off" } : { on: false });
       return null;
     }
@@ -225,7 +226,7 @@ export function register(app: Express, deps: Deps): void {
 
   app.get("/api/admin/member-tasks/access", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    res.json({ on: await membersWithListOn(getPool()) });
+    res.json({ on: await membersWithListOn(getPool(), boolVar("memberTasks.listDefault")) });
   });
 
   app.put("/api/admin/member-tasks/access/:userId", async (req, res) => {
@@ -267,7 +268,7 @@ export function register(app: Express, deps: Deps): void {
     // A dry run unless the steward said otherwise in so many words.
     if (body.dryRun !== false) return res.json({ dryRun: true, pulled: phrase !== null, ...summary });
     const result = await runImport(getPool(), userId, seraOwnerId, plan, today(), adminActor(req)?.id ?? null);
-    res.json({ dryRun: false, ...summary, ...result, listOn: await listIsOn(getPool(), userId) });
+    res.json({ dryRun: false, ...summary, ...result, listOn: await listIsOn(getPool(), userId, boolVar("memberTasks.listDefault")) });
   });
 
   app.post("/api/admin/member-tasks/import/:batch/remove", async (req, res) => {

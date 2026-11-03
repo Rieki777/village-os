@@ -19,7 +19,7 @@
  */
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import type {
-  GoalStatus, ItemFields, ItemOrigin, ItemReview, ItemState, ItemVisibility, MoonAttestation, MoonGoal, PayRoute, PayRouteInput,
+  EvidenceKind, GoalStatus, ItemFields, ItemOrigin, ItemReview, ItemState, ItemVisibility, MoonAttestation, MoonGoal, PayRoute, PayRouteInput,
   PayRouteRecord, RecapItem, RecapStatus, ReviewEventKind, TaskStatus, TaxFormKind, InvoiceStatus,
 } from "../../shared/moonRecap";
 
@@ -256,6 +256,7 @@ function toItem(r: RowDataPacket): RecapItem {
     visibility: String(r.visibility) as ItemVisibility, review: String(r.review) as ItemReview, reviewNote: str(r.review_note),
     position: Number(r.position) || 0, setOn: day(r.set_on), taskStatus: (str(r.task_status) as TaskStatus | null),
     redirectTo: str(r.redirect_to), letGoReason: str(r.let_go_reason), belongsToRoleId: str(r.belongs_to_role_id),
+    evidenceKind: (str(r.evidence_kind) as EvidenceKind | null), evidenceOn: day(r.evidence_on), belongsToSeatWords: str(r.belongs_to_seat_words),
   };
 }
 
@@ -293,6 +294,14 @@ export interface ItemInsert {
   position: number;
   /** The day the task was set, for the score's this-moon rule. */
   setOn?: string | null;
+  /** A moon pack item (A1, A2) arrives kept, with its status and proof. */
+  taskStatus?: string | null;
+  redirectTo?: string | null;
+  letGoReason?: string | null;
+  evidenceKind?: string | null;
+  evidenceOn?: string | null;
+  accountabilityWords?: string | null;
+  belongsToSeatWords?: string | null;
 }
 
 /**
@@ -302,9 +311,11 @@ export interface ItemInsert {
 export async function insertItem(db: Queryable, i: ItemInsert): Promise<boolean> {
   await db.query(
     "INSERT INTO `moon_recap_items` (`id`, `recap_id`, `origin`, `dedupe_key`, `text`, `origin_note`, `done_on`, `evidence_url`, " +
-      "`proof_in_summary`, `role_id`, `season_goal_id`, `state`, `visibility`, `review`, `position`, `set_on`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'pending', ?, ?) ON DUPLICATE KEY UPDATE `id` = `id`",
-    [i.id, i.recapId, i.origin, i.dedupeKey, i.text, i.originNote, i.doneOn, i.evidenceUrl, i.roleId, i.seasonGoalId, i.state, i.visibility, i.position, i.setOn ?? null],
+      "`proof_in_summary`, `role_id`, `season_goal_id`, `state`, `visibility`, `review`, `position`, `set_on`, `task_status`, `redirect_to`, " +
+      "`let_go_reason`, `evidence_kind`, `evidence_on`, `accountability_words`, `belongs_to_seat_words`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `id` = `id`",
+    [i.id, i.recapId, i.origin, i.dedupeKey, i.text, i.originNote, i.doneOn, i.evidenceUrl, i.roleId, i.seasonGoalId, i.state, i.visibility, i.position, i.setOn ?? null,
+      i.taskStatus ?? null, i.redirectTo ?? null, i.letGoReason ?? null, i.evidenceKind ?? null, i.evidenceOn ?? null, i.accountabilityWords ?? null, i.belongsToSeatWords ?? null],
   );
   const [rows] = await db.query<RowDataPacket[]>("SELECT `id` FROM `moon_recap_items` WHERE `recap_id` = ? AND `dedupe_key` = ?", [i.recapId, i.dedupeKey]);
   return rows[0] ? String(rows[0].id) === i.id : false;
@@ -335,6 +346,28 @@ export async function updateItem(db: Queryable, id: string, fields: ItemFields):
   const set = keys.map((k) => `\`${ITEM_COLUMNS[k]}\` = ?`).join(", ");
   const vals = keys.map((k) => (k === "proofInSummary" ? (fields[k] ? 1 : 0) : fields[k]));
   const [res] = await db.query<ResultSetHeader>(`UPDATE \`moon_recap_items\` SET ${set} WHERE \`id\` = ?`, [...vals, id]);
+  return res.affectedRows;
+}
+
+/** Every dedupe key a recap holds, to the item that holds it, for the pack's preview. */
+export async function itemKeysOf(db: Queryable, recapId: string): Promise<Map<string, string>> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `dedupe_key`, `id` FROM `moon_recap_items` WHERE `recap_id` = ?", [recapId]);
+  return new Map(rows.map((r) => [String(r.dedupe_key), String(r.id)]));
+}
+
+/**
+ * A pack item naming a Sera task the recap already holds: its words, status
+ * and proof land on that item, and the member's own role and goal tags stay
+ * where the member already set them.
+ */
+export async function mergePackItem(db: Queryable, id: string, recapId: string, m: { text: string; taskStatus: string | null; redirectTo: string | null; letGoReason: string | null; evidenceKind: string | null; evidenceUrl: string | null; evidenceOn: string | null; roleId: string | null; seasonGoalId: string | null }): Promise<number> {
+  const [res] = await db.query<ResultSetHeader>(
+    "UPDATE `moon_recap_items` SET `text` = ?, `task_status` = COALESCE(?, `task_status`), `redirect_to` = COALESCE(?, `redirect_to`), " +
+      "`let_go_reason` = COALESCE(?, `let_go_reason`), `evidence_kind` = COALESCE(?, `evidence_kind`), `evidence_url` = COALESCE(?, `evidence_url`), " +
+      "`evidence_on` = COALESCE(?, `evidence_on`), `role_id` = COALESCE(`role_id`, ?), `season_goal_id` = COALESCE(`season_goal_id`, ?), `state` = 'kept' " +
+      "WHERE `id` = ? AND `recap_id` = ?",
+    [m.text, m.taskStatus, m.redirectTo, m.letGoReason, m.evidenceKind, m.evidenceUrl, m.evidenceOn, m.roleId, m.seasonGoalId, id, recapId],
+  );
   return res.affectedRows;
 }
 
@@ -795,6 +828,21 @@ export async function scoreGoal(db: Queryable, id: string, userId: string, statu
   return res.affectedRows;
 }
 
+// ── moon_nudges (B1) ─────────────────────────────────────────────────────────
+
+/**
+ * Claim one reminder: true when this call wrote the row, so the caller sends;
+ * false when it was already sent. INSERT IGNORE reports 0 rows on a duplicate
+ * key whatever FOUND_ROWS says.
+ */
+export async function claimNudge(db: Queryable, userId: string, cycleId: string, kind: string): Promise<boolean> {
+  const [res] = await db.query<ResultSetHeader>(
+    "INSERT IGNORE INTO `moon_nudges` (`user_id`, `cycle_id`, `kind`) VALUES (?, ?, ?)",
+    [userId, cycleId, kind],
+  );
+  return res.affectedRows === 1;
+}
+
 // ── Erasure and export ───────────────────────────────────────────────────────
 
 /**
@@ -810,7 +858,7 @@ export async function forgetMoonReviews(db: Queryable, userId: string): Promise<
   const [items] = await db.query<ResultSetHeader>(
     "UPDATE `moon_recap_items` i JOIN `moon_recaps` r ON r.`id` = i.`recap_id` SET i.`text` = '', i.`origin_note` = NULL, " +
       "i.`evidence_url` = NULL, i.`evidence_asset` = NULL, i.`accountability_words` = NULL, i.`own_goal_words` = NULL, i.`review_note` = NULL, " +
-      "i.`redirect_to` = NULL, i.`let_go_reason` = NULL " +
+      "i.`redirect_to` = NULL, i.`let_go_reason` = NULL, i.`belongs_to_seat_words` = NULL " +
       "WHERE r.`user_id` = ?",
     [uid],
   );
@@ -828,7 +876,8 @@ export async function forgetMoonReviews(db: Queryable, userId: string): Promise<
     [uid],
   );
   const [routes] = await db.query<ResultSetHeader>("DELETE FROM `member_pay_routes` WHERE `user_id` = ?", [uid]);
-  return items.affectedRows + recaps.affectedRows + invoices.affectedRows + routes.affectedRows + goals.affectedRows;
+  const [nudges] = await db.query<ResultSetHeader>("DELETE FROM `moon_nudges` WHERE `user_id` = ?", [uid]);
+  return items.affectedRows + recaps.affectedRows + invoices.affectedRows + routes.affectedRows + goals.affectedRows + nudges.affectedRows;
 }
 
 /** The member's own data export: their recaps, items, invoices, route and events. */

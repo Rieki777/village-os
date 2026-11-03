@@ -17,6 +17,7 @@
  * Two jobs: the outbox drains every 15 minutes (and sweeps feedback older than
  * 12 months), and linked members' changes are read every 6 hours.
  */
+import { boolVar } from "../lib/variables";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { registerJob } from "../lib/scheduler";
@@ -57,7 +58,7 @@ export function register(app: Express, deps: Deps): void {
       res.status(429).json({ error: "That is a lot of changes for one hour. Try again a little later." });
       return null;
     }
-    if (!(await listIsOn(getPool(), uid))) {
+    if (!(await listIsOn(getPool(), uid, boolVar("memberTasks.listDefault")))) {
       res.status(403).json({ error: "list_off" });
       return null;
     }
@@ -80,7 +81,7 @@ export function register(app: Express, deps: Deps): void {
     const task = await ownTask(pool, uid, String(req.params.id));
     if (!task || task.status !== "open") return res.status(404).json({ error: "not_found" });
     if (toUserId) {
-      if (toUserId === uid || !(await redirectPeople(pool, uid)).some((p) => p.id === toUserId)) {
+      if (toUserId === uid || !(await redirectPeople(pool, uid, boolVar("memberTasks.listDefault"))).some((p) => p.id === toUserId)) {
         return res.status(400).json({ error: "That member can't take tasks yet." });
       }
     } else if (!(await activeRoles(pool)).some((r) => r.id === toRoleId)) {
@@ -139,7 +140,7 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/member-tasks/redirect-targets", async (req, res) => {
     const uid = await member(req, res, false);
     if (!uid) return;
-    res.json({ people: await redirectPeople(getPool(), uid), roles: await activeRoles(getPool()) });
+    res.json({ people: await redirectPeople(getPool(), uid, boolVar("memberTasks.listDefault")), roles: await activeRoles(getPool()) });
   });
 
   // ── Steward ─────────────────────────────────────────────────────────────

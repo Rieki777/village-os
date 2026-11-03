@@ -6,8 +6,9 @@ Provenance: platform
 > coverage, invoice lines from terms, the route and payer checks, `endOfMoonFriday`, the approval hash, the work
 > summary, and the request and response shapes of every route). Every SQL statement for its tables is in
 > `server/repos/moonRecaps.ts`; the schema is `drizzle/0313_a_member_reviews_their_moon.sql`,
-> `drizzle/0314_a_member_tags_a_task_to_a_role.sql`, `drizzle/0315_an_approval_can_be_the_members_own.sql` and
-> `drizzle/0316_a_member_sets_the_next_moons_goals.sql`.
+> `drizzle/0314_a_member_tags_a_task_to_a_role.sql`, `drizzle/0315_an_approval_can_be_the_members_own.sql`,
+> `drizzle/0316_a_member_sets_the_next_moons_goals.sql` and `drizzle/0317_a_moon_keeps_its_rhythm.sql`. The dates are
+> `shared/moonRhythm.ts`.
 
 **Once a moon, each member who holds a role gathers what they delivered, checks it against their role cards and
 the season goals, does a role audit and sends a recap. When the adopted terms of one of their roles carry money,
@@ -37,7 +38,9 @@ launch, `members` takes a `module.switch` holder or a vote.
 2. By the end-of-moon Friday (`endOfMoonFriday`, the prepare-by day: the last Friday on or before the moon's last day,
    in village time) they open My moon, bring in their tasks, ask Sera, keep and tag items, mark each task Done, Partly,
    Carry, Let go or Redirect, score last moon's goals, set three to five for the next, and do the role audit. They send
-   by `sendBy`: the new moon circle day, or the first all-staff on or after it.
+   by the circle Monday (`sendBy`, `circleMonday` in `shared/moonRhythm.ts`): the first Monday after the end-of-moon
+   Friday, which is the last Friday before the closing new moon's civil date. A village can move either day for one
+   cycle in the `moon_rhythm` document.
 3. They send the recap. It needs no pay route.
 4. If a role's terms carry money, they issue their own invoice (by email, through the electronic invoice system, or
    however they invoice today) and send the app's draft for approval with that invoice's number, the moon attestation
@@ -81,6 +84,22 @@ launch, `members` takes a `module.switch` holder or a vote.
 - **Closing the loop in Sera** (`seraClosures`): once the work is approved, each item Sera sent that the member marked
   Done or Let go closes through the feedback outbox, and each Redirect goes with its words. Only tasks Sera sent.
 
+## The deep dive and the moon pack (spec section 17, A1 to A4)
+
+- **Deep-dive items** (origin `claude`) carry their proof's kind (`sera`, `artifact`, `mail`, `notes`, `drive`, `file`,
+  `build`) and date, and for Outside my roles work the role it belongs to in words. Another member never reads a
+  mail, notes, drive or file link. An imported item starts Approvers only. Built-but-not-live work imports as Partly.
+- **The moon pack** (`validatePack`): a strict v1 document from the member's own Claude, previewed (add, merge, skip,
+  each skip with its reason) and then written only when the confirm carries the preview's hash. A pack is refused
+  whole when it names any money, rate or tax key at any depth, any field it does not have, more than 300 items or
+  five next goals, or another moon's dates. A Sera task the recap already holds merges into that item.
+- **One Sera key** (`seraCloseKey`): `moon:<moon start>:<sera task id>`, with the reason codes the skill sends
+  (`already_done`, `not_a_task`, `not_mine`), so a task closed from either side lands once.
+- **Reading the score** (`readingOf`, `seatReadingOf`): a band, its sentence and context lines, compared on
+  half-points. The score never sets pay and is never ranked.
+- **Reminders** (`moon_nudges`): one row per member, cycle and kind (`eom_prep`, `eom_day`, `halfway`); the insert is
+  the claim.
+
 ## Nothing village-specific in code (decision 22)
 
 Every value one village decides is data with an admin editor on the Cash payouts desk, edited by `cash.pay` holders,
@@ -92,7 +111,8 @@ and every change writes a `moon_review_events` row with old and new values:
   name), its VAT rate, its exchange-rate source and its currency, the tax forms kept on file, the routes that need one,
   the hold rules, and the pilot acknowledgement with its version. A new version asks every member to accept again.
   The attestation and the route words are templates filled from these.
-- **The send-by rule** is the module's own config (`allStaffWeekday`).
+- **The moon rhythm** (`moon_rhythm` in `app_config`): a moved end-of-moon Friday or circle Monday for any one cycle,
+  and the hour reminders go out. Empty by default.
 
 What stays in code: the closed list of route kinds (`pending`, `abroad`, `nomad`, `local_contractor`,
 `local_employee`, `visitor`), the status words, the scoring rules and the safety checks. Defaults ship empty: until a

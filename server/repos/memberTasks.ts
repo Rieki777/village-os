@@ -79,9 +79,14 @@ function toRow(r: RowDataPacket): MemberTaskRow {
 
 // ── The switch ───────────────────────────────────────────────────────────
 
-export async function listIsOn(db: Queryable, userId: string): Promise<boolean> {
+/**
+ * Is this member's board on? A row decides, a steward's off included; with no
+ * row, `listDefault` does (the game variable `memberTasks.listDefault`, which
+ * the caller reads: this file imports nothing from server/lib).
+ */
+export async function listIsOn(db: Queryable, userId: string, listDefault: boolean): Promise<boolean> {
   const [rows] = await db.query<RowDataPacket[]>("SELECT `list_on` FROM `member_task_access` WHERE `user_id` = ?", [userId]);
-  return rows.length > 0 && Number(rows[0].list_on) === 1;
+  return rows.length > 0 ? Number(rows[0].list_on) === 1 : listDefault;
 }
 
 export async function setListOn(db: Queryable, userId: string, on: boolean, byUserId: string | null): Promise<void> {
@@ -92,9 +97,13 @@ export async function setListOn(db: Queryable, userId: string, on: boolean, byUs
   );
 }
 
-/** Every member whose list a steward turned on, for the steward panel. */
-export async function membersWithListOn(db: Queryable): Promise<string[]> {
-  const [rows] = await db.query<RowDataPacket[]>("SELECT `user_id` FROM `member_task_access` WHERE `list_on` = 1 ORDER BY `user_id`");
+/** Every member whose board is on by the same rule as `listIsOn`, for the steward panel. */
+export async function membersWithListOn(db: Queryable, listDefault: boolean): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT u.`id` AS `user_id` FROM `users` u LEFT JOIN `member_task_access` a ON a.`user_id` = u.`id` " +
+      "WHERE COALESCE(a.`list_on`, ?) = 1 ORDER BY u.`id`",
+    [listDefault ? 1 : 0],
+  );
   return rows.map((r) => String(r.user_id));
 }
 

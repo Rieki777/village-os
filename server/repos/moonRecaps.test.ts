@@ -21,7 +21,7 @@ import {
   clearApprovals, confirmPayRoute, doneTasksBetween, ensureRecap, forgetMoonReviews, insertInvoice, insertItem, insertReviewEvent,
   invoiceById, itemsOf, keysInOtherRecaps, markRecapSent, memberNumbersOf, nextBillRefSeq, payRouteOf, recapById,
   setFinanceApproved, setInvoiceApproved, setWorkApproved, takeBackRecap, upsertPayRoute, type ItemInsert,
-  goalsFor, insertGoal, scoreGoal, updateItem, writeScoreSnapshot,
+  goalsFor, insertGoal, scoreGoal, updateItem, writeScoreSnapshot, claimNudge, itemKeysOf, mergePackItem,
 } from "./moonRecaps";
 
 const configured = testDbConfigured();
@@ -176,6 +176,29 @@ describe.skipIf(!configured)("moon review store on a real database", () => {
     expect((await goalsFor(pool, "u1", "lunar-000332")).map((x) => [x.id, x.status, x.carryCount])).toEqual([["mg-1", "done", 0], ["mg-3", "open", 2]]);
   });
 
+  it("writes a deep-dive item with its proof kind and day, and merges a pack's Sera task into the one already held (A1, check 25)", async () => {
+    expect(await insertItem(pool, item({
+      id: "mi-0000000000000020", origin: "claude", dedupeKey: "claude:0123456789abcdef0123456789abcdef", state: "kept", visibility: "approvers",
+      taskStatus: "partly", evidenceKind: "mail", evidenceOn: "2026-10-20", belongsToSeatWords: "Land role", roleId: null,
+    }))).toBe(true);
+    await insertItem(pool, item({ id: "mi-0000000000000021", origin: "sera", dedupeKey: "sera:ext-21", text: "From the sync" }));
+    const keys = await itemKeysOf(pool, "mr-0000000000000001");
+    expect(keys.get("sera:ext-21")).toBe("mi-0000000000000021");
+    expect(await mergePackItem(pool, "mi-0000000000000021", "mr-0000000000000001", { text: "From the pack", taskStatus: "done", redirectTo: null, letGoReason: null, evidenceKind: "sera", evidenceUrl: null, evidenceOn: "2026-10-22", roleId: "r1", seasonGoalId: null })).toBe(1);
+    const all = await itemsOf(pool, "mr-0000000000000001");
+    const deep = all.find((i) => i.id === "mi-0000000000000020");
+    expect([deep?.origin, deep?.evidenceKind, deep?.evidenceOn, deep?.belongsToSeatWords, deep?.visibility, deep?.taskStatus]).toEqual(["claude", "mail", "2026-10-20", "Land role", "approvers", "partly"]);
+    const merged = all.filter((i) => i.dedupeKey === "sera:ext-21");
+    expect(merged.map((i) => [i.text, i.taskStatus, i.state, i.evidenceOn])).toEqual([["From the pack", "done", "kept", "2026-10-22"]]);
+  });
+
+  it("claims each reminder once per member, cycle and kind (B1, check 28's store)", async () => {
+    expect(await claimNudge(pool, "u1", "lunar-000331", "eom_prep")).toBe(true);
+    expect(await claimNudge(pool, "u1", "lunar-000331", "eom_prep")).toBe(false);
+    expect(await claimNudge(pool, "u1", "lunar-000331", "eom_day")).toBe(true);
+    expect(await claimNudge(pool, "u2", "lunar-000331", "eom_prep")).toBe(true);
+  });
+
   it("erasure clears words and the route, and keeps amounts, numbers and events (check 16)", async () => {
     await insertReviewEvent(pool, { recapId: "mr-0000000000000001", invoiceId: "mv-0000000000000001", userId: "u1", kind: "sent", actorUserId: "u1", actorRole: null, amountMinor: 100_000, currency: "USD", hash: null, note: "a note" });
     await insertReviewEvent(pool, { recapId: "mr-0000000000000005", invoiceId: null, userId: "fin", kind: "self_approved", actorUserId: "fin", actorRole: "treasury", amountMinor: null, currency: null, hash: "h", note: null, selfApproved: true });
@@ -187,6 +210,8 @@ describe.skipIf(!configured)("moon review store on a real database", () => {
     expect(await forgetMoonReviews(pool, "u1")).toBeGreaterThan(0);
     expect((await itemsOf(pool, "mr-0000000000000001")).every((i) => i.text === "" && i.letGoReason === null)).toBe(true);
     expect((await goalsFor(pool, "u1", "lunar-000332")).every((x) => x.text === "")).toBe(true);
+    const [nudges] = await pool.query<mysql.RowDataPacket[]>("SELECT `user_id` FROM `moon_nudges` ORDER BY `user_id`"); // module-review-ok: fixture read against the S5 scratch schema
+    expect(nudges.map((r) => String(r.user_id))).toEqual(["u2"]);
     expect(await payRouteOf(pool, "u1")).toBeNull();
     const inv = await invoiceById(pool, "mv-0000000000000001");
     expect([inv?.totalMinor, inv?.memberNumber, inv?.billRefSeq, inv?.fromJson, inv?.attestation]).toEqual([100_000, "2026-001", 1, null, null]);

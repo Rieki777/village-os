@@ -15,7 +15,7 @@ function fakePool(tables: string[], answers: [RegExp, unknown[]][]) {
 
 describe("the bridge reading", () => {
   it("answers not ready, not an error, when the tables are missing", async () => {
-    const r = await bridgeReading(fakePool([], []));
+    const r = await bridgeReading(fakePool([], []), true);
     expect(r.lists.ready).toBe(false);
     expect(r.feedback.ready).toBe(false);
     expect(r.needsOwner.ready).toBe(false);
@@ -39,6 +39,7 @@ describe("the bridge reading", () => {
           [/member_task_import_queue/, [{ n: 2 }]],
         ],
       ),
+      true,
     );
     expect(r.lists).toMatchObject({ ready: true, linkedPeople: 1, listsOn: 1, imported: 33, importedOpen: 30 });
     expect(r.lists.lastBatch).toEqual({ id: "batch-1", at: "2026-11-02T20:00:00.000Z", tasks: 33 });

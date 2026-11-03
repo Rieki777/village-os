@@ -10,6 +10,7 @@
  * The submission itself is moved by the existing status and delete routes.
  * This route only keeps the reason. Handing a request on does not delete it.
  */
+import { boolVar } from "../lib/variables";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { planSubmissionHandling } from "../../shared/submissionHandling";
@@ -30,7 +31,7 @@ export function register(app: Express, deps: Deps): void {
     const actor = adminActor(req);
     const pool = getPool();
     res.json({
-      people: actor ? await redirectPeople(pool, actor.id) : [],
+      people: actor ? await redirectPeople(pool, actor.id, boolVar("memberTasks.listDefault")) : [],
       roles: await activeRoles(pool),
     });
   });
