@@ -173,6 +173,8 @@ import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan"
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
+import { isAgentAccount } from "./repos/agentAccounts";
+import { villageDayKey } from "../shared/companionItems";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
@@ -6690,7 +6692,7 @@ async function startServer() {
     });
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
-    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10) });
+    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone) });
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
@@ -6731,7 +6733,13 @@ async function startServer() {
     app.post("/api/agent/tokens", async (req, res) => {
       const user = await me(req, res);
       if (!user) return;
-      const scopes = cleanScopes(req.body?.scopes, { intentsAllowed: AGENT_INTENT_WRITE, adminAllowed: await isAdmin(req) });
+      const holderIsAdmin = await isAdmin(req);
+      const scopes = cleanScopes(req.body?.scopes, {
+        intentsAllowed: AGENT_INTENT_WRITE,
+        adminAllowed: holderIsAdmin,
+        // Sera's agent: an agent account that is not an admin (addendum v6, B7).
+        seraAllowed: !holderIsAdmin && (await isAgentAccount(getPool(), String(user.id))),
+      });
       if (!scopes.ok) return res.status(400).json({ error: scopes.error });
       const minted = await mintToken(getPool(), user.id, { name: String(req.body?.name ?? ""), scopes: scopes.scopes, ttlDays: req.body?.ttlDays }, Number(user.tokenVersion ?? 0)); // a session ended since its check answers 401
       if (!minted.ok) return res.status(minted.status).json({ error: minted.error });

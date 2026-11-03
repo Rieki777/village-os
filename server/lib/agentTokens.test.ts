@@ -116,7 +116,7 @@ describe("the token value", () => {
 
 describe("scopes", () => {
   it("is a closed list", () => {
-    expect([...AGENT_SCOPES]).toEqual(["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin"]);
+    expect([...AGENT_SCOPES]).toEqual(["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin", "sera.undoable"]);
   });
   it("refuses unknown scopes and dedupes", () => {
     expect(cleanScopes(["calendar.read", "calendar.read"], { intentsAllowed: false })).toEqual({ ok: true, scopes: ["calendar.read"] });
@@ -126,6 +126,9 @@ describe("scopes", () => {
     expect(cleanScopes(["admin"], { intentsAllowed: false }).ok).toBe(false);
     expect(cleanScopes(["admin"], { intentsAllowed: false, adminAllowed: false }).ok).toBe(false);
     expect(cleanScopes(["admin"], { intentsAllowed: false, adminAllowed: true })).toEqual({ ok: true, scopes: ["admin"] });
+    // sera.undoable is Sera's agent account's alone (addendum v6, B7).
+    expect(cleanScopes(["sera.undoable"], { intentsAllowed: false, adminAllowed: true }).ok).toBe(false);
+    expect(cleanScopes(["sera.undoable"], { intentsAllowed: false, seraAllowed: true })).toEqual({ ok: true, scopes: ["sera.undoable"] });
   });
   it("holds intents.write behind the flag", () => {
     expect(cleanScopes(["intents.write"], { intentsAllowed: false }).ok).toBe(false);

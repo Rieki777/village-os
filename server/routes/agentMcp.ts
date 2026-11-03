@@ -34,6 +34,7 @@ import { recordAgentAction } from "../repos/agentAccounts";
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { AGENT_ADMIN_PATHS_DOC, effectiveAgentAdminPaths } from "../../shared/agentAdmin";
 import { PLATFORM_VERSION } from "../lib/identity";
+import { runSeraTool, undoSeraAction } from "../lib/seraAgent";
 
 export const MCP_PATH = "/api/agent/v1/mcp";
 
@@ -50,6 +51,10 @@ type Deps = Pick<AppDeps, "getPool"> & {
   villageName: () => string;
   /** The port this server listens on, for the loopback. */
   port: () => number;
+  /** `memberTasks.listDefault`, for Sera's suggestions. */
+  listDefault: () => boolean;
+  /** Today in the village, YYYY-MM-DD. */
+  today: () => string;
 };
 
 /** The address a client of this process reaches it at. The holder's session goes nowhere else. */
@@ -88,7 +93,7 @@ async function asHolder(
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { resolveAgent, confirmSecret, getPool, villageName, port } = deps;
+  const { resolveAgent, confirmSecret, getPool, villageName, port, listDefault, today } = deps;
 
   app.get("/api/agent/v1/mcp", (_req, res) => {
     res.set("Allow", "POST").status(405).json({ error: "This connector opens no stream. Send each message with POST." });
@@ -117,6 +122,10 @@ export function register(app: Express, deps: Deps): void {
         dispatch: (method, path, body) => asHolder(port(), session, forwardedFor, method, path, body),
         mintConfirm: (tool, echo) => mintConfirmToken(confirmSecret, { action: `mcp:${tool}`, userId, echo }),
         holderId: userId,
+        sera: {
+          run: (tool, args) => runSeraTool(getPool(), { userId, tokenId: row.id, tokenPrefix: row.prefix }, tool, args, { listDefault: listDefault(), today: today() }),
+          undo: (actionId) => undoSeraAction(getPool(), actionId, userId, userId),
+        },
         adminPaths: async () => effectiveAgentAdminPaths(await readConfigDocument(getPool(), AGENT_ADMIN_PATHS_DOC)),
         recordAction: async (a) => {
           await recordAgentAction(getPool(), { ...a, tokenId: row.id, actorUserId: userId });

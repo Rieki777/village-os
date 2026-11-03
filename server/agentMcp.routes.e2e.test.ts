@@ -262,8 +262,9 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     const off = await call("GET", "/api/member-tasks/me", undefined, ben.token);
     expect(off.json?.on === false || off.status === 403, off.text).toBe(true);
 
-    const [rows] = await pool.query<any[]>("SELECT state FROM agent_actions WHERE actor_user_id = ? ORDER BY created_at, id", [agent.id]);
-    expect(rows.map((r: any) => r.state)).toEqual(["done", "asked", "done"]);
+    // Three calls inside one second share a created_at, so compare the states as a set of counts.
+    const [rows] = await pool.query<any[]>("SELECT state FROM agent_actions WHERE actor_user_id = ?", [agent.id]);
+    expect(rows.map((r: any) => r.state).sort()).toEqual(["asked", "done", "done"]);
   });
 
   it("refuses what is always a person's, for the agent and through the agent's own session (check 53)", async () => {
@@ -280,5 +281,44 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     // And a person may not save a list that names an always-a-person path.
     const saved = await call("PUT", "/api/admin/agent-admin-paths", { document: { paths: [{ method: "DELETE", path: "/api/admin/players/:id", confirm: "agent", label: "x" }] } });
     expect(saved.status).toBe(400);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("Sera's agent (B7)", () => {
+  let seraAgent = { token: "", id: "" };
+  let seraVat = "";
+  let actionId = "";
+
+  it("is an agent account that is not an admin, and only it may hold sera.undoable (check 58)", async () => {
+    seraAgent = await register("Sera (Saberra agent)", "sera-agent");
+    expect((await call("PUT", `/api/admin/players/${seraAgent.id}/agent`, { isAgent: true })).status).toBe(200);
+    expect((await call("POST", "/api/agent/tokens", { name: "nope", scopes: ["sera.undoable"] }, ana.token)).status).toBe(400);
+    expect((await call("POST", "/api/agent/tokens", { name: "nope", scopes: ["sera.undoable"] })).status).toBe(400);
+    seraVat = await mint(seraAgent.token, ["sera.undoable"]);
+    const listed = await mcp(seraVat, "tools/list");
+    expect(listed.json.result.tools.map((t: any) => t.name)).toEqual(["link_sera_person", "suggest_task", "set_board_access", "undo_sera_action"]);
+    // Not an admin, so the admin scope stays closed to it.
+    expect((await call("POST", "/api/agent/tokens", { name: "nope", scopes: ["admin"] }, seraAgent.token)).status).toBe(400);
+  });
+
+  it("suggests a task that lands on the member's board and notifies nobody", async () => {
+    const [[before]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM notifications");
+    const r = await tool(seraVat, "suggest_task", { userId: ana.id, title: "Check the water tank" });
+    expect(r.json.result.isError, r.text).toBe(false);
+    actionId = String(r.json.result.structuredContent.actionId);
+    const board = await call("GET", "/api/member-tasks/me", undefined, ana.token);
+    expect(board.json.open.map((t: any) => t.title)).toContain("Check the water tank");
+    const [[after]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM notifications");
+    expect(Number(after.n)).toBe(Number(before.n));
+  });
+
+  it("is listed for stewards and undone by one (check 59, the list and the Undo)", async () => {
+    const listed = await call("GET", "/api/admin/agent-actions?scope=sera.undoable");
+    expect(listed.json.actions.map((a: any) => a.id)).toContain(actionId);
+    const undone = await call("POST", `/api/admin/agent-actions/${actionId}/undo`, {});
+    expect(undone.status, undone.text).toBe(200);
+    const board = await call("GET", "/api/member-tasks/me", undefined, ana.token);
+    expect(board.json.open.map((t: any) => t.title)).not.toContain("Check the water tank");
+    expect((await call("POST", `/api/admin/agent-actions/${actionId}/undo`, {})).status).toBe(409);
   });
 });

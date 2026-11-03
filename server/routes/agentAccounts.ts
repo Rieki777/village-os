@@ -6,6 +6,7 @@
  *   GET /api/admin/agent-admin-paths       the paths `admin_request` may call, and what is always a person's
  *   PUT /api/admin/agent-admin-paths       change that list
  *   GET /api/admin/agent-actions           what agents did through the admin and Sera scopes, newest first
+ *   POST /api/admin/agent-actions/:id/undo put back one of Sera's actions (B7), within 30 days
  *
  * Every route is an admin's, and the two writes are a PERSON's: an agent
  * account is refused them even with a session, and `admin_request` can never
@@ -21,6 +22,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { agentAccountIds, isAgentAccount, listAgentActions, liveRoleCount, setAgentAccount } from "../repos/agentAccounts";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
+import { undoSeraAction } from "../lib/seraAgent";
 import { AGENT_ADMIN_PATHS_DOC, ALWAYS_A_PERSON, DEFAULT_AGENT_ADMIN_PATHS, effectiveAgentAdminPaths, parseAgentAdminPaths } from "../../shared/agentAdmin";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "isAdmin">;
@@ -105,5 +107,13 @@ export function register(app: Express, deps: Deps): void {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const scope = typeof req.query.scope === "string" ? req.query.scope.slice(0, 32) : undefined;
     res.json({ actions: await listAgentActions(getPool(), { scope, limit: Number(req.query.limit ?? 100) }) });
+  });
+
+  app.post("/api/admin/agent-actions/:id/undo", async (req, res) => {
+    const actor = await person(req, res);
+    if (!actor) return;
+    const out = await undoSeraAction(getPool(), String(req.params.id ?? "").slice(0, 64), actor.id, null);
+    if (!out.ok) return res.status(out.status).json({ error: out.error });
+    res.json({ undone: true });
   });
 }

@@ -243,3 +243,35 @@ describe("admin_request (check 52)", () => {
     expect(a.routeCalls).toEqual([]);
   });
 });
+
+describe("sera.undoable (check 56)", () => {
+  it("opens exactly the closed list, and no other scope opens any of it", () => {
+    expect(toolsFor(["sera.undoable"]).map((t) => t.name)).toEqual(["link_sera_person", "suggest_task", "set_board_access", "undo_sera_action"]);
+    for (const s of ["moon.read", "tasks.write", "admin"] as const) {
+      expect(toolsFor([s]).some((t) => t.scope === "sera.undoable")).toBe(false);
+    }
+    // No Sera tool names a route: they reach only server/lib/seraAgent.ts, which notifies nobody.
+    for (const t of toolsFor(["sera.undoable"])) expect(t.routes).toEqual([]);
+  });
+
+  it("hands each call to the Sera port and never to a route", async () => {
+    const h = holder();
+    const seen: string[] = [];
+    const ctx: ToolContext = {
+      ...h.ctx,
+      sera: {
+        run: async (tool) => {
+          seen.push(tool);
+          return { ok: true, result: { written: true, actionId: "aac-1" } };
+        },
+        undo: async (id) => (id === "aac-1" ? { ok: true } : { ok: false, error: "There is no such Sera action." }),
+      },
+    };
+    const r = await ask(callTool("suggest_task", { userId: "u-2", title: "x" }), ["sera.undoable"], ctx);
+    expect(r.result.isError).toBe(false);
+    const u = await ask(callTool("undo_sera_action", { actionId: "nope" }), ["sera.undoable"], ctx);
+    expect(u.result.isError).toBe(true);
+    expect(seen).toEqual(["suggest_task"]);
+    expect(h.calls).toEqual([]);
+  });
+});

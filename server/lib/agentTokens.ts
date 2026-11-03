@@ -60,7 +60,12 @@ export const TOKEN_PREFIX = "vat_";
  * allow-listed admin path as the holder (shared/agentAdmin.ts; addendum v6,
  * B6). Only an admin may mint it, and the holder's own admin gates still run.
  */
-export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin"] as const;
+/*
+ * `sera.undoable` opens Sera's closed list of undoable tools
+ * (server/lib/seraAgent.ts; addendum v6, B7). Only an agent account that is
+ * not an admin may mint it.
+ */
+export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin", "sera.undoable"] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 /** Read scopes are on by default in the panel; writes are opt-in. */
@@ -96,7 +101,7 @@ export function isAgentBearer(header: string | undefined): boolean {
 }
 
 /** The scope list a member asked for, or a sentence saying why not. */
-export function cleanScopes(raw: unknown, opts: { intentsAllowed: boolean; adminAllowed?: boolean }): { ok: true; scopes: AgentScope[] } | { ok: false; error: string } {
+export function cleanScopes(raw: unknown, opts: { intentsAllowed: boolean; adminAllowed?: boolean; seraAllowed?: boolean }): { ok: true; scopes: AgentScope[] } | { ok: false; error: string } {
   if (!Array.isArray(raw) || raw.length === 0) return { ok: false, error: "Pick at least one scope" };
   const seen = new Set<string>();
   const scopes: AgentScope[] = [];
@@ -105,6 +110,7 @@ export function cleanScopes(raw: unknown, opts: { intentsAllowed: boolean; admin
     if (!(AGENT_SCOPES as readonly string[]).includes(v)) return { ok: false, error: `Unknown scope: ${v.slice(0, 40)}` };
     if (v === "intents.write" && !opts.intentsAllowed) return { ok: false, error: "Posting intents is not open on this deployment yet" };
     if (v === "admin" && !opts.adminAllowed) return { ok: false, error: "Only an admin can give a token the admin scope" };
+    if (v === "sera.undoable" && !opts.seraAllowed) return { ok: false, error: "Only Sera's agent account can hold the sera.undoable scope" };
     if (!seen.has(v)) { seen.add(v); scopes.push(v as AgentScope); }
   }
   return { ok: true, scopes };
