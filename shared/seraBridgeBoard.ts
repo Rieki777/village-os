@@ -7,6 +7,7 @@
  * of the service, and the board says so.
  */
 import type { QuestFeedAnswer } from "./seraQuestFeed";
+import type { SyncLast } from "./seraSyncHealth";
 
 /** The data agreement with Saberra LLC: Tue Nov 3 2026, 2:00 PM Costa Rica time (UTC-6). */
 export const SERA_AGREEMENT = {
@@ -42,6 +43,8 @@ export interface BridgeAnswer {
     membersOff?: number;
   };
   reviewQueue: { waiting: number };
+  /** The last linked-members sync, for the health alert. */
+  sync?: SyncLast | null;
   /** Sera's quest feed: the last real run, and how many of its quests wait for a steward. */
   questFeed?: { last: QuestFeedAnswer | null; waiting: number };
   needsOwner: { ready: boolean; waiting: number };
@@ -52,6 +55,8 @@ export interface LinkedPerson {
   listOn: boolean;
   imported: number;
   lastImportAt: string | null;
+  /** When the 6-hourly sync last read this member (sera_person_links.last_synced_at). */
+  lastSyncedAt?: string | null;
 }
 
 export interface SeraTool {

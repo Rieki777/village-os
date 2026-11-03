@@ -18,6 +18,7 @@ import {
   type BridgeAnswer,
 } from "@shared/seraBridgeBoard";
 import type { QuestFeedAnswer } from "@shared/seraQuestFeed";
+import { syncHealth, syncHealthWords } from "@shared/seraSyncHealth";
 import { API_BASE, authHeaders } from "./adminApi";
 import { LevelRing, QuestCard, ToolBadges, type QuestState } from "./SaberraBridgeQuests";
 
@@ -49,6 +50,7 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
   const shown = feed && typeof feed !== "string" ? feed : a.questFeed?.last ?? null;
   const [showChecks, setShowChecks] = useState(false);
   const checks = bridgeChecks(a, now);
+  const health = syncHealth(a.sync ?? null, now);
   const done = checks.filter((c) => c.done).length;
   const allDone = done === checks.length;
   const conn = [a.connection.mayCall, a.connection.addressSet, a.connection.held > 0].filter(Boolean).length;
@@ -114,6 +116,10 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
           )}
         </QuestCard>
 
+        <QuestCard title="Sync health" state={health.state === "ok" ? "done" : health.state === "never" ? "waiting" : "active"}>
+          <p role={health.state === "stale" || health.state === "failed" ? "alert" : undefined}>{syncHealthWords(health)}</p>
+        </QuestCard>
+
         <QuestCard title="Linked to Sera" state={!a.lists.ready ? "building" : a.lists.people?.length ? "done" : "waiting"}>
           {!a.lists.ready ? (
             <p>The list tables are not in this database yet.</p>
@@ -122,7 +128,8 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
               {a.lists.people.map((p, i) => (
                 <li key={i}>
                   <span className="font-semibold">{p.name || "A member"}</span>: list {p.listOn ? "on" : "off"}, {plural(p.imported, "task")} imported,{" "}
-                  {p.lastImportAt ? `last import ${villageDate(p.lastImportAt)}` : "no import yet"}.
+                  {p.lastImportAt ? `last import ${villageDate(p.lastImportAt)}` : "no import yet"},{" "}
+                  {p.lastSyncedAt ? `last synced ${villageDate(p.lastSyncedAt)}` : "not synced yet"}.
                 </li>
               ))}
             </ul>

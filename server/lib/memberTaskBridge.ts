@@ -33,7 +33,7 @@ import { itemsOf, planImport } from "../../shared/memberTaskImport";
 import { heldFromLibrary, runImport } from "../repos/memberTaskImport";
 import type { MemberTaskRow } from "../repos/memberTasks";
 import {
-  closeLibraryTask, dueOutbox, importPhrase, recentRemovalSent, enqueue, libraryOwnerOf, markLinkSynced, markOutboxDropped, syncableLinks, feedbackOn, insertFeedback, markOutboxFailed, markOutboxSent, notesRelease, sweepOldFeedback, type OutboxRow,
+  closeLibraryTask, setSyncRecord, dueOutbox, importPhrase, recentRemovalSent, enqueue, libraryOwnerOf, markLinkSynced, markOutboxDropped, syncableLinks, feedbackOn, insertFeedback, markOutboxFailed, markOutboxSent, notesRelease, sweepOldFeedback, type OutboxRow,
 } from "../repos/memberTaskFeedback";
 
 export { libraryOwnerOf };
@@ -310,6 +310,13 @@ export async function syncMember(
 }
 
 export async function syncLinked(pool: Pool, today: string): Promise<{ status: string; members: number; created: number; updated: number; closed: number; errors: string[] }> {
+  const r = await syncLinkedOnce(pool, today);
+  // The board's sync health reads this: when it ran, whether it worked, how many members failed. No service words.
+  await setSyncRecord(pool, JSON.stringify({ at: new Date().toISOString(), ok: r.status === "ok" && r.errors.length === 0, s: r.status.slice(0, 40), m: r.members, e: r.errors.length })).catch(() => {});
+  return r;
+}
+
+async function syncLinkedOnce(pool: Pool, today: string): Promise<{ status: string; members: number; created: number; updated: number; closed: number; errors: string[] }> {
   const out = { status: "ok", members: 0, created: 0, updated: 0, closed: 0, errors: [] as string[] };
   if (!bridgeOn()) return { ...out, status: "library module off" };
   const pre = preflight();

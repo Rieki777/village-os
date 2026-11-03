@@ -6,7 +6,8 @@
  */
 import type { Pool } from "mysql2/promise";
 import type { BridgeAnswer } from "@shared/seraBridgeBoard";
-import { notesRelease, outboxCounts } from "./memberTaskFeedback";
+import { notesRelease, outboxCounts, syncRecord } from "./memberTaskFeedback";
+import { parseSyncLast } from "@shared/seraSyncHealth";
 
 type Row = Record<string, unknown>;
 
@@ -41,12 +42,13 @@ export async function bridgeLists(pool: Pool, have: Set<string>): Promise<Bridge
   const [ppl] = await pool.query(
     "SELECT u.`name` AS name, COALESCE(a.`list_on`, 0) AS on_, " +
       "(SELECT COUNT(*) FROM `member_tasks` t WHERE t.`user_id` = l.`user_id` AND t.`source` = 'sera') AS imported, " +
+      "(SELECT MAX(s.`last_synced_at`) FROM `sera_person_links` s WHERE s.`user_id` = l.`user_id`) AS synced_at, " +
       "(SELECT MAX(t.`created_at`) FROM `member_tasks` t WHERE t.`user_id` = l.`user_id` AND t.`source` = 'sera' AND t.`import_batch` IS NOT NULL) AS last_at " +
       "FROM (SELECT DISTINCT `user_id` FROM `sera_person_links`) l JOIN `users` u ON u.`id` = l.`user_id` " +
       "LEFT JOIN `member_task_access` a ON a.`user_id` = l.`user_id` ORDER BY u.`name` LIMIT 50",
   );
   const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? String(v) : null);
-  const people = (ppl as Row[]).map((r) => ({ name: String(r.name ?? ""), listOn: n(r.on_) === 1, imported: n(r.imported), lastImportAt: iso(r.last_at) }));
+  const people = (ppl as Row[]).map((r) => ({ name: String(r.name ?? ""), listOn: n(r.on_) === 1, imported: n(r.imported), lastImportAt: iso(r.last_at), lastSyncedAt: iso(r.synced_at) }));
   const at = last.at instanceof Date ? last.at.toISOString() : last.at ? String(last.at) : null;
   return {
     ready: true,
@@ -102,5 +104,6 @@ export async function bridgeReading(pool: Pool): Promise<Omit<BridgeAnswer, "con
   const needsOwner = have.has("member_task_import_queue")
     ? { ready: true, waiting: n((await one(pool, "SELECT COUNT(*) AS n FROM `member_task_import_queue` WHERE `status` = 'waiting'")).n) }
     : { ready: false, waiting: 0 };
-  return { lists, feedback, reviewQueue: { waiting: review }, needsOwner };
+  const sync = have.has("member_task_bridge") ? parseSyncLast(await syncRecord(pool).catch(() => null)) : null;
+  return { lists, feedback, reviewQueue: { waiting: review }, needsOwner, sync };
 }

@@ -43,7 +43,7 @@ describe("the bridge reading", () => {
     expect(r.lists).toMatchObject({ ready: true, linkedPeople: 1, listsOn: 1, imported: 33, importedOpen: 30 });
     expect(r.lists.lastBatch).toEqual({ id: "batch-1", at: "2026-11-02T20:00:00.000Z", tasks: 33 });
     expect(r.feedback).toEqual({ ready: true, sent: 4, queued: 2, failed: 1, notesHeld: 3, notesReleased: false, membersOff: 2 });
-    expect(r.lists.people).toEqual([{ name: "Ana", listOn: true, imported: 33, lastImportAt: "2026-11-02T20:00:00.000Z" }]);
+    expect(r.lists.people).toEqual([{ name: "Ana", listOn: true, imported: 33, lastImportAt: "2026-11-02T20:00:00.000Z", lastSyncedAt: null }]);
     expect(r.reviewQueue.waiting).toBe(5);
     expect(r.needsOwner).toEqual({ ready: true, waiting: 2 });
   });
