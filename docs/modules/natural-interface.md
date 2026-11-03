@@ -419,7 +419,7 @@ API for one, and it belongs on whichever settings surface a later lane owns.
 
 ## The asset budget rule
 
-CI enforces `MAX_MAIN_JS_KB` 700 and `MAX_TOTAL_DIST_KB` 6600 after
+CI enforces `MAX_MAIN_JS_KB` 700 and `MAX_TOTAL_DIST_KB` 7000 after
 `pnpm build`, and recent builds sit near the total ceiling. This kit is
 therefore all SVG drawn from arithmetic: no image, no font, no audio, no
 animation library. Nothing it adds is a file.

@@ -10,8 +10,8 @@
  *   FORMAT. Nothing stopped a PNG landing in `client/public`. WebP is the
  *   house standard for raster art and it was a convention, which is to say it
  *   held until someone was in a hurry.
- *   DIRECTION. The bundle budget is a CEILING (6600 KB on dist/public since
- *   R33; the tree sat at 6136 KB when that was set), so images can still grow
+ *   DIRECTION. The bundle budget is a CEILING (7000 KB on dist/public since
+ *   2026-11-02, 6600 from R33 when the tree sat at 6136 KB), so images can still grow
  *   by several hundred KB and stay green. A ceiling tells you about a
  *   catastrophe; it says nothing about a year of quiet accumulation.
  *
