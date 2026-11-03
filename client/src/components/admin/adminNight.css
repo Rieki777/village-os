@@ -53,3 +53,100 @@
 .admin-root.sheet-night .hover\:text-teal-deep:hover {
   color: var(--sheet-earned, var(--ring));
 }
+
+.admin-root.sheet-night .border-gray-400,
+.admin-root.sheet-night .border-gray-900 {
+  border-color: var(--ring);
+}
+
+/* Mint, cream, and sky slabs are light-only paints. On the night sheet they
+   take the panel and the moonlight, and a failure takes the warn token. */
+.admin-root.sheet-night .bg-emerald-50,
+.admin-root.sheet-night .bg-emerald-100,
+.admin-root.sheet-night .bg-amber-50,
+.admin-root.sheet-night .bg-amber-100,
+.admin-root.sheet-night .bg-amber-400,
+.admin-root.sheet-night .bg-yellow-50,
+.admin-root.sheet-night .bg-yellow-100,
+.admin-root.sheet-night .bg-blue-100,
+.admin-root.sheet-night .bg-violet-50,
+.admin-root.sheet-night .bg-violet-100,
+.admin-root.sheet-night .bg-sky-50,
+.admin-root.sheet-night .bg-stone-100,
+.admin-root.sheet-night .bg-red-50,
+.admin-root.sheet-night .bg-red-100,
+.admin-root.sheet-night .bg-teal-deep\/5,
+.admin-root.sheet-night .bg-teal-deep\/10 {
+  background-color: var(--muted);
+}
+
+.admin-root.sheet-night .text-emerald-600,
+.admin-root.sheet-night .text-emerald-700,
+.admin-root.sheet-night .text-emerald-800,
+.admin-root.sheet-night .text-amber-600,
+.admin-root.sheet-night .text-amber-700,
+.admin-root.sheet-night .text-amber-800,
+.admin-root.sheet-night .text-amber-900,
+.admin-root.sheet-night .text-blue-700,
+.admin-root.sheet-night .text-violet-700,
+.admin-root.sheet-night .text-sky-700,
+.admin-root.sheet-night .text-stone-500,
+.admin-root.sheet-night .text-yellow-800,
+.admin-root.sheet-night .text-teal-950 {
+  color: var(--foreground);
+}
+
+.admin-root.sheet-night .text-red-500,
+.admin-root.sheet-night .text-red-600,
+.admin-root.sheet-night .text-red-700,
+.admin-root.sheet-night .text-red-800 {
+  color: var(--destructive);
+}
+
+.admin-root.sheet-night .border-emerald-100,
+.admin-root.sheet-night .border-emerald-200,
+.admin-root.sheet-night .border-emerald-300,
+.admin-root.sheet-night .border-amber-100,
+.admin-root.sheet-night .border-amber-200,
+.admin-root.sheet-night .border-amber-300,
+.admin-root.sheet-night .border-amber-400,
+.admin-root.sheet-night .border-red-200,
+.admin-root.sheet-night .border-red-300,
+.admin-root.sheet-night .border-blue-200,
+.admin-root.sheet-night .border-violet-200,
+.admin-root.sheet-night .border-sky-200,
+.admin-root.sheet-night .border-teal-deep\/20 {
+  border-color: var(--border);
+}
+
+.admin-root.sheet-night .bg-teal-deep {
+  background-color: var(--ring);
+  color: var(--background);
+}
+
+.admin-root.sheet-night p.opacity-70,
+.admin-root.sheet-night span.opacity-70 {
+  opacity: 1;
+  color: var(--foreground);
+}
+
+.admin-root.sheet-night input::placeholder,
+.admin-root.sheet-night textarea::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+.admin-root input[type="checkbox"] {
+  accent-color: var(--ring);
+}
+
+.admin-root [data-lit="1"] {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.admin-fit button.admin-nowrap {
+  overflow-wrap: normal;
+  white-space: nowrap;
+  min-width: 7.5rem;
+}

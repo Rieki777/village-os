@@ -944,7 +944,7 @@ export function IntegrationsTab({ password }: { password: string }) {
           {CARDS.map((c) => {
             const s = c.key ? statusOf(c.key) : null;
             return (
-              <div key={c.key ?? `module:${c.module}`} className="bg-white border border-gray-100 rounded-xl p-5">
+              <div id={c.module === "saberra" ? "integration-sera" : c.module === "events" ? "integration-calendar" : c.key === "resend_api_key" ? "integration-email" : c.key === "stripe_secret_key" ? "integration-payments" : undefined} key={c.key ?? `module:${c.module}`} className="bg-white border border-gray-100 rounded-xl p-5">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
                   <p className="font-semibold text-gray-900">
                     {c.title}
@@ -6657,7 +6657,7 @@ function LedgerTab({ password }: { password: string }) {
 
   return (
     <div>
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Ledger</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -6666,7 +6666,7 @@ function LedgerTab({ password }: { password: string }) {
             have issued, which is why everything still sums to zero.
           </p>
         </div>
-        <button onClick={load} className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-50">
+        <button onClick={load} className="admin-nowrap inline-flex min-h-11 shrink-0 items-center rounded-lg border border-gray-200 px-3 text-sm text-gray-700 hover:bg-gray-50">
           Re-check
         </button>
       </div>
@@ -7798,7 +7798,7 @@ function LaunchBanner({ password }: { password: string }) {
   return (
     <a
       href="/journey-to-launch"
-      className="block bg-amber-400 text-teal-950 px-6 py-2.5 text-sm font-medium hover:bg-amber-300 transition-colors"
+      className="block truncate whitespace-nowrap bg-amber-400 px-4 py-2 text-sm font-medium text-teal-950 hover:bg-amber-300 sm:px-6"
     >
       <span className="font-semibold">🌳 Journey to Launch:</span>{" "}
       {done} of {total} done
@@ -7923,12 +7923,12 @@ export default function Admin() {
             table inside sets the floor and the page scrolls sideways. The
             padding steps down on small screens, where 32px a side was a
             tenth of the width. */}
-        <main className="admin-fit flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-4xl">
+        <main className="admin-fit min-w-0 w-full max-w-5xl flex-1 p-4 sm:p-6 lg:p-8">
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
-          <TourCard />
-          <HealthStrip password={password} onOpen={setActiveTab} />
+          <TourCard wait={activeTab === "home"} />
+          <HealthStrip password={password} full={activeTab === "home" || activeTab === "integrations"} onOpen={setActiveTab} />
           <AdminHelp tab={activeTab} />
           {activeTab === "home" && <Suspense fallback={null}><HomeBase password={password} onOpenTab={setActiveTab} groups={shownGroups} role={user?.role} /></Suspense>}
           {activeTab === "modules" && <SeraAdminHome />}

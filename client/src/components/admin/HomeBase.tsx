@@ -10,6 +10,7 @@ import { API_BASE, authHeaders } from "@/components/admin/adminApi";
 import type { NavGroup } from "@/components/admin/adminNavGroups";
 import { ADMIN_AREAS, setHomeBaseOn, tabsInArea, type AreaId } from "./adminAreas";
 import { connectionRows, glanceSentence, readLastGlance, rememberGlance, sinceLastVisit } from "./todayGlance";
+import { waitingRequests } from "./waitingWork";
 import UnifiedInbox from "./UnifiedInbox";
 import { AllClear, FeelSettings, GentleQuests, WeekRecap } from "./AdminFeel";
 
@@ -31,7 +32,7 @@ function needsFrom(submissions: number, blocking: number): Needs {
   return { sentence: "Nothing is waiting on you.", shape: "tick", word: "All clear" };
 }
 
-const MARK = "inline-block h-3 w-3 border-2 border-gray-900";
+const MARK = "inline-block h-3 w-3 border-2 border-current";
 
 function Mark({ shape }: { shape: Needs["shape"] }) {
   const form = shape === "tick" ? "rounded-sm" : shape === "dot" ? "rounded-full" : "rounded-sm rotate-45";
@@ -56,12 +57,13 @@ export default function HomeBase({
 
   const load = () => {
     setProblem(null);
+    const signal = AbortSignal.timeout(12000);
     Promise.all([
-      fetch(`${API_BASE}/admin/submissions`, { headers: authHeaders(password) }).then((r) => (r.ok ? r.json() : [])),
-      fetch(`${API_BASE}/admin/launch`, { headers: authHeaders(password) }).then((r) => (r.ok ? r.json() : null)),
-      fetch(`${API_BASE}/admin/integrations`, { headers: authHeaders(password) }).then((r) => (r.ok ? r.json() : {})),
+      fetch(`${API_BASE}/admin/submissions`, { headers: authHeaders(password), signal }).then((r) => (r.ok ? r.json() : [])),
+      fetch(`${API_BASE}/admin/launch`, { headers: authHeaders(password), signal }).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API_BASE}/admin/integrations`, { headers: authHeaders(password), signal }).then((r) => (r.ok ? r.json() : {})),
     ]).then(([subs, launch, integrations]) => {
-      const count = Array.isArray(subs) ? subs.length : 0;
+      const count = waitingRequests(Array.isArray(subs) ? subs : []);
       const blocking = Number(launch?.blockingOpen ?? 0);
       const rows = connectionRows(integrations ?? {});
       const prev = readLastGlance();
@@ -70,7 +72,11 @@ export default function HomeBase({
       setSince(sinceLastVisit(prev, count));
       rememberGlance(count, rows.filter((row) => row.state !== "working").length);
       setUpdated(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-    }).catch(() => setProblem("This did not load. Try again in a moment."));
+      window.dispatchEvent(new Event("admin:today-ready"));
+    }).catch(() => {
+      setProblem("This did not load. Try again in a moment.");
+      window.dispatchEvent(new Event("admin:today-ready"));
+    });
   };
 
   useEffect(() => { load(); }, [password]);
@@ -130,9 +136,10 @@ export default function HomeBase({
       </div>
         <GentleQuests />
         <FeelSettings role={role} onChanged={() => onOpenTab("home")} />
-        <label className="flex min-h-[44px] items-center gap-2 text-sm text-gray-900">
+        <label className="flex min-h-11 w-full cursor-pointer items-center gap-3 py-2 text-sm text-gray-900">
         <input
           type="checkbox"
+          className="h-6 w-6 shrink-0"
           onChange={(e) => {
             setHomeBaseOn(!e.target.checked);
             if (e.target.checked) onOpenTab("submissions");

@@ -47,16 +47,16 @@ export default function AdminHeader({
   const quiet = night ? "text-muted-foreground" : "text-white";
 
   return (
-    <header className={`px-4 py-4 sm:px-6 ${night ? NIGHT : DAY}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${night ? "border-border bg-muted" : "border-white"}`}>
+    <header className={`px-4 py-2 sm:px-6 sm:py-4 ${night ? NIGHT : DAY}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className={`hidden h-11 w-11 shrink-0 items-center justify-center rounded-lg border sm:flex ${night ? "border-border bg-muted" : "border-white"}`}>
             <Lock className="h-4 w-4" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold leading-tight">{villageName ? `${villageName} Admin` : "Admin"}</h1>
-            {host && <p className={`text-sm ${quiet}`}>{host}</p>}
-            <p className={`text-sm ${quiet}`}>
+            <h1 className="text-base font-semibold leading-tight sm:text-lg">{villageName ? `${villageName} Admin` : "Admin"}</h1>
+            {host && <p className={`hidden text-sm sm:block ${quiet}`}>{host}</p>}
+            <p className={`hidden text-sm sm:block ${quiet}`}>
               You choose what this village shows people.{" "}
               <a href="/modules" className={`underline ${night ? "text-card-foreground" : "text-white"} inline-flex min-h-11 items-center`}>
                 Change the filters
@@ -64,9 +64,9 @@ export default function AdminHeader({
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto sm:w-auto">
           {extra}
-          <p className={`text-sm ${quiet}`}>Handled today: {handled}, on this device</p>
+          <p className={`whitespace-nowrap text-xs sm:text-sm ${quiet}`}>Handled today: {handled}, on this device</p>
           <button
             type="button"
             aria-pressed={night}
