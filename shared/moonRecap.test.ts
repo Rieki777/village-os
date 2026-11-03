@@ -17,6 +17,11 @@
  *      approvers-only item, and no Sera evidence (asserted on the object).
  *   14 no shape carries hours or minutes; no origin is a quest.
  *   17 the work summary lists approved, invoiced items, ticked proof, no amount.
+ *   20 the October Moon's counts score 12 and a half of 18, 69% (neutral titles:
+ *      the repository is public).
+ *   21 a goal carried twice is flagged; Let go without a reason is refused.
+ *   22 (pure half) Sera hears only about tasks Sera sent.
+ *   23 an Outside my roles item shows in the role audit with its role named.
  */
 import { describe, expect, it } from "vitest";
 import { CALENDAR_CLOCK, LUNAR_CLOCK } from "./cycleClock";
@@ -27,7 +32,8 @@ import {
   parseAttestation, parseItemFields, parsePayers, parsePayRouteInput, parseRoleAudit, payersChanges, payerForRoute,
   PILOT_ACK_VERSION, prorate, RECAP_STATUS_WORDS, routeChangeClearsConfirmation, SEND_REFUSALS, taxFormValidOn,
   workSummaryText, workDueOn, type ApprovalSubject, type InvoiceLine, type Payer, type PayRouteRecord, type RecapItem,
-  type TermsInForce,
+  type TermsInForce, taskScore, seatCoverage, goalScore, scoreWords, carriedTooOften, carriedGoals, goalScoreProblem, parseMoonGoals,
+  carriedItems, seraClosures, outsideRolesAudit, sendBy, type MoonGoal,
 } from "./moonRecap";
 import * as contract from "./moonRecap";
 
@@ -37,16 +43,17 @@ const MOON = moonDays(NOV, TZ);
 
 function item(over: Partial<RecapItem>): RecapItem {
   return {
-    id: "mi-0000000000000001", origin: "task", text: "Wrote the water plan", originNote: null, doneOn: null, evidenceUrl: null,
+    id: "mi-0000000000000001", origin: "task", dedupeKey: "task:t1", text: "Wrote the water plan", originNote: null, doneOn: null, evidenceUrl: null,
     evidenceAsset: null, proofInSummary: false, roleId: "r1", accountabilityWords: null, seasonGoalId: null, ownGoalWords: null,
-    state: "kept", visibility: "members", review: "pending", reviewNote: null, position: 0, ...over,
+    state: "kept", visibility: "members", review: "pending", reviewNote: null, position: 0, setOn: null, taskStatus: null,
+    redirectTo: null, letGoReason: null, belongsToRoleId: null, ...over,
   };
 }
 
 function payer(over: Partial<Payer> = {}): Payer {
   return {
     key: "us-payer", legalName: "Example Payer", address: "1 Main St", taxId: null, country: "US", currencies: ["USD"],
-    invoiceTo: "invoices@example.org", invoicing: true, routes: ["abroad", "nomad"],
+    invoiceTo: "invoices@example.org", invoiceCc: [], invoicing: true, routes: ["abroad", "nomad"],
     authority: { kind: "none", date: null, routes: [], monthlyCeilingMinor: null, ceilingCurrency: null, filedWhere: null },
     queueNote: null, ...over,
   };
@@ -390,5 +397,124 @@ describe("statuses, one set of words", () => {
     expect(invoicePaidFrom([])).toEqual({ paid: false, paidOn: null });
     expect(invoicePaidFrom([{ state: "paid", paidAt: "2026-11-20T10:00:00Z" }, { state: "claimed", paidAt: null }]).paid).toBe(false);
     expect(invoicePaidFrom([{ state: "paid", paidAt: "2026-11-20T10:00:00Z" }, { state: "paid", paidAt: "2026-11-21T10:00:00Z" }])).toEqual({ paid: true, paidOn: "2026-11-21" });
+  });
+});
+
+describe("the score (decision 20, check 20)", () => {
+  // The October Moon's counts, with neutral titles: 11 Done, 3 Partly and 4
+  // Carry count; 4 Redirect and 7 set in the final week and not done are left
+  // out. 12 and a half of 18 is 69%.
+  const tasks: RecapItem[] = [];
+  let n = 0;
+  const add = (count: number, taskStatus: RecapItem["taskStatus"], setOn: string) => {
+    for (let k = 0; k < count; k++) {
+      n += 1;
+      tasks.push(item({ id: `mi-${String(n).padStart(16, "0")}`, text: `Task ${n}`, dedupeKey: `task:${n}`, taskStatus, setOn }));
+    }
+  };
+  add(11, "done", "2026-10-14");
+  add(3, "partly", "2026-10-20");
+  add(4, "carry", "2026-10-25");
+  add(4, "redirect", "2026-10-18");
+  add(4, "carry", "2026-11-05");
+  add(3, "partly", "2026-11-07");
+
+  it("scores 12 and a half of 18, which is 69%", () => {
+    const s = taskScore(tasks, MOON);
+    expect([s.done, s.partly, s.carry, s.numHalves, s.den, s.pct]).toEqual([11, 3, 4, 25, 18, 69]);
+    expect(s.leftOut).toEqual({ letGo: 0, redirect: 4, lastWeekNotDone: 7, olderThanMoon: 0 });
+    expect(scoreWords(s)).toBe("12\u00bd of 18, 69%");
+  });
+
+  it("counts a last-week task that is Done, and never a task set before the moon", () => {
+    const s = taskScore([...tasks, item({ taskStatus: "done", setOn: "2026-11-08" }), item({ taskStatus: "done", setOn: "2026-10-01" })], MOON);
+    expect([s.done, s.den, s.leftOut.olderThanMoon]).toEqual([12, 19, 1]);
+  });
+
+  it("seat coverage counts accountabilities with a kept item, never Outside my roles work", () => {
+    const seats = [{ roleId: "r1", accountabilities: ["Keep the water plan", "Write the monthly report"] }];
+    expect(seatCoverage(seats, [
+      item({ accountabilityWords: "keep the water plan" }),
+      item({ roleId: null, accountabilityWords: "Write the monthly report" }),
+    ])).toEqual({ on: 1, total: 2, pct: 50 });
+  });
+
+  it("goal score uses the same formula; Let go and Open are left out", () => {
+    const g = goalScore([{ status: "done" }, { status: "partly" }, { status: "carried" }, { status: "let_go" }, { status: "open" }]);
+    expect([g.numHalves, g.den, g.pct, g.unscored]).toEqual([3, 3, 50, 1]);
+  });
+});
+
+describe("goals and carrying (check 21)", () => {
+  const goal = (over: Partial<MoonGoal>): MoonGoal => ({
+    id: "g-1", userId: "u1", cycleId: "lunar-000331", position: 0, text: "Goal 1", doneWhen: null, seasonGoalId: null, status: "open",
+    letGoReason: null, carriedFromId: null, carryCount: 0, setAt: null, scoredAt: null, ...over,
+  });
+  it("flags a goal carried twice, and carries every unfinished goal one count higher", () => {
+    expect(carriedTooOften(goal({ carryCount: 1 }))).toBe(false);
+    expect(carriedTooOften(goal({ carryCount: 2 }))).toBe(true);
+    const next = carriedGoals([goal({ id: "a", status: "done" }), goal({ id: "b", status: "partly", carryCount: 1 }), goal({ id: "c", status: "let_go" })]);
+    expect(next).toEqual([{ carriedFromId: "b", text: "Goal 1", doneWhen: null, seasonGoalId: null, carryCount: 2 }]);
+    expect(carriedTooOften(next[0])).toBe(true);
+  });
+  it("refuses Let go without a reason, for a goal and for a task", () => {
+    expect(goalScoreProblem("let_go", "  ")).toBe(contract.LET_GO_NEEDS_REASON);
+    expect(goalScoreProblem("let_go", "No longer needed")).toBeNull();
+    expect(parseItemFields({ taskStatus: "let_go", letGoReason: "" })).toEqual({ ok: false, field: "letGoReason", error: contract.LET_GO_NEEDS_REASON });
+    expect(parseItemFields({ taskStatus: "redirect", redirectTo: "" }).ok).toBe(false);
+  });
+  it("takes three to five goals for the next moon", () => {
+    const g = (k: number) => Array.from({ length: k }, (_, i) => ({ text: `Goal ${i + 1}` }));
+    expect(parseMoonGoals(g(2)).ok).toBe(false);
+    expect(parseMoonGoals(g(3)).ok).toBe(true);
+    expect(parseMoonGoals(g(6)).ok).toBe(false);
+  });
+  it("rolls every Partly and Carry item into the next moon under a carry key", () => {
+    expect(carriedItems([item({ id: "a", taskStatus: "partly" }), item({ id: "b", taskStatus: "done" }), item({ id: "c", taskStatus: "carry", state: "dropped" })]).map((c) => c.dedupeKey)).toEqual(["carry:a"]);
+  });
+});
+
+describe("closing the loop in Sera (check 22, the pure half)", () => {
+  it("closes only tasks Sera sent, by item id", () => {
+    expect(seraClosures([
+      item({ id: "a", dedupeKey: "sera:ext-1", taskStatus: "done" }),
+      item({ id: "b", dedupeKey: "sera:ext-2", taskStatus: "redirect", redirectTo: "The land role" }),
+      item({ id: "c", dedupeKey: "task:t3", taskStatus: "done" }),
+      item({ id: "d", dedupeKey: "sera:ext-4", taskStatus: "carry" }),
+    ])).toEqual([
+      { itemId: "a", externalId: "ext-1", action: "done", note: null },
+      { itemId: "b", externalId: "ext-2", action: "redirect", note: "The land role" },
+    ]);
+  });
+});
+
+describe("Outside my roles in the role audit (check 23)", () => {
+  it("names the role each item belongs to, and raises a Fill signal for an empty role named twice", () => {
+    const audit = outsideRolesAudit({
+      items: [
+        item({ id: "a", roleId: null, belongsToRoleId: "r9", text: "Task A" }),
+        item({ id: "b", roleId: null, belongsToRoleId: "r9", text: "Task B" }),
+        item({ id: "c", roleId: null, text: "Task C" }),
+        item({ id: "d", roleId: "r1", text: "Task D" }),
+      ],
+      heldRoleIds: ["r1"], roleNames: { r9: "Land role" }, emptyRoleIds: ["r9"],
+    });
+    expect(audit.items.map((i) => [i.itemId, i.belongsTo])).toEqual([["a", "Land role"], ["b", "Land role"], ["c", contract.NO_ROLE_YET]]);
+    expect(audit.fill).toEqual([{ roleId: "r9", name: "Land role", count: 2 }]);
+  });
+});
+
+describe("the send-by day and the copied addresses (decision 21)", () => {
+  it("is the new moon day, Monday 9 November 2026, or the first all-staff on or after it", () => {
+    expect(sendBy(NOV, TZ)).toBe("2026-11-09");
+    expect(sendBy(NOV, TZ, 3)).toBe("2026-11-11");
+    expect(sendBy(NOV, TZ, 1)).toBe("2026-11-09");
+    expect(contract.sendByLine("2026-11-09")).toBe("Send by Monday 9 November 2026. Sending any time before then counts the same as sending in the room.");
+  });
+  it("reads invoiceCc as email addresses, and refuses anything else", () => {
+    const base = { key: "a-1", legalName: "A", address: "x", country: "US", currencies: ["USD"], invoiceTo: "x@example.org" };
+    const ok = parsePayers({ payers: [{ ...base, invoiceCc: ["one@example.org", "two@example.org"] }] });
+    expect(ok.ok && contract.billToOf(ok.value.payers[0]).invoiceCc).toEqual(["one@example.org", "two@example.org"]);
+    expect(parsePayers({ payers: [{ ...base, invoiceCc: ["not an address"] }] }).ok).toBe(false);
   });
 });
