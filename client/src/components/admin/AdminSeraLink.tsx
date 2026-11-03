@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { authHeaders } from "@/components/admin/adminApi";
 
-const CHIP = "inline-flex min-h-[44px] items-center rounded-lg border border-white px-3 text-sm font-medium text-white";
+const CHIP = "inline-flex min-h-11 items-center rounded-lg border border-white px-2 text-sm font-medium text-white sm:px-3";
 
 export function AdminSeraChip({ password }: { password: string }) {
   const [show, setShow] = useState(false);

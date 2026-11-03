@@ -12,10 +12,12 @@ export default function AdminMobileNav({
   groups,
   activeTab,
   onSelect,
+  onSignOut,
 }: {
   groups: NavGroup[];
   activeTab: string;
   onSelect: (key: string) => void;
+  onSignOut?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const openedAt = useRef(0);
@@ -105,6 +107,11 @@ export default function AdminMobileNav({
                 </ul>
               </div>
             ))}
+            {onSignOut && (
+              <button type="button" className="mt-2 flex min-h-[44px] w-full items-center rounded-lg border border-gray-300 px-2 text-left text-base text-gray-900" onClick={() => { if (tooSoon()) return; onSignOut(); }}>
+                Sign out
+              </button>
+            )}
           </div>
         </>
       )}

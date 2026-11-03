@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { API_BASE, authHeaders } from "@/components/admin/adminApi";
+import { revealCard } from "./revealCard";
 import { connectionRows, type ConnectionRow, type ConnState } from "./todayGlance";
 
 const SHAPE: Record<ConnState, string> = {
@@ -15,13 +16,8 @@ const SHAPE: Record<ConnState, string> = {
 };
 
 function openService(onOpen: (tab: string) => void, id: string) {
-  onOpen("integrations");
-  window.setTimeout(() => {
-    const el = document.getElementById(`integration-${id}`);
-    if (!el) return;
-    el.scrollIntoView({ block: "center" });
-    el.setAttribute("data-lit", "1");
-  }, 180);
+  onOpen(id === "calendar" ? "events-admin" : "integrations");
+  revealCard(id);
 }
 
 export default function HealthStrip({ password, onOpen, full = true }: { password: string; onOpen: (tab: string) => void; full?: boolean }) {
@@ -45,7 +41,7 @@ export default function HealthStrip({ password, onOpen, full = true }: { passwor
     );
   }
   return (
-    <ul className="mb-4 flex flex-nowrap gap-2 overflow-x-auto" aria-label="Connections">
+    <ul className="admin-chip-row mb-4 flex flex-nowrap gap-2 overflow-x-auto" aria-label="Connections">
       {rows.map((row) => (
         <li key={row.id} className="shrink-0">
           <button

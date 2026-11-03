@@ -913,7 +913,7 @@ export function IntegrationsTab({ password }: { password: string }) {
       </div>
       <SecretsKeyBanner status={data?.villageSecretsKey} />
       {loading && !data ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
-        <div className="space-y-5 max-w-2xl">
+        <div className="w-full space-y-5">
           {/* The one value that flows the OTHER way: what to paste into Stripe. */}
           <div className="bg-teal-deep/5 border border-teal-deep/20 rounded-xl p-4">
             <p className="text-sm font-medium text-gray-900 mb-1">Your Stripe webhook URL</p>
@@ -2346,11 +2346,11 @@ function MilestonesAdminTab({ password }: { password: string }) {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <select
                         value={m.status}
                         onChange={(e) => update(m.id, { status: e.target.value as Milestone["status"] })}
-                        className="px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                        className="min-h-11 w-full rounded border border-gray-200 bg-white px-2 py-1 text-sm"
                       >
                         <option value="complete">Complete</option>
                         <option value="in-progress">In Progress</option>
@@ -2363,7 +2363,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
                         onChange={(e) => setItems((prev) => prev.map((x) => x.id === m.id ? { ...x, completedDate: e.target.value || null } : x))}
                         onBlur={(e) => update(m.id, { completedDate: e.target.value || null })}
                         placeholder="YYYY-MM (if complete)"
-                        className="px-2 py-1 text-xs border border-gray-200 rounded"
+                        className="min-h-11 w-full rounded border border-gray-200 px-2 py-1 text-sm"
                       />
                       <input
                         type="text"
@@ -2371,7 +2371,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
                         onChange={(e) => setItems((prev) => prev.map((x) => x.id === m.id ? { ...x, phase: e.target.value } : x))}
                         onBlur={(e) => update(m.id, { phase: e.target.value })}
                         placeholder="Phase"
-                        className="px-2 py-1 text-xs border border-gray-200 rounded"
+                        className="min-h-11 w-full rounded border border-gray-200 px-2 py-1 text-sm"
                       />
                     </div>
                     <input
@@ -2380,7 +2380,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
                       onChange={(e) => setItems((prev) => prev.map((x) => x.id === m.id ? { ...x, updateNote: e.target.value } : x))}
                       onBlur={(e) => update(m.id, { updateNote: e.target.value })}
                       placeholder="Status note (optional, shown on homepage)"
-                      className="w-full px-2 py-1 text-xs border border-gray-200 rounded"
+                      className="min-h-11 w-full rounded border border-gray-200 px-2 py-1 text-sm"
                     />
                     {(() => {
                       const d = daysSinceUpdate(m);
@@ -7795,16 +7795,18 @@ function LaunchBanner({ password }: { password: string }) {
   if (!status || status.launchedAt) return null;
   const total = (status.items ?? []).length;
   const done = (status.items ?? []).filter((i: any) => i.state === "ok").length;
+  const short = status.blockingOpen > 0 ? `Launch ${done}/${total} · ${status.blockingOpen} open` : `Launch ${done}/${total}`;
+  const full = `Journey to Launch: ${done} of ${total} done${status.blockingOpen > 0 ? ` · ${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open` : " · ready when a founder says so"}`;
   return (
     <a
       href="/journey-to-launch"
-      className="block truncate whitespace-nowrap bg-amber-400 px-4 py-2 text-sm font-medium text-teal-950 hover:bg-amber-300 sm:px-6"
+      className="flex items-center gap-2 bg-amber-400 px-3 py-2 text-sm font-medium text-teal-950 hover:bg-amber-300 sm:px-6"
     >
-      <span className="font-semibold">🌳 Journey to Launch:</span>{" "}
-      {done} of {total} done
-      {status.blockingOpen > 0 && ` · ${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open`}
-      {status.blockingOpen === 0 && " · ready when a founder says so"}
-      <span className="float-right">→</span>
+      <span className="min-w-0 flex-1 truncate">
+        <span className="sm:hidden">{short}</span>
+        <span className="hidden sm:inline">{full}</span>
+      </span>
+      <span className="shrink-0" aria-hidden="true">→</span>
     </a>
   );
 }
@@ -7836,6 +7838,8 @@ export default function Admin() {
     window.history.pushState({}, "", `${window.location.pathname}?${p.toString()}`);
     // Choosing from low in the rail leaves you scrolled past the top of the
     // panel you just opened; every tab change starts at its own beginning.
+    const main = document.querySelector("main");
+    if (main) main.style.paddingBottom = "";
     window.scrollTo({ top: 0 });
   }, []);
   useEffect(() => {
@@ -7904,7 +7908,7 @@ export default function Admin() {
         extra={<AdminSeraChip password={password} />}
       />
 
-      <div className="flex">
+      <div className="flex w-full">
         <AdminNav
           groups={shownGroups}
           activeTab={activeTab}
@@ -7917,6 +7921,7 @@ export default function Admin() {
           groups={shownGroups}
           activeTab={activeTab}
           onSelect={setActiveTab}
+          onSignOut={() => setPassword(null)}
         />
 
         {/* min-w-0 lets a flex child actually shrink — without it a wide
