@@ -293,7 +293,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
 
   if (proposal.status === "submitted") {
     return (
-      <div className="grid gap-6">
+      <div className="grid min-w-0 gap-6">
         <ProposalState proposal={proposal} />
         <ProposalPreview proposal={proposal} />
       </div>

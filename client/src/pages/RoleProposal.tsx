@@ -35,7 +35,7 @@ function Page({ children }: { children: ReactNode }) {
   return (
     <Layout>
       <div className="sheet-night min-h-screen bg-background text-foreground">
-        <div className="container max-w-3xl px-4 py-8">{children}</div>
+        <div className="container min-w-0 max-w-3xl overflow-x-clip px-4 py-8">{children}</div>
       </div>
     </Layout>
   );
