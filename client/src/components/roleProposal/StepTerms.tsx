@@ -11,9 +11,10 @@
 import SeatSettingsEditor from "@/components/governance/SeatSettingsEditor";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 import { loadCheck, LOAD_WORDS } from "@shared/roleProposalLoad";
-import { emptySettings, parseSeatSettings, type SeatSettings } from "@shared/seatSettings";
+import { parseSeatSettings, type SeatSettings } from "@shared/seatSettings";
 import { RP_WORDS } from "./proposalWords";
 import { INPUT, LEDE, PANEL, PRIMARY, QUIET, SECONDARY } from "./parts";
+import WrittenDate from "./WrittenDate";
 
 export interface TermsRole {
   id: string;
@@ -90,6 +91,7 @@ export default function StepTerms({
           {roles.map((r) => (
             <label key={r.id} className="grid gap-1 text-sm font-medium text-foreground">
               <span className="break-words">{r.name}</span>
+              <WrittenDate iso={r.reviewOn} />
               <input type="date" value={r.reviewOn} onChange={(e) => onReview(r.id, e.target.value)} className={`min-h-[44px] ${INPUT}`} />
             </label>
           ))}
@@ -126,9 +128,6 @@ export default function StepTerms({
           {RP_WORDS.termsHeading}
         </h3>
         <p className={LEDE}>{RP_WORDS.notSureLine(partner)}</p>
-        <button type="button" className={SECONDARY} onClick={() => onSettings(emptySettings())}>
-          {RP_WORDS.notSureYet}
-        </button>
         {!parsed.ok && <p className="text-sm font-medium text-coral">{RP_WORDS.termsNotSaved}</p>}
         <SeatSettingsEditor value={settings} onChange={onSettings} villagePresets={presets} partner={partner} />
       </section>

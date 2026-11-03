@@ -70,7 +70,7 @@ describe("a terms row", () => {
 
   it("says a money row is a proposal, confirmed with the operations role", () => {
     expect(honestyLine({ set: true, presetLabel: "Unpaid", customised: false, partner: "Operations Steward", money: true })).toBe(
-      "Suggested from Unpaid. A proposal, confirmed with Operations Steward.",
+      "Suggested from Unpaid. A proposal, not a promise. Confirmed with Operations Steward.",
     );
   });
 
