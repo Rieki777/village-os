@@ -32,9 +32,9 @@ export default function HealthStrip({ password, onOpen }: { password: string; on
           <button
             type="button"
             onClick={() => onOpen("integrations")}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-gray-300 bg-white px-3 text-sm text-gray-900"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-card px-3 text-sm text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <span aria-hidden="true" className={`inline-block h-3 w-3 border-2 border-gray-900 ${SHAPE[row.state]}`} />
+            <span aria-hidden="true" className={`inline-block h-3 w-3 border-2 border-current ${SHAPE[row.state]}`} />
             <span className="font-medium">{row.name}</span>
             <span>{row.word}</span>
           </button>
