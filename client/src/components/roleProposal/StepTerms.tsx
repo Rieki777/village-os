@@ -38,7 +38,8 @@ export default function StepTerms({
   onReview: (roleId: string, day: string) => void;
   onSettings: (next: SeatSettings) => void;
   /** Who fills a row left open. The chart's operations role, or the fallback. */
-  partner: string;
+  /** Null while the chart loads, so no generic name flashes before the real one. */
+  partner: string | null;
   /** Opens the Words step, where each role's hours are written. */
   onOpenWords: () => void;
   /** Writes one role's time, which the load check adds up. */
@@ -127,9 +128,15 @@ export default function StepTerms({
         <h3 id="rp-terms" className="font-semibold text-foreground">
           {RP_WORDS.termsHeading}
         </h3>
-        <p className={LEDE}>{RP_WORDS.notSureLine(partner)}</p>
-        {!parsed.ok && <p className="text-sm font-medium text-coral">{RP_WORDS.termsNotSaved}</p>}
-        <SeatSettingsEditor value={settings} onChange={onSettings} villagePresets={presets} partner={partner} />
+        {partner === null ? (
+          <p className={LEDE} aria-busy="true">{RP_WORDS.termsLoading}</p>
+        ) : (
+          <>
+            <p className={LEDE}>{RP_WORDS.notSureLine(partner)}</p>
+            {!parsed.ok && <p className="text-sm font-medium text-coral">{RP_WORDS.termsNotSaved}</p>}
+            <SeatSettingsEditor value={settings} onChange={onSettings} villagePresets={presets} partner={partner} />
+          </>
+        )}
       </section>
     </div>
   );

@@ -58,6 +58,8 @@ export const RP_WORDS = {
   welcomeTitle: "Let's draft your roles",
   welcomeLede: "Three short questions, then we draft it with you. Save and come back any time.",
   guideHere: (who: string) => `Your guide here is ${who}.`,
+  termsLoading: "Loading your terms…",
+  opsFillsOpen: (ops: string) => `Anything left open, you fill in together with ${ops}.`,
   quickPath: "Quick path",
   fullControl: "All the steps",
   yourWordsTitle: "In your words",
