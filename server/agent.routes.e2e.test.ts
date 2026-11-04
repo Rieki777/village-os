@@ -340,6 +340,15 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
     const [[audit]] = await pool.query<any[]>("SELECT actor_kind, audience FROM health_events WHERE kind = 'event_rsvp' AND actor_user_id = ? ORDER BY at DESC LIMIT 1", [ana.id]);
     expect(audit.actor_kind).toBe("agent");
     expect(audit.audience).toBe("admin");
+    // The same yes cannot be sent twice: Ana says no on the web, and the old token cannot set it back.
+    const web2 = await call("POST", `/api/events/${eventId}/rsvp`, { status: "declined" }, ana.token);
+    expect(web2.status).toBe(200);
+    const replay = await call("POST", path_, { status: "going", confirm: true, confirmToken: first.json.confirmToken, echo: first.json.echo }, vat.ana);
+    expect(replay.status).toBe(409);
+    expect(replay.json.error).toBe("spent");
+    const [[stillNo]] = await pool.query<any[]>("SELECT status FROM event_rsvps WHERE event_id = ? AND user_id = ?", [eventId, ana.id]);
+    expect(stillNo.status, "the replay wrote nothing").toBe("declined");
+    expect((await call("POST", `/api/events/${eventId}/rsvp`, { status: "going" }, ana.token)).status).toBe(200);
     // And me/rsvps now shows it.
     const mine = await call("GET", "/api/agent/v1/me/rsvps", undefined, vat.ana);
     expect(mine.json.events.map((e: any) => e.id)).toEqual([eventId]);
@@ -566,6 +575,13 @@ describe.skipIf(!DB_CONFIGURED)("the founder's agent drafts the map", () => {
     expect(after.json.canEdit).toBe(true);
     expect(JSON.parse(after.json.draft.scene)).toEqual(scene);
     expect(after.json.draft.baseVersion).toBe(0);
+    // The same token keeps no second draft. The echo names the draft it replaces, which the first
+    // save just changed, so the echo check usually refuses first; the spend book holds when it would not.
+    const replay = await call("POST", "/api/agent/v1/map/draft", {
+      scene, confirm: true, confirmToken: first.json.confirmToken, echo: first.json.echo,
+    }, vat.mapMaker);
+    expect(replay.status).toBe(409);
+    expect(["spent", "echo_mismatch"]).toContain(replay.json.error);
     const config = await call("GET", "/api/map/config", undefined, "");
     expect(config.json.scene, "the live map is untouched").toBeNull();
   });

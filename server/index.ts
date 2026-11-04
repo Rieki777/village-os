@@ -678,7 +678,7 @@ import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
-  holderStands, mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
+  createConfirmSpendBook, holderStands, mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
 } from "./lib/agentTokens";
 import { DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, queueWeekAhead, removeInbox, setInbox } from "./lib/agentInbox";
 import {
@@ -6631,6 +6631,12 @@ async function startServer() {
     });
 
     // ── The two writes, both confirmed in the contract ────────────────────
+    // A confirm token writes once. Without this an agent could send the same
+    // RSVP token again inside its ten minutes, after the member changed their
+    // answer on the web, and set it back without asking: on a priced gathering
+    // that is a charge. Spent only after every other check passes, so a wrong
+    // echo or another holder's attempt never burns the member's yes.
+    const rsvpConfirmBook = createConfirmSpendBook();
     /**
      * `POST /api/agent/v1/events/:id/rsvp`.
      *
@@ -6695,6 +6701,9 @@ async function startServer() {
         || (sentBack.idempotencyKey ?? null) !== idempotencyKey || (sentBack.occurrenceKey ?? null) !== occurrenceKey
       ) {
         return res.status(409).json({ error: "echo_mismatch", message: CONFIRM_REASON_SENTENCE.echo_mismatch });
+      }
+      if (!rsvpConfirmBook.spend(String(req.body.confirmToken))) {
+        return res.status(409).json({ error: "spent", message: CONFIRM_REASON_SENTENCE.spent });
       }
 
       const outcome = await rsvp(getPool(), eventId, user.id, wanted as RsvpStatus, idempotencyKey ?? undefined, occurrenceKey ?? undefined);
