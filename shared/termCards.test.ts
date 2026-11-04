@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SEAT_PRESETS as PRESETS, WHOLE_PRESETS } from "./seatPresets";
-import { GLOSSARY, MONEY_PROMISE, fillTogetherTag, plainTerm, presetExample, presetTag, recommendsPay, unsureLine, wholeCardCopy } from "./termCards";
+import { GLOSSARY, MONEY_PROMISE, fillTogetherTag, plainTerm, presetExample, presetTag, recommendsPay, unsureLine, wholeCardCopy, wholeCardTag } from "./termCards";
 import { OPS_FALLBACK } from "./roleProposalHonesty";
 import { SETTINGS_GROUPS } from "./seatSettings";
 
@@ -26,6 +26,13 @@ describe("terms preset cards", () => {
     expect(presetTag("term", "Operations Steward")).toBe("Suggested");
     for (const g of ["pay", "allowance", "bonus"] as const) expect(presetTag(g, "Operations Steward")).toBe("Fill together with Operations Steward");
     expect(fillTogetherTag(null)).toBe("Fill together with the village's operations role");
+  });
+
+  it("tags only the money-free whole roles Suggested", () => {
+    const tags = Object.fromEntries(WHOLE_PRESETS.map((w) => [w.label, wholeCardTag(w, "Operations Steward")]));
+    expect(tags["Volunteer role"]).toBe("Suggested");
+    expect(tags["Stipend role"]).toBe("Fill together with Operations Steward");
+    expect(tags["Core team role"]).toBe("Fill together with Operations Steward");
   });
 
   it("puts the plain phrase before the official word, and explains the jargon", () => {

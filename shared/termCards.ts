@@ -78,3 +78,10 @@ export function plainTerm(group: SettingsGroup): string {
 export function groupRecordsMoney(group: SettingsGroup): boolean {
   return MONEY_GROUPS.includes(group);
 }
+
+const NO_MONEY = new Set(["platform:unpaid", "platform:honorary", "platform:no-allowance", "platform:no-bonus"]);
+/** A whole role is Suggested only when it records no money; otherwise its money is filled together. PURE. */
+export function wholeCardTag(whole: WholeSeatPreset, partner: string | null | undefined): string {
+  const money = [whole.picks.pay, whole.picks.allowance, whole.picks.bonus].some((id) => id && !NO_MONEY.has(id));
+  return money ? fillTogetherTag(partner) : SUGGESTED_TAG;
+}

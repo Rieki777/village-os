@@ -6,7 +6,7 @@
  */
 import { useId } from "react";
 import { WHOLE_PRESETS, type WholeSeatPreset } from "@shared/seatPresets";
-import { MONEY_PROMISE, NOT_SURE_YET, SUGGESTED_TAG, fillTogetherTag, unsureLine, wholeCardCopy } from "@shared/termCards";
+import { MONEY_PROMISE, NOT_SURE_YET, SUGGESTED_TAG, fillTogetherTag, unsureLine, wholeCardCopy, wholeCardTag } from "@shared/termCards";
 
 const tag = "rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide";
 
@@ -33,8 +33,11 @@ export default function WholePresetCards({
           <li key={w.id} className="min-w-0">
             <button type="button" aria-labelledby={labelId} aria-describedby={descId} onClick={() => onPick(w)} className={card}>
               <span className="flex max-w-full flex-wrap items-center gap-1.5" data-preset-tags="">
-                <span className={`${tag} bg-dash-gold/15 text-dash-gold-lit`}>{SUGGESTED_TAG}</span>
-                <span className={`${tag} bg-muted text-foreground`}>{`Pay: ${fillTogetherTag(partner)}`}</span>
+                {wholeCardTag(w, partner) === SUGGESTED_TAG ? (
+                  <span className={`${tag} bg-dash-gold/15 text-dash-gold-lit`}>{SUGGESTED_TAG}</span>
+                ) : (
+                  <span className={`${tag} bg-muted text-foreground`}>{wholeCardTag(w, partner)}</span>
+                )}
               </span>
               <span id={labelId} className="break-words text-base font-semibold text-foreground">
                 {w.label}
