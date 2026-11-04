@@ -88,3 +88,13 @@ export function honestyLine(input: {
     : "Written by you.";
   return input.money ? `${source} A proposal, not a promise. Confirmed with ${partner}.` : source;
 }
+
+/** An open row on a proposal's preview: who fills it, from the chart. */
+export function openRowLine(partner: string | null | undefined): string {
+  return `We'll fill this together with ${opsPartner(partner)}.`;
+}
+
+/** The load card on a proposal: the hours are filled with the operations role. */
+export function loadHoursLine(partner: string | null | undefined): string {
+  return `We'll fill the hours together with ${opsPartner(partner)}.`;
+}
