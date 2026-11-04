@@ -26,7 +26,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, RotateCcw } from "lucide-react";
 import { GROUP_PLAIN, honestyLine } from "@shared/roleProposalHonesty";
-import { MONEY_PROMISE, plainTerm } from "@shared/termCards";
+import { MONEY_PROMISE, plainTerm, presetExample, presetTag } from "@shared/termCards";
 import TermGlossary from "./TermGlossary";
 import WholePresetCards from "./WholePresetCards";
 import { useOpsPartner } from "./useOpsPartner";
@@ -195,13 +195,16 @@ function GroupRow({
                     current ? "border-notice bg-notice/10" : "border-border hover:bg-muted"
                   }`}
                 >
+                  <span className="mb-1 rounded-full bg-muted px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-foreground" data-preset-tag="">
+                    {presetTag(group, partner)}
+                  </span>
                   <span id={labelId} className="flex items-center gap-1.5 break-words text-sm font-semibold text-foreground">
                     {o.label}
                     {current && <Check className="size-4 text-notice" aria-hidden="true" />}
                   </span>
                   <span className="text-[13px] font-semibold uppercase tracking-wide text-foreground">{GROUP_LABELS[group]}</span>
                   <span className="mt-0.5 break-words text-[13px] leading-snug text-foreground">{o.blurb}</span>
-                  {previewOf(o) && <span className="mt-1 break-words text-[13px] font-medium leading-snug text-foreground">Example: {previewOf(o)}</span>}
+                  <span className="mt-1 break-words text-[13px] font-medium leading-snug text-foreground">{presetExample(o, previewOf(o))}</span>
                   {MONEY_GROUPS.includes(group) && <span className="mt-1 break-words text-[13px] font-medium leading-snug text-foreground">{MONEY_PROMISE}</span>}
                 </button>
               </li>
