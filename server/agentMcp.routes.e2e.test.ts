@@ -283,3 +283,21 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     expect(saved.status).toBe(400);
   });
 });
+
+describe.skipIf(!DB_CONFIGURED)("the connector's transport guards", () => {
+  const raw = (body: string, headers: Record<string, string> = {}) =>
+    fetch(`${BASE}/api/agent/v1/mcp`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body }); // module-review-ok: the test client dialling the built server on localhost
+
+  it("answers a body that is not JSON with a JSON-RPC parse error", async () => {
+    const r = await raw("{not json", { Authorization: `Bearer ${anaVat}` });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error.code).toBe(-32700);
+  });
+
+  it("refuses a page on another site, and lets a server and its own site through", async () => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" });
+    expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: "https://evil.example" })).status).toBe(403);
+    expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: BASE })).status).toBe(200);
+    expect((await raw(body, { Authorization: `Bearer ${anaVat}` })).status).toBe(200);
+  });
+});

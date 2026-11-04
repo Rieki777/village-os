@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { handleMcpMessage, MCP_TOOLS, redactToolResult, toolsFor, type RouteAnswer, type ToolContext } from "./agentMcp";
-import { CONFIRM_REASON_SENTENCE, mintConfirmToken, verifyConfirmToken, type AgentScope } from "./agentTokens";
+import { CONFIRM_REASON_SENTENCE, CONFIRM_TTL_MS, createConfirmSpendBook, mintConfirmToken, verifyConfirmToken, type AgentScope } from "./agentTokens";
 import { DEFAULT_AGENT_ADMIN_PATHS } from "../../shared/agentAdmin";
 
 const SECRET = "test-secret-for-confirm-tokens";
@@ -67,6 +67,9 @@ describe("the connector protocol", () => {
     expect(r.result.capabilities.tools).toBeTruthy();
     const unknown = await ask(rpc("initialize", { protocolVersion: "1999-01-01" }), ["moon.read"], ctx);
     expect(unknown.result.protocolVersion).toBe("2025-11-25");
+    // The revision before resource metadata is not offered back.
+    const old = await ask(rpc("initialize", { protocolVersion: "2025-03-26" }), ["moon.read"], ctx);
+    expect(old.result.protocolVersion).toBe("2025-11-25");
   });
 
   it("takes a notification without an answer and refuses an unknown method", async () => {
@@ -167,6 +170,10 @@ describe("no tool sends, approves, issues, pays or touches a pay route (check 32
     expect(r.result.structuredContent.moon.recap.items[0]).toEqual({ text: "Fixed the pump", minutes: 30 });
   });
 
+  it("never carries a member's private detail", () => {
+    expect(redactToolResult({ tasks: [{ title: "Call the vet", privateDetail: "her number", private_detail: "x" }] })).toEqual({ tasks: [{ title: "Call the vet" }] });
+  });
+
   it("redacts the pack's forbidden keys and the connector's own", () => {
     const out = redactToolResult({ ok: 1, nested: [{ currency: "USD", taxId: "x", legalName: "y", address: "z", route: "r", keep: true }] });
     expect(out).toEqual({ ok: 1, nested: [{ keep: true }] });
@@ -241,5 +248,22 @@ describe("admin_request (check 52)", () => {
     expect(r.result.isError).toBe(true);
     expect(r.result.structuredContent.detail.code).toBe("person_confirms");
     expect(a.routeCalls).toEqual([]);
+  });
+});
+
+describe("the confirm spend book", () => {
+  it("spends a token once, and forgets it only after it would have expired anyway", () => {
+    let now = 1_000_000;
+    const book = createConfirmSpendBook(() => now);
+    const { token } = mintConfirmToken(SECRET, { action: "mcp:x", userId: "u-1", echo: { a: 1 } }, now);
+    expect(book.spend(token)).toBe(true);
+    expect(book.spend(token)).toBe(false);
+    now += CONFIRM_TTL_MS - 1;
+    expect(book.spend(token)).toBe(false);
+    now += 2;
+    // Past its expiry the token fails verification first, so the book may drop it.
+    expect(verifyConfirmToken(SECRET, token, { action: "mcp:x", userId: "u-1", echo: { a: 1 } }, now)).toMatchObject({ ok: false, reason: "expired" });
+    book.spend("other.token");
+    expect(book.size()).toBe(1);
   });
 });
