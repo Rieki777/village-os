@@ -79,10 +79,18 @@ export async function runImport(
         await recordTaskEvent(conn, u.id, userId, "refresh", { batch }, byUserId);
       }
     }
+    // Marked, never removed: the member still sees it, with a line saying it waits for a role.
+    for (const w of plan.roleWaiting) {
+      await conn.query("UPDATE `member_tasks` SET `sera_role_id` = ? WHERE `id` = ? AND `user_id` = ? AND `status` = 'open'", [w.roleId ?? "", w.id, userId]);
+    }
+    // Back with a person: the mark goes.
+    for (const u of plan.ownedAgain ?? []) {
+      await conn.query("UPDATE `member_tasks` SET `sera_role_id` = NULL WHERE `id` = ? AND `user_id` = ? AND `sera_role_id` IS NOT NULL", [u, userId]);
+    }
     for (const q of plan.needsOwner) {
       const [res] = await conn.query<any>(
-        "INSERT IGNORE INTO `member_task_import_queue` (`external_id`, `title`, `import_batch`) VALUES (?,?,?)",
-        [q.externalId, q.title, batch],
+        "INSERT IGNORE INTO `member_task_import_queue` (`external_id`, `title`, `import_batch`, `sera_role_id`) VALUES (?,?,?,?)",
+        [q.externalId, q.title, batch, q.roleId ?? null],
       );
       queued += res.affectedRows === 1 ? 1 : 0;
     }

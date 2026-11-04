@@ -72,3 +72,19 @@ describe("requested_by from the library", () => {
     expect(p.update).toHaveLength(1);
   });
 });
+
+describe("role routing from the library", () => {
+  it("reads the role id, keeps a member's own task on their list marked, and queues an unheld one", async () => {
+    const { planImport, readLibraryTask } = await import("./memberTaskImport");
+    expect(readLibraryTask({ id: "x", title: "T", role_id: "r-9" })!.roleId).toBe("r-9");
+    expect(readLibraryTask({ id: "x", title: "T", role: { id: "r-8" } })!.roleId).toBe("r-8");
+    const held = [{ id: "m1", externalId: "a", title: "A", tier: "high" as const, dueOn: null, status: "open" as const, memberEdited: false }];
+    const p = planImport([
+      { id: "a", title: "A", status: "Needs Owner", role_id: "r-1" },
+      { id: "b", title: "B", status: "Needs Owner", role_id: "r-2" },
+    ], "own", held);
+    expect(p.roleWaiting).toEqual([{ id: "m1", roleId: "r-1" }]);
+    expect(p.needsOwner.map((t) => [t.externalId, t.roleId])).toEqual([["b", "r-2"]]);
+    expect(planImport([{ id: "a", title: "A", priority: "High", owner_id: "own" }], "own", held).ownedAgain).toEqual(["m1"]);
+  });
+});
