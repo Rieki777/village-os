@@ -37,6 +37,9 @@ import type { AppDeps } from "../lib/appDeps";
 import { type AgentScope, type AgentTokenRow, CONFIRM_REASON_SENTENCE, createConfirmSpendBook, echoHash, mintConfirmToken, verifyConfirmToken } from "../lib/agentTokens";
 import { callsWriteTool, handleMcpMessage, MCP_TOOLS, RPC, toolsFor, type RouteAnswer, type ToolContext } from "../lib/agentMcp";
 import { recordEvent } from "../lib/events";
+import { recordAgentAction } from "../repos/agentAccounts";
+import { readConfigDocument } from "../repos/appConfigDocs";
+import { AGENT_ADMIN_PATHS_DOC, effectiveAgentAdminPaths } from "../../shared/agentAdmin";
 import { PLATFORM_VERSION } from "../lib/identity";
 
 export const MCP_PATH = "/api/agent/v1/mcp";
@@ -83,7 +86,7 @@ async function asHolder(
   port: number,
   session: string,
   forwardedFor: string,
-  method: "GET" | "POST" | "PATCH" | "PUT",
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<RouteAnswer> {
@@ -141,15 +144,20 @@ export function register(app: Express, deps: Deps): void {
       const ctx: ToolContext = {
         dispatch: (method, path, body) => asHolder(port(), session, forwardedFor, method, path, body),
         mintConfirm: (tool, echo) => mintConfirmToken(confirmSecret, { action: `mcp:${tool}`, userId, echo }),
+        holderId: userId,
+        adminPaths: async () => effectiveAgentAdminPaths(await readConfigDocument(getPool(), AGENT_ADMIN_PATHS_DOC)),
+        recordAction: async (a) => {
+          await recordAgentAction(getPool(), { ...a, tokenId: row.id, actorUserId: userId });
+        },
         verifyConfirm: (tool, token, echo) => {
           const check = verifyConfirmToken(confirmSecret, token, { action: `mcp:${tool}`, userId, echo });
           if (check.ok) {
             if (!spendBook.spend(String(token))) return { ok: false, reason: "spent", sentence: CONFIRM_REASON_SENTENCE.spent };
             return { ok: true };
           }
-          // The echo is rebuilt from fresh state, so a mismatch means the task moved since the first call.
+          // The echo is rebuilt from the arguments and fresh state, so a mismatch means something moved since the first call.
           const sentence = check.reason === "echo_mismatch"
-            ? "The task changed since the first call, or the arguments differ. Call again without confirmToken to see it as it is now. Nothing was written"
+            ? "What this would write changed since the first call, or the arguments differ. Call again without confirmToken to see it as it is now. Nothing was written"
             : CONFIRM_REASON_SENTENCE[check.reason];
           return { ok: false, reason: check.reason, sentence };
         },

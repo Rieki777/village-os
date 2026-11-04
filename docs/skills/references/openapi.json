@@ -189,7 +189,7 @@
     },
     "/api/agent/v1/mcp": {
       "post": {
-        "summary": "The village connector: a remote MCP server (Streamable HTTP, stateless, JSON answers). Send one JSON-RPC 2.0 message per request: initialize, tools/list, tools/call, ping. tools/list shows only the tools your token's scopes open: moon.read gives get_my_moon, get_my_seats and get_season; tasks.write gives mark_my_task, which answers an echo and a confirmToken first and writes only when called again with the same arguments and the token. No tool sends, approves, issues or pays anything, and no result carries an amount, a pay route, a legal name or an address. Skill: village-moon.",
+        "summary": "The village connector: a remote MCP server (Streamable HTTP, stateless, JSON answers). Send one JSON-RPC 2.0 message per request: initialize, tools/list, tools/call, ping. tools/list shows only the tools your token's scopes open: moon.read gives get_my_moon, get_my_seats and get_season; tasks.write gives mark_my_task, which answers an echo and a confirmToken first and writes only when called again with the same arguments and the token. admin, for an admin's token only, gives admin_request: one allow-listed admin path as the holder, writes confirmed the same way. No tool sends, approves, issues or pays anything, and no result carries an amount, a pay route, a legal name or an address. Skill: village-moon.",
         "security": [{ "agentToken": [] }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["jsonrpc", "method"], "properties": { "jsonrpc": { "const": "2.0" }, "id": { "type": ["string", "integer"] }, "method": { "type": "string" }, "params": { "type": "object" } } } } } },
         "responses": {

@@ -37,6 +37,7 @@ The village connector is a remote MCP server at `VILLAGE_ORIGIN/api/agent/v1/mcp
 | `get_my_seats` | `moon.read` | The member's own role card: the roles they hold, each role's purpose and accountabilities. |
 | `get_season` | `moon.read` | The village's running season and its goals. |
 | `mark_my_task` | `tasks.write` | Press Done, remove (Let go, with a reason) or Undo on one of the member's own board tasks. |
+| `admin_request` | `admin` | For an admin's agent only: call one admin path the village has opened to agents, as the admin, with their own admin checks. The list is the village's (Admin, agent paths); erasure, powers, money, secrets and the agent accounts are never on it. |
 
 ## Pressing the board: two calls
 
@@ -46,6 +47,10 @@ The village connector is a remote MCP server at `VILLAGE_ORIGIN/api/agent/v1/mcp
 The second call reads the task again. If it moved in between (pressed on the web, closed by the Sera sync), the token no longer matches and nothing is written: call again without the token and show the member the task as it is now. A token works once and for ten minutes: send the same one again and it is refused, even when nothing moved.
 
 Done tells Sera exactly as a tap on the board does. Do not also close the task in Sera yourself.
+
+## Admin paths: the same two calls
+
+`admin_request` takes `method`, `path` and, for a write, `body`. A GET answers at once. A write answers first with the echo and a `confirmToken`, and writes only when called again with the same arguments and the token. A write the village marked for a person answers `person_confirms`: tell a person what you would change, and they make it in the app. Every call is recorded with the token, the method, the path and what happened.
 
 ## When something is refused
 

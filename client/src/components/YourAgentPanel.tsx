@@ -52,6 +52,7 @@ const SCOPE_WORDS: Record<string, string> = {
   "map.draft": "read the masterplan and draft the village map for you to review and publish",
   "moon.read": "read your moon, your roles, the season and your task board",
   "tasks.write": "mark your own board tasks Done, Let go or Undo, after your yes",
+  admin: "call the admin paths the village has opened to agents, as you, with your own admin checks (admins only)",
 };
 
 const TIER_WORDS: Record<Profile["aboutTier"], string> = {

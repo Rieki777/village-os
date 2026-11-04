@@ -59,8 +59,8 @@ let db: TestDb;
 let pool: mysql.Pool;
 let uploadsDir: string;
 
-const NONE: AgentSweepCounts = { deliveries: 0, inboxes: 0, keys: 0, drafts: 0, tokens: 0, profiles: 0, statements: 0 };
-const ONE_OF_EACH: AgentSweepCounts = { deliveries: 1, inboxes: 1, keys: 1, drafts: 1, tokens: 1, profiles: 1, statements: 1 };
+const NONE: AgentSweepCounts = { deliveries: 0, inboxes: 0, keys: 0, drafts: 0, tokens: 0, profiles: 0, statements: 0, oauthCodes: 0, actions: 0 };
+const ONE_OF_EACH: AgentSweepCounts = { deliveries: 1, inboxes: 1, keys: 1, drafts: 1, tokens: 1, profiles: 1, statements: 1, oauthCodes: 1, actions: 1 };
 
 /**
  * The real users repository, so the tombstone is a real write; one seam for
@@ -161,6 +161,14 @@ async function writeAgentInTheWindow(id: string): Promise<void> {
     "member",
     "You garden on Tuesdays.",
   ]);
+  await q(
+    "INSERT INTO `agent_oauth_codes` (`code_hash`, `client_id`, `user_id`, `scopes_json`, `code_challenge`, `redirect_uri`) VALUES (?,?,?,?,?,?)",
+    [`${"c".repeat(56)}${id.slice(-8).padStart(8, "0")}`, "client-1", id, JSON.stringify(["moon.read"]), "challenge", "https://example.test/cb"],
+  );
+  await q(
+    "INSERT INTO `agent_actions` (`id`, `token_id`, `actor_user_id`, `scope`, `tool`, `echo_hash`) VALUES (?,?,?,?,?,?)",
+    [`act-${id}`, `tok-${id}`, id, "admin", "admin_request", "e".repeat(64)],
+  );
 }
 
 describe.skipIf(!configured)("a member's agent written while an erasure is stopped part way", () => {

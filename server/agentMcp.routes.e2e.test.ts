@@ -211,6 +211,92 @@ describe.skipIf(!DB_CONFIGURED)("the village connector", () => {
   });
 });
 
+describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
+  let agent = { token: "", id: "" };
+  let agentVat = "";
+
+  it("is an admin account marked as an agent's, which a person marks", async () => {
+    agent = await register("Claude (Operations agent)", "ops-agent");
+    expect((await call("PUT", `/api/admin/users/${agent.id}/role`, { role: "admin" })).status).toBe(200);
+    const marked = await call("PUT", `/api/admin/players/${agent.id}/agent`, { isAgent: true });
+    expect(marked.status, marked.text).toBe(200);
+    const login = await call("POST", "/api/auth/login", { email: `ops-agent-${PORT}@example.test`, password: "AgentTest123!" }, "");
+    expect(login.status, login.text).toBe(200);
+    agent.token = String(login.json?.token ?? "");
+    const listed = await call("GET", "/api/admin/agent-accounts");
+    expect(listed.json.agents).toContain(agent.id);
+  });
+
+  it("gives the admin scope only to an admin", async () => {
+    const refused = await call("POST", "/api/agent/tokens", { name: "nope", scopes: ["admin"] }, ana.token);
+    expect(refused.status).toBe(400);
+    agentVat = await mint(agent.token, ["admin"]);
+  });
+
+  it("holds no role (check 54)", async () => {
+    const role = await call("POST", "/api/admin/org/roles", { name: "Treasury keeper" });
+    expect(role.status, role.text).toBe(200);
+    const roleId = String(role.json?.id ?? role.json?.role?.id ?? "");
+    expect(roleId).toBeTruthy();
+    const termEndsOn = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const seat = await call("POST", `/api/admin/org/roles/${roleId}/holders`, { userId: agent.id, termEndsOn });
+    expect(seat.status, seat.text).toBeGreaterThanOrEqual(400);
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_role_assignments WHERE user_id = ?", [agent.id]);
+    expect(Number(rows[0].n)).toBe(0);
+    // A person can still be seated there, so the refusal is the agent's alone.
+    const person = await call("POST", `/api/admin/org/roles/${roleId}/holders`, { userId: ben.id, termEndsOn });
+    expect(person.status, person.text).toBe(200);
+  });
+
+  it("is an admin that the money and approval keys still refuse, through its own session", async () => {
+    // The person admin reads the treasurer's list; the agent admin, with its own session, does not.
+    const person = await call("GET", "/api/cash-owed/queue");
+    expect(person.status, person.text).toBe(200);
+    const asAgent = await call("GET", "/api/cash-owed/queue", undefined, agent.token);
+    expect(asAgent.status, asAgent.text).toBeGreaterThanOrEqual(401);
+    expect(asAgent.status).toBeLessThan(500);
+  });
+
+  it("calls an allowed admin path as itself, writing only on the confirm (check 52)", async () => {
+    const read = await tool(agentVat, "admin_request", { method: "GET", path: "/api/admin/member-tasks/access" });
+    expect(read.json.result.isError, read.text).toBe(false);
+
+    const args = { method: "PUT", path: `/api/admin/member-tasks/access/${ben.id}`, body: { on: false } };
+    const asked = await tool(agentVat, "admin_request", args);
+    expect(asked.json.result.structuredContent.confirmRequired).toBe(true);
+    const still = await call("GET", "/api/member-tasks/me", undefined, ben.token);
+    expect(still.status).toBe(200);
+    const done = await tool(agentVat, "admin_request", { ...args, confirmToken: asked.json.result.structuredContent.confirmToken });
+    expect(done.json.result.isError, done.text).toBe(false);
+    // The same token again writes nothing, though nothing about the echo moved.
+    const replay = await tool(agentVat, "admin_request", { ...args, confirmToken: asked.json.result.structuredContent.confirmToken });
+    expect(replay.json.result.isError, replay.text).toBe(true);
+    expect(replay.json.result.structuredContent.detail.reason).toBe("spent");
+    const off = await call("GET", "/api/member-tasks/me", undefined, ben.token);
+    expect(off.json?.on === false || off.status === 403, off.text).toBe(true);
+
+    // Three calls inside one second share a created_at, so compare the states as a set of counts.
+    const [rows] = await pool.query<any[]>("SELECT state FROM agent_actions WHERE actor_user_id = ?", [agent.id]);
+    expect(rows.map((r: any) => r.state).sort()).toEqual(["asked", "done", "done", "refused"]);
+  });
+
+  it("refuses what is always a person's, for the agent and through the agent's own session (check 53)", async () => {
+    const erase = await tool(agentVat, "admin_request", { method: "DELETE", path: `/api/admin/players/${ana.id}` });
+    expect(erase.json.result.structuredContent.detail.code).toBe("always_a_person");
+    expect((await pool.query<any[]>("SELECT COUNT(*) AS n FROM users WHERE id = ? AND email LIKE 'ana-%'", [ana.id]))[0][0].n).toBe(1);
+    const widen = await tool(agentVat, "admin_request", { method: "PUT", path: "/api/admin/agent-admin-paths", body: { paths: [] } });
+    expect(widen.json.result.structuredContent.detail.code).toBe("always_a_person");
+    const ownFlag = await tool(agentVat, "admin_request", { method: "PUT", path: `/api/admin/users/${agent.id}/role`, body: { role: "member" } });
+    expect(ownFlag.json.result.isError).toBe(true);
+    // With its own session, the agent account still may not change the list or mark accounts.
+    const bySession = await call("PUT", "/api/admin/agent-admin-paths", { document: { paths: [] } }, agent.token);
+    expect(bySession.status).toBe(403);
+    // And a person may not save a list that names an always-a-person path.
+    const saved = await call("PUT", "/api/admin/agent-admin-paths", { document: { paths: [{ method: "DELETE", path: "/api/admin/players/:id", confirm: "agent", label: "x" }] } });
+    expect(saved.status).toBe(400);
+  });
+});
+
 describe.skipIf(!DB_CONFIGURED)("the connector's transport guards", () => {
   const raw = (body: string, headers: Record<string, string> = {}) =>
     fetch(`${BASE}/api/agent/v1/mcp`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body }); // module-review-ok: the test client dialling the built server on localhost
