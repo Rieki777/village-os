@@ -53,7 +53,7 @@ describe("the quick path", () => {
   it("Mia writes the three answers and they are saved as she typed them", async () => {
     draw({ roles: [] }, "?path=quick");
     expect(await screen.findByText(RP_WORDS.welcomeLede)).toBeTruthy();
-    expect(screen.getByText(/Your guide here is the village's operations role/)).toBeTruthy();
+    expect(await screen.findByText(/Your guide here is .*guide\. Anything left open, you fill in together with the village's operations role/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: RP_WORDS.startQuestions }));
     const love = "I love the bread,  the early oven";
     fireEvent.change(screen.getByLabelText(RP_WORDS.love), { target: { value: love } });

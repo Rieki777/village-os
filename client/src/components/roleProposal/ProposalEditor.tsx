@@ -484,7 +484,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
               setSettings(next);
               save.touch("settings");
             }}
-            partner={opsPartner(operationsRoleName(org && org !== "failed" ? org.roles : []))}
+            partner={org === null ? null : opsPartner(operationsRoleName(org !== "failed" ? org.roles : []))}
             onOpenWords={() => void go("words")}
             onHours={(roleId, text) => type(roleId, "timeCommitment", text)}
           />
