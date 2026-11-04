@@ -39,8 +39,8 @@ describe("the metadata", () => {
       token_endpoint_auth_methods_supported: ["none"],
       grant_types_supported: ["authorization_code"],
     });
-    expect(as.scopes_supported).not.toContain("admin");
-    expect(as.scopes_supported).not.toContain("sera.undoable");
+    // Only scopes that open a connector tool; the two extras are offered only to the accounts allowed them.
+    expect(as.scopes_supported).toEqual(["moon.read", "moon.write", "tasks.write", "moon.review", "admin", "sera.undoable"]);
     expect(wwwAuthenticate(ORIGIN)).toBe(`Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource"`);
   });
 });
@@ -60,13 +60,13 @@ describe("redirect URIs", () => {
 });
 
 describe("registration", () => {
-  it("registers a public client and refuses a confidential one", () => {
+  it("registers every client as a public one, whatever auth method it asked for", () => {
     expect(parseRegistration({ redirect_uris: ["https://claude.ai/api/mcp/auth_callback"], client_name: "Claude", token_endpoint_auth_method: "none" })).toEqual({
       ok: true,
       name: "Claude",
       redirectUris: ["https://claude.ai/api/mcp/auth_callback"],
     });
-    expect(parseRegistration({ redirect_uris: ["https://a.example/cb"], token_endpoint_auth_method: "client_secret_basic" }).ok).toBe(false);
+    expect(parseRegistration({ redirect_uris: ["https://a.example/cb"], token_endpoint_auth_method: "client_secret_basic" }).ok).toBe(true);
     expect(parseRegistration({ redirect_uris: [] }).ok).toBe(false);
     expect(parseRegistration({ redirect_uris: Array(6).fill("https://a.example/cb") }).ok).toBe(false);
     expect(parseRegistration({ redirect_uris: ["http://evil.example/cb"] }).ok).toBe(false);
@@ -96,7 +96,16 @@ describe("PKCE (check 33)", () => {
 describe("scopes", () => {
   it("keeps the connector's list and drops the rest", () => {
     expect(chosenScopes(["moon.read", "admin", "sera.undoable", "tasks.write", "moon.read"])).toEqual(["moon.read", "tasks.write"]);
-    expect(chosenScopes("moon.read me.read")).toEqual(["moon.read", "me.read"]);
+    // A scope that opens no connector tool is not offered at all.
+    expect(chosenScopes("moon.read me.read calendar.read directory.read")).toEqual(["moon.read"]);
     expect(chosenScopes(null)).toEqual([]);
+  });
+
+  it("offers an extra scope only where the member's own rules allow it", () => {
+    expect(chosenScopes(["moon.read", "admin"], ["admin"])).toEqual(["moon.read", "admin"]);
+    expect(chosenScopes(["sera.undoable"], ["admin"])).toEqual([]);
+    expect(chosenScopes(["sera.undoable"], ["sera.undoable"])).toEqual(["sera.undoable"]);
+    // An extra that is not on the extras list never gets through, whoever passes it.
+    expect(chosenScopes(["rsvp.write"], ["rsvp.write" as any])).toEqual([]);
   });
 });

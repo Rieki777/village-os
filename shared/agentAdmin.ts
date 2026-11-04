@@ -81,7 +81,7 @@ export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; test: 
   {
     key: "members",
     words: "Letting a member in, a member leaving, and removing one are always a person's act.",
-    test: (_m, p) => /join-?requests?|\/exits?(\/|$)|hard-?delete|invit/i.test(p),
+    test: (_m, p) => /join-?requests?|\/exits?(\/|$|-)|hard-?delete|invit/i.test(p),
   },
   {
     key: "settings",
@@ -125,14 +125,14 @@ function patternSegments(pattern: string): string[] | null {
 /**
  * A pattern so open it stands for many routes: a `:name` in the area or the
  * resource (the first two parts after /api/admin, or the first after /api),
- * or more `:name` parts than named ones. "Always a person" is tested on the
+ * or as many `:name` parts as named ones. "Always a person" is tested on the
  * concrete path at every call as well, but a list should say what it opens.
  */
 function tooOpen(segs: readonly string[]): boolean {
   const fixedHead = segs[1] === "admin" ? 3 : 2;
   if (segs.slice(0, fixedHead).some((p) => p.startsWith(":"))) return true;
   const params = segs.filter((p) => p.startsWith(":")).length;
-  return params > segs.length - params;
+  return params * 2 >= segs.length;
 }
 
 /** Whether a concrete path matches an allow-list pattern. */

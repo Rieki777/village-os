@@ -81,6 +81,21 @@ describe("always a person (check 53)", () => {
     ["agents", "PUT", "/api/admin/players/u-9/agent"],
     ["agents", "PUT", "/api/admin/agent-admin-paths"],
     ["agents", "GET", "/api/admin/agent-actions"],
+    // Widened after the adversarial reviews: each a real route the first list let through.
+    ["money", "POST", "/api/admin/mint-requests/m-1/approve"],
+    ["money", "POST", "/api/admin/products/purchases/p-1/confirm"],
+    ["money", "POST", "/api/admin/resources/budgets/b-2/spend"],
+    ["money", "PATCH", "/api/admin/economy/rules/e-1"],
+    ["powers", "POST", "/api/admin/org/drafts/d-1/publish"],
+    ["powers", "PUT", "/api/admin/governance/rules"],
+    ["members", "POST", "/api/admin/exits/x-1/resolve"],
+    ["members", "PUT", "/api/admin/exit-policy"],
+    ["members", "POST", "/api/admin/join-requests/j-1/approve"],
+    ["settings", "PUT", "/api/admin/email-config"],
+    ["settings", "PUT", "/api/admin/settings"],
+    ["settings", "PUT", "/api/admin/variables/membership.invite_only"],
+    ["settings", "PUT", "/api/admin/modules/m-2/config"],
+    ["settings", "POST", "/api/admin/comms/run"],
   ];
 
   it("refuses each item through the shipped list", () => {
@@ -111,6 +126,19 @@ describe("always a person (check 53)", () => {
 });
 
 describe("paths", () => {
+  it("refuses a query string or a fragment, and never trims one off", () => {
+    for (const p of ["/api/admin/member-tasks/access?userId=u-9", "/api/admin/member-tasks/access#x", "/api/moon-review/rhythm?cycle=2026-10"]) {
+      expect(adminRequestDecision("GET", p, SHIPPED, "agent-1"), p).toMatchObject({ ok: false, code: "bad_path" });
+    }
+  });
+
+  it("refuses to save a pattern that stands for many routes", () => {
+    for (const path of ["/api/admin/:area", "/api/admin/:area/:id", "/api/:anything/rhythm", "/api/admin/member-tasks/:a/:b/:c"]) {
+      expect(parseAgentAdminPaths({ paths: [{ method: "GET", path, confirm: "person", label: "x" }] }).ok, path).toBe(false);
+    }
+    expect(parseAgentAdminPaths({ paths: SHIPPED.paths }).ok).toBe(true);
+  });
+
   it("refuses anything that is not a plain /api/ path", () => {
     for (const p of ["/api/admin/../agent/tokens", "/api/admin//member-tasks/access", "/health", "api/admin/member-tasks/access", "/api/admin/member-tasks/access/%2e%2e"]) {
       expect(adminRequestDecision("GET", p, SHIPPED, "agent-1"), p).toMatchObject({ ok: false });

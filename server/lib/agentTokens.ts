@@ -225,12 +225,8 @@ export async function mintCapProblem(pool: Pool, userId: string): Promise<string
 
 /** Revoke a member's live tokens with exactly this name. A connector signing in again replaces its own token. */
 export async function revokeTokensNamed(pool: Pool, userId: string, name: string): Promise<number> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT id FROM agent_tokens WHERE user_id = ? AND name = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()",
-    [userId, name],
-  );
   let n = 0;
-  for (const r of rows) if (await revokeToken(pool, userId, String(r.id))) n++;
+  for (const t of await listTokens(pool, userId)) if (t.live && t.name === name && (await revokeToken(pool, userId, t.id))) n++;
   return n;
 }
 

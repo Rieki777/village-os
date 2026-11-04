@@ -154,6 +154,7 @@ export function register(app: Express, deps: Deps): void {
       if (!resolved) return;
       const { row, user } = resolved;
       if (toolsFor(row.scopes).length === 0) {
+        res.setHeader("WWW-Authenticate", `${meta}, error="insufficient_scope"`);
         return res.status(403).json({
           error: "agent_scope_missing",
           message: `This token opens no connector tool. Mint one with ${Array.from(new Set(MCP_TOOLS.map((t) => t.scope))).join(" or ")}.`,

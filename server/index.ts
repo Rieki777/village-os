@@ -3047,7 +3047,7 @@ const AGENT_NEVER_KEYS = ["cash.pay", "moon.approve", "moon.approve_alone", "moo
 
 async function capabilityCtx(user: any) {
   // An agent account holds no power from a role or a badge, whichever writer
-  // put the row there (0319): the context the one gate reads carries none.
+  // put the row there (0321): the context the one gate reads carries none.
   const agent = await isAgentAccount(getPool(), String(user.id));
   // S36: badge grants and denies join the one gate — but only while the
   // badges module is on. Off = zero queries, zero effect: the gate is
