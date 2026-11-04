@@ -46,6 +46,7 @@ import {
   type ShareOut,
 } from "./proposalApi";
 import { RP_WORDS, STEP_TITLES, STEPS, type StepKey } from "./proposalWords";
+import { resumeAt } from "@shared/roleProposalProgress";
 import { changedSections, newWordsToSave, roleProblems, shownText, stateFrom, wordsToSave } from "./roleWords";
 import { FOCUS, H2, LEDE, PRIMARY, SaveLine, SECONDARY } from "./parts";
 import { useAutosave, type Group, type SaveResult } from "./useAutosave";
@@ -80,6 +81,19 @@ const seasonFrom = (p: ProposalOut): SeasonState => ({
 const reviewsFrom = (p: ProposalOut): Record<string, string> =>
   Object.fromEntries([...p.roles.map((r) => [r.roleId, r.reviewOn ?? ""]), ...p.newRoles.map((r) => [r.id, r.reviewOn ?? ""])]);
 
+function fromDraft(p: ProposalOut): { path: ProposalPath; step: StepKey; front: FrontScreen } | null {
+  if (p.status !== "draft") return null;
+  const at = resumeAt({
+    roleCount: p.roles.length + p.newRoles.length,
+    love: p.season?.ownWords?.love,
+    offer: p.season?.ownWords?.offer,
+    why: p.season?.ownWords?.why,
+    aim: p.season?.aim,
+    goalCount: p.season?.seasonalGoals?.length ?? 0,
+  });
+  return at ? { path: pathFromUrl(), step: at.step, front: at.front } : null;
+}
+
 function stepFromUrl(): StepKey {
   if (typeof window === "undefined") return "roles";
   const s = new URLSearchParams(window.location.search).get("step");
@@ -104,7 +118,8 @@ export function ProposalPreview({ proposal }: { proposal: ProposalOut }) {
 }
 
 export default function ProposalEditor({ initial, me }: { initial: ProposalOut; me: string }) {
-  const resumed = !urlNamesPlace() ? readPlace(initial.id) : null;
+  // This tab's place first; failing that, the first unwritten part of the saved draft (a new tab agrees).
+  const resumed = !urlNamesPlace() ? readPlace(initial.id) ?? fromDraft(initial) : null;
   const [proposal, setProposal] = useState(initial);
   const [step, setStep] = useState<StepKey>(resumed?.step ?? stepFromUrl);
   const submitOpen = useRef<() => void>(() => {});
@@ -262,9 +277,15 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
     writePlace(proposal.id, { path, step, front });
   }, [proposal.id, proposal.status, path, step, front]);
 
+  const [goFailed, setGoFailed] = useState<StepKey | null>(null);
   const go = async (next: StepKey) => {
     const ok = await save.flush();
-    if (!ok) return;
+    if (!ok) {
+      // Never a silent click: say it did not save, and offer the same move again.
+      setGoFailed(next);
+      return;
+    }
+    setGoFailed(null);
     const forward = STEPS.indexOf(next) > STEPS.indexOf(step);
     setDone(forward && step !== "share" ? stepDone(step) : null);
     setStep(next);
@@ -276,9 +297,14 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
     }
   };
 
+  const [limitNote, setLimitNote] = useState<string | null>(null);
   const toggle = (roleId: string) => {
     const on = picked.includes(roleId);
-    if (!on && picked.length + newRoles.length >= proposal.limits.maxRoles) return;
+    if (!on && picked.length + newRoles.length >= proposal.limits.maxRoles) {
+      setLimitNote(PROPOSAL_WORDS.tooManyRoles);
+      return;
+    }
+    setLimitNote(null);
     setPicked(on ? picked.filter((r) => r !== roleId) : [...picked, roleId]);
     save.touch("roles");
   };
@@ -404,6 +430,19 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
 
       {front === "steps" && (
       <>
+      {goFailed && (
+        <div role="alert" className="grid gap-2 rounded-lg border border-coral p-3 text-sm text-foreground" data-go-failed="">
+          <p>{RP_WORDS.goFailed}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={`${PRIMARY} ${FOCUS}`} onClick={() => void go(goFailed)}>{RP_WORDS.tryAgain}</button>
+            <button type="button" className={`${SECONDARY} ${FOCUS}`} onClick={() => setGoFailed(null)}>{RP_WORDS.stayHere}</button>
+          </div>
+        </div>
+      )}
+      {limitNote && <p role="alert" className="text-sm font-medium text-foreground">{limitNote}</p>}
+      <button type="button" className={`${SECONDARY} ${FOCUS} justify-self-start`} onClick={() => { setDone(null); setFront("yours"); }}>
+        {RP_WORDS.editYourWords}
+      </button>
       <nav aria-label={RP_WORDS.stepOf(index + 1, STEPS.length)}>
         <ol className="flex flex-wrap gap-2" data-step-indicator="">
           {STEPS.map((s, i) => (
