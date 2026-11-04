@@ -56,6 +56,15 @@ interface SentEntry {
   cycleId?: string | null;
 }
 
+/** The recipient a link asked for, as typed: `/gratitude?to=@handle`. Empty when none. */
+function prefilledTo(): string {
+  try {
+    return (new URLSearchParams(window.location.search).get("to") ?? "").trim().slice(0, 80);
+  } catch {
+    return "";
+  }
+}
+
 export default function GratitudeWall() {
   const { user } = useAuth();
   const [wall, setWall] = useState<WallEntry[]>([]);
@@ -78,7 +87,8 @@ export default function GratitudeWall() {
   // anyone who still knows one. The server tells the two apart and looks the
   // handle up; see `recipientFor` in server/index.ts for why a handle is the
   // one of the two a member can actually obtain.
-  const [form, setForm] = useState({ to: "", amount: 10, message: "" });
+  // `?to=@handle` fills the field (My moon's Send gratitude). Nothing sends until the member does.
+  const [form, setForm] = useState(() => ({ to: prefilledTo(), amount: 10, message: "" }));
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   // Bumped after a send so the chips re-read and the person just thanked leaves.

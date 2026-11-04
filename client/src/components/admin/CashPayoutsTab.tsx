@@ -35,6 +35,8 @@ import {
   type CashQueueEntry,
 } from "@shared/cashOwed";
 
+/** The moon-review Invoices view (decision 16), its own chunk. It draws a refusal's sentence when the module is off. */
+const InvoicesDesk = lazy(() => import("@/components/myMoon/InvoicesDesk"));
 /** The moon review's village settings (decision 22), its own chunk: the desk's first page carries none of it. */
 const MoonReviewSettingsPanel = lazy(() => import("./moonReview/MoonReviewSettingsPanel"));
 
@@ -276,6 +278,10 @@ export default function CashPayoutsTab({ password, asPage = false }: {
           Export CSV
         </button>
       </div>
+
+      <Suspense fallback={null}>
+        <InvoicesDesk password={password} />
+      </Suspense>
 
       <section aria-label="Totals" className="rounded-xl border border-border bg-white p-4">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
