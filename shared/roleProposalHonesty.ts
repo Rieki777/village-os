@@ -104,3 +104,21 @@ export const MEMBER_LATER_LINE = "Open for now. You'll write this once you hold 
 
 /** Rows that only exist once a role is adopted (tensions, signs, tasks). */
 export const AFTER_ADOPT_LINE = "Open for now. You'll add these once the role is adopted.";
+
+/**
+ * A proposal card drawn on the server may only know its own roles, so its open
+ * rows can name the fallback. The editor knows the village chart (the same
+ * source the terms step reads), so it swaps the fallback for the real name.
+ * Only the exact fallback phrase is replaced. PURE.
+ */
+export function withPartnerName<T>(value: T, partner: string | null | undefined): T {
+  const name = String(partner ?? "").trim();
+  if (!name || name === OPS_FALLBACK) return value;
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") return v.includes(OPS_FALLBACK) ? v.split(OPS_FALLBACK).join(name) : v;
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, walk(x)]));
+    return v;
+  };
+  return walk(value) as T;
+}
