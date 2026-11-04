@@ -13,7 +13,7 @@
  * to say about why.
  */
 import Layout from "@/components/Layout";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useRoute } from "wouter";
 import { authToken } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
@@ -22,6 +22,8 @@ import VouchPanel from "@/components/profile/VouchPanel";
 import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
 import AlignedSection from "@/components/profile/AlignedSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
+/** This moon: their sent recap, member-visible items only. Its own chunk; draws nothing while the module is off. */
+const MemberMoonBlock = lazy(() => import("@/components/myMoon/MemberMoonBlock"));
 import { PersonGeneKeysCard, PersonGeneKeysSeal } from "@/components/geneKeys/ProfileGeneKeys";
 import { moonsOnLandPhrase } from "@shared/villageMoon";
 import BadgeFlower, { type FlowerBadge } from "@/components/badges/BadgeFlower";
@@ -274,6 +276,11 @@ export default function PublicProfile() {
         ) : null}
 
         {sheet.handle ? <PlayerRoleCard handle={sheet.handle} className="mt-10" /> : null}
+        {sheet.handle && signedIn ? (
+          <Suspense fallback={null}>
+            <MemberMoonBlock handle={sheet.handle} />
+          </Suspense>
+        ) : null}
         {sheet.handle && signedIn ? (
           <div className="mt-10">
             <PersonGeneKeysCard handle={sheet.handle} firstName={sheet.name.split(" ")[0]} />
