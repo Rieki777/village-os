@@ -22,6 +22,9 @@ import * as rooms from "../repos/liveSessions";
 import {
   CARRIES,
   DEFAULT_TEMPLATES,
+  MOON_TEMPLATE,
+  chooseMoonShare,
+  cleanMoonShare,
   TEMPLATE_LIMITS,
   TEMPLATE_REFUSALS as R,
   cleanStickMove,
@@ -94,7 +97,10 @@ export function mapTemplate(r: RowDataPacket | Record<string, unknown>): Session
  * feedback. Each seed's "feeds from" is linked by key after all are written.
  */
 export async function ensureSeeded(pool: Pool, now = new Date()): Promise<void> {
-  if ((await repo.seededCount(pool)) >= DEFAULT_TEMPLATES.length) return;
+  // Counts the three default keys only, so a village whose End of moon seed
+  // (below) landed first still gets all three.
+  const defaults = new Set(DEFAULT_TEMPLATES.map((s) => s.seedKey));
+  if ((await repo.seedIdRows(pool)).filter((r) => defaults.has(String(r.seed_key))).length >= DEFAULT_TEMPLATES.length) return;
   for (const s of DEFAULT_TEMPLATES) {
     await repo.insertSeed(pool, {
       seedKey: s.seedKey,
@@ -113,6 +119,30 @@ export async function ensureSeeded(pool: Pool, now = new Date()): Promise<void> 
     const from = s.feedsFrom ? ids.get(s.feedsFrom) : undefined;
     if (id != null && from != null) await repo.linkSeed(pool, id, from);
   }
+}
+
+/**
+ * Write the End of moon template once, and only while the moon-review module
+ * is on (`moonOn`, the route's answer from the module registry). Off, nothing
+ * is written, so a village with the module off never sees sections that do
+ * nothing. Once written it is an ordinary row: turning the module off later
+ * leaves it, and an edited or archived one is never written again.
+ * True when this call wrote it.
+ */
+export async function ensureMoonSeeded(pool: Pool, moonOn: boolean, now = new Date()): Promise<boolean> {
+  if (!moonOn) return false;
+  if ((await repo.seedIdRows(pool)).some((r) => String(r.seed_key) === MOON_TEMPLATE.seedKey)) return false;
+  await repo.insertSeed(pool, {
+    seedKey: MOON_TEMPLATE.seedKey,
+    name: MOON_TEMPLATE.name,
+    category: MOON_TEMPLATE.category,
+    summary: MOON_TEMPLATE.summary,
+    durationMin: MOON_TEMPLATE.durationMin,
+    flow: JSON.stringify(MOON_TEMPLATE.flow),
+    position: MOON_TEMPLATE.position,
+    now,
+  });
+  return true;
 }
 
 export async function listTemplates(pool: Pool | PoolConnection): Promise<SessionTemplate[]> {
@@ -387,12 +417,15 @@ export async function roomView(
     joined: f.joined,
     open: f.s.status === "open",
     here: hereNos.map((no) => ({ no, name: nameOf(no) })),
-    stick: stick.order.length ? { people: stick.order.map((no) => ({ no, name: nameOf(no) })), holder, next, rounds: stick.rounds } : null,
+    stick: stick.order.length
+      ? { people: stick.order.map((no) => ({ no, name: nameOf(no) })), holder, next, rounds: stick.rounds, shows: stick.shows ?? [] }
+      : null,
     priorities: f.template ? words((await repo.priorityRows(pool, sessionId)).map(mapPriority)) : [],
     review: readBack(review),
     carried: readBack(carried),
     shares: words(shares),
     season: f.template && season && season.goals.length ? season : null,
+    viewerNo: who.no,
   };
 }
 
@@ -430,6 +463,25 @@ export async function stickAct(pool: Pool, sessionId: number, who: RoomAsker, ra
     }
     const next = moveStick(readStick(f.stickRaw), m.value);
     await repo.writeStick(conn, sessionId, next.order.length ? JSON.stringify(next) : null, now);
+    return done(null);
+  });
+}
+
+/**
+ * The stick holder chooses Show my moon or Speak only in an `Our moons`
+ * section. The holder chooses for themselves; a host may set it for them
+ * when the holder asks out loud, the same hosts who move the stick.
+ */
+export async function moonShareAct(pool: Pool, sessionId: number, who: RoomAsker, raw: unknown, now = new Date()): Promise<Outcome<null>> {
+  const c = cleanMoonShare(raw);
+  if (!c.ok) return refuse(c.status, c.error);
+  return inTemplatedRoom(pool, sessionId, who, false, async (conn, f) => {
+    if (!flowHas(f.template?.flow ?? [], "moon_recaps")) return refuse(400, R.moonShareNoSection);
+    const stick = readStick(f.stickRaw);
+    const { holder } = stickHolders(stick);
+    if (holder == null) return refuse(409, R.moonShareNoStick);
+    if (holder !== f.no && !f.hosts) return refuse(403, R.moonShareHolder);
+    await repo.writeStick(conn, sessionId, JSON.stringify(chooseMoonShare(stick, c.value.show)), now);
     return done(null);
   });
 }

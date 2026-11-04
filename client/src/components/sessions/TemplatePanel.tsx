@@ -22,6 +22,14 @@
  *   - A `wins` section: the wins the room shares, each naming the season
  *     priority it serves.
  *
+ *   - The End of moon sections (MoonSections.tsx), drawn only while the
+ *     moon-review module is on: `moon_recaps` (Our moons) draws the talking
+ *     stick's controls itself, the holder's choice of Show my moon or Speak
+ *     only, their recap when shown, and who is ready to share; `moon_goals`
+ *     the holder's goals with how each landed; `moon_invoices` this viewer's
+ *     own row and how many have sent. None of them draws a number about a
+ *     person's moon (shared/moonRoom.ts).
+ *
  * The section's own title heads each part, so "Last Monday's priorities" is
  * the template's words, never this file's.
  *
@@ -32,6 +40,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Feather } from "lucide-react";
 import {
+  MOON_ROOM_COPY,
   PRIORITY_OUTCOMES,
   PRIORITY_OUTCOME_LABEL,
   SEASON_COPY,
@@ -41,6 +50,8 @@ import {
   TEMPLATES_ROOM_POLL_MS,
   TEMPLATE_COPY,
   TEMPLATE_LIMITS,
+  isMoonKind,
+  sectionMinutesFor,
   sectionOf,
   templateRoomApi,
   type SeriesReadBack,
@@ -48,7 +59,10 @@ import {
   type TemplateRoomView,
 } from "@shared/sessionTemplates";
 import type { SessionItem } from "@shared/sessions";
+import { moonRoomPanel } from "@shared/moonRoom";
 import { gameFetch } from "@/lib/gameApi";
+import { useMoonReviewOn } from "./useMoonReviewOn";
+import { MoonGoalsBody, MoonInvoicesBody, MoonRecapBody, MoonShareChoice, useMoonRoom } from "./MoonSections";
 import { ServesChip, ServesPicker } from "./ServesPicker";
 import { BTN_FORWARD, BTN_QUIET, BTN_SECONDARY, CHIP, EYEBROW, HINT, INPUT, LABEL_CAPS, PANEL, SOFT } from "./roomUi";
 
@@ -66,6 +80,90 @@ async function sentence(res: Response): Promise<string> {
   }
 }
 
+/** The talking stick: who holds it, who is next, the order, and the hosts' moves. */
+function StickControls({
+  view,
+  canHost,
+  busy,
+  write,
+}: {
+  view: TemplateRoomView;
+  canHost: boolean;
+  busy: boolean;
+  write(path: string, method: string, body: unknown): Promise<boolean>;
+}) {
+  const nameOf = (no: number | null) => (no == null ? "" : (view.stick?.people.find((p) => p.no === no)?.name ?? ""));
+  return view.stick ? (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-notice/60 bg-muted px-4 py-4" aria-live="polite">
+        <span className="grid size-16 shrink-0 place-items-center rounded-full text-notice ring-2 ring-notice" aria-hidden>
+          <Feather className="size-8" strokeWidth={1.4} />
+        </span>
+        <div className="min-w-0">
+          <p className="font-display text-2xl text-foreground">{TEMPLATE_COPY.stickHolder(nameOf(view.stick.holder))}</p>
+          <p className="text-sm text-muted-foreground">
+            {view.stick.next != null && TEMPLATE_COPY.stickNext(nameOf(view.stick.next))} · {TEMPLATE_COPY.stickRound(view.stick.rounds + 1)}
+          </p>
+        </div>
+      </div>
+      <ol className="flex flex-wrap gap-2">
+        {view.stick.people.map((p) => (
+          <li
+            key={p.no}
+            className={
+              p.no === view.stick?.holder
+                ? "rounded-full border border-notice bg-notice px-3 py-1 text-sm font-semibold text-background"
+                : p.no === view.stick?.next
+                  ? "rounded-full border border-notice/70 px-3 py-1 text-sm font-medium text-foreground"
+                  : "rounded-full border border-border px-3 py-1 text-sm text-muted-foreground"
+            }
+          >
+            {p.name}
+          </li>
+        ))}
+      </ol>
+      {canHost && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={BTN_FORWARD} disabled={busy} onClick={() => void write("/stick", "POST", { move: "pass" })}>
+            {TEMPLATE_COPY.stickPass}
+          </button>
+          <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void write("/stick", "POST", { move: "back" })}>
+            {TEMPLATE_COPY.stickBack}
+          </button>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            {TEMPLATE_COPY.stickGive}
+            <select
+              className={`${INPUT} w-auto`}
+              value=""
+              disabled={busy}
+              onChange={(e) => e.target.value && void write("/stick", "POST", { move: "give", to: Number(e.target.value) })}
+            >
+              <option value="">{TEMPLATE_COPY.stickChoose}</option>
+              {view.here.map((p) => (
+                <option key={p.no} value={p.no}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void write("/stick", "POST", { move: "stop" })}>
+            {TEMPLATE_COPY.stickStop}
+          </button>
+        </div>
+      )}
+    </div>
+  ) : (
+    <div className={`${SOFT} flex flex-wrap items-center justify-between gap-3`}>
+      <p className="text-sm text-muted-foreground">{TEMPLATE_COPY.stickIdle}</p>
+      {canHost && view.here.length > 0 && (
+        <button type="button" className={BTN_FORWARD} disabled={busy} onClick={() => void write("/stick", "POST", { move: "start", order: view.here.map((p) => p.no) })}>
+          {TEMPLATE_COPY.stickStart}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function TemplatePanel({ sessionId, agenda }: { sessionId: number; agenda: readonly SessionItem[] }) {
   const [view, setView] = useState<TemplateRoomView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +175,9 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
   const [winText, setWinText] = useState("");
   const [winServes, setWinServes] = useState<string | null>(null);
   const alive = useRef(true);
+  const moonOn = useMoonReviewOn();
+  const wantsMoon = moonOn && !!view?.template?.flow.some((s) => isMoonKind(s.kind));
+  const moonRoom = useMoonRoom(sessionId, wantsMoon);
 
   const read = useCallback(async () => {
     try {
@@ -130,11 +231,19 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
   const setSection = sectionOf(flow, "priorities_set");
   const seasonSection = sectionOf(flow, "season_priorities");
   const winsSection = sectionOf(flow, "wins");
+  const moonRecapsSection = sectionOf(flow, "moon_recaps");
+  const moonGoalsSection = sectionOf(flow, "moon_goals");
+  const moonInvoicesSection = sectionOf(flow, "moon_invoices");
+  const holderNo = view.stick?.holder ?? null;
+  const moonShown = holderNo != null && (view.stick?.shows ?? []).includes(holderNo);
+  // Null while the module is off or its room door is not there: each moon section then shows one calm line.
+  const moonPanel = wantsMoon && moonRoom ? moonRoomPanel(moonRoom, moonShown) : null;
+  const mayChooseMoon = open && joined && holderNo != null && (holderNo === view.viewerNo || hosts);
+  const holderName = view.stick?.people.find((p) => p.no === holderNo)?.name ?? "";
   const goals = view.season?.goals ?? [];
   const wins = view.shares.filter((s) => s.kind === "win");
   const stickShares = view.shares.filter((s) => s.kind !== "win");
   const canHost = hosts && open;
-  const nameOf = (no: number | null) => (no == null ? "" : (view.stick?.people.find((p) => p.no === no)?.name ?? ""));
 
   const takeAgenda = async () => {
     const have = new Set(view.priorities.map((p) => p.text.trim().toLowerCase()));
@@ -158,7 +267,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
         <ol className="mt-3 flex flex-wrap gap-1.5" aria-label={TEMPLATE_COPY.flowHeading}>
           {flow.map((s, i) => (
             <li key={s.key} className={CHIP} title={s.prompt || SECTION_KIND_DEFS[s.kind].hint}>
-              {i + 1}. {s.title} · {s.minutes} min
+              {i + 1}. {s.title} · {sectionMinutesFor(s, view.here.length)} min
             </li>
           ))}
         </ol>
@@ -242,81 +351,38 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
         </div>
       )}
 
+      {moonRecapsSection && (
+        <div className="space-y-4" data-section="moon_recaps">
+          <div>
+            <h3 className={LABEL_CAPS}>{moonRecapsSection.title}</h3>
+            {moonRecapsSection.prompt && <p className={`mt-1 ${HINT}`}>{moonRecapsSection.prompt}</p>}
+          </div>
+          <StickControls view={view} canHost={canHost} busy={busy} write={write} />
+          {mayChooseMoon && moonPanel && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">{MOON_ROOM_COPY.chooses(holderName)}</span>
+              <MoonShareChoice shown={moonShown} busy={busy} onChoose={(show) => void write("/moon-share", "POST", { show })} />
+            </div>
+          )}
+          <MoonRecapBody panel={moonPanel} holderName={holderNo != null ? holderName : null} />
+        </div>
+      )}
+
+      {moonGoalsSection && (
+        <div className="space-y-2" data-section="moon_goals">
+          <h3 className={LABEL_CAPS}>{moonGoalsSection.title}</h3>
+          {moonGoalsSection.prompt && <p className={HINT}>{moonGoalsSection.prompt}</p>}
+          <MoonGoalsBody panel={moonPanel} />
+        </div>
+      )}
+
       {stickSection && (
         <div className="space-y-4">
           <div>
             <h3 className={LABEL_CAPS}>{stickSection.title}</h3>
             {stickSection.prompt && <p className={`mt-1 ${HINT}`}>{stickSection.prompt}</p>}
           </div>
-          {view.stick ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-notice/60 bg-muted px-4 py-4" aria-live="polite">
-                <span className="grid size-16 shrink-0 place-items-center rounded-full text-notice ring-2 ring-notice" aria-hidden>
-                  <Feather className="size-8" strokeWidth={1.4} />
-                </span>
-                <div className="min-w-0">
-                  <p className="font-display text-2xl text-foreground">{TEMPLATE_COPY.stickHolder(nameOf(view.stick.holder))}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {view.stick.next != null && TEMPLATE_COPY.stickNext(nameOf(view.stick.next))} · {TEMPLATE_COPY.stickRound(view.stick.rounds + 1)}
-                  </p>
-                </div>
-              </div>
-              <ol className="flex flex-wrap gap-2">
-                {view.stick.people.map((p) => (
-                  <li
-                    key={p.no}
-                    className={
-                      p.no === view.stick?.holder
-                        ? "rounded-full border border-notice bg-notice px-3 py-1 text-sm font-semibold text-background"
-                        : p.no === view.stick?.next
-                          ? "rounded-full border border-notice/70 px-3 py-1 text-sm font-medium text-foreground"
-                          : "rounded-full border border-border px-3 py-1 text-sm text-muted-foreground"
-                    }
-                  >
-                    {p.name}
-                  </li>
-                ))}
-              </ol>
-              {canHost && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" className={BTN_FORWARD} disabled={busy} onClick={() => void write("/stick", "POST", { move: "pass" })}>
-                    {TEMPLATE_COPY.stickPass}
-                  </button>
-                  <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void write("/stick", "POST", { move: "back" })}>
-                    {TEMPLATE_COPY.stickBack}
-                  </button>
-                  <label className="flex items-center gap-2 text-sm text-foreground">
-                    {TEMPLATE_COPY.stickGive}
-                    <select
-                      className={`${INPUT} w-auto`}
-                      value=""
-                      disabled={busy}
-                      onChange={(e) => e.target.value && void write("/stick", "POST", { move: "give", to: Number(e.target.value) })}
-                    >
-                      <option value="">{TEMPLATE_COPY.stickChoose}</option>
-                      {view.here.map((p) => (
-                        <option key={p.no} value={p.no}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void write("/stick", "POST", { move: "stop" })}>
-                    {TEMPLATE_COPY.stickStop}
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className={`${SOFT} flex flex-wrap items-center justify-between gap-3`}>
-              <p className="text-sm text-muted-foreground">{TEMPLATE_COPY.stickIdle}</p>
-              {canHost && view.here.length > 0 && (
-                <button type="button" className={BTN_FORWARD} disabled={busy} onClick={() => void write("/stick", "POST", { move: "start", order: view.here.map((p) => p.no) })}>
-                  {TEMPLATE_COPY.stickStart}
-                </button>
-              )}
-            </div>
-          )}
+          <StickControls view={view} canHost={canHost} busy={busy} write={write} />
 
           {joined && open && (
             <form
@@ -504,6 +570,14 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
               )}
             </form>
           )}
+        </div>
+      )}
+
+      {moonInvoicesSection && (
+        <div className="space-y-2" data-section="moon_invoices">
+          <h3 className={LABEL_CAPS}>{moonInvoicesSection.title}</h3>
+          {moonInvoicesSection.prompt && <p className={HINT}>{moonInvoicesSection.prompt}</p>}
+          <MoonInvoicesBody panel={moonPanel} />
         </div>
       )}
     </section>
