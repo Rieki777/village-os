@@ -2068,3 +2068,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The village connector (`POST /api/agent/v1/mcp`, 2026-11-03, no migration)
 
 - A remote MCP server on the existing `vat_` agent tokens. A member mints a token under Your agent with `moon.read` (their moon, roles, season and task board) and, if they want, `tasks.write` (their own board pressed Done, Let go or Undo, each write asked first and confirmed), then adds `<origin>/api/agent/v1/mcp` to their client with `Authorization: Bearer <token>`. Every tool runs the member's own route over the loopback at `127.0.0.1:$PORT`, so nothing new needs provisioning, and the connector's name is the village's own name setting. OAuth sign-in for Claude's custom connectors comes with the next piece.
+
+## The End of moon meeting template (module `moon-review`, 2026-11-03, no migration)
+
+- A fourth meeting template, End of moon (category Moon rhythm, `seed_key` `end-of-moon`, flow in `MOON_TEMPLATE` in `shared/sessionTemplates.ts`), is written into `live_session_templates` the first time anyone opens the templates (`GET /api/session-templates`) while the `moon-review` module is on (any lifecycle but off). While the module is off nothing is written, and its three section kinds (Our moons, Moon goals, Sending together) are hidden in the template editor. Once written it is an ordinary row: turning the module off later leaves it, and an edited or archived copy is never written again. No env var and no manual step.
