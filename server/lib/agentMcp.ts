@@ -25,9 +25,10 @@
  * route, and a confirm token bound to that echo, the holder and the tool
  * (`mintConfirmToken`). Called again with the same arguments and the token,
  * it reads the state again, rebuilds the echo, and writes only when the token
- * binds THAT echo. The echo carries the row's version, so a token is spent by
- * its own write: after it, the version moves, the echo changes and a replay
- * is refused.
+ * binds THAT echo. A token works once: the HTTP wiring spends it the moment
+ * it verifies (`createConfirmSpendBook` in ./agentTokens), so the same token
+ * sent again is refused even where the echo would still match, as it would
+ * for an admin path or a moon write that leaves nothing versioned behind.
  *
  * ── WHAT NO TOOL EVER DOES ───────────────────────────────────────────────
  * Send a recap or an invoice, take one back, issue, approve, return, mark
@@ -45,7 +46,8 @@ import { MOON_ROUTES, PACK_FORBIDDEN_KEY } from "../../shared/moonRecap";
 import type { AgentScope } from "./agentTokens";
 
 /** The protocol revisions this server speaks, newest first. */
-export const MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
+// 2025-03-26 is not offered: it predates the resource metadata a 401 points at, which is how a connector finds the sign-in.
+export const MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
 
 /** The JSON-RPC error codes this server answers with. */
 export const RPC = {
@@ -59,7 +61,7 @@ export const RPC = {
 // ── Redaction ────────────────────────────────────────────────────────────────
 
 /** Keys a connector result never carries, beside the moon pack's own list. */
-export const CONNECTOR_REDACTED_KEY = /route|legal_?name|address/i;
+export const CONNECTOR_REDACTED_KEY = /route|legal_?name|address|private_?detail/i;
 
 /** True when a key is one no connector result may carry. */
 export function isRedactedKey(key: string): boolean {
@@ -114,6 +116,10 @@ export interface ToolDef {
   inputSchema: Record<string, unknown>;
   /** Every route this tool may call, as `METHOD /path` with `:param` holes. The table test reads these. */
   routes: readonly string[];
+  /** A write that can change or remove what is there, for the client's own warning. */
+  destructive?: boolean;
+  /** A write that lands on the first call, held by its undo instead of a confirmToken (Sera's tools only). */
+  writesAtOnce?: boolean;
   run: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolOutcome>;
 }
 
@@ -354,7 +360,7 @@ export async function handleMcpMessage(message: unknown, call: McpCall): Promise
             title: t.title,
             description: t.description,
             inputSchema: t.inputSchema,
-            annotations: { readOnlyHint: t.kind === "read", destructiveHint: false, idempotentHint: t.kind === "read", openWorldHint: false },
+            annotations: { readOnlyHint: t.kind === "read", destructiveHint: t.kind === "write" && !!t.destructive, idempotentHint: t.kind === "read", openWorldHint: false },
           })),
         },
       };

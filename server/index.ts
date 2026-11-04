@@ -6691,7 +6691,7 @@ async function startServer() {
     });
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
-    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10) });
+    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), clientIp });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
     app.all(`${AGENT_V1}/{*splat}`, (_req, res) => res.status(404).json({ error: "Not found" }));
