@@ -20,7 +20,9 @@ interface Request { clientName: string; redirectHost: string; scopes: Offer[] }
 
 const SCOPE_WORDS: Record<string, string> = {
   "moon.read": "Read your moon, your roles, the season and your task board",
+  "moon.write": "Draft your own moon: import a moon pack, change an item, set next moon's goals, each after your yes",
   "tasks.write": "Mark your own board tasks Done, Let go or Undo, each one after your yes",
+  "moon.review": "If you review recaps: read the review queue and the role signals, never with amounts",
   "calendar.read": "Read the calendar",
   "directory.read": "Read circles, roles and the people you may already see",
   "me.read": "Read your own profile and your RSVPs",

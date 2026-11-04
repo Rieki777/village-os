@@ -174,7 +174,8 @@ import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
 import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
-import { isAgentAccount } from "./repos/agentAccounts";
+import { agentAccountIds, isAgentAccount } from "./repos/agentAccounts";
+import { seraDigest } from "./lib/seraAgent";
 import { villageDayKey } from "../shared/companionItems";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
@@ -4886,6 +4887,19 @@ async function startServer() {
     return `${r.users} member(s), ${r.rows} notification(s)`;
   });
   registerJob("retention-sweep", 24 * 60 * 60 * 1000, async () => runRetentionSweep());
+  // Sera's agent, B7: once a day the people who hold admin hear what it did, each with an Undo on the bridge panel.
+  // The members it acted on are never told by this; agent accounts are not sent it.
+  registerJob("sera-agent-digest", 24 * 60 * 60 * 1000, async () => {
+    const digest = await seraDigest(getPool());
+    if (!digest) return "nothing to report";
+    const day = new Date().toISOString().slice(0, 10);
+    const agents = new Set(await agentAccountIds(getPool()));
+    const people = (await accountsWithAdminReach()).filter((u: any) => !agents.has(String(u.id)));
+    for (const u of people) {
+      await notify({ userId: String(u.id), type: "sera_agent_digest", title: digest.title, body: digest.body, link: "/admin", dedupeKey: `sera-agent-digest:${day}:${u.id}` });
+    }
+    return `${digest.count} actions, told ${people.length}`;
+  });
   // S31: hourly sweep; acts only once the UTC hour passes stay.autopay_post_hour.
   // Keyed ledger legs make reruns and catch-up idempotent by construction.
   registerJob("stay-nightly", 60 * 60 * 1000, async () => {

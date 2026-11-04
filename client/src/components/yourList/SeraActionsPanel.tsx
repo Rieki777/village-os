@@ -16,6 +16,8 @@ const TOOL_WORDS: Record<string, string> = {
   link_sera_person: "Linked a member to their Sera person",
   suggest_task: "Suggested a task",
   set_board_access: "Switched a task board",
+  draft_agenda_item: "Drafted an agenda item",
+  suggest_moon_item: "Suggested a moon item",
   undo_sera_action: "Undid an action",
 };
 

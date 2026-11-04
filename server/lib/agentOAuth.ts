@@ -28,7 +28,7 @@ export const TOKEN_PATH = "/api/agent/v1/oauth/token";
 export const AUTHORIZE_PAGE = "/oauth/authorize";
 
 /** The scopes a connector may ask a member for. Admin and Sera stay with the panel and their own accounts' rules. */
-export const OAUTH_SCOPES: readonly AgentScope[] = ["moon.read", "tasks.write", "calendar.read", "directory.read", "me.read"];
+export const OAUTH_SCOPES: readonly AgentScope[] = ["moon.read", "moon.write", "tasks.write", "moon.review", "calendar.read", "directory.read", "me.read"];
 /** Ticked on the consent page unless the member unticks them. Writes are opt-in. */
 export const OAUTH_DEFAULT_SCOPES: readonly AgentScope[] = ["moon.read"];
 

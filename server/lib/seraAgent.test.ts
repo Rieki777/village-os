@@ -14,7 +14,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
-import { runSeraTool, undoSeraAction, type SeraActor } from "./seraAgent";
+import { runSeraTool, seraDigest, undoSeraAction, type SeraActor } from "./seraAgent";
+import { ensureRecap } from "../repos/moonRecaps";
 import { listAgentActions } from "../repos/agentAccounts";
 import { setListOn } from "../repos/memberTasks";
 
@@ -133,5 +134,48 @@ describe.skipIf(!configured)("Sera's agent: undoable actions only (B7)", () => {
   it("writes an undo row for every undo", async () => {
     const undos = (await listAgentActions(pool, { scope: "sera.undoable", limit: 500 })).filter((a) => a.tool === "undo_sera_action");
     expect(undos.length).toBe(5);
+  });
+
+  it("check 55: an agenda draft lands as a waiting library item from Sera's agent, and its undo removes it while untouched", async () => {
+    const made = await runSeraTool(pool, sera, "draft_agenda_item", { title: "Water rota for the dry season", note: "From three members' tasks" }, deps);
+    expect(made.ok).toBe(true);
+    if (!made.ok) return;
+    const id = Number(made.result.libraryId);
+    expect(await one("SELECT `status`, `brought_by_no` FROM `live_session_library` WHERE `id` = ?", [id])).toMatchObject({ status: "waiting", brought_by_no: 0 });
+    expect(await one("SELECT `kind` FROM `live_session_library_sources` WHERE `library_id` = ?", [id])).toMatchObject({ kind: "sera_agent" });
+    expect(await undoSeraAction(pool, String(made.result.actionId), "u-steward", null)).toEqual({ ok: true });
+    expect(await one("SELECT COUNT(*) AS n FROM `live_session_library` WHERE `id` = ?", [id])).toMatchObject({ n: 0 });
+
+    const kept = await runSeraTool(pool, sera, "draft_agenda_item", { title: "Seed exchange" }, deps);
+    if (!kept.ok) throw new Error("fixture");
+    await pool.query("UPDATE `live_session_library` SET `edited_by_no` = 7 WHERE `id` = ?", [kept.result.libraryId]); // module-review-ok: a person editing the draft, as the library route does
+    expect(await undoSeraAction(pool, String(kept.result.actionId), "u-steward", null)).toMatchObject({ ok: false, status: 409 });
+    expect((await runSeraTool(pool, sera, "draft_agenda_item", { title: "x", circleId: "no-such-circle" }, deps)).ok).toBe(false);
+  });
+
+  it("check 55: a moon suggestion goes only on a Draft recap, and its undo removes it while it is still a suggestion", async () => {
+    expect((await runSeraTool(pool, sera, "suggest_moon_item", { userId: "u-ana", cycleId: "2026-10", text: "Fixed the pump" }, deps)).ok).toBe(false);
+    const recap = await ensureRecap(pool, { id: "mr-ana", userId: "u-ana", cycleId: "2026-10", seasonId: null });
+    const made = await runSeraTool(pool, sera, "suggest_moon_item", { userId: "u-ana", cycleId: "2026-10", text: "Fixed the pump" }, deps);
+    expect(made.ok).toBe(true);
+    if (!made.ok) return;
+    expect(await one("SELECT `origin`, `state`, `visibility` FROM `moon_recap_items` WHERE `id` = ?", [made.result.itemId])).toMatchObject({ origin: "sera", state: "suggested", visibility: "approvers" });
+    expect(await undoSeraAction(pool, String(made.result.actionId), "u-steward", null)).toEqual({ ok: true });
+
+    const kept = await runSeraTool(pool, sera, "suggest_moon_item", { userId: "u-ana", cycleId: "2026-10", text: "Cleared the drain" }, deps);
+    if (!kept.ok) throw new Error("fixture");
+    await pool.query("UPDATE `moon_recap_items` SET `state` = 'kept' WHERE `id` = ?", [kept.result.itemId]); // module-review-ok: the member keeping it, as the item route does
+    expect(await undoSeraAction(pool, String(kept.result.actionId), "u-steward", null)).toMatchObject({ ok: false, status: 409 });
+
+    await pool.query("UPDATE `moon_recaps` SET `status` = 'waiting' WHERE `id` = ?", [recap.id]); // module-review-ok: the member sending the recap
+    expect((await runSeraTool(pool, sera, "suggest_moon_item", { userId: "u-ana", cycleId: "2026-10", text: "Late one" }, deps)).ok).toBe(false);
+  });
+
+  it("check 59: the digest counts the day's actions and says nothing on a quiet day", async () => {
+    const d = await seraDigest(pool);
+    expect(d?.count).toBeGreaterThan(0);
+    expect(d?.body).toContain("undone");
+    const later = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    expect(await seraDigest(pool, later)).toBeNull();
   });
 });

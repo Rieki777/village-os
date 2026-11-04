@@ -54,6 +54,8 @@ const SCOPE_WORDS: Record<string, string> = {
   "tasks.write": "mark your own board tasks Done, Let go or Undo, after your yes",
   admin: "call the admin paths the village has opened to agents, as you, with your own admin checks (admins only)",
   "sera.undoable": "for Sera's agent account only: link people, suggest tasks and switch boards, each one undoable",
+  "moon.write": "draft your own moon: import a moon pack, change an item, set next moon's goals, each after your yes",
+  "moon.review": "for a reviewer: read the review queue and the role signals, never with amounts",
 };
 
 const TIER_WORDS: Record<Profile["aboutTier"], string> = {

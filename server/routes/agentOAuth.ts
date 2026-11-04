@@ -43,7 +43,7 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit"> & {
 };
 
 /** The scopes the consent page offers, and which of them write. */
-const SCOPE_OFFER = OAUTH_SCOPES.map((s) => ({ scope: s, write: s === "tasks.write", ticked: OAUTH_DEFAULT_SCOPES.includes(s) }));
+const SCOPE_OFFER = OAUTH_SCOPES.map((s) => ({ scope: s, write: s === "tasks.write" || s === "moon.write", ticked: OAUTH_DEFAULT_SCOPES.includes(s) }));
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, getPool, overLimit, clientIp, origin, memberById } = deps;

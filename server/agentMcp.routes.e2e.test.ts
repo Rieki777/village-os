@@ -296,7 +296,7 @@ describe.skipIf(!DB_CONFIGURED)("Sera's agent (B7)", () => {
     expect((await call("POST", "/api/agent/tokens", { name: "nope", scopes: ["sera.undoable"] })).status).toBe(400);
     seraVat = await mint(seraAgent.token, ["sera.undoable"]);
     const listed = await mcp(seraVat, "tools/list");
-    expect(listed.json.result.tools.map((t: any) => t.name)).toEqual(["link_sera_person", "suggest_task", "set_board_access", "undo_sera_action"]);
+    expect(listed.json.result.tools.map((t: any) => t.name)).toEqual(["link_sera_person", "suggest_task", "set_board_access", "draft_agenda_item", "suggest_moon_item", "undo_sera_action"]);
     // Not an admin, so the admin scope stays closed to it.
     expect((await call("POST", "/api/agent/tokens", { name: "nope", scopes: ["admin"] }, seraAgent.token)).status).toBe(400);
   });

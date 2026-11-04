@@ -246,8 +246,8 @@ describe("admin_request (check 52)", () => {
 
 describe("sera.undoable (check 56)", () => {
   it("opens exactly the closed list, and no other scope opens any of it", () => {
-    expect(toolsFor(["sera.undoable"]).map((t) => t.name)).toEqual(["link_sera_person", "suggest_task", "set_board_access", "undo_sera_action"]);
-    for (const s of ["moon.read", "tasks.write", "admin"] as const) {
+    expect(toolsFor(["sera.undoable"]).map((t) => t.name)).toEqual(["link_sera_person", "suggest_task", "set_board_access", "draft_agenda_item", "suggest_moon_item", "undo_sera_action"]);
+    for (const s of ["moon.read", "tasks.write", "admin", "moon.write", "moon.review"] as const) {
       expect(toolsFor([s]).some((t) => t.scope === "sera.undoable")).toBe(false);
     }
     // No Sera tool names a route: they reach only server/lib/seraAgent.ts, which notifies nobody.
@@ -273,5 +273,53 @@ describe("sera.undoable (check 56)", () => {
     expect(u.result.isError).toBe(true);
     expect(seen).toEqual(["suggest_task"]);
     expect(h.calls).toEqual([]);
+  });
+});
+
+
+describe("moon.write and moon.review", () => {
+  function moon(previewHash = "ph-1") {
+    const h = holder();
+    const posts: Array<{ path: string; body: any }> = [];
+    const ctx: ToolContext = {
+      ...h.ctx,
+      dispatch: async (method, path, body) => {
+        if (method === "POST" && path === "/api/me/moon/2026-10/import") {
+          posts.push({ path, body });
+          return (body as any)?.confirm
+            ? { status: 200, body: { written: true, added: 1 } }
+            : { status: 200, body: { written: false, previewHash, preview: { add: [{ text: "Wrote the report" }], merge: [], skip: [] } } };
+        }
+        if (path.startsWith("/api/moon-review/")) return { status: 404, body: { error: "Not found" } };
+        return { status: 404, body: { error: "Not found" } };
+      },
+    };
+    return { ctx, posts };
+  }
+
+  it("imports a pack in two calls: the preview writes nothing, the confirm sends the preview's hash", async () => {
+    const m = moon();
+    const first = await ask(callTool("import_moon_pack", { cycleId: "2026-10", pack: { v: 1 } }), ["moon.write"], m.ctx);
+    expect(first.result.structuredContent.confirmRequired).toBe(true);
+    expect(m.posts.map((p) => p.body.confirm ?? false)).toEqual([false]);
+    const second = await ask(callTool("import_moon_pack", { cycleId: "2026-10", pack: { v: 1 }, confirmToken: first.result.structuredContent.confirmToken }), ["moon.write"], m.ctx);
+    expect(second.result.structuredContent.written).toBe(true);
+    expect(m.posts.at(-1)!.body).toEqual({ pack: { v: 1 }, confirm: true, previewHash: "ph-1" });
+  });
+
+  it("refuses the confirm when the preview has changed since the first call", async () => {
+    const m1 = moon("ph-1");
+    const first = await ask(callTool("import_moon_pack", { cycleId: "2026-10", pack: { v: 1 } }), ["moon.write"], m1.ctx);
+    const m2 = moon("ph-2");
+    const second = await ask(callTool("import_moon_pack", { cycleId: "2026-10", pack: { v: 1 }, confirmToken: first.result.structuredContent.confirmToken }), ["moon.write"], m2.ctx);
+    expect(second.result.isError).toBe(true);
+    expect(m2.posts.filter((p) => p.body.confirm)).toEqual([]);
+  });
+
+  it("says the moon review is not open when its route answers 404", async () => {
+    const m = moon();
+    const r = await ask(callTool("get_review_queue", {}), ["moon.review"], m.ctx);
+    expect(r.result.isError).toBe(true);
+    expect(r.result.structuredContent.error).toContain("not open");
   });
 });

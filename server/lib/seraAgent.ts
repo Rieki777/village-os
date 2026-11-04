@@ -11,6 +11,10 @@
  *                      two members or one member to two owners.
  *   suggest_task       a task on a member's board for them to keep or remove.
  *   set_board_access   a member's task board on or off.
+ *   draft_agenda_item  a draft in a circle's agenda library (or none in
+ *                      particular). A person brings it to the room.
+ *   suggest_moon_item  a `suggested` item on a member's Draft recap, which the
+ *                      member keeps or drops.
  *
  * NEVER, THROUGH THIS SCOPE: emailing or notifying a member (a sent message
  * cannot be unsent; nothing here calls notify or the post office), money,
@@ -32,13 +36,18 @@ import { randomBytes } from "node:crypto";
 import { parseTaskInput } from "../../shared/memberTasks";
 import { recordEvent } from "./events";
 import { echoHash } from "./agentTokens";
-import { agentActionById, markAgentActionUndone, recordAgentAction } from "../repos/agentAccounts";
-import { boardAccessRow, deleteSeraLink, deleteUntouchedSuggestion, insertSeraLink, memberHasSeraLink, restoreBoardAccess, seraLinkOfOwner } from "../repos/seraAgentActions";
+import { agentActionById, listAgentActions, markAgentActionUndone, recordAgentAction } from "../repos/agentAccounts";
+import {
+  boardAccessRow, circleExists, deleteSeraLink, deleteSuggestedMoonItem, deleteUntouchedLibraryDraft, deleteUntouchedSuggestion,
+  insertSeraLink, memberHasSeraLink, restoreBoardAccess, seraLinkOfOwner,
+} from "../repos/seraAgentActions";
+import { insertItemRow, insertSource } from "../repos/sessionLibrary";
+import { insertItem, itemCount, recapFor } from "../repos/moonRecaps";
 import { insertTask, listIsOn, setListOn } from "../repos/memberTasks";
 import { memberExists } from "../repos/memberTaskImport";
 
 export const SERA_SCOPE = "sera.undoable";
-export const SERA_TOOLS = ["link_sera_person", "suggest_task", "set_board_access"] as const;
+export const SERA_TOOLS = ["link_sera_person", "suggest_task", "set_board_access", "draft_agenda_item", "suggest_moon_item"] as const;
 export type SeraTool = (typeof SERA_TOOLS)[number];
 export const UNDO_DAYS = 30;
 
@@ -61,7 +70,9 @@ export type SeraOutcome = { ok: true; result: Record<string, unknown> } | { ok: 
 type Undo =
   | { kind: "link"; seraOwnerId: string; userId: string }
   | { kind: "suggest"; userId: string; taskId: string; batch: string }
-  | { kind: "board"; userId: string; wrote: { on: boolean; setBy: string }; before: { on: boolean; setBy: string | null } | null };
+  | { kind: "board"; userId: string; wrote: { on: boolean; setBy: string }; before: { on: boolean; setBy: string | null } | null }
+  | { kind: "agenda"; libraryId: number }
+  | { kind: "moon"; itemId: string; recapId: string };
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
@@ -90,6 +101,7 @@ async function record(pool: Pool, actor: SeraActor, tool: string, subjectUserId:
 
 /** Run one Sera tool. Never notifies anyone. */
 export async function runSeraTool(pool: Pool, actor: SeraActor, tool: SeraTool, args: Record<string, unknown>, deps: SeraDeps): Promise<SeraOutcome> {
+  if (tool === "draft_agenda_item") return draftAgendaItem(pool, actor, args);
   const userId = str(args.userId, 64);
   if (!userId) return { ok: false, error: "Name the member: userId." };
   if (userId === actor.userId) return { ok: false, error: "Sera's agent never acts on its own account." };
@@ -131,7 +143,52 @@ export async function runSeraTool(pool: Pool, actor: SeraActor, tool: SeraTool, 
     return { ok: true, result: { written: true, actionId, userId, on: args.on } };
   }
 
+  if (tool === "suggest_moon_item") {
+    const cycleId = str(args.cycleId, 32);
+    const text = str(args.text, 500).replace(/[\u0000-\u001f\u007f]/g, " ");
+    if (!cycleId) return { ok: false, error: "Name the moon: cycleId." };
+    if (!text) return { ok: false, error: "Say what the item is: text." };
+    const recap = await recapFor(pool, userId, cycleId);
+    if (!recap) return { ok: false, error: "That member has no recap for that moon yet." };
+    if (recap.status !== "draft") return { ok: false, error: "That recap has left Draft, so nothing more is suggested on it." };
+    const itemId = `mi-${randomBytes(8).toString("hex")}`;
+    const wrote = await insertItem(pool, {
+      id: itemId,
+      recapId: recap.id,
+      origin: "sera",
+      dedupeKey: `sera-agent:${echoHash({ text }).slice(0, 32)}`,
+      text,
+      originNote: "Suggested by Sera's agent",
+      doneOn: null,
+      evidenceUrl: null,
+      roleId: null,
+      seasonGoalId: null,
+      state: "suggested",
+      // Approvers only until the member decides: the member chooses who reads their recap.
+      visibility: "approvers",
+      position: await itemCount(pool, recap.id),
+    });
+    if (!wrote) return { ok: false, error: "That recap already holds this item." };
+    const actionId = await record(pool, actor, tool, userId, { userId, cycleId, text }, { kind: "moon", itemId, recapId: recap.id });
+    return { ok: true, result: { written: true, actionId, itemId } };
+  }
+
   return { ok: false, error: "There is no such Sera tool." };
+}
+
+async function draftAgendaItem(pool: Pool, actor: SeraActor, args: Record<string, unknown>): Promise<SeraOutcome> {
+  const title = str(args.title, 200).replace(/[\u0000-\u001f\u007f]/g, " ");
+  if (!title) return { ok: false, error: "Give the draft a title." };
+  const circleId = str(args.circleId, 64) || null;
+  if (circleId && !(await circleExists(pool, circleId))) return { ok: false, error: "There is no circle with that id." };
+  const aim = str(args.aim, 500) || null;
+  const note = str(args.note, 2000) || null;
+  const now = new Date();
+  // Brought by no member number: a person brings it to the room. The source row says Sera's agent drafted it.
+  const libraryId = await insertItemRow(pool, { circleId, title, aim, note, broughtByNo: 0, now });
+  await insertSource(pool, { libraryId, kind: "sera_agent", ref: `sera:${libraryId}`, label: "Sera's agent", now });
+  const actionId = await record(pool, actor, "draft_agenda_item", null, { circleId, title }, { kind: "agenda", libraryId });
+  return { ok: true, result: { written: true, actionId, libraryId } };
 }
 
 export type UndoOutcome = { ok: true } | { ok: false; status: 404 | 409 | 410; error: string };
@@ -160,6 +217,12 @@ export async function undoSeraAction(pool: Pool, actionId: string, byUserId: str
   } else if (u.kind === "board") {
     put = await restoreBoardAccess(pool, u.userId, u.wrote, u.before);
     touched = "Someone has switched that board since.";
+  } else if (u.kind === "agenda") {
+    put = await deleteUntouchedLibraryDraft(pool, u.libraryId);
+    touched = "A person has edited that draft or brought it to a room, so it stays.";
+  } else if (u.kind === "moon") {
+    put = await deleteSuggestedMoonItem(pool, u.itemId, u.recapId);
+    touched = "The member has kept or dropped that item, or sent the recap, so it stays.";
   }
   if (!put) return { ok: false, status: 409, error: touched || "That action cannot be put back." };
   await markAgentActionUndone(pool, actionId, byUserId);
@@ -182,4 +245,31 @@ export async function undoSeraAction(pool: Pool, actionId: string, byUserId: str
     audience: "admin",
   });
   return { ok: true };
+}
+
+// ── The daily digest to the Operations role (B7, check 59) ──────────────────
+
+/** What each tool did, in the words the digest and the bridge panel use. */
+export const SERA_TOOL_WORDS: Record<SeraTool | "undo_sera_action", string> = {
+  link_sera_person: "linked a member to their Sera person",
+  suggest_task: "suggested a task",
+  set_board_access: "switched a task board",
+  draft_agenda_item: "drafted an agenda item",
+  suggest_moon_item: "suggested a moon item",
+  undo_sera_action: "undid an action",
+};
+
+/** The last day's Sera actions as a short summary, or null when there were none. */
+export async function seraDigest(pool: Pool, now = new Date()): Promise<{ count: number; title: string; body: string } | null> {
+  const since = now.getTime() - 24 * 60 * 60 * 1000;
+  const recent = (await listAgentActions(pool, { scope: SERA_SCOPE, limit: 500 })).filter((a) => new Date(a.createdAt).getTime() > since && a.state !== "refused");
+  if (recent.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const a of recent) counts.set(a.tool, (counts.get(a.tool) ?? 0) + 1);
+  const parts = Array.from(counts.entries()).map(([tool, n]) => `${n} ${SERA_TOOL_WORDS[tool as SeraTool] ?? tool}`);
+  return {
+    count: recent.length,
+    title: `Sera's agent took ${recent.length} action${recent.length === 1 ? "" : "s"} today`,
+    body: `${parts.join("; ")}. Each one can be undone from the Sera bridge panel for 30 days.`,
+  };
 }

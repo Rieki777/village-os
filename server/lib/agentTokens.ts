@@ -65,7 +65,12 @@ export const TOKEN_PREFIX = "vat_";
  * (server/lib/seraAgent.ts; addendum v6, B7). Only an agent account that is
  * not an admin may mint it.
  */
-export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin", "sera.undoable"] as const;
+/*
+ * `moon.write` drafts the holder's own recap through the two calls (import a
+ * moon pack, change an item, set next moon's goals); `moon.review` reads the
+ * review queue and the role signals for a holder who reviews. Both opt-in.
+ */
+export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin", "sera.undoable", "moon.write", "moon.review"] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 /** Read scopes are on by default in the panel; writes are opt-in. */
