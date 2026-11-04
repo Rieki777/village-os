@@ -2078,3 +2078,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## Sera's agent account (`sera.undoable`, 2026-11-03, no new migration)
 
 - To let Sera's agents act in the village: register a member account for it (such as "Sera (Saberra agent)"), never make it an admin, and mark it with `PUT /api/admin/players/<id>/agent {"isAgent": true}`. Signed in as that account, mint a token with the `sera.undoable` scope (only a non-admin agent account can) and hand it to the Sera side; any admin can revoke it. Its tools are a closed list, each undoable for 30 days from the Sera bridge panel: link a member to their Sera person (never over a steward's link), suggest a task on a member's board, switch a member's board on or off. Nothing it does notifies a member.
+
+## The connector's OAuth sign-in (2026-11-03, no new migration)
+
+- Claude's custom connectors sign a member in by OAuth 2.1: `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`, `POST /api/agent/v1/oauth/register`, the consent page at `/oauth/authorize` and `POST /api/agent/v1/oauth/token`. Every address in the metadata is built from `FRONTEND_URL` when it is set (otherwise from the request's host), so a village behind a proxy sets `FRONTEND_URL` to its public origin. Nothing else to provision: clients and codes live in 0319's tables, and the token is an ordinary agent token.

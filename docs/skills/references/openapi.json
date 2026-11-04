@@ -201,6 +201,18 @@
         }
       },
       "get": { "summary": "405: the connector opens no stream.", "responses": { "405": { "description": "Send each message with POST" } } }
+    },
+    "/api/agent/v1/oauth/register": {
+      "post": {
+        "summary": "Dynamic client registration (RFC 7591) for the connector's OAuth sign-in. Public clients only (token_endpoint_auth_method none); redirect_uris are https, or http on localhost. Metadata: /.well-known/oauth-authorization-server and /.well-known/oauth-protected-resource.",
+        "responses": { "201": { "description": "{client_id, client_name, redirect_uris, ...}" }, "400": { "description": "invalid_redirect_uri or invalid_client_metadata" }, "429": { "description": "20 registrations an hour from one address" } }
+      }
+    },
+    "/api/agent/v1/oauth/token": {
+      "post": {
+        "summary": "Exchange a single-use, ten-minute code for a vat_ token: grant_type authorization_code, code, client_id, redirect_uri and code_verifier (PKCE S256 required). Form-encoded or JSON. The token is minted like one from the Your agent panel and counts against the day's mints.",
+        "responses": { "200": { "description": "{access_token, token_type: Bearer, expires_in, scope}" }, "400": { "description": "invalid_grant, invalid_request or unsupported_grant_type" }, "429": { "description": "60 requests an hour from one address" } }
+      }
     }
   }
 }

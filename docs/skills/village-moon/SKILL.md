@@ -25,7 +25,7 @@ You are one member's own agent. Through the village connector you read what the 
 The village connector is a remote MCP server at `VILLAGE_ORIGIN/api/agent/v1/mcp` (Streamable HTTP, JSON answers, no stream).
 
 - **Claude Code, the API, or any client that takes a header:** the member mints a token in their profile under Your agent, with `moon.read`, and `tasks.write` if they want you to press their board. Add the connector with `Authorization: Bearer $VILLAGE_AGENT_TOKEN`. Never print the token, never store it in your memory files, never send it anywhere but `VILLAGE_ORIGIN`.
-- **Claude's custom connectors:** sign-in by OAuth is coming. Until it lands, use a client that takes a header.
+- **Claude's custom connectors:** add `VILLAGE_ORIGIN/api/agent/v1/mcp` as a custom connector. Claude finds the sign-in itself (OAuth 2.1 with PKCE), and the member signs in on the village's own page and picks what you may do. The token Claude gets is an ordinary agent token they can revoke under Your agent.
 
 `tools/list` shows only the tools the token's scopes open.
 

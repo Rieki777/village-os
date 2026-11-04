@@ -322,3 +322,95 @@ describe.skipIf(!DB_CONFIGURED)("Sera's agent (B7)", () => {
     expect((await call("POST", `/api/admin/agent-actions/${actionId}/undo`, {})).status).toBe(409);
   });
 });
+
+describe.skipIf(!DB_CONFIGURED)("signing a connector in with OAuth (B4, check 33)", () => {
+  const { createHash, randomBytes } = require("crypto") as typeof import("crypto");
+  const pkce = () => {
+    const verifier = randomBytes(32).toString("base64url");
+    return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
+  };
+  const REDIRECT = "https://claude.ai/api/mcp/auth_callback";
+  let clientId = "";
+  let cara = { token: "", id: "" };
+
+  const token = (form: Record<string, string>) =>
+    fetch(`${BASE}/api/agent/v1/oauth/token`, { // module-review-ok: the test client dialling the built server on localhost
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(form).toString(),
+    }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }));
+
+  async function allow(member: { token: string }, challenge: string, extra: Record<string, unknown> = {}) {
+    const r = await call("POST", "/api/agent/oauth/authorize", { clientId, redirectUri: REDIRECT, state: "st-1", codeChallenge: challenge, codeChallengeMethod: "S256", scopes: ["moon.read", "tasks.write"], decision: "allow", ...extra }, member.token);
+    expect(r.status, r.text).toBe(200);
+    return new URL(r.json.redirect);
+  }
+
+  it("publishes the metadata and points a 401 at it", async () => {
+    const pr = await call("GET", "/.well-known/oauth-protected-resource", undefined, "");
+    expect(pr.json.resource).toMatch(/\/api\/agent\/v1\/mcp$/);
+    const as = await call("GET", "/.well-known/oauth-authorization-server", undefined, "");
+    expect(as.json.code_challenge_methods_supported).toEqual(["S256"]);
+    const res = await fetch(`${BASE}/api/agent/v1/mcp`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }); // module-review-ok: the test client dialling the built server on localhost
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toContain("resource_metadata=");
+  });
+
+  it("registers a public client", async () => {
+    const r = await call("POST", "/api/agent/v1/oauth/register", { client_name: "Claude", redirect_uris: [REDIRECT], token_endpoint_auth_method: "none" }, "");
+    expect(r.status, r.text).toBe(201);
+    clientId = r.json.client_id;
+    const bad = await call("POST", "/api/agent/v1/oauth/register", { redirect_uris: ["http://evil.example/cb"] }, "");
+    expect(bad.status).toBe(400);
+  });
+
+  it("shows the consent page what is asked, and never sends a member to an unregistered address", async () => {
+    const r = await call("GET", `/api/agent/oauth/request?client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}`, undefined, ana.token);
+    expect(r.json.clientName).toBe("Claude");
+    expect(r.json.scopes.map((s: any) => s.scope)).not.toContain("admin");
+    const foreign = await call("POST", "/api/agent/oauth/authorize", { clientId, redirectUri: "https://evil.example/cb", decision: "allow", codeChallenge: "x", codeChallengeMethod: "S256", scopes: ["moon.read"] }, ana.token);
+    expect(foreign.status).toBe(400);
+    const refused = await call("POST", "/api/agent/oauth/authorize", { clientId, redirectUri: REDIRECT, state: "s", decision: "deny" }, ana.token);
+    expect(new URL(refused.json.redirect).searchParams.get("error")).toBe("access_denied");
+  });
+
+  it("refuses a code without PKCE", async () => {
+    const back = await allow(ana, "", { codeChallengeMethod: "plain" });
+    expect(back.searchParams.get("error")).toBe("invalid_request");
+    expect(back.searchParams.get("code")).toBeNull();
+  });
+
+  it("exchanges a code once for a vat_ token that counts against the day's mints and works on the connector", async () => {
+    const [[before]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ?", [ana.id]);
+    const { verifier, challenge } = pkce();
+    const back = await allow(ana, challenge);
+    expect(back.searchParams.get("state")).toBe("st-1");
+    const code = back.searchParams.get("code")!;
+    const wrong = await token({ grant_type: "authorization_code", code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: pkce().verifier });
+    expect(wrong.json.error).toBe("invalid_grant");
+    const ok = await token({ grant_type: "authorization_code", code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: verifier });
+    expect(ok.status, JSON.stringify(ok.json)).toBe(200);
+    expect(ok.json.access_token.startsWith("vat_")).toBe(true);
+    expect(ok.json.scope).toBe("moon.read tasks.write");
+    const again = await token({ grant_type: "authorization_code", code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: verifier });
+    expect(again.json.error).toBe("invalid_grant");
+    const [[after]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ?", [ana.id]);
+    expect(Number(after.n) - Number(before.n)).toBe(1);
+    const listed = await mcp(ok.json.access_token, "tools/list");
+    expect(listed.json.result.tools.map((t: any) => t.name)).toContain("mark_my_task");
+  });
+
+  it("ends with the member's sessions: a code allowed before, and a token minted before, both stop", async () => {
+    cara = await register("Cara Diaz", "cara-oauth");
+    const first = pkce();
+    const back = await allow(cara, first.challenge);
+    const minted = await token({ grant_type: "authorization_code", code: back.searchParams.get("code")!, client_id: clientId, redirect_uri: REDIRECT, code_verifier: first.verifier });
+    expect(minted.status).toBe(200);
+    const second = pkce();
+    const pending = (await allow(cara, second.challenge)).searchParams.get("code")!;
+    expect((await call("POST", `/api/admin/users/${cara.id}/revoke-sessions`, {})).status).toBe(200);
+    expect((await mcp(minted.json.access_token, "tools/list")).status).toBe(401);
+    const late = await token({ grant_type: "authorization_code", code: pending, client_id: clientId, redirect_uri: REDIRECT, code_verifier: second.verifier });
+    expect(late.json.error).toBe("invalid_grant");
+  });
+});

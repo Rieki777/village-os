@@ -155,6 +155,7 @@ const ResidentJourney = brochurePage(() => import("./pages/ResidentJourney"));
 const ProsperityJourney = brochurePage(() => import("./pages/ProsperityJourney"));
 const LoveLetter = brochurePage(() => import("./pages/LoveLetter"));
 const Circles = lazyPage(() => import("./pages/Circles"));
+const OAuthAuthorize = lazyPage(() => import("./pages/OAuthAuthorize"));
 const CircleCardPage = lazyPage(() => import("./pages/CircleCardPage"));
 const Places = lazyPage(() => import("./pages/Places"));
 const PlacePhotos = lazyPage(() => import("./pages/PlacePhotos"));
@@ -362,6 +363,8 @@ function Router() {
           class select into a lookup for a member called "characters". */}
       <Route path="/profile/:handle" component={PublicProfile} />
       <Route path="/login" component={Login} />
+      {/* A connector's sign-in (addendum v6, B4): the member allows or refuses. */}
+      <Route path="/oauth/authorize" component={OAuthAuthorize} />
       <Route path="/register" component={Register} />
       <Route path="/request-membership" component={RequestMembership} />
       {/* Confirm before :token, so the email's link is never read as a link made for one person. */}

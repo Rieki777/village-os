@@ -35,6 +35,7 @@ import { readConfigDocument } from "../repos/appConfigDocs";
 import { AGENT_ADMIN_PATHS_DOC, effectiveAgentAdminPaths } from "../../shared/agentAdmin";
 import { PLATFORM_VERSION } from "../lib/identity";
 import { runSeraTool, undoSeraAction } from "../lib/seraAgent";
+import { wwwAuthenticate } from "../lib/agentOAuth";
 
 export const MCP_PATH = "/api/agent/v1/mcp";
 
@@ -106,8 +107,11 @@ export function register(app: Express, deps: Deps): void {
     try {
       const message = req.body;
       // The bucket follows the message: a write tool spends the write bucket.
+      // A 401 says where the sign-in metadata is, so a connector client can start OAuth (RFC 9728).
+      res.setHeader("WWW-Authenticate", wwwAuthenticate((process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "")));
       const resolved = await resolveAgent(req, res, null, callsWriteTool(message) ? "write" : "read");
       if (!resolved) return;
+      res.removeHeader("WWW-Authenticate");
       const { row, user } = resolved;
       if (toolsFor(row.scopes).length === 0) {
         return res.status(403).json({

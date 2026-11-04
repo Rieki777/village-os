@@ -173,6 +173,7 @@ import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan"
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
+import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
 import { isAgentAccount } from "./repos/agentAccounts";
 import { villageDayKey } from "../shared/companionItems";
 import { register as registerBadgesRoutes } from "./routes/badges";
@@ -6694,6 +6695,11 @@ async function startServer() {
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
     registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone) });
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
+    registerAgentOAuthRoutes(app, {
+      authedUser, getPool, overLimit, clientIp,
+      origin: (req) => (process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, ""),
+      memberById: (id) => members.byId(id),
+    });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
     app.all(`${AGENT_V1}/{*splat}`, (_req, res) => res.status(404).json({ error: "Not found" }));
