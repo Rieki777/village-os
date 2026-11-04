@@ -1105,6 +1105,11 @@ html {
     display: none;
   }
 }
+/* A role proposal's sticky Back/Next bar owns the bottom edge: at any width
+   the shortcuts button rides above it, so it never covers Back or Next. */
+:root:has([data-step-bar]) [data-mobile-fab] {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 8.5rem) !important;
+}
 @media (prefers-reduced-motion: no-preference) {
   [data-mobile-fab] {
     transition: translate 200ms ease-out;
