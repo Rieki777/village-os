@@ -18,7 +18,7 @@ export const SERA_AGREEMENT = {
 } as const;
 
 export interface BridgeAnswer {
-  connection: { mayCall: boolean; addressSet: boolean; held: number; /** The full-scope privacy token is set (never its value). */ privacySet?: boolean };
+  connection: { mayCall: boolean; addressSet: boolean; held: number; /** The full-scope privacy token is set (never its value). */ privacySet?: boolean; /** Which token each act goes over; never a value. */ tokens?: TokenUse[] };
   lists: {
     /** False when the member-list tables are not in this database yet. */
     ready: boolean;
@@ -104,4 +104,14 @@ export function bridgeChecks(a: BridgeAnswer, now: number): BridgeCheck[] {
     { id: "feedback", label: "Feedback reached Sera", done: a.feedback.ready && a.feedback.sent > 0 },
     { id: "agreement", label: "Agreement time reached", done: agreementState(now).phase !== "before" },
   ];
+}
+
+export type TokenKind = "sync" | "connection" | "privacy";
+
+export interface TokenUse {
+  act: string;
+  /** Which token this act goes over right now. */
+  uses: TokenKind;
+  /** Whether that token is there; never its value. */
+  set: boolean;
 }
