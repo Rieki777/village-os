@@ -30,6 +30,14 @@
  * sent again is refused even where the echo would still match, as it would
  * for an admin path or a moon write that leaves nothing versioned behind.
  *
+ * ── SERA'S TOOLS WRITE AT ONCE, AND ARE UNDONE INSTEAD ───────────────────
+ * The `sera.undoable` tools are the one exception to the two calls, and they
+ * say so (`writesAtOnce`). Sera's agent acts for no single member who could
+ * say yes, so each write lands at once, is recorded with what puts it back,
+ * and can be undone for 30 days by the agent or a steward while nobody has
+ * touched it (server/lib/seraAgent.ts). Check 31 covers the member's own
+ * write tools; these are held instead by their undo.
+ *
  * ── WHAT NO TOOL EVER DOES ───────────────────────────────────────────────
  * Send a recap or an invoice, take one back, issue, approve, return, mark
  * paid, or read or change a pay route. A person presses those in the app.
@@ -394,6 +402,8 @@ export const MCP_TOOLS: readonly ToolDef[] = [
             }
           : { type: "object", properties: { userId: { type: "string" }, on: { type: "boolean" } }, required: ["userId", "on"], additionalProperties: false },
     routes: [],
+    writesAtOnce: true,
+    destructive: name === "set_board_access",
     async run(args, ctx) {
       if (!ctx.sera) return { ok: false, error: "Sera's tools are not open on this server." };
       const out = await ctx.sera.run(name, args);
@@ -404,6 +414,8 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     name: "undo_sera_action",
     scope: "sera.undoable",
     kind: "write",
+    writesAtOnce: true,
+    destructive: true,
     title: "Undo one of Sera's actions",
     description: "Puts back one action this agent took, within 30 days, while nobody has touched what it wrote since. Answers why when it cannot.",
     inputSchema: { type: "object", properties: { actionId: { type: "string" } }, required: ["actionId"], additionalProperties: false },
@@ -413,7 +425,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       const id = typeof args.actionId === "string" ? args.actionId.slice(0, 64) : "";
       if (!id) return { ok: false, error: "Name the action: actionId." };
       const out = await ctx.sera.undo(id);
-      return out.ok ? { ok: true, result: { undone: true, actionId: id } } : { ok: false, error: out.error };
+      return out.ok ? { ok: true, result: { written: true, undone: true, actionId: id } } : { ok: false, error: out.error };
     },
   },
 ];

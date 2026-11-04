@@ -52,6 +52,10 @@ Done tells Sera exactly as a tap on the board does. Do not also close the task i
 
 `admin_request` takes `method`, `path` and, for a write, `body`. A GET answers at once. A write answers first with the echo and a `confirmToken`, and writes only when called again with the same arguments and the token. A write the village marked for a person answers `person_confirms`: tell a person what you would change, and they make it in the app. Every call is recorded with the token, the method, the path and what happened.
 
+## Sera's tools write at once
+
+The `sera.undoable` tools (only on Sera's own agent account) are the one exception to the two calls. Each writes on the first call, is recorded with what puts it back, and can be undone with `undo_sera_action` for 30 days while nobody has touched it since.
+
 ## When something is refused
 
 A tool that could not do what was asked answers `isError: true` with the reason in words. Say the reason to the member and stop. Do not retry a refusal with different arguments to get around it.

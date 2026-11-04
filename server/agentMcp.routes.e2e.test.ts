@@ -334,6 +334,20 @@ describe.skipIf(!DB_CONFIGURED)("Sera's agent (B7)", () => {
     expect(board.json.open.map((t: any) => t.title)).not.toContain("Check the water tank");
     expect((await call("POST", `/api/admin/agent-actions/${actionId}/undo`, {})).status).toBe(409);
   });
+
+  it("names the member each action touched, for the steward's list", async () => {
+    const listed = await call("GET", "/api/admin/agent-actions?scope=sera.undoable");
+    expect(listed.json.actions.find((a: any) => a.id === actionId)?.subjectName).toBe("Ana Ruiz");
+  });
+
+  it("acts on no other agent account, and its token ends when a person marks it a person's again", async () => {
+    const other = await register("Another bot", "other-bot");
+    expect((await call("PUT", `/api/admin/players/${other.id}/agent`, { isAgent: true })).status).toBe(200);
+    const r = await tool(seraVat, "suggest_task", { userId: other.id, title: "Nothing" });
+    expect(r.json.result.isError).toBe(true);
+    expect((await call("PUT", `/api/admin/players/${seraAgent.id}/agent`, { isAgent: false })).status).toBe(200);
+    expect((await mcp(seraVat, "tools/list")).status).toBe(401);
+  });
 });
 
 describe.skipIf(!DB_CONFIGURED)("the connector's transport guards", () => {

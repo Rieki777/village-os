@@ -6708,7 +6708,7 @@ async function startServer() {
     });
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
-    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp });
+    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin });
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.

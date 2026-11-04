@@ -160,3 +160,11 @@ export async function liveRoleCount(db: Db, userId: string): Promise<number> {
   );
   return Number(rows[0]?.n ?? 0);
 }
+
+/** Members' names by id, for the actions list. An id with no row is left out. */
+export async function namesOf(db: Db, ids: readonly string[]): Promise<Record<string, string>> {
+  const unique = Array.from(new Set(ids.filter(Boolean))).slice(0, 500);
+  if (!unique.length) return {};
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `id`, `name` FROM `users` WHERE `id` IN (?)", [unique]);
+  return Object.fromEntries(rows.map((r) => [String(r.id), String(r.name ?? "")]));
+}

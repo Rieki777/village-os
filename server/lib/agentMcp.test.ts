@@ -72,6 +72,18 @@ describe("the connector protocol", () => {
     expect(old.result.protocolVersion).toBe("2025-11-25");
   });
 
+  it("marks the writes that can change or remove what is there, and Sera's as writing at once", async () => {
+    const { ctx } = holder();
+    const r = await ask(rpc("tools/list"), ["admin", "sera.undoable", "tasks.write"], ctx);
+    const hint = (name: string) => r.result.tools.find((t: any) => t.name === name)?.annotations.destructiveHint;
+    expect(hint("admin_request")).toBe(true);
+    expect(hint("set_board_access")).toBe(true);
+    expect(hint("undo_sera_action")).toBe(true);
+    expect(hint("suggest_task")).toBe(false);
+    for (const t of MCP_TOOLS.filter((x) => x.scope === "sera.undoable")) expect(t.writesAtOnce, t.name).toBe(true);
+    for (const t of MCP_TOOLS.filter((x) => x.scope !== "sera.undoable")) expect(t.writesAtOnce, t.name).toBeFalsy();
+  });
+
   it("takes a notification without an answer and refuses an unknown method", async () => {
     const { ctx } = holder();
     expect(await ask(rpc("notifications/initialized", undefined, null), ["moon.read"], ctx)).toBeNull();
