@@ -241,6 +241,33 @@ describe("admin_request (check 52)", () => {
     expect(a.actions.map((x) => x.state)).toEqual(["refused", "refused"]);
   });
 
+  it("writes once per confirm token: the same token sent again is refused, even with nothing changed", async () => {
+    const a = admin();
+    // The route's wiring: a token is spent the moment it verifies.
+    const book = createConfirmSpendBook();
+    const verify = a.ctx.verifyConfirm;
+    a.ctx.verifyConfirm = (tool, token, echo) => {
+      const c = verify(tool, token, echo);
+      if (c.ok && !book.spend(String(token))) return { ok: false, reason: "spent", sentence: CONFIRM_REASON_SENTENCE.spent };
+      return c;
+    };
+    const args = { method: "PUT", path: "/api/admin/member-tasks/access/u-2", body: { on: true } };
+    const first = await ask(callTool("admin_request", args), ["admin"], a.ctx);
+    const token = first.result.structuredContent.confirmToken;
+    expect((await ask(callTool("admin_request", { ...args, confirmToken: token }), ["admin"], a.ctx)).result.isError).toBe(false);
+    const again = await ask(callTool("admin_request", { ...args, confirmToken: token }), ["admin"], a.ctx);
+    expect(again.result.isError).toBe(true);
+    expect(again.result.structuredContent.detail.reason).toBe("spent");
+    expect(a.routeCalls).toHaveLength(1);
+  });
+
+  it("dispatches no path with a query string", async () => {
+    const a = admin();
+    const r = await ask(callTool("admin_request", { method: "GET", path: "/api/admin/member-tasks/access?userId=u-9" }), ["admin"], a.ctx);
+    expect(r.result.isError).toBe(true);
+    expect(a.routeCalls).toEqual([]);
+  });
+
   it("leaves a write marked for a person to a person", async () => {
     const a = admin();
     a.ctx.adminPaths = async () => ({ paths: [{ method: "POST", path: "/api/admin/events", confirm: "person", label: "Put a gathering on the calendar" }] });

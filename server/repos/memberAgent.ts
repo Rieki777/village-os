@@ -162,6 +162,9 @@ export async function enabledInboxUserIds(pool: Pool): Promise<string[]> {
  * sweep this belongs to is resumable and a step may be re-entered after a
  * failure part way through.
  */
+/** A value matched literally inside LIKE: its own % and _ are not wildcards. */
+const likeEscape = (v: string) => v.replace(/[\\%_]/g, (c) => `\\${c}`);
+
 export async function forgetAgentForMember(pool: Pool, userId: string): Promise<AgentSweepCounts> {
   const inbox = await forgetInboxOf(pool, userId);
   const [keys] = await pool.query("DELETE FROM `member_llm_keys` WHERE `user_id` = ?", [userId]);
@@ -172,7 +175,14 @@ export async function forgetAgentForMember(pool: Pool, userId: string): Promise<
   const [profiles] = await pool.query("DELETE FROM `agent_profiles` WHERE `user_id` = ?", [userId]);
   const [statements] = await pool.query("DELETE FROM `assistant_statements` WHERE `subject_user_id` = ?", [userId]);
   const [oauthCodes] = await pool.query("DELETE FROM `agent_oauth_codes` WHERE `user_id` = ?", [userId]);
-  const [actions] = await pool.query("DELETE FROM `agent_actions` WHERE `actor_user_id` = ? OR `subject_user_id` = ?", [userId, userId]);
+  // An admin path names the member it touched as a segment (`/api/admin/.../:userId`), so those rows go too.
+  const seg = likeEscape(userId);
+  const [actions] = await pool.query(
+    "DELETE FROM `agent_actions` WHERE `actor_user_id` = ? OR `subject_user_id` = ? OR `path` LIKE ? OR `path` LIKE ?",
+    [userId, userId, `%/${seg}`, `%/${seg}/%`],
+  );
+  // Who pressed an undo is the erased member's trace on somebody else's row: the row stays, the name goes.
+  await pool.query("UPDATE `agent_actions` SET `undone_by_user_id` = NULL WHERE `undone_by_user_id` = ?", [userId]);
   return {
     deliveries: inbox.deliveries,
     inboxes: inbox.inboxes,
@@ -209,6 +219,13 @@ export async function agentRowsRemaining(pool: Pool, userId: string): Promise<Ag
     profiles: await one("SELECT COUNT(*) AS n FROM `agent_profiles` WHERE `user_id` = ?"),
     statements: await one("SELECT COUNT(*) AS n FROM `assistant_statements` WHERE `subject_user_id` = ?"),
     oauthCodes: await one("SELECT COUNT(*) AS n FROM `agent_oauth_codes` WHERE `user_id` = ?"),
-    actions: await one("SELECT COUNT(*) AS n FROM `agent_actions` WHERE `actor_user_id` = ? OR `subject_user_id` = ?", 2),
+    actions: await (async () => {
+      const seg = likeEscape(userId);
+      const [rows] = await pool.query<Array<{ n: number }> & import("mysql2/promise").RowDataPacket[]>(
+        "SELECT COUNT(*) AS n FROM `agent_actions` WHERE `actor_user_id` = ? OR `subject_user_id` = ? OR `undone_by_user_id` = ? OR `path` LIKE ? OR `path` LIKE ?",
+        [userId, userId, userId, `%/${seg}`, `%/${seg}/%`],
+      );
+      return Number(rows[0]?.n ?? 0);
+    })(),
   };
 }

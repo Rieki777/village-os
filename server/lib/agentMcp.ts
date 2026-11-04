@@ -305,6 +305,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     },
     // The routes this tool may reach are the village's list, not this table. "Always a person" is in shared/agentAdmin.ts.
     routes: [],
+    destructive: true,
     writes: (args) => String(args.method ?? "").toUpperCase() !== "GET",
     async run(args, ctx) {
       if (!ctx.adminPaths || !ctx.recordAction) return { ok: false, error: "The admin tool is not open on this server." };

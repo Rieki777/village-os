@@ -19,6 +19,7 @@ import type express from "express";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
+import { revokeAllTokens } from "../lib/agentTokens";
 import { agentAccountIds, isAgentAccount, listAgentActions, liveRoleCount, setAgentAccount } from "../repos/agentAccounts";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
 import { AGENT_ADMIN_PATHS_DOC, ALWAYS_A_PERSON, DEFAULT_AGENT_ADMIN_PATHS, effectiveAgentAdminPaths, parseAgentAdminPaths } from "../../shared/agentAdmin";
@@ -59,12 +60,14 @@ export function register(app: Express, deps: Deps): void {
     if (!userId) return res.status(400).json({ error: "Which account?" });
     if (userId === actor.id) return res.status(400).json({ error: "Mark another account, never your own." });
     if (on && (await liveRoleCount(getPool(), userId)) > 0) {
-      return res.status(409).json({ error: "This account holds a role. An agent account holds none, so end its roles first." });
+      return res.status(409).json({ error: "This account holds a role or a power. An agent account holds neither, so end them first." });
     }
     if (!(await setAgentAccount(getPool(), userId, on))) return res.status(404).json({ error: "Not found" });
+    // A token never outlives what its account was when it was minted: both directions end every live token.
+    const ended = await revokeAllTokens(getPool(), userId);
     await recordEvent(getPool(), {
       kind: "audit",
-      text: on ? "marked an account as an agent's" : "marked an account as a person's",
+      text: `${on ? "marked an account as an agent's" : "marked an account as a person's"}, ending ${ended} agent token${ended === 1 ? "" : "s"}`,
       actorUserId: actor.id,
       entityType: "user",
       entityRef: userId,

@@ -1278,8 +1278,10 @@ export async function claimSeating(pool: Pool, assignmentId: string, userId: str
         SET holder_kind = 'member', user_id = ?, holder_key = ?
       WHERE id = ? AND ended_at IS NULL AND holder_kind = 'documented' AND is_example = 0
         AND is_agent = 0
-        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND LOWER(u.email) LIKE '%@anonymized.invalid')`,
-    [userId, userId, assignmentId, userId],
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND LOWER(u.email) LIKE '%@anonymized.invalid')
+        AND NOT EXISTS (SELECT 1 FROM users a WHERE a.id = ? AND a.is_agent = 1)`,
+    // 0319: an agent account holds no role, by this door either (seatHolder's refusal, and why).
+    [userId, userId, assignmentId, userId, userId],
   );
   return !!r?.affectedRows;
 }

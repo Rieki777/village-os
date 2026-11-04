@@ -248,6 +248,15 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     expect(person.status, person.text).toBe(200);
   });
 
+  it("is an admin that the money and approval keys still refuse, through its own session", async () => {
+    // The person admin reads the treasurer's list; the agent admin, with its own session, does not.
+    const person = await call("GET", "/api/cash-owed/queue");
+    expect(person.status, person.text).toBe(200);
+    const asAgent = await call("GET", "/api/cash-owed/queue", undefined, agent.token);
+    expect(asAgent.status, asAgent.text).toBeGreaterThanOrEqual(401);
+    expect(asAgent.status).toBeLessThan(500);
+  });
+
   it("calls an allowed admin path as itself, writing only on the confirm (check 52)", async () => {
     const read = await tool(agentVat, "admin_request", { method: "GET", path: "/api/admin/member-tasks/access" });
     expect(read.json.result.isError, read.text).toBe(false);
@@ -259,12 +268,16 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     expect(still.status).toBe(200);
     const done = await tool(agentVat, "admin_request", { ...args, confirmToken: asked.json.result.structuredContent.confirmToken });
     expect(done.json.result.isError, done.text).toBe(false);
+    // The same token again writes nothing, though nothing about the echo moved.
+    const replay = await tool(agentVat, "admin_request", { ...args, confirmToken: asked.json.result.structuredContent.confirmToken });
+    expect(replay.json.result.isError, replay.text).toBe(true);
+    expect(replay.json.result.structuredContent.detail.reason).toBe("spent");
     const off = await call("GET", "/api/member-tasks/me", undefined, ben.token);
     expect(off.json?.on === false || off.status === 403, off.text).toBe(true);
 
     // Three calls inside one second share a created_at, so compare the states as a set of counts.
     const [rows] = await pool.query<any[]>("SELECT state FROM agent_actions WHERE actor_user_id = ?", [agent.id]);
-    expect(rows.map((r: any) => r.state).sort()).toEqual(["asked", "done", "done"]);
+    expect(rows.map((r: any) => r.state).sort()).toEqual(["asked", "done", "done", "refused"]);
   });
 
   it("refuses what is always a person's, for the agent and through the agent's own session (check 53)", async () => {

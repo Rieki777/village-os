@@ -174,6 +174,7 @@ import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan"
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
+import { isAgentAccount } from "./repos/agentAccounts";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
@@ -3026,7 +3027,19 @@ const holderReads: HolderReads = {
 const liveHoldersOf = (capability: string): Promise<string[]> => liveHoldersNow(holderReads, capability);
 const rolesCarrying = (capability: string) => rolesCarryingCapability(loadRoles(), capability);
 
+/**
+ * THE KEYS AN AGENT ACCOUNT NEVER USES (End of Moon addendum v6, B6 and B7).
+ * For an agent account these read as held by the village, so the admin
+ * short-circuit never answers yes on them, and the break-glass, which needs a
+ * founder seated in a live role, is closed to it. Money and approvals are a
+ * person's.
+ */
+const AGENT_NEVER_KEYS = ["cash.pay", "moon.approve", "moon.approve_alone", "moon.approve_own", "steward.veto"] as const;
+
 async function capabilityCtx(user: any) {
+  // An agent account holds no power from a role or a badge, whichever writer
+  // put the row there (0321): the context the one gate reads carries none.
+  const agent = await isAgentAccount(getPool(), String(user.id));
   // S36: badge grants and denies join the one gate — but only while the
   // badges module is on. Off = zero queries, zero effect: the gate is
   // byte-identical to its pre-badges self.
@@ -3044,21 +3057,23 @@ async function capabilityCtx(user: any) {
   return {
     stageIndex: stageIndex(await stageOf(user)),
     stageIndexOf: stageIndex,
-    roleCapabilities: roleCapabilitiesFor(user.id),
-    badgeCapabilities,
+    roleCapabilities: agent ? [] : roleCapabilitiesFor(user.id),
+    badgeCapabilities: agent ? [] : badgeCapabilities,
     badgeDenies,
     stageUnlockOverrides: stageUnlockOverridesFromVars(),
     // Admins pass every capability gate (shared/capabilities.ts honors this):
     // real role on the user record, never a parallel permission path.
     isAdmin: user.role === "admin" || user.role === "founder",
     // Read by the break-glass step alone (Rye, 2026-09-21; BREAK_GLASS_SEAT).
-    isFounder: user.role === "founder",
+    isFounder: !agent && user.role === "founder",
     // 0098: what the VILLAGE holds. Read live, never cached, in the same
     // shape as badgeGrantsFor above, and for the same reason turned up to
     // eleven: a cached permission that a hand-written UPDATE can desync
     // between processes is not a permission. Empty on every deployment that
     // has not acted, and empty means the gate behaves exactly as it did.
-    villageHeld: await villageHeldCapabilities(getPool()),
+    villageHeld: agent
+      ? Array.from(new Set([...(await villageHeldCapabilities(getPool())), ...AGENT_NEVER_KEYS]))
+      : await villageHeldCapabilities(getPool()),
   };
 }
 
