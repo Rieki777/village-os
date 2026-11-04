@@ -21,6 +21,8 @@ export interface ListTask {
   memberPinned?: boolean;
   /** Who asked for it, from the knowledge library. */
   requestedBy?: string | null;
+  /** The library moved it to a role nobody holds yet. */
+  waitingForRole?: boolean;
   source: TaskSource;
   version: number;
   createdOn: string;

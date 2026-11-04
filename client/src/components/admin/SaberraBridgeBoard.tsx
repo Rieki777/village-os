@@ -209,6 +209,13 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
                 ? `${plural(a.needsOwner.waiting, "task")} from Sera waiting for an owner.`
                 : "No task is waiting for an owner."}
           </p>
+          {!!a.needsOwner.items?.length && (
+            <ul className="space-y-0.5">
+              {a.needsOwner.items.map((it, i) => (
+                <li key={i}>{it.title}{it.role ? `, for ${it.role}` : ""}</li>
+              ))}
+            </ul>
+          )}
         </QuestCard>
 
         <QuestCard title="Data agreement" state={agree.phase === "before" ? "active" : "done"}>

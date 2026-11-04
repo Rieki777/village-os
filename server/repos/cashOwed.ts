@@ -84,7 +84,7 @@ export async function recentlyPaidCashRows(pool: Pool, limit: number): Promise<R
 }
 
 /** A member claims their own owed row. Compare-and-set on the owner and the state. */
-export async function claimCashOwedRow(pool: Pool, id: string, userId: string): Promise<ResultSetHeader> {
+export async function claimCashOwedRow(pool: Pool | PoolConnection, id: string, userId: string): Promise<ResultSetHeader> {
   const [res] = await pool.query<ResultSetHeader>(
     "UPDATE `cash_owed` SET `state` = 'claimed', `claimed_at` = CURRENT_TIMESTAMP WHERE `id` = ? AND `user_id` = ? AND `state` = 'owed'",
     [id, userId],
