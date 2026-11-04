@@ -82,6 +82,8 @@ export function myMoon(over: Partial<MyMoonData> = {}): MyMoonData {
     moon: { cycleId: "lunar-2026-10", firstDay: "2026-10-10", lastDay: "2026-11-08", periodWords: "10 October to 8 November 2026", endOfMoonFriday: "2026-11-05", sendBy: "2026-11-09", halfwayDay: "2026-10-25" },
     moons: [{ cycleId: "lunar-2026-10", periodWords: "10 October to 8 November 2026", status: "draft", statusWords: "Draft" }],
     recap: null,
+    guideUrl: null,
+    thanks: [],
     items,
     roles: ROLES,
     coverage: {

@@ -117,6 +117,8 @@ export function normalizeMyMoon(raw: Partial<MyMoonData> & Pick<MyMoonData, "moo
   const defaults: Omit<MyMoonData, "moon"> = {
     moons: [],
     recap: null,
+    guideUrl: null,
+    thanks: [],
     items: [],
     roles: [],
     coverage: { roles: [], outsideMyRoles: [], seasonGoals: [], ownGoals: [], rolesWithNoItems: [] },
