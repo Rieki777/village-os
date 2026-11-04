@@ -133,13 +133,9 @@ const QUESTIONS = [
 export function YourWordsScreen({
   season,
   onChange,
-  onBack,
-  onNext,
 }: {
   season: SeasonState;
   onChange: (next: SeasonState) => void;
-  onBack: () => void;
-  onNext: () => void;
 }) {
   const set = (key: "love" | "offer" | "why", value: string) => onChange({ ...season, ownWords: { ...season.ownWords, [key]: value } });
   return (
@@ -159,14 +155,20 @@ export function YourWordsScreen({
           <GrowingText id={`own-${q.key}`} label={q.label} placeholder={q.hint || undefined} value={season.ownWords[q.key]} onValue={(v) => set(q.key, v)} max={OWN_WORDS_MAX} minRows={3} mic />
         </div>
       ))}
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className={SECONDARY} onClick={onBack}>
-          {RP_WORDS.back}
-        </button>
-        <button type="button" className={PRIMARY} onClick={onNext}>
-          {RP_WORDS.onToRoles}
-        </button>
-      </div>
+    </div>
+  );
+}
+
+/** Back and "Pick the roles", drawn in the sticky step bar so no bar ever hides them. */
+export function YourWordsActions({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2" data-yours-actions="">
+      <button type="button" className={SECONDARY} onClick={onBack}>
+        {RP_WORDS.back}
+      </button>
+      <button type="button" className={PRIMARY} onClick={onNext}>
+        {RP_WORDS.onToRoles}
+      </button>
     </div>
   );
 }

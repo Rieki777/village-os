@@ -42,6 +42,7 @@ export default function MobileTabBar() {
 
   const bar = (
     <nav
+      data-mobile-tabbar=""
       className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-teal-band to-teal-deep backdrop-blur-xl border-t border-white/15 shadow-[0_-10px_30px_-12px_rgba(0,0,0,0.45)]"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       aria-label="Bottom navigation"

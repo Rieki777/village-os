@@ -54,7 +54,7 @@ import StepWords, { type WordsRole } from "./StepWords";
 import StepSeason, { type SeasonState } from "./StepSeason";
 import StepTerms from "./StepTerms";
 import StepShare from "./StepShare";
-import { PathToggle, WelcomeScreen, YourWordsScreen, pathFromUrl, readPlace, rememberPath, roleFromUrl, urlNamesPlace, writePlace, type FrontScreen, type ProposalPath } from "./QuickPath";
+import { PathToggle, WelcomeScreen, YourWordsActions, YourWordsScreen, pathFromUrl, readPlace, rememberPath, roleFromUrl, urlNamesPlace, writePlace, type FrontScreen, type ProposalPath } from "./QuickPath";
 import StepDoneCard from "./StepDoneCard";
 import BringInRole from "./BringInRole";
 import OwnAiPrompt from "./OwnAiPrompt";
@@ -246,7 +246,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   useEffect(() => {
     const root = document.documentElement;
     const before = root.style.scrollPaddingBottom;
-    root.style.scrollPaddingBottom = "calc(env(safe-area-inset-bottom, 0px) + 11rem)";
+    root.style.scrollPaddingBottom = "calc(env(safe-area-inset-bottom, 0px) + 7rem)";
     return () => {
       root.style.scrollPaddingBottom = before;
     };
@@ -361,7 +361,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   const progressNow = front === "welcome" ? 1 : front === "yours" ? 2 : quick ? index + 3 : index + 1;
 
   return (
-    <div data-proposal-pad="" className="grid gap-5 max-md:pb-[max(4rem,calc(env(safe-area-inset-bottom,0px)+4rem))]">
+    <div data-proposal-pad="" className="grid gap-5 max-md:pb-[env(safe-area-inset-bottom,0px)]">
       <PathToggle path={path} onPath={choosePath} />
       <div className="grid gap-1">
         <div
@@ -397,8 +397,6 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
             setSeason(next);
             save.touch("season");
           }}
-          onBack={() => { setDone(null); setFront("welcome"); }}
-          onNext={() => { setDone(stepDone("yours")); setFront("steps"); }}
         />
       )}
 
@@ -518,11 +516,18 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
       */}
       <div
         data-hides-fab-phone
+        data-hides-tabbar-phone
         data-step-bar=""
         className="sticky bottom-[var(--rp-bar-bottom)] z-20 -mx-4 grid gap-1 border-t border-border bg-card/95 px-3 py-2 backdrop-blur md:bottom-0"
-        style={{ "--rp-bar-bottom": "max(calc(env(safe-area-inset-bottom, 0px) + 4rem), 4rem)" } as React.CSSProperties}
+        style={{ "--rp-bar-bottom": "env(safe-area-inset-bottom, 0px)" } as React.CSSProperties}
       >
         <SaveLine status={save.status} error={save.error} onRetry={() => void save.flush()} />
+        {front === "yours" && (
+          <YourWordsActions
+            onBack={() => { setDone(null); setFront("welcome"); }}
+            onNext={() => { setDone(stepDone("yours")); setFront("steps"); }}
+          />
+        )}
         {front === "steps" && (
         <div className="flex items-center justify-between gap-2">
           <button
