@@ -47,7 +47,7 @@ export interface EditField {
 
 export const EDIT_FIELDS: readonly EditField[] = [
   { field: "aim", key: "purpose", label: W.purpose, term: "purpose", list: false, multiline: true },
-  { field: "existsWhile", key: "existsWhile", label: W.existsWhile, term: "existsWhile", list: false, multiline: false, hint: ROLE_CCOS_WORDS.existsWhileHint },
+  { field: "existsWhile", key: "existsWhile", label: W.existsWhile, term: "existsWhile", list: false, multiline: true, hint: ROLE_CCOS_WORDS.existsWhileHint },
   { field: "domain", key: "decide", label: W.decide, term: "decide", list: false, multiline: true },
   { field: "authorities", key: "authorities", label: W.authorities, term: "authorities", list: true, multiline: true, hint: ROLE_CCOS_WORDS.authoritiesHint },
   { field: "accountabilities", key: "countOnMe", label: W.countOnMe, term: "countOnMe", list: true, multiline: true, hint: RP_WORDS.countOnMeHint },
@@ -57,7 +57,7 @@ export const EDIT_FIELDS: readonly EditField[] = [
   { field: "signsStretched", key: "signsStretched", label: W.signsStretched, term: "signsStretched", list: false, multiline: true, hint: ROLE_CCOS_WORDS.signsStretchedHint, group: "holding" },
   { field: "flowsBack", key: "flowsBack", label: W.flowsBack, term: "flowsBack", list: false, multiline: true, hint: ROLE_CCOS_WORDS.flowsBackHint, group: "holding" },
   { field: "stepBack", key: "stepBack", label: W.stepBack, term: "stepBack", list: false, multiline: true, hint: ROLE_CCOS_WORDS.stepBackHint, group: "holding" },
-  { field: "timeCommitment", key: "timeCommitment", label: W.timeCommitment, term: "timeCommitment", list: false, multiline: false, hint: ROLE_CCOS_WORDS.timeCommitmentHint },
+  { field: "timeCommitment", key: "timeCommitment", label: W.timeCommitment, term: "timeCommitment", list: false, multiline: true, hint: ROLE_CCOS_WORDS.timeCommitmentHint },
 ];
 
 /** The new role's name: a field of its words, and the only one a new role must have. */
