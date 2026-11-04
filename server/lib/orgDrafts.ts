@@ -35,6 +35,7 @@
  * this purpose either: `recordEvent` swallows its own errors by design, so it
  * is lossy, and an archive may not be.
  */
+import { isAgentAccount } from "../repos/agentAccounts";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
@@ -1840,7 +1841,8 @@ export async function revertDraft(
           [c.orgRoleId, c.payload?.userId ? String(c.payload.userId)
             : documentedKey(String(c.payload?.displayName ?? "unnamed"))],
         );
-      } else if (c.op === "end_holding" && c.beforeJson) {
+      } else if (c.op === "end_holding" && c.beforeJson && !(c.beforeJson.user_id && (await isAgentAccount(conn, String(c.beforeJson.user_id))))) {
+        // 0319: a holder marked as an agent account since the holding ended is not seated again; it holds no role.
         const b = c.beforeJson;
         // A NEW row, not a resurrection of the old id. `active_holder_key` is
         // a generated column under a unique index, and the ended row still
