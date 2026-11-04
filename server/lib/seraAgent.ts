@@ -315,6 +315,16 @@ export const SERA_TOOL_WORDS: Record<SeraTool | "undo_sera_action", string> = {
 };
 
 /**
+ * Where the daily summary opens. Undo is admin-only (decision, 2026-11-04), so an
+ * admin's summary opens the Players tab, which carries the bridge panel and each
+ * Undo; an approver who is not an admin gets no link into admin, and the body
+ * tells them to ask an admin.
+ */
+export function seraDigestLink(isAdmin: boolean): string | null {
+  return isAdmin ? "/admin?tab=players" : null;
+}
+
+/**
  * Sera's actions since `since` (the last digest; a day back when there was
  * none) as a short summary, or null when there were none. Refusals and undos
  * are left out: the digest says what the agent changed.

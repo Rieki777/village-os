@@ -176,7 +176,7 @@ import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
 import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
 import { agentAccountIds, isAgentAccount } from "./repos/agentAccounts";
-import { seraDigest } from "./lib/seraAgent";
+import { seraDigest, seraDigestLink } from "./lib/seraAgent";
 import { readConfigDocument, writeConfigDocument } from "./repos/appConfigDocs";
 import { villageDayKey } from "../shared/companionItems";
 import { register as registerBadgesRoutes } from "./routes/badges";
@@ -4925,7 +4925,11 @@ async function startServer() {
     const approvers = new Set([...(await liveHoldersOf("moon.approve")), ...(await liveHoldersOf("moon.approve_alone"))]);
     const people = Array.from(approvers).filter((id) => !agents.has(id));
     for (const id of people) {
-      await notify({ userId: id, type: "sera_agent_digest", title: digest.title, body: digest.body, link: "/admin", dedupeKey: `sera-agent-digest:${day}:${id}` });
+      // Undo stays admin-only (decision, 2026-11-04). An admin's summary opens the panel that
+      // carries each Undo; an approver who is not an admin gets no admin link, and the body tells
+      // them to ask an admin instead.
+      const link = seraDigestLink(userIsAdmin(await members.byId(id)));
+      await notify({ userId: id, type: "sera_agent_digest", title: digest.title, body: digest.body, link, dedupeKey: `sera-agent-digest:${day}:${id}` });
     }
     return `${digest.count} actions, told ${people.length}`;
   });
