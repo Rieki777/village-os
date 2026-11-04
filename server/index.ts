@@ -93,6 +93,7 @@ import { register as registerJoinAnswerRoutes } from "./routes/joinAnswers";
 import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
 import { register as registerVerifyEmailRoutes } from "./routes/verifyEmail";
+import { matchOnEvent } from "./lib/seraPersonMatch";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
@@ -7968,6 +7969,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     void recordEvent(getPool(), {
       kind: "audit", text, actorUserId: userId, entityType: "user", entityRef: userId, audience: "admin",
     });
+    // A member made a proved profile or proved their email: ask Sera, by keyed hash only, who they are (off by default).
+    if (text === "auth:email-verified" || text === "auth:google-joined") matchOnEvent(getPool(), userId, (t) => recordAuthAudit(t, userId));
   };
   const letters = { authSecret: AUTH_TOKEN_SECRET, sendEmail: sendResendEmail, escapeHtml, origin: notifyDeps.origin, projectName: () => mergedConfig().project.name }; // every auth letter's five
   registerRecoveryRoutes(app, {
