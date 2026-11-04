@@ -53,6 +53,7 @@ import { cleanLine, cleanText } from "./sessions";
  *   POST   /api/sessions                                gains `templateId?: number`
  *   GET    /api/session-templates/rooms/:sessionId      TemplateRoomView
  *   POST   /api/session-templates/rooms/:sessionId/stick       StickMove -> TemplateRoomView
+ *   POST   /api/session-templates/rooms/:sessionId/moon-share  { show } -> TemplateRoomView (the stick holder or a host)
  *   POST   /api/session-templates/rooms/:sessionId/priorities  { text } | { fromCarried: id } -> TemplateRoomView
  *   PATCH  /api/session-templates/rooms/:sessionId/priorities/:pid   { outcome } | { text } | { remove: true } -> TemplateRoomView
  *   POST   /api/session-templates/rooms/:sessionId/shares      { kind, text, speakerNo? } -> TemplateRoomView
@@ -96,6 +97,9 @@ export const SECTION_KINDS = [
   "priorities_review",
   "carried_over",
   "close",
+  "moon_recaps",
+  "moon_goals",
+  "moon_invoices",
 ] as const;
 export type SectionKind = (typeof SECTION_KINDS)[number];
 export const isSectionKind = (v: unknown): v is SectionKind => typeof v === "string" && (SECTION_KINDS as readonly string[]).includes(v);
@@ -111,7 +115,42 @@ export const SECTION_KIND_DEFS: Record<SectionKind, { label: string; hint: strin
   priorities_review: { label: "Read back the priorities", hint: "The priorities the meeting this one feeds from chose, each marked done, partly or carried over." },
   carried_over: { label: "Carried over", hint: "What the meeting this one feeds from carried over, ready to take up again." },
   close: { label: "Close", hint: "A closing round." },
+  moon_recaps: {
+    label: "Our moons",
+    hint: "The talking stick passes, and whoever holds it chooses to show their moon or speak only: each role, what they delivered, the season goals it served and proof links. Plan its minutes for the room; the room adds 5 for each person here. No amounts.",
+  },
+  moon_goals: { label: "Moon goals", hint: "The stick holder's goals for the moon just ended, each with how it landed, then the goals they set for the next moon. No numbers." },
+  moon_invoices: { label: "Sending together", hint: "Each person sees only their own recap and invoice status, with a button to send theirs. The room sees how many have sent. No amounts." },
 };
+
+/**
+ * THE END-OF-MOON KINDS. They read the moon-review module's room door
+ * (`GET /api/moon-review/rooms/:sessionId`, shared/moonRecap.ts), so the
+ * template editor offers them only while that module is on, and the End of
+ * moon template is seeded only then (`MOON_TEMPLATE`). A section of one of
+ * these kinds that is already in a flow keeps its kind in the editor.
+ *
+ * ROLLING BACK. An older release's `readFlow` cleans each stored section on
+ * its own and drops one whose kind it does not know, so a flow holding these
+ * kinds reads there as the same flow without them. A template SAVED by that
+ * older release loses them for good, since it writes back what it read.
+ */
+export const MOON_SECTION_KINDS: readonly SectionKind[] = ["moon_recaps", "moon_goals", "moon_invoices"];
+/** `MOON_REVIEW_MODULE` in shared/moonRecap.ts, spelled here so the sessions chunk does not carry that file. */
+export const MOON_REVIEW_MODULE_ID = "moon-review";
+export const isMoonKind = (k: SectionKind): boolean => MOON_SECTION_KINDS.includes(k);
+
+/** The kinds the template editor offers: the moon kinds only while the module is on, and always the kind a section already has. */
+export function editorKinds(moonOn: boolean, current?: SectionKind): SectionKind[] {
+  return SECTION_KINDS.filter((k) => moonOn || !isMoonKind(k) || k === current);
+}
+
+/** Minutes the room adds to an `Our moons` section for each person here. */
+export const MOON_MINUTES_PER_PERSON = 5;
+
+/** A section's minutes for the people here now: `Our moons` grows by 5 a person. */
+export const sectionMinutesFor = (s: Pick<TemplateSection, "kind" | "minutes">, people: number): number =>
+  s.kind === "moon_recaps" ? s.minutes + MOON_MINUTES_PER_PERSON * Math.max(0, people) : s.minutes;
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -374,6 +413,12 @@ export interface StickState {
   at: number;
   /** How many times the stick has gone all the way round. */
   rounds: number;
+  /**
+   * Who chose Show my moon in an `Our moons` section, as member numbers.
+   * Everyone else speaks only, which is where every holder starts. An older
+   * release reads the stick without it and drops it on its next move.
+   */
+  shows?: number[];
 }
 
 export const emptyStick = (): StickState => ({ order: [], at: 0, rounds: 0 });
@@ -392,7 +437,22 @@ export function readStick(raw: unknown): StickState {
   const unique = Array.from(new Set(order)).slice(0, TEMPLATE_LIMITS.stickPeople);
   const at = typeof b.at === "number" && Number.isInteger(b.at) && b.at >= 0 && b.at < unique.length ? b.at : 0;
   const rounds = typeof b.rounds === "number" && Number.isInteger(b.rounds) && b.rounds >= 0 ? b.rounds : 0;
-  return { order: unique, at, rounds };
+  const shows = Array.isArray(b.shows) ? Array.from(new Set((b.shows as unknown[]).filter((n): n is number => typeof n === "number" && unique.includes(n)))) : [];
+  return { order: unique, at, rounds, shows };
+}
+
+/** The stick after its holder chooses Show my moon (`show`) or Speak only. Nobody holding it: unchanged. */
+export function chooseMoonShare(s: StickState, show: boolean): StickState {
+  const { holder } = stickHolders(s);
+  if (holder == null) return s;
+  const rest = (s.shows ?? []).filter((n) => n !== holder);
+  return { ...s, shows: show ? [...rest, holder] : rest };
+}
+
+/** `{ show: boolean }`: the stick holder's choice in an `Our moons` section. */
+export function cleanMoonShare(raw: unknown): Clean<{ show: boolean }> {
+  const b = bodyOf(raw);
+  return typeof b.show === "boolean" ? { ok: true, value: { show: b.show } } : no(TEMPLATE_REFUSALS.moonShareChoice);
 }
 
 export type StickMove =
@@ -517,6 +577,8 @@ export interface StickView {
   holder: number | null;
   next: number | null;
   rounds: number;
+  /** Who chose Show my moon (an `Our moons` section). Absent from an older server: everyone speaks only. */
+  shows?: number[];
 }
 
 /** What the room's template panel reads. Absent pieces are null. */
@@ -539,6 +601,8 @@ export interface TemplateRoomView {
   shares: ShareRow[];
   /** The running season and its priorities, or null when no season runs or it names none. */
   season: SeasonRef | null;
+  /** This viewer's member number, so the stick holder sees their own choice. Absent from an older server. */
+  viewerNo?: number | null;
 }
 
 // ── The season (0292) ───────────────────────────────────────────────────────
@@ -866,6 +930,10 @@ export const TEMPLATE_REFUSALS = {
   tensionNotFound: "That tension is not here any more.",
   tensionNotYours: "Only the people who were in that Heart share say how its tensions group.",
   seasonUnknown: "That season is not one the village keeps.",
+  moonShareChoice: "Choose Show my moon or Speak only.",
+  moonShareHolder: "The person holding the stick chooses this.",
+  moonShareNoStick: "Start the stick first.",
+  moonShareNoSection: "This meeting has no Our moons section.",
 } as const;
 
 export const TEMPLATE_COPY = {
@@ -942,6 +1010,39 @@ export const TEMPLATE_COPY = {
   thrivingLine: "What is shared here is kept so the village can ask: are we really helping people thrive?",
 } as const;
 
+/**
+ * The End of moon sections' words (`moon_recaps`, `moon_goals`,
+ * `moon_invoices`). None of them carries a number about a person's moon: the
+ * room hears what people delivered, never what they are paid and never a
+ * score (spec section 9, addendum A4). The two counts here are of people.
+ */
+export const MOON_ROOM_COPY = {
+  notReady: "The moon recaps are not ready to show here yet. Share by voice, and send from My moon.",
+  showMine: "Show my moon",
+  speakOnly: "Speak only",
+  chooseAsk: "Whoever holds the stick chooses",
+  chooses: (name: string) => `${name} chooses: Show my moon or Speak only.`,
+  speaking: (name: string) => `${name} is speaking without their moon on screen.`,
+  noRecap: (name: string) => `${name} has no recap to show this moon.`,
+  seasonGoals: "Season goals it served",
+  proof: "Proof",
+  readyHeading: "Ready to share",
+  readyEmpty: "Names show here as people say they are ready to share.",
+  goalsLast: "Goals for the moon just ended",
+  goalsNext: "Goals for the next moon",
+  goalsEmpty: "No moon goals to show.",
+  goalsWaiting: "The stick holder's moon goals show here once they choose Show my moon.",
+  goalFlagged: "Carried twice, so it comes to the circle",
+  doneWhen: (words: string) => `Done when: ${words}`,
+  mineHeading: "Yours",
+  sendMine: "Send mine",
+  mineNone: "You have nothing to send this moon.",
+  sentCount: (n: number) => (n === 0 ? "Nobody has sent yet." : n === 1 ? "1 person has sent." : `${n} people have sent.`),
+} as const;
+
+/** Where Send mine goes: My moon, on the member's own profile. */
+export const MY_MOON_HREF = "/profile#my-moon";
+
 // ── The three templates every village starts with ────────────────────────────
 
 /**
@@ -1013,6 +1114,40 @@ export const DEFAULT_TEMPLATES: readonly TemplateSeed[] = [
     ],
   },
 ];
+
+/**
+ * THE END OF MOON TEMPLATE, seeded once by `end-of-moon` and only while the
+ * moon-review module is on (server/lib/sessionTemplates.ts
+ * `ensureMoonSeeded`), so a village with the module off never sees sections
+ * that do nothing. Its length is the flow plus 5 minutes for each person who
+ * shares: 95 for seven people.
+ */
+export const MOON_TEMPLATE: TemplateSeed = {
+  seedKey: "end-of-moon",
+  name: "End of moon",
+  category: "Moon rhythm",
+  summary:
+    "Once a moon, on the last Friday before the new moon, we read the season's goals, each share our moon against our role cards, set our goals for the next moon, celebrate, name the roles that should change, and send our recaps and invoices together. Anyone not ready sends by the Monday after the circle.",
+  durationMin: 95,
+  position: 1,
+  feedsFrom: null,
+  flow: [
+    sec("arrive", "round", "Arriving", 5, "How are you arriving, from 1 to 11?"),
+    sec("season", "season_priorities", "This season's goals", 5, "Read the season's goals aloud. Which ones moved this moon?"),
+    sec(
+      "moons",
+      "moon_recaps",
+      "Our moons",
+      10,
+      "Pass the stick. Whoever holds it chooses Show my moon or Speak only, and shares what they delivered for each role, which season goals it served, and what sat outside their roles.",
+    ),
+    sec("goals", "moon_goals", "Moon goals", 10, "Whoever holds the stick reads their goals for the moon just ended and how each one landed, then the goals they set for the next moon."),
+    sec("wins", "wins", "Wins and celebrations", 10, "What do we celebrate from this moon?"),
+    sec("roles", "talking_stick", "Roles to change", 10, "Which roles should expand, contract, be handed back, or be created? Each one is captured for its circle's next governance meeting."),
+    sec("send", "moon_invoices", "Sending together", 5, "Anyone ready sends their recap and draft invoice now. Anyone not ready sends by the Monday after the circle, and it counts the same."),
+    sec("close", "close", "Closing round", 5, "One word each to close the moon."),
+  ],
+};
 
 /** The doors the room's panel reads, for the page. */
 export const TEMPLATES_ROOM_POLL_MS = 3000;
