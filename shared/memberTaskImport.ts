@@ -29,6 +29,8 @@ export interface LibraryTask {
   confidence: number | null;
   /** Who asked for it, in the library's own words (requested_by). Display only; emails taken out. */
   requestedBy: string | null;
+  /** The library's role id when it sends one (Sera's Role relation). */
+  roleId: string | null;
 }
 
 export interface HeldTask {
@@ -50,6 +52,10 @@ export interface ImportPlan {
   tombstoned: LibraryTask[];
   skipped: { item: LibraryTask | null; why: "done" | "cancelled" | "other_owner" | "no_id" | "no_title" | "duplicate" }[];
   needsOwner: LibraryTask[];
+  /** A member's own open task the library moved to a role with nobody holding it. It stays on their list, marked. */
+  roleWaiting: { id: string; roleId: string | null }[];
+  /** Held open tasks the library holds with a person again (clears a role-waiting mark). */
+  ownedAgain: string[];
   flagged: LibraryTask[];
 }
 
@@ -77,6 +83,11 @@ export function readLibraryTask(raw: unknown): LibraryTask | null {
     dueOn: isDayKey(dueRaw) ? dueRaw : null,
     ownerId: owner || null,
     status: str(pick(o, ["status", "Status", "state"])).toLowerCase(),
+    roleId: (() => {
+      const r = pick(o, ["role_id", "roleId", "role"]);
+      const v = r && typeof r === "object" ? str((r as Record<string, unknown>).id) : str(r);
+      return v ? v.slice(0, 64) : null;
+    })(),
     requestedBy: (() => {
       const r = str(pick(o, ["requested_by", "requestedBy"])).replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
       return r || null;
@@ -100,7 +111,7 @@ export function itemsOf(answer: unknown): unknown[] {
 }
 
 export function planImport(rawItems: readonly unknown[], ownerId: string, held: readonly HeldTask[]): ImportPlan {
-  const plan: ImportPlan = { create: [], update: [], unchanged: [], keptEdits: [], tombstoned: [], skipped: [], needsOwner: [], flagged: [] };
+  const plan: ImportPlan = { create: [], update: [], unchanged: [], keptEdits: [], tombstoned: [], skipped: [], needsOwner: [], roleWaiting: [], ownedAgain: [], flagged: [] };
   const byExt = new Map(held.map((h) => [h.externalId, h]));
   const seen = new Set<string>();
   for (const raw of rawItems) {
@@ -112,12 +123,18 @@ export function planImport(rawItems: readonly unknown[], ownerId: string, held: 
     const s = item.status.replace(/[\s_-]+/g, " ");
     if (s === "done" || s === "completed" || s === "complete") { plan.skipped.push({ item, why: "done" }); continue; }
     if (s === "cancelled" || s === "canceled") { plan.skipped.push({ item, why: "cancelled" }); continue; }
-    if (s === "needs owner") { plan.needsOwner.push(item); continue; }
+    if (s === "needs owner") {
+      const mine = byExt.get(item.externalId);
+      if (mine && mine.status === "open") plan.roleWaiting.push({ id: mine.id, roleId: item.roleId });
+      else plan.needsOwner.push(item);
+      continue;
+    }
     if (item.ownerId && item.ownerId !== ownerId) { plan.skipped.push({ item, why: "other_owner" }); continue; }
     if (item.flagged) plan.flagged.push(item);
     const h = byExt.get(item.externalId);
     if (!h) { plan.create.push(item); continue; }
     if (h.status !== "open") { plan.tombstoned.push(item); continue; }
+    plan.ownedAgain.push(h.id);
     if (h.memberEdited) { plan.keptEdits.push(item); continue; }
     if (h.title === item.title && h.tier === item.tier && h.dueOn === item.dueOn && (h.requestedBy ?? null) === item.requestedBy) plan.unchanged.push(item);
     else plan.update.push({ id: h.id, next: item });
