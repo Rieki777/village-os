@@ -122,6 +122,8 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/aligned": "Aligned",
   "/gratitude": "Gratitude",
   "/404": "Page not found",
+  // The OAuth consent page a connector sends a member to (B4); the name is the page's own heading.
+  "/oauth/authorize": "Connect an agent",
 };
 
 /**
