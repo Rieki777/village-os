@@ -56,6 +56,11 @@ export default function AgentsPanel({ password, players }: { password: string; p
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? id;
 
   const mark = async (userId: string, isAgent: boolean) => {
+    // Either way the account's tokens end, so the person is asked first.
+    const ask = isAgent
+      ? `Mark ${nameOf(userId)} as an agent account? Its tokens end, and it can hold no role from now on.`
+      : `Mark ${nameOf(userId)} as a person's account again? Its agent tokens end, and it can hold roles again.`;
+    if (!window.confirm(ask)) return;
     const r = await fetch(`${API_BASE}/admin/players/${encodeURIComponent(userId)}/agent`, {
       method: "PUT",
       headers: authHeaders(password, { "Content-Type": "application/json" }),
@@ -108,7 +113,7 @@ export default function AgentsPanel({ password, players }: { password: string; p
           </div>
         ))}
         <div className="flex flex-wrap items-end gap-2 pt-2">
-          <label className="text-sm text-foreground">
+          <label className="w-full text-sm text-foreground sm:w-auto">
             Account
             <select aria-label="Account to mark as an agent's" className={field} value={pick} onChange={(e) => setPick(e.target.value)}>
               <option value="" />

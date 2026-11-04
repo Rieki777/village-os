@@ -51,6 +51,13 @@ describe("the agent accounts panel", () => {
     expect(await screen.findByText("Agent")).toBeTruthy();
     expect(screen.getByText("Erasing or anonymising a member is always a person's act.")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Account to mark as an agent's"), { target: { value: "u-ana" } });
+    // It asks first: a "no" sends nothing, a "yes" marks it.
+    const ask = vi.fn(() => false);
+    vi.stubGlobal("confirm", ask);
+    fireEvent.click(screen.getByText("Mark as an agent account"));
+    expect(ask).toHaveBeenCalledWith(expect.stringContaining("Its tokens end"));
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+    vi.stubGlobal("confirm", vi.fn(() => true));
     fireEvent.click(screen.getByText("Mark as an agent account"));
     await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.url.endsWith("/admin/players/u-ana/agent"))).toBe(true));
     expect(calls.find((c) => c.url.endsWith("/admin/players/u-ana/agent"))!.body).toEqual({ isAgent: true });

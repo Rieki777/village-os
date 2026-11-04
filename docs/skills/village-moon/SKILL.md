@@ -44,7 +44,7 @@ The village connector is a remote MCP server at `VILLAGE_ORIGIN/api/agent/v1/mcp
 1. Call `mark_my_task` with `taskId` and `action` (`done`, `remove` or `undo`; for `remove`, a `reason` and an optional `note`). Nothing is written. The answer carries `echo` (the task, its title, its status now, the action) and a `confirmToken`.
 2. Show the member the echo in plain words and ask. After their yes, call `mark_my_task` again with the same arguments and `confirmToken`.
 
-The second call reads the task again. If it moved in between (pressed on the web, closed by the Sera sync), the token no longer matches and nothing is written: call again without the token and show the member the task as it is now. A token works once and for ten minutes.
+The second call reads the task again. If it moved in between (pressed on the web, closed by the Sera sync), the token no longer matches and nothing is written: call again without the token and show the member the task as it is now. A token works once and for ten minutes: send the same one again and it is refused, even when nothing moved.
 
 Done tells Sera exactly as a tap on the board does. Do not also close the task in Sera yourself.
 

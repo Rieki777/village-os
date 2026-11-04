@@ -24,6 +24,7 @@ export async function isAgentAccount(db: Db, userId: string): Promise<boolean> {
 
 /** Mark an account as an agent's, or as a person's again. */
 export async function setAgentAccount(db: Db, userId: string, isAgent: boolean): Promise<boolean> {
+  // Callers that flip the flag also end the account's agent tokens (server/routes/agentAccounts.ts).
   const [res] = await db.query("UPDATE `users` SET `is_agent` = ? WHERE `id` = ?", [isAgent ? 1 : null, userId]);
   return Number((res as { affectedRows?: number }).affectedRows ?? 0) > 0;
 }
@@ -152,9 +153,10 @@ export async function markAgentActionUndone(db: Db, id: string, byUserId: string
 
 /** How many roles this account holds now. An account is marked an agent's only while it holds none. */
 export async function liveRoleCount(db: Db, userId: string): Promise<number> {
+  // Both planes: the org chart's seatings, and the permission roles that carry powers.
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM `org_role_assignments` WHERE `user_id` = ? AND `ended_at` IS NULL",
-    [userId],
+    "SELECT (SELECT COUNT(*) FROM `org_role_assignments` WHERE `user_id` = ? AND `ended_at` IS NULL) + (SELECT COUNT(*) FROM `role_holders` WHERE `user_id` = ?) AS n",
+    [userId, userId],
   );
   return Number(rows[0]?.n ?? 0);
 }
