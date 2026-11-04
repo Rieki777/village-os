@@ -174,6 +174,7 @@ import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan"
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
+import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
 import { isAgentAccount } from "./repos/agentAccounts";
 import { villageDayKey } from "../shared/companionItems";
 import { register as registerBadgesRoutes } from "./routes/badges";
@@ -1763,10 +1764,15 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
  *   founder — master admin: implies admin, manages admins, cannot be demoted
  *             by non-founders, and the last founder cannot be demoted at all.
  */
+/** Whether this member row is an admin: the role, or a live admin group (sheet 19, server/lib/groupAdmin.ts). */
+function userIsAdmin(user: any): boolean {
+  return !!user && (user.role === "admin" || user.role === "founder" || adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0);
+}
+
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!user || (user.role !== "admin" && user.role !== "founder" && !adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length)) return false; // sheet 19: or a live admin group, server/lib/groupAdmin.ts
+  if (!userIsAdmin(user)) return false;
   (req as any).adminUser = user;
   return true;
 }
@@ -6710,6 +6716,17 @@ async function startServer() {
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
     registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin });
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
+    registerAgentOAuthRoutes(app, {
+      authedUser, getPool, overLimit, clientIp,
+      origin: (req) => (process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, ""),
+      memberById: (id) => members.byId(id),
+      // The same two rules the Your agent panel's mint applies (cleanScopes): admin to an admin, Sera's scope to an agent account that is not one.
+      extraScopes: async (u) => {
+        const admin = userIsAdmin(u);
+        if (admin) return ["admin"];
+        return (await isAgentAccount(getPool(), String(u?.id ?? ""))) ? ["sera.undoable"] : [];
+      },
+    });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
     app.all(`${AGENT_V1}/{*splat}`, (_req, res) => res.status(404).json({ error: "Not found" }));

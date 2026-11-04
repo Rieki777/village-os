@@ -366,4 +366,139 @@ describe.skipIf(!DB_CONFIGURED)("the connector's transport guards", () => {
     expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: BASE })).status).toBe(200);
     expect((await raw(body, { Authorization: `Bearer ${anaVat}` })).status).toBe(200);
   });
+
+  it("says invalid_token for a token that failed, nothing for none sent, and insufficient_scope for a 403", async () => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const none = await raw(body);
+    expect(none.status).toBe(401);
+    expect(none.headers.get("www-authenticate")).not.toContain("error=");
+    const bad = await raw(body, { Authorization: "Bearer vat_not-a-real-token" });
+    expect(bad.status).toBe(401);
+    expect(bad.headers.get("www-authenticate")).toContain('error="invalid_token"');
+    const ok = await raw(body, { Authorization: `Bearer ${anaVat}` });
+    expect(ok.headers.get("www-authenticate")).toBeNull();
+    const narrow = await raw(body, { Authorization: `Bearer ${calendarVat}` });
+    expect(narrow.status).toBe(403);
+    expect(narrow.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("signing a connector in with OAuth (B4, check 33)", () => {
+  const { createHash, randomBytes } = require("crypto") as typeof import("crypto");
+  const pkce = () => {
+    const verifier = randomBytes(32).toString("base64url");
+    return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
+  };
+  const REDIRECT = "https://claude.ai/api/mcp/auth_callback";
+  let clientId = "";
+  let cara = { token: "", id: "" };
+
+  const token = (form: Record<string, string>) =>
+    fetch(`${BASE}/api/agent/v1/oauth/token`, { // module-review-ok: the test client dialling the built server on localhost
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(form).toString(),
+    }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }));
+
+  async function allow(member: { token: string }, challenge: string, extra: Record<string, unknown> = {}) {
+    const r = await call("POST", "/api/agent/oauth/authorize", { clientId, redirectUri: REDIRECT, state: "st-1", codeChallenge: challenge, codeChallengeMethod: "S256", scopes: ["moon.read", "tasks.write"], decision: "allow", ...extra }, member.token);
+    expect(r.status, r.text).toBe(200);
+    return new URL(r.json.redirect);
+  }
+
+  it("publishes the metadata and points a 401 at it", async () => {
+    const pr = await call("GET", "/.well-known/oauth-protected-resource", undefined, "");
+    expect(pr.json.resource).toMatch(/\/api\/agent\/v1\/mcp$/);
+    const as = await call("GET", "/.well-known/oauth-authorization-server", undefined, "");
+    expect(as.json.code_challenge_methods_supported).toEqual(["S256"]);
+    const res = await fetch(`${BASE}/api/agent/v1/mcp`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }); // module-review-ok: the test client dialling the built server on localhost
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toContain("resource_metadata=");
+  });
+
+  it("registers a public client", async () => {
+    const r = await call("POST", "/api/agent/v1/oauth/register", { client_name: "Claude", redirect_uris: [REDIRECT], token_endpoint_auth_method: "none" }, "");
+    expect(r.status, r.text).toBe(201);
+    clientId = r.json.client_id;
+    const bad = await call("POST", "/api/agent/v1/oauth/register", { redirect_uris: ["http://evil.example/cb"] }, "");
+    expect(bad.status).toBe(400);
+  });
+
+  it("shows the consent page what is asked, and never sends a member to an unregistered address", async () => {
+    const r = await call("GET", `/api/agent/oauth/request?client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}`, undefined, ana.token);
+    expect(r.json.clientName).toBe("Claude");
+    expect(r.json.scopes.map((s: any) => s.scope)).not.toContain("admin");
+    // Only the scopes that open a connector tool are offered.
+    expect(r.json.scopes.map((s: any) => s.scope)).toEqual(["moon.read", "tasks.write"]);
+    // An admin is offered the admin scope too, never ticked.
+    const asAdmin = await call("GET", `/api/agent/oauth/request?client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}`);
+    expect(asAdmin.json.scopes.find((s: any) => s.scope === "admin")).toMatchObject({ ticked: false, write: true });
+    const foreign = await call("POST", "/api/agent/oauth/authorize", { clientId, redirectUri: "https://evil.example/cb", decision: "allow", codeChallenge: "x", codeChallengeMethod: "S256", scopes: ["moon.read"] }, ana.token);
+    expect(foreign.status).toBe(400);
+    const refused = await call("POST", "/api/agent/oauth/authorize", { clientId, redirectUri: REDIRECT, state: "s", decision: "deny" }, ana.token);
+    expect(new URL(refused.json.redirect).searchParams.get("error")).toBe("access_denied");
+  });
+
+  it("refuses a code without PKCE", async () => {
+    const back = await allow(ana, "", { codeChallengeMethod: "plain" });
+    expect(back.searchParams.get("error")).toBe("invalid_request");
+    expect(back.searchParams.get("code")).toBeNull();
+  });
+
+  it("exchanges a code once for a vat_ token that counts against the day's mints and works on the connector", async () => {
+    const [[before]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ?", [ana.id]);
+    const { verifier, challenge } = pkce();
+    const back = await allow(ana, challenge);
+    expect(back.searchParams.get("state")).toBe("st-1");
+    const code = back.searchParams.get("code")!;
+    const wrong = await token({ grant_type: "authorization_code", code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: pkce().verifier });
+    expect(wrong.json.error).toBe("invalid_grant");
+    const ok = await token({ grant_type: "authorization_code", code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: verifier });
+    expect(ok.status, JSON.stringify(ok.json)).toBe(200);
+    expect(ok.json.access_token.startsWith("vat_")).toBe(true);
+    expect(ok.json.scope).toBe("moon.read tasks.write");
+    const again = await token({ grant_type: "authorization_code", code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: verifier });
+    expect(again.json.error).toBe("invalid_grant");
+    const [[after]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ?", [ana.id]);
+    expect(Number(after.n) - Number(before.n)).toBe(1);
+    const listed = await mcp(ok.json.access_token, "tools/list");
+    expect(listed.json.result.tools.map((t: any) => t.name)).toContain("mark_my_task");
+  });
+
+  it("answers invalid_client for a client it never registered", async () => {
+    const r = await token({ grant_type: "authorization_code", code: "x", client_id: "nobody", redirect_uri: REDIRECT, code_verifier: pkce().verifier });
+    expect(r.status).toBe(401);
+    expect(r.json.error).toBe("invalid_client");
+  });
+
+  it("gives the client back its state whole, and replaces its own token when it signs in again", async () => {
+    // A member of their own: Ana has spent most of the day's mints by now.
+    const dana = await register("Dana Vega", "dana-oauth");
+    const longState = "s".repeat(900);
+    const first = pkce();
+    const back = await allow(dana, first.challenge, { state: longState });
+    expect(back.searchParams.get("state")).toBe(longState);
+    const a = await token({ grant_type: "authorization_code", code: back.searchParams.get("code")!, client_id: clientId, redirect_uri: REDIRECT, code_verifier: first.verifier });
+    expect(a.status).toBe(200);
+    const second = pkce();
+    const back2 = await allow(dana, second.challenge);
+    const b = await token({ grant_type: "authorization_code", code: back2.searchParams.get("code")!, client_id: clientId, redirect_uri: REDIRECT, code_verifier: second.verifier });
+    expect(b.status, JSON.stringify(b.json)).toBe(200);
+    expect((await mcp(a.json.access_token, "tools/list")).status).toBe(401);
+    expect((await mcp(b.json.access_token, "tools/list")).status).toBe(200);
+  });
+
+  it("ends with the member's sessions: a code allowed before, and a token minted before, both stop", async () => {
+    cara = await register("Cara Diaz", "cara-oauth");
+    const first = pkce();
+    const back = await allow(cara, first.challenge);
+    const minted = await token({ grant_type: "authorization_code", code: back.searchParams.get("code")!, client_id: clientId, redirect_uri: REDIRECT, code_verifier: first.verifier });
+    expect(minted.status).toBe(200);
+    const second = pkce();
+    const pending = (await allow(cara, second.challenge)).searchParams.get("code")!;
+    expect((await call("POST", `/api/admin/users/${cara.id}/revoke-sessions`, {})).status).toBe(200);
+    expect((await mcp(minted.json.access_token, "tools/list")).status).toBe(401);
+    const late = await token({ grant_type: "authorization_code", code: pending, client_id: clientId, redirect_uri: REDIRECT, code_verifier: second.verifier });
+    expect(late.json.error).toBe("invalid_grant");
+  });
 });

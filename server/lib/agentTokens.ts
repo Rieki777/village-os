@@ -170,20 +170,8 @@ export async function mintToken(pool: Pool, userId: string, input: MintInput, se
   if (!input.scopes.length) return { ok: false, status: 400, error: "Pick at least one scope" };
   const ttl = Math.min(MAX_TTL_DAYS, Math.max(1, Math.floor(Number(input.ttlDays ?? DEFAULT_TTL_DAYS)) || DEFAULT_TTL_DAYS));
 
-  const [[day]] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)",
-    [userId],
-  );
-  if (Number(day?.n ?? 0) >= MINTS_PER_DAY) {
-    return { ok: false, status: 429, error: `You can mint ${MINTS_PER_DAY} tokens a day. Revoke one you no longer use, or come back tomorrow` };
-  }
-  const [[live]] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()",
-    [userId],
-  );
-  if (Number(live?.n ?? 0) >= LIVE_PER_USER) {
-    return { ok: false, status: 429, error: `You already hold ${LIVE_PER_USER} live tokens. Revoke one first` };
-  }
+  const cap = await mintCapProblem(pool, userId);
+  if (cap) return { ok: false, status: 429, error: cap };
 
   const token = TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const id = `atk-${randomBytes(8).toString("hex")}`;
@@ -209,6 +197,32 @@ export async function mintToken(pool: Pool, userId: string, input: MintInput, se
     audience: "admin",
   });
   return { ok: true, token, row };
+}
+
+/**
+ * Why a mint would be refused by the day's cap or the live cap, or null. The
+ * OAuth consent asks this before it hands out a code, so a member is told at
+ * Allow and not left with a connector that fails at the exchange.
+ */
+export async function mintCapProblem(pool: Pool, userId: string): Promise<string | null> {
+  const [[day]] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)",
+    [userId],
+  );
+  if (Number(day?.n ?? 0) >= MINTS_PER_DAY) return `You can mint ${MINTS_PER_DAY} tokens a day. Revoke one you no longer use, or come back tomorrow`;
+  const [[live]] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()",
+    [userId],
+  );
+  if (Number(live?.n ?? 0) >= LIVE_PER_USER) return `You already hold ${LIVE_PER_USER} live tokens. Revoke one first`;
+  return null;
+}
+
+/** Revoke a member's live tokens with exactly this name. A connector signing in again replaces its own token. */
+export async function revokeTokensNamed(pool: Pool, userId: string, name: string): Promise<number> {
+  let n = 0;
+  for (const t of await listTokens(pool, userId)) if (t.live && t.name === name && (await revokeToken(pool, userId, t.id))) n++;
+  return n;
 }
 
 export async function tokenById(pool: Pool, id: string): Promise<AgentTokenRow | null> {

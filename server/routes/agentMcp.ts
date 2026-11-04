@@ -44,6 +44,7 @@ import { readConfigDocument } from "../repos/appConfigDocs";
 import { AGENT_ADMIN_PATHS_DOC, effectiveAgentAdminPaths } from "../../shared/agentAdmin";
 import { PLATFORM_VERSION } from "../lib/identity";
 import { runSeraTool, undoSeraAction } from "../lib/seraAgent";
+import { wwwAuthenticate } from "../lib/agentOAuth";
 
 export const MCP_PATH = "/api/agent/v1/mcp";
 
@@ -138,10 +139,22 @@ export function register(app: Express, deps: Deps): void {
       if (foreignOrigin(req)) return res.status(403).json({ error: "origin_refused", message: "This connector answers servers and its own site, never a page on another site." });
       const message = req.body;
       // The bucket follows the message: a write tool spends the write bucket.
+      // A 401 says where the sign-in metadata is, so a connector client can start OAuth (RFC 9728),
+      // with error="invalid_token" when a token was sent and failed, and a 403 says insufficient_scope (RFC 6750).
+      const meta = wwwAuthenticate(ownOrigin(req));
+      const sentToken = !!req.get("authorization");
+      const status = res.status.bind(res);
+      res.status = ((code: number) => {
+        if (code === 401) res.setHeader("WWW-Authenticate", sentToken ? `${meta}, error="invalid_token"` : meta);
+        if (code === 403) res.setHeader("WWW-Authenticate", `${meta}, error="insufficient_scope"`);
+        return status(code);
+      }) as typeof res.status;
       const resolved = await resolveAgent(req, res, null, callsWriteTool(message) ? "write" : "read");
+      res.status = status;
       if (!resolved) return;
       const { row, user } = resolved;
       if (toolsFor(row.scopes).length === 0) {
+        res.setHeader("WWW-Authenticate", `${meta}, error="insufficient_scope"`);
         return res.status(403).json({
           error: "agent_scope_missing",
           message: `This token opens no connector tool. Mint one with ${Array.from(new Set(MCP_TOOLS.map((t) => t.scope))).join(" or ")}.`,
