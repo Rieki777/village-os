@@ -64,7 +64,8 @@ describe("what the End of moon room draws", () => {
     expect(p.recap?.roles[0].items[0].proofUrl).toBe("https://example.test/photo");
     // Only an http or https link is ever a proof link.
     expect(p.recap?.roles[0].items[1].proofUrl).toBeNull();
-    expect(p.recap?.seasonGoals).toEqual(["Feed the village from the land"]);
+    // The room door sends no season-goal tallies (A4); a stray one is never drawn.
+    expect(p.recap?.seasonGoals).toEqual([]);
     expect(p.goals?.last).toEqual([
       { text: "Finish the terrace", mark: "Done", flagged: false },
       { text: "Draft the water plan", mark: "Carry", flagged: true },

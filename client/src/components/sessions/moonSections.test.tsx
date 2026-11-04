@@ -136,7 +136,8 @@ describe("the End of moon sections in the room", () => {
     await waitFor(() => expect(screen.getByText(/Planted the lower terrace/)).toBeTruthy());
     expect(screen.getByText("Garden steward")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Proof" }).getAttribute("href")).toBe("https://example.test/terrace");
-    expect(screen.getByText("Feed the village from the land")).toBeTruthy();
+    // No season-goal tally reaches the room (A4), even when the answer carries one.
+    expect(screen.queryByText("Feed the village from the land")).toBeNull();
     expect(screen.getByText("Finish the terrace")).toBeTruthy();
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.getByText("Done when: Beds are planted")).toBeTruthy();

@@ -67,7 +67,8 @@ export function moonRoomPanel(r: RoomResponse | null, shown: boolean): MoonRoomP
           name: str(role.name),
           items: (role.items ?? []).map((i) => ({ text: str(i.text), proofUrl: safeUrl(i.evidenceUrl) })).filter((i) => i.text),
         })),
-        seasonGoals: (r.recap.seasonGoals ?? []).map((g) => str(g.words)).filter(Boolean),
+        // The room door sends no season-goal tallies (A4: no numbers on the shared screen), so none are drawn.
+        seasonGoals: [] as string[],
       }
     : null;
   const goals = shown && r?.goals
