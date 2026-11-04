@@ -155,7 +155,7 @@ describe("the application page draws the candidate's card in proposal mode", () 
     expect(asked).toContain(`GET /api/governance/role-applications/${ID}/card`);
     // One card, both roles in full.
     expect(container.querySelectorAll("[data-player-card]")).toHaveLength(1);
-    expect(within(card as HTMLElement).getAllByText("Starts once adopted").length).toBeGreaterThan(0);
+    expect(within(card as HTMLElement).getAllByText("Open for now. You'll add these once the role is adopted.").length).toBeGreaterThan(0);
     // The stacked role cards are gone, and a proposal is never edited.
     expect(container.querySelector("article[data-power-card]")).toBeNull();
     expect(screen.queryByRole("button", { name: /Edit my card/ })).toBeNull();

@@ -224,9 +224,9 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
     expect(card.roles.map((x: any) => x.id)).toEqual(roleIds);
     expect(card.header.name).toBe("Ana Quillfeather");
     expect(card.header.rolesLine.startsWith("Applies for ")).toBe(true);
-    expect(card.across.tasks).toEqual({ kind: "empty", words: "Starts once adopted" });
-    expect(card.across.signs).toEqual({ kind: "empty", words: "Starts once adopted" });
-    for (const role of card.roles) expect(role.tensions).toEqual({ kind: "empty", words: "Starts once adopted" });
+    expect(card.across.tasks).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
+    expect(card.across.signs).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
+    for (const role of card.roles) expect(role.tensions).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     // The application's own terms, money in words, small and last.
     const rows = card.agreements.roles[0].rows.value;
     expect(rows[rows.length - 1]).toMatchObject({ label: "Pay", small: true });
