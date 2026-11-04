@@ -9,12 +9,13 @@
  */
 import { describe, expect, it } from "vitest";
 import { CALENDAR_CLOCK, LUNAR_CLOCK } from "../../shared/cycleClock";
-import { SERA_CLOSED_NOTE, type AssignmentRow } from "../../shared/moonRecap";
+import { readingOf, scoreContextOf, SERA_CLOSED_NOTE, taskScore, type AssignmentRow, type RecapItem } from "../../shared/moonRecap";
 import { SCREEN_REASON_WORDS } from "../../shared/memberTaskFeedback";
 import type { AccomplishmentMoon } from "../../shared/taskAccomplishments";
 import type { BoardPress, BoardTask } from "../repos/moonGather";
+import type { InvoiceRow, RecapRow } from "../repos/moonRecaps";
 import {
-  boardCandidates, boundsForCycleId, defaultCycleId, moonOf, resolveMoon, roomCandidates, rolesHeldFrom, seasonOn, termsFrom,
+  boardCandidates, boundsForCycleId, defaultCycleId, moonOf, resolveMoon, roomCandidates, rolesHeldFrom, seasonOn, summaryFor, termsFrom,
 } from "./moonRecap";
 
 const TZ = "America/Costa_Rica";
@@ -170,5 +171,38 @@ describe("roles held and terms in force", () => {
     const seats = [seat({ applicationId: "app-1" })];
     const roles = rolesHeldFrom(seats, cards, () => null, MOON.days);
     expect(termsFrom(seats, roles, [{ id: "app-1", settings: null, deliverables: null }], new Set(), MOON.days)).toEqual([]);
+  });
+});
+
+describe("the work summary an invoice email carries", () => {
+  const item = (over: Partial<RecapItem>): RecapItem => ({
+    id: "mi-1", origin: "task", dedupeKey: "task:t1", text: "Wrote the water plan", originNote: null, doneOn: null, evidenceUrl: null,
+    evidenceAsset: null, proofInSummary: false, roleId: "r1", accountabilityWords: null, seasonGoalId: null, ownGoalWords: null,
+    state: "kept", visibility: "members", review: "approved", reviewNote: null, position: 0, setOn: "2026-10-12", taskStatus: "done",
+    redirectTo: null, letGoReason: null, belongsToRoleId: null, evidenceKind: null, evidenceOn: null, belongsToSeatWords: null, ...over,
+  });
+  const items = [
+    item({ id: "mi-1" }),
+    item({ id: "mi-2", text: "Mended the fence", dedupeKey: "task:t2" }),
+    item({ id: "mi-3", text: "Planted the hedge", dedupeKey: "task:t3", taskStatus: "partly" }),
+  ];
+  const recap = { id: "mr-0000000000000001", financeApprovedAt: "2026-11-12T15:00:00Z" } as RecapRow;
+  const stored = {
+    status: "approved", payerKey: "us-payer", memberNumber: "2026-001", fromJson: JSON.stringify({ legalName: "A Member", address: "1 Road" }),
+    linesJson: JSON.stringify([{ kind: "pay", roleNames: ["Steward"], approvedItemIds: ["mi-1", "mi-2", "mi-3"] }]),
+  } as InvoiceRow;
+  const payers = { payers: [{ key: "us-payer", legalName: "Example Payer" }] } as Parameters<typeof summaryFor>[0]["payers"];
+
+  it("carries no READING line, only the approved work in standard financial language", () => {
+    // These tasks score, so a reading exists for them: the summary leaves it out (company rule).
+    const t = taskScore(items, MOON.days);
+    expect(readingOf(t, scoreContextOf(t, 0))).not.toBeNull();
+    const out = summaryFor({ stored, recap, items, seasonGoals: [], payers, moon: MOON, timeZone: TZ });
+    expect(out).not.toBeNull();
+    expect(out!.text).not.toMatch(/READING/i);
+    expect(out!.html).not.toMatch(/READING/i);
+    expect(out!.text).toContain("Wrote the water plan; Mended the fence; Planted the hedge");
+    expect(out!.text.split("\n").at(-1)).toBe("Approved by the Operations and Finance roles on 12 November 2026");
+    expect(out!.text).toContain("A Member, for Example Payer");
   });
 });

@@ -552,7 +552,8 @@ export function linesOf(stored: Pick<store.InvoiceRow, "linesJson">): InvoiceLin
 
 /**
  * THE WORK SUMMARY, once both approvals are in: the approved items under the
- * invoiced lines, no amounts, and the `READING:` line (A4). Null before then.
+ * invoiced lines, no amounts, and no score reading: an invoice email carries
+ * standard financial language only (company rule). Null before then.
  */
 export function summaryFor(input: {
   stored: store.InvoiceRow | null;
@@ -567,7 +568,6 @@ export function summaryFor(input: {
   if (!stored || !recap.financeApprovedAt || (stored.status !== "approved" && stored.status !== "paid")) return null;
   const from = fromOf(stored.fromJson);
   const payer = input.payers.payers.find((p) => p.key === stored.payerKey) ?? null;
-  const t = taskScore(input.items, input.moon.days);
   const summary = {
     firstDay: input.moon.days.firstDay,
     lastDay: input.moon.days.lastDay,
@@ -579,7 +579,6 @@ export function summaryFor(input: {
     items: input.items,
     seasonGoals: input.seasonGoals,
     approvedOn: dayIn(recap.financeApprovedAt, input.timeZone) ?? input.moon.days.lastDay,
-    reading: readingOf(t, scoreContextOf(t, input.items.filter((i) => i.state === "kept" && !i.roleId).length)),
   };
   return { text: workSummaryText(summary), html: workSummaryHtml(summary) };
 }

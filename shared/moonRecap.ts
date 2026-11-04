@@ -1750,8 +1750,6 @@ export interface SummaryInput {
   seasonGoals: readonly SeasonGoalRef[];
   /** YYYY-MM-DD, the day the second approval was given. */
   approvedOn: string;
-  /** A4: the `READING:` line, when the caller has one. */
-  reading?: Reading | null;
   /** A7: the THANK YOU section from `thankYouLines`, when the caller includes it. */
   thankYou?: readonly string[];
 }
@@ -1808,7 +1806,6 @@ export function workSummaryText(s: SummaryInput): string {
   if (goals) out.push(`Season goals served: ${goals}`);
   if (own) out.push(`My seasonal goals: ${own}`);
   if (goals || own) out.push("");
-  if (s.reading) out.push(readingLine(s.reading), "");
   if (s.thankYou && s.thankYou.length > 0) out.push(...s.thankYou, "");
   out.push(`Approved by the Operations and Finance roles on ${dayWords(s.approvedOn)}`);
   return out.join("\n");
@@ -2127,11 +2124,6 @@ export function seatReadingOf(on: number, total: number): Reading | null {
 /** The context a task score is read in, from the same items `taskScore` counted. */
 export function scoreContextOf(t: TaskScore, outsideItems: number): ScoreContext {
   return { done: t.done, counted: t.den, outside: outsideItems, redirected: t.leftOut.redirect, lastWeek: t.leftOut.lastWeekNotDone, letGo: t.leftOut.letGo };
-}
-
-/** The `READING:` line the recap text and the work summary carry. */
-export function readingLine(r: Reading): string {
-  return `READING: ${r.label}. ${r.says}`;
 }
 
 // ── Moon goals (decision 20) ─────────────────────────────────────────────────
