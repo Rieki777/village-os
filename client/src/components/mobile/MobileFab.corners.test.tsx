@@ -310,4 +310,18 @@ describe("index.css bounds its phone-only rules with Tailwind's own md", () => {
       style.remove();
     }
   });
+
+  it("rides above a role proposal's Back/Next bar at every width", () => {
+    const rule = INDEX_CSS.match(/:root:has\(\[data-step-bar\]\) \[data-mobile-fab\] \{[^}]*\}/);
+    expect(rule).not.toBeNull();
+    const style = document.createElement("style");
+    style.textContent = rule![0];
+    document.head.appendChild(style);
+    try {
+      render(withRouter(<><MobileFab /><div data-step-bar="" /></>));
+      expect(getComputedStyle(fabBox()).bottom).toMatch(/136px|8\.5rem/);
+    } finally {
+      style.remove();
+    }
+  });
 });
