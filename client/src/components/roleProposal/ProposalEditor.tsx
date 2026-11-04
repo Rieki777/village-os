@@ -246,7 +246,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   useEffect(() => {
     const root = document.documentElement;
     const before = root.style.scrollPaddingBottom;
-    root.style.scrollPaddingBottom = "11rem";
+    root.style.scrollPaddingBottom = "calc(env(safe-area-inset-bottom, 0px) + 11rem)";
     return () => {
       root.style.scrollPaddingBottom = before;
     };
@@ -361,7 +361,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   const progressNow = front === "welcome" ? 1 : front === "yours" ? 2 : quick ? index + 3 : index + 1;
 
   return (
-    <div className="grid gap-5">
+    <div data-proposal-pad="" className="grid gap-5 max-md:pb-[max(4rem,calc(env(safe-area-inset-bottom,0px)+4rem))]">
       <PathToggle path={path} onPath={choosePath} />
       <div className="grid gap-1">
         <div

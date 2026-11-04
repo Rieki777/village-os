@@ -48,6 +48,7 @@ import { roleCcos, roleTerm, type HoldingWellOut, type ListSectionOut, type Text
 import type { RoleEditKey } from "./playerCardEdit";
 import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationStatus } from "./seatApplications";
 import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applicationGroups";
+import { loadHoursLine, openRowLine } from "./roleProposalHonesty";
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 import type { AccomplishmentMoon } from "./taskAccomplishments";
 import { roleProposalsOut, type RoleProposalIn, type RoleProposalOut } from "./playerCardProposals";
@@ -315,6 +316,11 @@ export interface PlayerCardInput {
    * reading "Starts once adopted". Live by default.
    */
   mode?: CardMode;
+  /**
+   * Who fills an open row on a proposal preview. The chart's operations role,
+   * or null for the fallback that names no village. Live cards ignore it.
+   */
+  fillWith?: string | null;
   /** Seasons whose end has passed, for the "Past" group. */
   endedSeasonIds?: readonly string[];
   /** The owner's old seatings that came through no application. */
@@ -728,7 +734,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
   // 0274: the CCOS sections, and the review chip from the role's own terms.
   const terms = input.frameworkTerms === true;
   const ccos = roleCcos(role, terms);
-  if (ccos.review) chips.push(ccos.review);
+  if (ccos.review) chips.push(input.mode === "proposal" && ccos.review === W.noReviewDate ? openRowLine(input.fillWith) : ccos.review);
 
   const powers =
     role.powers === undefined
@@ -807,6 +813,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
       : [];
 
   const plan = input.plan;
+  const proposal = input.mode === "proposal";
   const aim: Slot<string> = plan === undefined ? UNREAD : plan === null ? empty(W.noPlan) : textSlot(plan.aim, W.noAim);
   const sg = input.seasonalGoals;
   const sgList = (sg ?? [])
@@ -826,7 +833,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
     plan === undefined
       ? UNREAD
       : !plan || !plan.goals.length
-        ? empty(W.noGoals)
+        ? empty(proposal ? openRowLine(input.fillWith) : W.noGoals)
         : shown(
             plan.goals
               .filter((g) => clean(g.goal))
@@ -834,7 +841,6 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
           );
 
   const titleOf = new Map((roles ?? []).map((r) => [r.id, r.name]));
-  const proposal = input.mode === "proposal";
   const tasks: AcrossOut["tasks"] =
     input.tasks === undefined
       ? UNREAD
@@ -869,7 +875,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
   const words = [W.loadRoles(n), ...(openTasks ? [W.loadTasks(openTasks.n)] : [])].join(" · ");
   const lr = input.loadRead;
   const own: AcrossOut["load"]["own"] =
-    lr === undefined ? UNREAD : lr === null ? empty(W.loadNotSet) : shown({ step: lr, words: W.loadStep[lr] });
+    lr === undefined ? UNREAD : lr === null ? empty(proposal ? loadHoursLine(input.fillWith) : W.loadNotSet) : shown({ step: lr, words: W.loadStep[lr] });
   return {
     heading,
     doors,
@@ -881,10 +887,10 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
     signs,
     signsLede: W.signsLede(clean(input.villageName ?? null)),
     load: { heading: W.load, words, roles: rolesFig, openTasks, own, caption: W.loadCaption },
-    growingEdge: { heading: W.growingEdge, text: input.growingEdge === undefined ? UNREAD : textSlot(input.growingEdge, W.notWritten) },
+    growingEdge: { heading: W.growingEdge, text: input.growingEdge === undefined ? UNREAD : textSlot(input.growingEdge, proposal ? openRowLine(input.fillWith) : W.notWritten) },
     whoCouldHoldNext: {
       heading: W.whoCouldHoldNext,
-      text: input.whoCouldHoldNext === undefined ? UNREAD : textSlot(input.whoCouldHoldNext, W.notWritten),
+      text: input.whoCouldHoldNext === undefined ? UNREAD : textSlot(input.whoCouldHoldNext, proposal ? openRowLine(input.fillWith) : W.notWritten),
     },
   };
 }
@@ -1032,10 +1038,11 @@ function agreementRows(s: SeatSettings, input: PlayerCardInput): AgreementRow[] 
     if (s.term.endsOn) term.push(W.endsOn(day(s.term.endsOn) ?? s.term.endsOn));
     else if (s.term.lengthMoons) term.push(W.lengthMoons(s.term.lengthMoons));
     else if (s.term.endsOn === null) term.push(W.endsWithSeason);
-    term.push(s.term.reviewOn ? W.reviewDate(day(s.term.reviewOn) ?? s.term.reviewOn) : W.noReviewDate);
+    const openReview = input.mode === "proposal" ? openRowLine(input.fillWith) : W.noReviewDate;
+    term.push(s.term.reviewOn ? W.reviewDate(day(s.term.reviewOn) ?? s.term.reviewOn) : openReview);
     if (s.term.renewalOn) term.push(W.renewalDate(day(s.term.renewalOn) ?? s.term.renewalOn));
     if (s.term.noticeDays !== undefined) term.push(W.notice(s.term.noticeDays));
-  } else term.push(W.noReviewDate);
+  } else term.push(input.mode === "proposal" ? openRowLine(input.fillWith) : W.noReviewDate);
   rows.push({ label: W.term, lines: term, small: false });
 
   const clocks: string[] = [];

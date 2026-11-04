@@ -29,19 +29,25 @@
  * chunk carries only the icons the catalog actually names; a name the map
  * does not know falls back to a neutral mark rather than a crash.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity, Award, BedDouble, CalendarDays, Circle, Coins, Globe, Hammer,
   Handshake, Heart, Landmark, Mail, MessageCircle, MessagesSquare, Mic, Newspaper,
-  NotebookPen, Orbit, Sparkles, TrendingUp, Users, Wrench, type LucideIcon,
+  Network, NotebookPen, Orbit, Sparkles, TrendingUp, Users, Vote, Wrench, type LucideIcon,
 } from "lucide-react";
 import { BUNDLED_MODULE_ART } from "./bundledModuleArt";
 
 const EMBLEMS: Record<string, LucideIcon> = {
   Activity, Award, BedDouble, CalendarDays, Coins, Globe, Hammer, Handshake,
-  Heart, Landmark, Mail, MessageCircle, MessagesSquare, Mic, Newspaper, NotebookPen,
-  Orbit, Sparkles, TrendingUp, Users, Wrench,
+  Heart, Landmark, Mail, MessageCircle, MessagesSquare, Mic, Network, Newspaper, NotebookPen,
+  Orbit, Sparkles, TrendingUp, Users, Vote, Wrench,
 };
+
+/** Every emblem the catalog may name, for the test that holds the two together. */
+export const EMBLEM_NAMES = Object.keys(EMBLEMS);
+
+/** An image that has not drawn in this long is given up on, and the next source (or the drawn art) shows. */
+export const ART_TIMEOUT_MS = 8000;
 
 /** The platform art this build ships for a module, or null when it ships none. */
 export function bundledArtPath(id: string): string | null {
@@ -81,6 +87,12 @@ export default function ModuleArt({
     ...(bundled ? [bundled] : []),
   ];
   const [at, setAt] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (at >= sources.length || loaded) return;
+    const t = setTimeout(() => setAt((n) => n + 1), ART_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [at, loaded, sources.length]);
   if (at >= sources.length) return <FallbackArt hue={hue} emblem={emblem} className={className} />;
   return (
     <img
@@ -89,6 +101,7 @@ export default function ModuleArt({
       aria-hidden="true"
       loading="lazy"
       onError={() => setAt((n) => n + 1)}
+      onLoad={() => setLoaded(true)}
       className={`object-cover ${className}`}
     />
   );

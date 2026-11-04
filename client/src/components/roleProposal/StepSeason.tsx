@@ -9,6 +9,7 @@
  *
  * When next season's goals are not set, the step says so and saves anyway.
  */
+import GrowingField from "@/components/form/GrowingField";
 import { AIM_MAX } from "@shared/seasonPlans";
 import { SeasonalGoalsField, ServedGoalsField, type SeasonalRow, type ServedRow } from "@/components/seasonPlans/SeasonGoalsFields";
 import AiHelpButton from "./AiHelpButton";
@@ -30,7 +31,7 @@ export default function StepSeason({ season, orgGoals, onChange }: { season: Sea
       <label className="grid gap-1 text-sm font-semibold text-foreground">
         {RP_WORDS.aim}
         <span className="text-xs font-normal text-muted-foreground">{RP_WORDS.aimHelp}</span>
-        <textarea rows={3} maxLength={AIM_MAX} value={season.aim} onChange={(e) => onChange({ ...season, aim: e.target.value })} className={INPUT} />
+        <GrowingField minRows={3} maxLength={AIM_MAX} value={season.aim} onChange={(aim) => onChange({ ...season, aim })} className={INPUT} />
       </label>
       <div className={PANEL}>
         <SeasonalGoalsField rows={season.seasonal} onChange={(seasonal) => onChange({ ...season, seasonal })} />
