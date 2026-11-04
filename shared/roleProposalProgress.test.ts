@@ -20,3 +20,14 @@ describe("draft fill", () => {
     expect(draftFill({ roleCount: 0, love: "   ", offer: "", goalCount: 1 }).done).toBe(1);
   });
 });
+
+describe("where a draft opens", () => {
+  it("opens at the first unwritten part, and keeps a fresh draft's welcome", async () => {
+    const { resumeAt } = await import("./roleProposalProgress");
+    expect(resumeAt({ roleCount: 0, goalCount: 0 })).toBeNull();
+    expect(resumeAt({ roleCount: 2, goalCount: 0 })).toEqual({ front: "yours", step: "roles" });
+    expect(resumeAt({ roleCount: 2, love: "soil", goalCount: 0 })).toEqual({ front: "steps", step: "season" });
+    expect(resumeAt({ roleCount: 0, love: "soil", aim: "feed", goalCount: 0 })).toEqual({ front: "steps", step: "roles" });
+    expect(resumeAt({ roleCount: 1, love: "soil", aim: "feed", goalCount: 1 })).toEqual({ front: "steps", step: "terms" });
+  });
+});
