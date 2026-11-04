@@ -7,7 +7,8 @@
  * anything already written.
  */
 import GrowingText from "@/components/sessions/GrowingText";
-import { guideName } from "@shared/roleProposalHonesty";
+import { operationsRoleName, opsPartner } from "@shared/roleProposalHonesty";
+import { useGuideName } from "@/hooks/useGuideName";
 import { OWN_WORDS_MAX } from "@shared/roleProposals";
 import type { OrgView } from "./StepRoles";
 import type { SeasonState } from "./StepSeason";
@@ -111,12 +112,18 @@ export function PathToggle({ path, onPath }: { path: ProposalPath; onPath: (next
 }
 
 export function WelcomeScreen({ org, onStart }: { org: OrgView | null | "failed"; onStart: () => void }) {
-  const who = guideName(org && org !== "failed" ? org.roles : []);
+  // The guide is the village's assistant; the Ops role only fills open parts with the member.
+  const guide = useGuideName();
+  const ops = org === null ? null : opsPartner(operationsRoleName(org !== "failed" ? org.roles : []));
   return (
     <div className="grid gap-4">
       <h2 id="rp-welcome" tabIndex={-1} className={`${H2} outline-none`}>{RP_WORDS.welcomeTitle}</h2>
       <p className={LEDE}>{RP_WORDS.welcomeLede}</p>
-      <p className={LEDE}>{RP_WORDS.guideHere(who)}</p>
+      {guide.loaded && ops !== null && (
+        <p className={LEDE}>
+          {RP_WORDS.guideHere(guide.name)} {RP_WORDS.opsFillsOpen(ops)}
+        </p>
+      )}
       <button type="button" className={PRIMARY} onClick={onStart}>
         {RP_WORDS.startQuestions}
       </button>
@@ -133,13 +140,9 @@ const QUESTIONS = [
 export function YourWordsScreen({
   season,
   onChange,
-  onBack,
-  onNext,
 }: {
   season: SeasonState;
   onChange: (next: SeasonState) => void;
-  onBack: () => void;
-  onNext: () => void;
 }) {
   const set = (key: "love" | "offer" | "why", value: string) => onChange({ ...season, ownWords: { ...season.ownWords, [key]: value } });
   return (
@@ -159,14 +162,20 @@ export function YourWordsScreen({
           <GrowingText id={`own-${q.key}`} label={q.label} placeholder={q.hint || undefined} value={season.ownWords[q.key]} onValue={(v) => set(q.key, v)} max={OWN_WORDS_MAX} minRows={3} mic />
         </div>
       ))}
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className={SECONDARY} onClick={onBack}>
-          {RP_WORDS.back}
-        </button>
-        <button type="button" className={PRIMARY} onClick={onNext}>
-          {RP_WORDS.onToRoles}
-        </button>
-      </div>
+    </div>
+  );
+}
+
+/** Back and "Pick the roles", drawn in the sticky step bar so no bar ever hides them. */
+export function YourWordsActions({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2" data-yours-actions="">
+      <button type="button" className={SECONDARY} onClick={onBack}>
+        {RP_WORDS.back}
+      </button>
+      <button type="button" className={PRIMARY} onClick={onNext}>
+        {RP_WORDS.onToRoles}
+      </button>
     </div>
   );
 }

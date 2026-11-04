@@ -111,7 +111,14 @@ export function ToolBadges({ tools }: { tools: readonly SeraTool[] }) {
           }`}
         >
           {t.unlocked ? <Check aria-hidden className="w-3 h-3" /> : <Lock aria-hidden className="w-3 h-3" />}
-          <span className="font-mono">{t.name}</span>
+          {t.label ? (
+            <>
+              <span>{t.label}</span>
+              <span className="font-mono opacity-70">{t.name}</span>
+            </>
+          ) : (
+            <span className="font-mono">{t.name}</span>
+          )}
           <span className="sr-only">{t.unlocked ? "unlocked" : "locked"}: {t.what}</span>
         </li>
       ))}

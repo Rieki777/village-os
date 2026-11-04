@@ -35,7 +35,7 @@ export const REASON_WORDS: Record<ReasonCode, string> = {
   handed_to_you: "Someone handed it to you.",
   from_session: "It came from a session.",
   from_journal: "You made it from your journal.",
-  from_library: "It came from the knowledge library.",
+  from_library: "It came from Organisational Memory.",
   added_by_you: "You added it.",
   chosen_today: "You chose today for it.",
 };
@@ -301,7 +301,7 @@ export default function YourListCard() {
         <label className="mt-4 flex items-start gap-2 text-sm text-foreground">
           <input type="checkbox" className="mt-1" checked={sharing} onChange={flipSharing} />
           <span>
-            Help the knowledge library learn from my choices. When this is on, the reason you pick for a task it sent you goes back to it.
+            Help Organisational Memory learn from my choices. When this is on, the reason you pick for a task it sent you goes back to it.
             Your journal words never do.
           </span>
         </label>

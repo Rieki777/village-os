@@ -60,7 +60,7 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
         <LevelRing done={done} of={checks.length} />
         <div>
           <h3 id="sera-bridge-title" className="font-semibold text-gray-900">
-            The Sera bridge{allDone ? ": complete" : ""}
+            Organisational Memory{allDone ? ": complete" : ""}
           </h3>
           <p className="text-xs text-gray-500">
             {plural(done, "check")} of {checks.length} done. Each check is a fact this village's server reads, never an estimate.
@@ -248,6 +248,7 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
 export default function SaberraBridgeBoard({ password }: { password: string }) {
   const [a, setA] = useState<BridgeAnswer | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setTry] = useState(0);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -264,10 +265,16 @@ export default function SaberraBridgeBoard({ password }: { password: string }) {
       live = false;
       clearInterval(t);
     };
-  }, [password]);
+  }, [password, attempt]);
 
-  if (failed) return <p className="text-xs text-amber-800">The bridge board could not be read just now.</p>;
-  if (!a) return <p className="text-xs text-gray-500">Reading the bridge…</p>;
+  if (failed)
+    return (
+      <div aria-live="polite" className="text-xs text-amber-800 space-y-1">
+        <p>Organisational Memory could not be read just now. Check your connection, then try again.</p>
+        <button type="button" className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs" onClick={() => { setFailed(false); setTry((n) => n + 1); }}>Try again</button>
+      </div>
+    );
+  if (!a) return <p className="text-xs text-gray-500">Reading Organisational Memory…</p>;
   const onFeed = async (dryRun: boolean): Promise<QuestFeedAnswer | string> => {
     try {
       const r = await fetch(`${API_BASE}/saberra/quest-feed`, {
