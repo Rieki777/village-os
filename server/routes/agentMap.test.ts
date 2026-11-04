@@ -194,6 +194,19 @@ describe.skipIf(!testDbConfigured())("the agent's map routes", () => {
       expect(trail).toEqual([{ text: "kept a drafted map from their agent (vat_abc123...): 1 buildings, 2 features", actor_kind: "agent", audience: "admin" }]);
     });
 
+    it("keeps one draft per yes: the same token sent again is refused even when the echo matches", async () => {
+      const text = JSON.stringify(exampleDraft());
+      const first = await call("POST", "/api/agent/v1/map/draft", { scene: text });
+      const yes = { scene: text, confirm: true, confirmToken: first.body.confirmToken, echo: first.body.echo };
+      expect((await call("POST", "/api/agent/v1/map/draft", yes)).status).toBe(200);
+      // The founder throws the draft away, so the echo reads exactly as it did: only the spent token stands in the way.
+      await pool.query("DELETE FROM map_scene_drafts"); // module-review-ok: the founder discarding the draft, in the scratch schema this suite provisioned
+      const replay = await call("POST", "/api/agent/v1/map/draft", yes);
+      expect(replay.status).toBe(409);
+      expect(replay.body.error).toBe("spent");
+      expect(await drafts(), "the replay kept nothing").toEqual([]);
+    });
+
     it("hashes an object the way it hashes its text, so either form confirms", async () => {
       const scene = exampleDraft();
       const asObject = await call("POST", "/api/agent/v1/map/draft", { scene });
