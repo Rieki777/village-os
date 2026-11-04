@@ -6,10 +6,12 @@
  * library leaves for a steward (merged, other removals, heard wrong), and
  * tasks members handed to a role. Members' notes are never shown here.
  */
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { SCREEN_REASON_WORDS, SERA_TEST_OWNER_ID, type ScreenReason } from "@shared/memberTaskFeedback";
 import { BTN_QUIET, BTN_SECONDARY, HINT } from "@/components/sessions/roomUi";
+
+const SeraActionsPanel = lazy(() => import("./SeraActionsPanel"));
 
 interface Bridge {
   notes: "held" | "released";
@@ -127,6 +129,7 @@ export default function BridgePanel({ password }: { password: string }) {
           </ul>
         </>
       )}
+      <Suspense fallback={null}><SeraActionsPanel password={password} /></Suspense>
     </div>
   );
 }

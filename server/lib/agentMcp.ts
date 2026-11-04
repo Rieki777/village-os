@@ -30,6 +30,14 @@
  * sent again is refused even where the echo would still match, as it would
  * for an admin path or a moon write that leaves nothing versioned behind.
  *
+ * ── SERA'S TOOLS WRITE AT ONCE, AND ARE UNDONE INSTEAD ───────────────────
+ * The `sera.undoable` tools are the one exception to the two calls, and they
+ * say so (`writesAtOnce`). Sera's agent acts for no single member who could
+ * say yes, so each write lands at once, is recorded with what puts it back,
+ * and can be undone for 30 days by the agent or a steward while nobody has
+ * touched it (server/lib/seraAgent.ts). Check 31 covers the member's own
+ * write tools; these are held instead by their undo.
+ *
  * ── WHAT NO TOOL EVER DOES ───────────────────────────────────────────────
  * Send a recap or an invoice, take one back, issue, approve, return, mark
  * paid, or read or change a pay route. A person presses those in the app.
@@ -103,6 +111,11 @@ export interface ToolContext {
   holderId?: string;
   /** The village's agent paths list (shared/agentAdmin.ts). Only `admin_request` reads it. */
   adminPaths?: () => Promise<AgentAdminPathsDoc>;
+  /** Sera's undoable actions (server/lib/seraAgent.ts). Only the `sera.undoable` tools use it. */
+  sera?: {
+    run: (tool: "link_sera_person" | "suggest_task" | "set_board_access", args: Record<string, unknown>) => Promise<{ ok: true; result: Record<string, unknown> } | { ok: false; error: string }>;
+    undo: (actionId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  };
   /** Writes one `agent_actions` row. Only the admin and Sera tools record through it. */
   recordAction?: (a: { scope: string; tool: string; method: string | null; path: string | null; echoHash: string; state: "done" | "refused" | "asked" }) => Promise<void>;
 }
@@ -358,6 +371,61 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       await record(a.status < 300 ? "done" : "refused");
       if (a.status >= 300) return refusal("The admin path refused", a);
       return { ok: true, result: { written: true, echo, answer: a.body } };
+    },
+  },
+  ...(["link_sera_person", "suggest_task", "set_board_access"] as const).map((name): ToolDef => ({
+    name,
+    scope: "sera.undoable",
+    kind: "write",
+    title: name === "link_sera_person" ? "Link a member to their Sera person" : name === "suggest_task" ? "Suggest a task on a member's board" : "Turn a member's task board on or off",
+    description:
+      name === "link_sera_person"
+        ? "Links a member to their Sera owner id. Never replaces a link that exists, and never links one owner to two members or one member to two owners. Undoable for 30 days."
+        : name === "suggest_task"
+          ? "Puts a task on a member's board as a suggestion they keep or remove. Nobody is notified. Undoable for 30 days while the member has not touched it."
+          : "Turns a member's task board on or off. Undoable for 30 days while nobody has switched it since.",
+    inputSchema:
+      name === "link_sera_person"
+        ? { type: "object", properties: { userId: { type: "string" }, seraOwnerId: { type: "string" } }, required: ["userId", "seraOwnerId"], additionalProperties: false }
+        : name === "suggest_task"
+          ? {
+              type: "object",
+              properties: {
+                userId: { type: "string" },
+                title: { type: "string" },
+                tier: { type: "string", enum: ["high", "priority", "not_yet"] },
+                horizon: { type: "string", enum: ["today", "week", "later"] },
+                dueOn: { type: "string", description: "YYYY-MM-DD" },
+              },
+              required: ["userId", "title"],
+              additionalProperties: false,
+            }
+          : { type: "object", properties: { userId: { type: "string" }, on: { type: "boolean" } }, required: ["userId", "on"], additionalProperties: false },
+    routes: [],
+    writesAtOnce: true,
+    destructive: name === "set_board_access",
+    async run(args, ctx) {
+      if (!ctx.sera) return { ok: false, error: "Sera's tools are not open on this server." };
+      const out = await ctx.sera.run(name, args);
+      return out.ok ? { ok: true, result: out.result } : { ok: false, error: out.error };
+    },
+  })),
+  {
+    name: "undo_sera_action",
+    scope: "sera.undoable",
+    kind: "write",
+    writesAtOnce: true,
+    destructive: true,
+    title: "Undo one of Sera's actions",
+    description: "Puts back one action this agent took, within 30 days, while nobody has touched what it wrote since. Answers why when it cannot.",
+    inputSchema: { type: "object", properties: { actionId: { type: "string" } }, required: ["actionId"], additionalProperties: false },
+    routes: [],
+    async run(args, ctx) {
+      if (!ctx.sera) return { ok: false, error: "Sera's tools are not open on this server." };
+      const id = typeof args.actionId === "string" ? args.actionId.slice(0, 64) : "";
+      if (!id) return { ok: false, error: "Name the action: actionId." };
+      const out = await ctx.sera.undo(id);
+      return out.ok ? { ok: true, result: { written: true, undone: true, actionId: id } } : { ok: false, error: out.error };
     },
   },
 ];

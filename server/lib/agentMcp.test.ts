@@ -72,6 +72,18 @@ describe("the connector protocol", () => {
     expect(old.result.protocolVersion).toBe("2025-11-25");
   });
 
+  it("marks the writes that can change or remove what is there, and Sera's as writing at once", async () => {
+    const { ctx } = holder();
+    const r = await ask(rpc("tools/list"), ["admin", "sera.undoable", "tasks.write"], ctx);
+    const hint = (name: string) => r.result.tools.find((t: any) => t.name === name)?.annotations.destructiveHint;
+    expect(hint("admin_request")).toBe(true);
+    expect(hint("set_board_access")).toBe(true);
+    expect(hint("undo_sera_action")).toBe(true);
+    expect(hint("suggest_task")).toBe(false);
+    for (const t of MCP_TOOLS.filter((x) => x.scope === "sera.undoable")) expect(t.writesAtOnce, t.name).toBe(true);
+    for (const t of MCP_TOOLS.filter((x) => x.scope !== "sera.undoable")) expect(t.writesAtOnce, t.name).toBeFalsy();
+  });
+
   it("takes a notification without an answer and refuses an unknown method", async () => {
     const { ctx } = holder();
     expect(await ask(rpc("notifications/initialized", undefined, null), ["moon.read"], ctx)).toBeNull();
@@ -275,6 +287,38 @@ describe("admin_request (check 52)", () => {
     expect(r.result.isError).toBe(true);
     expect(r.result.structuredContent.detail.code).toBe("person_confirms");
     expect(a.routeCalls).toEqual([]);
+  });
+});
+
+describe("sera.undoable (check 56)", () => {
+  it("opens exactly the closed list, and no other scope opens any of it", () => {
+    expect(toolsFor(["sera.undoable"]).map((t) => t.name)).toEqual(["link_sera_person", "suggest_task", "set_board_access", "undo_sera_action"]);
+    for (const s of ["moon.read", "tasks.write", "admin"] as const) {
+      expect(toolsFor([s]).some((t) => t.scope === "sera.undoable")).toBe(false);
+    }
+    // No Sera tool names a route: they reach only server/lib/seraAgent.ts, which notifies nobody.
+    for (const t of toolsFor(["sera.undoable"])) expect(t.routes).toEqual([]);
+  });
+
+  it("hands each call to the Sera port and never to a route", async () => {
+    const h = holder();
+    const seen: string[] = [];
+    const ctx: ToolContext = {
+      ...h.ctx,
+      sera: {
+        run: async (tool) => {
+          seen.push(tool);
+          return { ok: true, result: { written: true, actionId: "aac-1" } };
+        },
+        undo: async (id) => (id === "aac-1" ? { ok: true } : { ok: false, error: "There is no such Sera action." }),
+      },
+    };
+    const r = await ask(callTool("suggest_task", { userId: "u-2", title: "x" }), ["sera.undoable"], ctx);
+    expect(r.result.isError).toBe(false);
+    const u = await ask(callTool("undo_sera_action", { actionId: "nope" }), ["sera.undoable"], ctx);
+    expect(u.result.isError).toBe(true);
+    expect(seen).toEqual(["suggest_task"]);
+    expect(h.calls).toEqual([]);
   });
 });
 
