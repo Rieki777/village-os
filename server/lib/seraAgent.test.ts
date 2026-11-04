@@ -14,7 +14,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
-import { runSeraTool, seraDigest, undoSeraAction, type SeraActor } from "./seraAgent";
+import { runSeraTool, seraDigest, seraDigestLink, undoSeraAction, type SeraActor } from "./seraAgent";
 import { ensureRecap } from "../repos/moonRecaps";
 import { listAgentActions } from "../repos/agentAccounts";
 import { setListOn } from "../repos/memberTasks";
@@ -273,5 +273,12 @@ describe.skipIf(!configured)("Sera's agent: undoable actions only (B7)", () => {
       await pool.query("INSERT INTO `live_session_library_takes` (`session_id`, `library_id`, `item_id`, `taken_by_no`) VALUES (1, ?, 1, 3)", [draft.result.libraryId]); // module-review-ok: a session taking the draft, as the agenda route does
       expect(await undoSeraAction(pool, String(draft.result.actionId), "u-steward", null)).toMatchObject({ ok: false, status: 409 });
     });
+  });
+});
+
+describe("where the daily summary opens", () => {
+  it("opens the panel with each Undo for an admin, and gives an approver who is not an admin no admin link", () => {
+    expect(seraDigestLink(true)).toBe("/admin?tab=players");
+    expect(seraDigestLink(false)).toBeNull();
   });
 });
