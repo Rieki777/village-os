@@ -189,7 +189,8 @@ export async function undoSeraAction(pool: Pool, actionId: string, byUserId: str
     return { ok: false, status: 410, error: `Sera's actions can be undone for ${UNDO_DAYS} days, and this one is older.` };
   }
   const u = a.undo as Undo;
-  if (await laterStandingAction(pool, a)) {
+  // Only a tool that replaces a member's state can be undone out of order: two suggestions are two things, each undone alone.
+  if (u.kind === "board" && (await laterStandingAction(pool, a))) {
     return { ok: false, status: 409, error: "Sera's agent did the same thing to this member again later. Undo that later action first." };
   }
   let put = false;
