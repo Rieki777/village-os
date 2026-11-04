@@ -93,6 +93,7 @@ import { register as registerJoinAnswerRoutes } from "./routes/joinAnswers";
 import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
 import { register as registerVerifyEmailRoutes } from "./routes/verifyEmail";
+import { matchOnEvent } from "./lib/seraPersonMatch";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
@@ -196,6 +197,7 @@ import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerMoonRecapRoutes, exportMoonReviews } from "./routes/moonRecaps";
 import { register as registerMoonReviewSettingsRoutes } from "./routes/moonReviewSettings";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
 import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
@@ -7973,6 +7975,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     void recordEvent(getPool(), {
       kind: "audit", text, actorUserId: userId, entityType: "user", entityRef: userId, audience: "admin",
     });
+    // A member made a proved profile or proved their email: ask Sera, by keyed hash only, who they are (off by default).
+    if (text === "auth:email-verified" || text === "auth:google-joined") matchOnEvent(getPool(), userId, (t) => recordAuthAudit(t, userId));
   };
   const letters = { authSecret: AUTH_TOKEN_SECRET, sendEmail: sendResendEmail, escapeHtml, origin: notifyDeps.origin, projectName: () => mergedConfig().project.name }; // every auth letter's five
   registerRecoveryRoutes(app, {
@@ -18229,6 +18233,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
+  registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
   registerMoonReviewSettingsRoutes(app, { authedUser, getPool, guardCapability, overLimit }); // decision 22: the moon review's village settings (server/routes/moonReviewSettings.ts)
   registerOwnHoldingsRoutes(app, { authedUser, getPool });
   registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
@@ -25881,6 +25886,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       sessions: await exportMemberSessions(pool, user.id), // live sessions they joined, entries they wrote or hold, and their own answers; arrival words are already erased from closed ones (server/lib/liveSessions.ts)
       geneKeys: await exportMemberGeneKeys(pool, user.id), // their saved Gene Keys result and settings; no birth data exists to export (server/lib/geneKeys.ts)
       memberTasks: await exportMemberTasks(pool, user.id), // their own list, private detail and tombstones included (server/repos/memberTasks.ts)
+      moonReviews: await exportMoonReviews(pool, user.id), // their moon recaps, items, invoices, pay route and review events (server/repos/moonRecaps.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *

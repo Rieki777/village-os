@@ -65,8 +65,10 @@ export const EDITOR_WORDS = {
   payHelp: "Recorded here and settled off the platform. Money never flows out of this village through this software.",
 } as const;
 
+/** Helper copy and the Change/Edit controls: moonlight on the night panel, at least 13px, and a 44px tap. */
+const helpText = "mt-0.5 break-words text-[13px] leading-snug text-foreground";
 const quietButton =
-  "inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-notice hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-medium leading-none text-foreground underline decoration-foreground/40 underline-offset-2 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 const asSettings = (v: unknown): SeatSettings =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as SeatSettings) : emptySettings();
@@ -116,13 +118,13 @@ function GroupRow({
     <section aria-labelledby={headId} className="rounded-xl border border-border bg-card p-3" data-settings-group={group}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 id={headId} className="text-sm font-semibold text-foreground">
+          <h4 id={headId} className="text-[13px] font-semibold leading-snug text-foreground">
             {GROUP_PLAIN[group]}
           </h4>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{GROUP_LABELS[group]}</p>
-          <p className={`mt-0.5 break-words text-sm ${row.set ? "text-foreground" : "text-muted-foreground"}`}>{open ? honest : row.headline}</p>
-          {row.moneyLine && <p className="mt-0.5 text-xs text-muted-foreground">{row.moneyLine}</p>}
-          {row.set && <p className="mt-0.5 text-xs text-muted-foreground">{honest}</p>}
+          <p className="text-[13px] font-semibold uppercase tracking-wide text-foreground">{GROUP_LABELS[group]}</p>
+          <p className={helpText}>{open ? honest : row.headline}</p>
+          {row.moneyLine && <p className={helpText}>{row.moneyLine}</p>}
+          {row.set && <p className={helpText}>{honest}</p>}
           {customised && (
             <p className="mt-0.5 text-xs text-muted-foreground">
               <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-foreground">
@@ -197,10 +199,10 @@ function GroupRow({
                     {o.label}
                     {current && <Check className="size-4 text-notice" aria-hidden="true" />}
                   </span>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{GROUP_LABELS[group]}</span>
-                  <span className="mt-0.5 break-words text-xs text-muted-foreground">{o.blurb}</span>
-                  {previewOf(o) && <span className="mt-1 break-words text-xs font-medium text-foreground">Example: {previewOf(o)}</span>}
-                  {MONEY_GROUPS.includes(group) && <span className="mt-1 break-words text-xs font-medium text-foreground">{MONEY_PROMISE}</span>}
+                  <span className="text-[13px] font-semibold uppercase tracking-wide text-foreground">{GROUP_LABELS[group]}</span>
+                  <span className="mt-0.5 break-words text-[13px] leading-snug text-foreground">{o.blurb}</span>
+                  {previewOf(o) && <span className="mt-1 break-words text-[13px] font-medium leading-snug text-foreground">Example: {previewOf(o)}</span>}
+                  {MONEY_GROUPS.includes(group) && <span className="mt-1 break-words text-[13px] font-medium leading-snug text-foreground">{MONEY_PROMISE}</span>}
                 </button>
               </li>
             );

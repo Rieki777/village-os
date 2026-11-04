@@ -25,6 +25,8 @@ export interface MemberLinkRow {
   how: LinkHow | null;
   linkedAt: string | null;
   lastSyncedAt: string | null;
+  /** The keyed match could not link this member alone: Sera found none, or several. */
+  review?: { outcome: "none" | "several"; matches: number } | null;
 }
 
 export interface LinksResponse {

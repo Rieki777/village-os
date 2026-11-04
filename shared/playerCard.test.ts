@@ -579,6 +579,34 @@ describe("proposal mode (PR 3): the card a role application asks for", () => {
     expect(rows.slice(-3).every((r) => r.small)).toBe(true);
   });
 
+  it("an open row on a proposal names who fills it, and the load card names the hours", () => {
+    const card = buildPlayerCard(
+      input({
+        mode: "proposal",
+        fillWith: "Operations Steward",
+        loadRead: null,
+        growingEdge: null,
+        whoCouldHoldNext: null,
+        plan: { aim: null, goals: [] },
+        roles: [role(1, { settings: { v: 1, term: { endsOn: "2026-12-31" } } })],
+      }),
+    );
+    const line = "We'll fill this together with Operations Steward.";
+    expect(card.across.growingEdge.text).toEqual({ kind: "empty", words: line });
+    expect(card.across.whoCouldHoldNext.text).toEqual({ kind: "empty", words: line });
+    expect(card.across.goals).toEqual({ kind: "empty", words: line });
+    expect(card.across.load.own).toEqual({ kind: "empty", words: "We'll fill the hours together with Operations Steward." });
+    expect(card.roles[0].chips.join(" ")).toContain(line);
+    expect(card.roles[0].chips.join(" ")).not.toContain("No review date set");
+    const none = buildPlayerCard(input({ mode: "proposal", fillWith: null, loadRead: null, growingEdge: null, plan: null }));
+    expect(none.across.load.own).toEqual({ kind: "empty", words: "We'll fill the hours together with the village's operations role." });
+    expect(none.across.growingEdge.text).toEqual({ kind: "empty", words: "We'll fill this together with the village's operations role." });
+    const live = buildPlayerCard(input({ loadRead: null, growingEdge: null, plan: { aim: null, goals: [] } }));
+    expect(live.across.load.own).toEqual({ kind: "empty", words: "Not set this moon" });
+    expect(live.across.growingEdge.text).toEqual({ kind: "empty", words: "Not written yet" });
+    expect(live.across.goals).toEqual({ kind: "empty", words: "No village goals named yet" });
+  });
+
   it("a live card is unchanged by the mode it does not ask for", () => {
     const live = buildPlayerCard(input());
     expect(live.across.tasks.kind).toBe("shown");

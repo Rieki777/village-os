@@ -169,6 +169,7 @@ import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
 import { forgetMemberTasks } from "../repos/memberTasks";
+import { forgetMoonReviews } from "../repos/moonRecaps";
 import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
@@ -1647,6 +1648,23 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * The end-of-moon review (0313): their own words go, the item text, the
+       * proof links, the role audit, the From block, the attestation and
+       * every note, and the pay route goes whole. Amounts, dates, numbers,
+       * bill refs and events stay, as `cash_owed` keeps them
+       * (forgetMoonReviews in server/repos/moonRecaps.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the recap
+       * doors write for anybody signed in until the sessions die. Keyed on
+       * the member, so a resume or a second run changes nothing more.
+       */
+      name: "moon-reviews-after-tombstone",
+      run: async () => {
+        await forgetMoonReviews(pool, target.id);
+      },
+    },
+    {
+      /*
        * Reward moment markers (0294): the baseline row says when the member
        * first opened the app, and each seen row which of their payments they
        * were shown. Personal data about them, deleted whole. A debt is kept
@@ -2218,6 +2236,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "reward-moments-after-tombstone",
   "companions-after-tombstone",
   "member-asks-after-tombstone",
+  "moon-reviews-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 
