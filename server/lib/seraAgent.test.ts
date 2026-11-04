@@ -178,17 +178,25 @@ describe.skipIf(!configured)("Sera's agent: undoable actions only (B7)", () => {
       expect(await one("SELECT `list_on`, `set_by_user_id` FROM `member_task_access` WHERE `user_id` = 'u-eli'")).toMatchObject({ list_on: 0, set_by_user_id: "u-ana" });
     });
 
-    it("undoes the later of two actions on one member first", async () => {
+    it("undoes the later of two board switches on one member first, and two suggestions each alone", async () => {
       const first = await runSeraTool(pool, sera, "set_board_access", { userId: "u-dee", on: false }, deps);
       if (!first.ok) throw new Error("fixture");
       await pool.query("UPDATE `agent_actions` SET `created_at` = `created_at` - INTERVAL 5 SECOND WHERE `id` = ?", [first.result.actionId]); // module-review-ok: the first action, a moment earlier
-      const second = await runSeraTool(pool, sera, "set_board_access", { userId: "u-dee", on: true }, deps);
+      // The same switch again: the row reads exactly as the first left it, so only the order check stops the first undo.
+      const second = await runSeraTool(pool, sera, "set_board_access", { userId: "u-dee", on: false }, deps);
       if (!second.ok) throw new Error("fixture");
       const early = await undoSeraAction(pool, String(first.result.actionId), "u-steward", null);
       expect(early).toMatchObject({ ok: false, status: 409 });
       expect(await undoSeraAction(pool, String(second.result.actionId), "u-steward", null)).toEqual({ ok: true });
       expect(await undoSeraAction(pool, String(first.result.actionId), "u-steward", null)).toEqual({ ok: true });
       expect(await one("SELECT COUNT(*) AS n FROM `member_task_access` WHERE `user_id` = 'u-dee'")).toMatchObject({ n: 0 });
+
+      const a = await runSeraTool(pool, sera, "suggest_task", { userId: "u-dee", title: "First suggestion" }, deps);
+      if (!a.ok) throw new Error("fixture");
+      await pool.query("UPDATE `agent_actions` SET `created_at` = `created_at` - INTERVAL 5 SECOND WHERE `id` = ?", [a.result.actionId]); // module-review-ok: the first action, a moment earlier
+      const b = await runSeraTool(pool, sera, "suggest_task", { userId: "u-dee", title: "Second suggestion" }, deps);
+      if (!b.ok) throw new Error("fixture");
+      expect(await undoSeraAction(pool, String(a.result.actionId), "u-steward", null)).toEqual({ ok: true });
     });
   });
 });
