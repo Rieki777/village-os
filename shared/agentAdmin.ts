@@ -53,8 +53,8 @@ export const DEFAULT_AGENT_ADMIN_PATHS: AgentAdminPathsDoc = {
   paths: [
     { method: "GET", path: "/api/admin/member-tasks/access", confirm: "agent", label: "Who has a task board" },
     { method: "PUT", path: "/api/admin/member-tasks/access/:userId", confirm: "agent", label: "Turn a member's task board on or off" },
-    { method: "GET", path: "/api/admin/member-tasks/bridge", confirm: "agent", label: "The Sera bridge: links, queue and last sync" },
-    { method: "POST", path: "/api/admin/member-tasks/bridge/sync", confirm: "agent", label: "Run the Sera bridge sync now" },
+    { method: "GET", path: "/api/admin/member-tasks/bridge", confirm: "agent", label: "Organisational Memory: links, queue and last sync" },
+    { method: "POST", path: "/api/admin/member-tasks/bridge/sync", confirm: "agent", label: "Run the Organisational Memory sync now" },
     { method: "GET", path: "/api/moon-review/rhythm", confirm: "agent", label: "The moon rhythm" },
     { method: "PUT", path: "/api/moon-review/rhythm", confirm: "agent", label: "Move a moon's days, the send hour or the guide link" },
   ],

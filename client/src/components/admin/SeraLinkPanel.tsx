@@ -109,8 +109,10 @@ export default function SeraLinkPanel({ password }: { password: string }) {
   const waiting = (members ?? []).filter((m) => m.review).length;
   const [counts, setCounts] = useState<BackfillCounts | null>(null);
   const [busy, setBusy] = useState(false);
+  const [matchError, setMatchError] = useState("");
   const runMatch = async (dryRun: boolean) => {
     setBusy(true);
+    setMatchError("");
     try {
       const r = await fetch(`${API_BASE}/saberra/person-match/backfill`, {
         method: "POST",
@@ -122,12 +124,13 @@ export default function SeraLinkPanel({ password }: { password: string }) {
       setCounts(body);
       setMembers(body.members);
     } catch {
-      setMessage("The match did not run just now.");
+      setMessage("");
+      setMatchError("The match did not run just now. Check your connection, then press the button again.");
     }
     setBusy(false);
   };
 
-  if (failed) return <p className="text-xs text-amber-800">The Sera links could not be read just now.</p>;
+  if (failed) return <p aria-live="polite" className="text-xs text-amber-800">The links to Sera could not be read just now. Reload the page to try again.</p>;
   if (!members) return <p className="text-xs text-gray-500">Reading the Sera links…</p>;
 
   return (
@@ -145,6 +148,7 @@ export default function SeraLinkPanel({ password }: { password: string }) {
             <button type="button" disabled={busy} onClick={() => runMatch(false)} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs text-white">Match now ({counts.candidates})</button>
           )}
         </div>
+        {matchError && <p role="alert" className="text-xs text-amber-800">{matchError}</p>}
         {counts && (
           <p className="text-xs text-gray-700" role="status">
             {counts.note

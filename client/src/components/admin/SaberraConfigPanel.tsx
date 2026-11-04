@@ -249,7 +249,7 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
 
   return (
     <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 sm:p-5 space-y-4">
-      <Suspense fallback={<p className="text-xs text-gray-500">Reading the bridge…</p>}>
+      <Suspense fallback={<p className="text-xs text-gray-500">Reading Organisational Memory…</p>}>
         <SaberraBridgeBoard password={password} />
       </Suspense>
       <Suspense fallback={<p className="text-xs text-gray-500">Reading the Sera links…</p>}>

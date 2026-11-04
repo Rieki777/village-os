@@ -4298,7 +4298,7 @@ How many different members must answer a pulse question in a week before anybody
 
 ### Every member has a task board unless a steward turns one off
 
-When on, every member has a task board on their profile unless a steward turns theirs off, and a member linked to the knowledge library has their tasks brought in. When off, a board stays off until a steward turns it on for that member, which is how boards worked before.
+When on, every member has a task board on their profile unless a steward turns theirs off, and a member linked to Organisational Memory has their tasks brought in. When off, a board stays off until a steward turns it on for that member, which is how boards worked before.
 
 | Fact | Value |
 | --- | --- |

@@ -39,7 +39,7 @@ export interface BridgeAnswer {
     notesHeld: number;
     /** Whether notes are released to Sera, or null when unknown. */
     notesReleased: boolean | null;
-    /** Members who turned "Help the knowledge library learn" off. */
+    /** Members who turned "Help Organisational Memory learn" off. */
     membersOff?: number;
   };
   reviewQueue: { waiting: number };
@@ -61,18 +61,20 @@ export interface LinkedPerson {
 
 export interface SeraTool {
   name: string;
+  /** Plain words for the badge; the raw name stays beside it, small. */
+  label?: string;
   what: string;
   unlocked: boolean;
 }
 
 /** Shipped and not-yet, as Saberra's emails of Nov 2 2026 list them. */
 export const SERA_TOOLS: readonly SeraTool[] = [
-  { name: "list_voice_tasks", what: "Paging, changed_since, removed_since, evidence_contains", unlocked: true },
-  { name: "submit_task_feedback", what: "Reason, context, redirect target; notes switched off until the agreement", unlocked: true },
-  { name: "retract_task_feedback", what: "Undo a feedback", unlocked: true },
-  { name: "delete_owner_feedback", what: "Delete a person's feedback", unlocked: true },
-  { name: "reassign_voice_task", what: "Redirect a task to a named person", unlocked: true },
-  { name: "list_quest_proposals", what: "Quest ideas from the library", unlocked: true },
+  { name: "list_voice_tasks", label: "Read members' tasks", what: "Paging, changed_since, removed_since, evidence_contains", unlocked: true },
+  { name: "submit_task_feedback", label: "Send task feedback", what: "Reason, context, redirect target; notes switched off until the agreement", unlocked: true },
+  { name: "retract_task_feedback", label: "Undo feedback", what: "Undo a feedback", unlocked: true },
+  { name: "delete_owner_feedback", label: "Forget a person's feedback", what: "Delete a person's feedback", unlocked: true },
+  { name: "reassign_voice_task", label: "Hand a task to someone", what: "Redirect a task to a named person", unlocked: true },
+  { name: "list_quest_proposals", label: "Read quest ideas", what: "Quest ideas from Organisational Memory", unlocked: true },
   { name: "Role relation", what: "Redirect to a role, not only a person", unlocked: false },
   { name: "requested_by", what: "A \"waiting on you\" field", unlocked: false },
   { name: "Retention job", what: "Delete feedback after 12 months", unlocked: false },
