@@ -1099,6 +1099,11 @@ html {
   :root:has(.md\:hidden [aria-modal="true"], [data-hides-fab-phone]) [data-mobile-fab] {
     visibility: hidden;
   }
+  /* A focused flow with its own Back/Next bar (a role proposal) keeps one bar,
+     not two: the tab bar steps out; the header menu still reaches every page. */
+  :root:has([data-hides-tabbar-phone]) [data-mobile-tabbar] {
+    display: none;
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-mobile-fab] {
