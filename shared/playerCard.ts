@@ -48,7 +48,7 @@ import { roleCcos, roleTerm, type HoldingWellOut, type ListSectionOut, type Text
 import type { RoleEditKey } from "./playerCardEdit";
 import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationStatus } from "./seatApplications";
 import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applicationGroups";
-import { loadHoursLine, openRowLine } from "./roleProposalHonesty";
+import { AFTER_ADOPT_LINE, MEMBER_LATER_LINE, loadHoursLine, openRowLine } from "./roleProposalHonesty";
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 import type { AccomplishmentMoon } from "./taskAccomplishments";
 import { roleProposalsOut, type RoleProposalIn, type RoleProposalOut } from "./playerCardProposals";
@@ -630,7 +630,7 @@ function playsAs(role: PlayerRoleIn, names: Read<Record<string, string> | null>)
 
 function signsFor(role: PlayerRoleIn, input: PlayerCardInput): Slot<SignOut[]> {
   if (role.settings === undefined) return UNREAD;
-  if (input.mode === "proposal") return empty(W.startsOnceAdopted);
+  if (input.mode === "proposal") return empty(AFTER_ADOPT_LINE);
   const measures = role.settings?.scoreboard?.measures ?? [];
   if (!measures.length) return empty(W.noSigns);
   const windows = cycleWindows(input.now, LUNAR_CLOCK, input.timeZone);
@@ -680,7 +680,7 @@ function viewerHoldsRole(role: PlayerRoleIn, input: PlayerCardInput): boolean {
 
 function tensionsFor(role: PlayerRoleIn, input: PlayerCardInput): RoleOut["tensions"] {
   if (role.tensions === undefined) return UNREAD;
-  if (input.mode === "proposal") return empty(W.startsOnceAdopted);
+  if (input.mode === "proposal") return empty(AFTER_ADOPT_LINE);
   const viewer = input.viewerUserId ?? null;
   const holds = viewerHoldsRole(role, input);
   const openAll = role.tensions.filter((t) => t.status === "open");
@@ -746,6 +746,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
             ),
           )
         : empty(W.noPowers);
+  const opsOpen = input.mode === "proposal" ? openRowLine(input.fillWith) : W.notWritten;
   const anyShared = !!role.powers?.some((p) => p.sharedWith?.length);
   // A10: nothing handed over, so say what the role suits, once per power and
   // never a power it already holds. An unread or empty list leaves the card
@@ -772,10 +773,10 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     circle,
     time: ccos.time,
     plays: playsAs(role, input.archetypeNames),
-    decide: { heading: W.decide, term: roleTerm("decide", terms), text: textSlot(role.domain, W.notWritten) },
+    decide: { heading: W.decide, term: roleTerm("decide", terms), text: textSlot(role.domain, opsOpen) },
     authorities: ccos.authorities,
-    bringMe: { heading: W.bringMe, items: wordsSlot(role.bringMe, W.notWritten) },
-    countOnMe: { heading: W.countOnMe, term: roleTerm("countOnMe", terms), items: wordsSlot(role.accountabilities, W.notWritten) },
+    bringMe: { heading: W.bringMe, items: wordsSlot(role.bringMe, opsOpen) },
+    countOnMe: { heading: W.countOnMe, term: roleTerm("countOnMe", terms), items: wordsSlot(role.accountabilities, opsOpen) },
     responsibilities: ccos.responsibilities,
     working: { heading: W.working, term: roleTerm("working", terms), items: signsFor(role, input) },
     worksWith: {
@@ -785,11 +786,11 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
           ? UNREAD
           : role.worksWith.length
             ? shown(role.worksWith.map((w) => (clean(w.about) ? W.worksWithLine(w.roleName, clean(w.about)!) : w.roleName)))
-            : empty(W.notWritten),
+            : empty(opsOpen),
     },
     holdingWell: ccos.holdingWell,
-    notMine: { heading: W.notMine, term: roleTerm("notMine", terms), items: wordsSlot(role.notMine, W.notWritten) },
-    runbook: { heading: W.runbook, text: textSlot(role.runbook, W.notWritten) },
+    notMine: { heading: W.notMine, term: roleTerm("notMine", terms), items: wordsSlot(role.notMine, opsOpen) },
+    runbook: { heading: W.runbook, text: textSlot(role.runbook, input.mode === "proposal" ? MEMBER_LATER_LINE : W.notWritten) },
     powers: showSuited
       ? { heading: W.suitedTo, items: shown(suited.map((p) => p.label)), note: W.suitedNote }
       : { heading: anyShared ? W.powersShared : W.powers, items: powers, note: null },
@@ -845,7 +846,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
     input.tasks === undefined
       ? UNREAD
       : proposal
-        ? empty(W.startsOnceAdopted)
+        ? empty(AFTER_ADOPT_LINE)
         : input.tasks.length === 0
         ? empty(W.noTasks)
         : shown(
@@ -864,7 +865,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
     roles === undefined || (signLists.length > 0 && signLists.every((s) => s.kind === "unread"))
       ? UNREAD
       : proposal
-        ? empty(W.startsOnceAdopted)
+        ? empty(AFTER_ADOPT_LINE)
         : allSigns.length
           ? shown(allSigns)
           : empty(W.noSigns);
@@ -1164,7 +1165,7 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
           ? UNREAD
           : input.howIHold && input.howIHold.some((h) => clean(h.text))
             ? shown(input.howIHold.filter((h) => clean(h.text)).map((h) => ({ label: h.label, text: clean(h.text)! })))
-            : empty(W.notWritten),
+            : empty(input.mode === "proposal" ? MEMBER_LATER_LINE : W.notWritten),
     },
     applications: applications(input),
     agreements: agreements(input, list),

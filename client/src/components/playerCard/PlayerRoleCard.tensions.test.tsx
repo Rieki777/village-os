@@ -117,7 +117,7 @@ describe("tensions on the card", () => {
   it("a proposal card reads Starts once adopted, with no raise control", () => {
     noFetch();
     const box = draw("member", { viewerMember: true, mode: "proposal", roles: [withTensions([])] })!;
-    expect(within(box).getByText("Starts once adopted")).toBeTruthy();
+    expect(within(box).getByText("Open for now. You'll add these once the role is adopted.")).toBeTruthy();
     expect(within(box).queryByRole("button", { name: RAISE })).toBeNull();
   });
 });

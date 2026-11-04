@@ -98,3 +98,9 @@ export function openRowLine(partner: string | null | undefined): string {
 export function loadHoursLine(partner: string | null | undefined): string {
   return `We'll fill the hours together with ${opsPartner(partner)}.`;
 }
+
+/** An open row the member writes once they hold the role (runbook, how they hold it). */
+export const MEMBER_LATER_LINE = "Open for now. You'll write this once you hold the role.";
+
+/** Rows that only exist once a role is adopted (tensions, signs, tasks). */
+export const AFTER_ADOPT_LINE = "Open for now. You'll add these once the role is adopted.";
