@@ -47,7 +47,7 @@ export interface BridgeAnswer {
   sync?: SyncLast | null;
   /** Sera's quest feed: the last real run, and how many of its quests wait for a steward. */
   questFeed?: { last: QuestFeedAnswer | null; waiting: number };
-  needsOwner: { ready: boolean; waiting: number };
+  needsOwner: { ready: boolean; waiting: number; items?: { title: string; role: string | null }[] };
 }
 
 export interface LinkedPerson {

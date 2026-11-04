@@ -36,6 +36,7 @@ describe("the bridge reading", () => {
           [/member_task_outbox/, [{ kind: "feedback", status: "sent", n: 4 }, { kind: "feedback", status: "queued", n: 2 }, { kind: "feedback", status: "failed", n: 1 }, { kind: "note", status: "held", n: 3 }]],
           [/member_task_bridge/, [{ value: "held" }]],
           [/external_proposals/, [{ n: 5 }]],
+          [/LEFT JOIN `org_roles`/, [{ title: "Fix the pump", rid: "r-1", rname: "Water steward" }, { title: "Paint", rid: "sera-x", rname: null }, { title: "Sweep", rid: null, rname: null }]],
           [/member_task_import_queue/, [{ n: 2 }]],
         ],
       ),
@@ -46,6 +47,6 @@ describe("the bridge reading", () => {
     expect(r.feedback).toEqual({ ready: true, sent: 4, queued: 2, failed: 1, notesHeld: 3, notesReleased: false, membersOff: 2 });
     expect(r.lists.people).toEqual([{ name: "Ana", listOn: true, imported: 33, lastImportAt: "2026-11-02T20:00:00.000Z", lastSyncedAt: null }]);
     expect(r.reviewQueue.waiting).toBe(5);
-    expect(r.needsOwner).toEqual({ ready: true, waiting: 2 });
+    expect(r.needsOwner).toEqual({ ready: true, waiting: 2, items: [{ title: "Fix the pump", role: "Water steward" }, { title: "Paint", role: "a role in Sera" }, { title: "Sweep", role: null }] });
   });
 });

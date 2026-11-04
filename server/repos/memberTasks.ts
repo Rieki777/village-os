@@ -38,6 +38,8 @@ export interface MemberTaskRow {
   confidence: number | null;
   /** Who asked for it, from the library (display only). */
   requestedBy: string | null;
+  /** Set when the library moved this task to a role nobody holds yet ("" when it named no role id). */
+  seraRoleId: string | null;
   notNowCount: number;
   version: number;
   createdOn: string;
@@ -47,7 +49,7 @@ export interface MemberTaskRow {
 }
 
 const COLUMNS =
-  "`id`, `user_id`, `title`, `private_detail`, `tier`, `horizon`, DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `minutes`, `status`, `remove_reason`, `pinned`, `member_pinned`, `source`, `external_id`, `import_batch`, `member_edited`, `confidence`, `requested_by`, `not_now_count`, `version`, DATE_FORMAT(`created_on`, '%Y-%m-%d') AS `created_on`, `done_at`, `removed_at`, `updated_at`";
+  "`id`, `user_id`, `title`, `private_detail`, `tier`, `horizon`, DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `minutes`, `status`, `remove_reason`, `pinned`, `member_pinned`, `source`, `external_id`, `import_batch`, `member_edited`, `confidence`, `requested_by`, `sera_role_id`, `not_now_count`, `version`, DATE_FORMAT(`created_on`, '%Y-%m-%d') AS `created_on`, `done_at`, `removed_at`, `updated_at`";
 
 const iso = (v: unknown): string | null => (v == null ? null : v instanceof Date ? v.toISOString() : String(v));
 
@@ -71,6 +73,7 @@ function toRow(r: RowDataPacket): MemberTaskRow {
     memberEdited: Number(r.member_edited) === 1,
     confidence: r.confidence == null ? null : Number(r.confidence),
     requestedBy: r.requested_by == null ? null : String(r.requested_by),
+    seraRoleId: r.sera_role_id == null ? null : String(r.sera_role_id),
     notNowCount: Number(r.not_now_count ?? 0),
     version: Number(r.version ?? 1),
     createdOn: String(r.created_on),

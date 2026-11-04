@@ -2024,7 +2024,7 @@ export const TASK_BANDS = [
   { key: "very_full", minPct: 85, label: "Very full", says: "You finished nearly everything you set. Next moon, check your goals still stretch you, and that nothing hard was let go just to keep the number up." },
   { key: "steady", minPct: 60, label: "Steady", says: "The normal range for real work, where priorities move mid-moon. Nothing to fix." },
   { key: "pulled", minPct: 40, label: "Pulled", says: "Something took your time: work outside your roles, tasks waiting on others, or tasks too big for one moon. Name which, and shape next moon's tasks around it." },
-  { key: "rethink", minPct: 0, label: "Rethink the plan", says: "Usually this points to the plan: the tasks weren't the work the village needed this moon, or you were covering an empty role. Bring it to the circle." },
+  { key: "rethink", minPct: 0, label: "Rethink the plan", says: "Usually this points to the plan: the tasks weren't the work the village needed this moon, or you were covering an empty role. Bring it to the circle. That's what it's for." },
 ] as const;
 
 /**
@@ -2792,6 +2792,10 @@ export interface MyMoonResponse {
   attestationWords: ReturnType<typeof attestationWords>;
   /** Who can read the member's route and invoice, by name. */
   cashPayHolders: string[];
+  /** B1: the village's End of Moon guide, or null when it has set none (`moon_rhythm`). */
+  guideUrl: string | null;
+  /** A7: who helped this moon, as the member saved it. */
+  thanks: ThanksEntry[];
 }
 
 export interface GatherResponse {
@@ -2816,11 +2820,13 @@ export interface ItemResponse {
 export interface SendRecapRequest {
   ownWords?: string | null;
   roleAudit?: RoleAudit;
+  /** A7: who helped, read with `parseThanks`. */
+  thanks?: ThanksEntry[];
 }
 
 /** `PUT /api/me/moon/:cycle/goals`: the next moon's three to five goals. */
 export interface NextGoalsRequest {
-  goals: GoalInput[];
+  goals: Array<GoalInput & { carriedFromId?: string | null }>;
 }
 
 /** `PATCH /api/me/moon/goals/:id`: score one of last moon's goals. */
@@ -2871,6 +2877,8 @@ export interface PayRouteResponse {
   billTo: BillTo | null;
   routeChoices: Array<{ route: PayRoute; words: string }>;
   cashPayHolders: string[];
+  /** The tax forms the village keeps on file (`settings.taxForms`), for the form to offer. */
+  taxForms: TaxFormDef[];
 }
 
 /** `PUT /api/me/pay-route`. A pilot acknowledgement rides with it the first time. */
@@ -2898,8 +2906,20 @@ export interface QueueRow {
   invoiceApprovers: string[];
   roles: Array<{ roleId: string; name: string; itemCount: number }>;
   outsideMyRoles: number;
-  /** `cash.pay` view only. */
-  invoice: (InvoiceView & { routeCheck: string | null; taxFormValid: boolean; authorityNote: string | null; queueNote: string | null }) | null;
+  /**
+   * The approval hash of the recap as the queue read it (lane B). A work or
+   * invoice approval sends it back, and the door refuses with
+   * `APPROVAL_REFUSALS.hashChanged` when the recap moved since.
+   */
+  hash: string;
+  /** A4: the reading first, the numbers second. Never an amount. */
+  taskReading: Reading | null;
+  seatReading: Reading | null;
+  score: Score;
+  /** The recap's items, for an approver to approve or return each one (lane B, for the client lane). */
+  items: RecapItem[];
+  /** `cash.pay` view only. `hash` is the row's, for `BulkApproveRequest`. */
+  invoice: (InvoiceView & { routeCheck: string | null; taxFormValid: boolean; authorityNote: string | null; queueNote: string | null; hash: string }) | null;
 }
 
 /** `GET /api/moon-review/queue?cycle=`. The `moon.approve` view carries no invoice. */
@@ -2954,16 +2974,20 @@ export type SettingsRequest = MoonReviewSettings;
 export interface RoomResponse {
   moon: MoonRef;
   holder: { userId: string; name: string } | null;
+  /**
+   * The stick holder's sent recap, only while the stick SHOWS it (the
+   * session's `shows` set; absent means Speak only, and this is null). A4:
+   * no room panel shows anyone's numbers, so there is no count here, not
+   * even of items held privately or per season goal.
+   */
   recap: {
-    roles: Array<{ roleId: string | null; name: string; items: Array<{ text: string; evidenceUrl: string | null }>; heldPrivately: number }>;
-    seasonGoals: Array<{ id: string; words: string; count: number }>;
+    roles: Array<{ roleId: string | null; name: string; items: Array<{ text: string; evidenceUrl: string | null }> }>;
   } | null;
   /** Who is ready to share. Nobody is marked as not ready. */
   ready: Array<{ userId: string; name: string }>;
-  /** The `moon_goals` section: the holder's last-moon goals with their score, then the next moon's. */
+  /** The `moon_goals` section, under the same Speak only rule: each goal with its status word, never a score. */
   goals: {
-    last: Array<{ text: string; status: GoalStatus; flagged: boolean }>;
-    score: Score;
+    last: Array<{ text: string; status: GoalStatus; statusWords: string; flagged: boolean }>;
     next: Array<{ text: string; doneWhen: string | null }>;
   } | null;
   /** This viewer's own row in the sending section. */

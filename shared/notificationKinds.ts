@@ -382,6 +382,17 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
    * The body is the treasurer's own note on how it was paid. Not celebrated,
    * for redemption's reason: the platform records the payment and never sees it.
    */
+  /**
+   * The end-of-moon review (module moon-review, server/lib/moonReview.ts): a
+   * recap returned, approved, a range changed, a self-approval to review, and
+   * "Your pay is sent". The title carries the contract's own words.
+   */
+  moon_review: {
+    group: "work",
+    blurb: "Your moon recap moved: returned, approved, or paid.",
+    many: "{n} updates on moon recaps.",
+    celebrate: false,
+  },
   cash_paid: {
     group: "economy",
     blurb: "The village marked cash it owed you as paid.",
