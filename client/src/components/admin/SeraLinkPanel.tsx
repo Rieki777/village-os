@@ -11,12 +11,10 @@ import { useEffect, useMemo, useState } from "react";
 import { LINK_HOW_WORDS, LINK_WORDS, seraOwnerIdProblem, type LinksResponse, type MemberLinkRow } from "@shared/seraPersonLinks";
 import { MATCH_WORDS, type BackfillCounts } from "@shared/seraPersonMatch";
 import { API_BASE, authHeaders } from "./adminApi";
+import { villageTime } from "@shared/seraBridgeBoard";
 
-function when(iso: string | null): string {
-  if (!iso) return LINK_WORDS.never;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? LINK_WORDS.never : d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
+// The same clock as the Sera board: village time, zone named when it is not the viewer's.
+const when = (iso: string | null): string => villageTime(iso, LINK_WORDS.never);
 
 function Row({ m, password, onDone }: { m: MemberLinkRow; password: string; onDone: (members: MemberLinkRow[], message: string) => void }) {
   const [id, setId] = useState("");

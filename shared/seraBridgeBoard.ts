@@ -115,3 +115,26 @@ export interface TokenUse {
   /** Whether that token is there; never its value. */
   set: boolean;
 }
+
+/**
+ * Every time on the Sera board and the Link to Sera panel, in village time
+ * (SERA_AGREEMENT.timezone). The zone is named when it is not the viewer's,
+ * so two readers never see two different clocks for one sync.
+ */
+export function villageTime(iso: string | null, fallback = "unknown time", viewerZone?: string): string {
+  if (!iso) return fallback;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return fallback;
+  const zone = SERA_AGREEMENT.timezone;
+  const text = d.toLocaleString("en-US", { timeZone: zone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  let viewer = viewerZone;
+  if (viewer === undefined) {
+    try { viewer = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { viewer = zone; }
+  }
+  return viewer === zone ? text : `${text} ${zoneName(zone)} time`;
+}
+
+function zoneName(zone: string): string {
+  const city = zone.split("/").pop() ?? zone;
+  return city.replace(/_/g, " ");
+}

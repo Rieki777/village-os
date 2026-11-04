@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import {
   SERA_AGREEMENT,
+  villageTime,
   SERA_TOOLS,
   agreementState,
   bridgeChecks,
@@ -31,12 +32,7 @@ function countdown(ms: number): string {
   return h > 0 ? `in ${h} h ${m} min` : `in ${m} min`;
 }
 
-function villageDate(iso: string | null): string {
-  if (!iso) return "unknown time";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "unknown time";
-  return d.toLocaleString("en-US", { timeZone: SERA_AGREEMENT.timezone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
+const villageDate = (iso: string | null): string => villageTime(iso);
 
 export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; onFeed?: (dryRun: boolean) => Promise<QuestFeedAnswer | string> }) {
   const [feed, setFeed] = useState<QuestFeedAnswer | string | null>(null);
