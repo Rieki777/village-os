@@ -51,7 +51,7 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit"> & {
 
 /** What the consent page offers this member, and which of the scopes write. Writes and extras are never ticked. */
 const scopeOffer = (extras: readonly AgentScope[]) =>
-  offeredScopes(extras).map((s) => ({ scope: s, write: s !== "moon.read", ticked: OAUTH_DEFAULT_SCOPES.includes(s) }));
+  offeredScopes(extras).map((s) => ({ scope: s, write: s !== "moon.read" && s !== "moon.review", ticked: OAUTH_DEFAULT_SCOPES.includes(s) }));
 
 /** The token a connector holds is named after it, and its id's tail tells two connectors with one name apart. */
 const tokenName = (client: { name: string; clientId: string }) => `Connector: ${client.name.slice(0, 60)} (${client.clientId.slice(-6)})`;

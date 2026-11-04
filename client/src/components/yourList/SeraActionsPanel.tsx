@@ -10,13 +10,15 @@ import { useCallback, useEffect, useState } from "react";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { BTN_QUIET, HINT } from "@/components/sessions/roomUi";
 
-type SeraTool = "link_sera_person" | "suggest_task" | "set_board_access" | "undo_sera_action";
+type SeraTool = "link_sera_person" | "suggest_task" | "set_board_access" | "draft_agenda_item" | "suggest_moon_item" | "undo_sera_action";
 interface Action { id: string; tool: SeraTool; subjectUserId: string | null; subjectName?: string | null; state: string; createdAt: string; undoneAt: string | null }
 
 const TOOL_WORDS: Record<SeraTool, string> = {
   link_sera_person: "Linked a member to their Sera person",
   suggest_task: "Suggested a task",
   set_board_access: "Switched a task board",
+  draft_agenda_item: "Drafted an agenda item",
+  suggest_moon_item: "Suggested a moon item",
   undo_sera_action: "Undid an action",
 };
 

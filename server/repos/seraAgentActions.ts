@@ -96,6 +96,44 @@ export async function restoreBoardAccess(
   return affected(res) === 1;
 }
 
+// ── B7 part 2: agenda drafts and moon suggestions ───────────────────────────
+
+/** Whether a circle exists, for a draft that names one. */
+export async function circleExists(db: Db, circleId: string): Promise<boolean> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT 1 FROM `circles` WHERE `id` = ? LIMIT 1", [circleId]);
+  return rows.length > 0;
+}
+
+/**
+ * Remove a draft Sera put in the agenda library, only while nobody has
+ * touched it: still waiting, never on an agenda, never edited, no note added.
+ * Its source row goes with it.
+ */
+export async function deleteUntouchedLibraryDraft(db: Db, libraryId: number): Promise<boolean> {
+  const [res] = await db.query(
+    "DELETE FROM `live_session_library` WHERE `id` = ? AND `status` = 'waiting' AND `session_id` IS NULL AND `edited_by_no` IS NULL AND `note_by_no` IS NULL " +
+      "AND `id` IN (SELECT `library_id` FROM `live_session_library_sources` WHERE `kind` = 'sera_agent') " +
+      // A draft some session has taken, even one later put back, has been in a room.
+      "AND NOT EXISTS (SELECT 1 FROM `live_session_library_takes` t WHERE t.`library_id` = `live_session_library`.`id`)",
+    [libraryId],
+  );
+  if (affected(res) !== 1) return false;
+  await db.query("DELETE FROM `live_session_library_sources` WHERE `library_id` = ? AND `kind` = 'sera_agent'", [libraryId]);
+  return true;
+}
+
+/** Remove a moon item Sera suggested, only while it is still a suggestion on a Draft recap. */
+export async function deleteSuggestedMoonItem(db: Db, itemId: string, recapId: string, text: string | null): Promise<boolean> {
+  // `text` is what the agent wrote. An item the member reworded is theirs, even while it is still a suggestion.
+  const [res] = await db.query(
+    "DELETE FROM `moon_recap_items` WHERE `id` = ? AND `recap_id` = ? AND `state` = 'suggested' AND `origin` = 'sera' " +
+      (text === null ? "" : "AND `text` = ? ") +
+      "AND `recap_id` IN (SELECT `id` FROM (SELECT `id` FROM `moon_recaps` WHERE `id` = ? AND `status` = 'draft') AS `d`)",
+    text === null ? [itemId, recapId, recapId] : [itemId, recapId, text, recapId],
+  );
+  return affected(res) === 1;
+}
+
 /**
  * Whether a later action by the agent, on the same tool and the same member,
  * still stands. Undoing the earlier one under it would put back a state the

@@ -113,7 +113,7 @@ export interface ToolContext {
   adminPaths?: () => Promise<AgentAdminPathsDoc>;
   /** Sera's undoable actions (server/lib/seraAgent.ts). Only the `sera.undoable` tools use it. */
   sera?: {
-    run: (tool: "link_sera_person" | "suggest_task" | "set_board_access", args: Record<string, unknown>) => Promise<{ ok: true; result: Record<string, unknown> } | { ok: false; error: string }>;
+    run: (tool: "link_sera_person" | "suggest_task" | "set_board_access" | "draft_agenda_item" | "suggest_moon_item", args: Record<string, unknown>) => Promise<{ ok: true; result: Record<string, unknown> } | { ok: false; error: string }>;
     undo: (actionId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   };
   /** Writes one `agent_actions` row. Only the admin and Sera tools record through it. */
@@ -183,6 +183,95 @@ const PRESSES_FROM: Record<BoardAction, readonly string[]> = {
 };
 
 // ── The tool table ───────────────────────────────────────────────────────────
+
+
+/** `:name` holes in a MOON_ROUTES path, filled and encoded. */
+const fill = (path: string, params: Record<string, string>) => path.replace(/:([A-Za-z]+)/g, (_m, k: string) => encodeURIComponent(params[k] ?? ""));
+
+/**
+ * A write through one of the member's own moon routes, in the two calls: the
+ * first answers the echo and a token, the second writes only when the token
+ * binds the same echo. The route's own checks (Draft only, the member's own
+ * recap) still decide.
+ */
+async function twoCallWrite(
+  tool: string,
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+  method: "PUT" | "PATCH" | "POST",
+  path: string,
+  body: Record<string, unknown>,
+): Promise<ToolOutcome> {
+  const echo = { method, path, body };
+  if (args.confirmToken === undefined) {
+    const { token, expiresAt } = ctx.mintConfirm(tool, echo);
+    return { ok: true, result: { confirmRequired: true, echo, confirmToken: token, expiresAt, message: `Nothing was written. Show this to the member, and after their yes call ${tool} again with the same arguments and this confirmToken.` } };
+  }
+  const check = ctx.verifyConfirm(tool, args.confirmToken, echo);
+  if (!check.ok) return { ok: false, error: check.sentence, detail: { reason: check.reason } };
+  const a = await ctx.dispatch(method, path, body);
+  if (a.status >= 300) return a.status === 404 ? { ok: false, error: NOT_OPEN } : refusal("My moon did not take that", a);
+  return { ok: true, result: { written: true, echo, answer: a.body } };
+}
+
+/** What a moon tool says while its route is not on this server, or the moon review is off. */
+const NOT_OPEN = "My moon is not open here yet: the moon review is off in this village, or this server does not carry that part of it.";
+
+/** Sera's closed list (server/lib/seraAgent.ts holds what each does and how it is undone). */
+type SeraToolName = "link_sera_person" | "suggest_task" | "set_board_access" | "draft_agenda_item" | "suggest_moon_item";
+const SERA_TOOL_DEFS: ReadonlyArray<{ name: SeraToolName; title: string; description: string; inputSchema: Record<string, unknown> }> = [
+  {
+    name: "link_sera_person",
+    title: "Link a member to their Sera person",
+    description: "Links a member to their Sera owner id. Never replaces a link that exists, and never links one owner to two members or one member to two owners. Undoable for 30 days.",
+    inputSchema: { type: "object", properties: { userId: { type: "string" }, seraOwnerId: { type: "string" } }, required: ["userId", "seraOwnerId"], additionalProperties: false },
+  },
+  {
+    name: "suggest_task",
+    title: "Suggest a task on a member's board",
+    description: "Puts a task on a member's board as a suggestion they keep or remove. Nobody is notified. Undoable for 30 days while the member has not touched it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string" },
+        title: { type: "string" },
+        tier: { type: "string", enum: ["high", "priority", "not_yet"] },
+        horizon: { type: "string", enum: ["today", "week", "later"] },
+        dueOn: { type: "string", description: "YYYY-MM-DD" },
+      },
+      required: ["userId", "title"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "set_board_access",
+    title: "Turn a member's task board on or off",
+    description: "Turns a member's task board on or off. Undoable for 30 days while nobody has switched it since.",
+    inputSchema: { type: "object", properties: { userId: { type: "string" }, on: { type: "boolean" } }, required: ["userId", "on"], additionalProperties: false },
+  },
+  {
+    name: "draft_agenda_item",
+    title: "Draft an agenda item",
+    description: "Puts a draft in a circle's agenda library, or in none in particular. A person brings it to the room. Undoable for 30 days while nobody has edited it or brought it to a room.",
+    inputSchema: {
+      type: "object",
+      properties: { title: { type: "string" }, circleId: { type: "string" }, aim: { type: "string" }, note: { type: "string" } },
+      required: ["title"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "suggest_moon_item",
+    title: "Suggest an item on a member's moon",
+    description: "Adds a suggested item to a member's Draft recap for that moon, which the member keeps or drops. Undoable for 30 days while it is still a suggestion.",
+    inputSchema: {
+      type: "object",
+      properties: { userId: { type: "string" }, cycleId: { type: "string" }, text: { type: "string" } },
+      required: ["userId", "cycleId", "text"],
+      additionalProperties: false,
+    },
+  },
+];
 
 export const MCP_TOOLS: readonly ToolDef[] = [
   {
@@ -299,6 +388,114 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     },
   },
   {
+    name: "import_moon_pack",
+    scope: "moon.write",
+    kind: "write",
+    title: "Import a moon pack",
+    description:
+      "Imports a moon pack (the strict JSON shape the guide gives, never with amounts) into the member's Draft recap. The first call writes nothing and answers the preview: what would be added, merged and skipped, with a confirmToken. After the member's yes, call again with the same pack and the token.",
+    inputSchema: {
+      type: "object",
+      properties: { cycleId: { type: "string" }, pack: { type: "object" }, confirmToken: { type: "string" } },
+      required: ["cycleId", "pack"],
+      additionalProperties: false,
+    },
+    routes: [`POST ${MOON_ROUTES.importPack}`],
+    async run(args, ctx) {
+      const cycle = typeof args.cycleId === "string" ? args.cycleId.slice(0, 32) : "";
+      if (!cycle) return { ok: false, error: "Name the moon: cycleId." };
+      const path = fill(MOON_ROUTES.importPack, { cycle });
+      // The preview is read fresh on both calls, so a token binds exactly what would be written now.
+      const preview = await ctx.dispatch("POST", path, { pack: args.pack });
+      if (preview.status === 404) return { ok: false, error: NOT_OPEN };
+      if (preview.status >= 300) return refusal("The pack was refused", preview);
+      const p = (preview.body && typeof preview.body === "object" ? preview.body : {}) as Record<string, unknown>;
+      const echo = { cycle, previewHash: p.previewHash ?? null, preview: p.preview ?? null };
+      if (args.confirmToken === undefined) {
+        const { token, expiresAt } = ctx.mintConfirm("import_moon_pack", echo);
+        return { ok: true, result: { confirmRequired: true, echo, confirmToken: token, expiresAt, message: "Nothing was written. Show the member what would be added, merged and skipped, and after their yes call import_moon_pack again with the same pack and this confirmToken." } };
+      }
+      const check = ctx.verifyConfirm("import_moon_pack", args.confirmToken, echo);
+      if (!check.ok) return { ok: false, error: check.sentence, detail: { reason: check.reason } };
+      const done = await ctx.dispatch("POST", path, { pack: args.pack, confirm: true, previewHash: p.previewHash });
+      if (done.status >= 300) return refusal("The import did not go through", done);
+      return { ok: true, result: { written: true, answer: done.body } };
+    },
+  },
+  {
+    name: "update_moon_item",
+    scope: "moon.write",
+    kind: "write",
+    title: "Change an item on my moon",
+    description: "Changes one item on the member's Draft recap: its words, its state (kept or dropped), its status, its role or its proof. Two calls, like every write here.",
+    inputSchema: {
+      type: "object",
+      properties: { itemId: { type: "string" }, fields: { type: "object", description: "The fields to change, as the My moon page sends them." }, confirmToken: { type: "string" } },
+      required: ["itemId", "fields"],
+      additionalProperties: false,
+    },
+    routes: [`PATCH ${MOON_ROUTES.editItem}`],
+    async run(args, ctx) {
+      const id = typeof args.itemId === "string" ? args.itemId.slice(0, 64) : "";
+      const fields = args.fields && typeof args.fields === "object" && !Array.isArray(args.fields) ? (args.fields as Record<string, unknown>) : null;
+      if (!id || !fields) return { ok: false, error: "Name the item (itemId) and what changes (fields)." };
+      return twoCallWrite("update_moon_item", args, ctx, "PATCH", fill(MOON_ROUTES.editItem, { id }), fields);
+    },
+  },
+  {
+    name: "set_moon_goals",
+    scope: "moon.write",
+    kind: "write",
+    title: "Set my goals for next moon",
+    description: "Sets the member's goals for the next moon on their recap. Two calls, like every write here.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cycleId: { type: "string" },
+        goals: { type: "array", items: { type: "object", properties: { text: { type: "string" }, carriedFromId: { type: "string" } }, required: ["text"] } },
+        confirmToken: { type: "string" },
+      },
+      required: ["cycleId", "goals"],
+      additionalProperties: false,
+    },
+    routes: [`PUT ${MOON_ROUTES.nextGoals}`],
+    async run(args, ctx) {
+      const cycle = typeof args.cycleId === "string" ? args.cycleId.slice(0, 32) : "";
+      if (!cycle || !Array.isArray(args.goals)) return { ok: false, error: "Name the moon (cycleId) and the goals." };
+      return twoCallWrite("set_moon_goals", args, ctx, "PUT", fill(MOON_ROUTES.nextGoals, { cycle }), { goals: args.goals });
+    },
+  },
+  {
+    name: "get_review_queue",
+    scope: "moon.review",
+    kind: "read",
+    title: "The review queue",
+    description: "For a member who reviews recaps: the moon's queue, always without amounts, pay routes, legal names or addresses, whoever asks. Read only.",
+    inputSchema: { type: "object", properties: { cycleId: { type: "string" } }, additionalProperties: false },
+    routes: [`GET ${MOON_ROUTES.queue}`],
+    async run(args, ctx) {
+      const cycle = typeof args.cycleId === "string" ? args.cycleId.slice(0, 32) : "";
+      const a = await ctx.dispatch("GET", `${MOON_ROUTES.queue}${cycle ? `?cycle=${encodeURIComponent(cycle)}` : ""}`);
+      if (a.status === 404) return { ok: false, error: NOT_OPEN };
+      return a.status === 200 ? { ok: true, result: a.body } : refusal("The queue could not be read", a);
+    },
+  },
+  {
+    name: "get_seat_signals",
+    scope: "moon.review",
+    kind: "read",
+    title: "Role signals",
+    description: "For a member who reviews recaps: which empty roles members keep covering, ready to bring to the circle. Read only.",
+    inputSchema: { type: "object", properties: { cycleId: { type: "string" } }, additionalProperties: false },
+    routes: ["GET /api/moon-review/signals"],
+    async run(args, ctx) {
+      const cycle = typeof args.cycleId === "string" ? args.cycleId.slice(0, 32) : "";
+      const a = await ctx.dispatch("GET", `/api/moon-review/signals${cycle ? `?cycle=${encodeURIComponent(cycle)}` : ""}`);
+      if (a.status === 404) return { ok: false, error: NOT_OPEN };
+      return a.status === 200 ? { ok: true, result: a.body } : refusal("The signals could not be read", a);
+    },
+  },
+  {
     name: "admin_request",
     scope: "admin",
     kind: "write",
@@ -373,40 +570,19 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       return { ok: true, result: { written: true, echo, answer: a.body } };
     },
   },
-  ...(["link_sera_person", "suggest_task", "set_board_access"] as const).map((name): ToolDef => ({
-    name,
+  ...SERA_TOOL_DEFS.map((d): ToolDef => ({
+    name: d.name,
     scope: "sera.undoable",
     kind: "write",
-    title: name === "link_sera_person" ? "Link a member to their Sera person" : name === "suggest_task" ? "Suggest a task on a member's board" : "Turn a member's task board on or off",
-    description:
-      name === "link_sera_person"
-        ? "Links a member to their Sera owner id. Never replaces a link that exists, and never links one owner to two members or one member to two owners. Undoable for 30 days."
-        : name === "suggest_task"
-          ? "Puts a task on a member's board as a suggestion they keep or remove. Nobody is notified. Undoable for 30 days while the member has not touched it."
-          : "Turns a member's task board on or off. Undoable for 30 days while nobody has switched it since.",
-    inputSchema:
-      name === "link_sera_person"
-        ? { type: "object", properties: { userId: { type: "string" }, seraOwnerId: { type: "string" } }, required: ["userId", "seraOwnerId"], additionalProperties: false }
-        : name === "suggest_task"
-          ? {
-              type: "object",
-              properties: {
-                userId: { type: "string" },
-                title: { type: "string" },
-                tier: { type: "string", enum: ["high", "priority", "not_yet"] },
-                horizon: { type: "string", enum: ["today", "week", "later"] },
-                dueOn: { type: "string", description: "YYYY-MM-DD" },
-              },
-              required: ["userId", "title"],
-              additionalProperties: false,
-            }
-          : { type: "object", properties: { userId: { type: "string" }, on: { type: "boolean" } }, required: ["userId", "on"], additionalProperties: false },
+    title: d.title,
+    description: d.description,
+    inputSchema: d.inputSchema,
     routes: [],
     writesAtOnce: true,
-    destructive: name === "set_board_access",
+    destructive: d.name === "set_board_access",
     async run(args, ctx) {
       if (!ctx.sera) return { ok: false, error: "Sera's tools are not open on this server." };
-      const out = await ctx.sera.run(name, args);
+      const out = await ctx.sera.run(d.name, args);
       return out.ok ? { ok: true, result: out.result } : { ok: false, error: out.error };
     },
   })),

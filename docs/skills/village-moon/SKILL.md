@@ -5,7 +5,7 @@ version: 1.0.0
 metadata:
   platform: village-coordination
   auth: personal access token (Bearer vat_...) minted by the member in their profile under Your agent
-  scopes: moon.read, tasks.write
+  scopes: moon.read, tasks.write, moon.write, moon.review (admin and sera.undoable only on the accounts allowed them)
   mcp: /api/agent/v1/mcp
   openapi: /api/agent/v1/openapi.json
 ---
@@ -37,7 +37,14 @@ The village connector is a remote MCP server at `VILLAGE_ORIGIN/api/agent/v1/mcp
 | `get_my_seats` | `moon.read` | The member's own role card: the roles they hold, each role's purpose and accountabilities. |
 | `get_season` | `moon.read` | The village's running season and its goals. |
 | `mark_my_task` | `tasks.write` | Press Done, remove (Let go, with a reason) or Undo on one of the member's own board tasks. |
+| `import_moon_pack` | `moon.write` | Import a moon pack (the guide's strict JSON, never with amounts) into the member's Draft recap. The first call answers the preview: what would be added, merged and skipped. |
+| `update_moon_item` | `moon.write` | Change one item on the member's Draft recap. |
+| `set_moon_goals` | `moon.write` | Set the member's goals for next moon. |
+| `get_review_queue` | `moon.review` | For a reviewer: the moon's queue, never with amounts. |
+| `get_seat_signals` | `moon.review` | For a reviewer: which empty roles members keep covering. |
 | `admin_request` | `admin` | For an admin's agent only: call one admin path the village has opened to agents, as the admin, with their own admin checks. The list is the village's (Admin, agent paths); erasure, powers, money, secrets and the agent accounts are never on it. |
+
+Every write here, the moon tools included, takes the two calls below. A moon tool answers "My moon is not open here yet" while the village has the moon review off.
 
 ## Pressing the board: two calls
 

@@ -40,7 +40,7 @@ describe("the metadata", () => {
       grant_types_supported: ["authorization_code"],
     });
     // Only scopes that open a connector tool; the two extras are offered only to the accounts allowed them.
-    expect(as.scopes_supported).toEqual(["moon.read", "tasks.write", "admin", "sera.undoable"]);
+    expect(as.scopes_supported).toEqual(["moon.read", "moon.write", "tasks.write", "moon.review", "admin", "sera.undoable"]);
     expect(wwwAuthenticate(ORIGIN)).toBe(`Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource"`);
   });
 });

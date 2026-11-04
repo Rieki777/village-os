@@ -14,7 +14,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
-import { runSeraTool, undoSeraAction, type SeraActor } from "./seraAgent";
+import { runSeraTool, seraDigest, undoSeraAction, type SeraActor } from "./seraAgent";
+import { ensureRecap } from "../repos/moonRecaps";
 import { listAgentActions } from "../repos/agentAccounts";
 import { setListOn } from "../repos/memberTasks";
 
@@ -135,6 +136,55 @@ describe.skipIf(!configured)("Sera's agent: undoable actions only (B7)", () => {
     expect(undos.length).toBe(5);
   });
 
+  it("check 55: an agenda draft lands as a waiting library item from Sera's agent, and its undo removes it while untouched", async () => {
+    const made = await runSeraTool(pool, sera, "draft_agenda_item", { title: "Water rota for the dry season", note: "From three members' tasks" }, deps);
+    expect(made.ok).toBe(true);
+    if (!made.ok) return;
+    const id = Number(made.result.libraryId);
+    expect(await one("SELECT `status`, `brought_by_no` FROM `live_session_library` WHERE `id` = ?", [id])).toMatchObject({ status: "waiting", brought_by_no: 0 });
+    expect(await one("SELECT `kind` FROM `live_session_library_sources` WHERE `library_id` = ?", [id])).toMatchObject({ kind: "sera_agent" });
+    expect(await undoSeraAction(pool, String(made.result.actionId), "u-steward", null)).toEqual({ ok: true });
+    expect(await one("SELECT COUNT(*) AS n FROM `live_session_library` WHERE `id` = ?", [id])).toMatchObject({ n: 0 });
+
+    const kept = await runSeraTool(pool, sera, "draft_agenda_item", { title: "Seed exchange" }, deps);
+    if (!kept.ok) throw new Error("fixture");
+    await pool.query("UPDATE `live_session_library` SET `edited_by_no` = 7 WHERE `id` = ?", [kept.result.libraryId]); // module-review-ok: a person editing the draft, as the library route does
+    expect(await undoSeraAction(pool, String(kept.result.actionId), "u-steward", null)).toMatchObject({ ok: false, status: 409 });
+    expect((await runSeraTool(pool, sera, "draft_agenda_item", { title: "x", circleId: "no-such-circle" }, deps)).ok).toBe(false);
+  });
+
+  it("check 55: a moon suggestion goes only on a Draft recap, and its undo removes it while it is still a suggestion", async () => {
+    expect((await runSeraTool(pool, sera, "suggest_moon_item", { userId: "u-ana", cycleId: "2026-10", text: "Fixed the pump" }, deps)).ok).toBe(false);
+    const recap = await ensureRecap(pool, { id: "mr-ana", userId: "u-ana", cycleId: "2026-10", seasonId: null });
+    const made = await runSeraTool(pool, sera, "suggest_moon_item", { userId: "u-ana", cycleId: "2026-10", text: "Fixed the pump" }, deps);
+    expect(made.ok).toBe(true);
+    if (!made.ok) return;
+    expect(await one("SELECT `origin`, `state`, `visibility` FROM `moon_recap_items` WHERE `id` = ?", [made.result.itemId])).toMatchObject({ origin: "sera", state: "suggested", visibility: "approvers" });
+    expect(await undoSeraAction(pool, String(made.result.actionId), "u-steward", null)).toEqual({ ok: true });
+
+    const kept = await runSeraTool(pool, sera, "suggest_moon_item", { userId: "u-ana", cycleId: "2026-10", text: "Cleared the drain" }, deps);
+    if (!kept.ok) throw new Error("fixture");
+    await pool.query("UPDATE `moon_recap_items` SET `state` = 'kept' WHERE `id` = ?", [kept.result.itemId]); // module-review-ok: the member keeping it, as the item route does
+    expect(await undoSeraAction(pool, String(kept.result.actionId), "u-steward", null)).toMatchObject({ ok: false, status: 409 });
+
+    await pool.query("UPDATE `moon_recaps` SET `status` = 'waiting' WHERE `id` = ?", [recap.id]); // module-review-ok: the member sending the recap
+    expect((await runSeraTool(pool, sera, "suggest_moon_item", { userId: "u-ana", cycleId: "2026-10", text: "Late one" }, deps)).ok).toBe(false);
+  });
+
+  it("check 59: the digest counts the day's actions and says nothing on a quiet day", async () => {
+    const d = await seraDigest(pool);
+    expect(d?.count).toBeGreaterThan(0);
+    // It says what the agent changed: refusals and undos are not counted, and the words name who can undo.
+    expect(d?.body).not.toContain("undid");
+    expect(d?.body).toContain("an admin can undo");
+    const done = (await listAgentActions(pool, { scope: "sera.undoable", limit: 500 })).filter((a) => a.state === "done" && a.tool !== "undo_sera_action");
+    expect(d?.count).toBe(done.length);
+    const later = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    expect(await seraDigest(pool, later)).toBeNull();
+    // From the last summary on: nothing after "now" is counted twice.
+    expect(await seraDigest(pool, new Date(Date.now() + 60_000), new Date(Date.now() + 1000))).toBeNull();
+  });
+
   describe("the hardening from the adversarial reviews", () => {
     beforeAll(async () => {
       await pool.query("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `is_agent`) VALUES ('u-bot', 'Ops bot', 'u-bot@example.org', 'x', 1)"); // module-review-ok: fixture SQL against the S5 scratch schema
@@ -150,17 +200,29 @@ describe.skipIf(!configured)("Sera's agent: undoable actions only (B7)", () => {
     });
 
     it("writes nothing into a module that is not open to members", async () => {
-      const closed = { ...deps, moduleOpen: (id: string) => id !== "saberra" };
-      const out = await runSeraTool(pool, sera, "link_sera_person", { userId: "u-dee", seraOwnerId: "owner-dee-0001" }, closed);
-      expect(out.ok).toBe(false);
+      const closed = { ...deps, moduleOpen: (id: string) => id !== "saberra" && id !== "sessions" && id !== "moon-review" };
+      for (const [tool, args] of [
+        ["link_sera_person", { userId: "u-dee", seraOwnerId: "owner-dee-0001" }],
+        ["draft_agenda_item", { title: "Closed" }],
+        ["suggest_moon_item", { userId: "u-dee", cycleId: "2026-10", text: "Closed" }],
+      ] as const) {
+        const out = await runSeraTool(pool, sera, tool, args as Record<string, unknown>, closed);
+        expect(out.ok, tool).toBe(false);
+      }
       expect(await one("SELECT COUNT(*) AS n FROM `sera_person_links` WHERE `user_id` = 'u-dee'")).toMatchObject({ n: 0 });
       // The board has no module: it still answers.
       expect((await runSeraTool(pool, sera, "suggest_task", { userId: "u-dee", title: "Still open" }, closed)).ok).toBe(true);
     });
 
     it("refuses words past the limits and shapes it does not know, and never cuts them", async () => {
-      expect((await runSeraTool(pool, sera, "suggest_task", { userId: "u-dee", title: "x".repeat(121) }, deps)).ok).toBe(false);
+      const long = "x".repeat(121);
+      expect((await runSeraTool(pool, sera, "suggest_task", { userId: "u-dee", title: long }, deps)).ok).toBe(false);
+      expect((await runSeraTool(pool, sera, "draft_agenda_item", { title: long }, deps)).ok).toBe(false);
+      expect((await runSeraTool(pool, sera, "draft_agenda_item", { title: "Fine", note: "y".repeat(601) }, deps)).ok).toBe(false);
+      expect((await runSeraTool(pool, sera, "draft_agenda_item", { title: "Fine", aim: "shout" }, deps)).ok).toBe(false);
       expect((await runSeraTool(pool, sera, "link_sera_person", { userId: "u-dee", seraOwnerId: "o/../x" }, deps)).ok).toBe(false);
+      const fine = await runSeraTool(pool, sera, "draft_agenda_item", { title: "Fine", aim: "decide" }, deps);
+      expect(fine.ok).toBe(true);
     });
 
     it("links as `sera`, which the steward panel names", async () => {
@@ -197,6 +259,19 @@ describe.skipIf(!configured)("Sera's agent: undoable actions only (B7)", () => {
       const b = await runSeraTool(pool, sera, "suggest_task", { userId: "u-dee", title: "Second suggestion" }, deps);
       if (!b.ok) throw new Error("fixture");
       expect(await undoSeraAction(pool, String(a.result.actionId), "u-steward", null)).toEqual({ ok: true });
+    });
+
+    it("leaves a moon item the member reworded, and an agenda draft a room took", async () => {
+      await ensureRecap(pool, { id: "mr-dee", userId: "u-dee", cycleId: "2026-10", seasonId: null });
+      const item = await runSeraTool(pool, sera, "suggest_moon_item", { userId: "u-dee", cycleId: "2026-10", text: "Mended the fence" }, deps);
+      if (!item.ok) throw new Error("fixture");
+      await pool.query("UPDATE `moon_recap_items` SET `text` = 'Mended the long fence' WHERE `id` = ?", [item.result.itemId]); // module-review-ok: the member rewording it, still a suggestion
+      expect(await undoSeraAction(pool, String(item.result.actionId), "u-steward", null)).toMatchObject({ ok: false, status: 409 });
+
+      const draft = await runSeraTool(pool, sera, "draft_agenda_item", { title: "Taken once" }, deps);
+      if (!draft.ok) throw new Error("fixture");
+      await pool.query("INSERT INTO `live_session_library_takes` (`session_id`, `library_id`, `item_id`, `taken_by_no`) VALUES (1, ?, 1, 3)", [draft.result.libraryId]); // module-review-ok: a session taking the draft, as the agenda route does
+      expect(await undoSeraAction(pool, String(draft.result.actionId), "u-steward", null)).toMatchObject({ ok: false, status: 409 });
     });
   });
 });

@@ -393,6 +393,18 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} updates on moon recaps.",
     celebrate: false,
   },
+  /**
+   * Once a day, what Sera's agent did since the last summary (B7,
+   * server/lib/seraAgent.ts). Sent to the live holders of moon.approve and
+   * moon.approve_alone, never to an agent account. Each action can be undone
+   * for 30 days from the Sera bridge panel.
+   */
+  sera_agent_digest: {
+    group: "work",
+    blurb: "What Sera's agent changed since the last summary, each one undoable for 30 days.",
+    many: "{n} summaries of what Sera's agent did.",
+    celebrate: false,
+  },
   cash_paid: {
     group: "economy",
     blurb: "The village marked cash it owed you as paid.",

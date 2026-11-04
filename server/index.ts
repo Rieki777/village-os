@@ -175,7 +175,9 @@ import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
 import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
-import { isAgentAccount } from "./repos/agentAccounts";
+import { agentAccountIds, isAgentAccount } from "./repos/agentAccounts";
+import { seraDigest } from "./lib/seraAgent";
+import { readConfigDocument, writeConfigDocument } from "./repos/appConfigDocs";
 import { villageDayKey } from "../shared/companionItems";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
@@ -4907,6 +4909,26 @@ async function startServer() {
     return `${r.users} member(s), ${r.rows} notification(s)`;
   });
   registerJob("retention-sweep", 24 * 60 * 60 * 1000, async () => runRetentionSweep());
+  // Sera's agent, B7: once a day the people who approve moons (live holders of moon.approve or
+  // moon.approve_alone, counted the way the gate counts) hear what it did since the last summary,
+  // each with an Undo on the bridge panel. The members it acted on are never told by this, and an
+  // agent account is never sent it, even one that somehow holds the key.
+  registerJob("sera-agent-digest", 24 * 60 * 60 * 1000, async () => {
+    const now = new Date();
+    const mark = await readConfigDocument<{ lastUntil?: string }>(getPool(), "sera-agent-digest");
+    const since = mark?.lastUntil && !Number.isNaN(Date.parse(mark.lastUntil)) ? new Date(mark.lastUntil) : null;
+    const digest = await seraDigest(getPool(), now, since);
+    await writeConfigDocument(getPool(), "sera-agent-digest", { lastUntil: now.toISOString() });
+    if (!digest) return "nothing to report";
+    const day = now.toISOString().slice(0, 10);
+    const agents = new Set(await agentAccountIds(getPool()));
+    const approvers = new Set([...(await liveHoldersOf("moon.approve")), ...(await liveHoldersOf("moon.approve_alone"))]);
+    const people = Array.from(approvers).filter((id) => !agents.has(id));
+    for (const id of people) {
+      await notify({ userId: id, type: "sera_agent_digest", title: digest.title, body: digest.body, link: "/admin", dedupeKey: `sera-agent-digest:${day}:${id}` });
+    }
+    return `${digest.count} actions, told ${people.length}`;
+  });
   // S31: hourly sweep; acts only once the UTC hour passes stay.autopay_post_hour.
   // Keyed ledger legs make reruns and catch-up idempotent by construction.
   registerJob("stay-nightly", 60 * 60 * 1000, async () => {

@@ -309,7 +309,7 @@ describe.skipIf(!DB_CONFIGURED)("Sera's agent (B7)", () => {
     expect((await call("POST", "/api/agent/tokens", { name: "nope", scopes: ["sera.undoable"] })).status).toBe(400);
     seraVat = await mint(seraAgent.token, ["sera.undoable"]);
     const listed = await mcp(seraVat, "tools/list");
-    expect(listed.json.result.tools.map((t: any) => t.name)).toEqual(["link_sera_person", "suggest_task", "set_board_access", "undo_sera_action"]);
+    expect(listed.json.result.tools.map((t: any) => t.name)).toEqual(["link_sera_person", "suggest_task", "set_board_access", "draft_agenda_item", "suggest_moon_item", "undo_sera_action"]);
     // Not an admin, so the admin scope stays closed to it.
     expect((await call("POST", "/api/agent/tokens", { name: "nope", scopes: ["admin"] }, seraAgent.token)).status).toBe(400);
   });
@@ -347,39 +347,6 @@ describe.skipIf(!DB_CONFIGURED)("Sera's agent (B7)", () => {
     expect(r.json.result.isError).toBe(true);
     expect((await call("PUT", `/api/admin/players/${seraAgent.id}/agent`, { isAgent: false })).status).toBe(200);
     expect((await mcp(seraVat, "tools/list")).status).toBe(401);
-  });
-});
-
-describe.skipIf(!DB_CONFIGURED)("the connector's transport guards", () => {
-  const raw = (body: string, headers: Record<string, string> = {}) =>
-    fetch(`${BASE}/api/agent/v1/mcp`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body }); // module-review-ok: the test client dialling the built server on localhost
-
-  it("answers a body that is not JSON with a JSON-RPC parse error", async () => {
-    const r = await raw("{not json", { Authorization: `Bearer ${anaVat}` });
-    expect(r.status).toBe(400);
-    expect((await r.json()).error.code).toBe(-32700);
-  });
-
-  it("refuses a page on another site, and lets a server and its own site through", async () => {
-    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" });
-    expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: "https://evil.example" })).status).toBe(403);
-    expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: BASE })).status).toBe(200);
-    expect((await raw(body, { Authorization: `Bearer ${anaVat}` })).status).toBe(200);
-  });
-
-  it("says invalid_token for a token that failed, nothing for none sent, and insufficient_scope for a 403", async () => {
-    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
-    const none = await raw(body);
-    expect(none.status).toBe(401);
-    expect(none.headers.get("www-authenticate")).not.toContain("error=");
-    const bad = await raw(body, { Authorization: "Bearer vat_not-a-real-token" });
-    expect(bad.status).toBe(401);
-    expect(bad.headers.get("www-authenticate")).toContain('error="invalid_token"');
-    const ok = await raw(body, { Authorization: `Bearer ${anaVat}` });
-    expect(ok.headers.get("www-authenticate")).toBeNull();
-    const narrow = await raw(body, { Authorization: `Bearer ${calendarVat}` });
-    expect(narrow.status).toBe(403);
-    expect(narrow.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
   });
 });
 
@@ -429,7 +396,7 @@ describe.skipIf(!DB_CONFIGURED)("signing a connector in with OAuth (B4, check 33
     expect(r.json.clientName).toBe("Claude");
     expect(r.json.scopes.map((s: any) => s.scope)).not.toContain("admin");
     // Only the scopes that open a connector tool are offered.
-    expect(r.json.scopes.map((s: any) => s.scope)).toEqual(["moon.read", "tasks.write"]);
+    expect(r.json.scopes.map((s: any) => s.scope)).toEqual(["moon.read", "moon.write", "tasks.write", "moon.review"]);
     // An admin is offered the admin scope too, never ticked.
     const asAdmin = await call("GET", `/api/agent/oauth/request?client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}`);
     expect(asAdmin.json.scopes.find((s: any) => s.scope === "admin")).toMatchObject({ ticked: false, write: true });
@@ -500,5 +467,38 @@ describe.skipIf(!DB_CONFIGURED)("signing a connector in with OAuth (B4, check 33
     expect((await mcp(minted.json.access_token, "tools/list")).status).toBe(401);
     const late = await token({ grant_type: "authorization_code", code: pending, client_id: clientId, redirect_uri: REDIRECT, code_verifier: second.verifier });
     expect(late.json.error).toBe("invalid_grant");
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("the connector's transport guards", () => {
+  const raw = (body: string, headers: Record<string, string> = {}) =>
+    fetch(`${BASE}/api/agent/v1/mcp`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body }); // module-review-ok: the test client dialling the built server on localhost
+
+  it("answers a body that is not JSON with a JSON-RPC parse error", async () => {
+    const r = await raw("{not json", { Authorization: `Bearer ${anaVat}` });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error.code).toBe(-32700);
+  });
+
+  it("refuses a page on another site, and lets a server and its own site through", async () => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" });
+    expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: "https://evil.example" })).status).toBe(403);
+    expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: BASE })).status).toBe(200);
+    expect((await raw(body, { Authorization: `Bearer ${anaVat}` })).status).toBe(200);
+  });
+
+  it("says invalid_token for a token that failed, nothing for none sent, and insufficient_scope for a 403", async () => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const none = await raw(body);
+    expect(none.status).toBe(401);
+    expect(none.headers.get("www-authenticate")).not.toContain("error=");
+    const bad = await raw(body, { Authorization: "Bearer vat_not-a-real-token" });
+    expect(bad.status).toBe(401);
+    expect(bad.headers.get("www-authenticate")).toContain('error="invalid_token"');
+    const ok = await raw(body, { Authorization: `Bearer ${anaVat}` });
+    expect(ok.headers.get("www-authenticate")).toBeNull();
+    const narrow = await raw(body, { Authorization: `Bearer ${calendarVat}` });
+    expect(narrow.status).toBe(403);
+    expect(narrow.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
   });
 });
