@@ -248,6 +248,15 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     expect(person.status, person.text).toBe(200);
   });
 
+  it("is an admin that the money and approval keys still refuse, through its own session", async () => {
+    // The person admin reads the treasurer's list; the agent admin, with its own session, does not.
+    const person = await call("GET", "/api/cash-owed/queue");
+    expect(person.status, person.text).toBe(200);
+    const asAgent = await call("GET", "/api/cash-owed/queue", undefined, agent.token);
+    expect(asAgent.status, asAgent.text).toBeGreaterThanOrEqual(401);
+    expect(asAgent.status).toBeLessThan(500);
+  });
+
   it("calls an allowed admin path as itself, writing only on the confirm (check 52)", async () => {
     const read = await tool(agentVat, "admin_request", { method: "GET", path: "/api/admin/member-tasks/access" });
     expect(read.json.result.isError, read.text).toBe(false);
@@ -259,12 +268,16 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     expect(still.status).toBe(200);
     const done = await tool(agentVat, "admin_request", { ...args, confirmToken: asked.json.result.structuredContent.confirmToken });
     expect(done.json.result.isError, done.text).toBe(false);
+    // The same token again writes nothing, though nothing about the echo moved.
+    const replay = await tool(agentVat, "admin_request", { ...args, confirmToken: asked.json.result.structuredContent.confirmToken });
+    expect(replay.json.result.isError, replay.text).toBe(true);
+    expect(replay.json.result.structuredContent.detail.reason).toBe("spent");
     const off = await call("GET", "/api/member-tasks/me", undefined, ben.token);
     expect(off.json?.on === false || off.status === 403, off.text).toBe(true);
 
     // Three calls inside one second share a created_at, so compare the states as a set of counts.
     const [rows] = await pool.query<any[]>("SELECT state FROM agent_actions WHERE actor_user_id = ?", [agent.id]);
-    expect(rows.map((r: any) => r.state).sort()).toEqual(["asked", "done", "done"]);
+    expect(rows.map((r: any) => r.state).sort()).toEqual(["asked", "done", "done", "refused"]);
   });
 
   it("refuses what is always a person's, for the agent and through the agent's own session (check 53)", async () => {
@@ -320,6 +333,38 @@ describe.skipIf(!DB_CONFIGURED)("Sera's agent (B7)", () => {
     const board = await call("GET", "/api/member-tasks/me", undefined, ana.token);
     expect(board.json.open.map((t: any) => t.title)).not.toContain("Check the water tank");
     expect((await call("POST", `/api/admin/agent-actions/${actionId}/undo`, {})).status).toBe(409);
+  });
+
+  it("names the member each action touched, for the steward's list", async () => {
+    const listed = await call("GET", "/api/admin/agent-actions?scope=sera.undoable");
+    expect(listed.json.actions.find((a: any) => a.id === actionId)?.subjectName).toBe("Ana Ruiz");
+  });
+
+  it("acts on no other agent account, and its token ends when a person marks it a person's again", async () => {
+    const other = await register("Another bot", "other-bot");
+    expect((await call("PUT", `/api/admin/players/${other.id}/agent`, { isAgent: true })).status).toBe(200);
+    const r = await tool(seraVat, "suggest_task", { userId: other.id, title: "Nothing" });
+    expect(r.json.result.isError).toBe(true);
+    expect((await call("PUT", `/api/admin/players/${seraAgent.id}/agent`, { isAgent: false })).status).toBe(200);
+    expect((await mcp(seraVat, "tools/list")).status).toBe(401);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("the connector's transport guards", () => {
+  const raw = (body: string, headers: Record<string, string> = {}) =>
+    fetch(`${BASE}/api/agent/v1/mcp`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body }); // module-review-ok: the test client dialling the built server on localhost
+
+  it("answers a body that is not JSON with a JSON-RPC parse error", async () => {
+    const r = await raw("{not json", { Authorization: `Bearer ${anaVat}` });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error.code).toBe(-32700);
+  });
+
+  it("refuses a page on another site, and lets a server and its own site through", async () => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" });
+    expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: "https://evil.example" })).status).toBe(403);
+    expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: BASE })).status).toBe(200);
+    expect((await raw(body, { Authorization: `Bearer ${anaVat}` })).status).toBe(200);
   });
 });
 

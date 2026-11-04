@@ -70,12 +70,23 @@ export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; test: 
   {
     key: "powers",
     words: "Power handover, the break-glass, power groups and capabilities are always a person's act.",
-    test: (_m, p) => /power|break-?glass|override|capabilit|badge|handover|veto|steward|admin-access|\/roles\/[^/]+\/holders/i.test(p),
+    test: (_m, p) => /power|break-?glass|override|capabilit|badge|handover|veto|steward|admin-access|governance|\/org\/(drafts|seatings|roles)|\/roles(\/|$)|\/stages?(\/|$)/i.test(p),
   },
   {
     key: "money",
     words: "Payers, pay routes, and the moon review's approvals, invoices and payments are always a person's act.",
-    test: (_m, p) => /payer|pay-?route|invoice|payout|payment|cash|settle|ledger|wallet|treasury|exchange|\/api\/admin\/tokens|token-jobs|\/moon-review\/(?!rhythm$)/i.test(p),
+    test: (_m, p) =>
+      /payer|pay-?route|\/pay(\/|$)|invoice|payout|payment|cash|settle|ledger|wallet|treasury|exchange|mint|approv|refund|\/comps?(\/|$)|purchase|budget|\/cycles?(\/|$)|economy|owed|\/api\/admin\/tokens|token-jobs|\/moon-review\/(?!rhythm$)/i.test(p),
+  },
+  {
+    key: "members",
+    words: "Letting a member in, a member leaving, and removing one are always a person's act.",
+    test: (_m, p) => /join-?requests?|\/exits?(\/|$|-)|hard-?delete|invit/i.test(p),
+  },
+  {
+    key: "settings",
+    words: "Sending letters and email, and the village's modules, variables and settings, are always a person's act.",
+    test: (_m, p) => /\/letters?(\/|$)|\/send(\/|$)|email-?config|\/comms(\/|$)|\/modules?(\/|$)|variables|settings|\/brand(\/|$)|\/launch(\/|$)/i.test(p),
   },
   {
     key: "secrets",
@@ -111,6 +122,19 @@ function patternSegments(pattern: string): string[] | null {
   return parts;
 }
 
+/**
+ * A pattern so open it stands for many routes: a `:name` in the area or the
+ * resource (the first two parts after /api/admin, or the first after /api),
+ * or as many `:name` parts as named ones. "Always a person" is tested on the
+ * concrete path at every call as well, but a list should say what it opens.
+ */
+function tooOpen(segs: readonly string[]): boolean {
+  const fixedHead = segs[1] === "admin" ? 3 : 2;
+  if (segs.slice(0, fixedHead).some((p) => p.startsWith(":"))) return true;
+  const params = segs.filter((p) => p.startsWith(":")).length;
+  return params * 2 >= segs.length;
+}
+
 /** Whether a concrete path matches an allow-list pattern. */
 export function pathMatches(pattern: string, path: string): boolean {
   const want = patternSegments(pattern);
@@ -137,8 +161,9 @@ export type AdminRequestDecision =
 export function adminRequestDecision(method: string, path: string, doc: AgentAdminPathsDoc, selfUserId?: string | null): AdminRequestDecision {
   const m = String(method ?? "").toUpperCase();
   if (!(ADMIN_METHODS as readonly string[]).includes(m)) return { ok: false, code: "bad_path", words: `method is one of ${ADMIN_METHODS.join(", ")}.` };
-  const bare = String(path ?? "").split("?")[0];
-  if (!segmentsOf(bare)) return { ok: false, code: "bad_path", words: "path is a plain path starting with /api/, with no query string and no dots." };
+  const bare = String(path ?? "");
+  // The path is dispatched exactly as given, so a query string or a fragment is refused, never trimmed.
+  if (/[?#%]/.test(bare) || !segmentsOf(bare)) return { ok: false, code: "bad_path", words: "path is a plain path starting with /api/, with no query string and no dots." };
   const person = alwaysAPerson(m, bare, selfUserId);
   if (person) return { ok: false, code: "always_a_person", words: person.words };
   const entry = doc.paths.find((e) => e.method === m && pathMatches(e.path, bare));
@@ -161,7 +186,9 @@ export function parseAgentAdminPaths(raw: unknown): { ok: true; value: AgentAdmi
     const method = String(x.method ?? "").toUpperCase();
     if (!(ADMIN_METHODS as readonly string[]).includes(method)) return { ok: false, error: `Path ${i + 1}: method is one of ${ADMIN_METHODS.join(", ")}.` };
     const path = String(x.path ?? "");
-    if (!patternSegments(path)) return { ok: false, error: `Path ${i + 1}: write it as /api/... with :name for one part, and no query string.` };
+    const segs = patternSegments(path);
+    if (!segs) return { ok: false, error: `Path ${i + 1}: write it as /api/... with :name for one part, and no query string.` };
+    if (tooOpen(segs)) return { ok: false, error: `Path ${i + 1}: name the route itself. A :name may only stand for one member or one thing, after the words that say what the route is.` };
     const person = alwaysAPerson(method, path.replace(/:[A-Za-z][A-Za-z0-9]*/g, "x"));
     if (person) return { ok: false, error: `Path ${i + 1}: ${person.words}` };
     const confirm: AdminConfirm = x.confirm === "agent" ? "agent" : "person";

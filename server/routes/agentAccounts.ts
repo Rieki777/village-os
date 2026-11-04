@@ -20,7 +20,8 @@ import type express from "express";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
-import { agentAccountIds, isAgentAccount, listAgentActions, liveRoleCount, setAgentAccount } from "../repos/agentAccounts";
+import { revokeAllTokens } from "../lib/agentTokens";
+import { agentAccountIds, isAgentAccount, listAgentActions, liveRoleCount, setAgentAccount, namesOf } from "../repos/agentAccounts";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
 import { undoSeraAction } from "../lib/seraAgent";
 import { AGENT_ADMIN_PATHS_DOC, ALWAYS_A_PERSON, DEFAULT_AGENT_ADMIN_PATHS, effectiveAgentAdminPaths, parseAgentAdminPaths } from "../../shared/agentAdmin";
@@ -61,12 +62,14 @@ export function register(app: Express, deps: Deps): void {
     if (!userId) return res.status(400).json({ error: "Which account?" });
     if (userId === actor.id) return res.status(400).json({ error: "Mark another account, never your own." });
     if (on && (await liveRoleCount(getPool(), userId)) > 0) {
-      return res.status(409).json({ error: "This account holds a role. An agent account holds none, so end its roles first." });
+      return res.status(409).json({ error: "This account holds a role or a power. An agent account holds neither, so end them first." });
     }
     if (!(await setAgentAccount(getPool(), userId, on))) return res.status(404).json({ error: "Not found" });
+    // A token never outlives what its account was when it was minted: both directions end every live token.
+    const ended = await revokeAllTokens(getPool(), userId);
     await recordEvent(getPool(), {
       kind: "audit",
-      text: on ? "marked an account as an agent's" : "marked an account as a person's",
+      text: `${on ? "marked an account as an agent's" : "marked an account as a person's"}, ending ${ended} agent token${ended === 1 ? "" : "s"}`,
       actorUserId: actor.id,
       entityType: "user",
       entityRef: userId,
@@ -106,7 +109,10 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/admin/agent-actions", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const scope = typeof req.query.scope === "string" ? req.query.scope.slice(0, 32) : undefined;
-    res.json({ actions: await listAgentActions(getPool(), { scope, limit: Number(req.query.limit ?? 100) }) });
+    const actions = await listAgentActions(getPool(), { scope, limit: Number(req.query.limit ?? 100) });
+    // Which member each action touched, by name, so a steward sees whom an Undo is for.
+    const names = await namesOf(getPool(), actions.map((a) => a.subjectUserId ?? ""));
+    res.json({ actions: actions.map((a) => ({ ...a, subjectName: a.subjectUserId ? names[a.subjectUserId] ?? null : null })) });
   });
 
   app.post("/api/admin/agent-actions/:id/undo", async (req, res) => {

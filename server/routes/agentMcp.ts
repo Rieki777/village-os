@@ -19,6 +19,13 @@
  * never leaves this process: it rides one loopback request and is not in any
  * answer.
  *
+ * ── ONCE, FROM WHERE IT SAYS ─────────────────────────────────────────────
+ * A confirm token is spent the moment it verifies, so it writes once. A
+ * request carrying an Origin header from any other site is refused, which is
+ * the DNS-rebinding guard the MCP transport asks for; a connector calling
+ * from a server sends none. The client address the loopback forwards is the
+ * one the rate limits read (`clientIp`), never the raw header.
+ *
  * ── RECORDED ──────────────────────────────────────────────────────────────
  * Every `tools/call` of a write tool writes one admin-audience event naming
  * the token prefix, the tool and whether it wrote, and a read writes none, as
@@ -27,8 +34,10 @@
 import type express from "express";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
-import { type AgentScope, type AgentTokenRow, CONFIRM_REASON_SENTENCE, echoHash, mintConfirmToken, verifyConfirmToken } from "../lib/agentTokens";
-import { callsWriteTool, handleMcpMessage, MCP_TOOLS, toolsFor, type RouteAnswer, type ToolContext } from "../lib/agentMcp";
+import { type AgentScope, type AgentTokenRow, CONFIRM_REASON_SENTENCE, createConfirmSpendBook, echoHash, mintConfirmToken, verifyConfirmToken } from "../lib/agentTokens";
+import { callsWriteTool, handleMcpMessage, MCP_TOOLS, RPC, toolsFor, type RouteAnswer, type ToolContext } from "../lib/agentMcp";
+import { isAgentAccount } from "../repos/agentAccounts";
+import { effectiveLifecycle } from "../lib/modules";
 import { recordEvent } from "../lib/events";
 import { recordAgentAction } from "../repos/agentAccounts";
 import { readConfigDocument } from "../repos/appConfigDocs";
@@ -56,7 +65,28 @@ type Deps = Pick<AppDeps, "getPool"> & {
   listDefault: () => boolean;
   /** Today in the village, YYYY-MM-DD. */
   today: () => string;
+  /** The caller's address as the rate limits read it, through the trusted proxies only. */
+  clientIp: (req: express.Request) => string;
+  /** Whether the request's holder is an admin, the same answer the token mint reads. */
+  isAdmin: (req: express.Request) => Promise<boolean>;
 };
+
+/** The origin this server answers at, from the configured address or the request's own host. */
+const ownOrigin = (req: express.Request) => (process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+
+/** True when an Origin header names some other site. No Origin is a server-side client, and passes. */
+function foreignOrigin(req: express.Request): boolean {
+  const origin = req.get("origin");
+  if (!origin) return false;
+  try {
+    const want = new URL(ownOrigin(req)).origin;
+    const self = new URL(`${req.protocol}://${req.get("host")}`).origin;
+    const got = new URL(origin).origin;
+    return got !== want && got !== self;
+  } catch {
+    return true;
+  }
+}
 
 /** The address a client of this process reaches it at. The holder's session goes nowhere else. */
 const loopback = (port: number) => `http://127.0.0.1:${port}`;
@@ -94,7 +124,8 @@ async function asHolder(
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { resolveAgent, confirmSecret, getPool, villageName, port, listDefault, today } = deps;
+  const { resolveAgent, confirmSecret, getPool, villageName, port, listDefault, today, clientIp, isAdmin } = deps;
+  const spendBook = createConfirmSpendBook();
 
   app.get("/api/agent/v1/mcp", (_req, res) => {
     res.set("Allow", "POST").status(405).json({ error: "This connector opens no stream. Send each message with POST." });
@@ -105,6 +136,7 @@ export function register(app: Express, deps: Deps): void {
 
   app.post("/api/agent/v1/mcp", async (req, res, next) => {
     try {
+      if (foreignOrigin(req)) return res.status(403).json({ error: "origin_refused", message: "This connector answers servers and its own site, never a page on another site." });
       const message = req.body;
       // The bucket follows the message: a write tool spends the write bucket.
       // A 401 says where the sign-in metadata is, so a connector client can start OAuth (RFC 9728).
@@ -120,15 +152,29 @@ export function register(app: Express, deps: Deps): void {
         });
       }
       const session = String(req.headers.authorization ?? "");
-      const forwardedFor = String(req.ip ?? "");
+      const forwardedFor = clientIp(req);
       const userId = String(user.id);
+      const seraStillAllowed = async () => (await isAgentAccount(getPool(), userId)) && !(await isAdmin(req));
       const ctx: ToolContext = {
         dispatch: (method, path, body) => asHolder(port(), session, forwardedFor, method, path, body),
         mintConfirm: (tool, echo) => mintConfirmToken(confirmSecret, { action: `mcp:${tool}`, userId, echo }),
         holderId: userId,
+        // The scope was checked when the token was minted; the account is checked again on every call,
+        // so a token outlives neither an agent flag taken off nor an admin flag put on.
         sera: {
-          run: (tool, args) => runSeraTool(getPool(), { userId, tokenId: row.id, tokenPrefix: row.prefix }, tool, args, { listDefault: listDefault(), today: today() }),
-          undo: (actionId) => undoSeraAction(getPool(), actionId, userId, userId),
+          run: async (tool, args) => {
+            if (!(await seraStillAllowed())) return { ok: false, error: SERA_CLOSED };
+            return runSeraTool(getPool(), { userId, tokenId: row.id, tokenPrefix: row.prefix }, tool, args, {
+              listDefault: listDefault(),
+              today: today(),
+              moduleOpen: (id) => ["members", "public"].includes(effectiveLifecycle(id)),
+            });
+          },
+          undo: async (actionId) => {
+            if (!(await seraStillAllowed())) return { ok: false, error: SERA_CLOSED };
+            const out = await undoSeraAction(getPool(), actionId, userId, userId);
+            return out.ok ? out : { ok: false, error: out.error };
+          },
         },
         adminPaths: async () => effectiveAgentAdminPaths(await readConfigDocument(getPool(), AGENT_ADMIN_PATHS_DOC)),
         recordAction: async (a) => {
@@ -136,7 +182,10 @@ export function register(app: Express, deps: Deps): void {
         },
         verifyConfirm: (tool, token, echo) => {
           const check = verifyConfirmToken(confirmSecret, token, { action: `mcp:${tool}`, userId, echo });
-          if (check.ok) return { ok: true };
+          if (check.ok) {
+            if (!spendBook.spend(String(token))) return { ok: false, reason: "spent", sentence: CONFIRM_REASON_SENTENCE.spent };
+            return { ok: true };
+          }
           // The echo is rebuilt from the arguments and fresh state, so a mismatch means something moved since the first call.
           const sentence = check.reason === "echo_mismatch"
             ? "What this would write changed since the first call, or the arguments differ. Call again without confirmToken to see it as it is now. Nothing was written"
@@ -150,8 +199,8 @@ export function register(app: Express, deps: Deps): void {
         ctx,
         onToolCall: async (tool, outcome, args) => {
           if (tool.kind !== "write") return;
-          const confirming = args.confirmToken !== undefined;
-          const wrote = outcome.ok && confirming && !!(outcome.result as any)?.written;
+          const confirming = args.confirmToken !== undefined || !!tool.writesAtOnce;
+          const wrote = outcome.ok && (outcome.result as any)?.written === true;
           await recordEvent(getPool(), {
             kind: "agent_mcp",
             text: `${tool.name} through the connector (${row.prefix}...): ${wrote ? "written" : confirming ? "refused" : "asked"}, echo ${echoHash((outcome.ok ? (outcome.result as any)?.echo : null) ?? null).slice(0, 12)}`,
@@ -169,4 +218,14 @@ export function register(app: Express, deps: Deps): void {
       return next(e);
     }
   });
+
+  // A body that is not JSON never reaches the route: the parser fails first. Answer it as JSON-RPC does.
+  app.use(MCP_PATH, (err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err?.type === "entity.parse.failed" || err instanceof SyntaxError) {
+      return res.status(400).json({ jsonrpc: "2.0", id: null, error: { code: RPC.parseError, message: "That body is not JSON. Send one JSON-RPC 2.0 message." } });
+    }
+    return next(err);
+  });
 }
+
+const SERA_CLOSED = "This account no longer holds Sera's tools: it is not an agent account, or it is an admin.";

@@ -31,6 +31,23 @@ export async function memberHasSeraLink(db: Db, userId: string): Promise<boolean
   return rows.length > 0;
 }
 
+/**
+ * Who Sera's agent may act on: a member row that stands (no erasure
+ * tombstone) and is a person, never another agent account. Null when there
+ * is no such member.
+ */
+export async function seraTarget(db: Db, userId: string): Promise<{ stands: boolean; isAgent: boolean } | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `email`, `is_agent` FROM `users` WHERE `id` = ? LIMIT 1", [userId]);
+  if (!rows[0]) return null;
+  return { stands: !String(rows[0].email ?? "").endsWith("@anonymized.invalid"), isAgent: Number(rows[0].is_agent ?? 0) === 1 };
+}
+
+/** How many links a member holds. Two means a race landed both. */
+export async function seraLinkCount(db: Db, userId: string): Promise<number> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS `n` FROM `sera_person_links` WHERE `user_id` = ?", [userId]);
+  return Number(rows[0]?.n ?? 0);
+}
+
 /** Write a Sera link. INSERT IGNORE: a row that appeared in between is left alone and this answers false. */
 export async function insertSeraLink(db: Db, seraOwnerId: string, userId: string): Promise<boolean> {
   const [res] = await db.query(
@@ -77,4 +94,19 @@ export async function restoreBoardAccess(
     [before.on ? 1 : 0, before.setBy, userId, expect.on ? 1 : 0, expect.setBy],
   );
   return affected(res) === 1;
+}
+
+/**
+ * Whether a later action by the agent, on the same tool and the same member,
+ * still stands. Undoing the earlier one under it would put back a state the
+ * later one already moved past, so the later one is undone first.
+ */
+export async function laterStandingAction(db: Db, a: { id: string; tool: string; subjectUserId: string | null; createdAt: string; scope: string }): Promise<boolean> {
+  if (a.subjectUserId === null) return false;
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT 1 FROM `agent_actions` WHERE `scope` = ? AND `tool` = ? AND `subject_user_id` = ? AND `id` <> ? AND `state` = 'done' AND `undone_at` IS NULL " +
+      "AND `created_at` > ? LIMIT 1",
+    [a.scope, a.tool, a.subjectUserId, a.id, new Date(a.createdAt)],
+  );
+  return rows.length > 0;
 }
