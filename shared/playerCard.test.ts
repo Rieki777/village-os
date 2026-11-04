@@ -378,7 +378,7 @@ describe("tensions in plain words (PR 9)", () => {
 
   it("proposal mode: Starts once adopted and no door", () => {
     const r = card({ mode: "proposal" }, { tensions: [] });
-    expect(r.tensions).toEqual({ kind: "empty", words: "Starts once adopted" });
+    expect(r.tensions).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     expect(r.tensionDoor).toBeNull();
   });
 });
@@ -560,11 +560,11 @@ describe("proposal mode (PR 3): the card a role application asks for", () => {
 
   it("every live section reads Starts once adopted", () => {
     const card = proposal();
-    expect(card.across.tasks).toEqual({ kind: "empty", words: "Starts once adopted" });
-    expect(card.across.signs).toEqual({ kind: "empty", words: "Starts once adopted" });
+    expect(card.across.tasks).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
+    expect(card.across.signs).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     for (const r of card.roles) {
-      expect(r.working.items).toEqual({ kind: "empty", words: "Starts once adopted" });
-      expect(r.tensions).toEqual({ kind: "empty", words: "Starts once adopted" });
+      expect(r.working.items).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
+      expect(r.tensions).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     }
     expect(card.across.load.openTasks).toBeNull();
   });
@@ -605,6 +605,19 @@ describe("proposal mode (PR 3): the card a role application asks for", () => {
     expect(live.across.load.own).toEqual({ kind: "empty", words: "Not set this moon" });
     expect(live.across.growingEdge.text).toEqual({ kind: "empty", words: "Not written yet" });
     expect(live.across.goals).toEqual({ kind: "empty", words: "No village goals named yet" });
+  });
+
+  it("a proposal names who fills each open role row, and never says Not written yet", () => {
+    const card = buildPlayerCard(
+      input({ mode: "proposal", fillWith: "Operations Steward", howIHold: [], roles: [role(1, { worksWith: [], runbook: null, notMine: [], tensions: [] })] }),
+    );
+    const r = card.roles[0];
+    expect(r.worksWith.items).toEqual({ kind: "empty", words: "We'll fill this together with Operations Steward." });
+    expect(r.runbook.text).toEqual({ kind: "empty", words: "Open for now. You'll write this once you hold the role." });
+    expect(card.howIHold.items).toEqual({ kind: "empty", words: "Open for now. You'll write this once you hold the role." });
+    expect(r.tensions).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
+    expect(JSON.stringify(card)).not.toContain("Not written yet");
+    expect(JSON.stringify({ roles: card.roles, across: card.across })).not.toContain("Starts once adopted");
   });
 
   it("a live card is unchanged by the mode it does not ask for", () => {
