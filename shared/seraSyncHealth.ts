@@ -11,6 +11,8 @@ export interface SyncLast {
   status: string;
   members: number;
   errors: number;
+  /** Tasks Sera held back for carrying an email address, added up over every page of the run. */
+  dropped?: number;
 }
 
 export type SyncHealth =
@@ -24,7 +26,7 @@ export function parseSyncLast(raw: string | null): SyncLast | null {
   try {
     const j = JSON.parse(raw) as Record<string, unknown>;
     if (typeof j.at !== "string") return null;
-    return { at: j.at, ok: j.ok === true, status: String(j.s ?? ""), members: Number(j.m ?? 0) || 0, errors: Number(j.e ?? 0) || 0 };
+    return { at: j.at, ok: j.ok === true, status: String(j.s ?? ""), members: Number(j.m ?? 0) || 0, errors: Number(j.e ?? 0) || 0, dropped: Math.max(0, Number(j.d ?? 0) || 0) };
   } catch {
     return null;
   }
@@ -48,4 +50,11 @@ export function syncHealthWords(h: SyncHealth): string {
     case "stale": return `Behind. The last read was ${ago(h.hours)}, and it should run every 6 hours. Check the connection.`;
     case "failed": return `The last read, ${ago(h.hours)}, did not work${h.errors ? ` for ${h.errors} member${h.errors === 1 ? "" : "s"}` : ""}${h.status && h.status !== "ok" ? ` (${h.status})` : ""}. It tries again in 6 hours.`;
   }
+}
+
+/** The held-back count for one run, in plain words; null when there is nothing to say. */
+export function droppedWords(last: SyncLast | null): string | null {
+  if (!last || !last.dropped) return null;
+  const n = last.dropped;
+  return `Sera held back ${n} task${n === 1 ? "" : "s"} in the last read because ${n === 1 ? "it" : "they"} carried an email address.`;
 }
