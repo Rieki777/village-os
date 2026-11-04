@@ -1,5 +1,5 @@
 /**
- * STEWARD: the feedback bridge to the knowledge library (PR E).
+ * STEWARD: the feedback bridge to Organisational Memory (PR E).
  *
  * What is waiting to be sent and what failed, the notes switch (held until a
  * steward releases notes), "Send now" and "Read changes now", the items the
@@ -31,7 +31,7 @@ export default function BridgePanel({ password }: { password: string }) {
       const res = await fetch(`${API_BASE}/admin/member-tasks/bridge`, { headers: authHeaders(password) });
       const data = await res.json().catch(() => ({}));
       if (res.ok) setB(data as Bridge);
-      else setLine(refusal(data, "Could not read the bridge."));
+      else setLine(refusal(data, "Could not read Organisational Memory. Reload the page to try again."));
     } catch {
       setLine("Could not reach the village.");
     }
@@ -55,25 +55,25 @@ export default function BridgePanel({ password }: { password: string }) {
     await load();
   };
 
-  if (!b) return <p className={`${HINT} mt-4`}>{line ?? "Reading the bridge..."}</p>;
+  if (!b) return <p className={`${HINT} mt-4`}>{line ?? "Reading Organisational Memory..."}</p>;
   const count = (k: string) => Object.entries(b.outbox).filter(([key]) => key.endsWith(`:${k}`)).reduce((n, [, v]) => n + v, 0);
 
   return (
     <div className="mt-5 border-t border-border pt-4">
-      <h4 className="font-semibold text-foreground">Feedback to the knowledge library</h4>
+      <h4 className="font-semibold text-foreground">Feedback to Organisational Memory</h4>
       <p className={`${HINT} mt-1`}>
         {count("queued")} waiting, {count("sent")} sent, {count("failed")} retrying, {count("held")} notes held.
       </p>
       <details className={`${HINT} mt-2`}>
         <summary className="cursor-pointer">Testing a send end to end</summary>
         <p className="mt-1">
-          Use the library's test person, never a real member's owner id. Link a test member to{" "}
+          Use Sera's test person, never a real member's owner id. Link a test member to{" "}
           <code className="font-mono">{SERA_TEST_OWNER_ID}</code> in the import above, import, remove one task with a reason,
-          then press Send now. The test person's tasks are the library's own fixtures.
+          then press Send now. The test person's tasks are Sera's own fixtures.
         </p>
       </details>
       <p className="mt-2 text-sm text-foreground">
-        Notes are {b.notes === "held" ? "held in the village" : "released to the library"}.
+        Notes are {b.notes === "held" ? "held in the village" : "released to Organisational Memory"}.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         <button

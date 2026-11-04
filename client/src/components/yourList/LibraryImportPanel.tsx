@@ -1,5 +1,5 @@
 /**
- * STEWARD: bring one member's tasks in from the knowledge library
+ * STEWARD: bring one member's tasks in from Organisational Memory
  * ("Your list", PR 3).
  *
  * Paste what the library's list_voice_tasks answered for that person, pick the
@@ -52,7 +52,7 @@ export default function LibraryImportPanel({ password, players }: { password: st
       try {
         answer = JSON.parse(pasted);
       } catch {
-        setProblem("That is not JSON. Paste the library's answer as it came, or leave it empty to read from the library.");
+        setProblem("That is not JSON. Paste Sera's answer as it came, or leave it empty to read from Organisational Memory.");
         return;
       }
     }
@@ -94,7 +94,7 @@ export default function LibraryImportPanel({ password, players }: { password: st
 
   return (
     <div className="mt-5 border-t border-border pt-4">
-      <h4 className="font-semibold text-foreground">Bring in tasks from the knowledge library</h4>
+      <h4 className="font-semibold text-foreground">Bring in tasks from Organisational Memory</h4>
       <p className={`${HINT} mt-1`}>A dry run first. Nothing is written until you read it and press Import for real.</p>
       <label className="mt-3 block">
         <span className={LABEL_CAPS}>Member</span>

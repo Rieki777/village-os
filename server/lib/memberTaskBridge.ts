@@ -1,5 +1,5 @@
 /**
- * The feedback bridge between a member's list and the knowledge library
+ * The feedback bridge between a member's list and Organisational Memory
  * (PR E). Three jobs:
  *
  *   recordAction   a press on the card becomes one feedback row (idempotent on
@@ -324,14 +324,14 @@ export async function pullLibrary(
 
 /** Pull for the steward import: a session of its own. */
 export async function pullForImport(owner: string, phrase: string): Promise<{ ok: true; items: unknown[] } | { ok: false; error: string }> {
-  if (!bridgeOn()) return { ok: false, error: "The library module is off." };
+  if (!bridgeOn()) return { ok: false, error: "Organisational Memory is off." };
   const pre = preflight();
   if (!pre.ok) return { ok: false, error: `Not connected: ${pre.gap}` };
   const session = await openSession(pre.client);
-  if (!session) return { ok: false, error: "The library did not open a session." };
+  if (!session) return { ok: false, error: "Sera did not open a session. Try again in a few minutes." };
   const listing = await listTools(pre.client, session);
   const tools = new Map<string, ToolInfo>((listing.ok ? listing.tools : []).map((t) => [t.name, t]));
-  if (!tools.has("list_voice_tasks")) return { ok: false, error: "The library does not offer list_voice_tasks." };
+  if (!tools.has("list_voice_tasks")) return { ok: false, error: "Sera does not offer its task list (list_voice_tasks) yet." };
   const r = await pullLibrary(pre.client, session, tools, owner, phrase, null);
   return r.ok ? { ok: true, items: r.items } : r;
 }

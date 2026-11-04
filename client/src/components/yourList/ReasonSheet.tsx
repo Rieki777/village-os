@@ -2,7 +2,7 @@
  * Why: the small sheet Remove and Redirect open on Your list (PR E).
  *
  * A reason is required, a note is optional. The sheet says plainly that the
- * reason helps the knowledge library learn, and that a note stays in the
+ * reason helps Organisational Memory learn, and that a note stays in the
  * village until notes are released. Redirect also asks who: a named member, or
  * a role. Nothing is sent until the press is saved.
  */
@@ -98,7 +98,7 @@ export default function ReasonSheet({ mode, busy, onCancel, onPick, others = [] 
         <textarea className={`${FIELD} min-h-20 py-2`} maxLength={NOTE_MAX} value={note} onChange={(e) => setNote(e.target.value)} />
       </label>
       <p className={`${HINT} mt-1`}>
-        Your reason helps the knowledge library learn what to send you. A note stays in the village until notes are released, and
+        Your reason helps Organisational Memory learn what to send you. A note stays in the village until notes are released, and
         emails and phone numbers are taken out before it ever leaves.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">

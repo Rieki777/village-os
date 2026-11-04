@@ -1,6 +1,6 @@
 /**
  * Why a member removed, redirected, finished or re-tiered a task, and how
- * that crosses to the knowledge library (PR E, the feedback bridge).
+ * that crosses to Organisational Memory (PR E, the feedback bridge).
  *
  * THE LIBRARY TAKES EIGHT CODES AND NOTHING ELSE. The screen offers words a
  * member recognises; `libraryCode` maps each onto one of the eight. Context
@@ -40,7 +40,7 @@ export const SCREEN_REASON_WORDS: Record<ScreenReason, string> = {
   not_a_task: "It isn't a task",
   wrong_priority: "Wrong priority",
   wrong_due_date: "Wrong due date",
-  heard_wrong: "The library heard it wrong",
+  heard_wrong: "Organisational Memory heard it wrong",
   other: "Something else",
 };
 
