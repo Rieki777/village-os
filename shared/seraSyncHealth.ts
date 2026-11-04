@@ -12,7 +12,7 @@ export interface SyncLast {
   members: number;
   errors: number;
   /** Tasks Sera held back for carrying an email address, added up over every page of the run. */
-  dropped: number;
+  dropped?: number;
 }
 
 export type SyncHealth =
