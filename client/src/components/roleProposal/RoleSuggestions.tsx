@@ -1,8 +1,8 @@
 /**
  * After "In your words": about three roles ranked from those answers.
  *
- * The list draws only when a guide can answer. With no guide configured it
- * stays empty, and the member picks by hand. A tap selects the role. It
+ * The list draws only when a guide can answer. With no guide configured, or
+ * no role sharing words with the answers, one plain line says so. A tap selects the role. It
  * does not write the member's words. Holders are not on this list: the
  * shared step never mounts it, and a card shows the role and the sentence.
  */
@@ -26,11 +26,14 @@ export function RoleSuggestions({
   onToggle: (roleId: string) => void;
 }) {
   const [guideOn, setGuideOn] = useState(false);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
     let alive = true;
     void fetchGuide().then((g) => {
-      if (alive) setGuideOn(!!g?.answering);
+      if (!alive) return;
+      setGuideOn(!!g?.answering);
+      setChecked(true);
     });
     return () => {
       alive = false;
@@ -38,7 +41,13 @@ export function RoleSuggestions({
   }, []);
 
   const list = guideOn ? suggestRoles(answers, roles) : [];
-  if (list.length === 0) return null;
+  // Never silent: once the guide check is back, an empty list says so plainly.
+  if (list.length === 0)
+    return checked ? (
+      <p className="text-sm text-muted-foreground" data-role-suggestions="none">
+        {RP_WORDS.noSuggestions}
+      </p>
+    ) : null;
 
   return (
     <section className={`${PANEL} grid gap-2`} aria-labelledby="rp-suggested-roles" data-role-suggestions="">

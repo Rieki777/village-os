@@ -43,11 +43,11 @@ function draw(body: DraftBody, search: string) {
   );
 }
 
-async function toRoles(love: string) {
+async function toRoles(love: string, offer = "loaves on Fridays", why = "the kitchen asked") {
   fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.startQuestions }));
   fireEvent.change(screen.getByLabelText(RP_WORDS.love), { target: { value: love } });
-  fireEvent.change(screen.getByLabelText(RP_WORDS.offer), { target: { value: "loaves on Fridays" } });
-  fireEvent.change(screen.getByLabelText(RP_WORDS.whyHere), { target: { value: "the kitchen asked" } });
+  fireEvent.change(screen.getByLabelText(RP_WORDS.offer), { target: { value: offer } });
+  fireEvent.change(screen.getByLabelText(RP_WORDS.whyHere), { target: { value: why } });
   fireEvent.click(screen.getByRole("button", { name: RP_WORDS.onToRoles }));
   expect(await screen.findByText(RP_WORDS.rolesLede)).toBeTruthy();
 }
@@ -70,6 +70,15 @@ describe("suggested roles from your words", () => {
     expect(screen.queryByRole("heading", { name: RP_WORDS.suggestionsHeading })).toBeNull();
     expect(screen.getByRole("checkbox", { name: /Water keeper/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: RP_WORDS.addNewRole })).toBeTruthy();
+    expect(await screen.findByText(RP_WORDS.noSuggestions)).toBeTruthy();
+  });
+
+  it("says plainly when your words match no role, instead of staying silent", async () => {
+    fetchGuide.mockResolvedValue(GUIDE_ON);
+    draw({ roles: [] }, "?path=quick");
+    await toRoles("Test words, please ignore.", "Test words, please ignore.", "Test words, please ignore.");
+    expect(await screen.findByText(RP_WORDS.noSuggestions)).toBeTruthy();
+    expect(document.querySelector("[data-suggested-role]")).toBeNull();
   });
 
   it("marks about three Suggested, open roles first, with the sentence, and does not rewrite your words", async () => {

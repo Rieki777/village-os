@@ -109,6 +109,7 @@ export const RP_WORDS = {
   addAnotherRole: "Add another role",
   suggestionsHeading: "Roles that fit your words",
   suggested: "Suggested",
+  noSuggestions: "No role suggestions from your words yet; pick below, or propose a new one.",
   fromYourWords: "From your words:",
   removeNewRole: (name: string) => `Take ${name} off this proposal`,
   newRoleTag: "New role",
