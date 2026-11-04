@@ -79,6 +79,8 @@ import { recordEvent } from "../lib/events";
 import { linkSeraPerson, linkedMember } from "../repos/memberTaskImport";
 import { linkableMember, memberLinks, memberName, unlinkMember } from "../repos/seraPersonLinks";
 import { LINK_WORDS, seraOwnerIdProblem } from "@shared/seraPersonLinks";
+import { backfill, linksWithReviews } from "../lib/seraPersonMatch";
+import { clearReview } from "../repos/seraLinkReviews";
 
 type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser">;
 
@@ -173,7 +175,7 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/saberra/links", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
     try {
-      res.json({ members: await memberLinks(getPool()) });
+      res.json({ members: await linksWithReviews(getPool()) });
     } catch {
       res.status(500).json({ error: "Could not read the links." });
     }
@@ -200,11 +202,12 @@ export function register(app: Express, deps: Deps): void {
       // One library person per member: a relink replaces the old link whole.
       await unlinkMember(pool, userId);
       await linkSeraPerson(pool, owner, userId, String(actor.id));
+      await clearReview(pool, userId).catch(() => {});
       void recordEvent(pool, {
         kind: "audit", text: `sera:link:${userId}`, actorUserId: actor.id,
         entityType: "sera_person_link", entityRef: userId, audience: "admin",
       });
-      res.json({ ok: true, message: LINK_WORDS.linked(member.name), members: await memberLinks(pool) });
+      res.json({ ok: true, message: LINK_WORDS.linked(member.name), members: await linksWithReviews(pool) });
     } catch {
       res.status(500).json({ error: "Could not write the link." });
     }
@@ -222,9 +225,33 @@ export function register(app: Express, deps: Deps): void {
         kind: "audit", text: `sera:unlink:${userId}`, actorUserId: actor.id,
         entityType: "sera_person_link", entityRef: userId, audience: "admin",
       });
-      res.json({ ok: true, message: LINK_WORDS.unlinked(await memberName(pool, userId)), members: await memberLinks(pool) });
+      res.json({ ok: true, message: LINK_WORDS.unlinked(await memberName(pool, userId)), members: await linksWithReviews(pool) });
     } catch {
       res.status(500).json({ error: "Could not remove the link." });
+    }
+  });
+
+  /**
+   * Keyed-hash matching for members already here (docs/modules/sera-person-links.md).
+   * A dry run unless the body says dryRun: false; the dry run counts and calls nothing.
+   */
+  app.post("/api/saberra/person-match/backfill", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const actor = await authedUser(req);
+    if (!actor) return res.status(401).json({ error: "auth_required" });
+    try {
+      const pool = getPool();
+      const dryRun = (req.body as { dryRun?: unknown } | undefined)?.dryRun !== false;
+      const counts = await backfill(pool, dryRun);
+      if (!dryRun && !counts.note) {
+        void recordEvent(pool, {
+          kind: "audit", text: `sera:match-backfill:${counts.linked}/${counts.review}/${counts.failed}`, actorUserId: actor.id,
+          entityType: "sera_person_link", entityRef: "backfill", audience: "admin",
+        });
+      }
+      res.json({ ...counts, members: await linksWithReviews(pool) });
+    } catch {
+      res.status(500).json({ error: "The match stopped on an error in this village's server." });
     }
   });
 

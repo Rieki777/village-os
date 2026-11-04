@@ -9,6 +9,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { LINK_HOW_WORDS, LINK_WORDS, seraOwnerIdProblem, type LinksResponse, type MemberLinkRow } from "@shared/seraPersonLinks";
+import { MATCH_WORDS, type BackfillCounts } from "@shared/seraPersonMatch";
 import { API_BASE, authHeaders } from "./adminApi";
 
 function when(iso: string | null): string {
@@ -55,6 +56,7 @@ function Row({ m, password, onDone }: { m: MemberLinkRow; password: string; onDo
           {m.how ? `${LINK_HOW_WORDS[m.how]} · …${m.ownerTail} · ${LINK_WORDS.lastSync}: ${when(m.lastSyncedAt)}` : LINK_WORDS.notLinked}
         </span>
       </div>
+      {m.review && <p className="text-xs text-amber-800">{MATCH_WORDS[m.review.outcome]}</p>}
       <div className="flex flex-wrap gap-2">
         <label className="sr-only" htmlFor={`sera-owner-${m.userId}`}>Sera owner id for {m.name}</label>
         <input
@@ -106,6 +108,26 @@ export default function SeraLinkPanel({ password }: { password: string }) {
     return (members ?? []).filter((m) => !f || m.name.toLowerCase().includes(f));
   }, [members, filter]);
   const linked = (members ?? []).filter((m) => m.how).length;
+  const waiting = (members ?? []).filter((m) => m.review).length;
+  const [counts, setCounts] = useState<BackfillCounts | null>(null);
+  const [busy, setBusy] = useState(false);
+  const runMatch = async (dryRun: boolean) => {
+    setBusy(true);
+    try {
+      const r = await fetch(`${API_BASE}/saberra/person-match/backfill`, {
+        method: "POST",
+        headers: { ...authHeaders(password), "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun }),
+      });
+      if (!r.ok) throw new Error(String(r.status));
+      const body = (await r.json()) as BackfillCounts & { members: MemberLinkRow[] };
+      setCounts(body);
+      setMembers(body.members);
+    } catch {
+      setMessage("The match did not run just now.");
+    }
+    setBusy(false);
+  };
 
   if (failed) return <p className="text-xs text-amber-800">The Sera links could not be read just now.</p>;
   if (!members) return <p className="text-xs text-gray-500">Reading the Sera links…</p>;
@@ -115,7 +137,25 @@ export default function SeraLinkPanel({ password }: { password: string }) {
       <div className="space-y-1">
         <h3 id="sera-link-title" className="text-sm font-semibold text-gray-900">{LINK_WORDS.title}</h3>
         <p className="text-xs text-gray-500">{LINK_WORDS.intro}</p>
-        <p className="text-xs text-gray-500">{linked} of {members.length} members linked.</p>
+        <p className="text-xs text-gray-500">{linked} of {members.length} members linked{waiting ? `, ${waiting} waiting for a steward` : ""}.</p>
+      </div>
+      <div className="space-y-1">
+        <p className="text-xs text-gray-500">Match members already here by a keyed hash of their verified email. Only the hash goes to Sera. Count first; nothing is sent until you press Match now.</p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={busy} onClick={() => runMatch(true)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs">Count who would be matched</button>
+          {counts?.dryRun && !counts.note && counts.candidates > 0 && (
+            <button type="button" disabled={busy} onClick={() => runMatch(false)} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs text-white">Match now ({counts.candidates})</button>
+          )}
+        </div>
+        {counts && (
+          <p className="text-xs text-gray-700" role="status">
+            {counts.note
+              ? `${counts.candidates} member${counts.candidates === 1 ? "" : "s"} with a verified email and no link. ${counts.note}`
+              : counts.dryRun
+                ? `${counts.candidates} member${counts.candidates === 1 ? "" : "s"} with a verified email and no link. Nothing sent yet.`
+                : `Linked ${counts.linked}, ${counts.review} waiting for a steward, ${counts.failed} did not get an answer.`}
+          </p>
+        )}
       </div>
       <label className="sr-only" htmlFor="sera-link-filter">Find a member</label>
       <input
