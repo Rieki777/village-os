@@ -49,7 +49,13 @@ export const TOKEN_PREFIX = "vat_";
  * the holder does that on the map. Only a holder who may draft the land
  * (`map.edit`) gets anything from it, like every scope here.
  */
-export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft"] as const;
+/*
+ * `moon.read` and `tasks.write` open the village connector
+ * (server/lib/agentMcp.ts, `POST /api/agent/v1/mcp`): the holder's own moon,
+ * roles and season, and the holder's own task board pressed through the two
+ * calls. Both are opt-in, unlike the three reads below (addendum v6, B4).
+ */
+export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write"] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 /** Read scopes are on by default in the panel; writes are opt-in. */
@@ -546,7 +552,7 @@ export function mintConfirmToken(secret: string, claims: ConfirmClaims, now = Da
 
 export type ConfirmCheck =
   | { ok: true }
-  | { ok: false; reason: "missing" | "malformed" | "bad_signature" | "expired" | "wrong_action" | "wrong_holder" | "echo_mismatch" };
+  | { ok: false; reason: "missing" | "malformed" | "bad_signature" | "expired" | "wrong_action" | "wrong_holder" | "echo_mismatch" | "spent" };
 
 /**
  * Every reason is distinct so the agent can say which step it got wrong, and
@@ -583,4 +589,32 @@ export const CONFIRM_REASON_SENTENCE: Record<Exclude<ConfirmCheck, { ok: true }>
   wrong_action: "That confirmToken was issued for a different action. Nothing was written",
   wrong_holder: "That confirmToken belongs to a different member. Nothing was written",
   echo_mismatch: "The echo you sent back does not match what you were shown. Nothing was written",
+  spent: "That confirmToken was already used. Call again without it to get a fresh one. Nothing was written",
 };
+
+/**
+ * A confirm token works once. The signature alone would let the same token
+ * write twice inside its ten minutes, so a caller that writes spends it here
+ * first. The book lives in this process: a village runs one server, and a
+ * restart forgets nothing that matters, because every token it held expires
+ * within CONFIRM_TTL_MS anyway.
+ */
+export function createConfirmSpendBook(now: () => number = Date.now) {
+  const spent = new Map<string, number>();
+  return {
+    /** True the first time this token is spent, false every time after. Call only after the token verified. */
+    spend(token: string): boolean {
+      const t = now();
+      spent.forEach((exp, k) => { if (exp <= t) spent.delete(k); });
+      if (spent.has(token)) return false;
+      let exp = t + CONFIRM_TTL_MS;
+      try {
+        const decoded = JSON.parse(Buffer.from(token.slice(0, token.lastIndexOf(".")), "base64url").toString("utf8"));
+        if (typeof decoded?.exp === "number") exp = decoded.exp;
+      } catch { /* a verified token always decodes; the fallback keeps the book bounded anyway */ }
+      spent.set(token, exp);
+      return true;
+    },
+    size: () => spent.size,
+  };
+}

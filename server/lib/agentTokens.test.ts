@@ -116,7 +116,7 @@ describe("the token value", () => {
 
 describe("scopes", () => {
   it("is a closed list", () => {
-    expect([...AGENT_SCOPES]).toEqual(["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft"]);
+    expect([...AGENT_SCOPES]).toEqual(["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write"]);
   });
   it("refuses unknown scopes and dedupes", () => {
     expect(cleanScopes(["calendar.read", "calendar.read"], { intentsAllowed: false })).toEqual({ ok: true, scopes: ["calendar.read"] });

@@ -172,6 +172,7 @@ import { register as registerRoleGuideRoutes } from "./routes/roleGuide";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
+import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
@@ -6446,7 +6447,7 @@ async function startServer() {
      */
     const AGENT_INTENT_WRITE = process.env.AGENT_INTENT_WRITE === "1";
     const SKILLS_DIR = path.join(process.cwd(), "docs", "skills");
-    const SKILL_NAMES = ["village-calendar", "village-circles", "village-directory", "village-intents", "village-map"] as const;
+    const SKILL_NAMES = ["village-calendar", "village-circles", "village-directory", "village-intents", "village-map", "village-moon"] as const;
     const skillFile = (name: string) => path.join(SKILLS_DIR, name, "SKILL.md");
     const OPENAPI_FILE = path.join(SKILLS_DIR, "references", "openapi.json");
 
@@ -6503,7 +6504,7 @@ async function startServer() {
     const resolveAgent = async (
       req: express.Request,
       res: express.Response,
-      scope: AgentScope,
+      scope: AgentScope | null,
       kind: "read" | "write",
     ): Promise<{ row: AgentTokenRow; user: any } | null> => {
       const header = req.headers.authorization;
@@ -6517,7 +6518,9 @@ async function startServer() {
         return null;
       }
       const row: AgentTokenRow = verified.row;
-      if (!row.scopes.includes(scope)) {
+      // `null` asks for a live token and no one scope: the connector (server/routes/agentMcp.ts)
+      // lists and refuses tools by the token's scopes itself.
+      if (scope !== null && !row.scopes.includes(scope)) {
         res.status(403).json({ error: "agent_scope_missing", scope, message: `This token was not given the ${scope} scope` });
         return null;
       }
@@ -6688,6 +6691,7 @@ async function startServer() {
     });
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
+    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), clientIp });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
     app.all(`${AGENT_V1}/{*splat}`, (_req, res) => res.status(404).json({ error: "Not found" }));
