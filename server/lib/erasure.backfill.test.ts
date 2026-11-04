@@ -116,6 +116,7 @@ const GIVEN_TO_IT = [
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
   "member-asks-after-tombstone",
+  "moon-reviews-after-tombstone",
   "reward-moments-after-tombstone",
   "companions-after-tombstone",
   "product-subscriptions-after-tombstone",

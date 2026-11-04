@@ -5,7 +5,7 @@
  * without growing a file that sits at its line ratchet. The card and the key
  * live in ./PlayerCard.tsx.
  */
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
@@ -80,6 +80,11 @@ export default function PlayersTab({ password }: { password: string }) {
   };
 
   const [erasing, setErasing] = useState<{ id: string; email: string } | null>(null);
+  const eraseSheet = useRef<HTMLDivElement>(null);
+  // Bring the sheet itself into view once it is drawn: a plain jump, wherever the tab sits on the page.
+  useEffect(() => {
+    if (erasing) eraseSheet.current?.scrollIntoView?.({ block: "start" });
+  }, [erasing]);
   const remove = async (id: string, email: string) => {
     if (!confirm(`Delete player ${email}? This removes their account. Their past quest claims and ledger entries are kept.`)) return;
     try {
@@ -133,7 +138,7 @@ export default function PlayersTab({ password }: { password: string }) {
   return (
     <div>
       {erasing && (
-        <div className="mb-4 rounded-lg border border-border bg-card p-4">
+        <div ref={eraseSheet} className="mb-4 rounded-lg border border-border bg-card p-4">
           <Suspense fallback={<p className="text-sm text-muted-foreground">Loading...</p>}>
             <ErasePrepPanel
               key={erasing.id}
@@ -176,7 +181,7 @@ export default function PlayersTab({ password }: { password: string }) {
                 onAccess={(role) => setRole(p.id, role, p.name)}
                 onStage={(id) => grant(p.id, id ?? "")}
                 onSignOut={() => revokeSessions(p.id, p.name)}
-                onDelete={() => { setErasing({ id: p.id, email: p.email }); window.scrollTo(0, 0); }}
+                onDelete={() => setErasing({ id: p.id, email: p.email })}
               />
             ))}
           </div>

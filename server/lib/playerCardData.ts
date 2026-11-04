@@ -93,6 +93,7 @@ import {
 import { roleWordsIn, type RoleEditKey } from "../../shared/playerCardEdit";
 import { cycleWindows, readSign, SIGNS, isSignKey, type SignKey, type SignReading, type SignRows } from "../../shared/roleSigns";
 import { signSheetRows, type SignSheetRow } from "../../shared/roleSignRows";
+import { operationsRoleName } from "../../shared/roleProposalHonesty";
 import { parseSeatSettings, type SeatSettings } from "../../shared/seatSettings";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
 import { civilDateInstant } from "../../shared/seatTerms";
@@ -412,6 +413,7 @@ export async function buildPlayerCards(
   const roles = new Map<string, OrgRole & { archetypesSuggested: boolean }>(
     [...rows.roles, ...prop.roles].map((r) => [String(r.id), { ...rowToRole(r), archetypesSuggested: !!r.archetypes_suggested }]),
   );
+  const fillWith = operationsRoleName(Array.from(roles.values()));
   const roleName = new Map(rows.roleNames.map((r) => [String(r.id), String(r.name)]));
   const circleName = new Map([...rows.circles, ...prop.circles].map((c) => [String(c.id), String(c.name)]));
   const lapseCtx = { ...ctx.lapse, now: ctx.now };
@@ -633,6 +635,7 @@ export async function buildPlayerCards(
       pastSeatings: isSelf ? pastSeatings : undefined,
       endedSeasonIds: ctx.endedSeasonIds ?? [],
       mode: proposal ? "proposal" : "live",
+      fillWith: proposal ? fillWith : undefined,
       roleNames: Object.fromEntries(roleName),
       bonusTokenName: null,
       // The owner's own words and this moon's read (PR 6, #530), whatever the season.

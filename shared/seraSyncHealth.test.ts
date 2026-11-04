@@ -17,3 +17,13 @@ describe("sync health", () => {
     expect(syncHealthWords(syncHealth(rec(2, false, 1), now))).toMatch(/did not work for 1 member \(no session\)/);
   });
 });
+
+describe("dropped for email, added up per run", () => {
+  it("reads the run total and words it plainly", async () => {
+    const { parseSyncLast, droppedWords } = await import("./seraSyncHealth");
+    const last = parseSyncLast(JSON.stringify({ at: "2026-11-03T10:00:00Z", ok: true, s: "ok", m: 2, e: 0, d: 3 }));
+    expect(last?.dropped).toBe(3);
+    expect(droppedWords(last)).toBe("Sera held back 3 tasks in the last read because they carried an email address.");
+    expect(droppedWords(parseSyncLast(JSON.stringify({ at: "2026-11-03T10:00:00Z", ok: true })))).toBeNull();
+  });
+});

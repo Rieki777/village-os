@@ -105,3 +105,18 @@ describe("the sync health card", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/^Behind/);
   });
 });
+
+describe("tasks held back for an email address", () => {
+  const sync = (d?: number) => ({ at: new Date(before - 3_600_000).toISOString(), ok: true, status: "ok", members: 1, errors: 0, ...(d === undefined ? {} : { dropped: d }) });
+  it("says the run's total when it is above zero", () => {
+    render(<BridgeView a={{ ...base, sync: sync(4) }} now={before} />);
+    expect(screen.getByText("Sera held back 4 tasks in the last read because they carried an email address.")).toBeTruthy();
+  });
+  it("stays quiet at zero and on an older record", () => {
+    render(<BridgeView a={{ ...base, sync: sync(0) }} now={before} />);
+    expect(screen.queryByText(/held back/)).toBeNull();
+    cleanup();
+    render(<BridgeView a={{ ...base, sync: sync() }} now={before} />);
+    expect(screen.queryByText(/held back/)).toBeNull();
+  });
+});

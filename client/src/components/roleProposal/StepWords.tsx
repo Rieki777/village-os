@@ -26,6 +26,7 @@ import AiHelpButton from "./AiHelpButton";
 import type { WordFieldOut } from "./proposalApi";
 import { RP_WORDS } from "./proposalWords";
 import TermGlossary from "@/components/governance/TermGlossary";
+import GrowingField from "@/components/form/GrowingField";
 import { EDIT_FIELDS, fieldProblem, NAME_FIELD, stateFrom, shownText, differs, type EditField } from "./roleWords";
 import WrittenDate from "./WrittenDate";
 import { FieldFrame, FOCUS, INPUT, LEDE, PANEL } from "./parts";
@@ -144,14 +145,14 @@ function WordInput({
         </p>
       )}
       {f.multiline ? (
-        <textarea
+        <GrowingField
           id={id}
           aria-label={f.label}
           aria-describedby={hint ? `${id}-hint` : undefined}
           aria-invalid={problem ? true : undefined}
-          rows={f.list ? 4 : 3}
+          minRows={f.list ? 3 : 2}
           value={value}
-          onChange={(e) => onType(e.target.value)}
+          onChange={onType}
           className={`mt-1 ${INPUT}`}
         />
       ) : (

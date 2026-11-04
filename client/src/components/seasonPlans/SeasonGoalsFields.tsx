@@ -9,6 +9,7 @@
  * the finger loses nothing.
  */
 import { Plus, Trash2 } from "lucide-react";
+import GrowingField from "@/components/form/GrowingField";
 import { DONE_WHEN_MAX, HOW_IT_HELPS_MAX, SEASONAL_GOALS_LIMIT, SEASONAL_TITLE_MAX } from "@shared/seasonPlanWords";
 
 export const SEASON_GOALS_WORDS = {
@@ -80,12 +81,11 @@ export function ServedGoalsField({ rows, onChange }: { rows: readonly ServedRow[
             {r.ticked && (
               <label className="mt-2 block text-sm text-foreground">
                 {SEASON_GOALS_WORDS.howItHelps}
-                <input
-                  type="text"
+                <GrowingField
                   maxLength={HOW_IT_HELPS_MAX}
                   value={r.howItHelps}
                   aria-label={SEASON_GOALS_WORDS.howItHelpsFor(r.goal)}
-                  onChange={(e) => set(i, { howItHelps: e.target.value })}
+                  onChange={(howItHelps) => set(i, { howItHelps })}
                   className={`mt-1 ${inputClass}`}
                 />
               </label>
@@ -108,11 +108,11 @@ export function SeasonalGoalsField({ rows, onChange }: { rows: readonly Seasonal
           <li key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
             <label className="text-sm text-foreground">
               {SEASON_GOALS_WORDS.title}
-              <input type="text" maxLength={SEASONAL_TITLE_MAX} value={r.title} onChange={(e) => set(i, { title: e.target.value })} className={`mt-1 ${inputClass}`} />
+              <GrowingField maxLength={SEASONAL_TITLE_MAX} value={r.title} onChange={(title) => set(i, { title })} className={`mt-1 ${inputClass}`} />
             </label>
             <label className="text-sm text-foreground">
               {SEASON_GOALS_WORDS.doneWhen}
-              <input type="text" maxLength={DONE_WHEN_MAX} value={r.doneWhen} onChange={(e) => set(i, { doneWhen: e.target.value })} className={`mt-1 ${inputClass}`} />
+              <GrowingField maxLength={DONE_WHEN_MAX} value={r.doneWhen} onChange={(doneWhen) => set(i, { doneWhen })} className={`mt-1 ${inputClass}`} />
             </label>
             <button
               type="button"
