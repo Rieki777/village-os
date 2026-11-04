@@ -33,11 +33,11 @@ export default function WholePresetCards({
               <span id={labelId} className="break-words text-base font-semibold text-foreground">
                 {w.label}
               </span>
-              <span className="break-words text-xs font-semibold uppercase tracking-wide text-muted-foreground">{copy.official}</span>
+              <span className="break-words text-[13px] font-semibold uppercase tracking-wide text-foreground">{copy.official}</span>
               <span id={descId} className="grid gap-1">
-                <span className="break-words text-sm text-muted-foreground">{w.blurb}</span>
-                <span className="break-words text-sm text-foreground">{copy.example}</span>
-                <span className="break-words text-xs font-medium text-foreground">{MONEY_PROMISE}</span>
+                <span className="break-words text-[13px] leading-snug text-foreground">{w.blurb}</span>
+                <span className="break-words text-[13px] leading-snug text-foreground">{copy.example}</span>
+                <span className="break-words text-[13px] font-medium leading-snug text-foreground">{MONEY_PROMISE}</span>
               </span>
             </button>
           </li>
@@ -46,7 +46,7 @@ export default function WholePresetCards({
       <li className="min-w-0">
         <button type="button" onClick={onUnsure} className={card} data-not-sure="">
           <span className="break-words text-base font-semibold text-foreground">{NOT_SURE_YET}</span>
-          <span className="break-words text-sm text-muted-foreground">{unsureLine(partner)}</span>
+          <span className="break-words text-[13px] leading-snug text-foreground">{unsureLine(partner)}</span>
         </button>
       </li>
     </ul>
