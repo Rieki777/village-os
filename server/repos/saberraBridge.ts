@@ -88,6 +88,15 @@ export async function bridgeFeedback(pool: Pool, have: Set<string>): Promise<Bri
   };
 }
 
+/** The first waiting Needs Owner tasks, with the role's name when the library's role id is one of ours. */
+async function needsOwnerItems(pool: Pool): Promise<{ title: string; role: string | null }[]> {
+  const [rows] = await pool.query(
+    "SELECT q.`title`, q.`sera_role_id` AS rid, r.`name` AS rname FROM `member_task_import_queue` q LEFT JOIN `org_roles` r ON r.`id` = q.`sera_role_id` " +
+      "WHERE q.`status` = 'waiting' ORDER BY q.`created_at` DESC LIMIT 10",
+  );
+  return (rows as Row[]).map((r) => ({ title: String(r.title ?? ""), role: r.rid ? (r.rname ? String(r.rname) : "a role in Sera") : null }));
+}
+
 export async function bridgeReading(pool: Pool, listDefault: boolean): Promise<Omit<BridgeAnswer, "connection">> {
   const have = await tables(pool, [
     "member_tasks",
@@ -105,7 +114,11 @@ export async function bridgeReading(pool: Pool, listDefault: boolean): Promise<O
     ? n((await one(pool, "SELECT COUNT(*) AS n FROM `external_proposals` WHERE `module_id` = 'saberra' AND `status` = 'proposed'")).n)
     : 0;
   const needsOwner = have.has("member_task_import_queue")
-    ? { ready: true, waiting: n((await one(pool, "SELECT COUNT(*) AS n FROM `member_task_import_queue` WHERE `status` = 'waiting'")).n) }
+    ? {
+        ready: true,
+        waiting: n((await one(pool, "SELECT COUNT(*) AS n FROM `member_task_import_queue` WHERE `status` = 'waiting'")).n),
+        items: await needsOwnerItems(pool),
+      }
     : { ready: false, waiting: 0 };
   const sync = have.has("member_task_bridge") ? parseSyncLast(await syncRecord(pool).catch(() => null)) : null;
   return { lists, feedback, reviewQueue: { waiting: review }, needsOwner, sync };
