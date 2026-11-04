@@ -300,12 +300,14 @@ export function removalAction(e: LibraryRemoval): { kind: "done"; doneAt: Date |
 /** Every library task for one owner whose evidence holds the phrase, all pages. */
 export async function pullLibrary(
   client: ClientOptions, session: string, tools: Map<string, ToolInfo>, owner: string, phrase: string, since: string | null,
-): Promise<{ ok: true; items: unknown[]; removed: LibraryRemoval[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; items: unknown[]; removed: LibraryRemoval[]; dropped: number } | { ok: false; error: string }> {
   const fields = declaredFields(tools.get("list_voice_tasks"));
   const items: unknown[] = [];
   const removed: LibraryRemoval[] = [];
   let cursor: string | null = null;
   let pages = 0;
+  // Sera counts tasks it held back for carrying an email address PER CALL, not as a running total, so add them up here.
+  let dropped = 0;
   do {
     const ask = shapeArgs({
       owner_id: owner, page_size: 100,
@@ -319,10 +321,12 @@ export async function pullLibrary(
     items.push(...filterByPhrase(itemsOf(r.value), phrase));
     removed.push(...removedEntriesOf(r.value));
     const v = (r.value ?? {}) as Record<string, unknown>;
+    const d = Number(v.dropped_for_email);
+    if (Number.isFinite(d) && d > 0) dropped += Math.floor(d);
     cursor = v.has_more === false ? null : typeof v.next_cursor === "string" && v.next_cursor ? v.next_cursor : null;
     pages += 1;
   } while (cursor && pages < MAX_PAGES);
-  return { ok: true, items, removed };
+  return { ok: true, items, removed, dropped };
 }
 
 /** Pull for the steward import: a session of its own. */
@@ -341,7 +345,7 @@ export async function pullForImport(owner: string, phrase: string): Promise<{ ok
 
 export async function syncMember(
   pool: Pool, client: ClientOptions, session: string, tools: Map<string, ToolInfo>, link: { owner: string; userId: string; since: string | null }, today: string,
-): Promise<{ created: number; updated: number; closed: number; error?: string }> {
+): Promise<{ created: number; updated: number; closed: number; dropped?: number; error?: string }> {
   const startedAt = new Date();
   const phrase = await importPhrase(pool);
   let pulled = await pullLibrary(client, session, tools, link.owner, phrase, link.since);
@@ -368,18 +372,18 @@ export async function syncMember(
       : await removeLibraryTask(pool, link.userId, e.id, act.removeReason);
   }
   await markLinkSynced(pool, link.owner, startedAt);
-  return { created: res.created, updated: res.updated, closed };
+  return { created: res.created, updated: res.updated, closed, dropped: pulled.dropped };
 }
 
-export async function syncLinked(pool: Pool, today: string): Promise<{ status: string; members: number; created: number; updated: number; closed: number; errors: string[] }> {
+export async function syncLinked(pool: Pool, today: string): Promise<{ status: string; members: number; created: number; updated: number; closed: number; dropped: number; errors: string[] }> {
   const r = await syncLinkedOnce(pool, today);
   // The board's sync health reads this: when it ran, whether it worked, how many members failed. No service words.
-  await setSyncRecord(pool, JSON.stringify({ at: new Date().toISOString(), ok: r.status === "ok" && r.errors.length === 0, s: r.status.slice(0, 40), m: r.members, e: r.errors.length })).catch(() => {});
+  await setSyncRecord(pool, JSON.stringify({ at: new Date().toISOString(), ok: r.status === "ok" && r.errors.length === 0, s: r.status.slice(0, 40), m: r.members, e: r.errors.length, d: r.dropped })).catch(() => {});
   return r;
 }
 
-async function syncLinkedOnce(pool: Pool, today: string): Promise<{ status: string; members: number; created: number; updated: number; closed: number; errors: string[] }> {
-  const out = { status: "ok", members: 0, created: 0, updated: 0, closed: 0, errors: [] as string[] };
+async function syncLinkedOnce(pool: Pool, today: string): Promise<{ status: string; members: number; created: number; updated: number; closed: number; dropped: number; errors: string[] }> {
+  const out = { status: "ok", members: 0, created: 0, updated: 0, closed: 0, dropped: 0, errors: [] as string[] };
   if (!bridgeOn()) return { ...out, status: "library module off" };
   const pre = preflight();
   if (!pre.ok) return { ...out, status: `not connected: ${pre.gap}` };
@@ -394,6 +398,7 @@ async function syncLinkedOnce(pool: Pool, today: string): Promise<{ status: stri
     out.created += r.created;
     out.updated += r.updated;
     out.closed += r.closed;
+    out.dropped += r.dropped ?? 0;
     if (r.error) out.errors.push(r.error);
   }
   return out;

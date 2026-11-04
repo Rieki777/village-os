@@ -18,7 +18,7 @@ import {
   type BridgeAnswer,
 } from "@shared/seraBridgeBoard";
 import type { QuestFeedAnswer } from "@shared/seraQuestFeed";
-import { syncHealth, syncHealthWords } from "@shared/seraSyncHealth";
+import { droppedWords, syncHealth, syncHealthWords } from "@shared/seraSyncHealth";
 import { API_BASE, authHeaders } from "./adminApi";
 import { LevelRing, QuestCard, ToolBadges, type QuestState } from "./SaberraBridgeQuests";
 
@@ -123,6 +123,7 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
 
         <QuestCard title="Sync health" state={health.state === "ok" ? "done" : health.state === "never" ? "waiting" : "active"}>
           <p role={health.state === "stale" || health.state === "failed" ? "alert" : undefined}>{syncHealthWords(health)}</p>
+          {droppedWords(a.sync ?? null) && <p>{droppedWords(a.sync ?? null)}</p>}
         </QuestCard>
 
         <QuestCard title="Linked to Sera" state={!a.lists.ready ? "building" : a.lists.people?.length ? "done" : "waiting"}>
