@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { WHOLE_PRESETS } from "./seatPresets";
-import { GLOSSARY, MONEY_PROMISE, plainTerm, recommendsPay, unsureLine, wholeCardCopy } from "./termCards";
+import { SEAT_PRESETS as PRESETS, WHOLE_PRESETS } from "./seatPresets";
+import { GLOSSARY, MONEY_PROMISE, fillTogetherTag, plainTerm, presetExample, presetTag, recommendsPay, unsureLine, wholeCardCopy } from "./termCards";
 import { OPS_FALLBACK } from "./roleProposalHonesty";
 import { SETTINGS_GROUPS } from "./seatSettings";
 
@@ -9,7 +9,8 @@ describe("terms preset cards", () => {
     expect(WHOLE_PRESETS.map((w) => w.label)).toEqual(["Volunteer role", "Stipend role", "Core team role", "Trial moon"]);
     for (const whole of WHOLE_PRESETS) {
       const card = wholeCardCopy(whole);
-      expect(card.example).toMatch(/^How often you meet \(rhythm\): .+/);
+      expect(card.rhythm).toMatch(/^How often you meet \(rhythm\): .+/);
+      expect(card.example).toMatch(/^Example: .+/);
       expect(card.official.length).toBeGreaterThan(0);
       expect(recommendsPay(whole.label)).toBe(false);
       expect(recommendsPay(whole.blurb)).toBe(false);
@@ -17,6 +18,14 @@ describe("terms preset cards", () => {
       expect(recommendsPay(card.official)).toBe(false);
       expect(recommendsPay(MONEY_PROMISE)).toBe(false);
     }
+  });
+
+  it("gives every preset an Example line, and tags money as filled together, never Suggested", () => {
+    for (const p of PRESETS) expect(presetExample(p)).toMatch(/^Example: .{3,}/);
+    expect(presetExample({ id: "platform:until-season-end", label: "Until the season ends" })).toContain("season closes");
+    expect(presetTag("term", "Operations Steward")).toBe("Suggested");
+    for (const g of ["pay", "allowance", "bonus"] as const) expect(presetTag(g, "Operations Steward")).toBe("Fill together with Operations Steward");
+    expect(fillTogetherTag(null)).toBe("Fill together with the village's operations role");
   });
 
   it("puts the plain phrase before the official word, and explains the jargon", () => {
