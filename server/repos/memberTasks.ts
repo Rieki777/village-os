@@ -289,6 +289,8 @@ export async function forgetMemberTasks(db: Queryable, userId: string): Promise<
   const [links] = await db.query<RowDataPacket[]>("SELECT `sera_owner_id` FROM `sera_person_links` WHERE `user_id` = ?", [uid]);
   await forgetMemberTaskFeedback(db, uid, links.map((l) => String(l.sera_owner_id)));
   await db.query("DELETE FROM `sera_person_links` WHERE `user_id` = ?", [uid]);
+  // The keyed-match review queue (drizzle/0320): the member's own row only.
+  await db.query("DELETE FROM `sera_link_reviews` WHERE `user_id` = ?", [uid]).catch(() => {});
   await db.query("UPDATE `sera_person_links` SET `linked_by_user_id` = NULL WHERE `linked_by_user_id` = ?", [uid]);
   return e.affectedRows + t.affectedRows + a.affectedRows;
 }

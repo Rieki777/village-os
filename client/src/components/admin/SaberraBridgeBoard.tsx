@@ -12,13 +12,14 @@
 import { useEffect, useState } from "react";
 import {
   SERA_AGREEMENT,
+  villageTime,
   SERA_TOOLS,
   agreementState,
   bridgeChecks,
   type BridgeAnswer,
 } from "@shared/seraBridgeBoard";
 import type { QuestFeedAnswer } from "@shared/seraQuestFeed";
-import { syncHealth, syncHealthWords } from "@shared/seraSyncHealth";
+import { droppedWords, syncHealth, syncHealthWords } from "@shared/seraSyncHealth";
 import { API_BASE, authHeaders } from "./adminApi";
 import { LevelRing, QuestCard, ToolBadges, type QuestState } from "./SaberraBridgeQuests";
 
@@ -31,12 +32,7 @@ function countdown(ms: number): string {
   return h > 0 ? `in ${h} h ${m} min` : `in ${m} min`;
 }
 
-function villageDate(iso: string | null): string {
-  if (!iso) return "unknown time";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "unknown time";
-  return d.toLocaleString("en-US", { timeZone: SERA_AGREEMENT.timezone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
+const villageDate = (iso: string | null): string => villageTime(iso);
 
 export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; onFeed?: (dryRun: boolean) => Promise<QuestFeedAnswer | string> }) {
   const [feed, setFeed] = useState<QuestFeedAnswer | string | null>(null);
@@ -103,6 +99,19 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
               ? "Privacy connection set: a steward can remove a member's tasks in Sera."
               : "Removing a member's tasks in Sera needs a full-scope connection (not set)."}
           </p>
+          {a.connection.tokens?.length ? (
+            <details className="mt-1">
+              <summary className="cursor-pointer">Which key each act uses</summary>
+              <ul className="mt-1 space-y-0.5">
+                {a.connection.tokens.map((t) => (
+                  <li key={t.act}>
+                    {t.act}: {t.uses === "sync" ? "the routine sync key" : t.uses === "privacy" ? "the privacy key" : "the connection key (no separate sync key)"}
+                    {t.set ? "" : ", not set"}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </QuestCard>
 
         <QuestCard title="Members' lists from Sera" state={a.lists.ready ? st(list, 3) : "building"} steps={a.lists.ready ? { done: list, of: 3 } : undefined}>
@@ -123,6 +132,7 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
 
         <QuestCard title="Sync health" state={health.state === "ok" ? "done" : health.state === "never" ? "waiting" : "active"}>
           <p role={health.state === "stale" || health.state === "failed" ? "alert" : undefined}>{syncHealthWords(health)}</p>
+          {droppedWords(a.sync ?? null) && <p>{droppedWords(a.sync ?? null)}</p>}
         </QuestCard>
 
         <QuestCard title="Linked to Sera" state={!a.lists.ready ? "building" : a.lists.people?.length ? "done" : "waiting"}>

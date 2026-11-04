@@ -5,7 +5,8 @@
  *   POST /api/me/cash-owed/:id/claim  I am ready to be paid this
  *   GET  /api/cash-owed/queue         the treasurer's list, for whoever holds `cash.pay`
  *   POST /api/cash-owed/:id/paid      the money went out, and this is how
- *   POST /api/cash-owed/transfers     one bank transfer paid some or all of one member's lines
+ *   POST /api/cash-owed/transfers     one bank transfer paid some or all of one member's lines; a
+ *                                     moon invoice whose rows are all paid then reads Paid
  *   GET  /api/cash-owed/export.csv    every line, paid and unpaid, for the accounts
  *   GET  /api/me/cash-owed/export.csv?year=YYYY   a member's own cash received that year
  *
@@ -36,6 +37,7 @@ import { cashCsv, cashExportRows, cashOwedFor, cashQueue, claimCash, markCashPai
 import { CASH_PAY_REQUIRED, cashKeyRefusalWords, cashTotalsByCurrency, type CashOwedEntry, type CashQueueEntry } from "../../shared/cashOwed";
 import { formatMoney } from "../../shared/money";
 import { roleWithHolders } from "../../shared/roleHolderLabel";
+import { settlePaidInvoices } from "../lib/moonReview";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "members" | "notify" | "overLimit"> & {
   /** Who holds `cash.pay` through a role or a badge, admins left out (`liveHoldersOf`, server/index.ts). */
@@ -179,6 +181,9 @@ export function register(app: Express, deps: Deps): void {
       // ids is paid once, and its sorted list is a stable key.
       dedupeKey: single ? `cash:${single.id}:paid` : `cash:transfer:${createHash("sha256").update(ids.join("|")).digest("hex").slice(0, 32)}`,
     });
+    // A moon invoice whose every row is now paid reads Paid, and its member reads "Your pay is sent".
+    const transferDate = typeof req.body?.transferDate === "string" ? req.body.transferDate.trim() : null;
+    await settlePaidInvoices(getPool(), ids, transferDate, { notify }).catch((e) => console.warn("[moon-review] settling paid invoices:", e instanceof Error ? e.message : e));
     res.json({ success: true, paid: out.entries.length, entries: out.entries });
   });
 
@@ -211,6 +216,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: actor.id,
       dedupeKey: `cash:${id}:paid`,
     });
+    await settlePaidInvoices(getPool(), [id], null, { notify }).catch((e) => console.warn("[moon-review] settling paid invoices:", e instanceof Error ? e.message : e));
     res.json({ success: true, entry: out.entry });
   });
 }
