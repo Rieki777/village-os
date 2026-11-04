@@ -177,6 +177,7 @@ import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
 import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
 import { agentAccountIds, isAgentAccount } from "./repos/agentAccounts";
 import { seraDigest } from "./lib/seraAgent";
+import { readConfigDocument, writeConfigDocument } from "./repos/appConfigDocs";
 import { villageDayKey } from "../shared/companionItems";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
@@ -1765,10 +1766,15 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
  *   founder — master admin: implies admin, manages admins, cannot be demoted
  *             by non-founders, and the last founder cannot be demoted at all.
  */
+/** Whether this member row is an admin: the role, or a live admin group (sheet 19, server/lib/groupAdmin.ts). */
+function userIsAdmin(user: any): boolean {
+  return !!user && (user.role === "admin" || user.role === "founder" || adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0);
+}
+
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!user || (user.role !== "admin" && user.role !== "founder" && !adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length)) return false; // sheet 19: or a live admin group, server/lib/groupAdmin.ts
+  if (!userIsAdmin(user)) return false;
   (req as any).adminUser = user;
   return true;
 }
@@ -4903,16 +4909,23 @@ async function startServer() {
     return `${r.users} member(s), ${r.rows} notification(s)`;
   });
   registerJob("retention-sweep", 24 * 60 * 60 * 1000, async () => runRetentionSweep());
-  // Sera's agent, B7: once a day the people who hold admin hear what it did, each with an Undo on the bridge panel.
-  // The members it acted on are never told by this; agent accounts are not sent it.
+  // Sera's agent, B7: once a day the people who approve moons (live holders of moon.approve or
+  // moon.approve_alone, counted the way the gate counts) hear what it did since the last summary,
+  // each with an Undo on the bridge panel. The members it acted on are never told by this, and an
+  // agent account is never sent it, even one that somehow holds the key.
   registerJob("sera-agent-digest", 24 * 60 * 60 * 1000, async () => {
-    const digest = await seraDigest(getPool());
+    const now = new Date();
+    const mark = await readConfigDocument<{ lastUntil?: string }>(getPool(), "sera-agent-digest");
+    const since = mark?.lastUntil && !Number.isNaN(Date.parse(mark.lastUntil)) ? new Date(mark.lastUntil) : null;
+    const digest = await seraDigest(getPool(), now, since);
+    await writeConfigDocument(getPool(), "sera-agent-digest", { lastUntil: now.toISOString() });
     if (!digest) return "nothing to report";
-    const day = new Date().toISOString().slice(0, 10);
+    const day = now.toISOString().slice(0, 10);
     const agents = new Set(await agentAccountIds(getPool()));
-    const people = (await accountsWithAdminReach()).filter((u: any) => !agents.has(String(u.id)));
-    for (const u of people) {
-      await notify({ userId: String(u.id), type: "sera_agent_digest", title: digest.title, body: digest.body, link: "/admin", dedupeKey: `sera-agent-digest:${day}:${u.id}` });
+    const approvers = new Set([...(await liveHoldersOf("moon.approve")), ...(await liveHoldersOf("moon.approve_alone"))]);
+    const people = Array.from(approvers).filter((id) => !agents.has(id));
+    for (const id of people) {
+      await notify({ userId: id, type: "sera_agent_digest", title: digest.title, body: digest.body, link: "/admin", dedupeKey: `sera-agent-digest:${day}:${id}` });
     }
     return `${digest.count} actions, told ${people.length}`;
   });
@@ -6723,12 +6736,18 @@ async function startServer() {
     });
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
-    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone) });
+    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin });
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
     registerAgentOAuthRoutes(app, {
       authedUser, getPool, overLimit, clientIp,
       origin: (req) => (process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, ""),
       memberById: (id) => members.byId(id),
+      // The same two rules the Your agent panel's mint applies (cleanScopes): admin to an admin, Sera's scope to an agent account that is not one.
+      extraScopes: async (u) => {
+        const admin = userIsAdmin(u);
+        if (admin) return ["admin"];
+        return (await isAgentAccount(getPool(), String(u?.id ?? ""))) ? ["sera.undoable"] : [];
+      },
     });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.

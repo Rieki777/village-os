@@ -34,17 +34,18 @@
 import type { Pool } from "mysql2/promise";
 import { randomBytes } from "node:crypto";
 import { parseTaskInput } from "../../shared/memberTasks";
+import { SERA_OWNER_ID } from "../../shared/seraPersonLinks";
+import { ITEM_AIMS } from "../../shared/sessions";
 import { recordEvent } from "./events";
 import { echoHash } from "./agentTokens";
 import { agentActionById, listAgentActions, markAgentActionUndone, recordAgentAction } from "../repos/agentAccounts";
 import {
   boardAccessRow, circleExists, deleteSeraLink, deleteSuggestedMoonItem, deleteUntouchedLibraryDraft, deleteUntouchedSuggestion,
-  insertSeraLink, memberHasSeraLink, restoreBoardAccess, seraLinkOfOwner,
+  insertSeraLink, laterStandingAction, memberHasSeraLink, restoreBoardAccess, seraLinkCount, seraLinkOfOwner, seraTarget,
 } from "../repos/seraAgentActions";
 import { insertItemRow, insertSource } from "../repos/sessionLibrary";
 import { insertItem, itemCount, recapFor } from "../repos/moonRecaps";
 import { insertTask, listIsOn, setListOn } from "../repos/memberTasks";
-import { memberExists } from "../repos/memberTaskImport";
 
 export const SERA_SCOPE = "sera.undoable";
 export const SERA_TOOLS = ["link_sera_person", "suggest_task", "set_board_access", "draft_agenda_item", "suggest_moon_item"] as const;
@@ -63,7 +64,25 @@ export interface SeraDeps {
   listDefault: boolean;
   /** Today in the village, YYYY-MM-DD. */
   today: string;
+  /**
+   * Whether a module is open to members here (`members` or `public`). A tool
+   * whose module is off, or only in preview, writes nothing. Absent means
+   * every module is open, which only a unit test passes.
+   */
+  moduleOpen?: (id: string) => boolean;
 }
+
+/** The module each tool writes into. The board has no module of its own. */
+const TOOL_MODULE: Record<SeraTool, string | null> = {
+  link_sera_person: "saberra",
+  suggest_task: null,
+  set_board_access: null,
+  draft_agenda_item: "sessions",
+  suggest_moon_item: "moon-review",
+};
+
+/** The longest words each tool takes. Longer is refused, never cut. */
+export const SERA_LIMITS = { title: 120, note: 600, aim: 40, moonText: 500 } as const;
 
 export type SeraOutcome = { ok: true; result: Record<string, unknown> } | { ok: false; error: string };
 
@@ -72,7 +91,7 @@ type Undo =
   | { kind: "suggest"; userId: string; taskId: string; batch: string }
   | { kind: "board"; userId: string; wrote: { on: boolean; setBy: string }; before: { on: boolean; setBy: string | null } | null }
   | { kind: "agenda"; libraryId: number }
-  | { kind: "moon"; itemId: string; recapId: string };
+  | { kind: "moon"; itemId: string; recapId: string; text?: string };
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
@@ -101,15 +120,21 @@ async function record(pool: Pool, actor: SeraActor, tool: string, subjectUserId:
 
 /** Run one Sera tool. Never notifies anyone. */
 export async function runSeraTool(pool: Pool, actor: SeraActor, tool: SeraTool, args: Record<string, unknown>, deps: SeraDeps): Promise<SeraOutcome> {
+  if (!(SERA_TOOLS as readonly string[]).includes(tool)) return { ok: false, error: "There is no such Sera tool." };
+  const mod = TOOL_MODULE[tool];
+  if (mod && deps.moduleOpen && !deps.moduleOpen(mod)) return { ok: false, error: "That part of the village is not open to members here, so Sera's agent writes nothing there." };
   if (tool === "draft_agenda_item") return draftAgendaItem(pool, actor, args);
   const userId = str(args.userId, 64);
   if (!userId) return { ok: false, error: "Name the member: userId." };
   if (userId === actor.userId) return { ok: false, error: "Sera's agent never acts on its own account." };
-  if (!(await memberExists(pool, userId))) return { ok: false, error: "There is no member with that id." };
+  const target = await seraTarget(pool, userId);
+  if (!target || !target.stands) return { ok: false, error: "There is no member with that id." };
+  if (target.isAgent) return { ok: false, error: "That account is an agent. Sera's agent acts only for people." };
 
   if (tool === "link_sera_person") {
-    const seraOwnerId = str(args.seraOwnerId, 128);
+    const seraOwnerId = typeof args.seraOwnerId === "string" ? args.seraOwnerId.trim() : "";
     if (!seraOwnerId) return { ok: false, error: "Name the Sera owner: seraOwnerId." };
+    if (!SERA_OWNER_ID.test(seraOwnerId)) return { ok: false, error: "That does not look like a Sera owner id." };
     const existing = await seraLinkOfOwner(pool, seraOwnerId);
     if (existing) {
       await record(pool, actor, tool, userId, { seraOwnerId, userId }, null, "refused");
@@ -120,12 +145,19 @@ export async function runSeraTool(pool: Pool, actor: SeraActor, tool: SeraTool, 
       return { ok: false, error: "That member is already linked to a Sera owner. A steward decides that one." };
     }
     if (!(await insertSeraLink(pool, seraOwnerId, userId))) return { ok: false, error: "Another link landed first. Nothing was written." };
+    // Two owners can race onto one member: the owner is the unique key, the member is not. Whoever sees two takes theirs back.
+    if ((await seraLinkCount(pool, userId)) > 1) {
+      await deleteSeraLink(pool, seraOwnerId, userId);
+      await record(pool, actor, tool, userId, { seraOwnerId, userId }, null, "refused");
+      return { ok: false, error: "That member is already linked to a Sera owner. A steward decides that one." };
+    }
     const actionId = await record(pool, actor, tool, userId, { seraOwnerId, userId }, { kind: "link", seraOwnerId, userId });
     return { ok: true, result: { written: true, actionId, seraOwnerId, userId } };
   }
 
   if (tool === "suggest_task") {
     if (!(await listIsOn(pool, userId, deps.listDefault))) return { ok: false, error: "That member's task board is off." };
+    if (typeof args.title === "string" && args.title.trim().length > SERA_LIMITS.title) return { ok: false, error: `Keep the title to ${SERA_LIMITS.title} characters.` };
     const parsed = parseTaskInput({ title: args.title, tier: args.tier ?? "not_yet", horizon: args.horizon ?? null, dueOn: args.dueOn ?? null, minutes: args.minutes ?? null });
     if (!parsed.ok) return { ok: false, error: parsed.problem };
     const batch = `sera-agent:${randomBytes(8).toString("hex")}`;
@@ -138,6 +170,14 @@ export async function runSeraTool(pool: Pool, actor: SeraActor, tool: SeraTool, 
   if (tool === "set_board_access") {
     if (typeof args.on !== "boolean") return { ok: false, error: "Say on: true or on: false." };
     const before = await boardAccessRow(pool, userId);
+    // A board a person switched stays theirs: the member, or a steward for them. Sera's agent only moves a board it or nobody set.
+    if (before?.setBy && before.setBy !== actor.userId) {
+      const setter = await seraTarget(pool, before.setBy);
+      if (setter && !setter.isAgent) {
+        await record(pool, actor, tool, userId, { userId, on: args.on }, null, "refused");
+        return { ok: false, error: "A person switched that board. A person switches it again." };
+      }
+    }
     await setListOn(pool, userId, args.on, actor.userId);
     const actionId = await record(pool, actor, tool, userId, { userId, on: args.on }, { kind: "board", userId, wrote: { on: args.on, setBy: actor.userId }, before });
     return { ok: true, result: { written: true, actionId, userId, on: args.on } };
@@ -145,7 +185,8 @@ export async function runSeraTool(pool: Pool, actor: SeraActor, tool: SeraTool, 
 
   if (tool === "suggest_moon_item") {
     const cycleId = str(args.cycleId, 32);
-    const text = str(args.text, 500).replace(/[\u0000-\u001f\u007f]/g, " ");
+    if (typeof args.text === "string" && args.text.trim().length > SERA_LIMITS.moonText) return { ok: false, error: `Keep the item to ${SERA_LIMITS.moonText} characters.` };
+    const text = str(args.text, SERA_LIMITS.moonText).replace(/[\u0000-\u001f\u007f]/g, " ");
     if (!cycleId) return { ok: false, error: "Name the moon: cycleId." };
     if (!text) return { ok: false, error: "Say what the item is: text." };
     const recap = await recapFor(pool, userId, cycleId);
@@ -169,7 +210,7 @@ export async function runSeraTool(pool: Pool, actor: SeraActor, tool: SeraTool, 
       position: await itemCount(pool, recap.id),
     });
     if (!wrote) return { ok: false, error: "That recap already holds this item." };
-    const actionId = await record(pool, actor, tool, userId, { userId, cycleId, text }, { kind: "moon", itemId, recapId: recap.id });
+    const actionId = await record(pool, actor, tool, userId, { userId, cycleId, text }, { kind: "moon", itemId, recapId: recap.id, text });
     return { ok: true, result: { written: true, actionId, itemId } };
   }
 
@@ -177,12 +218,16 @@ export async function runSeraTool(pool: Pool, actor: SeraActor, tool: SeraTool, 
 }
 
 async function draftAgendaItem(pool: Pool, actor: SeraActor, args: Record<string, unknown>): Promise<SeraOutcome> {
-  const title = str(args.title, 200).replace(/[\u0000-\u001f\u007f]/g, " ");
+  for (const [k, max] of [["title", SERA_LIMITS.title], ["note", SERA_LIMITS.note]] as const) {
+    if (typeof args[k] === "string" && (args[k] as string).trim().length > max) return { ok: false, error: `Keep the ${k} to ${max} characters.` };
+  }
+  const title = str(args.title, SERA_LIMITS.title).replace(/[\u0000-\u001f\u007f]/g, " ");
   if (!title) return { ok: false, error: "Give the draft a title." };
   const circleId = str(args.circleId, 64) || null;
   if (circleId && !(await circleExists(pool, circleId))) return { ok: false, error: "There is no circle with that id." };
-  const aim = str(args.aim, 500) || null;
-  const note = str(args.note, 2000) || null;
+  const aim = str(args.aim, SERA_LIMITS.aim) || null;
+  if (aim && !(ITEM_AIMS as readonly string[]).includes(aim)) return { ok: false, error: `aim is one of ${ITEM_AIMS.join(", ")}.` };
+  const note = str(args.note, SERA_LIMITS.note) || null;
   const now = new Date();
   // Brought by no member number: a person brings it to the room. The source row says Sera's agent drafted it.
   const libraryId = await insertItemRow(pool, { circleId, title, aim, note, broughtByNo: 0, now });
@@ -206,6 +251,9 @@ export async function undoSeraAction(pool: Pool, actionId: string, byUserId: str
     return { ok: false, status: 410, error: `Sera's actions can be undone for ${UNDO_DAYS} days, and this one is older.` };
   }
   const u = a.undo as Undo;
+  if (await laterStandingAction(pool, a)) {
+    return { ok: false, status: 409, error: "Sera's agent did the same thing to this member again later. Undo that later action first." };
+  }
   let put = false;
   let touched = "";
   if (u.kind === "link") {
@@ -215,14 +263,20 @@ export async function undoSeraAction(pool: Pool, actionId: string, byUserId: str
     put = await deleteUntouchedSuggestion(pool, u.userId, u.taskId, u.batch);
     touched = "The member has kept, edited or closed that suggestion, so it is theirs now.";
   } else if (u.kind === "board") {
-    put = await restoreBoardAccess(pool, u.userId, u.wrote, u.before);
+    // Put the earlier switch back under the name of whoever set it, while they stand; otherwise under whoever undoes it.
+    let before = u.before;
+    if (before?.setBy) {
+      const setter = await seraTarget(pool, before.setBy);
+      if (!setter || !setter.stands) before = { on: before.on, setBy: byUserId };
+    }
+    put = await restoreBoardAccess(pool, u.userId, u.wrote, before);
     touched = "Someone has switched that board since.";
   } else if (u.kind === "agenda") {
     put = await deleteUntouchedLibraryDraft(pool, u.libraryId);
     touched = "A person has edited that draft or brought it to a room, so it stays.";
   } else if (u.kind === "moon") {
-    put = await deleteSuggestedMoonItem(pool, u.itemId, u.recapId);
-    touched = "The member has kept or dropped that item, or sent the recap, so it stays.";
+    put = await deleteSuggestedMoonItem(pool, u.itemId, u.recapId, u.text ?? null);
+    touched = "The member has kept, dropped or reworded that item, or sent the recap, so it stays.";
   }
   if (!put) return { ok: false, status: 409, error: touched || "That action cannot be put back." };
   await markAgentActionUndone(pool, actionId, byUserId);
@@ -259,17 +313,25 @@ export const SERA_TOOL_WORDS: Record<SeraTool | "undo_sera_action", string> = {
   undo_sera_action: "undid an action",
 };
 
-/** The last day's Sera actions as a short summary, or null when there were none. */
-export async function seraDigest(pool: Pool, now = new Date()): Promise<{ count: number; title: string; body: string } | null> {
-  const since = now.getTime() - 24 * 60 * 60 * 1000;
-  const recent = (await listAgentActions(pool, { scope: SERA_SCOPE, limit: 500 })).filter((a) => new Date(a.createdAt).getTime() > since && a.state !== "refused");
+/**
+ * Sera's actions since `since` (the last digest; a day back when there was
+ * none) as a short summary, or null when there were none. Refusals and undos
+ * are left out: the digest says what the agent changed.
+ */
+export async function seraDigest(pool: Pool, now = new Date(), since: Date | null = null): Promise<{ count: number; title: string; body: string } | null> {
+  const from = (since ?? new Date(now.getTime() - 24 * 60 * 60 * 1000)).getTime();
+  const to = now.getTime();
+  const recent = (await listAgentActions(pool, { scope: SERA_SCOPE, limit: 500 })).filter((a) => {
+    const t = new Date(a.createdAt).getTime();
+    return t > from && t <= to && a.state === "done" && a.tool !== "undo_sera_action";
+  });
   if (recent.length === 0) return null;
   const counts = new Map<string, number>();
   for (const a of recent) counts.set(a.tool, (counts.get(a.tool) ?? 0) + 1);
   const parts = Array.from(counts.entries()).map(([tool, n]) => `${n} ${SERA_TOOL_WORDS[tool as SeraTool] ?? tool}`);
   return {
     count: recent.length,
-    title: `Sera's agent took ${recent.length} action${recent.length === 1 ? "" : "s"} today`,
-    body: `${parts.join("; ")}. Each one can be undone from the Sera bridge panel for 30 days.`,
+    title: `Sera's agent took ${recent.length} action${recent.length === 1 ? "" : "s"} since the last summary`,
+    body: `${parts.join("; ")}. For 30 days an admin can undo each one from the Sera bridge panel; ask one if something looks wrong.`,
   };
 }

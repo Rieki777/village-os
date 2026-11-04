@@ -14,7 +14,7 @@
 /** The library's owner ids are UUID-like; anything with spaces, slashes or quotes is a paste gone wrong. */
 export const SERA_OWNER_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,127}$/;
 
-export const LINK_HOWS = ["steward", "email"] as const;
+export const LINK_HOWS = ["steward", "email", "sera"] as const;
 export type LinkHow = (typeof LINK_HOWS)[number];
 
 export interface MemberLinkRow {
@@ -51,6 +51,7 @@ export function seraOwnerIdProblem(raw: unknown): string | null {
 export const LINK_HOW_WORDS: Record<LinkHow, string> = {
   steward: "Linked by a steward",
   email: "Linked by email",
+  sera: "Linked by Sera's agent",
 };
 
 export const LINK_WORDS = {

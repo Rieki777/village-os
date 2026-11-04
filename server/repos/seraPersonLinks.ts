@@ -36,7 +36,7 @@ export async function memberLinks(db: Queryable): Promise<MemberLinkRow[]> {
       userId,
       name: String(r.name ?? ""),
       ownerTail: owner ? ownerTail(owner) : null,
-      how: owner ? ((r.how === "email" ? "email" : "steward") as LinkHow) : null,
+      how: owner ? ((r.how === "email" || r.how === "sera" ? r.how : "steward") as LinkHow) : null,
       linkedAt: owner ? iso(r.linked_at) : null,
       lastSyncedAt: owner ? iso(r.synced_at) : null,
     });

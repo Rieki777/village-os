@@ -175,20 +175,8 @@ export async function mintToken(pool: Pool, userId: string, input: MintInput, se
   if (!input.scopes.length) return { ok: false, status: 400, error: "Pick at least one scope" };
   const ttl = Math.min(MAX_TTL_DAYS, Math.max(1, Math.floor(Number(input.ttlDays ?? DEFAULT_TTL_DAYS)) || DEFAULT_TTL_DAYS));
 
-  const [[day]] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)",
-    [userId],
-  );
-  if (Number(day?.n ?? 0) >= MINTS_PER_DAY) {
-    return { ok: false, status: 429, error: `You can mint ${MINTS_PER_DAY} tokens a day. Revoke one you no longer use, or come back tomorrow` };
-  }
-  const [[live]] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()",
-    [userId],
-  );
-  if (Number(live?.n ?? 0) >= LIVE_PER_USER) {
-    return { ok: false, status: 429, error: `You already hold ${LIVE_PER_USER} live tokens. Revoke one first` };
-  }
+  const cap = await mintCapProblem(pool, userId);
+  if (cap) return { ok: false, status: 429, error: cap };
 
   const token = TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const id = `atk-${randomBytes(8).toString("hex")}`;
@@ -214,6 +202,36 @@ export async function mintToken(pool: Pool, userId: string, input: MintInput, se
     audience: "admin",
   });
   return { ok: true, token, row };
+}
+
+/**
+ * Why a mint would be refused by the day's cap or the live cap, or null. The
+ * OAuth consent asks this before it hands out a code, so a member is told at
+ * Allow and not left with a connector that fails at the exchange.
+ */
+export async function mintCapProblem(pool: Pool, userId: string): Promise<string | null> {
+  const [[day]] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)",
+    [userId],
+  );
+  if (Number(day?.n ?? 0) >= MINTS_PER_DAY) return `You can mint ${MINTS_PER_DAY} tokens a day. Revoke one you no longer use, or come back tomorrow`;
+  const [[live]] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()",
+    [userId],
+  );
+  if (Number(live?.n ?? 0) >= LIVE_PER_USER) return `You already hold ${LIVE_PER_USER} live tokens. Revoke one first`;
+  return null;
+}
+
+/** Revoke a member's live tokens with exactly this name. A connector signing in again replaces its own token. */
+export async function revokeTokensNamed(pool: Pool, userId: string, name: string): Promise<number> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id FROM agent_tokens WHERE user_id = ? AND name = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()",
+    [userId, name],
+  );
+  let n = 0;
+  for (const r of rows) if (await revokeToken(pool, userId, String(r.id))) n++;
+  return n;
 }
 
 export async function tokenById(pool: Pool, id: string): Promise<AgentTokenRow | null> {
@@ -569,7 +587,7 @@ export function mintConfirmToken(secret: string, claims: ConfirmClaims, now = Da
 
 export type ConfirmCheck =
   | { ok: true }
-  | { ok: false; reason: "missing" | "malformed" | "bad_signature" | "expired" | "wrong_action" | "wrong_holder" | "echo_mismatch" };
+  | { ok: false; reason: "missing" | "malformed" | "bad_signature" | "expired" | "wrong_action" | "wrong_holder" | "echo_mismatch" | "spent" };
 
 /**
  * Every reason is distinct so the agent can say which step it got wrong, and
@@ -606,4 +624,32 @@ export const CONFIRM_REASON_SENTENCE: Record<Exclude<ConfirmCheck, { ok: true }>
   wrong_action: "That confirmToken was issued for a different action. Nothing was written",
   wrong_holder: "That confirmToken belongs to a different member. Nothing was written",
   echo_mismatch: "The echo you sent back does not match what you were shown. Nothing was written",
+  spent: "That confirmToken was already used. Call again without it to get a fresh one. Nothing was written",
 };
+
+/**
+ * A confirm token works once. The signature alone would let the same token
+ * write twice inside its ten minutes, so a caller that writes spends it here
+ * first. The book lives in this process: a village runs one server, and a
+ * restart forgets nothing that matters, because every token it held expires
+ * within CONFIRM_TTL_MS anyway.
+ */
+export function createConfirmSpendBook(now: () => number = Date.now) {
+  const spent = new Map<string, number>();
+  return {
+    /** True the first time this token is spent, false every time after. Call only after the token verified. */
+    spend(token: string): boolean {
+      const t = now();
+      spent.forEach((exp, k) => { if (exp <= t) spent.delete(k); });
+      if (spent.has(token)) return false;
+      let exp = t + CONFIRM_TTL_MS;
+      try {
+        const decoded = JSON.parse(Buffer.from(token.slice(0, token.lastIndexOf(".")), "base64url").toString("utf8"));
+        if (typeof decoded?.exp === "number") exp = decoded.exp;
+      } catch { /* a verified token always decodes; the fallback keeps the book bounded anyway */ }
+      spent.set(token, exp);
+      return true;
+    },
+    size: () => spent.size,
+  };
+}

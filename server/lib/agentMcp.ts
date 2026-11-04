@@ -25,9 +25,18 @@
  * route, and a confirm token bound to that echo, the holder and the tool
  * (`mintConfirmToken`). Called again with the same arguments and the token,
  * it reads the state again, rebuilds the echo, and writes only when the token
- * binds THAT echo. The echo carries the row's version, so a token is spent by
- * its own write: after it, the version moves, the echo changes and a replay
- * is refused.
+ * binds THAT echo. A token works once: the HTTP wiring spends it the moment
+ * it verifies (`createConfirmSpendBook` in ./agentTokens), so the same token
+ * sent again is refused even where the echo would still match, as it would
+ * for an admin path or a moon write that leaves nothing versioned behind.
+ *
+ * ── SERA'S TOOLS WRITE AT ONCE, AND ARE UNDONE INSTEAD ───────────────────
+ * The `sera.undoable` tools are the one exception to the two calls, and they
+ * say so (`writesAtOnce`). Sera's agent acts for no single member who could
+ * say yes, so each write lands at once, is recorded with what puts it back,
+ * and can be undone for 30 days by the agent or a steward while nobody has
+ * touched it (server/lib/seraAgent.ts). Check 31 covers the member's own
+ * write tools; these are held instead by their undo.
  *
  * ── WHAT NO TOOL EVER DOES ───────────────────────────────────────────────
  * Send a recap or an invoice, take one back, issue, approve, return, mark
@@ -46,7 +55,8 @@ import { MOON_ROUTES, PACK_FORBIDDEN_KEY } from "../../shared/moonRecap";
 import { echoHash, type AgentScope } from "./agentTokens";
 
 /** The protocol revisions this server speaks, newest first. */
-export const MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
+// 2025-03-26 is not offered: it predates the resource metadata a 401 points at, which is how a connector finds the sign-in.
+export const MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
 
 /** The JSON-RPC error codes this server answers with. */
 export const RPC = {
@@ -60,7 +70,7 @@ export const RPC = {
 // ── Redaction ────────────────────────────────────────────────────────────────
 
 /** Keys a connector result never carries, beside the moon pack's own list. */
-export const CONNECTOR_REDACTED_KEY = /route|legal_?name|address/i;
+export const CONNECTOR_REDACTED_KEY = /route|legal_?name|address|private_?detail/i;
 
 /** True when a key is one no connector result may carry. */
 export function isRedactedKey(key: string): boolean {
@@ -128,6 +138,10 @@ export interface ToolDef {
   routes: readonly string[];
   /** For a tool that reads or writes by its arguments: whether THIS call writes. */
   writes?: (args: Record<string, unknown>) => boolean;
+  /** A write that can change or remove what is there, for the client's own warning. */
+  destructive?: boolean;
+  /** A write that lands on the first call, held by its undo instead of a confirmToken (Sera's tools only). */
+  writesAtOnce?: boolean;
   run: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolOutcome>;
 }
 
@@ -501,6 +515,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     },
     // The routes this tool may reach are the village's list, not this table. "Always a person" is in shared/agentAdmin.ts.
     routes: [],
+    destructive: true,
     writes: (args) => String(args.method ?? "").toUpperCase() !== "GET",
     async run(args, ctx) {
       if (!ctx.adminPaths || !ctx.recordAction) return { ok: false, error: "The admin tool is not open on this server." };
@@ -563,6 +578,8 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     description: d.description,
     inputSchema: d.inputSchema,
     routes: [],
+    writesAtOnce: true,
+    destructive: d.name === "set_board_access",
     async run(args, ctx) {
       if (!ctx.sera) return { ok: false, error: "Sera's tools are not open on this server." };
       const out = await ctx.sera.run(d.name, args);
@@ -573,6 +590,8 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     name: "undo_sera_action",
     scope: "sera.undoable",
     kind: "write",
+    writesAtOnce: true,
+    destructive: true,
     title: "Undo one of Sera's actions",
     description: "Puts back one action this agent took, within 30 days, while nobody has touched what it wrote since. Answers why when it cannot.",
     inputSchema: { type: "object", properties: { actionId: { type: "string" } }, required: ["actionId"], additionalProperties: false },
@@ -582,7 +601,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       const id = typeof args.actionId === "string" ? args.actionId.slice(0, 64) : "";
       if (!id) return { ok: false, error: "Name the action: actionId." };
       const out = await ctx.sera.undo(id);
-      return out.ok ? { ok: true, result: { undone: true, actionId: id } } : { ok: false, error: out.error };
+      return out.ok ? { ok: true, result: { written: true, undone: true, actionId: id } } : { ok: false, error: out.error };
     },
   },
 ];
@@ -672,7 +691,7 @@ export async function handleMcpMessage(message: unknown, call: McpCall): Promise
             title: t.title,
             description: t.description,
             inputSchema: t.inputSchema,
-            annotations: { readOnlyHint: t.kind === "read", destructiveHint: false, idempotentHint: t.kind === "read", openWorldHint: false },
+            annotations: { readOnlyHint: t.kind === "read", destructiveHint: t.kind === "write" && !!t.destructive, idempotentHint: t.kind === "read", openWorldHint: false },
           })),
         },
       };

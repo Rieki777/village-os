@@ -5,7 +5,7 @@ version: 1.0.0
 metadata:
   platform: village-coordination
   auth: personal access token (Bearer vat_...) minted by the member in their profile under Your agent
-  scopes: moon.read, tasks.write
+  scopes: moon.read, tasks.write, moon.write, moon.review (admin and sera.undoable only on the accounts allowed them)
   mcp: /api/agent/v1/mcp
   openapi: /api/agent/v1/openapi.json
 ---
@@ -51,13 +51,17 @@ Every write here, the moon tools included, takes the two calls below. A moon too
 1. Call `mark_my_task` with `taskId` and `action` (`done`, `remove` or `undo`; for `remove`, a `reason` and an optional `note`). Nothing is written. The answer carries `echo` (the task, its title, its status now, the action) and a `confirmToken`.
 2. Show the member the echo in plain words and ask. After their yes, call `mark_my_task` again with the same arguments and `confirmToken`.
 
-The second call reads the task again. If it moved in between (pressed on the web, closed by the Sera sync), the token no longer matches and nothing is written: call again without the token and show the member the task as it is now. A token works once and for ten minutes.
+The second call reads the task again. If it moved in between (pressed on the web, closed by the Sera sync), the token no longer matches and nothing is written: call again without the token and show the member the task as it is now. A token works once and for ten minutes: send the same one again and it is refused, even when nothing moved.
 
 Done tells Sera exactly as a tap on the board does. Do not also close the task in Sera yourself.
 
 ## Admin paths: the same two calls
 
 `admin_request` takes `method`, `path` and, for a write, `body`. A GET answers at once. A write answers first with the echo and a `confirmToken`, and writes only when called again with the same arguments and the token. A write the village marked for a person answers `person_confirms`: tell a person what you would change, and they make it in the app. Every call is recorded with the token, the method, the path and what happened.
+
+## Sera's tools write at once
+
+The `sera.undoable` tools (only on Sera's own agent account) are the one exception to the two calls. Each writes on the first call, is recorded with what puts it back, and can be undone with `undo_sera_action` for 30 days while nobody has touched it since.
 
 ## When something is refused
 

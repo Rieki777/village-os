@@ -10,9 +10,10 @@ import { useCallback, useEffect, useState } from "react";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { BTN_QUIET, HINT } from "@/components/sessions/roomUi";
 
-interface Action { id: string; tool: string; subjectUserId: string | null; state: string; createdAt: string; undoneAt: string | null }
+type SeraTool = "link_sera_person" | "suggest_task" | "set_board_access" | "draft_agenda_item" | "suggest_moon_item" | "undo_sera_action";
+interface Action { id: string; tool: SeraTool; subjectUserId: string | null; subjectName?: string | null; state: string; createdAt: string; undoneAt: string | null }
 
-const TOOL_WORDS: Record<string, string> = {
+const TOOL_WORDS: Record<SeraTool, string> = {
   link_sera_person: "Linked a member to their Sera person",
   suggest_task: "Suggested a task",
   set_board_access: "Switched a task board",
@@ -62,7 +63,8 @@ export default function SeraActionsPanel({ password }: { password: string }) {
         {actions.map((a) => (
           <li key={a.id} className="flex flex-wrap items-center gap-2 text-sm text-foreground">
             <span className="min-w-0 flex-1">
-              {TOOL_WORDS[a.tool] ?? a.tool} <span className={HINT}>{a.createdAt.slice(0, 10)}{a.state === "undone" ? ", undone" : a.state === "refused" ? ", refused" : ""}</span>
+              {TOOL_WORDS[a.tool] ?? a.tool}
+              {a.subjectName ? <span>, for {a.subjectName}</span> : null} <span className={HINT}>{a.createdAt.slice(0, 10)}{a.state === "undone" ? ", undone" : a.state === "refused" ? ", refused" : ""}</span>
             </span>
             {a.state === "done" && a.tool !== "undo_sera_action" && (
               <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void undo(a.id)}>Undo</button>

@@ -21,7 +21,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { revokeAllTokens } from "../lib/agentTokens";
-import { agentAccountIds, isAgentAccount, listAgentActions, liveRoleCount, setAgentAccount } from "../repos/agentAccounts";
+import { agentAccountIds, isAgentAccount, listAgentActions, liveRoleCount, setAgentAccount, namesOf } from "../repos/agentAccounts";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
 import { undoSeraAction } from "../lib/seraAgent";
 import { AGENT_ADMIN_PATHS_DOC, ALWAYS_A_PERSON, DEFAULT_AGENT_ADMIN_PATHS, effectiveAgentAdminPaths, parseAgentAdminPaths } from "../../shared/agentAdmin";
@@ -109,7 +109,10 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/admin/agent-actions", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const scope = typeof req.query.scope === "string" ? req.query.scope.slice(0, 32) : undefined;
-    res.json({ actions: await listAgentActions(getPool(), { scope, limit: Number(req.query.limit ?? 100) }) });
+    const actions = await listAgentActions(getPool(), { scope, limit: Number(req.query.limit ?? 100) });
+    // Which member each action touched, by name, so a steward sees whom an Undo is for.
+    const names = await namesOf(getPool(), actions.map((a) => a.subjectUserId ?? ""));
+    res.json({ actions: actions.map((a) => ({ ...a, subjectName: a.subjectUserId ? names[a.subjectUserId] ?? null : null })) });
   });
 
   app.post("/api/admin/agent-actions/:id/undo", async (req, res) => {

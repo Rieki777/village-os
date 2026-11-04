@@ -27,8 +27,19 @@ export const REGISTER_PATH = "/api/agent/v1/oauth/register";
 export const TOKEN_PATH = "/api/agent/v1/oauth/token";
 export const AUTHORIZE_PAGE = "/oauth/authorize";
 
-/** The scopes a connector may ask a member for. Admin and Sera stay with the panel and their own accounts' rules. */
-export const OAUTH_SCOPES: readonly AgentScope[] = ["moon.read", "moon.write", "tasks.write", "moon.review", "calendar.read", "directory.read", "me.read"];
+/**
+ * The scopes a connector may ask any member for: the ones that open a
+ * connector tool (server/lib/agentMcp.ts), and no others, since a scope that
+ * opens nothing here only widens what the token could reach elsewhere.
+ */
+export const OAUTH_SCOPES: readonly AgentScope[] = ["moon.read", "moon.write", "tasks.write", "moon.review"];
+/**
+ * Offered only to the members whose own rules allow them, the same rules the
+ * Your agent panel applies (`cleanScopes`): `admin` to an admin, unticked;
+ * `sera.undoable` to an agent account that is not an admin. Read again at the
+ * exchange, so a flag that changed in between closes the scope.
+ */
+export const OAUTH_EXTRA_SCOPES: readonly AgentScope[] = ["admin", "sera.undoable"];
 /** Ticked on the consent page unless the member unticks them. Writes are opt-in. */
 export const OAUTH_DEFAULT_SCOPES: readonly AgentScope[] = ["moon.read"];
 
@@ -36,7 +47,7 @@ export function protectedResourceMetadata(origin: string) {
   return {
     resource: `${origin}${MCP_RESOURCE_PATH}`,
     authorization_servers: [origin],
-    scopes_supported: [...OAUTH_SCOPES],
+    scopes_supported: [...OAUTH_SCOPES, ...OAUTH_EXTRA_SCOPES],
     bearer_methods_supported: ["header"],
   };
 }
@@ -51,7 +62,7 @@ export function authorizationServerMetadata(origin: string) {
     grant_types_supported: ["authorization_code"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: [...OAUTH_SCOPES],
+    scopes_supported: [...OAUTH_SCOPES, ...OAUTH_EXTRA_SCOPES],
   };
 }
 
@@ -93,10 +104,8 @@ export function parseRegistration(body: unknown): Registration {
     const p = redirectUriProblem(u);
     if (p) return { ok: false, error: "invalid_redirect_uri", description: p };
   }
-  const method = b.token_endpoint_auth_method;
-  if (method !== undefined && method !== "none") {
-    return { ok: false, error: "invalid_client_metadata", description: "Only public clients register here: token_endpoint_auth_method is none." };
-  }
+  // A client asking for another auth method is registered as a public client all the same, and the answer says
+  // `none` (RFC 7591 lets the server replace a value). It is never given a secret, so PKCE is all it has.
   const grants = b.grant_types;
   if (grants !== undefined && (!Array.isArray(grants) || grants.some((g) => g !== "authorization_code" && g !== "refresh_token"))) {
     return { ok: false, error: "invalid_client_metadata", description: "The only grant here is authorization_code." };
@@ -130,16 +139,25 @@ export function pkceMatches(verifier: string, challenge: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** The scopes a member picked, kept to the connector's list. Empty means none chosen. */
-export function chosenScopes(raw: unknown): AgentScope[] {
+/** The scopes this member may be offered: the connector's list plus the extras their own rules allow. */
+export function offeredScopes(extras: readonly AgentScope[]): AgentScope[] {
+  return [...OAUTH_SCOPES, ...extras.filter((s) => (OAUTH_EXTRA_SCOPES as readonly string[]).includes(s) && !OAUTH_SCOPES.includes(s))];
+}
+
+/** The scopes a member picked, kept to what they may be offered. Empty means none chosen. */
+export function chosenScopes(raw: unknown, extras: readonly AgentScope[] = []): AgentScope[] {
+  const allowed = offeredScopes(extras) as readonly string[];
   const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/\s+/) : [];
   const out: AgentScope[] = [];
   for (const s of list) {
     const v = String(s);
-    if ((OAUTH_SCOPES as readonly string[]).includes(v) && (AGENT_SCOPES as readonly string[]).includes(v) && !out.includes(v as AgentScope)) out.push(v as AgentScope);
+    if (allowed.includes(v) && (AGENT_SCOPES as readonly string[]).includes(v) && !out.includes(v as AgentScope)) out.push(v as AgentScope);
   }
   return out;
 }
+
+/** The longest `state` a client may send. Longer is refused, never cut, so the client always gets back what it sent. */
+export const MAX_STATE = 2000;
 
 /** Where to send the member back: the registered URI with the code or the error, and the client's state. */
 export function redirectWith(redirectUri: string, params: Record<string, string | undefined>): string {
