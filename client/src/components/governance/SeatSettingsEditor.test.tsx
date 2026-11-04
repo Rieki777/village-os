@@ -91,6 +91,19 @@ describe("SeatSettingsEditor", () => {
     expect(within(groupBox("term")).queryByRole("alert")).toBeNull();
   });
 
+  it("gives Change and Edit a 44px target in the night ink, at least 13px", () => {
+    render(<Harness start={{ v: 1 }} seen={() => {}} />);
+    const change = within(groupBox("pay")).getByRole("button", { name: /^Change\s*Pay$/ });
+    const edit = within(groupBox("pay")).getByRole("button", { name: /^Edit\s*Pay$/ });
+    for (const button of [change, edit]) {
+      expect(button.className).toContain("min-h-11");
+      expect(button.className).toContain("text-[13px]");
+      expect(button.className).toContain("text-foreground");
+      expect(button.className).not.toContain("text-xs");
+      expect(button.className).not.toContain("text-muted-foreground");
+    }
+  });
+
   it("reads an empty group as something to fill with the operations role, and carries the money line only where money is recorded", () => {
     render(<Harness start={{ v: 1, pay: { kind: "fixed", per: "month" }, bonus: { kind: "none" } }} seen={() => {}} />);
     expect(within(groupBox("allowance")).getByText("We'll fill this together with the village's operations role.")).toBeInTheDocument();
