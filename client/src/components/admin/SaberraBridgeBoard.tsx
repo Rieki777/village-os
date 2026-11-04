@@ -103,6 +103,19 @@ export function BridgeView({ a, now, onFeed }: { a: BridgeAnswer; now: number; o
               ? "Privacy connection set: a steward can remove a member's tasks in Sera."
               : "Removing a member's tasks in Sera needs a full-scope connection (not set)."}
           </p>
+          {a.connection.tokens?.length ? (
+            <details className="mt-1">
+              <summary className="cursor-pointer">Which key each act uses</summary>
+              <ul className="mt-1 space-y-0.5">
+                {a.connection.tokens.map((t) => (
+                  <li key={t.act}>
+                    {t.act}: {t.uses === "sync" ? "the routine sync key" : t.uses === "privacy" ? "the privacy key" : "the connection key (no separate sync key)"}
+                    {t.set ? "" : ", not set"}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </QuestCard>
 
         <QuestCard title="Members' lists from Sera" state={a.lists.ready ? st(list, 3) : "building"} steps={a.lists.ready ? { done: list, of: 3 } : undefined}>

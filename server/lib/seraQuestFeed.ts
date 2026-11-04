@@ -16,7 +16,7 @@ import { instanceIdentity } from "./identity";
 import { effectiveLifecycle } from "./modules";
 import { proposeQuest } from "./questProposals";
 import { callToolJson, listTools, openSession } from "./saberraClient";
-import { preflight } from "./saberraSync";
+import { syncPreflight as preflight } from "./saberraTokens";
 import { questFeedSetting, seenSeraQuestIds, setQuestFeedSetting } from "../repos/seraQuestFeed";
 
 export const QUEST_FEED_MODULE = "saberra";
