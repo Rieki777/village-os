@@ -88,3 +88,14 @@ describe("a terms row", () => {
     }
   });
 });
+
+describe("withPartnerName", () => {
+  it("swaps only the fallback phrase for the chart's Ops role, deep in a card", async () => {
+    const { withPartnerName, openRowLine, loadHoursLine } = await import("./roleProposalHonesty");
+    const card = { a: { kind: "empty", words: openRowLine(null) }, list: [loadHoursLine(null), "Kept as written"] };
+    const out = withPartnerName(card, "Operations Steward");
+    expect(out.a.words).toBe("We'll fill this together with Operations Steward.");
+    expect(out.list).toEqual(["We'll fill the hours together with Operations Steward.", "Kept as written"]);
+    expect(withPartnerName(card, null)).toBe(card);
+  });
+});

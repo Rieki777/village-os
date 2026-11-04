@@ -32,7 +32,7 @@ import { PlayerRoleCardView } from "@/components/playerCard/PlayerRoleCard";
 import { BreathingLoader } from "@/components/natural";
 import { servedBody, servedRows, seasonalBody } from "@/components/seasonPlans/SeasonGoalsFields";
 import type { PlayerCardPayload } from "@shared/playerCardPayload";
-import { operationsRoleName, opsPartner } from "@shared/roleProposalHonesty";
+import { operationsRoleName, opsPartner, withPartnerName } from "@shared/roleProposalHonesty";
 import { stepDone, type StepDoneCopy } from "@shared/stepDone";
 import { civilDayWords } from "@shared/seasonPlans";
 import { parseSeatSettings, settingsWords, type SeatSettings } from "@shared/seatSettings";
@@ -101,7 +101,8 @@ function stepFromUrl(): StepKey {
 }
 
 /** The card in proposal mode, with the changed words in gold. */
-export function ProposalPreview({ proposal }: { proposal: ProposalOut }) {
+/** `partner` is the Ops role from the village chart, as the terms step reads it; null while it loads. */
+export function ProposalPreview({ proposal, partner }: { proposal: ProposalOut; partner?: string | null }) {
   const [card, setCard] = useState<PlayerCardPayload | null | "failed">(null);
   useEffect(() => {
     let alive = true;
@@ -112,9 +113,9 @@ export function ProposalPreview({ proposal }: { proposal: ProposalOut }) {
       alive = false;
     };
   }, [proposal.id, proposal.updatedAt]);
-  if (card === null) return <BreathingLoader label={RP_WORDS.loadingPreview} />;
+  if (card === null || partner === null) return <BreathingLoader label={RP_WORDS.loadingPreview} />;
   if (card === "failed") return <p className="text-coral">{RP_WORDS.previewFailed}</p>;
-  return <PlayerRoleCardView data={card} mode="proposal" changed={changedSections(proposal)} />;
+  return <PlayerRoleCardView data={withPartnerName(card, partner)} mode="proposal" changed={changedSections(proposal)} />;
 }
 
 export default function ProposalEditor({ initial, me }: { initial: ProposalOut; me: string }) {
@@ -343,7 +344,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
     return (
       <div className="grid min-w-0 gap-6">
         <ProposalState proposal={proposal} />
-        <ProposalPreview proposal={proposal} />
+        <ProposalPreview proposal={proposal} partner={org === null ? null : opsPartner(operationsRoleName(org !== "failed" ? org.roles : []))} />
       </div>
     );
   }
@@ -529,7 +530,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
         {step === "preview" && (
           <div className="grid gap-3">
             <p className={LEDE}>{RP_WORDS.previewLede}</p>
-            <ProposalPreview proposal={proposal} />
+            <ProposalPreview proposal={proposal} partner={org === null ? null : opsPartner(operationsRoleName(org !== "failed" ? org.roles : []))} />
           </div>
         )}
         {step === "share" && (

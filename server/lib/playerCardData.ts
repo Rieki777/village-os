@@ -413,7 +413,8 @@ export async function buildPlayerCards(
   const roles = new Map<string, OrgRole & { archetypesSuggested: boolean }>(
     [...rows.roles, ...prop.roles].map((r) => [String(r.id), { ...rowToRole(r), archetypesSuggested: !!r.archetypes_suggested }]),
   );
-  const fillWith = operationsRoleName(Array.from(roles.values()));
+  // The card's own roles rarely include the Ops role, so the whole chart's names are the fallback.
+  const fillWith = operationsRoleName(Array.from(roles.values())) ?? operationsRoleName(rows.roleNames.map((r) => ({ name: String(r.name) })));
   const roleName = new Map(rows.roleNames.map((r) => [String(r.id), String(r.name)]));
   const circleName = new Map([...rows.circles, ...prop.circles].map((c) => [String(c.id), String(c.name)]));
   const lapseCtx = { ...ctx.lapse, now: ctx.now };
