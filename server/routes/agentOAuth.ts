@@ -20,13 +20,14 @@ import express from "express";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
-import { DEFAULT_TTL_DAYS, holderStands, mintToken } from "../lib/agentTokens";
+import { type AgentScope, DEFAULT_TTL_DAYS, holderStands, mintCapProblem, mintToken, revokeTokensNamed } from "../lib/agentTokens";
 import {
   authorizationServerMetadata,
   challengeProblem,
   chosenScopes,
+  MAX_STATE,
   OAUTH_DEFAULT_SCOPES,
-  OAUTH_SCOPES,
+  offeredScopes,
   parseRegistration,
   pkceMatches,
   protectedResourceMetadata,
@@ -40,13 +41,23 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit"> & {
   /** The village's own origin, with no trailing slash. */
   origin: (req: express.Request) => string;
   memberById: (id: string) => Promise<any | null>;
+  /**
+   * The extra scopes this member's own rules allow, the same rules the Your
+   * agent panel applies: `admin` for an admin, `sera.undoable` for an agent
+   * account that is not one.
+   */
+  extraScopes: (user: any) => Promise<AgentScope[]>;
 };
 
-/** The scopes the consent page offers, and which of them write. */
-const SCOPE_OFFER = OAUTH_SCOPES.map((s) => ({ scope: s, write: s === "tasks.write", ticked: OAUTH_DEFAULT_SCOPES.includes(s) }));
+/** What the consent page offers this member, and which of the scopes write. Writes and extras are never ticked. */
+const scopeOffer = (extras: readonly AgentScope[]) =>
+  offeredScopes(extras).map((s) => ({ scope: s, write: s !== "moon.read", ticked: OAUTH_DEFAULT_SCOPES.includes(s) }));
+
+/** The token a connector holds is named after it, and its id's tail tells two connectors with one name apart. */
+const tokenName = (client: { name: string; clientId: string }) => `Connector: ${client.name.slice(0, 60)} (${client.clientId.slice(-6)})`;
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, overLimit, clientIp, origin, memberById } = deps;
+  const { authedUser, getPool, overLimit, clientIp, origin, memberById, extraScopes } = deps;
 
   const resourceMeta = (req: express.Request, res: express.Response) => {
     res.setHeader("Cache-Control", "public, max-age=300");
@@ -66,7 +77,7 @@ export function register(app: Express, deps: Deps): void {
     const parsed = parseRegistration(req.body);
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, error_description: parsed.description });
     const client = await insertOAuthClient(getPool(), parsed.name, parsed.redirectUris);
-    res.status(201).json({
+    res.status(201).set("Cache-Control", "no-store").json({
       client_id: client.clientId,
       client_id_issued_at: Math.floor(Date.now() / 1000),
       client_name: client.name,
@@ -85,7 +96,7 @@ export function register(app: Express, deps: Deps): void {
     if (!client) return res.status(400).json({ error: "invalid_client", message: "This connector is not registered here." });
     const redirectUri = String(req.query.redirect_uri ?? "");
     if (!client.redirectUris.includes(redirectUri)) return res.status(400).json({ error: "invalid_redirect_uri", message: "This connector did not register that return address." });
-    res.json({ clientName: client.name, redirectHost: new URL(redirectUri).host, scopes: SCOPE_OFFER, member: { name: user.name ?? "" } });
+    res.json({ clientName: client.name, redirectHost: new URL(redirectUri).host, scopes: scopeOffer(await extraScopes(user)), member: { name: user.name ?? "" } });
   });
 
   app.post("/api/agent/oauth/authorize", async (req, res) => {
@@ -100,12 +111,16 @@ export function register(app: Express, deps: Deps): void {
     const redirectUri = String(b.redirectUri ?? "");
     // Never send a member anywhere the client did not register, not even with an error.
     if (!client.redirectUris.includes(redirectUri)) return res.status(400).json({ error: "This connector did not register that return address." });
-    const state = typeof b.state === "string" ? b.state.slice(0, 500) : undefined;
+    const state = typeof b.state === "string" ? b.state : undefined;
+    if (state !== undefined && state.length > MAX_STATE) return res.json({ redirect: redirectWith(redirectUri, { error: "invalid_request", error_description: `state is at most ${MAX_STATE} characters.` }) });
     if (b.decision !== "allow") return res.json({ redirect: redirectWith(redirectUri, { error: "access_denied", state }) });
     const pkce = challengeProblem(b.codeChallenge, b.codeChallengeMethod);
     if (pkce) return res.json({ redirect: redirectWith(redirectUri, { error: "invalid_request", error_description: pkce, state }) });
-    const scopes = chosenScopes(b.scopes);
+    const scopes = chosenScopes(b.scopes, await extraScopes(user));
     if (scopes.length === 0) return res.status(400).json({ error: "Pick at least one thing the connector may do." });
+    // A connector signing in again replaces its own token at the exchange, so that one does not count against the live cap here.
+    const cap = await mintCapProblem(getPool(), String(user.id));
+    if (cap && !/live tokens/.test(cap)) return res.status(429).json({ error: cap });
     const code = await insertOAuthCode(getPool(), { clientId: client.clientId, userId: String(user.id), scopes, codeChallenge: String(b.codeChallenge), redirectUri, sessionVersion: Number(user.tokenVersion ?? 0) });
     await recordEvent(getPool(), {
       kind: "agent_token",
@@ -127,6 +142,8 @@ export function register(app: Express, deps: Deps): void {
       return res.status(429).set("Retry-After", "600").json({ error: "too_many_requests", error_description: "Too many token requests from here this hour." });
     }
     const b = (req.body ?? {}) as Record<string, unknown>;
+    const asked = await oauthClient(getPool(), String(b.client_id ?? "").slice(0, 64));
+    if (!asked) return res.status(401).set("Cache-Control", "no-store").set("WWW-Authenticate", 'Basic realm="oauth"').json({ error: "invalid_client", error_description: "This client is not registered here." });
     if (b.grant_type !== "authorization_code") return oauthError(res, 400, "unsupported_grant_type", "The only grant here is authorization_code.");
     const code = typeof b.code === "string" ? b.code.slice(0, 200) : "";
     const verifier = b.code_verifier;
@@ -144,8 +161,13 @@ export function register(app: Express, deps: Deps): void {
     if (!(await spendOAuthCode(getPool(), code))) return oauthError(res, 400, "invalid_grant", "That code was already used.");
     const member = await memberById(stored.userId);
     if (!holderStands(member)) return oauthError(res, 400, "invalid_grant", "The member who signed in is no longer here.");
-    const client = await oauthClient(getPool(), stored.clientId);
-    const minted = await mintToken(getPool(), stored.userId, { name: `Connector: ${client?.name ?? "a connector"}`, scopes: chosenScopes(stored.scopes) }, stored.sessionVersion);
+    // The member's own rules are read again: an admin flag or an agent flag that changed since Allow closes that scope.
+    const extras = await extraScopes(member);
+    const scopes = chosenScopes(stored.scopes, extras);
+    if (scopes.length !== stored.scopes.length) return oauthError(res, 400, "invalid_grant", "What the member allowed is no longer theirs to give. Sign in again.");
+    const name = tokenName(asked);
+    await revokeTokensNamed(getPool(), stored.userId, name);
+    const minted = await mintToken(getPool(), stored.userId, { name, scopes }, stored.sessionVersion);
     // 401 from the mint: the member's sessions ended (a new password, an admin's revoke) since they pressed Allow.
     if (!minted.ok) return oauthError(res, 400, "invalid_grant", minted.status === 401 ? "The member's sign-in changed since they allowed this. Sign in again." : minted.error);
     res.set("Cache-Control", "no-store").set("Pragma", "no-cache").json({

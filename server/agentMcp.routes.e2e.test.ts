@@ -366,6 +366,21 @@ describe.skipIf(!DB_CONFIGURED)("the connector's transport guards", () => {
     expect((await raw(body, { Authorization: `Bearer ${anaVat}`, Origin: BASE })).status).toBe(200);
     expect((await raw(body, { Authorization: `Bearer ${anaVat}` })).status).toBe(200);
   });
+
+  it("says invalid_token for a token that failed, nothing for none sent, and insufficient_scope for a 403", async () => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const none = await raw(body);
+    expect(none.status).toBe(401);
+    expect(none.headers.get("www-authenticate")).not.toContain("error=");
+    const bad = await raw(body, { Authorization: "Bearer vat_not-a-real-token" });
+    expect(bad.status).toBe(401);
+    expect(bad.headers.get("www-authenticate")).toContain('error="invalid_token"');
+    const ok = await raw(body, { Authorization: `Bearer ${anaVat}` });
+    expect(ok.headers.get("www-authenticate")).toBeNull();
+    const narrow = await raw(body, { Authorization: `Bearer ${calendarVat}` });
+    expect(narrow.status).toBe(403);
+    expect(narrow.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+  });
 });
 
 describe.skipIf(!DB_CONFIGURED)("signing a connector in with OAuth (B4, check 33)", () => {
@@ -413,6 +428,11 @@ describe.skipIf(!DB_CONFIGURED)("signing a connector in with OAuth (B4, check 33
     const r = await call("GET", `/api/agent/oauth/request?client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}`, undefined, ana.token);
     expect(r.json.clientName).toBe("Claude");
     expect(r.json.scopes.map((s: any) => s.scope)).not.toContain("admin");
+    // Only the scopes that open a connector tool are offered.
+    expect(r.json.scopes.map((s: any) => s.scope)).toEqual(["moon.read", "tasks.write"]);
+    // An admin is offered the admin scope too, never ticked.
+    const asAdmin = await call("GET", `/api/agent/oauth/request?client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}`);
+    expect(asAdmin.json.scopes.find((s: any) => s.scope === "admin")).toMatchObject({ ticked: false, write: true });
     const foreign = await call("POST", "/api/agent/oauth/authorize", { clientId, redirectUri: "https://evil.example/cb", decision: "allow", codeChallenge: "x", codeChallengeMethod: "S256", scopes: ["moon.read"] }, ana.token);
     expect(foreign.status).toBe(400);
     const refused = await call("POST", "/api/agent/oauth/authorize", { clientId, redirectUri: REDIRECT, state: "s", decision: "deny" }, ana.token);
@@ -443,6 +463,29 @@ describe.skipIf(!DB_CONFIGURED)("signing a connector in with OAuth (B4, check 33
     expect(Number(after.n) - Number(before.n)).toBe(1);
     const listed = await mcp(ok.json.access_token, "tools/list");
     expect(listed.json.result.tools.map((t: any) => t.name)).toContain("mark_my_task");
+  });
+
+  it("answers invalid_client for a client it never registered", async () => {
+    const r = await token({ grant_type: "authorization_code", code: "x", client_id: "nobody", redirect_uri: REDIRECT, code_verifier: pkce().verifier });
+    expect(r.status).toBe(401);
+    expect(r.json.error).toBe("invalid_client");
+  });
+
+  it("gives the client back its state whole, and replaces its own token when it signs in again", async () => {
+    // A member of their own: Ana has spent most of the day's mints by now.
+    const dana = await register("Dana Vega", "dana-oauth");
+    const longState = "s".repeat(900);
+    const first = pkce();
+    const back = await allow(dana, first.challenge, { state: longState });
+    expect(back.searchParams.get("state")).toBe(longState);
+    const a = await token({ grant_type: "authorization_code", code: back.searchParams.get("code")!, client_id: clientId, redirect_uri: REDIRECT, code_verifier: first.verifier });
+    expect(a.status).toBe(200);
+    const second = pkce();
+    const back2 = await allow(dana, second.challenge);
+    const b = await token({ grant_type: "authorization_code", code: back2.searchParams.get("code")!, client_id: clientId, redirect_uri: REDIRECT, code_verifier: second.verifier });
+    expect(b.status, JSON.stringify(b.json)).toBe(200);
+    expect((await mcp(a.json.access_token, "tools/list")).status).toBe(401);
+    expect((await mcp(b.json.access_token, "tools/list")).status).toBe(200);
   });
 
   it("ends with the member's sessions: a code allowed before, and a token minted before, both stop", async () => {

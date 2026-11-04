@@ -15,15 +15,15 @@ import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch } from "@/lib/gameApi";
 
-interface Offer { scope: string; write: boolean; ticked: boolean }
+type OfferedScope = "moon.read" | "tasks.write" | "admin" | "sera.undoable";
+interface Offer { scope: OfferedScope; write: boolean; ticked: boolean }
 interface Request { clientName: string; redirectHost: string; scopes: Offer[] }
 
-const SCOPE_WORDS: Record<string, string> = {
+const SCOPE_WORDS: Record<OfferedScope, string> = {
   "moon.read": "Read your moon, your roles, the season and your task board",
   "tasks.write": "Mark your own board tasks Done, Let go or Undo, each one after your yes",
-  "calendar.read": "Read the calendar",
-  "directory.read": "Read circles, roles and the people you may already see",
-  "me.read": "Read your own profile and your RSVPs",
+  admin: "As you, an admin: call the admin paths this village opened to agents, each write after a confirm. Erasure, powers, money and secrets stay with people",
+  "sera.undoable": "Sera's tools for this agent account: links, suggestions and drafts, each one undoable for 30 days",
 };
 
 export default function OAuthAuthorize() {
@@ -92,7 +92,7 @@ export default function OAuthAuthorize() {
       ) : !req ? null : (
         <div className="mt-4 space-y-5">
           <p className="text-sm text-foreground">
-            <strong>{req.clientName}</strong> asks to act for you, {user.name}. When you decide, you go back to <strong>{req.redirectHost}</strong>.
+            A connector that says it is <strong>{req.clientName}</strong> asks to act for you, {user.name}. It named itself; check the return address before you allow it. When you decide, you go back to <strong>{req.redirectHost}</strong>.
           </p>
           <fieldset className="space-y-3 rounded-xl border border-border bg-white p-4">
             <legend className="px-1 text-sm font-semibold text-foreground">What it may do</legend>

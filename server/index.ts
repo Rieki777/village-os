@@ -1764,10 +1764,15 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
  *   founder — master admin: implies admin, manages admins, cannot be demoted
  *             by non-founders, and the last founder cannot be demoted at all.
  */
+/** Whether this member row is an admin: the role, or a live admin group (sheet 19, server/lib/groupAdmin.ts). */
+function userIsAdmin(user: any): boolean {
+  return !!user && (user.role === "admin" || user.role === "founder" || adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0);
+}
+
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!user || (user.role !== "admin" && user.role !== "founder" && !adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length)) return false; // sheet 19: or a live admin group, server/lib/groupAdmin.ts
+  if (!userIsAdmin(user)) return false;
   (req as any).adminUser = user;
   return true;
 }
@@ -6715,6 +6720,12 @@ async function startServer() {
       authedUser, getPool, overLimit, clientIp,
       origin: (req) => (process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, ""),
       memberById: (id) => members.byId(id),
+      // The same two rules the Your agent panel's mint applies (cleanScopes): admin to an admin, Sera's scope to an agent account that is not one.
+      extraScopes: async (u) => {
+        const admin = userIsAdmin(u);
+        if (admin) return ["admin"];
+        return (await isAgentAccount(getPool(), String(u?.id ?? ""))) ? ["sera.undoable"] : [];
+      },
     });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
