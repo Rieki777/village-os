@@ -27,7 +27,7 @@
  * hold changes; "in step" is said only when the last read was whole, nothing
  * waits and no draft is open (R29).
  */
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronDown } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
@@ -371,8 +371,9 @@ function SeraList({
     },
   };
 
-  // Back from a comparison, focus returns to the button that opened it.
-  useEffect(() => {
+  // Back from a comparison, focus returns to the button that opened it, in a layout effect so it is
+  // settled before the click that caused it returns (the test raced a passive effect under load).
+  useLayoutEffect(() => {
     if (comparing !== null || backTo.current === null) return;
     const key = backTo.current;
     backTo.current = null;

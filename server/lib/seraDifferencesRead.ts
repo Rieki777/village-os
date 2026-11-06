@@ -59,7 +59,7 @@ import {
 import { differenceSentence, flagWords, openInUrl, openInWords, shownFlags, sourceWords } from "../../shared/seraDifferenceWords";
 import { nameCheckFor } from "./saberraNames";
 import { acceptedForDifferences, liveForDifferences } from "./saberraSnapshot";
-import { listOrgAssignments, type OrgAssignment } from "./orgChart";
+import { listOrgAssignments, type LapseContext, type OrgAssignment } from "./orgChart";
 import { rosterRows } from "../repos/peopleRoster";
 import { snapshotIndex, snapshotsBySeq, type SnapshotIndexRow } from "../repos/saberraSnapshots";
 import { publishStamp } from "../repos/seraDifferences";
@@ -108,6 +108,8 @@ export function batchLinks(
   list: ReadonlyArray<Pick<Difference, "subject">>,
   items: readonly WaitingChartItem[],
   heldPageIds: readonly string[],
+  /** When the newest read was taken: an arrival newer than it cannot be held by it (review K6). */
+  readAt: string | null,
 ): { links: (string | null)[]; held: string[] } {
   const byBatch = new Map<string, { newest: number; ids: Set<string>; anyWithout: boolean }>();
   for (const it of items) {
@@ -124,19 +126,24 @@ export function batchLinks(
     return id ? (newestFirst.find(([, b]) => b.ids.has(id))?.[0] ?? null) : null;
   });
   const here = new Set(heldPageIds.map(pageKey));
-  const held = newestFirst.filter(([, b]) => !b.anyWithout && b.ids.size > 0 && Array.from(b.ids).every((id) => here.has(id))).map(([k]) => k);
+  const readMs = readAt ? Date.parse(readAt) : NaN;
+  const held = newestFirst
+    .filter(([, b]) => Number.isFinite(readMs) && b.newest > 0 && b.newest < readMs)
+    .filter(([, b]) => !b.anyWithout && b.ids.size > 0 && Array.from(b.ids).every((id) => here.has(id)))
+    .map(([k]) => k);
   return { links, held };
 }
 
 /** Each role's holders here, by name: a member by the roster's name, a documented holder by the name written. Examples left out. */
 export function holderNamesByRole(
-  seatings: readonly Pick<OrgAssignment, "orgRoleId" | "userId" | "displayName" | "isExample">[],
+  seatings: readonly Pick<OrgAssignment, "orgRoleId" | "userId" | "displayName" | "isExample" | "lapsed">[],
   roster: readonly { id: string | null; name: string }[],
 ): Record<string, string[]> {
   const nameOf = new Map(roster.filter((r) => r.id !== null).map((r) => [String(r.id), r.name]));
   const out: Record<string, string[]> = {};
   for (const a of seatings) {
-    if (a.isExample) continue;
+    // An example, or a seating whose term has lapsed, names nobody (review N5).
+    if (a.isExample || a.lapsed) continue;
     const name = a.userId ? nameOf.get(String(a.userId)) : a.displayName;
     if (!name) continue;
     (out[a.orgRoleId] ??= []).push(name);
@@ -167,7 +174,7 @@ export function snapshotsNeeded(index: readonly SnapshotIndexRow[], nowSeconds: 
  */
 let cached: { key: string; value: DifferencesRead } | null = null;
 
-export async function readDifferences(pool: Pool, now: number = Date.now()): Promise<DifferencesRead> {
+export async function readDifferences(pool: Pool, now: number = Date.now(), lapse?: LapseContext): Promise<DifferencesRead> {
   // Twice at most: a row pruned between choosing the rows and reading them is chosen again, once.
   for (let attempt = 1; ; attempt += 1) {
     const [index, liveIn, stamp, roster, seatings] = await Promise.all([
@@ -175,7 +182,8 @@ export async function readDifferences(pool: Pool, now: number = Date.now()): Pro
       liveForDifferences(pool),
       publishStamp(pool, MODULE_ID),
       rosterRows(pool),
-      listOrgAssignments(pool),
+      // With the lapse context, so a lapsed holder is never named (review N5).
+      listOrgAssignments(pool, lapse),
     ]);
     const holders = holderNamesByRole(seatings, roster);
     const check = nameCheckFor(roster);
@@ -248,7 +256,7 @@ export function listAnswer(
   differences: ListedDifference[];
 } {
   const { agent, dashboard, timeZone } = opts;
-  const { links, held } = batchLinks(read.list, opts.waiting ?? [], read.heldPageIds ?? []);
+  const { links, held } = batchLinks(read.list, opts.waiting ?? [], read.heldPageIds ?? [], read.latest?.takenAt ?? null);
   return {
     agent,
     lastReadAt: read.latest?.takenAt ?? null,

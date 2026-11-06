@@ -46,8 +46,10 @@ interface Props {
 }
 
 export function CompareBlocks({ d, agent, layout }: Props) {
-  // Our words as stored here, never the compared form (the engine sends both).
-  const ours = d.oursAsStored ?? d.ours ?? "";
+  // The diff compares the compared form (the engine's, a name swapped out the same on both sides), so a
+  // swapped name is never struck (review K5); Here now shows our words as stored.
+  const ours = d.ours ?? "";
+  const stored = d.oursAsStored ?? ours;
   const theirs = d.sera ?? "";
   const [full, setFull] = useState(false);
   const id = useId();
@@ -64,7 +66,7 @@ export function CompareBlocks({ d, agent, layout }: Props) {
 
   const clamp = full ? "" : " line-clamp-4";
   const theirsTitle = `${possessive(agent)} version`;
-  const hereText = ours ? ours : <span className="text-muted-foreground">Nothing here yet.</span>;
+  const hereText = stored ? stored : <span className="text-muted-foreground">Nothing here yet.</span>;
   const legend = (
     <p className="text-[13px] leading-snug text-muted-foreground">
       Struck words are only here. Underlined words are only in {theirsTitle}.

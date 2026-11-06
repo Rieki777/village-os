@@ -352,6 +352,21 @@ describe("the Waiting for you board", () => {
 });
 
 describe("the conflict board", () => {
+  it("diffs the compared form, so a name the swap took out is never struck (K5)", async () => {
+    const both = listed({ kind: "textField", field: "aim", lane: "lowRisk", state: "conflict", sera: "a member keeps the wells clear.", ours: "a member keeps the wells.", subject: { name: "Well Keeper" } });
+    serve({ list: [200, listAnswer([{ ...both, oursAsStored: "Jane Example keeps the wells." }])] });
+    show();
+    await screen.findByRole("heading", { level: 2 });
+    fireEvent.click(screen.getByRole("button", { name: "Compare them" }));
+    const theirs = screen.getByRole("heading", { level: 3, name: "Sera's version" }).closest("section") as HTMLElement;
+    expect(Array.from(theirs.querySelectorAll("del")).map((d) => d.textContent).join(" ")).not.toContain("Jane");
+    expect(Array.from(theirs.querySelectorAll("ins")).map((d) => d.textContent).join(" ")).toContain("clear.");
+    expect(theirs.querySelector("p")?.textContent).not.toContain("Jane");
+    // Here now still shows our words as stored.
+    const here = screen.getByRole("heading", { level: 3, name: "Here now" }).closest("section") as HTMLElement;
+    expect(here.querySelector("p")?.textContent).toBe("Jane Example keeps the wells.");
+  });
+
   it("shows our words as stored under Here now, never the compared form", async () => {
     const both = listed({ kind: "textField", field: "aim", lane: "lowRisk", state: "conflict", sera: "Keeps the wells.", ours: "keeps the wells clear.", subject: { name: "Well Keeper" } });
     serve({ list: [200, listAnswer([{ ...both, oursAsStored: "Keeps  the wells clear, with Jane Example." }])] });
@@ -393,9 +408,9 @@ describe("the conflict board", () => {
     fireEvent.click(more);
     expect(ours.className).not.toContain("line-clamp-4");
     expect(more.getAttribute("aria-expanded")).toBe("true");
-    // Back to the list, focus on the button that opened it.
+    // Back to the list, focus on the button that opened it, settled inside the click itself.
     fireEvent.click(screen.getByRole("button", { name: "Back to all 5" }));
-    await waitFor(() => expect((document.activeElement as HTMLElement | null)?.textContent).toBe("Compare them"));
+    expect((document.activeElement as HTMLElement | null)?.textContent).toBe("Compare them");
   });
 });
 

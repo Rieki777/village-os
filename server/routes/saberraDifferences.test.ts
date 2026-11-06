@@ -32,7 +32,7 @@ vi.mock("../lib/modules", () => ({
 
 import { register, SNAPSHOT_AGE_JOB } from "./saberra";
 import { registeredJobs } from "../lib/scheduler";
-import { batchLinks, listAnswer, type DifferencesRead } from "../lib/seraDifferencesRead";
+import { batchLinks, holderNamesByRole, listAnswer, type DifferencesRead } from "../lib/seraDifferencesRead";
 import type { Difference } from "../../shared/seraDifferences";
 
 const LAND = "0".repeat(31) + "1";
@@ -104,11 +104,12 @@ beforeAll(async () => {
       buckets.push(bucket);
       return who.limited;
     }) as never,
-    members: { byId: async (id: string) => ({ id, name: id === "u-rye" ? "Rye Weaver" : "Someone Else", email: "rye@example.test" }) } as never,
+    members: { all: async () => [{ id: "u-rye", name: "Rye Weaver", email: "rye@example.test" }] } as never,
     deciders: {
-      liveHoldersOf: async (cap: string) => liveHolders[cap] ?? [],
-      rolesCarrying: (cap: string) => (cap === "org.decide" ? [{ id: "ops-lead", name: "Ops lead" }] : [{ id: "treasurer", name: "Treasurer" }]),
+      roles: () => [{ id: "ops-lead", name: "Ops lead", capabilities: liveHolders["org.decide"].length ? ["org.decide"] : [] }, { id: "treasurer", name: "Treasurer", capabilities: ["cash.pay"] }],
       roleHolders: () => [{ roleId: "ops-lead", userId: "u-rye" }],
+      orgRoles: async () => [],
+      villageHolder: async () => null,
     },
   });
   [server, base] = await listen(app);
@@ -147,7 +148,8 @@ describe("the count", () => {
       small: 0,
       facts: 0,
       // Who decides and who sets pay, from the holder test: role names and first names only (S2).
-      decides: { by: "holders", labels: ["Ops lead (Rye)"], more: 0, stewards: false, others: 0 },
+      // Before launch (the mock has held no launch vote) the admins hold the door beside the role (N4).
+      decides: { by: "holders", labels: ["Ops lead (Rye)"], more: 0, stewards: false, others: 0, admins: true },
       paySetBy: { by: "admins" },
       lanes: { facts: 0, lowRisk: 0, decision: 2 },
       conflicts: 0,
@@ -276,12 +278,26 @@ describe("which arrival holds each difference (C7, S1)", () => {
     { batchId: "circ", kind: "circle.proposed", receivedAt: "2026-11-03T10:00:00.000Z", payload: { vendorRecordId: "cccc-3333" } },
   ];
   it("LINKS A ROLE TO THE NEWEST WAITING BATCH CARRYING ITS PAGE ID, a circle by its record id, and nothing to none", () => {
-    const out = batchLinks([roleDiff("aaaa1111"), roleDiff("BBBB2222"), circleDiff("cccc3333"), roleDiff("dddd4444")], batches, ["aaaa1111", "bbbb2222"]);
+    const out = batchLinks([roleDiff("aaaa1111"), roleDiff("BBBB2222"), circleDiff("cccc3333"), roleDiff("dddd4444")], batches, ["aaaa1111", "bbbb2222"], "2026-11-06T10:00:00.000Z");
     expect(out.links).toEqual(["old", "new", "circ", null]);
   });
   it("HOLDS A BATCH ONLY WHEN THE NEWEST READ HOLDS EVERY PAGE ID IT CARRIES", () => {
-    const out = batchLinks([], batches, ["aaaa1111", "bbbb2222"]);
+    const out = batchLinks([], batches, ["aaaa1111", "bbbb2222"], "2026-11-06T10:00:00.000Z");
     expect(out.held.sort()).toEqual(["new", "old"]);
+  });
+  it("NEVER HOLDS A BATCH NEWER THAN THE NEWEST READ, whose fields the read cannot hold (K6)", () => {
+    // The read was taken before "new" landed (its snapshot write failed): page ids alone would call it held.
+    const out = batchLinks([], batches, ["aaaa1111", "bbbb2222"], "2026-11-04T10:00:00.000Z");
+    expect(out.held).toEqual(["old"]);
+    expect(batchLinks([], batches, ["aaaa1111", "bbbb2222"], null).held).toEqual([]);
+  });
+  it("NAMES NO HOLDER WHOSE TERM HAS LAPSED (N5)", () => {
+    const roster = [{ id: "u-ana", name: "Ana Moss" }, { id: "u-bo", name: "Bo Reyes" }];
+    const seatings = [
+      { orgRoleId: "r-water", userId: "u-ana", displayName: null, isExample: false, lapsed: false },
+      { orgRoleId: "r-water", userId: "u-bo", displayName: null, isExample: false, lapsed: true },
+    ];
+    expect(holderNamesByRole(seatings, roster)).toEqual({ "r-water": ["Ana Moss"] });
   });
 });
 
