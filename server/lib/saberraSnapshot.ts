@@ -51,12 +51,25 @@ import type { SnapshotKind, SnapshotRead, SnapshotRecord, SnapshotRef, SnapshotV
 import { nameCheckFor, type NameCheck } from "./saberraNames";
 import type { VendorRecord } from "./saberraProposals";
 import { readVendorRecord, type SaberraRecordKind } from "./saberraRecords";
-import { labelOf, normaliseId, plainText, relationRefs } from "./saberraRelations";
+import { idShapeOk, labelOf, normaliseId, plainText, relationRefs } from "./saberraRelations";
 import { rosterRows } from "../repos/peopleRoster";
-import { insertSnapshot, pruneSnapshots, recentSnapshots } from "../repos/saberraSnapshots";
+import { insertSnapshot, pruneSnapshots, pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
 
 /** How many reads are kept. R4 needs two whole ones; the rest are history. */
 export const SNAPSHOT_KEEP = 30;
+/**
+ * The oldest a stored read may be, in days. Reads rotate by count only while
+ * syncs run; this ages them out when nothing is syncing, so a name stored as
+ * sent cannot outlive the member it named. The newest goes too: with nothing
+ * left, the page says nothing has been read yet.
+ */
+export const SNAPSHOT_MAX_AGE_DAYS = 60;
+
+/** Delete every stored read older than the age, the newest included. Says how many went. */
+export function pruneByAge(pool: Pool, now: Date = new Date()): Promise<number> {
+  return pruneSnapshotsOlderThan(pool, new Date(now.getTime() - SNAPSHOT_MAX_AGE_DAYS * 24 * 60 * 60 * 1000));
+}
+
 /** The longest text kept whole, in code points. Anything longer is clipped, named, and never compared. */
 export const TEXT_KEEP = 20_000;
 
@@ -77,8 +90,6 @@ const KINDS: ReadonlyArray<{ kind: SaberraRecordKind; key: "circles" | "roles" }
 
 /** A field that points at other records. Kept as pointers, resolved against the snapshot later (R5). */
 const RELATION_FIELDS = new Set(["Circle"]);
-/** Prose, where a member can be named in passing, so names are swapped out here (R9). */
-const PROSE_FIELDS = new Set(["Body", "Notes", "Compensation Terms"]);
 
 /** What one read was, in our kinds: which were asked, which failed, which were cut short. */
 export interface ReadForSnapshot {
@@ -131,9 +142,10 @@ export function snapshotRecord(kind: SaberraRecordKind, rec: VendorRecord, check
     let v = plainValue(field, raw);
     if (v === null) continue;
     if (typeof v === "string") {
-      // The wide match flags, over prose and names alike; only the narrow one rewrites, and only prose.
-      if ((PROSE_FIELDS.has(field) || NAME_FIELDS.has(field)) && check.names(v)) named.push(field);
-      if (PROSE_FIELDS.has(field)) {
+      // The wide match flags EVERY text field, names included. The narrow one rewrites every
+      // text field but a role's or a circle's name, which is compared with our own names (R9).
+      if (check.names(v)) named.push(field);
+      if (!NAME_FIELDS.has(field)) {
         const out = check.swap(v);
         if (out !== v) {
           v = out;
@@ -193,7 +205,8 @@ export async function writeSnapshot(
   const previous = (await recentSnapshots(pool, 1))[0]?.snapshot ?? null;
   const kept: Record<"circles" | "roles", SnapshotKind> = { circles: { read: "empty", records: [] }, roles: { read: "empty", records: [] } };
   for (const { kind, key } of KINDS) {
-    const fresh = dedupe(read.records.filter((r) => r.kind === kind).map((r) => snapshotRecord(kind, r, check)));
+    // An id is an id (R10): a record with an address for one is never kept.
+    const fresh = dedupe(read.records.filter((r) => r.kind === kind && idShapeOk(r.id)).map((r) => snapshotRecord(kind, r, check)));
     const state = readOf(kind, read, fresh);
     kept[key] = state === "whole" ? { read: state, records: fresh } : { read: state, records: previous?.[key].records ?? [] };
   }

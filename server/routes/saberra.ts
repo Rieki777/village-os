@@ -90,6 +90,7 @@ import { LINK_WORDS, seraOwnerIdProblem } from "@shared/seraPersonLinks";
 import { backfill, linksWithReviews } from "../lib/seraPersonMatch";
 import { clearReview } from "../repos/seraLinkReviews";
 import { countAnswer, listAnswer, readDifferences } from "../lib/seraDifferencesRead";
+import { pruneByAge, SNAPSHOT_MAX_AGE_DAYS } from "../lib/saberraSnapshot";
 import { saberraAgentName } from "../lib/saberraGuide";
 import { villageTimezone } from "../lib/villageReaders";
 
@@ -109,6 +110,9 @@ const DIFFERENCES_LIST_PER_MINUTE = 60;
 const TOO_MANY = { error: "That is a lot of checks in a minute. Wait a moment and look again." };
 
 const MODULE_ID = "saberra";
+/** The daily job that ages stored reads out (spec R27). */
+export const SNAPSHOT_AGE_JOB = "saberra-snapshot-age";
+const DAY_MS = 24 * 60 * 60 * 1000;
 const SECRET_KEY = "sera_api_secret";
 
 /** Whether the store holds an https address for the service. The rule is `httpsAddress`, as the sync's. */
@@ -125,6 +129,9 @@ export function register(app: Express, deps: Deps): void {
   // Every tick, so a schedule saved in the panel is honoured within one; the
   // job itself decides whether anything is due, and off calls nothing.
   registerJob(POLL_JOB, TICK_MS, () => pollOnce(getPool()));
+  // Stored reads age out daily whatever the schedule or the module, so a name
+  // stored as sent cannot outlive an erasure (spec R27).
+  registerJob(SNAPSHOT_AGE_JOB, DAY_MS, async () => `removed ${await pruneByAge(getPool())} stored read(s) past ${SNAPSHOT_MAX_AGE_DAYS} days`);
 
   /** What a steward needs before pressing anything. */
   app.get("/api/saberra/status", async (req, res) => {

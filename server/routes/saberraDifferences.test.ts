@@ -30,7 +30,8 @@ vi.mock("../lib/modules", () => ({
   effectiveLifecycle: () => "preview",
 }));
 
-import { register } from "./saberra";
+import { register, SNAPSHOT_AGE_JOB } from "./saberra";
+import { registeredJobs } from "../lib/scheduler";
 import { listAnswer, type DifferencesRead } from "../lib/seraDifferencesRead";
 import type { Difference } from "../../shared/seraDifferences";
 
@@ -240,6 +241,12 @@ describe("the words the list sends", () => {
     const rest = role({ kind: "roleRest", field: null, sera: "gone", ours: "live", subject: { kind: "role", pageId: "p", ourId: "r-dish", via: "pageId", name: "Dish Rota", circleId: "kitchen", circleName: "Kitchen" } });
     expect(sentences(read([rest], {}))).toEqual(["Sera has archived Dish Rota. It is still live here, and nobody holds it."]);
     expect(sentences(read([rest], { "r-dish": ["Ana Moss"] }))).toEqual(["Sera has archived Dish Rota (Ana). It is still live here."]);
+  });
+});
+
+describe("stored reads age out", () => {
+  it("REGISTERS A DAILY JOB that ages stored reads out, whatever the schedule or the module (R27)", () => {
+    expect(registeredJobs()).toContainEqual({ name: SNAPSHOT_AGE_JOB, everyMs: 24 * 60 * 60 * 1000 });
   });
 });
 

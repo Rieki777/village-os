@@ -120,3 +120,15 @@ export async function pruneSnapshots(pool: Pool, keep: number): Promise<number> 
   const [res] = await pool.query<ResultSetHeader>("DELETE FROM saberra_snapshots WHERE seq < ?", [Number(oldestKept)]);
   return res.affectedRows;
 }
+
+/**
+ * Delete every read taken before `cutoff`, the newest included. Compared through
+ * UNIX_TIMESTAMP, the way reads are read back, so the host's offset cannot move
+ * the line. Says how many rows went.
+ */
+export async function pruneSnapshotsOlderThan(pool: Pool, cutoff: Date): Promise<number> {
+  const [res] = await pool.query<ResultSetHeader>("DELETE FROM saberra_snapshots WHERE UNIX_TIMESTAMP(taken_at) < ?", [
+    Math.floor(cutoff.getTime() / 1000),
+  ]);
+  return Number(res.affectedRows ?? 0);
+}

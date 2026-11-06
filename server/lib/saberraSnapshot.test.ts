@@ -84,7 +84,8 @@ import { landProposal, markProposalDecided, proposalsInBatch } from "./externalP
 import { pollOnce, syncByHand } from "./saberraSync";
 import { SNAPSHOT_KEEP, TEXT_KEEP, writeSnapshot } from "./saberraSnapshot";
 import { countAnswer, readDifferences, snapshotsNeeded } from "./seraDifferencesRead";
-import { recentSnapshots } from "../repos/saberraSnapshots";
+import { pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
+import { SNAPSHOT_MAX_AGE_DAYS, pruneByAge } from "./saberraSnapshot";
 import { writeSyncLogDocument } from "../repos/saberraSyncLog";
 
 const configured = testDbConfigured();
@@ -230,6 +231,42 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     } finally {
       await pool.query("DELETE FROM users WHERE id = 'u-robin'"); // module-review-ok: fixture SQL, removes this test's member
     }
+  });
+
+  it("DROPS A RECORD WHOSE ID IS AN ADDRESS, and counts it in the sync's report (R10)", async () => {
+    const { water } = serviceHolds("ids");
+    // The service sends a second role with its page ADDRESS where the id belongs: the title rides in it.
+    (state.read.role as unknown[]).push({ id: `https://www.notion.so/Secret-Plan-${pageId("ids-url")}`, fields: { "Role Name": "Secret Plan", Status: "Active" } });
+    const answer = await syncByHand(pool);
+    expect(answer.status).toBe(200);
+    expect(answer.body.refusedIds).toBe(1);
+    const s = await newest();
+    expect(s.roles.records.map((r) => r.id)).toEqual([water]);
+    expect(JSON.stringify(s)).not.toContain("Secret");
+  });
+
+  it("PRUNES BY AGE, the newest read included, and the list reads an empty table as nothing read yet", async () => {
+    serviceHolds("age");
+    await syncByHand(pool);
+    await syncByHand(pool);
+    const age = (days: number, which: "MIN" | "MAX") =>
+      pool.query( // module-review-ok: fixture SQL, ages one stored read
+        `UPDATE saberra_snapshots SET taken_at = taken_at - INTERVAL ${days} DAY WHERE seq = (SELECT s FROM (SELECT ${which}(seq) AS s FROM saberra_snapshots) x)`,
+      );
+    await age(SNAPSHOT_MAX_AGE_DAYS + 1, "MIN");
+    expect(await pruneByAge(pool, new Date())).toBe(1);
+    expect((await recentSnapshots(pool, 30)).length).toBe(1);
+    // The newest one too, once it is past the age: nothing stays because it is the last.
+    await age(SNAPSHOT_MAX_AGE_DAYS + 1, "MAX");
+    expect(await pruneByAge(pool, new Date())).toBe(1);
+    expect((await recentSnapshots(pool, 30)).length).toBe(0);
+    const read = await readDifferences(pool);
+    expect(read.list).toEqual([]);
+    expect(read.latest).toBeNull();
+    expect(countAnswer(read)).toMatchObject({ total: 0, lastReadAt: null, lastReadWhole: false });
+    // A read inside the age is never touched.
+    await syncByHand(pool);
+    expect(await pruneSnapshotsOlderThan(pool, new Date(Date.now() - SNAPSHOT_MAX_AGE_DAYS * 86_400_000))).toBe(0);
   });
 
   it("CARRIES A KIND FORWARD when it failed, was cut short, came back empty or was not asked, and says which", async () => {
@@ -477,6 +514,31 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
       await pool.query("UPDATE org_roles SET aim = ? WHERE id = ?", ["The water, as the service says it now.", idOf("water")]); // module-review-ok: fixture SQL, an edit made here
       const after = await readDifferences(pool);
       expect(after.list.some((d) => d.field === "aim" && d.subject.ourId === idOf("water"))).toBe(false);
+    });
+
+    it("SWAPS A FULL NAME OUT OF ANY TEXT FIELD AND FLAGS IT, so a fact naming a member never applies by itself (R9)", async () => {
+      const land = pageId(`${tag}-land`);
+      await pool.query("INSERT IGNORE INTO circles (id, name, status) VALUES ('diff-land', 'diff Land', 'active')"); // module-review-ok: fixture SQL, the live circle
+      await liveRole("method", "Keeps the method.");
+      const read = (method: string) => ({
+        circle: [{ id: land, fields: { "Circle Name": `${tag} Land`, Status: "Active" } }],
+        role: [{ id: pageId(`${tag}-method`), fields: { "Role Name": `${tag} method`, Circle: [land], Body: "Keeps the method.", Status: "Active", "Assignment Method": method } }],
+        role_assignment: [],
+      });
+      state.read = read("Elected");
+      await syncByHand(pool);
+      // The reviewer's probe value: a full name in a field that is not prose.
+      state.read = read("Appointed by Jane Example");
+      await syncByHand(pool);
+      const stored = (await recentSnapshots(pool, 1))[0]!.snapshot.roles.records[0]!;
+      expect(stored.fields["Assignment Method"]).toBe("Appointed by a member");
+      expect(stored.swapped).toContain("Assignment Method");
+      expect(stored.namesAMember).toContain("Assignment Method");
+      // A role's and a circle's name are flagged, never rewritten: they are compared with our own names.
+      expect(stored.fields["Role Name"]).toBe(`${tag} method`);
+      const fact = (await readDifferences(pool)).list.find((d) => d.field === "Assignment Method");
+      expect(fact?.flags.map((f) => f.key)).toContain("namesAMember");
+      expect(fact?.autoEligible).toBe(false);
     });
 
     it("TAKES THE NEWEST PUBLISHED CHANGE AS THE BASE, and compares our words through the same name swap", async () => {
