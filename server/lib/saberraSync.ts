@@ -57,7 +57,7 @@ import {
 } from "./saberraPolling";
 import { proposeStructure, type VendorRecord } from "./saberraProposals";
 import { editedAtOf, type SaberraRecordKind } from "./saberraRecords";
-import { idShapeOk } from "./saberraRelations";
+import { idShapeOk, pageIdOf } from "./saberraRelations";
 import { writeSnapshot } from "./saberraSnapshot";
 import { proposalKindFor, splitStreams } from "./saberraStreams";
 import { schedulerEnabled } from "./scheduler";
@@ -100,9 +100,11 @@ function serviceUrl(): string | null {
 function asVendorRecord(kind: SaberraRecordKind, raw: unknown): VendorRecord | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
-  const id = typeof r.id === "string" && r.id.trim() !== "" ? r.id.trim() : "";
+  const sent = typeof r.id === "string" && r.id.trim() !== "" ? r.id.trim() : "";
   // An id is an id: a page address carries the page title, and is refused here (R10).
-  if (id === "" || !idShapeOk(id)) return null;
+  if (sent === "" || !idShapeOk(sent)) return null;
+  // An id cut from the end of one keeps only its page id, never the title before it (review #5).
+  const id = pageIdOf(sent);
   const fields =
     r.fields && typeof r.fields === "object" && !Array.isArray(r.fields)
       ? (r.fields as Record<string, unknown>)

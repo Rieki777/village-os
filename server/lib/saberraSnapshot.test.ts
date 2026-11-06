@@ -297,6 +297,25 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect(after.circles.records[0]!.namesAMember).toBeUndefined();
   });
 
+  it("KEEPS ONLY THE PAGE ID OF AN ID THAT ENDS A PAGE ADDRESS, dashed or not, so no stored id carries a title (review #5)", async () => {
+    const { land } = serviceHolds("tail");
+    const hex = pageId("tail-titled");
+    const dashed = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    const other = pageId("tail-other");
+    (state.read.role as unknown[]).push(
+      { id: `Jane-Example-Helper-${dashed}`, fields: { "Role Name": "Helper", Circle: [`Land-Circle-${land}`], Status: "Active" } },
+      { id: `Secret-Plan-${other}`, fields: { "Role Name": "Planner", Status: "Active" } },
+    );
+    expect((await syncByHand(pool)).status).toBe(200);
+    const s = await newest();
+    expect(s.roles.records.map((r) => r.id)).toEqual(expect.arrayContaining([hex, other]));
+    expect(s.roles.records.find((r) => r.id === hex)!.fields.Circle).toEqual([{ id: land }]);
+    const stored = JSON.stringify(s);
+    for (const title of ["Jane-Example", "Helper-", "Secret-Plan", "Land-Circle"]) expect(stored).not.toContain(title);
+    // What the sync landed carries the page id too, never the title.
+    expect(JSON.stringify(await proposalsInBatch(pool, "sync-snap-1"))).not.toContain("Jane-Example");
+  });
+
   it("DROPS A RECORD WHOSE ID IS AN ADDRESS, and counts it in the sync's report (R10)", async () => {
     const { water } = serviceHolds("ids");
     // The service sends a second role with its page ADDRESS where the id belongs: the title rides in it.

@@ -38,6 +38,19 @@ export function idShapeOk(v: string): boolean {
   return /^[A-Za-z0-9_-]{1,64}$/.test(v.trim());
 }
 
+/**
+ * The page id a record id carries (review #5). A page address ends in the
+ * page's title and then its id ("Water-Steward-<32 hex>"), so an id cut from
+ * one passes `idShapeOk` with the title still in it. When other text comes
+ * before a 32-hex tail, with or without the id's own dashes, only the tail is
+ * kept, as 32 hex. An id alone is kept as it was sent.
+ */
+export function pageIdOf(v: string): string {
+  const t = v.trim();
+  const m = /^.*[-_]([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$/i.exec(t);
+  return m ? normaliseId(m[1]) : t;
+}
+
 /** A Notion-style page id: 32 hex digits once the dashes are gone. */
 export function looksLikeAnId(v: string): boolean {
   return /^[0-9a-f]{32}$/.test(normaliseId(v));
@@ -107,14 +120,17 @@ function refsOf(v: unknown, depth = 0): Ref[] {
   if (typeof v === "string") {
     const t = nonBlank(v);
     if (!t) return [];
-    return [looksLikeAnId(t) ? { id: t, name: null } : { id: null, name: t }];
+    // A pointer with a page title before its id is that id, never a name (review #5).
+    const id = pageIdOf(t);
+    return [looksLikeAnId(id) ? { id, name: null } : { id: null, name: t }];
   }
   if (Array.isArray(v)) return v.flatMap((x) => refsOf(x, depth + 1));
   if (typeof v === "object") {
     const o = v as Record<string, unknown>;
     // Notion's own property shape: { type: "relation", relation: [{ id }] }.
     if (Array.isArray(o.relation)) return refsOf(o.relation, depth + 1);
-    const id = nonBlank(o.id) ?? nonBlank(o.page_id) ?? null;
+    const given = nonBlank(o.id) ?? nonBlank(o.page_id) ?? null;
+    const id = given === null ? null : pageIdOf(given);
     const name =
       nonBlank(o.name) ??
       nonBlank(o["Circle Name"]) ??

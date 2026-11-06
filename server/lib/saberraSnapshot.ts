@@ -73,7 +73,7 @@ import { dedupeKeyFor } from "./externalProposals";
 import { nameCheckFor, type NameCheck } from "./saberraNames";
 import type { VendorRecord } from "./saberraProposals";
 import { readVendorRecord, type SaberraRecordKind } from "./saberraRecords";
-import { idShapeOk, labelOf, normaliseId, plainText, relationRefs } from "./saberraRelations";
+import { idShapeOk, labelOf, normaliseId, pageIdOf, plainText, relationRefs } from "./saberraRelations";
 import { liveChart } from "./structureReview";
 import { rosterRows } from "../repos/peopleRoster";
 import { insertSnapshot, pruneSnapshots, pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
@@ -185,7 +185,8 @@ export function snapshotRecord(kind: SaberraRecordKind, rec: VendorRecord, check
     }
     fields[field] = v;
   }
-  const out: SnapshotRecord = { id: rec.id.trim(), fields };
+  // The page id alone, never a title cut with it (review #5).
+  const out: SnapshotRecord = { id: pageIdOf(rec.id), fields };
   if (rec.editedAt) out.editedAt = rec.editedAt;
   if (named.length) out.namesAMember = named.sort();
   if (swapped.length) out.swapped = swapped.sort();
