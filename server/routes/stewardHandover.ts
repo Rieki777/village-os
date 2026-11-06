@@ -60,6 +60,8 @@ import { askForCosign, clearPendingHandover, needsCosign, readPendingHandover, s
 import { isMatureOnly, powerInPlainWords as plainWords, readLaunchSelection, writeLaunchSelection } from "../lib/launchHandover";
 import { COOLING_DAYS, landDueCooling, readCooling, startCooling, stopCooling, type CoolingEntry } from "../lib/handoverCooling";
 import { registerJob } from "../lib/scheduler";
+import { EVERYDAY_FLOOR_KEYS, isEverydayFloor, passFloors, readVillageFloors } from "../lib/villageFloors";
+import { CAPABILITY_LABELS } from "../../shared/capabilities";
 import { catalystUserIds } from "../repos/users";
 
 export const HAND_OVER_PATH = "/api/governance/powers/hand-to-village";
@@ -80,6 +82,8 @@ export const HAND_OVER_WORDS = {
   signedAlready: "You signed this already. It waits for a second steward to sign the same list.",
   stopNeedsReason: "Say why you are stopping it. The village reads the reason beside the stop.",
   notCooling: "That power is not waiting to cross.",
+  floorsAfterStart:
+    "An everyday power passes once the Game has started: the village then sets the stage that opens it, and every member keeps it.",
   adminDoorClosed:
     "Since the Game started, the stewards decide which powers the village holds. A steward hands one over from the hand-over checklist on the Journey to Launch page.",
 } as const;
@@ -174,6 +178,7 @@ export function register(app: Express, deps: Deps): void {
     const held = new Set((await capabilityHoldings(pool)).map((h) => h.capability));
     const cooling = started ? await readCooling(pool) : [];
     const selected = started ? [] : (await readLaunchSelection(pool)).capabilities;
+    const floors = started ? await readVillageFloors(pool) : [];
     const frozen = !started && !!(await openBallotFor(pool, VILLAGE_LAUNCH, LAUNCH_SUBJECT_REF));
     const waiting = await readPendingHandover(pool, started ? "now" : "launch");
     res.json({
@@ -189,7 +194,19 @@ export function register(app: Express, deps: Deps): void {
         ...plainWords(capability),
         held: held.has(capability),
         matureOnly: isMatureOnly(capability),
-      })),
+      })).concat(
+        // After the start, every everyday power too: passing one moves who sets its stage, never anybody's access.
+        started
+          ? EVERYDAY_FLOOR_KEYS.map((capability) => ({
+              capability,
+              title: CAPABILITY_LABELS[capability],
+              consequence: plainWords(capability).consequence,
+              held: floors.includes(capability),
+              matureOnly: false,
+              floorOnly: true,
+            }))
+          : [],
+      ),
     });
   });
 
@@ -208,7 +225,10 @@ export function register(app: Express, deps: Deps): void {
     const named = Array.from(new Set(asked.map(String)));
     // A launch selection may be empty; a hand-over after launch has to name something.
     if (started && named.length === 0) return res.status(400).json({ error: HAND_OVER_WORDS.nonePicked });
-    const stray = named.find((c) => !(HANDOVER_SET as readonly string[]).includes(c));
+    // An everyday power passes too, after the start, as its stage floor only (server/lib/villageFloors.ts).
+    const floorAtLaunch = !started && named.find(isEverydayFloor);
+    if (floorAtLaunch) return res.status(400).json({ error: HAND_OVER_WORDS.floorsAfterStart });
+    const stray = named.find((c) => !(HANDOVER_SET as readonly string[]).includes(c) && !isEverydayFloor(c));
     if (stray) return res.status(400).json({ error: HAND_OVER_WORDS.notAPower(stray) });
     if (req.body?.confirm !== true) return res.status(400).json({ error: HAND_OVER_WORDS.unconfirmed });
     // Never blocked: a mature-only power asks a second, explicit confirm, from each signer.
@@ -275,6 +295,30 @@ export function register(app: Express, deps: Deps): void {
 
     await landDue();
     const held = new Set((await capabilityHoldings(pool)).map((h) => h.capability));
+    /*
+     * EVERYDAY POWERS PASS AS THEIR FLOOR, AND WRITE NO HOLDING ROW. A holding row
+     * would leave one role holding voting or posting and take it from every other
+     * member. What moves is who sets the stage that opens it: the village, by vote.
+     */
+    const floorsNamed = named.filter(isEverydayFloor);
+    const floorsPassed = await passFloors(pool, floorsNamed);
+    for (const capability of floorsPassed) {
+      await recordEvent(pool, {
+        kind: "governance",
+        text: `The village now sets the stage that opens this, by its own vote: ${CAPABILITY_LABELS[capability]}. Every member keeps it.`,
+        actorUserId: actorId,
+        entityType: "capability",
+        entityRef: capability,
+      });
+      await recordEvent(pool, {
+        kind: "audit",
+        text: `capability:floor-to-village:${capability}:signed:${signedBy}`,
+        actorUserId: actorId,
+        entityType: "capability",
+        entityRef: capability,
+        audience: "admin",
+      });
+    }
     const moved: string[] = [];
     const alreadyHeld: string[] = [];
     const refused: Array<{ capability: string; error: string }> = [];
@@ -301,6 +345,7 @@ export function register(app: Express, deps: Deps): void {
       });
     }
     for (const capability of named) {
+      if (isEverydayFloor(capability)) continue;
       if (held.has(capability)) {
         alreadyHeld.push(capability);
         continue;
@@ -333,7 +378,7 @@ export function register(app: Express, deps: Deps): void {
         audience: "admin",
       });
     }
-    res.json({ stage: "now", moved, alreadyHeld, refused, cooling: (await readCooling(pool)).filter((e) => toCool.includes(e.capability)).map((e) => ({ capability: e.capability, landsAt: e.landsAt })) });
+    res.json({ stage: "now", moved, alreadyHeld, refused, floors: floorsPassed, cooling: (await readCooling(pool)).filter((e) => toCool.includes(e.capability)).map((e) => ({ capability: e.capability, landsAt: e.landsAt })) });
   });
 
   /** Stop a mature-only power inside its week. Any steward, with a reason the village reads. */
