@@ -91,6 +91,8 @@ import { backfill, linksWithReviews } from "../lib/seraPersonMatch";
 import { clearReview } from "../repos/seraLinkReviews";
 import { countAnswer, listAnswer, readDifferences } from "../lib/seraDifferencesRead";
 import { pruneByAge, SNAPSHOT_MAX_AGE_DAYS } from "../lib/saberraSnapshot";
+import { doorsNow, type Deciders } from "../lib/seraDoors";
+import { waitingChartProposals } from "../repos/seraDifferences";
 import { saberraAgentName } from "../lib/saberraGuide";
 import { villageTimezone } from "../lib/villageReaders";
 
@@ -102,7 +104,11 @@ import { villageTimezone } from "../lib/villageReaders";
  * other read here asks and never a wider one, and the reads go unbounded the
  * way every other route here does.
  */
-type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser"> & Partial<Pick<AppDeps, "mayStillSee" | "overLimit">>;
+type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser"> &
+  Partial<Pick<AppDeps, "mayStillSee" | "overLimit" | "members">> & {
+    /** The holder reads the count's "who decides" needs (review S2). Without them the count says nothing about it. */
+    deciders?: Deciders;
+  };
 
 /** How often one member may ask, per minute: a page that polls, never a loop. */
 const DIFFERENCES_COUNT_PER_MINUTE = 120;
@@ -122,7 +128,7 @@ function addressSet(): boolean {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { guardCapability, getPool, authedUser, mayStillSee, overLimit } = deps;
+  const { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, deciders } = deps;
 
   // The pool is read when the job RUNS, never when it is registered: this runs
   // during boot, before the pool is guaranteed to be the one the village uses.
@@ -330,7 +336,10 @@ export function register(app: Express, deps: Deps): void {
       return res.status(429).json(TOO_MANY);
     }
     try {
-      res.json(countAnswer(await readDifferences(getPool())));
+      const count = countAnswer(await readDifferences(getPool()));
+      // Who decides and who sets pay, by the holder test: role names and first names only (S2).
+      const doors = deciders && members ? await doorsNow(getPool(), deciders, members) : { decides: null, paySetBy: null };
+      res.json({ ...count, ...doors });
     } catch {
       res.status(500).json({ error: "Could not read the differences." });
     }
@@ -357,7 +366,8 @@ export function register(app: Express, deps: Deps): void {
     try {
       const cfg = (moduleConfig(MODULE_ID) as Record<string, unknown> | null) ?? {};
       const read = await readDifferences(getPool());
-      res.json(listAnswer(read, { agent: saberraAgentName(), dashboard: cfg.dashboardUrl, timeZone: villageTimezone() }));
+      const waiting = await waitingChartProposals(getPool(), MODULE_ID);
+      res.json(listAnswer(read, { agent: saberraAgentName(), dashboard: cfg.dashboardUrl, timeZone: villageTimezone(), waiting }));
     } catch {
       res.status(500).json({ error: "Could not read the differences." });
     }

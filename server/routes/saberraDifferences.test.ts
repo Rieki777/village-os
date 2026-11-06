@@ -32,7 +32,7 @@ vi.mock("../lib/modules", () => ({
 
 import { register, SNAPSHOT_AGE_JOB } from "./saberra";
 import { registeredJobs } from "../lib/scheduler";
-import { listAnswer, type DifferencesRead } from "../lib/seraDifferencesRead";
+import { batchLinks, listAnswer, type DifferencesRead } from "../lib/seraDifferencesRead";
 import type { Difference } from "../../shared/seraDifferences";
 
 const LAND = "0".repeat(31) + "1";
@@ -69,6 +69,8 @@ let server: http.Server;
 let bare: http.Server;
 let bareBase = "";
 const who = { signedIn: true, mayLook: false, mayGuard: false, limited: false };
+/** Who holds each power live, as the gate counts them. */
+const liveHolders: Record<string, string[]> = { "org.decide": ["u-rye"], "cash.pay": [] };
 const asked: string[] = [];
 const buckets: string[] = [];
 let guardCalls = 0;
@@ -102,6 +104,12 @@ beforeAll(async () => {
       buckets.push(bucket);
       return who.limited;
     }) as never,
+    members: { byId: async (id: string) => ({ id, name: id === "u-rye" ? "Rye Weaver" : "Someone Else", email: "rye@example.test" }) } as never,
+    deciders: {
+      liveHoldersOf: async (cap: string) => liveHolders[cap] ?? [],
+      rolesCarrying: (cap: string) => (cap === "org.decide" ? [{ id: "ops-lead", name: "Ops lead" }] : [{ id: "treasurer", name: "Treasurer" }]),
+      roleHolders: () => [{ roleId: "ops-lead", userId: "u-rye" }],
+    },
   });
   [server, base] = await listen(app);
 
@@ -136,6 +144,11 @@ describe("the count", () => {
     expect(r.body).toEqual({
       total: 2,
       toDecide: 2,
+      small: 0,
+      facts: 0,
+      // Who decides and who sets pay, from the holder test: role names and first names only (S2).
+      decides: { by: "holders", labels: ["Ops lead (Rye)"], more: 0, stewards: false, others: 0 },
+      paySetBy: { by: "admins" },
       lanes: { facts: 0, lowRisk: 0, decision: 2 },
       conflicts: 0,
       checkFirst: 2,
@@ -225,7 +238,7 @@ describe("the words the list sends", () => {
     ...over,
   });
   const read = (list: Difference[], holders: Record<string, string[]>): DifferencesRead => ({
-    list, latest: null, lastWhole: { circles: null, roles: null }, circleOrder: [], holders,
+    list, latest: null, lastWhole: { circles: null, roles: null }, circleOrder: [], holders, heldPageIds: [],
   });
   const sentences = (r: DifferencesRead) =>
     listAnswer(r, { agent: "Sera", dashboard: "", timeZone: "UTC" }).differences.map((d) => d.words.sentence);
@@ -241,6 +254,34 @@ describe("the words the list sends", () => {
     const rest = role({ kind: "roleRest", field: null, sera: "gone", ours: "live", subject: { kind: "role", pageId: "p", ourId: "r-dish", via: "pageId", name: "Dish Rota", circleId: "kitchen", circleName: "Kitchen" } });
     expect(sentences(read([rest], {}))).toEqual(["Sera has archived Dish Rota. It is still live here, and nobody holds it."]);
     expect(sentences(read([rest], { "r-dish": ["Ana Moss"] }))).toEqual(["Sera has archived Dish Rota (Ana). It is still live here."]);
+  });
+});
+
+describe("who decides, on the count", () => {
+  it("CARRIES NO ID, NO ADDRESS AND NO SURNAME of a holder, and says nothing without the holder reads (S2)", async () => {
+    const told = JSON.stringify((await get("/api/saberra/differences/count")).body);
+    for (const never of ["u-rye", "Weaver", "example.test"]) expect(told).not.toContain(never);
+    const bare = (await get("/api/saberra/differences/count", bareBase)).body;
+    expect(bare.decides).toBeNull();
+    expect(bare.paySetBy).toBeNull();
+  });
+});
+
+describe("which arrival holds each difference (C7, S1)", () => {
+  const roleDiff = (pageId: string) => ({ kind: "roleMove", subject: { kind: "role", pageId } }) as never;
+  const circleDiff = (pageId: string) => ({ kind: "circleAdd", subject: { kind: "circle", pageId } }) as never;
+  const batches = [
+    { batchId: "old", kind: "org.proposed", receivedAt: "2026-11-01T10:00:00.000Z", payload: { seats: [{ id: "AAAA-1111" }, { id: "bbbb2222" }] } },
+    { batchId: "new", kind: "org.proposed", receivedAt: "2026-11-05T10:00:00.000Z", payload: { seats: [{ id: "bbbb-2222" }] } },
+    { batchId: "circ", kind: "circle.proposed", receivedAt: "2026-11-03T10:00:00.000Z", payload: { vendorRecordId: "cccc-3333" } },
+  ];
+  it("LINKS A ROLE TO THE NEWEST WAITING BATCH CARRYING ITS PAGE ID, a circle by its record id, and nothing to none", () => {
+    const out = batchLinks([roleDiff("aaaa1111"), roleDiff("BBBB2222"), circleDiff("cccc3333"), roleDiff("dddd4444")], batches, ["aaaa1111", "bbbb2222"]);
+    expect(out.links).toEqual(["old", "new", "circ", null]);
+  });
+  it("HOLDS A BATCH ONLY WHEN THE NEWEST READ HOLDS EVERY PAGE ID IT CARRIES", () => {
+    const out = batchLinks([], batches, ["aaaa1111", "bbbb2222"]);
+    expect(out.held.sort()).toEqual(["new", "old"]);
   });
 });
 

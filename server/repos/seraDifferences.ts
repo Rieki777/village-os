@@ -114,3 +114,23 @@ export async function publishStamp(pool: Pool, moduleId: string): Promise<string
   );
   return `${Number(rows[0]?.n ?? 0)}:${Number(rows[0]?.at ?? 0)}`;
 }
+
+/** The kinds that change the chart (shared/structurePlan.ts STRUCTURE_KINDS). */
+const CHART_KINDS = ["org.proposed", "role.proposed", "circle.proposed"];
+
+/** Every proposal from `moduleId` still waiting that changes the chart, for the list's links (review C7). */
+export async function waitingChartProposals(
+  pool: Pool,
+  moduleId: string,
+): Promise<Array<{ batchId: string; kind: string; receivedAt: string | null; payload: Record<string, unknown> | null }>> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT batch_id, kind, UNIX_TIMESTAMP(received_at) AS at, payload FROM external_proposals WHERE module_id = ? AND status = 'proposed' AND kind IN (${CHART_KINDS.map(() => "?").join(",")})`,
+    [moduleId, ...CHART_KINDS],
+  );
+  return rows.map((r) => ({
+    batchId: String(r.batch_id),
+    kind: String(r.kind),
+    receivedAt: r.at === null || r.at === undefined ? null : new Date(Number(r.at) * 1000).toISOString(),
+    payload: objectOf(r.payload),
+  }));
+}

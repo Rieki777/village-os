@@ -48,6 +48,7 @@
 import { createHash } from "crypto";
 import type { Pool } from "mysql2/promise";
 import { canonicalJson } from "../../shared/canonicalJson";
+import { pageKey } from "../../shared/seraWaiting";
 import {
   countDifferences,
   differences,
@@ -76,6 +77,55 @@ export interface DifferencesRead {
   circleOrder: string[];
   /** Who holds each role here now, by role id, as names. Read on every call, never cached. */
   holders: Record<string, string[]>;
+  /** Every page id the newest read holds, as one key: an arrival is held in the list when all of its are here. */
+  heldPageIds: string[];
+}
+
+/** One waiting proposal that changes the chart, from the service, as the list reads it. */
+export interface WaitingChartItem {
+  batchId: string;
+  kind: string;
+  receivedAt: string | null;
+  payload: Record<string, unknown> | null;
+}
+
+/** The page ids one proposal carries: a structure's seats, or a record's own id. */
+function pageIdsOf(item: WaitingChartItem): string[] {
+  const p = item.payload ?? {};
+  const seats = Array.isArray(p.seats) ? p.seats : [];
+  const ids = seats.map((s) => (s && typeof s === "object" ? (s as Record<string, unknown>).id : null));
+  ids.push(p.vendorRecordId, p.id);
+  return ids.filter((x): x is string => typeof x === "string" && x.trim() !== "").map(pageKey);
+}
+
+/**
+ * WHICH ARRIVAL HOLDS EACH DIFFERENCE (review C7), and which arrivals the newest
+ * read holds whole (review S1). A role is held by the waiting structure carrying
+ * its page id, a circle by the waiting record of that id; the newest arrival
+ * wins, by its newest item. None is null, and the page says so with no link.
+ */
+export function batchLinks(
+  list: ReadonlyArray<Pick<Difference, "subject">>,
+  items: readonly WaitingChartItem[],
+  heldPageIds: readonly string[],
+): { links: (string | null)[]; held: string[] } {
+  const byBatch = new Map<string, { newest: number; ids: Set<string>; anyWithout: boolean }>();
+  for (const it of items) {
+    const b = byBatch.get(it.batchId) ?? { newest: 0, ids: new Set<string>(), anyWithout: false };
+    b.newest = Math.max(b.newest, Date.parse(it.receivedAt ?? "") || 0);
+    const ids = pageIdsOf(it);
+    if (ids.length === 0) b.anyWithout = true;
+    for (const id of ids) b.ids.add(id);
+    byBatch.set(it.batchId, b);
+  }
+  const newestFirst = Array.from(byBatch.entries()).sort((x, y) => y[1].newest - x[1].newest);
+  const links = list.map((d) => {
+    const id = d.subject.pageId ? pageKey(d.subject.pageId) : null;
+    return id ? (newestFirst.find(([, b]) => b.ids.has(id))?.[0] ?? null) : null;
+  });
+  const here = new Set(heldPageIds.map(pageKey));
+  const held = newestFirst.filter(([, b]) => !b.anyWithout && b.ids.size > 0 && Array.from(b.ids).every((id) => here.has(id))).map(([k]) => k);
+  return { links, held };
 }
 
 /** Each role's holders here, by name: a member by the roster's name, a documented holder by the name written. Examples left out. */
@@ -155,6 +205,7 @@ export async function readDifferences(pool: Pool, now: number = Date.now()): Pro
       lastWhole: { circles: wholeAt("circlesRead"), roles: wholeAt("rolesRead") },
       circleOrder: liveIn.circles.map((c) => c.id),
       holders,
+      heldPageIds: top ? [...top.circles.records, ...top.roles.records].map((r) => pageKey(r.id)) : [],
     };
     // An answer from part of its rows is given once and never kept.
     if (whole) cached = { key, value };
@@ -184,7 +235,7 @@ export interface ListedDifference extends Difference {
 /** The whole list, each difference with its words, for a reader the list's gate let in. */
 export function listAnswer(
   read: DifferencesRead,
-  opts: { agent: string; dashboard: unknown; timeZone: string },
+  opts: { agent: string; dashboard: unknown; timeZone: string; waiting?: readonly WaitingChartItem[] },
 ): {
   agent: string;
   lastReadAt: string | null;
@@ -192,10 +243,12 @@ export function listAnswer(
   reads: { circles: SnapshotRead; roles: SnapshotRead } | null;
   lastWholeAt: { circles: string | null; roles: string | null };
   circleOrder: string[];
+  heldBatches: string[];
   count: DifferenceCount;
   differences: ListedDifference[];
 } {
   const { agent, dashboard, timeZone } = opts;
+  const { links, held } = batchLinks(read.list, opts.waiting ?? [], read.heldPageIds ?? []);
   return {
     agent,
     lastReadAt: read.latest?.takenAt ?? null,
@@ -203,9 +256,12 @@ export function listAnswer(
     reads: read.latest ? { circles: read.latest.circles, roles: read.latest.roles } : null,
     lastWholeAt: read.lastWhole,
     circleOrder: read.circleOrder,
+    heldBatches: held,
     count: countDifferences(read.list),
-    differences: read.list.map((d) => ({
+    differences: read.list.map((d, i) => ({
       ...d,
+      // The arrival that holds it, for the structure review link; moderator data, never on the count.
+      batchId: links[i],
       words: {
         // A role here is named with who holds it here; a circle, or a role not here yet, with nobody.
         sentence: differenceSentence(d, agent, d.subject.kind === "role" && d.subject.ourId ? { holders: read.holders[d.subject.ourId] ?? [] } : {}),

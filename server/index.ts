@@ -25511,7 +25511,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo, seasonState, notify, firstName, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
-  registerSaberraRoutes(app, { guardCapability, getPool, authedUser, mayStillSee, overLimit });
+  registerSaberraRoutes(app, { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, deciders: { liveHoldersOf, rolesCarrying, roleHolders: loadPowerHoldings } });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps, authedUser });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
