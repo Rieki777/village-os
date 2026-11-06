@@ -129,6 +129,8 @@ import { register as registerGovernanceWizardRoutes } from "./routes/governanceW
 import { register as registerDelegationRoutes } from "./routes/delegation";
 import { register as registerVoiceSpreadRoutes } from "./routes/voiceSpread";
 import { register as registerGovernanceVetoRoutes } from "./routes/governanceVetoes";
+import { announceQuorumFallbackSwitch, register as registerQuorumFallbackRoutes } from "./routes/quorumFallback";
+import { QUORUM_FALLBACK_KEY, ADMIN_ROUTE_REFUSAL as QUORUM_FALLBACK_ADMIN_ROUTE } from "../shared/quorumFallback";
 import { register as registerGovernanceLandingRoutes } from "./routes/governanceLanding";
 import { register as registerMechanicsHistoryRoutes } from "./routes/mechanicsHistory";
 import { register as registerChangeRequestRoutes } from "./routes/changeRequests";
@@ -2973,7 +2975,13 @@ const recordMechanicsChange = (
   source: "admin" | "governance" | "platform",
   proposalRef?: string | null,
   note?: string | null,
-): Promise<void> => recordMechanicsChangeRow(getPool(), key, result, actorUserId, source, proposalRef, note);
+): Promise<void> =>
+  recordMechanicsChangeRow(getPool(), key, result, actorUserId, source, proposalRef, note).then(() =>
+    // 0328: every switch of the quorum fallback, by anyone, is recorded and announced.
+    key === QUORUM_FALLBACK_KEY
+      ? announceQuorumFallbackSwitch(getPool(), { previous: result.previous, value: result.value, by: source === "governance" ? "village" : "admin", actorUserId })
+      : undefined,
+  );
 
 /**
  * The village's stage-unlock table, resolved from the variables registry
@@ -20284,6 +20292,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
         });
       }
     }
+    // 0328: ON is the failsafe door's, OFF is the village's vote (Rye, 2026-11-06).
+    if (req.params.key === QUORUM_FALLBACK_KEY) return res.status(409).json({ error: QUORUM_FALLBACK_ADMIN_ROUTE, proposeInstead: true });
     const raw = req.body?.value;
     if (raw === undefined || raw === null) return res.status(400).json({ error: "A value is required" });
     // After the Birthing, what a vote MEANS is the village's, and the one door
@@ -22771,6 +22781,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       opensAt: b.opensAt,
       closesAt: b.closesAt,
       status: b.status,
+      // 0328: present only when true or set, so a village with the quorum
+      // fallback off serves every ballot exactly as it did before.
+      ...(b.quorumFallback ? { quorumFallback: true } : {}),
+      ...(b.rerunOf ? { rerunOf: b.rerunOf } : {}),
       // 0219: the judgement line, beside the proposal at the moment of deciding.
       purposeAlignment: b.purposeAlignment ?? null,
       outcomeNote: b.outcomeNote,
@@ -23155,6 +23169,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       opensAt: b.opensAt,
       closesAt: b.closesAt,
       status: b.status,
+      ...(b.rerunOf ? { rerunOf: b.rerunOf } : {}),
       outcomeNote: b.outcomeNote,
       closedAt: b.closedAt,
       tallies,
@@ -23235,6 +23250,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const readsRoll = !!viewer && (payload.myWeight !== null || (await isAdmin(req)) || hasCapability("ballot.vote", await capabilityCtx(viewer)));
     res.json(ballotForViewer(readsRoll ? viewer : null, {
       ...payload,
+      // 0328: a first ballot the quorum fallback asked again points at its re-run.
+      ...(b.status === "no_quorum_rerun" ? { rerunId: chain.find((p) => p.rerunOf === b.id)?.id ?? null } : {}),
       appliedKeys,
       priorAttempts: chain
         .filter((p) => p.id !== b.id)
@@ -23500,6 +23517,26 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(result.alreadyClosed ? 409 : 400).json({
         error: result.error,
         ballot: result.alreadyClosed ? await serveBallot(result.alreadyClosed) : undefined,
+      });
+    }
+    /*
+     * THE QUORUM FALLBACK ASKED AGAIN (0328). Nothing was decided, so nothing
+     * routes and no outcome is told: the listener registered beside the
+     * subject table already wrote the feed line, the audit event and the
+     * roll's notice that the question is open again.
+     */
+    if (result.outcome === "no_quorum_rerun") {
+      return res.json({
+        success: true,
+        outcome: result.outcome,
+        binding: ballotBinds(b.subjectType),
+        unity: result.unity,
+        quorum: result.quorum,
+        tallies: result.tallies,
+        applied: [],
+        held: null,
+        rerunBallotId: result.quorumRerun?.id ?? null,
+        ballot: await serveBallot(result.ballot, user.id),
       });
     }
     /*
@@ -24796,6 +24833,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     peopleArePublic: () => boolVar("org.public_people"),
   });
   registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
+  registerQuorumFallbackRoutes(app, { authedUser, isAdmin, getPool, notify });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
   registerChangeRequestRoutes(app, { authedUser, capabilityCtx, getPool, members, overLimit, validate: validateProposalChanges });
   // The two founder doors onto the moon's settlement: ask the village now,

@@ -21,6 +21,7 @@
  * for a reader with no animation at all.
  */
 import { CheckCircle2, CircleSlash, MinusCircle } from "lucide-react";
+import { Link } from "wouter";
 import { Celebration } from "@/components/natural";
 import { pctText, weightText } from "./voteBars";
 import type { Ballot, Landing } from "./governanceApi";
@@ -66,6 +67,14 @@ const OUTCOME: Record<
   },
   no_quorum: {
     word: "Too few spoke",
+    icon: MinusCircle,
+    frame: "border-stone-300 bg-stone-50",
+    chip: "bg-stone-600 text-white",
+    law: false,
+  },
+  // 0328: never an outcome. The question is open again on a linked re-run.
+  no_quorum_rerun: {
+    word: "Open again, half the quorum",
     icon: MinusCircle,
     frame: "border-stone-300 bg-stone-50",
     chip: "bg-stone-600 text-white",
@@ -184,6 +193,24 @@ export default function DecisionOutcome({
           </p>
         ) : (
           <p className="mt-3 text-lg text-stone-700">This closed without a sentence on it.</p>
+        )}
+
+        {/* 0328: the two ballots of a quorum re-run point at each other. */}
+        {ballot.status === "no_quorum_rerun" && ballot.rerunId && (
+          <p className="mt-3 text-sm font-semibold text-stone-800">
+            <Link href={`/decisions/${ballot.rerunId}`} className="text-teal-deep hover:underline">
+              Vote on it again here
+            </Link>
+          </p>
+        )}
+        {ballot.rerunOf && (
+          <p className="mt-3 text-sm text-stone-700">
+            This asks again after{" "}
+            <Link href={`/decisions/${ballot.rerunOf}`} className="text-teal-deep hover:underline">
+              a vote too few of us answered
+            </Link>
+            .
+          </p>
         )}
 
         <p className="mt-2 text-sm text-stone-700">

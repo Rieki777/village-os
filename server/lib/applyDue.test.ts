@@ -202,7 +202,9 @@ const carry = async (
     closerMayCloseEarly: false,
   });
   if (!closed.ok) throw new Error(`close refused: ${closed.error}`);
-  return closed;
+  // These fixtures never turn the quorum fallback on (0328), so no close here is a re-run.
+  if (closed.outcome === "no_quorum_rerun") throw new Error("a close here opened a quorum re-run");
+  return { ...closed, outcome: closed.outcome };
 };
 
 /** Seat somebody as a steward: a role carrying the capability, and a holding. */

@@ -2009,6 +2009,10 @@ const KNOWN_DIALS = [
   // The two that arrived with 19G: whose weight the quorum counts.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
+  // Rye, 2026-11-06: a missed quorum asked again once, at half the bar, off by
+  // default (0328, shared/quorumFallback.ts). It builds no staged ruling here:
+  // the stalemate re-run above is a different door, on an OPEN ballot.
+  "governance.quorum_fallback",
 ];
 
 export function dialCoverageProblem(keys, known = KNOWN_DIALS) {

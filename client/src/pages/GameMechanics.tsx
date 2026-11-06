@@ -150,7 +150,7 @@ export type ProposalStatus =
   | "applied";
 
 /** How the last ballot on a proposal ended (`ballots.status`). */
-export type BallotStatus = "open" | "passed" | "failed" | "no_quorum" | "withdrawn";
+export type BallotStatus = "open" | "passed" | "failed" | "no_quorum" | "no_quorum_rerun" | "withdrawn";
 
 interface Proposal {
   id: string;

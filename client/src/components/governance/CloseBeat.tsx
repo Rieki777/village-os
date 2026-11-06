@@ -75,6 +75,12 @@ const ADVISORY_WORDS: Record<BallotOutcome, { heading: string; blurb: string }> 
   },
 };
 
+// The quorum fallback (shared/quorumFallback.ts): nothing is decided by this close.
+const RERUN_WORDS = {
+  heading: "Too few spoke, so it is asked again",
+  blurb: "Closing this opens the same question once more, for as long as before, and half as many voices are enough. Nothing is decided by this close.",
+};
+
 export default function CloseBeat({
   ballot,
   busy,
@@ -101,8 +107,12 @@ export default function CloseBeat({
     totalWeight: ballot.totalWeight,
     tallies: ballot.tallies,
     openObjections: standingObjections,
+    // 0328: a re-run's second miss is decided by the votes cast, as the close is.
+    majorityOfCast: !!ballot.quorumFallback && !!ballot.rerunOf,
   });
-  const words = (ballot.binding ? OUTCOME_WORDS : ADVISORY_WORDS)[outcome];
+  // 0328: a first ballot that misses with the fallback on is asked again.
+  const asksAgain = outcome === "no_quorum" && !!ballot.quorumFallback && !ballot.rerunOf;
+  const words = asksAgain ? RERUN_WORDS : (ballot.binding ? OUTCOME_WORDS : ADVISORY_WORDS)[outcome];
 
   // A seat application's ballot records fixed words (red team U12): typed words
   // could name the member who applied on a record built never to name them.

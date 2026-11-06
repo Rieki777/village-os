@@ -187,7 +187,9 @@ const carry = async (b: BallotRow, votes: Array<[string, "yes" | "no", string?]>
     closerMayCloseEarly: false,
   });
   if (!closed.ok || !closed.ballot) throw new Error(`close refused: ${JSON.stringify(closed)}`);
-  return closed;
+  // These fixtures never turn the quorum fallback on (0328), so no close here is a re-run.
+  if (closed.outcome === "no_quorum_rerun") throw new Error("a close here opened a quorum re-run");
+  return { ...closed, outcome: closed.outcome };
 };
 
 /** Carried and stamped with its landing instant, the way the close route leaves it. */
