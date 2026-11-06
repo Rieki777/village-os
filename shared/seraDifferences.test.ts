@@ -11,9 +11,10 @@ import { describe, expect, it } from "vitest";
 import { seatIdFor } from "./structurePlan";
 import {
   countDifferences,
-  differences,
+  differences as computeDifferences,
   laneFor,
   normaliseText,
+  traceAccepted,
   valueHash,
   type AcceptedChange,
   type Difference,
@@ -26,6 +27,18 @@ import {
   type SnapshotRecord,
 } from "./seraDifferences";
 import { differenceSentence, flagWords, openInUrl, sourceWords } from "./seraDifferenceWords";
+
+/**
+ * Every call in this file goes through here, so every fixture also holds the
+ * rule that one key names one difference: a page can only take, keep or settle
+ * a difference it can address.
+ */
+function differences(i: DifferencesInput): Difference[] {
+  const out = computeDifferences(i);
+  const keys = out.map((d) => d.key);
+  expect(keys.filter((k, n) => keys.indexOf(k) !== n), "two differences share a key").toEqual([]);
+  return out;
+}
 
 // ── Builders ────────────────────────────────────────────────────────────────
 
@@ -73,7 +86,32 @@ const liveRole = (id: string, name: string, circleId: string | null, extra: Part
   id, name, circleId, active: true, isExample: false, holders: 0, aim: null, paySet: false, ...extra,
 });
 
-const created = (id: string, payload: Record<string, unknown>): AcceptedChange => ({ op: "create_seat", orgRoleId: id, payload });
+/** The names our circles answer to, so a published circle id can be traced back to the service's circle name. */
+const CIRCLE_NAMES: Record<string, string> = { land: "Land", water: "Water" };
+
+/**
+ * A published create_seat traced to the service's own proposal, which said
+ * exactly what was published: nobody edited it at accept.
+ */
+const created = (id: string, payload: Record<string, unknown>, pageId: string | null = null): AcceptedChange => ({
+  op: "create_seat",
+  orgRoleId: id,
+  payload,
+  from: {
+    pageId,
+    name: typeof payload.name === "string" ? payload.name : null,
+    aim: typeof payload.aim === "string" ? payload.aim : null,
+    circleName: typeof payload.circleId === "string" ? (CIRCLE_NAMES[payload.circleId] ?? null) : null,
+  },
+});
+
+/** A published create_circle traced to the service's circle proposal. */
+const madeCircle = (id: string, name: string, pageId: string | null): AcceptedChange => ({
+  op: "create_circle",
+  orgRoleId: `circle:${id}`,
+  payload: { name },
+  from: { pageId, name },
+});
 
 /** A small chart both sides agree on: one circle, one role made from a page id. */
 const LAND = pid(1);
@@ -81,6 +119,11 @@ const WATER = pid(2);
 const STEWARD = pid(10);
 const LAND_HERE = liveCircle("land", "Land");
 const WATER_HERE = liveCircle("water", "Water");
+
+/** A snapshot taken at an exact moment, for the rules that look a day back. */
+function snapshotAt(takenAt: string, circles: SnapshotRecord[] | SnapshotKind, roles: SnapshotRecord[] | SnapshotKind): Snapshot {
+  return { ...snapshot(circles, roles), takenAt };
+}
 
 function input(over: Partial<DifferencesInput> = {}): DifferencesInput {
   return {
@@ -210,11 +253,16 @@ describe("R2: the base is what this village published from the service", () => {
     const roles = [kitchen, liveRole("cook", "Cook", "land")];
     expect(differences(input({ snapshots: twoReads, live: { circles: [LAND_HERE, garden], roles } }))).toEqual([]);
 
-    // The control: a published history for the same role makes its absence count.
+    // The control: a published history for the same role, traced to the page id
+    // the service sent it under, makes its absence from two whole reads count.
+    const KITCHEN = pid(24);
     const withHistory = differences(
-      input({ snapshots: twoReads, live: { circles: [LAND_HERE, garden], roles }, accepted: [created("kitchen", { name: "Kitchen" })] }),
+      input({ snapshots: twoReads, live: { circles: [LAND_HERE, garden], roles }, accepted: [created("kitchen", { name: "Kitchen" }, KITCHEN)] }),
     );
-    expect(withHistory.map((d) => [d.kind, d.subject.ourId])).toEqual([["roleRest", "kitchen"]]);
+    expect(withHistory.map((d) => [d.kind, d.subject.ourId, d.key])).toEqual([["roleRest", "kitchen", `role:${KITCHEN}:presence`]]);
+
+    // A history that names no page id cannot prove anything is gone.
+    expect(differences(input({ snapshots: twoReads, live: { circles: [LAND_HERE, garden], roles }, accepted: [created("kitchen", { name: "Kitchen" })] }))).toEqual([]);
   });
 
   it("WE RESTED WHAT THE SERVICE KEEPS: ours is ahead, counted, and never a difference to act on", () => {
@@ -299,11 +347,13 @@ describe("R3: a field the service did not send", () => {
 describe("R4: when something counts as removed", () => {
   const X = pid(20);
   const xId = roleIdOf(X);
-  const history = [created(xId, { name: "Kitchen", circleId: "land" })];
+  const history = [created(xId, { name: "Kitchen", circleId: "land" }, X)];
   const live = { circles: [LAND_HERE], roles: [liveRole(xId, "Kitchen", "land")] };
   const withX = (n: number) => snapshot([circleRec(LAND, "Land")], [roleRec(X, "Kitchen", [LAND])], n);
+  // A read without the kitchen. One that was not whole carries the read before it
+  // forward, records and all, exactly as the sync stores it: never an empty list.
   const withoutX = (n: number, read: SnapshotRead = "whole") =>
-    snapshot([circleRec(LAND, "Land")], kindOf(read === "whole" ? [roleRec(pid(21), "Cook", [LAND])] : [], read), n);
+    snapshot([circleRec(LAND, "Land")], kindOf([roleRec(pid(21), "Cook", [LAND])], read), n);
 
   it("ARCHIVED AT THE SERVICE IS GONE: a role to rest, with the reason", () => {
     const list = differences(
@@ -326,7 +376,7 @@ describe("R4: when something counts as removed", () => {
     const G = pid(25);
     const garden = liveCircle("garden", "Garden");
     const circleLive = { circles: [LAND_HERE, garden], roles: [] };
-    const made = [{ op: "create_circle", orgRoleId: "circle:garden", payload: { name: "Garden" } }];
+    const made = [madeCircle("garden", "Garden", G)];
     const read = (n: number, withGarden: boolean) =>
       snapshot([circleRec(LAND, "Land"), ...(withGarden ? [circleRec(G, "Garden")] : [])], [], n);
     expect(only(differences(input({ snapshots: [read(3, false), read(2, true)], live: circleLive, accepted: made })), "circleRest")).toEqual([]);
@@ -513,8 +563,10 @@ describe("R12: one difference is one field, or one add or rest", () => {
       );
     };
     const [d] = run(false);
-    expect(d).toMatchObject({ kind: "pay", field: "pay", lane: "decision", ours: "none", state: "suggestion" });
+    expect(d).toMatchObject({ kind: "pay", field: "pay", lane: "decision", ours: "none", state: "suggestion", base: "unknown" });
     expect(d.autoEligible).toBe(false);
+    expect(d.bulkEligible).toBe(false);
+    expect(d.takeable).toBe(false);
     expect(differenceSentence(d, "Sera")).toBe(
       "Sera lists Treasurer's pay as a stipend of US$1,200 a month for the whole role, still pending in Sera. This village has no pay set for it.",
     );
@@ -684,5 +736,324 @@ describe("the count", () => {
       checkFirst: 1,
       oursAhead: 0,
     });
+  });
+});
+
+// ── The independent review of 2026-11-06 ────────────────────────────────────
+// Each block below is one finding, built from the reviewer's probe inputs.
+
+describe("review 1: a rename is never a removal", () => {
+  const G = pid(80);
+  const garden = liveCircle("garden", "Garden");
+  const read = (n: number, name: string) => snapshot([circleRec(LAND, "Land"), circleRec(G, name)], [], n);
+  const live = { circles: [LAND_HERE, garden], roles: [] };
+
+  it("A CIRCLE THE SERVICE RENAMED UNDER THE SAME PAGE ID IS ONE RENAME, NEVER A REST", () => {
+    // With and without a published history: the reads alone carry the page id.
+    for (const accepted of [[], [madeCircle("garden", "Garden", G)]]) {
+      const list = differences(
+        input({ snapshots: [read(3, "Gardens & Orchards"), read(2, "Gardens & Orchards"), read(1, "Garden")], live, accepted }),
+      );
+      expect(list.map((d) => [d.kind, d.key, d.sera, d.ours])).toEqual([["rename", `circle:${G}:name`, "Gardens & Orchards", "Garden"]]);
+      expect(list[0].flags.map((f) => f.key)).toContain("matchedEarlier");
+      expect(list[0].bulkEligible).toBe(false);
+    }
+    // A published history knows the page id even when no kept read saw the old name.
+    const fromHistory = differences(input({ snapshots: [read(1, "Gardens & Orchards")], live, accepted: [madeCircle("garden", "Garden", G)] }));
+    expect(fromHistory.map((d) => [d.kind, d.base])).toEqual([["rename", { value: "Garden" }]]);
+  });
+
+  it("A RECORD WHOSE NAME FIELD STOPPED ARRIVING IS STILL THERE, so nothing is rested", () => {
+    const nameless = (n: number) => snapshot([circleRec(LAND, "Land"), { id: G, fields: { Name: "Garden", Status: "Active" } }], [], n);
+    expect(differences(input({ snapshots: [nameless(3), nameless(2), read(1, "Garden")], live, accepted: [madeCircle("garden", "Garden", G)] }))).toEqual([]);
+  });
+
+  it("A ROLE MATCHED BY NAME AND RENAMED AT THE SERVICE IS A RENAME, NEVER A REST", () => {
+    const K = pid(81);
+    const role = (n: number, name: string) => snapshot([circleRec(LAND, "Land")], [roleRec(K, name, [LAND])], n);
+    const traced: AcceptedChange = {
+      op: "update_seat", orgRoleId: "cook", payload: { name: "Cook", circleId: "land" },
+      from: { pageId: K, name: "Cook", aim: null, circleName: "Land" },
+    };
+    for (const accepted of [[{ ...traced, from: null }], [traced]]) {
+      const list = differences(
+        input({ snapshots: [role(3, "Head Cook"), role(2, "Head Cook"), role(1, "Cook")], live: { circles: [LAND_HERE], roles: [liveRole("cook", "Cook", "land")] }, accepted }),
+      );
+      expect(list.map((d) => [d.kind, d.key, d.sera, d.ours])).toEqual([["rename", `role:${K}:name`, "Head Cook", "Cook"]]);
+    }
+  });
+
+  it("A PAGE ID THAT WAS OURS AND CAN NO LONGER BE MATCHED IS FLAGGED ON ITS RECORD, NEVER RESTED", () => {
+    const H = pid(82);
+    // A stored link has given our garden to another record, and G is still sent.
+    const both = (n: number) => snapshot([circleRec(G, "Gardens & Orchards"), circleRec(H, "Garden")], [], n);
+    const list = differences(
+      input({
+        snapshots: [both(3), both(2), snapshot([circleRec(G, "Garden")], [], 1)],
+        live: { circles: [garden], roles: [] },
+        accepted: [madeCircle("garden", "Garden", G)],
+        links: { circles: { [H]: "garden" } },
+      }),
+    );
+    expect(only(list, "circleRest")).toEqual([]);
+    const add = list.find((d) => d.key === `circle:${G}:presence`)!;
+    expect(add.kind).toBe("circleAdd");
+    expect(add.flags).toContainEqual({ key: "wasOurs", params: { name: "Garden", of: "circle" } });
+  });
+
+  it("NEVER TWO DIFFERENCES WITH ONE KEY, over every one of the review's fixtures", () => {
+    const K = pid(81);
+    const fixtures: DifferencesInput[] = [
+      input({ snapshots: [read(3, "Gardens & Orchards"), read(2, "Gardens & Orchards"), read(1, "Garden")], live, accepted: [madeCircle("garden", "Garden", G)] }),
+      input({
+        snapshots: [
+          snapshot([circleRec(LAND, "Land")], [roleRec(K, "Head Cook", [LAND])], 3),
+          snapshot([circleRec(LAND, "Land")], [roleRec(K, "Head Cook", [LAND])], 2),
+          snapshot([circleRec(LAND, "Land")], [roleRec(K, "Cook", [LAND])], 1),
+        ],
+        live: { circles: [LAND_HERE], roles: [liveRole("cook", "Cook", "land")] },
+        accepted: [{ op: "update_seat", orgRoleId: "cook", payload: { name: "Cook" }, from: { pageId: K, name: "Cook" } }],
+      }),
+    ];
+    for (const f of fixtures) {
+      const keys = computeDifferences(f).map((d) => d.key);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+  });
+
+  it("A CIRCLE TO REST COUNTS THE PEOPLE WHO HOLD ROLES IN IT", () => {
+    const people = { circles: [garden], roles: [liveRole("weeder", "Weeder", "garden", { holders: 2 }), liveRole("waterer", "Waterer", "garden", { holders: 1 })] };
+    const archived = differences(
+      input({ snapshots: [snapshot([circleRec(G, "Garden", { fields: { Status: "Archived" } })], [], 1)], live: people, accepted: [madeCircle("garden", "Garden", G)] }),
+    );
+    const missing = differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land")], [], 3), snapshot([circleRec(LAND, "Land")], [], 2), read(1, "Garden")],
+        live: { ...people, circles: [LAND_HERE, garden] },
+        accepted: [madeCircle("garden", "Garden", G)],
+      }),
+    );
+    for (const list of [archived, missing]) {
+      const [rest] = only(list, "circleRest");
+      expect(rest.flags).toContainEqual({ key: "heldHere", params: { holders: 3 } });
+      expect(rest.bulkEligible).toBe(false);
+    }
+  });
+});
+
+describe("review 2: the base is what the service itself said", () => {
+  const K = pid(83);
+  const kid = roleIdOf(K);
+  const run = (published: string, original: string, sera: string) =>
+    differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(K, "Kitchen", [LAND], { fields: { Body: sera } })])],
+        live: { circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land", { aim: published })] },
+        accepted: [{
+          op: "create_seat", orgRoleId: kid, payload: { name: "Kitchen", circleId: "land", aim: published },
+          from: { pageId: K, name: "Kitchen", aim: original, circleName: "Land" },
+        }],
+      }),
+    );
+
+  it("WORDS A STEWARD EDITED AT ACCEPT ARE AN UNKNOWN BASE, flagged, never an automatic suggestion", () => {
+    const [d] = run("Cooks and keeps the pantry.", "Cooks.", "Cooks.");
+    expect(d).toMatchObject({ kind: "textField", field: "aim", base: "unknown", autoEligible: false, bulkEligible: false });
+    expect(d.flags.map((f) => f.key)).toContain("baseUnknown");
+    // The control: nothing edited at accept, then the service changed its words.
+    const [plain] = run("Cooks and keeps the pantry.", "Cooks and keeps the pantry.", "Cooks.");
+    expect(plain).toMatchObject({ state: "suggestion", base: { value: "Cooks and keeps the pantry." }, autoEligible: true });
+  });
+
+  it("A NAME TYPED AT ACCEPT IS AN UNKNOWN BASE", () => {
+    const list = differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(K, "Kitchen", [LAND])])],
+        live: { circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen Two", "land")] },
+        accepted: [{ op: "create_seat", orgRoleId: kid, payload: { name: "Kitchen Two", circleId: "land" }, from: { pageId: K, name: "Kitchen", circleName: "Land" } }],
+      }),
+    );
+    expect(list.map((d) => [d.kind, d.base])).toEqual([["rename", "unknown"]]);
+  });
+
+  it("A CHANGE THAT CANNOT BE TRACED TO THE SERVICE IS LEFT OUT OF THE BASE", () => {
+    const [d] = differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(K, "Kitchen", [LAND], { fields: { Body: "Cooks." } })])],
+        live: { circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land", { aim: "Feeds people." })] },
+        accepted: [{ op: "create_seat", orgRoleId: kid, payload: { name: "Kitchen", aim: "Feeds people." }, from: null }],
+      }),
+    );
+    expect(d).toMatchObject({ field: "aim", base: "unknown" });
+  });
+});
+
+describe("tracing a published change to the service's proposal", () => {
+  const K = pid(84);
+  const kid = roleIdOf(K);
+  const structure = {
+    id: "p1", draftId: "d1", kind: "org.proposed", original: true,
+    payload: { title: "Structure", seats: [{ id: K, name: "Kitchen", circleName: "Land", aim: "Cooks." }, { id: pid(85), name: "Cook" }] },
+  };
+  const orchard = { id: "p2", draftId: "d1", kind: "circle.proposed", original: true, payload: { "Circle Name": "Orchard", Status: "Active", vendorRecordId: pid(86) } };
+
+  it("TRACES A ROLE BY ITS PAGE ID, AN UPDATE BY NAME AND A CIRCLE BY ITS ID, AND NEVER A REST", () => {
+    const out = traceAccepted(
+      [
+        { draftId: "d1", op: "create_seat", orgRoleId: kid, payload: { name: "Kitchen" } },
+        { draftId: "d1", op: "update_seat", orgRoleId: "cook-here", payload: { name: "Cook" } },
+        { draftId: "d1", op: "create_circle", orgRoleId: "circle:orchard", payload: { name: "Orchard" } },
+        { draftId: "d1", op: "rest_seat", orgRoleId: "old", payload: { chosenBy: "u-1" } },
+      ],
+      [structure, orchard],
+    );
+    expect(out.map((c) => c.from)).toEqual([
+      { pageId: K, name: "Kitchen", aim: "Cooks.", circleName: "Land" },
+      { pageId: pid(85), name: "Cook", aim: null, circleName: null },
+      { pageId: pid(86), name: "Orchard" },
+      null,
+    ]);
+  });
+
+  it("NEVER TRACES TO A PROPOSAL SOMEBODY EDITED, OR TO ANOTHER DRAFT'S", () => {
+    const changes = [
+      { draftId: "d1", op: "create_seat", orgRoleId: kid, payload: {} },
+      { draftId: "d2", op: "create_seat", orgRoleId: kid, payload: {} },
+    ];
+    expect(traceAccepted(changes, [{ ...structure, original: false }]).map((c) => c.from)).toEqual([null, null]);
+    // The control: the untouched proposal traces its own draft's change, and only that one.
+    expect(traceAccepted(changes, [structure]).map((c) => c.from?.pageId ?? null)).toEqual([K, null]);
+  });
+});
+
+describe("review 4: a move says when its circle is not here", () => {
+  const K = pid(87);
+  const kid = roleIdOf(K);
+  const ORCHARD = pid(88);
+  const run = (circles: string[]) =>
+    differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land"), circleRec(WATER, "Water"), circleRec(ORCHARD, "Orchard")], [roleRec(K, "Kitchen", circles)])],
+        live: { circles: [LAND_HERE, WATER_HERE], roles: [liveRole(kid, "Kitchen", "land")] },
+        accepted: [created(kid, { name: "Kitchen", circleId: "land" }, K)],
+      }),
+    );
+
+  it("A MOVE INTO A CIRCLE THAT IS NOT HERE IS FLAGGED, and so is a move into several", () => {
+    const [into] = only(run([ORCHARD]), "roleMove");
+    expect(into.flags).toEqual([{ key: "circleNotHere", params: { circle: "Orchard" } }]);
+    expect(into.bulkEligible).toBe(false);
+    const [several] = only(run([WATER, ORCHARD]), "roleMove");
+    expect(several.flags).toEqual([{ key: "circleNotHere", params: { circle: "Orchard" } }, { key: "severalCircles", params: { count: 2 } }]);
+    // The control: one circle that is here carries no flag.
+    expect(only(run([WATER]), "roleMove")[0].flags).toEqual([]);
+  });
+});
+
+describe("review 5: pay is never bulk-taken", () => {
+  it("PAY'S BASE IS ALWAYS UNKNOWN, on the second read as on the first", () => {
+    const K = pid(89);
+    const kid = roleIdOf(K);
+    const pay = { "Compensation Model": "Stipend", "Compensation Status": "Proposed", "Compensation Target (Monthly)": 1200 };
+    const read = (n: number) => snapshot([circleRec(LAND, "Land")], [roleRec(K, "Kitchen", [LAND], { fields: pay })], n);
+    const [d] = differences(
+      input({
+        snapshots: [read(2), read(1)],
+        live: { circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land")] },
+        accepted: [created(kid, { name: "Kitchen", circleId: "land" }, K)],
+      }),
+    );
+    expect(d).toMatchObject({ kind: "pay", base: "unknown", bulkEligible: false, autoEligible: false });
+  });
+});
+
+describe("review 6: facts and pay compare with the read a day before", () => {
+  const id = roleIdOf(STEWARD);
+  const live = { circles: [LAND_HERE], roles: [liveRole(id, "Water Steward", "land", { paySet: true })] };
+  const accepted = [created(id, { name: "Water Steward", circleId: "land" }, STEWARD)];
+  const at = (iso: string, fields: Record<string, unknown>) =>
+    snapshotAt(iso, [circleRec(LAND, "Land")], [roleRec(STEWARD, "Water Steward", [LAND], { fields })]);
+
+  it("A FACT THAT CHANGED STAYS IN THE LIST FOR A DAY, through any number of reads", () => {
+    const a = at("2026-11-01T09:00:00.000Z", { "Next Audit Date": "2026-11-01" });
+    const b = at("2026-11-02T08:00:00.000Z", { "Next Audit Date": "2026-12-01" });
+    const c = at("2026-11-02T10:00:00.000Z", { "Next Audit Date": "2026-12-01" });
+    const shown = differences(input({ live, accepted, snapshots: [c, b, a], asOf: "2026-11-02T10:00:00.000Z" }));
+    expect(shown.map((d) => [d.kind, d.sera, d.ours])).toEqual([["valueField", "2026-12-01", "2026-11-01"]]);
+    // A day after the read that changed it, the digest has moved on.
+    const d = at("2026-11-03T10:00:00.000Z", { "Next Audit Date": "2026-12-01" });
+    expect(differences(input({ live, accepted, snapshots: [d, c, b, a], asOf: "2026-11-03T10:00:00.000Z" }))).toEqual([]);
+  });
+
+  it("A PAY FIGURE THE SERVICE CHANGED, WITH PAY SET HERE, STAYS FOR A DAY TOO", () => {
+    const pay = (usd: number) => ({ "Compensation Model": "Stipend", "Compensation Status": "Proposed", "Compensation Target (Monthly)": usd });
+    const a = at("2026-11-01T09:00:00.000Z", pay(1200));
+    const b = at("2026-11-02T08:00:00.000Z", pay(1500));
+    const c = at("2026-11-02T10:00:00.000Z", pay(1500));
+    const [d] = differences(input({ live, accepted, snapshots: [c, b, a], asOf: "2026-11-02T10:00:00.000Z" }));
+    expect(d).toMatchObject({ kind: "pay", state: "conflict", ours: "set" });
+  });
+});
+
+describe("review 7: presence needs the service's own status", () => {
+  const K = pid(90);
+  const kid = roleIdOf(K);
+  const rec = (status?: string): SnapshotRecord => ({ id: K, fields: { "Role Name": "Kitchen", Circle: [{ id: LAND }], ...(status ? { Status: status } : {}) } });
+
+  it("AN ABSENT OR UNKNOWN STATUS MAKES NO PRESENCE DIFFERENCE, either way", () => {
+    // The reviewer's shape: rested here, and the service's record carries no status.
+    const rested = { circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land", { active: false })] };
+    const history: AcceptedChange[] = [created(kid, { name: "Kitchen", circleId: "land" }, K), { op: "rest_seat", orgRoleId: kid, payload: {}, from: null }];
+    expect(differences(input({ snapshots: [snapshot([circleRec(LAND, "Land")], [rec()])], live: rested, accepted: history }))).toEqual([]);
+    // Nothing here, and no status, or one the service never defined: no addition.
+    for (const status of [undefined, "Paused"]) {
+      expect(differences(input({ snapshots: [snapshot([circleRec(LAND, "Land")], [rec(status)])] })), String(status)).toEqual([]);
+    }
+    // The controls: an explicit live status adds, an explicit Archived rests.
+    expect(differences(input({ snapshots: [snapshot([circleRec(LAND, "Land")], [rec("Vacant")])] })).map((d) => d.kind)).toEqual(["roleAdd"]);
+    const live = { circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land")] };
+    expect(differences(input({ snapshots: [snapshot([circleRec(LAND, "Land")], [rec("Archived")])], live, accepted: history })).map((d) => d.kind)).toEqual(["roleRest"]);
+  });
+});
+
+describe("review 8 and 9: one normaliser, the name swap included", () => {
+  const K = pid(91);
+  const kid = roleIdOf(K);
+  const swap = (t: string) => t.replace(/\bJane Example\b/g, "a member");
+  const swapped = { namesAMember: ["Body"], swapped: ["Body"] };
+
+  it("WORDS WITH A NAME SWAPPED OUT COMPARE EQUAL TO OUR WORDS WITH THE NAME IN THEM", () => {
+    const ours = "Jane Example holds the water.";
+    const run = (withSwap: boolean) =>
+      differences(
+        input({
+          snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(K, "Kitchen", [LAND], { ...swapped, fields: { Body: "a member holds the water." } })])],
+          live: { circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land", { aim: ours })] },
+          accepted: [created(kid, { name: "Kitchen", circleId: "land", aim: ours }, K)],
+          ...(withSwap ? { swap } : {}),
+        }),
+      );
+    expect(run(true)).toEqual([]);
+    // The control: without the swap on our side, the two never meet.
+    expect(run(false).map((d) => d.field)).toEqual(["aim"]);
+  });
+
+  it("NEVER OFFERS SWAPPED WORDS AS THE VALUE TO TAKE", () => {
+    const [d] = differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(K, "Kitchen", [LAND], { ...swapped, fields: { Body: "a member keeps the wells." } })])],
+        live: { circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land", { aim: "Keeps the water." })] },
+        accepted: [created(kid, { name: "Kitchen", circleId: "land", aim: "Keeps the water." }, K)],
+        swap,
+      }),
+    );
+    expect(d.flags.map((f) => f.key)).toEqual(["namesAMember"]);
+    expect(d).toMatchObject({ takeable: false, autoEligible: false, bulkEligible: false });
+  });
+
+  it("A NAME THAT NAMES A MEMBER IS FLAGGED, and kept as the service sent it", () => {
+    const [d] = differences(input({ snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(K, "Jane's Helper", [LAND], { namesAMember: ["Role Name"] })])] }));
+    expect(d).toMatchObject({ kind: "roleAdd", sera: "Jane's Helper", takeable: false });
+    expect(d.flags.map((f) => f.key)).toContain("namesAMember");
   });
 });
