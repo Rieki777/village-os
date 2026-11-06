@@ -57,6 +57,8 @@ export default function RoleGuidePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [asked, setAsked] = useState(false);
+  /** A suggestion the member is rewriting, by its path. Absent until they press Edit. */
+  const [edits, setEdits] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let alive = true;
@@ -95,6 +97,7 @@ export default function RoleGuidePanel({
   const shared = guide.answering === "saberra" ? ROLE_GUIDE_WORDS.sharedWith.saberra(name) : ROLE_GUIDE_WORDS.sharedWith.village(name);
 
   const shown = suggestions.filter(accepts);
+  const textOf = (s: GuideSuggestion) => edits[s.path] ?? show(s.words);
 
   const send = () => {
     const text = reply.trim().slice(0, GUIDE_ANSWER_MAX);
@@ -118,21 +121,21 @@ export default function RoleGuidePanel({
         </div>
       )}
       {busy && (
-        <p className="text-sm text-stone-600" role="status">
+        <p className="text-sm text-muted-foreground" role="status">
           {ROLE_GUIDE_WORDS.thinking(answerName ?? name)}
         </p>
       )}
       {error && (
-        <p className="text-sm text-stone-700" role="alert">
+        <p className="text-sm text-muted-foreground" role="alert">
           {error}
         </p>
       )}
-      {note && <p className="text-sm text-stone-700">{note}</p>}
+      {note && <p className="text-sm text-muted-foreground">{note}</p>}
 
       {flags.length > 0 && (
-        <ul className="grid gap-1 text-sm text-stone-700" data-guide-flags>
+        <ul className="grid gap-1 text-sm text-muted-foreground" data-guide-flags>
           {flags.map((f, i) => (
-            <li key={`${f.kind}-${i}`} className="rounded-lg bg-amber-50 px-3 py-2">
+            <li key={`${f.kind}-${i}`} className="rounded-lg border border-notice bg-notice/10 px-3 py-2 text-foreground">
               {f.sentence}
             </li>
           ))}
@@ -142,14 +145,18 @@ export default function RoleGuidePanel({
       {shown.length > 0 && (
         <ul className="grid gap-2" data-guide-suggestions>
           {shown.map((s) => (
-            <li key={s.path} className="grid gap-1.5 rounded-lg border border-stone-200 bg-white p-3 text-sm" data-suggestion={s.path}>
-              <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
-                <span className="rounded-full bg-teal-deep/10 px-2 py-0.5 text-teal-deep">{ROLE_GUIDE_WORDS.suggested}</span>
+            <li key={s.path} className="grid gap-1.5 rounded-lg border border-border bg-card p-3 text-sm" data-suggestion={s.path}>
+              <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <span className="rounded-full bg-dash-gold/15 px-2 py-0.5 text-dash-gold-lit">{ROLE_GUIDE_WORDS.suggested}</span>
                 {s.role ? `${s.role}: ` : ""}
                 {labelOf(s.field)}
               </p>
-              <p className="whitespace-pre-line break-words text-stone-900">{show(s.words)}</p>
-              <p className="text-xs text-stone-600">
+              {edits[s.path] === undefined ? (
+                <p className="whitespace-pre-line break-words text-foreground">{show(s.words)}</p>
+              ) : (
+                <textarea className={INPUT} rows={3} value={edits[s.path]} aria-label={`Edit ${labelOf(s.field)}`} onChange={(e) => setEdits((m) => ({ ...m, [s.path]: e.target.value }))} />
+              )}
+              <p className="text-xs text-muted-foreground">
                 {s.source ? (
                   <>
                     {ROLE_GUIDE_WORDS.from} <q>{s.source}</q>
@@ -165,11 +172,14 @@ export default function RoleGuidePanel({
                   className={QUIET}
                   disabled={!!s.problem}
                   onClick={() => {
-                    onAccept(s);
+                    onAccept({ ...s, words: textOf(s) });
                     setSuggestions((list) => list.filter((x) => x.path !== s.path));
                   }}
                 >
                   {ROLE_GUIDE_WORDS.accept}
+                </button>
+                <button type="button" className={QUIET} onClick={() => setEdits((m) => ({ ...m, [s.path]: show(s.words) }))}>
+                  {ROLE_GUIDE_WORDS.edit}
                 </button>
                 <button type="button" className={QUIET} onClick={() => setSuggestions((list) => list.filter((x) => x.path !== s.path))}>
                   {ROLE_GUIDE_WORDS.leave}
@@ -181,13 +191,29 @@ export default function RoleGuidePanel({
       )}
 
       {asked && !busy && !error && !question && shown.length === 0 && <p className={LEDE}>{ROLE_GUIDE_WORDS.nothingMissing}</p>}
+      {document && asked && (
+        <div>
+          <button
+            type="button"
+            className={QUIET}
+            disabled={busy}
+            onClick={() => {
+              setSuggestions([]);
+              setEdits({});
+              void turn([], document);
+            }}
+          >
+            {ROLE_GUIDE_WORDS.startOver}
+          </button>
+        </div>
+      )}
 
       {question && (
         <div className="grid gap-2" data-guide-question>
-          <p className="text-sm font-medium text-stone-900">
+          <p className="text-sm font-medium text-foreground">
             {ROLE_GUIDE_WORDS.asks(answerName ?? name)} {question}
           </p>
-          <label className="grid gap-1 text-sm text-stone-700">
+          <label className="grid gap-1 text-sm text-muted-foreground">
             {ROLE_GUIDE_WORDS.answer}
             <textarea className={INPUT} rows={3} value={reply} maxLength={GUIDE_ANSWER_MAX} onChange={(e) => setReply(e.target.value)} />
           </label>

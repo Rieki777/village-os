@@ -79,6 +79,11 @@ const ALLOWLIST = {
   "/propose-a-role/confirm": "the link in the confirmation email, never linked from the site",
   "/propose-a-role/:token": "a link an admin makes for one person and sends them, never linked from the site",
 
+  // A connector's OAuth sign-in (addendum v6, B4): the connector sends the
+  // member here with its own query string; a link from the site would carry no
+  // client and could only show an error.
+  "/oauth/authorize": "a connector's sign-in page, reached only from the connector that sends the member there",
+
   // The treasurer's payout list outside /admin (Rye, 2026-10-30), for a finance
   // role holding cash.pay without being an admin. Its one door is the books half
   // of the profile cash card, which renders only for a key holder; a nav entry

@@ -49,6 +49,7 @@ import ProposalEditor from "./ProposalEditor";
 import ProposeRolesEntry from "./ProposeRolesEntry";
 import { guideFor } from "./BringInRole";
 import { AUTOSAVE } from "./useAutosave";
+import { RP_WORDS } from "./proposalWords";
 import { RC_WORDS } from "./roleCardWords";
 
 const BASE = `/api/governance/role-proposals/${PROPOSAL_ID}`;
@@ -79,8 +80,8 @@ function importAnswer(text: string, current: ProposalBody) {
 let server: ReturnType<typeof fakeServer>;
 let asked: Array<{ url: string; method: string; body: any }>;
 
-function draw(body: DraftBody, step = "words") {
-  server = fakeServer(body);
+function draw(body: DraftBody, step = "words", opts: { failPut?: boolean } = {}) {
+  server = fakeServer(body, { failPut: opts.failPut });
   asked = [];
   vi.stubGlobal(
     "fetch",
@@ -145,6 +146,17 @@ afterEach(() => {
 });
 
 describe("bring in a description of your role", () => {
+  it("does not read a document when the draft did not save", async () => {
+    draw({ roles: [{ roleId: "r1" }] }, "words", { failPut: true });
+    fireEvent.change(await screen.findByLabelText("Purpose"), { target: { value: "A new purpose for the kitchen." } });
+    expect(await screen.findByText(RP_WORDS.notSaved)).toBeTruthy();
+    fireEvent.click(within(panel()).getByRole("button", { name: RC_WORDS.fromPaste }));
+    fireEvent.change(within(panel()).getByLabelText(RC_WORDS.pasteLabel), { target: { value: "I keep the bees." } });
+    fireEvent.click(within(panel()).getByRole("button", { name: RC_WORDS.read }));
+    await waitFor(() => expect(asked.some((a) => a.url === `${BASE}/import`)).toBe(false));
+    expect(screen.getAllByText(RP_WORDS.notSaved).length).toBeGreaterThan(0);
+  });
+
   it("says the village reads the document and does not keep it, and opens when the draft has no roles", async () => {
     draw({ roles: [] });
     await screen.findByText(RC_WORDS.bringIn);

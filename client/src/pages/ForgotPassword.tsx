@@ -1,6 +1,6 @@
 import Layout from "@/components/Layout";
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Mail, CheckCircle2 } from "lucide-react";
 
 /**
@@ -44,7 +44,7 @@ export default function ForgotPassword() {
     <Layout>
       <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[70vh]">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="max-w-md mx-auto bg-card border border-border rounded-2xl shadow-sm p-8"
@@ -109,7 +109,7 @@ export default function ForgotPassword() {
                 </div>
               </>
             )}
-          </motion.div>
+          </m.div>
         </div>
       </section>
     </Layout>

@@ -9,6 +9,7 @@
  * the finger loses nothing.
  */
 import { Plus, Trash2 } from "lucide-react";
+import GrowingField from "@/components/form/GrowingField";
 import { DONE_WHEN_MAX, HOW_IT_HELPS_MAX, SEASONAL_GOALS_LIMIT, SEASONAL_TITLE_MAX } from "@shared/seasonPlanWords";
 
 export const SEASON_GOALS_WORDS = {
@@ -38,7 +39,7 @@ export interface SeasonalRow {
 
 // min-h-[44px]: a 44px tap on a phone (the role proposal steps reuse these fields at 375px).
 const inputClass =
-  "min-h-[44px] w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep";
+  "min-h-[44px] w-full rounded-lg border border-border bg-card px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Rows for every goal of the season, ticked where the plan serves it. */
 export function servedRows(goals: readonly string[], served: ReadonlyArray<{ goal: string; howItHelps: string | null }>): ServedRow[] {
@@ -63,29 +64,28 @@ export function ServedGoalsField({ rows, onChange }: { rows: readonly ServedRow[
   const set = (i: number, patch: Partial<ServedRow>) => onChange(rows.map((r, ri) => (ri === i ? { ...r, ...patch } : r)));
   return (
     <fieldset data-testid="serves-goals">
-      <legend className="text-sm font-semibold text-stone-800">{SEASON_GOALS_WORDS.servesHeading}</legend>
-      <p className="text-sm text-stone-600">{SEASON_GOALS_WORDS.servesLine}</p>
+      <legend className="text-sm font-semibold text-foreground">{SEASON_GOALS_WORDS.servesHeading}</legend>
+      <p className="text-sm text-muted-foreground">{SEASON_GOALS_WORDS.servesLine}</p>
       <ul className="mt-2 space-y-3">
         {rows.map((r, i) => (
-          <li key={r.goal} className="rounded-lg border border-stone-200 bg-white p-3">
-            <label className="flex min-h-[44px] items-center gap-3 text-base text-stone-900">
+          <li key={r.goal} className="rounded-lg border border-border bg-card p-3">
+            <label className="flex min-h-[44px] items-center gap-3 text-base text-foreground">
               <input
                 type="checkbox"
                 checked={r.ticked}
                 onChange={(e) => set(i, { ticked: e.target.checked })}
-                className="h-5 w-5 rounded border-stone-400 text-teal-deep focus-visible:ring-2 focus-visible:ring-teal-deep"
+                className="h-5 w-5 rounded border-border accent-notice focus-visible:ring-2 focus-visible:ring-ring"
               />
               {r.goal}
             </label>
             {r.ticked && (
-              <label className="mt-2 block text-sm text-stone-700">
+              <label className="mt-2 block text-sm text-foreground">
                 {SEASON_GOALS_WORDS.howItHelps}
-                <input
-                  type="text"
+                <GrowingField
                   maxLength={HOW_IT_HELPS_MAX}
                   value={r.howItHelps}
                   aria-label={SEASON_GOALS_WORDS.howItHelpsFor(r.goal)}
-                  onChange={(e) => set(i, { howItHelps: e.target.value })}
+                  onChange={(howItHelps) => set(i, { howItHelps })}
                   className={`mt-1 ${inputClass}`}
                 />
               </label>
@@ -101,24 +101,24 @@ export function SeasonalGoalsField({ rows, onChange }: { rows: readonly Seasonal
   const set = (i: number, patch: Partial<SeasonalRow>) => onChange(rows.map((r, ri) => (ri === i ? { ...r, ...patch } : r)));
   return (
     <fieldset data-testid="seasonal-goals">
-      <legend className="text-sm font-semibold text-stone-800">{SEASON_GOALS_WORDS.seasonalHeading}</legend>
-      <p className="text-sm text-stone-600">{SEASON_GOALS_WORDS.seasonalLede}</p>
+      <legend className="text-sm font-semibold text-foreground">{SEASON_GOALS_WORDS.seasonalHeading}</legend>
+      <p className="text-sm text-muted-foreground">{SEASON_GOALS_WORDS.seasonalLede}</p>
       <ol className="mt-2 space-y-3">
         {rows.map((r, i) => (
           <li key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-            <label className="text-sm text-stone-700">
+            <label className="text-sm text-foreground">
               {SEASON_GOALS_WORDS.title}
-              <input type="text" maxLength={SEASONAL_TITLE_MAX} value={r.title} onChange={(e) => set(i, { title: e.target.value })} className={`mt-1 ${inputClass}`} />
+              <GrowingField maxLength={SEASONAL_TITLE_MAX} value={r.title} onChange={(title) => set(i, { title })} className={`mt-1 ${inputClass}`} />
             </label>
-            <label className="text-sm text-stone-700">
+            <label className="text-sm text-foreground">
               {SEASON_GOALS_WORDS.doneWhen}
-              <input type="text" maxLength={DONE_WHEN_MAX} value={r.doneWhen} onChange={(e) => set(i, { doneWhen: e.target.value })} className={`mt-1 ${inputClass}`} />
+              <GrowingField maxLength={DONE_WHEN_MAX} value={r.doneWhen} onChange={(doneWhen) => set(i, { doneWhen })} className={`mt-1 ${inputClass}`} />
             </label>
             <button
               type="button"
               onClick={() => onChange(rows.filter((_, ri) => ri !== i))}
               aria-label={SEASON_GOALS_WORDS.removeGoal(i + 1)}
-              className="inline-flex min-h-[44px] items-center justify-center self-end rounded-lg px-3 text-stone-600 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+              className="inline-flex min-h-[44px] items-center justify-center self-end rounded-lg px-3 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -129,7 +129,7 @@ export function SeasonalGoalsField({ rows, onChange }: { rows: readonly Seasonal
         <button
           type="button"
           onClick={() => onChange([...rows, { title: "", doneWhen: "" }])}
-          className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-teal-deep hover:bg-teal-deep/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+          className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-notice hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           {SEASON_GOALS_WORDS.addGoal}

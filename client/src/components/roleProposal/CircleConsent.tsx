@@ -21,11 +21,15 @@
  *
  * "Record the adoption" is not here: it is the adopt click itself, so it sits
  * where a holder of the power adopts, on the application page's holder card.
+ *
+ * A role proposal from somebody with no account yet has no application (open
+ * proposals part B): its page hands in `answer`, which posts to the
+ * proposal's own consent route, and everything else here is the same.
  */
 import { useEffect, useId, useState } from "react";
 import { Check, MessageSquareWarning } from "lucide-react";
 import { CONSENT_WORDS, OBJECTION_MAX, TALLY_WORDS, tallyWords, type ConsentAnswer } from "@shared/roleProposalConsent";
-import { answerConsent, type ConsentOut } from "./proposalApi";
+import { answerConsent, type ConsentAnswerOut, type ConsentOut } from "./proposalApi";
 import { ADOPTED_HEADING, STATE_HEADINGS } from "./proposalWords";
 import { H2, INPUT, LEDE, PANEL, PRIMARY, SECONDARY } from "./parts";
 
@@ -45,8 +49,8 @@ export function ConsentTally({ consent }: { consent: ConsentOut }) {
     <dl className="grid gap-1 text-sm" data-consent-tally="">
       {rows.map((r) => (
         <div key={r.key} className="flex flex-wrap gap-x-2" data-tally={r.key}>
-          <dt className="font-semibold text-stone-700">{r.label}</dt>
-          <dd className="min-w-0 break-words text-stone-900">{tallyWords(r.n, r.titles)}</dd>
+          <dt className="font-semibold text-muted-foreground">{r.label}</dt>
+          <dd className="min-w-0 break-words text-foreground">{tallyWords(r.n, r.titles)}</dd>
         </div>
       ))}
     </dl>
@@ -63,14 +67,14 @@ export function ConsentSummary({ consent, decided, headingId }: { consent: Conse
         {CONSENT_WORDS.heading}
       </h2>
       <div className="grid gap-1">
-        <p className="font-semibold text-stone-900" data-state-heading="">
+        <p className="font-semibold text-foreground" data-state-heading="">
           {decided ? ADOPTED_HEADING : STATE_HEADINGS[consent.state]}
         </p>
-        <p className="text-stone-800">{decided ?? consent.words}</p>
+        <p className="text-foreground">{decided ?? consent.words}</p>
       </div>
       <ConsentTally consent={consent} />
       {consent.objections.length > 0 && (
-        <ul className="list-disc space-y-1 pl-5 text-sm text-stone-700" data-objections="">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground" data-objections="">
           {consent.objections.map((o, i) => (
             <li key={i} className="break-words">
               {o}
@@ -90,10 +94,12 @@ export interface CircleConsentProps {
   waiting: boolean;
   /** After an answer lands, so the page can read the application again. */
   onAnswered?: () => void;
+  /** Where the answer goes, when it is not an application's consent route. */
+  answer?: (answer: ConsentAnswer, reason?: string) => Promise<{ ok: true; data: ConsentAnswerOut } | { ok: false; error: string }>;
 }
 
 /** The summary, and the asked holder's Consent and Object. */
-export default function CircleConsent({ applicationId, consent: given, decided, waiting, onAnswered }: CircleConsentProps) {
+export default function CircleConsent({ applicationId, consent: given, decided, waiting, onAnswered, answer: answerWith }: CircleConsentProps) {
   const [consent, setConsent] = useState(given);
   const [objecting, setObjecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -123,7 +129,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
     }
     setBusy(true);
     setError("");
-    const out = await answerConsent(applicationId, answer, answer === "object" ? said : undefined);
+    const out = await (answerWith ?? ((a: ConsentAnswer, r?: string) => answerConsent(applicationId, a, r)))(answer, answer === "object" ? said : undefined);
     setBusy(false);
     if (!out.ok) {
       setError(out.error || CONSENT_WORDS.failed);
@@ -142,7 +148,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
 
       {mayAnswer && !objecting && (
         <div className={`${PANEL} grid gap-3`} data-consent-ask="">
-          <p className="text-stone-800">{CONSENT_WORDS.askedYou(consent.closesOn ?? "")}</p>
+          <p className="text-foreground">{CONSENT_WORDS.askedYou(consent.closesOn ?? "")}</p>
           <div className="grid gap-2 sm:flex sm:flex-wrap">
             <button type="button" disabled={busy} onClick={() => void send("consent")} className={PRIMARY}>
               <Check className="size-4" aria-hidden="true" />
@@ -174,10 +180,10 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
             void send("object");
           }}
         >
-          <label htmlFor={reasonId} className="font-semibold text-stone-900">
+          <label htmlFor={reasonId} className="font-semibold text-foreground">
             {CONSENT_WORDS.reasonLabel}
           </label>
-          <p id={goesId} className="text-stone-800">
+          <p id={goesId} className="text-foreground">
             {CONSENT_WORDS.objectionGoes}
           </p>
           <textarea
@@ -222,7 +228,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
 
       {answered && (
         <div role="status" className={`${PANEL} grid gap-1`} data-your-answer={answered}>
-          <p className="font-semibold text-stone-900">{answered === "object" ? CONSENT_WORDS.youObjected : CONSENT_WORDS.youConsented}</p>
+          <p className="font-semibold text-foreground">{answered === "object" ? CONSENT_WORDS.youObjected : CONSENT_WORDS.youConsented}</p>
           <p className={LEDE}>{CONSENT_WORDS.answerStands}</p>
           {where && <p className={LEDE}>{where}</p>}
         </div>

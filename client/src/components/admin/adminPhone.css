@@ -1,0 +1,9 @@
+/*
+ * Room for the bottom section picker on a phone, including the home indicator.
+ * Unlayered so it wins over the page padding utility.
+ */
+@media (max-width: 1023px) {
+  main.admin-fit {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  }
+}

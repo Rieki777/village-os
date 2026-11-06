@@ -7,7 +7,7 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
-import { grantCashPayToTreasury, seedStarterRoles, TREASURY_ROLE_ID } from "./starterRoles";
+import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles, TREASURY_ROLE_ID } from "./starterRoles";
 import { HANDOVER_SET, TRANSFERABLE } from "../../shared/capabilities";
 
 type Role = { id: string; name: string; description?: string; capabilities?: string[] };
@@ -65,5 +65,43 @@ describe("cash.pay and the finance role", () => {
     const roles = store([{ id: "only", name: "Only", capabilities: [] }]);
     await seedStarterRoles(roles, SEED);
     expect(roles.writes()).toBe(0);
+  });
+});
+
+describe("the end-of-moon review's two held-back keys (decisions 18 and 19)", () => {
+  const rows = (): Role[] => [
+    { id: "founders-circle", name: "Founders", capabilities: ["org.seat"] },
+    { id: "steward-circle", name: "Stewards" },
+    { id: TREASURY_ROLE_ID, name: "Treasury", capabilities: ["cash.pay"] },
+    { id: "gardeners", name: "Gardeners", capabilities: ["health.record"] },
+  ];
+
+  it("gives approve_alone to the founders' and stewards' groups, approve_own to Treasury, and nobody else anything", async () => {
+    const s = store(rows());
+    expect(await grantMoonReviewKeys(s, MOON_REVIEW_GRANTS)).toBe(3);
+    expect(Object.fromEntries(s.all().map((r) => [r.id, r.capabilities ?? []]))).toEqual({
+      "founders-circle": ["org.seat", "moon.approve_alone"],
+      "steward-circle": ["moon.approve_alone"],
+      [TREASURY_ROLE_ID]: ["cash.pay", "moon.approve_own"],
+      gardeners: ["health.record"],
+    });
+    expect(s.all().find((r) => r.id === "founders-circle")?.name).toBe("Founders");
+  });
+
+  it("is idempotent, and writes nothing to a village without those roles", async () => {
+    const s = store(rows());
+    await grantMoonReviewKeys(s, MOON_REVIEW_GRANTS);
+    expect(await grantMoonReviewKeys(s, MOON_REVIEW_GRANTS)).toBe(0);
+    expect(s.writes()).toBe(1);
+    const none = store([{ id: "gardeners", name: "Gardeners" }]);
+    expect(await grantMoonReviewKeys(none, MOON_REVIEW_GRANTS)).toBe(0);
+    expect(none.writes()).toBe(0);
+  });
+
+  it("grants keys that are held back: neither is in the founders' handover set", () => {
+    for (const g of MOON_REVIEW_GRANTS) {
+      expect(TRANSFERABLE[g.capability]).toBe(false);
+      expect(HANDOVER_SET).not.toContain(g.capability);
+    }
   });
 });

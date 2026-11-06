@@ -576,6 +576,9 @@ export const GAME_CONFIG: GameConfig = {
     favicon: "",
   },
 
+  // The platform's words for the four paths. A village's own name, second line
+  // and sentence for each come from Admin, Paths & Stages (shared/villagePaths.ts),
+  // back-filled from these. The ids and routes are fixed.
   paths: [
     { id: "investor", label: "Investor", role: "Capital Contributor", route: "/investor" },
     { id: "steward", label: "Village Steward", role: "Co-Creator", route: "/steward" },
@@ -583,8 +586,17 @@ export const GAME_CONFIG: GameConfig = {
     { id: "prosperity-creator", label: "Prosperity Creator", role: "Business Builder", route: "/prosperity" },
   ],
 
-  // Amora's Path of Growth (from the Game Guide). Stages are earned by real
+  // The ladder, in order; its default name, "Path of Growth", is in
+  // shared/villagePaths.ts. A village renames and re-describes each stage in
+  // Admin, Paths & Stages; the ids, the order and the rules stay here, because
+  // quests, roles and the game variables key on them. Stages are earned by real
   // acts, never abstract points. "granted" stages are recognized by the team.
+  //
+  // The sentences are true of any village (readiness R061, 2026-11-01). Four of
+  // them named the first village's rite, its circle and its year counts; a
+  // village that already held its own page words keeps those at boot, from
+  // server/seeds/village-paths-before-neutral.json (server/lib/pathWordsKept.ts).
+  // Contributor keeps its line: it states the unlock rule (Rye, 2026-09-08).
   stages: [
     { id: "visitor", name: "Visitor", description: "Discovering what this village is.", rule: { type: "default" }, gratitudeMultiplier: 0 },
     { id: "guest", name: "Guest", description: "Created a profile and stepped inside.", rule: { type: "account" }, gratitudeMultiplier: 1 },
@@ -593,11 +605,11 @@ export const GAME_CONFIG: GameConfig = {
     { id: "member", name: "Member", description: "Signed the {commitment} and joined the community.", rule: { type: "membership" }, gratitudeMultiplier: 2 },
     { id: "contributor", name: "Contributor", description: "The village has paid you for what you brought it.", rule: { type: "tokens" }, gratitudeMultiplier: 2 },
     { id: "quest-seeker", name: "Quest Seeker", description: "Contributing steadily through quests.", rule: { type: "quests", min: 3 }, gratitudeMultiplier: 2 },
-    { id: "initiate", name: "Initiate", description: "Walking the Co-Creator Right of Passage.", rule: { type: "granted" }, gratitudeMultiplier: 2 },
-    { id: "co-creator", name: "Co-Creator", description: "Consented by the Co-Creators circle.", rule: { type: "granted" }, gratitudeMultiplier: 3 },
+    { id: "initiate", name: "Initiate", description: "Recognized by the village and preparing for the next stage.", rule: { type: "granted" }, gratitudeMultiplier: 2 },
+    { id: "co-creator", name: "Co-Creator", description: "Welcomed by the village as one who shapes it.", rule: { type: "granted" }, gratitudeMultiplier: 3 },
     { id: "role-holder", name: "Role Holder", description: "Holding a seasonal role for the village.", rule: { type: "role" }, gratitudeMultiplier: 3 },
-    { id: "guide", name: "Guide", description: "Seven or more years of stewardship.", rule: { type: "granted" }, gratitudeMultiplier: 4 },
-    { id: "sage", name: "Sage", description: "Twenty-one or more years of stewardship.", rule: { type: "granted" }, gratitudeMultiplier: 5 },
+    { id: "guide", name: "Guide", description: "Recognized by the village for years of steady stewardship.", rule: { type: "granted" }, gratitudeMultiplier: 4 },
+    { id: "sage", name: "Sage", description: "Honored by the village as an elder steward.", rule: { type: "granted" }, gratitudeMultiplier: 5 },
   ],
 
   gratitude: {

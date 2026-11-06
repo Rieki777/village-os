@@ -24,9 +24,12 @@ describe("roleWithHolders", () => {
     expect(roleWithHolders("Steward", ["Ana", "Ben"], 1)).toBe("Steward (Ana +1)");
   });
 
-  it("never prints an email domain", () => {
-    expect(holderFirstName("rick@example.org")).toBe("rick");
-    expect(roleWithHolders("Treasurer", ["rick@example.org"])).not.toContain("example.org");
+  it("drops an email-shaped name, including the part before the @", () => {
+    expect(holderFirstName("rick@example.org")).toBe("");
+    expect(holderFirstName("Rick Moss")).toBe("Rick");
+    expect(roleWithHolders("Treasurer", ["rick@example.org"])).toBe("Treasurer");
+    expect(roleWithHolders("Treasurer", ["rick@example.org", "Rye Cordon"])).toBe("Treasurer (Rye)");
+    expect(roleWithHolders("Treasurer", ["rick@example.org"])).not.toContain("@");
   });
 
   it("falls back to the names when the role has no title", () => {

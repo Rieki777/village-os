@@ -769,7 +769,7 @@ export function moneyWords(minor: number, currency: string | undefined, locale =
 export function dateWords(iso: string, locale = "en-GB"): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(d);
 }
 
 const perWords = (per: string | undefined): string => (per === "moon" ? " a moon" : per === "month" ? " a month" : "");

@@ -1,5 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Tests are not shipped, so a class only a test names is not generated. */
+@source not "./**/*.test.ts";
+@source not "./**/*.test.tsx";
+@source not "./**/*.e2e.test.ts";
 
 /*
  * No @font-face here, deliberately. A village's brand font is DEPLOYMENT
@@ -923,6 +927,48 @@ html {
   animation: fadeInUp 0.6s ease-out forwards;
 }
 
+/* The homepage hero's entrance, in CSS so the first thing a visitor reads
+   never waits on a script. It was framer-motion, and framer renders an
+   `initial` of opacity 0 inline until its engine runs; the engine now loads
+   lazily (LazyMotion in App.tsx), which would have held the headline back
+   for one more request. `backwards` keeps the element at the first frame
+   during its delay, which is what `initial` did, and lets go when it ends:
+   `both` held the finished transform, which kept the text on a compositor
+   layer and swapped its subpixel antialiasing for greyscale. Asking the system for less motion
+   keeps the fade and drops the travel, the same split framer's
+   reducedMotion="user" made. */
+@keyframes hero-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes hero-cue-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(12px); }
+}
+
+.hero-rise {
+  animation: fadeInUp 0.6s ease-out backwards;
+}
+
+.hero-cue {
+  animation: hero-fade 0.3s ease-out 1s backwards;
+}
+
+.hero-cue-dot {
+  animation: hero-cue-bob 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise {
+    animation-name: hero-fade;
+  }
+
+  .hero-cue-dot {
+    animation: none;
+  }
+}
+
 .animate-pulse-glow {
   animation: pulse-glow 2s infinite;
 }
@@ -1053,6 +1099,16 @@ html {
   :root:has(.md\:hidden [aria-modal="true"], [data-hides-fab-phone]) [data-mobile-fab] {
     visibility: hidden;
   }
+  /* A focused flow with its own Back/Next bar (a role proposal) keeps one bar,
+     not two: the tab bar steps out; the header menu still reaches every page. */
+  :root:has([data-hides-tabbar-phone]) [data-mobile-tabbar] {
+    display: none;
+  }
+}
+/* A role proposal's sticky Back/Next bar owns the bottom edge: at any width
+   the shortcuts button rides above it, so it never covers Back or Next. */
+:root:has([data-step-bar]) [data-mobile-fab] {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 8.5rem) !important;
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-mobile-fab] {
@@ -1522,6 +1578,10 @@ html {
   --sheet-earned-lit: var(--sheet-earned-highlight, #f2ce85);
   --destructive: var(--sheet-warn, #e0805e);
   --destructive-foreground: var(--sheet-ground, #0d1411);
+  /* Platform coral (#9b4030) is a dark ink measured on white. On this ground
+     it falls under 3:1, so an error line disappears. .text-coral reads
+     --color-coral, and the sheet's warn already clears 5.80:1 on the panel. */
+  --color-coral: var(--sheet-warn, #e0805e);
 
   /* The two accents this world is built on. --sheet-earned is live: it is the
      focus ring, the ring on the fronted character, and (through --sheet-notice
@@ -1605,6 +1665,14 @@ html {
  */
 .sheet-night .shadow-sm {
   box-shadow: var(--sheet-shadow, 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 40px -22px rgb(0 0 0 / 0.9));
+}
+
+/* Pay chips and other `text-primary` labels. --primary stays the village's
+   brand (a button fill), and on an unbranded fork that fill is #404040.
+   As text on this ground that is about 1.7:1. Text only: a filled primary
+   button keeps its own foreground. */
+.sheet-night .text-primary {
+  color: var(--foreground);
 }
 
 /* The foil around a seat card. Read off the night tokens on the same element,

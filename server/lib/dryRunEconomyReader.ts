@@ -185,6 +185,7 @@ const SEED_TOKENS: readonly SeedTokenRow[] = [
 interface SeedRuleRow {
   trigger: string;
   token: string;
+  /** "" is a blank amount, read from the work: what `readRuleRows` gives a NULL. */
   amountRaw: string;
   ceilingRaw: string;
   recipient: string;
@@ -194,13 +195,14 @@ interface SeedRuleRow {
 const SEED_RULES: readonly SeedRuleRow[] = [
   { trigger: "quest.completed", token: VILLAGE_VOICE, amountRaw: "10.0000", ceilingRaw: "100.0000", recipient: "claimant", enabled: true },
   { trigger: "quest.completed", token: CREDITS, amountRaw: "25.0000", ceilingRaw: "250.0000", recipient: "claimant", enabled: true },
-  { trigger: "role.cycle", token: VILLAGE_VOICE, amountRaw: "50.0000", ceilingRaw: "200.0000", recipient: "holder", enabled: true },
-  { trigger: "role.cycle", token: CREDITS, amountRaw: "25.0000", ceilingRaw: "250.0000", recipient: "holder", enabled: true },
+  // No flat role mint (Rye, 2026-11-01): blank, so a role pays its own list. See economySeed.ts.
+  { trigger: "role.cycle", token: VILLAGE_VOICE, amountRaw: "", ceilingRaw: "200.0000", recipient: "holder", enabled: true },
+  { trigger: "role.cycle", token: CREDITS, amountRaw: "", ceilingRaw: "250.0000", recipient: "holder", enabled: true },
   // Seeded off, and off is not gone. See the block comment at economySeed.ts:99.
   { trigger: "role.cycle", token: HEARTS, amountRaw: "20.0000", ceilingRaw: "100.0000", recipient: "holder", enabled: false },
   // Earned Equity, seeded off: a village decides what pays it. See economySeed.ts.
   { trigger: "quest.completed", token: EARNED_EQUITY, amountRaw: "1.0000", ceilingRaw: "1.0000", recipient: "claimant", enabled: false },
-  { trigger: "role.cycle", token: EARNED_EQUITY, amountRaw: "1.0000", ceilingRaw: "1.0000", recipient: "holder", enabled: false },
+  { trigger: "role.cycle", token: EARNED_EQUITY, amountRaw: "", ceilingRaw: "1.0000", recipient: "holder", enabled: false },
   // An accepted proposal is work (Rye, 2026-10-23), paid like a quest. See economySeed.ts.
   { trigger: "proposal.accepted", token: VILLAGE_VOICE, amountRaw: "10.0000", ceilingRaw: "100.0000", recipient: "claimant", enabled: true },
   { trigger: "proposal.accepted", token: CREDITS, amountRaw: "25.0000", ceilingRaw: "250.0000", recipient: "claimant", enabled: true },
@@ -435,7 +437,7 @@ function seedMintRules(tokens: readonly TokenSpec[]): MintRuleSpec[] {
       trigger: r.trigger,
       tokenSlug: r.token,
       recipient: r.recipient,
-      amount: minorUnits(r.amountRaw, places, `the seed amount on ${id}`),
+      amount: r.amountRaw === "" ? null : minorUnits(r.amountRaw, places, `the seed amount on ${id}`),
       amountRaw: r.amountRaw,
       ceiling: minorUnits(r.ceilingRaw, places, `the seed ceiling on ${id}`),
       ceilingRaw: r.ceilingRaw,

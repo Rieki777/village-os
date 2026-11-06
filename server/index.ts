@@ -19,7 +19,7 @@ import crypto from "crypto";
 import multer from "multer";
 import bcrypt from "bcrypt";
 import { securityHeaders } from "./lib/securityHeaders";
-import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
+import { claimPaths, GAME_CONFIG, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
 import { guidePromptName } from "../shared/guideName";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
@@ -59,6 +59,7 @@ import { pageContentProblem } from "../shared/pageContent";
 import { contentVersion } from "../shared/pageContent/resolve";
 import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
 import { pageVarsFrom } from "../shared/pageContent/vars";
+import { visitProgramProblem } from "../shared/visitProgram";
 import { workWithUsAckEmail } from "./lib/workWithUsAck";
 import { investorPacketEmail } from "./lib/investorPacketMail";
 import { emailAccent } from "./lib/emailAccent";
@@ -76,6 +77,7 @@ import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, 
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerBrochurePagesRoutes } from "./routes/brochurePages";
+import { register as registerVillagePathsRoutes, loadVillagePaths, servedPathWords, stageName } from "./routes/villagePaths";
 import { register as registerPeopleLock, ballotCardForViewer, ballotForViewer, firstNameOf, hiddenFromStranger } from "./routes/peopleLock";
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
@@ -91,6 +93,7 @@ import { register as registerJoinAnswerRoutes } from "./routes/joinAnswers";
 import { makeInviteDoor } from "./lib/inviteDoor";
 import { register as registerRecoveryRoutes } from "./routes/authRecovery";
 import { register as registerVerifyEmailRoutes } from "./routes/verifyEmail";
+import { matchOnEvent } from "./lib/seraPersonMatch";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
@@ -144,7 +147,9 @@ import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/r
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
 import { keepFirstPlanIfUsed } from "./lib/commandCentrePlanDefault";
+import { keepVillagePathWords } from "./lib/pathWordsKept";
 import { keepGovernanceWords } from "./lib/governanceWordsKept";
+import { keepCirclesWords } from "./lib/circlesWordsKept";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
@@ -167,6 +172,13 @@ import { register as registerRoleGuideRoutes } from "./routes/roleGuide";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
+import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
+import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
+import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
+import { agentAccountIds, isAgentAccount } from "./repos/agentAccounts";
+import { seraDigest, seraDigestLink } from "./lib/seraAgent";
+import { readConfigDocument, writeConfigDocument } from "./repos/appConfigDocs";
+import { villageDayKey } from "../shared/companionItems";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
@@ -190,19 +202,24 @@ import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerMoonRecapRoutes, exportMoonReviews } from "./routes/moonRecaps";
+import { register as registerMoonReviewSettingsRoutes } from "./routes/moonReviewSettings";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
 import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { claimsAnnouncedHere } from "./lib/rewardMoment";
 import { feedOrigin as feedOriginOf, feedUidHost } from "./lib/feedOrigin";
 import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary";
-import { register as registerModuleLibraryRoutes, moduleChangeReaders, plantingDoor } from "./routes/moduleLibrary";
+import { register as registerModuleLibraryRoutes, moduleChangeReaders, founderAdoptable, founderHeldVoteProblem, plantingDoor } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
 import { register as registerFeedbackRoutes } from "./routes/feedback";
+import { register as registerSubmissionHandlingRoutes } from "./routes/submissionHandling";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerCompanionRoutes } from "./routes/companions";
+import { exportMemberTasks, register as registerMemberTaskRoutes } from "./routes/memberTasks";
+import { register as registerMemberTaskBridgeRoutes } from "./routes/memberTaskBridge";
 import { register as registerMemberAskRoutes } from "./routes/memberAsks";
 import { register as registerStockAvatarRoutes, STOCK_AVATAR_DIR } from "./routes/stockAvatars";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
@@ -436,6 +453,7 @@ import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, use
 import { loadInventory } from "./repos/profileInventory";
 import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
+import { blankFlatRoleMint } from "./lib/flatRoleMint";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
 import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
@@ -469,7 +487,7 @@ import {
   transcriptFor,
   videoIdsFromRss,
 } from "./lib/recordings";
-import { chapterCandidates, synthesisSystemPrompt } from "./lib/callSynthesis";
+import { chapterCandidates, synthesisSystemPrompt, synthesisUserContent } from "./lib/callSynthesis";
 // ── K2 ZONE START: synthesis through the batch API ──────────────────────────
 import {
   MAX_BATCH_SIZE,
@@ -585,7 +603,7 @@ import {
   type Candidate,
 } from "./lib/map";
 import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION, PRODUCT_NAME } from "./lib/identity";
-import { brochurePagesOn, isBrochurePath, loadBrochurePages } from "./lib/brochurePages";
+import { brochureConfig, brochurePageServed, loadBrochurePages } from "./lib/brochurePages";
 import { listDrafts, measureVisionMetrics, tierDraftWords, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
 import { noteSeen, readSeen } from "./lib/sheetSeen"; import { displayCurrencyProblem } from "../shared/money";
@@ -654,13 +672,13 @@ import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
-import { grantCashPayToTreasury, seedStarterRoles } from "./lib/starterRoles";
+import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
-  holderStands, mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
+  createConfirmSpendBook, holderStands, mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
 } from "./lib/agentTokens";
 import { DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, queueWeekAhead, removeInbox, setInbox } from "./lib/agentInbox";
 import {
@@ -1341,6 +1359,7 @@ const crowdpoolSnapshotsRepo = dbDocument(getPool(), "crowdpool-snapshots", {} a
 /** The crowdpool dialer is the house pinned dialer, nothing else. */
 const crowdpoolDeps: CrowdpoolDeps = {
   fetchJson: (url, timeoutMs) => guardedFetchJson(url, timeoutMs),
+  villageCurrency: () => String(mergedConfig().project.fiatCurrency ?? ""),
 };
 /** The hub default is ONE founder-held game variable, never a literal here. */
 const crowdpoolHubBase = () => stringVar("governance.hub_url").replace(/\/+$/, "");
@@ -1495,7 +1514,7 @@ async function initStores(): Promise<void> {
     emailConfigRepo.load(),
     settingsRepo.load(),
     brandRepo.load(),
-    loadBrochurePages(getPool()),
+    loadBrochurePages(getPool()), loadVillagePaths(getPool()),
     mapVocabRepo.load(),
     mapWalkRepo.load(),
     workWithUsRepo.load(),
@@ -1747,10 +1766,15 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
  *   founder — master admin: implies admin, manages admins, cannot be demoted
  *             by non-founders, and the last founder cannot be demoted at all.
  */
+/** Whether this member row is an admin: the role, or a live admin group (sheet 19, server/lib/groupAdmin.ts). */
+function userIsAdmin(user: any): boolean {
+  return !!user && (user.role === "admin" || user.role === "founder" || adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0);
+}
+
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!user || (user.role !== "admin" && user.role !== "founder" && !adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length)) return false; // sheet 19: or a live admin group, server/lib/groupAdmin.ts
+  if (!userIsAdmin(user)) return false;
   (req as any).adminUser = user;
   return true;
 }
@@ -1875,8 +1899,12 @@ async function ensureDataFiles() {
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
   await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
+  // The ladder's default sentences went neutral: a village that already holds its page words keeps its path and stage words.
+  await runOnce("keep-path-words-2026-11-01", () => keepVillagePathWords(contentRepo).then(() => undefined));
   // How We Govern's defaults went neutral: a village that already holds its page words keeps this page's too.
   await runOnce("keep-governance-words-2026-11-01", () => keepGovernanceWords(contentRepo).then(() => undefined));
+  // Circles' defaults went neutral the same way: an established village keeps the words /circles shows today.
+  await runOnce("keep-circles-words-2026-11-01", () => keepCirclesWords(contentRepo).then(() => undefined));
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
@@ -1898,6 +1926,7 @@ async function ensureDataFiles() {
   await runOnce("currency-name-into-tokens-2026-08-14", migrateCurrencyNameIntoTokens);
   await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
   await runOnce("cash-pay-to-treasury-2026-10-30", () => grantCashPayToTreasury(rolesRepo).then(() => undefined)); // Rye, 2026-10-30
+  await runOnce("moon-review-keys-2026-11-03", () => grantMoonReviewKeys(rolesRepo, MOON_REVIEW_GRANTS).then(() => undefined)); // decisions 18 and 19
   await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
@@ -2898,11 +2927,11 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
     at: new Date().toISOString(),
   });
   commsSink.fire({ type: "stage_advanced", userId: user.id, stage: to });
-  await addActivity("stage", `${firstName(user.name)} advanced to ${getStage(to).name}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
+  await addActivity("stage", `${firstName(user.name)} advanced to ${stageName(to)}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
   await notify({
     userId: user.id,
     type: "stage_advanced",
-    title: `You advanced to ${getStage(to).name}`,
+    title: `You advanced to ${stageName(to)}`,
     body: unlocked.length ? `Newly unlocked: ${unlocked.join(", ")}` : null,
     link: "/profile",
     // One per stage, ever: re-computation can never re-celebrate.
@@ -3007,7 +3036,19 @@ const holderReads: HolderReads = {
 const liveHoldersOf = (capability: string): Promise<string[]> => liveHoldersNow(holderReads, capability);
 const rolesCarrying = (capability: string) => rolesCarryingCapability(loadRoles(), capability);
 
+/**
+ * THE KEYS AN AGENT ACCOUNT NEVER USES (End of Moon addendum v6, B6 and B7).
+ * For an agent account these read as held by the village, so the admin
+ * short-circuit never answers yes on them, and the break-glass, which needs a
+ * founder seated in a live role, is closed to it. Money and approvals are a
+ * person's.
+ */
+const AGENT_NEVER_KEYS = ["cash.pay", "moon.approve", "moon.approve_alone", "moon.approve_own", "steward.veto"] as const;
+
 async function capabilityCtx(user: any) {
+  // An agent account holds no power from a role or a badge, whichever writer
+  // put the row there (0321): the context the one gate reads carries none.
+  const agent = await isAgentAccount(getPool(), String(user.id));
   // S36: badge grants and denies join the one gate — but only while the
   // badges module is on. Off = zero queries, zero effect: the gate is
   // byte-identical to its pre-badges self.
@@ -3025,21 +3066,23 @@ async function capabilityCtx(user: any) {
   return {
     stageIndex: stageIndex(await stageOf(user)),
     stageIndexOf: stageIndex,
-    roleCapabilities: roleCapabilitiesFor(user.id),
-    badgeCapabilities,
+    roleCapabilities: agent ? [] : roleCapabilitiesFor(user.id),
+    badgeCapabilities: agent ? [] : badgeCapabilities,
     badgeDenies,
     stageUnlockOverrides: stageUnlockOverridesFromVars(),
     // Admins pass every capability gate (shared/capabilities.ts honors this):
     // real role on the user record, never a parallel permission path.
     isAdmin: user.role === "admin" || user.role === "founder",
     // Read by the break-glass step alone (Rye, 2026-09-21; BREAK_GLASS_SEAT).
-    isFounder: user.role === "founder",
+    isFounder: !agent && user.role === "founder",
     // 0098: what the VILLAGE holds. Read live, never cached, in the same
     // shape as badgeGrantsFor above, and for the same reason turned up to
     // eleven: a cached permission that a hand-written UPDATE can desync
     // between processes is not a permission. Empty on every deployment that
     // has not acted, and empty means the gate behaves exactly as it did.
-    villageHeld: await villageHeldCapabilities(getPool()),
+    villageHeld: agent
+      ? Array.from(new Set([...(await villageHeldCapabilities(getPool())), ...AGENT_NEVER_KEYS]))
+      : await villageHeldCapabilities(getPool()),
   };
 }
 
@@ -4522,7 +4565,7 @@ async function runRetentionSweep(): Promise<string> {
 
 async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
   // The letter is a guest's step only where the village serves it; a signing it has not answered is its own step (lib/nextAction.ts).
-  const joining = brochurePagesOn() && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
+  const joining = brochurePageServed("/love-letter") && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
   return pickNextAction(GAME_CONFIG.nextActions, {
     trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)),
   });
@@ -4796,6 +4839,7 @@ async function startServer() {
   // village's own amounts are never restored to a default by a redeploy.
   await seedEconomy(getPool(), villageId());
   await loadTokenRegistry(getPool());
+  await runOnce("flat-role-mint-off-2026-11-01", () => blankFlatRoleMint(getPool()).then(() => undefined)); // Rye, 2026-11-01: no flat role mint, from the next cycle
   // Suggested class tags on work that already exists, so a fresh village does
   // not meet five classes that appear to open nothing. Only rows where
   // `archetypes IS NULL` are touched, so a tag a human confirmed or cleared is
@@ -4865,6 +4909,30 @@ async function startServer() {
     return `${r.users} member(s), ${r.rows} notification(s)`;
   });
   registerJob("retention-sweep", 24 * 60 * 60 * 1000, async () => runRetentionSweep());
+  // Sera's agent, B7: once a day the people who approve moons (live holders of moon.approve or
+  // moon.approve_alone, counted the way the gate counts) hear what it did since the last summary,
+  // each with an Undo on the bridge panel. The members it acted on are never told by this, and an
+  // agent account is never sent it, even one that somehow holds the key.
+  registerJob("sera-agent-digest", 24 * 60 * 60 * 1000, async () => {
+    const now = new Date();
+    const mark = await readConfigDocument<{ lastUntil?: string }>(getPool(), "sera-agent-digest");
+    const since = mark?.lastUntil && !Number.isNaN(Date.parse(mark.lastUntil)) ? new Date(mark.lastUntil) : null;
+    const digest = await seraDigest(getPool(), now, since);
+    await writeConfigDocument(getPool(), "sera-agent-digest", { lastUntil: now.toISOString() });
+    if (!digest) return "nothing to report";
+    const day = now.toISOString().slice(0, 10);
+    const agents = new Set(await agentAccountIds(getPool()));
+    const approvers = new Set([...(await liveHoldersOf("moon.approve")), ...(await liveHoldersOf("moon.approve_alone"))]);
+    const people = Array.from(approvers).filter((id) => !agents.has(id));
+    for (const id of people) {
+      // Undo stays admin-only (decision, 2026-11-04). An admin's summary opens the panel that
+      // carries each Undo; an approver who is not an admin gets no admin link, and the body tells
+      // them to ask an admin instead.
+      const link = seraDigestLink(userIsAdmin(await members.byId(id)));
+      await notify({ userId: id, type: "sera_agent_digest", title: digest.title, body: digest.body, link, dedupeKey: `sera-agent-digest:${day}:${id}` });
+    }
+    return `${digest.count} actions, told ${people.length}`;
+  });
   // S31: hourly sweep; acts only once the UTC hour passes stay.autopay_post_hour.
   // Keyed ledger legs make reruns and catch-up idempotent by construction.
   registerJob("stay-nightly", 60 * 60 * 1000, async () => {
@@ -6428,7 +6496,7 @@ async function startServer() {
      */
     const AGENT_INTENT_WRITE = process.env.AGENT_INTENT_WRITE === "1";
     const SKILLS_DIR = path.join(process.cwd(), "docs", "skills");
-    const SKILL_NAMES = ["village-calendar", "village-circles", "village-directory", "village-intents", "village-map"] as const;
+    const SKILL_NAMES = ["village-calendar", "village-circles", "village-directory", "village-intents", "village-map", "village-moon"] as const;
     const skillFile = (name: string) => path.join(SKILLS_DIR, name, "SKILL.md");
     const OPENAPI_FILE = path.join(SKILLS_DIR, "references", "openapi.json");
 
@@ -6485,7 +6553,7 @@ async function startServer() {
     const resolveAgent = async (
       req: express.Request,
       res: express.Response,
-      scope: AgentScope,
+      scope: AgentScope | null,
       kind: "read" | "write",
     ): Promise<{ row: AgentTokenRow; user: any } | null> => {
       const header = req.headers.authorization;
@@ -6499,7 +6567,9 @@ async function startServer() {
         return null;
       }
       const row: AgentTokenRow = verified.row;
-      if (!row.scopes.includes(scope)) {
+      // `null` asks for a live token and no one scope: the connector (server/routes/agentMcp.ts)
+      // lists and refuses tools by the token's scopes itself.
+      if (scope !== null && !row.scopes.includes(scope)) {
         res.status(403).json({ error: "agent_scope_missing", scope, message: `This token was not given the ${scope} scope` });
         return null;
       }
@@ -6565,6 +6635,12 @@ async function startServer() {
     });
 
     // ── The two writes, both confirmed in the contract ────────────────────
+    // A confirm token writes once. Without this an agent could send the same
+    // RSVP token again inside its ten minutes, after the member changed their
+    // answer on the web, and set it back without asking: on a priced gathering
+    // that is a charge. Spent only after every other check passes, so a wrong
+    // echo or another holder's attempt never burns the member's yes.
+    const rsvpConfirmBook = createConfirmSpendBook();
     /**
      * `POST /api/agent/v1/events/:id/rsvp`.
      *
@@ -6630,6 +6706,9 @@ async function startServer() {
       ) {
         return res.status(409).json({ error: "echo_mismatch", message: CONFIRM_REASON_SENTENCE.echo_mismatch });
       }
+      if (!rsvpConfirmBook.spend(String(req.body.confirmToken))) {
+        return res.status(409).json({ error: "spent", message: CONFIRM_REASON_SENTENCE.spent });
+      }
 
       const outcome = await rsvp(getPool(), eventId, user.id, wanted as RsvpStatus, idempotencyKey ?? undefined, occurrenceKey ?? undefined);
       if (!outcome.ok) {
@@ -6670,6 +6749,19 @@ async function startServer() {
     });
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
+    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin });
+    registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
+    registerAgentOAuthRoutes(app, {
+      authedUser, getPool, overLimit, clientIp,
+      origin: (req) => (process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, ""),
+      memberById: (id) => members.byId(id),
+      // The same two rules the Your agent panel's mint applies (cleanScopes): admin to an admin, Sera's scope to an agent account that is not one.
+      extraScopes: async (u) => {
+        const admin = userIsAdmin(u);
+        if (admin) return ["admin"];
+        return (await isAgentAccount(getPool(), String(u?.id ?? ""))) ? ["sera.undoable"] : [];
+      },
+    });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
     app.all(`${AGENT_V1}/{*splat}`, (_req, res) => res.status(404).json({ error: "Not found" }));
@@ -6709,7 +6801,13 @@ async function startServer() {
     app.post("/api/agent/tokens", async (req, res) => {
       const user = await me(req, res);
       if (!user) return;
-      const scopes = cleanScopes(req.body?.scopes, { intentsAllowed: AGENT_INTENT_WRITE });
+      const holderIsAdmin = await isAdmin(req);
+      const scopes = cleanScopes(req.body?.scopes, {
+        intentsAllowed: AGENT_INTENT_WRITE,
+        adminAllowed: holderIsAdmin,
+        // Sera's agent: an agent account that is not an admin (addendum v6, B7).
+        seraAllowed: !holderIsAdmin && (await isAgentAccount(getPool(), String(user.id))),
+      });
       if (!scopes.ok) return res.status(400).json({ error: scopes.error });
       const minted = await mintToken(getPool(), user.id, { name: String(req.body?.name ?? ""), scopes: scopes.scopes, ttlDays: req.body?.ttlDays }, Number(user.tokenVersion ?? 0)); // a session ended since its check answers 401
       if (!minted.ok) return res.status(minted.status).json({ error: minted.error });
@@ -7951,6 +8049,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     void recordEvent(getPool(), {
       kind: "audit", text, actorUserId: userId, entityType: "user", entityRef: userId, audience: "admin",
     });
+    // A member made a proved profile or proved their email: ask Sera, by keyed hash only, who they are (off by default).
+    if (text === "auth:email-verified" || text === "auth:google-joined") matchOnEvent(getPool(), userId, (t) => recordAuthAudit(t, userId));
   };
   const letters = { authSecret: AUTH_TOKEN_SECRET, sendEmail: sendResendEmail, escapeHtml, origin: notifyDeps.origin, projectName: () => mergedConfig().project.name }; // every auth letter's five
   registerRecoveryRoutes(app, {
@@ -12722,6 +12822,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
 
   // ── S66: feedback — the local queue is the feature, the relay is a copy ──
   registerFeedbackRoutes(app, { isAdmin, authedUser, getPool, notify, overLimit, clientIp, projectName: notifyDeps.projectName });
+  registerSubmissionHandlingRoutes(app, { isAdmin, getPool, adminActor });
 
   /**
    * S70: Maia's organizing counsel. Two shelves, one priority rule: the
@@ -13851,14 +13952,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
           model: SYNTHESIS_MODEL,
           max_tokens: SYNTHESIS_MAX_TOKENS,
           system: synthesisSystemPrompt(roleCandidates),
-          messages: [{
-            role: "user",
-            content: JSON.stringify({
-              title: rec.title,
-              chapterMarks,
-              segments: transcript.segments.slice(0, 400).map((s) => ({ startMs: s.startMs, text: s.text.slice(0, 400) })),
-            }).slice(0, 100000),
-          }],
+          messages: [{ role: "user", content: synthesisUserContent({ title: rec.title, chapterMarks, segments: transcript.segments }) }],
         }),
       });
       if (!resp.ok) {
@@ -18176,6 +18270,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   registerFaqRoutes(app, { isAdmin, guardCapability, faqsRepo });
   registerBrochurePagesRoutes(app, { isAdmin, guardCapability });
+  registerVillagePathsRoutes(app, { isAdmin, guardCapability, config: mergedConfig, valueTokenName: () => { const slug = String(stringVar("gratitude.pool_token")); return tokenDef(slug)?.name ?? slug; } });
 
   // â”€â”€ Milestones (NEW-3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -18185,9 +18280,11 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
-  registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members });
+  registerMemberTaskRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
+  registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, notify, timeZone: () => getSeasonConfig().timezone });
+  registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
-  registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: String(getWorkWithUs().assistantName || "Maia"), timeZone: getSeasonConfig().timezone }) });
+  registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: guidePromptName(getWorkWithUs().assistantName), timeZone: getSeasonConfig().timezone }) });
   registerMemberAskRoutes(app, { authedUser, getPool, members, notify, overLimit, firstName });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, seasonState, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
@@ -18210,6 +18307,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
+  registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
+  registerMoonReviewSettingsRoutes(app, { authedUser, getPool, guardCapability, overLimit }); // decision 22: the moon review's village settings (server/routes/moonReviewSettings.ts)
   registerOwnHoldingsRoutes(app, { authedUser, getPool });
   registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
   registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
@@ -18476,7 +18575,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.put("/api/admin/visit-config", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (!req.body || typeof req.body !== "object") return res.status(400).json({ error: "Body required" });
-    const problem = ctaLinkProblemIn(req.body);
+    const problem = ctaLinkProblemIn(req.body) ?? visitProgramProblem(req.body);
     if (problem) return res.status(400).json({ error: problem });
     await visitConfigRepo.put(req.body);
     res.json({ success: true });
@@ -18521,10 +18620,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       project: m.project,
       currency: { ...m.currency, value: { slug: valueSlug, name: valueDef?.name ?? valueSlug }, names: Object.fromEntries(allTokens().map((t) => [t.slug, t.name])) },
       images: m.images,
-      paths: GAME_CONFIG.paths,
+      ...servedPathWords(), // paths, with their sentences, and the ladder's name: server/lib/villagePaths.ts
       stages: servedLadder(mergedConfig().project.commitmentName),
       season: seasonState(),
-      brochurePages: brochurePagesOn(),
+      ...brochureConfig(),
       site: siteWords(contentRepo.get() ?? null, m),
     });
   });
@@ -20839,6 +20938,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(403).json({ error: "Only the proposer takes their proposal to the vote" });
     }
     if (p.status !== "open") return res.status(409).json({ error: `This proposal is ${p.status.replace("_", " ")}, not open` });
+    const heldByFounders = await founderHeldVoteProblem(p.changeSet, () => founderPowerStands(getPool())); if (heldByFounders) return res.status(409).json({ error: heldByFounders });
     const threshold = Math.max(0, numberVar("governance.proposal_support_threshold"));
     const backers = await backerCounts(getPool(), [p.id]);
     const supports = backers.get(p.id)?.supports ?? 0;
@@ -21001,7 +21101,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // passed_onsite joins the applyable set: a ballot-passed proposal held by
     // the auto-apply brake (or by a cycle-timed dial) is applied by the same
     // human hand as a Hypha-verified one.
-    if (p.status !== "to_hypha" && p.status !== "passed_claimed" && p.status !== "passed_verified" && p.status !== "passed_onsite") {
+    if (p.status !== "to_hypha" && p.status !== "passed_claimed" && p.status !== "passed_verified" && p.status !== "passed_onsite" && !founderAdoptable(p)) {
       return res.status(409).json({ error: `A ${p.status.replace(/_/g, " ")} proposal cannot be applied` });
     }
     /*
@@ -22046,7 +22146,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         const needed = stageIndex(role.minStage);
         if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
           out.held =
-            `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage ` +
+            `${firstName(member.name)} has not reached the ${stageName(role.minStage)} stage ` +
             `${role.name ?? asked.roleId} asks for, so nobody was seated. The village can ask again once they have.`;
           await notifyAdmins("governance", `A carried seating could not land: ${b.title}`, `bal:${b.id}:seat-held`);
           return out;
@@ -22876,6 +22976,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (p.status !== "open") {
       return res.status(409).json({ error: `This proposal is ${p.status.replace(/_/g, " ")}, not open for a ballot` });
     }
+    const heldByFounders = await founderHeldVoteProblem(p.changeSet, () => founderPowerStands(getPool())); if (heldByFounders) return res.status(409).json({ error: heldByFounders });
     const ctx = await capabilityCtx(user);
     if (p.proposerUserId !== user.id && !hasCapability("proposal.open", ctx)) {
       return res.status(403).json({ error: "Taking a proposal to the vote is for its proposer or a proposal.open holder" });
@@ -24606,7 +24707,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
-  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState }); // a role proposal from somebody with no account (0305)
+  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState, notify, notifyAdmins, members, stageOf, recordStageEvent, liveHoldersOf, rolesCarrying, loadRoleHolders, seatCalendar, lapse: lapseContext }); // a role proposal from somebody with no account (0305), and its decision
   registerStewardHandoverRoutes(app, { getPool, overLimit, authedUser, liveHoldersOf }); // the launch selection, then every hand-over to the village (Rye, 2026-11-01)
   registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
@@ -25654,7 +25755,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       const needed = stageIndex(role.minStage);
       if (needed >= 0 && stageIndex(await stageOf(member)) < needed) {
         return res.status(409).json({
-          error: `${firstName(member.name)} has not reached the ${getStage(role.minStage)?.name ?? role.minStage} stage this role asks for.`,
+          error: `${firstName(member.name)} has not reached the ${stageName(role.minStage)} stage this role asks for.`,
           minStage: role.minStage,
         });
       }
@@ -25858,6 +25959,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
       sessions: await exportMemberSessions(pool, user.id), // live sessions they joined, entries they wrote or hold, and their own answers; arrival words are already erased from closed ones (server/lib/liveSessions.ts)
       geneKeys: await exportMemberGeneKeys(pool, user.id), // their saved Gene Keys result and settings; no birth data exists to export (server/lib/geneKeys.ts)
+      memberTasks: await exportMemberTasks(pool, user.id), // their own list, private detail and tombstones included (server/repos/memberTasks.ts)
+      moonReviews: await exportMoonReviews(pool, user.id), // their moon recaps, items, invoices, pay route and review events (server/repos/moonRecaps.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *
@@ -26014,7 +26117,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.get("/sitemap.xml", (req, res) => {
     const origin = requestOrigin(req);
     const paths = [
-      ...PUBLIC_PATHS.filter((p) => brochurePagesOn() || !isBrochurePath(p)),
+      ...PUBLIC_PATHS.filter((p) => brochurePageServed(p)),
       ...GATED_PATHS.filter(([, id]) => effectiveLifecycle(id) === "public").map(([p]) => p),
     ];
     const urls = paths
@@ -26187,7 +26290,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       console.error(`[sendFile error] ${indexPath}: the shell is missing`);
       return res.status(500).send(`Server error: could not serve index.html from ${indexPath}`);
     }
-    const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null);
+    const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null, !brochurePageServed(req.path));
     res.type("html").set("Cache-Control", "no-cache").send(spliceMeta(shellWithTheme(shell, getBrand), meta));
   });
 

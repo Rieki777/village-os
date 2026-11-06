@@ -25,7 +25,10 @@ import type { WordValue } from "@shared/roleProposals";
 import AiHelpButton from "./AiHelpButton";
 import type { WordFieldOut } from "./proposalApi";
 import { RP_WORDS } from "./proposalWords";
+import TermGlossary from "@/components/governance/TermGlossary";
+import GrowingField from "@/components/form/GrowingField";
 import { EDIT_FIELDS, fieldProblem, NAME_FIELD, stateFrom, shownText, differs, type EditField } from "./roleWords";
+import WrittenDate from "./WrittenDate";
 import { FieldFrame, FOCUS, INPUT, LEDE, PANEL } from "./parts";
 
 export interface WordsRole {
@@ -47,6 +50,8 @@ export interface StepWordsProps {
   frameworkTerms: boolean;
   onType: (roleId: string, field: string, text: string) => void;
   onReview: (roleId: string, day: string) => void;
+  /** The member's three answers, so the guide can cite them. */
+  ownText?: string | null;
 }
 
 const list = (v: WordValue | undefined): string[] => (Array.isArray(v) ? v : typeof v === "string" && v ? [v] : []);
@@ -67,38 +72,38 @@ function FromHolder({ role }: { role: WordsRole }) {
   });
   const runbook = text(posted.runbook);
   return (
-    <div className={`${PANEL} grid gap-3 bg-stone-50`} data-from-holder={role.id}>
+    <div className={`${PANEL} grid gap-3 bg-muted`} data-from-holder={role.id}>
       <div>
-        <h3 className="font-semibold text-stone-900">{RP_WORDS.fromHolder}</h3>
+        <h3 className="font-semibold text-foreground">{RP_WORDS.fromHolder}</h3>
         <p className={LEDE}>{RP_WORDS.fromHolderLede}</p>
       </div>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{W.runbook}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{W.runbook}</p>
         {runbook ? (
           runbookIsLink(runbook) ? (
-            <a href={runbook} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-[44px] items-center break-all text-sm font-medium text-teal-deep underline ${FOCUS}`}>
+            <a href={runbook} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-[44px] items-center break-all text-sm font-medium text-dash-gold-lit underline ${FOCUS}`}>
               {runbook}
             </a>
           ) : (
-            <p className="mt-1 whitespace-pre-line break-words text-sm text-stone-800">{runbook}</p>
+            <p className="mt-1 whitespace-pre-line break-words text-sm text-foreground">{runbook}</p>
           )
         ) : (
-          <p className="mt-1 text-sm text-stone-600">{RP_WORDS.noRunbook}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{RP_WORDS.noRunbook}</p>
         )}
       </div>
       <div data-handover-meter="">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{handover.heading}</p>
-          <span className="text-sm font-semibold text-stone-900">{handover.summary}</span>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{handover.heading}</p>
+          <span className="text-sm font-semibold text-foreground">{handover.summary}</span>
         </div>
         <ul className="mt-1 grid gap-1 text-sm">
           {handover.checks.map((c) => (
             <li key={c.key} data-check={c.key} className="flex items-start gap-2">
-              <span aria-hidden="true" className={c.state === "ready" ? "text-teal-deep" : "text-stone-400"}>
+              <span aria-hidden="true" className={c.state === "ready" ? "text-dash-gold-lit" : "text-muted-foreground"}>
                 {c.state === "ready" ? "✓" : "○"}
               </span>
               <span className="min-w-0">
-                <span className="font-medium text-stone-800">{c.label}:</span> <span className="text-stone-600">{c.words}</span>
+                <span className="font-medium text-foreground">{c.label}:</span> <span className="text-muted-foreground">{c.words}</span>
               </span>
             </li>
           ))}
@@ -129,25 +134,25 @@ function WordInput({
   const hint = f.hint ?? (f.list ? RP_WORDS.onePerLine : undefined);
   return (
     <FieldFrame changed={changed} isNew={role.isNew} posted={posted} field={f.field}>
-      <div className="text-sm font-semibold text-stone-900">
+      <div className="text-sm font-semibold text-foreground">
         <CcosTerm term={f.term ? roleTerm(f.term, frameworkTerms) : null} tap={LABEL_TAP}>
           {f.label}
         </CcosTerm>
       </div>
       {hint && (
-        <p id={`${id}-hint`} className="text-xs text-stone-600">
+        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
           {hint}
         </p>
       )}
       {f.multiline ? (
-        <textarea
+        <GrowingField
           id={id}
           aria-label={f.label}
           aria-describedby={hint ? `${id}-hint` : undefined}
           aria-invalid={problem ? true : undefined}
-          rows={f.list ? 4 : 3}
+          minRows={f.list ? 3 : 2}
           value={value}
-          onChange={(e) => onType(e.target.value)}
+          onChange={onType}
           className={`mt-1 ${INPUT}`}
         />
       ) : (
@@ -170,9 +175,9 @@ function WordInput({
   );
 }
 
-export default function StepWords({ roles, typed, frameworkTerms, onType, onReview }: StepWordsProps) {
+export default function StepWords({ roles, typed, frameworkTerms, onType, onReview, ownText }: StepWordsProps) {
   const [current, setCurrent] = useState(0);
-  if (!roles.length) return <p className="text-stone-700">{RP_WORDS.pickRoleFirst}</p>;
+  if (!roles.length) return <p className="text-muted-foreground">{RP_WORDS.pickRoleFirst}</p>;
   const role = roles[Math.min(current, roles.length - 1)];
   const state = stateFrom(role.fields ?? [], typed[role.id] ?? {});
   const holding = EDIT_FIELDS.filter((f) => f.group === "holding");
@@ -192,6 +197,10 @@ export default function StepWords({ roles, typed, frameworkTerms, onType, onRevi
   return (
     <div className="grid gap-4">
       <p className={LEDE}>{RP_WORDS.wordsLede}</p>
+      <p className="text-sm text-foreground" data-any-language="">
+        {RP_WORDS.anyLanguage}
+      </p>
+      <TermGlossary />
       {roles.length > 1 && (
         <div role="group" aria-label={RP_WORDS.whichRole} className="flex flex-wrap gap-2">
           {roles.map((r, i) => (
@@ -201,7 +210,7 @@ export default function StepWords({ roles, typed, frameworkTerms, onType, onRevi
               aria-pressed={r.id === role.id}
               onClick={() => setCurrent(i)}
               className={`inline-flex min-h-[44px] max-w-full items-center rounded-lg border px-3 text-left text-sm font-medium ${FOCUS} ${
-                r.id === role.id ? "border-teal-deep bg-teal-deep/5 text-stone-900" : "border-stone-300 bg-white text-stone-700"
+                r.id === role.id ? "border-dash-gold bg-dash-gold text-dash-gold-ink" : "border-border bg-card text-foreground"
               }`}
             >
               <span className="break-words">{r.name}</span>
@@ -211,15 +220,15 @@ export default function StepWords({ roles, typed, frameworkTerms, onType, onRevi
       )}
 
       <section aria-label={role.name} className="grid gap-3" data-words-role={role.id}>
-        <h3 className="break-words font-display text-2xl font-bold text-stone-900">{role.name}</h3>
+        <h3 className="break-words font-display text-2xl font-bold text-foreground">{role.name}</h3>
         {!role.isNew && role.holderCount > 0 && role.fields && <FromHolder role={role} />}
         {role.fields === null ? (
-          <p className="text-sm text-stone-600">{RP_WORDS.saving}</p>
+          <p className="text-sm text-muted-foreground">{RP_WORDS.saving}</p>
         ) : (
           <>
             {role.isNew && (
               <FieldFrame changed isNew posted={null} field={NAME_FIELD}>
-                <label className="grid gap-1 text-sm font-semibold text-stone-900">
+                <label className="grid gap-1 text-sm font-semibold text-foreground">
                   {RP_WORDS.roleName}
                   <input
                     value={shownText(state, NAME_FIELD)}
@@ -237,9 +246,10 @@ export default function StepWords({ roles, typed, frameworkTerms, onType, onRevi
               {holding.map(input)}
             </fieldset>
             {EDIT_FIELDS.filter((f) => !f.group).slice(8).map(input)}
-            <label className="grid gap-1 rounded-xl border border-stone-200 bg-white p-3 text-sm font-semibold text-stone-900">
+            <label className="grid gap-1 rounded-xl border border-border bg-card p-3 text-sm font-semibold text-foreground">
               {RP_WORDS.reviewOn}
-              <span className="text-xs font-normal text-stone-600">{RP_WORDS.reviewHint}</span>
+              <span className="text-xs font-normal text-muted-foreground">{RP_WORDS.reviewHint}</span>
+              <WrittenDate iso={role.reviewOn} />
               <input type="date" value={role.reviewOn} onChange={(e) => onReview(role.id, e.target.value)} className={`min-h-[44px] ${INPUT}`} />
             </label>
           </>
@@ -247,6 +257,7 @@ export default function StepWords({ roles, typed, frameworkTerms, onType, onRevi
         <AiHelpButton
           step="words"
           words={Object.fromEntries(EDIT_FIELDS.map((f) => [f.field, shownText(state, f.field)]))}
+          ownText={ownText}
           onAccept={(field, words) => onType(role.id, field, words)}
         />
       </section>

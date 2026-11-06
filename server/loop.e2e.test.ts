@@ -3768,11 +3768,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // one may become work. ──
     const { createServer: createHttpServer } = await import("http");
     let llmCalls = 0;
+    const synthAsks: any[] = [];
     const llm = createHttpServer((req, res) => {
       llmCalls += 1;
       let body = "";
       req.on("data", (c) => (body += c));
       req.on("end", () => {
+        try { synthAsks.push(JSON.parse(body)); } catch { synthAsks.push({}); }
         const payload = {
           content: [{
             text: JSON.stringify({
@@ -3800,6 +3802,19 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       const synth = await api("POST", `/api/admin/recordings/${recId}/synthesize`, {}, founderToken);
       expect(synth.status).toBe(200);
       expect(llmCalls).toBe(1);
+      // What went upstream: the speech and the role candidates each in one
+      // fence, opened once and closed once (server/lib/callSynthesis.test.ts
+      // holds the hostile cases; this pins that the route uses that builder).
+      const ask = synthAsks[0];
+      const turn = String(ask.messages?.[0]?.content ?? "");
+      expect(turn.startsWith('<village-data reader="call.transcript">'), turn.slice(0, 80)).toBe(true);
+      expect(turn.endsWith("</village-data>")).toBe(true);
+      expect(turn.split("<village-data ").length).toBe(2);
+      expect(turn).toContain("water pump before the rains");
+      const sys = String(ask.system ?? "");
+      expect(sys).toContain('<village-data reader="call.role_candidates">');
+      expect(sys.split("<village-data ").length).toBe(2);
+      expect(sys.split("</village-data>").length).toBe(2);
       // THE EVIDENCE RULE, end to end: 1 kept, 2 dropped, and the drop count
       // is stored where humans see it.
       expect(synth.json.tasks).toBe(1);

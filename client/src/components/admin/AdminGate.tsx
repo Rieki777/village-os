@@ -58,6 +58,13 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
+  const [waited, setWaited] = useState(false);
+  const [giveUp, setGiveUp] = useState(false);
+  useEffect(() => {
+    if (!loading) { setWaited(false); return; }
+    const t = window.setTimeout(() => setWaited(true), 8000);
+    return () => window.clearTimeout(t);
+  }, [loading]);
 
   // Sheet 19: or a live holding of a power group with admin access, which the server works out (`adminAccess`).
   const isAdmin = !!user && (user.role === "admin" || user.role === "founder" || (user as any).adminAccess === true);
@@ -89,10 +96,23 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
     setChecking(false);
   };
 
-  if (loading || isAdmin) {
+  if (!giveUp && (loading || isAdmin) && !waited) {
     return (
       <div className="min-h-screen bg-teal-deep flex items-center justify-center">
         <BreathingLoader label="Opening the admin" size={56} />
+      </div>
+    );
+  }
+
+  if (!giveUp && loading && waited) {
+    return (
+      <div className="min-h-screen bg-teal-deep flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
+          <p className="text-sm text-gray-700">Still checking your account.</p>
+          <button type="button" className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-teal-deep px-4 text-sm text-white" onClick={() => setGiveUp(true)}>
+            Sign in anyway
+          </button>
+        </div>
       </div>
     );
   }

@@ -266,10 +266,14 @@ describe("the component actually feeds the floor a measurement", () => {
      * So scope the check to motion tags, by walking each one's opening tag
      * with brace depth rather than by regex, which cannot see where a tag
      * ends and reported the plain elements as violations.
+     *
+     * A motion tag is `<m.` (the slim component every file renders under
+     * LazyMotion, lib/motionFeatures.ts) or `<motion.`: both are framer's.
      */
     const motionTags: string[] = [];
     for (const file of [src, label]) {
-    for (let i = file.indexOf("<motion."); i !== -1; i = file.indexOf("<motion.", i + 1)) {
+    for (const start of file.matchAll(/<(?:m|motion)\./g)) {
+      const i = start.index!;
       let depth = 0;
       for (let j = i; j < file.length; j++) {
         const ch = file[j];

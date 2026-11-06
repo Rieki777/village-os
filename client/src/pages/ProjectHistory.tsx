@@ -2,7 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useVillageName } from "@/hooks/useVillageName";
 import { authToken, useCatalyst } from "@/lib/gameApi";
 import { readStoredJson, removeStored, writeStoredJson } from "@/lib/safeStorage";
-import { usePageVars } from "@/hooks/usePageContent";
+import { usePageVars } from "@/hooks/usePageContent"; import { useStoryPageOffAlone } from "@/lib/brochure";
 import { withoutUntouchedNew } from "@/lib/planEdits";
 import { DecisionsEditor, EmptyPlanNote, PlanEditBar, PlanWeeksEditor } from "@/components/commandCentre/PlanEditor";
 import { villageMoonLabel } from "@shared/villageMoon";
@@ -503,7 +503,7 @@ export default function ProjectHistory() {
   /** `{village}` and the other words, filled for reading. The editor shows them raw. */
   const fill = (text: string) => fillVars(text, pageVars ?? { village: villageName });
   const buckets = buildBuckets(villageName);
-  const QUICK_LINKS = buildQuickLinks(villageName, pageVars?.commitment ?? "membership agreement");
+  const pageOff = useStoryPageOffAlone(); /* a story page switched off on its own leaves the quick links */ const QUICK_LINKS = buildQuickLinks(villageName, pageVars?.commitment ?? "membership agreement").filter((l) => !pageOff(l.url));
   const [authenticated, setAuthenticated] = useState(false);
   const [journeyPassword, setJourneyPassword] = useState<string>("");
   const journeyHeaders = (extra: Record<string, string> = {}): Record<string, string> => ({

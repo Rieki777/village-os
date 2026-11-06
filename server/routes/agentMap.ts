@@ -54,7 +54,7 @@ import {
 } from "../../shared/mapFromMasterplan";
 import { MAX_SCENE_BYTES, sceneSizeProblem, sceneSummary } from "../../shared/mapScene";
 import type { AppDeps } from "../lib/appDeps";
-import { type AgentScope, type AgentTokenRow, CONFIRM_REASON_SENTENCE, echoHash, mintConfirmToken, verifyConfirmToken } from "../lib/agentTokens";
+import { type AgentScope, type AgentTokenRow, CONFIRM_REASON_SENTENCE, createConfirmSpendBook, echoHash, mintConfirmToken, verifyConfirmToken } from "../lib/agentTokens";
 import { recordEvent } from "../lib/events";
 import { getDraft, pendingDraft, publishedScene, publishedVersion, saveDraft } from "../lib/mapScene";
 import { currentMasterplan } from "../lib/mapMasterplan";
@@ -139,6 +139,8 @@ export const DRAFT_RULES: readonly string[] = [
 export function register(app: Express, deps: Deps): void {
   const { resolveAgent, capabilityCtx, getPool, confirmSecret } = deps;
   const V1 = "/api/agent/v1";
+  // A confirm token keeps one draft. Spent only after every other check passes (see the RSVP route's note).
+  const draftConfirmBook = createConfirmSpendBook();
 
   /** The holder, when they may draft the land; otherwise the refusal is sent and null comes back. */
   async function mapMakerAgent(req: express.Request, res: express.Response, kind: "read" | "write") {
@@ -276,6 +278,9 @@ export function register(app: Express, deps: Deps): void {
     // THIS request would write, or a token for one scene could carry another.
     if (echoHash(req.body?.echo) !== echoHash(echo)) {
       return res.status(409).json({ error: "echo_mismatch", message: CONFIRM_REASON_SENTENCE.echo_mismatch });
+    }
+    if (!draftConfirmBook.spend(String(req.body.confirmToken))) {
+      return res.status(409).json({ error: "spent", message: CONFIRM_REASON_SENTENCE.spent });
     }
 
     await saveDraft(getPool(), user.id, text, liveVersion);

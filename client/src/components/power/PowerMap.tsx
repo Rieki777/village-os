@@ -33,7 +33,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { wrapLabel, type NestedLayout } from "@shared/mapLayout";
 import { cssColourForCircle } from "@shared/circleView";
 import { arcCounts } from "@shared/capacityArc";
@@ -605,11 +605,11 @@ export default function PowerMap({
             iconY >= pos.y - pos.r + (glyphs ? 34 : 8 * unit);
 
           return (
-            <motion.g key={pos.id} animate={{ opacity }} transition={morph}>
+            <m.g key={pos.id} animate={{ opacity }} transition={morph}>
               {/* The circle, its links and its roles. A forming circle reads by
                   its material, a dashed edge and a hatch, never by a fade. */}
               <g>
-              <motion.circle
+              <m.circle
                 id={`power-node-${pos.id}`}
                 animate={{ cx: pos.x, cy: pos.y, r: pos.r }}
                 initial={false}
@@ -706,7 +706,7 @@ export default function PowerMap({
 
               {/* A forming disc carries the hatch over its tint. */}
               {forming && (
-                <motion.circle animate={{ cx: pos.x, cy: pos.y, r: pos.r }} initial={false} transition={morph} fill={`url(#${uid}-hatch)`} pointerEvents="none" />
+                <m.circle animate={{ cx: pos.x, cy: pos.y, r: pos.r }} initial={false} transition={morph} fill={`url(#${uid}-hatch)`} pointerEvents="none" />
               )}
 
               <SeatRing
@@ -794,7 +794,7 @@ export default function PowerMap({
                 morph={morph}
                 roles={data.roles}
               />
-            </motion.g>
+            </m.g>
           );
         })}
 
@@ -836,7 +836,7 @@ export default function PowerMap({
           const words = seat ? seatStateWords(seat.state, seat.holderCount, seat.seats) : "";
           const pass = seatPasses(seat);
           return (
-            <motion.g
+            <m.g
               key={rp.id}
               animate={{ x: rp.x, y: rp.y, opacity: pass ? 1 : 0.2 }}
               initial={false}
@@ -873,7 +873,7 @@ export default function PowerMap({
               {selected?.kind === "role" && selected.id === rp.id && (
                 <circle cx={0} cy={0} r={15} fill="none" stroke="var(--color-teal-deep)" strokeWidth={1.6} />
               )}
-            </motion.g>
+            </m.g>
           );
         })}
 

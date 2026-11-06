@@ -663,6 +663,13 @@ ul.pc-list li {
 }
 .pc-f13 {
   font-size: 13px;
+  /* Montserrat's descenders (the p in "October", the comma) paint past a
+     line box that ends on the baseline. The proposal page clips overflow,
+     so a tight box cuts the moon line at phone width. The padding keeps
+     that ink inside the box. */
+  line-height: 1.5;
+  padding-bottom: 0.2em;
+  overflow: visible;
 }
 .pc-f12 {
   font-size: 12px;

@@ -11,7 +11,7 @@
  * moment is the result, never the movement. The glyph is decoration for
  * assistive tech; the heading carries the words.
  */
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import type { GeneKeysView } from "@shared/geneKeys";
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import { HINT } from "./ui";
@@ -27,7 +27,7 @@ export default function GeneKeysReveal({ view, chosen, headingId }: { view: Gene
         {lines.map((n, i) => {
           const lit = n === first ? "solid" : n === second ? "ring" : null;
           return (
-            <motion.span
+            <m.span
               key={n}
               className="block h-2.5 rounded-sm"
               initial={still ? false : { scaleX: 0, opacity: 0.2 }}
@@ -35,7 +35,7 @@ export default function GeneKeysReveal({ view, chosen, headingId }: { view: Gene
               transition={{ delay: still ? 0 : i * 0.12, duration: still ? 0 : 0.35, ease: "easeOut" }}
               style={{ transformOrigin: "left center" }}
             >
-              <motion.span
+              <m.span
                 className={`block h-full w-full rounded-sm ${
                   lit === "solid" ? "bg-notice" : lit === "ring" ? "border-2 border-notice" : "bg-muted-foreground/40"
                 }`}
@@ -43,11 +43,11 @@ export default function GeneKeysReveal({ view, chosen, headingId }: { view: Gene
                 animate={{ opacity: 1 }}
                 transition={{ delay: still ? 0 : 0.85, duration: still ? 0 : 0.4 }}
               />
-            </motion.span>
+            </m.span>
           );
         })}
       </div>
-      <motion.div
+      <m.div
         className="flex flex-col gap-1"
         initial={still ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -58,7 +58,7 @@ export default function GeneKeysReveal({ view, chosen, headingId }: { view: Gene
           {view.names}
         </h1>
         <p className={HINT}>{chosen ? "Chosen by you" : "Your Gene Keys profile"}</p>
-      </motion.div>
+      </m.div>
     </div>
   );
 }

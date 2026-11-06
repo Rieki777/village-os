@@ -114,12 +114,18 @@ export interface PublicGameConfig {
     names?: Record<string, string>;
   };
   images: BrandImages;
-  paths: { id: string; label: string; role: string; route: string }[];
+  /** In the village's own words (Admin, Paths & Stages). `description` is absent on an older server. */
+  paths: { id: string; label: string; role: string; route: string; description?: string }[];
   stages: GameStagePublic[];
+  /** The stage ladder's name, in the village's words. Absent on an older server: read it through `useLadderTitle`. */
+  ladder?: { title: string };
   season: SeasonState;
   /** Whether this village serves the brochure pages (shared/brochure.ts).
    *  Absent on a server older than 1.2.0, which reads as off. */
   brochurePages?: boolean;
+  /** The story pages this village switched off one by one, while the rest
+   *  are served. Absent on an older server, which reads as none. */
+  brochureHidden?: string[];
   /** Site-wide words from Admin, Pages, Whole site. Absent on an older server. */
   site?: {
     footerSignoff: string;
@@ -167,6 +173,10 @@ let _configCache: Promise<PublicGameConfig | null> | null = null;
 // The resolved config, so a component mounting after it arrived starts with it
 // instead of rendering empty, painting, and rendering again in an effect.
 let _configNow: PublicGameConfig | null = null;
+/** The cached config as it stands, for code that is not a component (null before the first read). */
+export function configNow(): PublicGameConfig | null {
+  return _configNow;
+}
 export function fetchConfigCached(): Promise<PublicGameConfig | null> {
   if (!_configCache) {
     _configCache = fetch("/api/game/config")

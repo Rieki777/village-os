@@ -127,13 +127,19 @@ describe.skipIf(!configured)("badge multipliers name a token, and Gratitude is o
 
     it("reach each role holder at settlement, through the caller's reader", async () => {
       const u = await makeMember("bm-seat-holder");
+      // The role names its own 25 credits: the seed's role rule carries no flat
+      // amount since Rye ended the automatic role mint (2026-11-01).
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('bm-role','bm-role',?)",
+        [JSON.stringify([{ token: CREDITS, amount: 25 }])],
+      );
       await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) VALUES ('bm-seat','bm-role','member',?,?,0)",
         [u, u],
       );
       const before = await balanceOf(pool, memberAccount(u), CREDITS);
       await runSettlement(pool, new Date(), { boostFor: async (who): Promise<Record<string, number>> => (who === u ? { [CREDITS]: 3 } : {}) });
-      // The seeded role rule pays 25 credits; the holder's badge makes it 75.
+      // The role pays 25 credits; the holder's badge makes it 75.
       expect((await balanceOf(pool, memberAccount(u), CREDITS)) - before).toBe(await unitsOf(CREDITS, 75));
     });
 

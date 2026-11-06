@@ -25,6 +25,7 @@ import { useEffect, useState } from "react";
 import { crossRate, exponentOf, formatMoney } from "@shared/money";
 import type { PayBadge, PayLine, StatedCash, WorkPay, WorkValue } from "@shared/workValue";
 import { storedText } from "@/lib/safeStorage";
+import { configNow } from "@/lib/gameApi";
 
 export type { WorkPay } from "@shared/workValue";
 
@@ -74,15 +75,27 @@ export function useDisplayRates(): DisplayRates | null {
   return rates;
 }
 
+/** The village's own currency (Admin, Make This Yours), or "" while it has named none. */
+function villageCurrency(): string {
+  return String(configNow()?.project?.fiatCurrency ?? "").trim().toUpperCase();
+}
+
 /**
  * The currency a value is shown beside: the viewer's own choice when it differs
- * from the value's, and otherwise US dollars for a value held in anything else.
+ * from the value's, and otherwise the village's own currency for a value held in
+ * another one. Never a currency nobody here chose: a village that named none
+ * shows the value as it is (readiness R154; it used to be US dollars).
  * Null when there is nothing worth converting to.
  */
-export function conversionTarget(valueCurrency: string, chosen: string = chosenDisplayCurrency()): string | null {
+export function conversionTarget(
+  valueCurrency: string,
+  chosen: string = chosenDisplayCurrency(),
+  home: string = villageCurrency(),
+): string | null {
   const from = valueCurrency.toUpperCase();
   if (chosen && chosen !== from) return chosen;
-  if (!chosen && from !== "USD") return "USD";
+  const village = String(home ?? "").trim().toUpperCase();
+  if (!chosen && village && from !== village) return village;
   return null;
 }
 
@@ -91,9 +104,10 @@ export function valueWords(
   value: WorkValue,
   rates: DisplayRates | null,
   chosen: string = chosenDisplayCurrency(),
+  home: string = villageCurrency(),
 ): { own: string; converted: string | null } {
   const own = formatMoney(value.minor, value.currency);
-  const target = conversionTarget(value.currency, chosen);
+  const target = conversionTarget(value.currency, chosen, home);
   if (!target || !rates?.rates) return { own, converted: null };
   const rate = crossRate(rates.rates, value.currency, target);
   if (rate === null) return { own, converted: null };

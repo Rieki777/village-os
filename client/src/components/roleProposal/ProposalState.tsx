@@ -22,19 +22,19 @@ export default function ProposalState({ proposal }: { proposal: ProposalOut }) {
   const heading = adopted ? ADOPTED_HEADING : consent ? STATE_HEADINGS[consent.state] : null;
   return (
     <section aria-labelledby="rp-state" className={`${PANEL} grid gap-2`} data-proposal-state={adopted ? "adopted" : consent?.state ?? "submitted"}>
-      <h2 id="rp-state" className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+      <h2 id="rp-state" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {RP_WORDS.stateHeading}
       </h2>
-      {heading && <p className="font-display text-2xl font-bold text-stone-900">{heading}</p>}
+      {heading && <p className="font-display text-2xl font-bold text-foreground">{heading}</p>}
       {adopted ? (
-        <p className="text-stone-800">{proposal.decided}</p>
+        <p className="text-foreground">{proposal.decided}</p>
       ) : consent ? (
         <>
-          <p className="text-stone-800">{consent.words}</p>
+          <p className="text-foreground">{consent.words}</p>
           {/* Who was asked, who consented, who objected: counts and role titles, never a name (PR D). */}
           <ConsentTally consent={consent} />
           {consent.objections.length > 0 && (
-            <ul className="list-disc space-y-1 pl-5 text-sm text-stone-700">
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
               {consent.objections.map((o, i) => (
                 <li key={i} className="break-words">
                   {o}

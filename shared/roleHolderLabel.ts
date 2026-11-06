@@ -12,10 +12,13 @@
 /** How many first names a label prints before it folds the rest into "+N". */
 export const ROLE_HOLDER_NAME_CAP = 3;
 
-/** First word of a display name; the local part of an email-shaped name. "" when nothing usable. */
+/**
+ * First word of a display name. An email-shaped name is dropped whole, so a
+ * label never shows an address or the part before the @. "" when nothing usable.
+ */
 export function holderFirstName(name: string | null | undefined): string {
   const first = String(name ?? "").trim().split(/\s+/)[0] ?? "";
-  return first.includes("@") ? (first.split("@")[0] ?? "") : first;
+  return first.includes("@") ? "" : first;
 }
 
 /** The parenthesis alone ("Rick", "Rye, Jessica", "A, B, C +2"), or "" for a vacant role. */

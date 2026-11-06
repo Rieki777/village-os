@@ -87,10 +87,12 @@ export function normaliseLongText(raw: string): string {
  *               domain of the Hypha proposal loop. The platform's min/max
  *               BOUNDS stay Ring 0: governance moves a value within its
  *               bounds, never the bounds.
- *   "founder" — Ring 1: tunable, but by the founder/admin only — legal
- *               posture, infrastructure, privacy windows, abuse guards.
- *               Shown on the public page (everything is visible) but marked
- *               founder-held and never proposable.
+ *   "founder" — Ring 1: held by the founders — legal posture,
+ *               infrastructure, privacy windows, abuse guards. Shown on the
+ *               public page (everything is visible) and marked founder-held.
+ *               Anyone may PROPOSE a change to one (Rye, 2026-09-25); before
+ *               the start a founder adopts it, and after it the village votes
+ *               (server/lib/founderDials.ts).
  *
  * The ring on a def is the PLATFORM CEILING. A founder can close an "open"
  * variable to their community; nothing can open a "founder" one to it.
@@ -3344,6 +3346,24 @@ export const VARIABLES: VariableDef[] = [
     min: 1,
     max: 1000,
     unit: "members",
+  },
+
+  // ── Task boards (spec section 17, A6) ─────────────────────────────────────
+  //
+  // READ by server/repos/memberTasks.ts `listIsOn` and every count of who has
+  // a board (memberTaskFeedback `syncableLinks` and `redirectPeople`,
+  // saberraBridge `bridgeLists`): a member's access row decides, and with no
+  // row this does. ON by default because a board that starts off is a board
+  // nobody uses, and the end-of-moon recap starts from the board's own marks.
+  // Off restores the earlier behaviour exactly. No access rows are written.
+  {
+    key: "memberTasks.listDefault",
+    category: "Journal",
+    label: "Every member has a task board unless a steward turns one off",
+    description:
+      "When on, every member has a task board on their profile unless a steward turns theirs off, and a member linked to Organisational Memory has their tasks brought in. When off, a board stays off until a steward turns it on for that member, which is how boards worked before.",
+    type: "boolean",
+    default: "true",
   },
 
   // ── Live Sessions: the room's own words and its usual length ──────────────

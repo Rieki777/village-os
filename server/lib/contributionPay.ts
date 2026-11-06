@@ -59,6 +59,9 @@ export const LEDGER_SOURCE_PAYS_A_CONTRIBUTION: Readonly<Record<string, boolean>
   // Buying something for yourself.
   stay_purchase: false,
   product_grant: false,
+  // Tokens for membership dues paid (Rye, 2026-11-01): what dues buy, like a
+  // product's grant, and never itself a contribution that promotes anybody.
+  dues_dividend: false,
   // Hospitality and corrections.
   stay_comp: false,
   stay_manual_override: false,

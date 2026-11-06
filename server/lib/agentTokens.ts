@@ -49,7 +49,28 @@ export const TOKEN_PREFIX = "vat_";
  * the holder does that on the map. Only a holder who may draft the land
  * (`map.edit`) gets anything from it, like every scope here.
  */
-export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft"] as const;
+/*
+ * `moon.read` and `tasks.write` open the village connector
+ * (server/lib/agentMcp.ts, `POST /api/agent/v1/mcp`): the holder's own moon,
+ * roles and season, and the holder's own task board pressed through the two
+ * calls. Both are opt-in, unlike the three reads below (addendum v6, B4).
+ */
+/*
+ * `admin` opens one connector tool, `admin_request`, which calls an
+ * allow-listed admin path as the holder (shared/agentAdmin.ts; addendum v6,
+ * B6). Only an admin may mint it, and the holder's own admin gates still run.
+ */
+/*
+ * `sera.undoable` opens Sera's closed list of undoable tools
+ * (server/lib/seraAgent.ts; addendum v6, B7). Only an agent account that is
+ * not an admin may mint it.
+ */
+/*
+ * `moon.write` drafts the holder's own recap through the two calls (import a
+ * moon pack, change an item, set next moon's goals); `moon.review` reads the
+ * review queue and the role signals for a holder who reviews. Both opt-in.
+ */
+export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin", "sera.undoable", "moon.write", "moon.review"] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 /** Read scopes are on by default in the panel; writes are opt-in. */
@@ -85,7 +106,7 @@ export function isAgentBearer(header: string | undefined): boolean {
 }
 
 /** The scope list a member asked for, or a sentence saying why not. */
-export function cleanScopes(raw: unknown, opts: { intentsAllowed: boolean }): { ok: true; scopes: AgentScope[] } | { ok: false; error: string } {
+export function cleanScopes(raw: unknown, opts: { intentsAllowed: boolean; adminAllowed?: boolean; seraAllowed?: boolean }): { ok: true; scopes: AgentScope[] } | { ok: false; error: string } {
   if (!Array.isArray(raw) || raw.length === 0) return { ok: false, error: "Pick at least one scope" };
   const seen = new Set<string>();
   const scopes: AgentScope[] = [];
@@ -93,6 +114,8 @@ export function cleanScopes(raw: unknown, opts: { intentsAllowed: boolean }): { 
     const v = String(s);
     if (!(AGENT_SCOPES as readonly string[]).includes(v)) return { ok: false, error: `Unknown scope: ${v.slice(0, 40)}` };
     if (v === "intents.write" && !opts.intentsAllowed) return { ok: false, error: "Posting intents is not open on this deployment yet" };
+    if (v === "admin" && !opts.adminAllowed) return { ok: false, error: "Only an admin can give a token the admin scope" };
+    if (v === "sera.undoable" && !opts.seraAllowed) return { ok: false, error: "Only Sera's agent account can hold the sera.undoable scope" };
     if (!seen.has(v)) { seen.add(v); scopes.push(v as AgentScope); }
   }
   return { ok: true, scopes };
@@ -152,20 +175,8 @@ export async function mintToken(pool: Pool, userId: string, input: MintInput, se
   if (!input.scopes.length) return { ok: false, status: 400, error: "Pick at least one scope" };
   const ttl = Math.min(MAX_TTL_DAYS, Math.max(1, Math.floor(Number(input.ttlDays ?? DEFAULT_TTL_DAYS)) || DEFAULT_TTL_DAYS));
 
-  const [[day]] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)",
-    [userId],
-  );
-  if (Number(day?.n ?? 0) >= MINTS_PER_DAY) {
-    return { ok: false, status: 429, error: `You can mint ${MINTS_PER_DAY} tokens a day. Revoke one you no longer use, or come back tomorrow` };
-  }
-  const [[live]] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()",
-    [userId],
-  );
-  if (Number(live?.n ?? 0) >= LIVE_PER_USER) {
-    return { ok: false, status: 429, error: `You already hold ${LIVE_PER_USER} live tokens. Revoke one first` };
-  }
+  const cap = await mintCapProblem(pool, userId);
+  if (cap) return { ok: false, status: 429, error: cap };
 
   const token = TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const id = `atk-${randomBytes(8).toString("hex")}`;
@@ -191,6 +202,32 @@ export async function mintToken(pool: Pool, userId: string, input: MintInput, se
     audience: "admin",
   });
   return { ok: true, token, row };
+}
+
+/**
+ * Why a mint would be refused by the day's cap or the live cap, or null. The
+ * OAuth consent asks this before it hands out a code, so a member is told at
+ * Allow and not left with a connector that fails at the exchange.
+ */
+export async function mintCapProblem(pool: Pool, userId: string): Promise<string | null> {
+  const [[day]] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)",
+    [userId],
+  );
+  if (Number(day?.n ?? 0) >= MINTS_PER_DAY) return `You can mint ${MINTS_PER_DAY} tokens a day. Revoke one you no longer use, or come back tomorrow`;
+  const [[live]] = await pool.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()",
+    [userId],
+  );
+  if (Number(live?.n ?? 0) >= LIVE_PER_USER) return `You already hold ${LIVE_PER_USER} live tokens. Revoke one first`;
+  return null;
+}
+
+/** Revoke a member's live tokens with exactly this name. A connector signing in again replaces its own token. */
+export async function revokeTokensNamed(pool: Pool, userId: string, name: string): Promise<number> {
+  let n = 0;
+  for (const t of await listTokens(pool, userId)) if (t.live && t.name === name && (await revokeToken(pool, userId, t.id))) n++;
+  return n;
 }
 
 export async function tokenById(pool: Pool, id: string): Promise<AgentTokenRow | null> {
@@ -546,7 +583,7 @@ export function mintConfirmToken(secret: string, claims: ConfirmClaims, now = Da
 
 export type ConfirmCheck =
   | { ok: true }
-  | { ok: false; reason: "missing" | "malformed" | "bad_signature" | "expired" | "wrong_action" | "wrong_holder" | "echo_mismatch" };
+  | { ok: false; reason: "missing" | "malformed" | "bad_signature" | "expired" | "wrong_action" | "wrong_holder" | "echo_mismatch" | "spent" };
 
 /**
  * Every reason is distinct so the agent can say which step it got wrong, and
@@ -583,4 +620,32 @@ export const CONFIRM_REASON_SENTENCE: Record<Exclude<ConfirmCheck, { ok: true }>
   wrong_action: "That confirmToken was issued for a different action. Nothing was written",
   wrong_holder: "That confirmToken belongs to a different member. Nothing was written",
   echo_mismatch: "The echo you sent back does not match what you were shown. Nothing was written",
+  spent: "That confirmToken was already used. Call again without it to get a fresh one. Nothing was written",
 };
+
+/**
+ * A confirm token works once. The signature alone would let the same token
+ * write twice inside its ten minutes, so a caller that writes spends it here
+ * first. The book lives in this process: a village runs one server, and a
+ * restart forgets nothing that matters, because every token it held expires
+ * within CONFIRM_TTL_MS anyway.
+ */
+export function createConfirmSpendBook(now: () => number = Date.now) {
+  const spent = new Map<string, number>();
+  return {
+    /** True the first time this token is spent, false every time after. Call only after the token verified. */
+    spend(token: string): boolean {
+      const t = now();
+      spent.forEach((exp, k) => { if (exp <= t) spent.delete(k); });
+      if (spent.has(token)) return false;
+      let exp = t + CONFIRM_TTL_MS;
+      try {
+        const decoded = JSON.parse(Buffer.from(token.slice(0, token.lastIndexOf(".")), "base64url").toString("utf8"));
+        if (typeof decoded?.exp === "number") exp = decoded.exp;
+      } catch { /* a verified token always decodes; the fallback keeps the book bounded anyway */ }
+      spent.set(token, exp);
+      return true;
+    },
+    size: () => spent.size,
+  };
+}

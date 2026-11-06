@@ -17,6 +17,8 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import type { ProposalOut, OrgCircleIn, OrgRoleIn } from "./proposalApi";
+import type { OwnAnswers, SuggestRoleIn } from "@shared/roleSuggestions";
+import { RoleSuggestions } from "./RoleSuggestions";
 import { RP_WORDS } from "./proposalWords";
 import { FOCUS, INPUT, LEDE, PANEL, PRIMARY, QUIET } from "./parts";
 
@@ -39,6 +41,10 @@ export interface StepRolesProps {
   onToggle: (roleId: string) => void;
   onAddNew: (circleId: string, name: string) => Promise<string | null>;
   onRemoveNew: (id: string) => void;
+  /** Asked again after the chart did not load. */
+  onRetry?: () => void;
+  /** The three answers, so a guide can suggest roles from them. */
+  ownWords?: OwnAnswers;
 }
 
 const holderIds = (r: OrgRoleIn): string[] => (r.holders ?? []).map((h) => String(h?.userId ?? "")).filter(Boolean);
@@ -64,7 +70,12 @@ export function roleFacts(r: OrgRoleIn, me: string, applying: number): string[] 
   return out;
 }
 
-export default function StepRoles({ proposal, picked, newRoles, org, applying, me, onToggle, onAddNew, onRemoveNew }: StepRolesProps) {
+/** A role the suggestions may rank. Holders stay off this object. */
+export function suggestInput(r: OrgRoleIn, me: string, about: string): SuggestRoleIn {
+  return { id: r.id, name: r.name, about, open: groupOf(r, me) === "open" };
+}
+
+export default function StepRoles({ proposal, picked, newRoles, org, applying, me, onToggle, onAddNew, onRemoveNew, onRetry, ownWords }: StepRolesProps) {
   const max = proposal.limits.maxRoles;
   const count = picked.length + newRoles.length;
   const atMost = count >= max;
@@ -106,7 +117,7 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
       <li key={r.id}>
         <label
           htmlFor={id}
-          className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-lg border p-3 ${on ? "border-teal-deep bg-teal-deep/5" : "border-stone-200 bg-white hover:bg-stone-50"}`}
+          className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-lg border p-3 ${on ? "border-dash-gold bg-dash-gold/10" : "border-border bg-card hover:bg-muted"}`}
         >
           <input
             id={id}
@@ -114,12 +125,12 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
             checked={on}
             disabled={!on && atMost}
             onChange={() => onToggle(r.id)}
-            className={`mt-0.5 size-5 shrink-0 accent-teal-deep ${FOCUS}`}
+            className={`mt-0.5 size-5 shrink-0 accent-dash-gold ${FOCUS}`}
           />
           <span className="grid min-w-0 gap-0.5">
-            <span className="break-words font-semibold text-stone-900">{r.name}</span>
-            <span className="break-words text-sm text-stone-600">{circle ? RP_WORDS.circleLine(circle.name, circle.purpose ?? null) : RP_WORDS.noCircle}</span>
-            <span className="text-xs text-stone-600" data-role-facts="">
+            <span className="break-words font-semibold text-foreground">{r.name}</span>
+            <span className="break-words text-sm text-muted-foreground">{circle ? RP_WORDS.circleLine(circle.name, circle.purpose ?? null) : RP_WORDS.noCircle}</span>
+            <span className="text-xs text-muted-foreground" data-role-facts="">
               {roleFacts(r, me, applying.get(r.id) ?? 0).join(". ")}.
             </span>
             {/* What it pays, before it is picked (Rye, 2026-10-30). */}
@@ -137,29 +148,47 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
   return (
     <div className="grid gap-4">
       <p className={LEDE}>{RP_WORDS.rolesLede}</p>
-      <p className="text-sm font-medium text-stone-800" aria-live="polite" data-picked-count="">
+      {ownWords && org && org !== "failed" && (
+        <RoleSuggestions
+          answers={ownWords}
+          roles={roles.map((r) => suggestInput(r, me, circleOf(r.circleId)?.purpose ?? ""))}
+          picked={picked}
+          atMost={atMost}
+          onToggle={onToggle}
+        />
+      )}
+      <p className="text-sm font-medium text-foreground" aria-live="polite" data-picked-count="">
         {RP_WORDS.picked(count, max)}
         {atMost ? ` ${RP_WORDS.atMost(max)}` : ""}
       </p>
 
-      {org === null && <p className="text-sm text-stone-600">{RP_WORDS.loadingRoles}</p>}
-      {org === "failed" && <p className="text-sm text-coral">{RP_WORDS.rolesFailed}</p>}
-      {org && org !== "failed" && roles.length === 0 && <p className="text-sm text-stone-600">{RP_WORDS.noRolesYet}</p>}
+      {org === null && <p className="text-sm text-muted-foreground">{RP_WORDS.loadingRoles}</p>}
+      {org === "failed" && (
+        <p className="text-sm text-coral">
+          {RP_WORDS.rolesFailed}{" "}
+          {onRetry && (
+            <button type="button" className={QUIET} onClick={onRetry}>
+              {RP_WORDS.tryAgain}
+            </button>
+          )}
+        </p>
+      )}
+      {org && org !== "failed" && roles.length === 0 && <p className="text-sm text-muted-foreground">{RP_WORDS.noRolesYet}</p>}
 
       {groups.map((g) => {
         const list = roles.filter((r) => groupOf(r, me) === g.key);
         if (!list.length && !(g.key === "youHold" && strays.length)) return null;
         return (
           <fieldset key={g.key} className="grid min-w-0 gap-2" data-pick-group={g.key}>
-            <legend className="mb-1 text-sm font-semibold text-stone-800">{g.heading}</legend>
+            <legend className="mb-1 text-sm font-semibold text-foreground">{g.heading}</legend>
             <ul className="grid gap-2">
               {list.map(roleRow)}
               {g.key === "youHold" &&
                 strays.map((s) => (
                   <li key={s.roleId}>
-                    <label className="flex min-h-[44px] items-center gap-3 rounded-lg border border-teal-deep bg-teal-deep/5 p-3">
-                      <input type="checkbox" checked onChange={() => onToggle(s.roleId)} className={`size-5 accent-teal-deep ${FOCUS}`} />
-                      <span className="break-words font-semibold text-stone-900">{s.name}</span>
+                    <label className="flex min-h-[44px] items-center gap-3 rounded-lg border border-dash-gold bg-dash-gold/10 p-3">
+                      <input type="checkbox" checked onChange={() => onToggle(s.roleId)} className={`size-5 accent-dash-gold ${FOCUS}`} />
+                      <span className="break-words font-semibold text-foreground">{s.name}</span>
                     </label>
                   </li>
                 ))}
@@ -174,8 +203,8 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
             <li key={r.id} className="flex min-h-[44px] items-center justify-between gap-2 rounded-lg border border-notice border-l-4 bg-notice/10 p-3">
               <span className="grid min-w-0">
                 <span className="text-xs font-semibold uppercase tracking-wide text-notice">{RP_WORDS.newRoleTag}</span>
-                <span className="break-words font-semibold text-stone-900">{r.name}</span>
-                {r.circleName && <span className="text-sm text-stone-600">{r.circleName}</span>}
+                <span className="break-words font-semibold text-foreground">{r.name}</span>
+                {r.circleName && <span className="text-sm text-muted-foreground">{r.circleName}</span>}
               </span>
               <button type="button" onClick={() => onRemoveNew(r.id)} aria-label={RP_WORDS.removeNewRole(r.name)} className={`${QUIET} min-w-[44px] justify-center`}>
                 <X className="h-4 w-4" aria-hidden="true" />
@@ -186,13 +215,13 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
       )}
 
       <div className={`${PANEL} grid gap-3`} data-new-role-form="">
-        <h3 className="font-semibold text-stone-900">{RP_WORDS.newRoleHeading}</h3>
+        <h3 className="font-semibold text-foreground">{RP_WORDS.newRoleHeading}</h3>
         <p className={LEDE}>{RP_WORDS.newRoleLede}</p>
         {org && org !== "failed" && circles.length === 0 ? (
-          <p className="text-sm text-stone-600">{RP_WORDS.noCircles}</p>
+          <p className="text-sm text-muted-foreground">{RP_WORDS.noCircles}</p>
         ) : (
           <>
-            <label className="grid gap-1 text-sm font-medium text-stone-800">
+            <label className="grid gap-1 text-sm font-medium text-foreground">
               {RP_WORDS.newRoleCircle}
               <select value={circleId} onChange={(e) => setCircleId(e.target.value)} className={`${INPUT} min-h-[44px]`} disabled={atMost}>
                 <option value="">{RP_WORDS.pickCircle}</option>
@@ -203,14 +232,14 @@ export default function StepRoles({ proposal, picked, newRoles, org, applying, m
                 ))}
               </select>
             </label>
-            <label className="grid gap-1 text-sm font-medium text-stone-800">
+            <label className="grid gap-1 text-sm font-medium text-foreground">
               {RP_WORDS.newRoleName}
               <input value={name} maxLength={120} onChange={(e) => setName(e.target.value)} className={`${INPUT} min-h-[44px]`} disabled={atMost} />
             </label>
             <div>
               <button type="button" onClick={() => void add()} disabled={atMost || adding || !circleId || !name.trim()} className={PRIMARY}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                {RP_WORDS.addNewRole}
+                {count > 0 ? RP_WORDS.addAnotherRole : RP_WORDS.addNewRole}
               </button>
             </div>
             {said && (

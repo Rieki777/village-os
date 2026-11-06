@@ -38,6 +38,7 @@ describe("page titles", () => {
     expect(documentTitle("/season-plans/mine", "Village")).toBe("Your season · Village");
     expect(documentTitle("/season-plans", "Village")).toBe("The village's season · Village");
     expect(documentTitle("/404", "Village")).toBe("Page not found · Village");
+    expect(documentTitle("/oauth/authorize", "Village")).toBe("Connect an agent · Village");
   });
 
   it("keeps the longer key winning where one key is a prefix of another", () => {

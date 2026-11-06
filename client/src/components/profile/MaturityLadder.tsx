@@ -40,6 +40,7 @@
  */
 import LadderChip from "@/components/sheet/LadderChip";
 import type { GameStagePublic } from "@/lib/gameApi";
+import { DEFAULT_LADDER_TITLE } from "@shared/villagePaths";
 import type { StageRule } from "@shared/gameConfig";
 
 /**
@@ -95,6 +96,7 @@ const times = (n: number): string => `${n} time${n === 1 ? "" : "s"}`;
 
 export default function MaturityLadder({
   showNext = true,
+  title,
   stages,
   stageIndex,
   consentedQuests,
@@ -114,6 +116,8 @@ export default function MaturityLadder({
    * the same countdown in two places assumes they are two different counts.
    */
   showNext?: boolean;
+  /** The ladder's name in this village's words (`/api/game/config` `ladder.title`). Absent reads as the platform's. */
+  title?: string;
   stages: GameStagePublic[];
   stageIndex: number;
   consentedQuests: number;
@@ -127,7 +131,7 @@ export default function MaturityLadder({
   return (
     <section aria-labelledby="maturity-h" className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
       <h2 id="maturity-h" className="font-display text-2xl font-bold text-card-foreground">
-        Path of Growth
+        {title?.trim() || DEFAULT_LADDER_TITLE}
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Where you stand, and how to reach the next stage.

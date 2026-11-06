@@ -694,6 +694,7 @@ The retention sweep never deletes an unstamped row, at any age.
   at `/propose-a-role`. Fixed, not dialled (sheet 19i): a proposal never
   confirmed is DELETED 48 hours after it was sent, and a declined or
   withdrawn one loses its name and address 90 days after it was decided,
+  as does an adopted one whose invitation nobody used in those 90 days,
   keeping only the roles and the words the circle's record needs. The
   hourly `open-proposals-tidy` job does both, and the form says so in one
   line. Nothing unconfirmed reaches a person: until its address answers,

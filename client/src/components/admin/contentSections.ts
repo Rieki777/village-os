@@ -7,7 +7,7 @@
  * renders a picker from it. Leaving it in Admin.tsx would have forced the nav
  * to stay there too.
  */
-import { Coins, FileText, LayoutTemplate, Users } from "lucide-react";
+import { Coins, FileText, LayoutTemplate, Signpost, Users } from "lucide-react";
 
 /*
  * ONE SECTION LEFT, and the six that went are why this comment exists.
@@ -26,12 +26,20 @@ import { Coins, FileText, LayoutTemplate, Users } from "lucide-react";
  */
 /** The tab that edits the page specs rather than one stored section. */
 export const PAGES_TAB_KEY = "pages";
+/** The tab that edits the village's paths and stages (its own document, `village-paths`). */
+export const PATHS_STAGES_TAB_KEY = "paths-stages";
 
 export const CONTENT_SECTIONS = [
   // Every word the public pages say about this village (Rye, 2026-10-22).
   // Not one section but one per page (`page-home`, ...), edited by
   // components/admin/pages/PagesEditor.tsx from the specs in shared/pageContent.
   { key: PAGES_TAB_KEY, label: "Pages", icon: LayoutTemplate },
+  // The four paths a newcomer picks when they join and the ladder of stages,
+  // in the village's own words (shared/villagePaths.ts). They were fixed in
+  // shared/gameConfig.ts, so every village joined people onto the first
+  // village's four paths and climbed its ladder. Edited by
+  // components/admin/PathsStagesEditor.tsx; ids stay fixed.
+  { key: PATHS_STAGES_TAB_KEY, label: "Paths & Stages", icon: Signpost },
   { key: "team", label: "Team Page", icon: Users },
   // Added for the brochure lane's legal-content extraction (fe3f3e1): 22
   // jurisdiction-specific claims moved out of compiled JSX into this section,

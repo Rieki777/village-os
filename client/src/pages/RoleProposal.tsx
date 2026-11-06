@@ -26,6 +26,7 @@ import { BreathingLoader } from "@/components/natural";
 import ProposalEditor from "@/components/roleProposal/ProposalEditor";
 import SharedProposal from "@/components/roleProposal/SharedProposal";
 import { fetchProposal, fetchShared, startFromCard, type ProposalOut, type SharedOut } from "@/components/roleProposal/proposalApi";
+import { keepRoleOn } from "@/components/roleProposal/QuickPath";
 import { RP_WORDS } from "@/components/roleProposal/proposalWords";
 
 const GATE_LINE = "Each member's proposal for the roles they will hold next season, shared for feedback before it goes to the circle.";
@@ -33,7 +34,9 @@ const GATE_LINE = "Each member's proposal for the roles they will hold next seas
 function Page({ children }: { children: ReactNode }) {
   return (
     <Layout>
-      <div className="container max-w-3xl px-4 py-8">{children}</div>
+      <div className="sheet-night min-h-screen bg-background text-foreground">
+        <div className="container min-w-0 max-w-3xl overflow-x-clip px-4 py-8">{children}</div>
+      </div>
     </Layout>
   );
 }
@@ -41,9 +44,9 @@ function Page({ children }: { children: ReactNode }) {
 function Notice({ heading, line, next }: { heading: string; line?: string; next?: string }) {
   return (
     <Page>
-      <div className="mt-6 rounded-xl border border-stone-200 bg-white p-6 text-center sm:p-8">
-        <h1 className="font-display text-2xl font-bold text-stone-900">{heading}</h1>
-        {line && <p className="mx-auto mt-2 max-w-md leading-relaxed text-stone-600">{line}</p>}
+      <div className="mt-6 rounded-xl border border-border bg-card p-6 text-center sm:p-8">
+        <h1 className="font-display text-2xl text-foreground">{heading}</h1>
+        {line && <p className="mx-auto mt-2 max-w-md leading-relaxed text-muted-foreground">{line}</p>}
         {next && (
           <div className="mt-5">
             <SignInDoors next={next} />
@@ -73,9 +76,9 @@ export function NewRoleProposal() {
     let alive = true;
     void startFromCard().then((r) => {
       if (!alive) return;
-      if (r.ok) setLocation(r.data.proposal.href, { replace: true });
+      if (r.ok) setLocation(keepRoleOn(r.data.proposal.href), { replace: true });
       // One draft at a time: the one already open is where the member carries on.
-      else if (r.status === 409 && typeof r.body?.href === "string" && r.body.href.startsWith("/role-proposals/")) setLocation(r.body.href, { replace: true });
+      else if (r.status === 409 && typeof r.body?.href === "string" && r.body.href.startsWith("/role-proposals/")) setLocation(keepRoleOn(r.body.href), { replace: true });
       else setError({ status: r.status, text: r.error });
     });
     return () => {

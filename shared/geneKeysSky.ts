@@ -235,3 +235,53 @@ export function skyAt(utc: Date): CardSky {
     moonVoidUntil: void_ ? void_.toISOString() : null,
   };
 }
+
+// ── A member's own Western signs ─────────────────────────────────────────────
+
+/** How far apart the instants of a span are sampled: the Moon crosses a sign in about two and a half days. */
+const NATAL_SAMPLE_MS = 20 * 60 * 1000;
+
+/**
+ * The Sun and Moon signs (0 Aries to 11 Pisces, tropical) of a birth that fell
+ * somewhere between the earliest and the latest of `instants`, sampled every
+ * twenty minutes between them and at both ends. A sign is given only when every
+ * sample agrees; a span the Sun or Moon changed sign inside gives null for it,
+ * never a guess. One instant is an exact birth time.
+ *
+ * Read in the browser, at the step that reads the Gene Keys chart, from the same
+ * date and town. Only the two numbers leave the device (`PUT /api/gene-keys/me`).
+ */
+export function natalSigns(instants: readonly Date[]): { sun: number | null; moon: number | null } {
+  if (!instants.length) return { sun: null, moon: null };
+  const times = instants.map((d) => d.getTime());
+  const first = Math.min(...times), last = Math.max(...times);
+  const signOf = (body: "Sun" | "Moon", ms: number) => Math.floor(normDeg(WESTERN_LON[body](Astronomy.MakeTime(new Date(ms)))) / 30);
+  const agreed = (body: "Sun" | "Moon"): number | null => {
+    const sign = signOf(body, first);
+    for (let ms = first + NATAL_SAMPLE_MS; ms < last; ms += NATAL_SAMPLE_MS) if (signOf(body, ms) !== sign) return null;
+    return signOf(body, last) === sign ? sign : null;
+  };
+  return { sun: agreed("Sun"), moon: agreed("Moon") };
+}
+
+/**
+ * The rising sign (the sign on the eastern horizon, 0 Aries to 11 Pisces) for a
+ * birth at `utc` in a town at `lat` and `lon` (degrees, north and east
+ * positive). It changes about every two hours, so it is read only from an exact
+ * birth time (client/src/components/geneKeys/natal.ts). Null for a latitude it
+ * cannot read.
+ *
+ * The ascendant from the local sidereal time and the obliquity of the ecliptic
+ * (Meeus, Astronomical Algorithms, ch. 13): tan(ASC) = -cos(RAMC) / (sin(eps)
+ * tan(lat) + cos(eps) sin(RAMC)), taken in the quadrant `atan2` gives.
+ */
+export function risingSign(utc: Date, lat: number, lon: number): number | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90) return null;
+  const t = Astronomy.MakeTime(utc);
+  const rad = Math.PI / 180;
+  const ramc = normDeg(Astronomy.SiderealTime(t) * 15 + lon) * rad;
+  // Mean obliquity, close enough for a sign: it moves under a degree in a thousand years.
+  const eps = (23.4392911 - 0.0130042 * (t.tt / 36525)) * rad;
+  const asc = Math.atan2(Math.cos(ramc), -(Math.sin(ramc) * Math.cos(eps) + Math.tan(lat * rad) * Math.sin(eps))) / rad;
+  return Math.floor(normDeg(asc) / 30);
+}

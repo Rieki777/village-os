@@ -192,6 +192,33 @@ export type Parsed<T> = { ok: true; value: T } | { ok: false; field: string; err
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
+/** One stored answer, as written. A missing or non-string value is empty. */
+function ownAnswer(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+/** Read the three answers from a stored season. Missing answers are empty, never invented. */
+export function ownWordsOf(raw: unknown): OwnWords {
+  const o = isObject(raw) ? raw : {};
+  return { love: ownAnswer(o.love), offer: ownAnswer(o.offer), why: ownAnswer(o.why) };
+}
+
+/** Accept the three answers, or the first reason one cannot be kept. PURE. The text is not rewritten. */
+export function parseOwnWords(raw: unknown): Parsed<OwnWords> {
+  if (raw === null) return { ok: true, value: emptyOwnWords() };
+  if (!isObject(raw)) return { ok: false, field: "season.ownWords", error: "Your own words arrive as the three answers." };
+  const out = emptyOwnWords();
+  for (const key of ["love", "offer", "why"] as const) {
+    const v = raw[key];
+    if (v === undefined || v === null) continue;
+    if (typeof v !== "string") return { ok: false, field: `season.ownWords.${key}`, error: "Write this in your own words." };
+    if (v.length > OWN_WORDS_MAX) return { ok: false, field: `season.ownWords.${key}`, error: `Keep this to ${OWN_WORDS_MAX} characters.` };
+    if (looksLikePaymentDetails(v)) return { ok: false, field: `season.ownWords.${key}`, error: PROPOSAL_WORDS.paymentInWords };
+    out[key] = v;
+  }
+  return { ok: true, value: out };
+}
+
 /**
  * One role's words, read field by field. PURE.
  *
@@ -303,12 +330,28 @@ export interface NewRole {
   reviewOn: string | null;
 }
 
+/** The three answers a member writes before any draft. Kept as typed. */
+export interface OwnWords {
+  love: string;
+  offer: string;
+  why: string;
+}
+
+/** How long one of those answers may be. A ramble fits. Longer is refused, never cut. */
+export const OWN_WORDS_MAX = 4000;
+
+export function emptyOwnWords(): OwnWords {
+  return { love: "", offer: "", why: "" };
+}
+
 /** The member's own season, for the season the draft is for. */
 export interface SeasonWords {
   aim: string | null;
   seasonalGoals: SeasonalGoal[];
   /** Which of the village's goals for that season each serves, and how it helps. */
   servesGoals: ServedGoal[];
+  /** Love, offer, and why, in the member's own words. Absent on a draft written before this. */
+  ownWords?: OwnWords;
 }
 
 export interface ProposalBody {
@@ -320,7 +363,7 @@ export interface ProposalBody {
 }
 
 export function emptyBody(): ProposalBody {
-  return { roles: [], newRoles: [], settings: { v: 1 }, season: { aim: null, seasonalGoals: [], servesGoals: [] } };
+  return { roles: [], newRoles: [], settings: { v: 1 }, season: { aim: null, seasonalGoals: [], servesGoals: [], ownWords: emptyOwnWords() } };
 }
 
 /** Read a stored body, filling anything a row written by an earlier shape lacks. PURE. */
@@ -340,6 +383,7 @@ export function bodyOf(raw: unknown): ProposalBody {
       aim: typeof season.aim === "string" ? season.aim : null,
       seasonalGoals: Array.isArray(season.seasonalGoals) ? (season.seasonalGoals as SeasonalGoal[]) : [],
       servesGoals: Array.isArray(season.servesGoals) ? (season.servesGoals as ServedGoal[]) : [],
+      ownWords: ownWordsOf(season.ownWords),
     },
   };
 }
@@ -454,6 +498,12 @@ export function parseBodyUpdate(update: unknown, current: ProposalBody, ctx: Bod
       const g = parseServesGoals(s.servesGoals, ctx.orgGoals);
       if (!g.ok) return { ok: false, field: `season.${g.field}`, error: g.error };
       next.season.servesGoals = g.value ?? [];
+    }
+    // Absent means "leave what is stored". A save of the aim must not wipe the three answers.
+    if (s.ownWords !== undefined) {
+      const words = parseOwnWords(s.ownWords);
+      if (!words.ok) return words;
+      next.season.ownWords = words.value;
     }
   }
   return { ok: true, value: next };
