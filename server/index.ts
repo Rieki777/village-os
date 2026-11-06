@@ -48,6 +48,7 @@ import {
   capabilityHoldings,
   moveCapabilityToVillage,
   MOVE_NEEDS_A_VOTE, RETURN_NEEDS_A_VOTE,
+  reservedRoleIdRefusal,
   returnCapabilityToScaffolding,
   villageHandoverState, villageHoldsRefusal,
   villageHeldCapabilities,
@@ -13532,6 +13533,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
         grantedEscalations: granted,
       });
       const id = slugify(String(payload.name), `role-${Date.now().toString(36)}`).slice(0, 64);
+      const reserved = reservedRoleIdRefusal(id); // R159: a draft's role never takes a seat's id
+      if (reserved) return res.status(409).json({ error: reserved });
       if (rolesRepo.all().some((r) => r.id === id)) return res.status(409).json({ error: "A role with that name already exists" });
       await rolesRepo.insert({
         id,
@@ -24632,6 +24635,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!roleId) {
       return res.status(400).json({ error: "That name has no letters or numbers in it, so there is nothing to call the role." });
     }
+    const reservedId = reservedRoleIdRefusal(roleId); // R159: a declared role never takes a seat's id
+    if (reservedId) return res.status(409).json({ error: reservedId });
     if (rolesRepo.all().some((r: any) => r.id === roleId)) {
       return res.status(409).json({ error: "This village already has a role by that name." });
     }
