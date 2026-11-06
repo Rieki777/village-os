@@ -665,9 +665,6 @@ function DetailPage({ id }: { id: string }) {
 export default function ChangeRequests() {
   const [, params] = useRoute("/changes/:id");
   const id = params?.id ?? null;
-  useEffect(() => {
-    document.title = id ? "Change request" : "Change requests";
-  }, [id]);
   return (
     <main className="min-h-screen bg-stone-50 px-4 pb-28 pt-6 sm:px-6">
       <div className="mx-auto max-w-3xl">
