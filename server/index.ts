@@ -676,6 +676,7 @@ import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedSt
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 import { isUnprovedRaise, UNPROVED_RAISE_REFUSAL } from "./lib/founderGrant";
+import { publicDatabaseError } from "./lib/healthProbe";
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
@@ -4187,10 +4188,9 @@ async function probeDatabase(): Promise<DatabaseProbe> {
     }
     return { ok: true, ms: Date.now() - started };
   } catch (e) {
-    // The message, not the stack, and never the connection string: this
-    // endpoint is unauthenticated. mysql2 messages name the error class
-    // (ECONNREFUSED, ER_ACCESS_DENIED_ERROR) without the credentials.
-    return { ok: false, error: String((e as any)?.message ?? e ?? "unknown error").slice(0, 200) };
+    // The code, never the message: this endpoint is unauthenticated, and a
+    // mysql2 message can name the account and its host (R116, lib/healthProbe.ts).
+    return { ok: false, error: publicDatabaseError(e) };
   } finally {
     if (timer) clearTimeout(timer);
   }
