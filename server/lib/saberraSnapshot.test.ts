@@ -372,11 +372,11 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     const said = (r: Role) => `The ${r} as the service said it.`;
     const STEWARDS_WORDS = "A steward's own words.";
 
-    /** One draft and its one change, as a publish leaves them. */
-    async function draft(id: string, opts: { sourceKind: string; moduleId: string | null; status: string }, change: { op: string; roleId: string; payload: unknown }) {
+    /** One draft and its one change, as a publish leaves them, published `daysAgo` days back. */
+    async function draft(id: string, opts: { sourceKind: string; moduleId: string | null; status: string; daysAgo?: number }, change: { op: string; roleId: string; payload: unknown }) {
       await pool.query( // module-review-ok: fixture SQL standing in for a published draft
-        "INSERT INTO org_drafts (id, title, status, source_kind, source_module_id, published_at) VALUES (?, 'A draft', ?, ?, ?, NOW())",
-        [id, opts.status, opts.sourceKind, opts.moduleId],
+        "INSERT INTO org_drafts (id, title, status, source_kind, source_module_id, published_at) VALUES (?, 'A draft', ?, ?, ?, ?)",
+        [id, opts.status, opts.sourceKind, opts.moduleId, new Date(Date.now() - (opts.daysAgo ?? 0) * 86_400_000)],
       );
       await pool.query( // module-review-ok: fixture SQL standing in for a published draft's change
         "INSERT INTO org_draft_changes (id, draft_id, op, org_role_id, payload, sort_order) VALUES (?, ?, ?, ?, ?, 1)",
@@ -390,23 +390,36 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
      * change written first, then the proposal marked accepted against the draft,
      * carrying the steward's edit when there was one.
      */
-    async function accepted(r: Role, opts: { status: string; draftModule: string | null; sourceKind?: string; proposalModule?: string; edited?: boolean }) {
-      const seat = { id: page(r), name: `${tag} ${r}`, circleName: `${tag} Land`, aim: said(r) };
+    async function accepted(
+      r: string,
+      opts: { status: string; draftModule: string | null; sourceKind?: string; proposalModule?: string; edited?: boolean; aim?: string; draftId?: string; daysAgo?: number },
+    ) {
+      const pageOf = pageId(`${tag}-${r}`);
+      const draftId = opts.draftId ?? `d-${r}`;
+      const seat = { id: pageOf, name: `${tag} ${r}`, circleName: `${tag} Land`, aim: opts.aim ?? `The ${r} as the service said it.` };
       const payload = { title: "Structure", rationale: "From the service.", seats: [seat] };
       const landed = await landProposal(pool, {
-        villageId: "village-1", moduleId: opts.proposalModule ?? "saberra", batchId: `batch-${r}`, kind: "org.proposed",
-        payload, sourceRef: `structure-${r}`, trustTier: "extracted_unreviewed",
+        villageId: "village-1", moduleId: opts.proposalModule ?? "saberra", batchId: `batch-${draftId}`, kind: "org.proposed",
+        payload, sourceRef: `structure-${draftId}`, trustTier: "extracted_unreviewed",
       });
       if (!landed.ok) throw new Error(`the ${r} proposal did not land`);
-      const published = opts.edited ? STEWARDS_WORDS : said(r);
-      await draft(`d-${r}`, { sourceKind: opts.sourceKind ?? "agent", moduleId: opts.draftModule, status: opts.status }, {
-        op: "create_seat", roleId: idOf(r), payload: { name: seat.name, circleId: "diff-land", aim: published },
+      const published = opts.edited ? STEWARDS_WORDS : seat.aim;
+      await draft(draftId, { sourceKind: opts.sourceKind ?? "agent", moduleId: opts.draftModule, status: opts.status, daysAgo: opts.daysAgo }, {
+        op: "create_seat", roleId: seatIdFor(pageOf, "unused"), payload: { name: seat.name, circleId: "diff-land", aim: published },
       });
       await markProposalDecided(pool, {
-        id: landed.id, status: "accepted", decidedBy: "u-steward", createdRef: `d-${r}`,
+        id: landed.id, status: "accepted", decidedBy: "u-steward", createdRef: draftId,
         editedPayload: opts.edited ? { ...payload, seats: [{ ...seat, aim: STEWARDS_WORDS }] } : null,
       });
       return published;
+    }
+
+    /** A live role a draft made, with our words on it. */
+    async function liveRole(r: string, aim: string) {
+      await pool.query( // module-review-ok: fixture SQL, the live role the draft made
+        "INSERT INTO org_roles (id, circle_id, name, seats, active, aim) VALUES (?, 'diff-land', ?, 1, 1, ?)",
+        [seatIdFor(pageId(`${tag}-${r}`), "unused"), `${tag} ${r}`, aim],
+      );
     }
 
     it("TAKES ITS BASE FROM WHAT THE SERVICE SAID, ONLY IN THIS VILLAGE'S OWN PUBLISHED, UNEDITED ACCEPTS", async () => {
@@ -426,12 +439,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
         // A person's own draft says nothing about the service.
         human: await accepted("human", { status: "published", draftModule: "saberra", sourceKind: "human" }),
       };
-      for (const r of ROLES) {
-        await pool.query( // module-review-ok: fixture SQL, the live role the draft made
-          "INSERT INTO org_roles (id, circle_id, name, seats, active, aim) VALUES (?, 'diff-land', ?, 1, 1, ?)",
-          [idOf(r), `${tag} ${r}`, ourWords[r]],
-        );
-      }
+      for (const r of ROLES) await liveRole(r, ourWords[r]);
       // The service now says something new for every one of them.
       state.read = {
         circle: [{ id: land, fields: { "Circle Name": `${tag} Land`, Status: "Active" } }],
@@ -461,6 +469,30 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
       await pool.query("UPDATE org_roles SET aim = ? WHERE id = ?", ["The water, as the service says it now.", idOf("water")]); // module-review-ok: fixture SQL, an edit made here
       const after = await readDifferences(pool);
       expect(after.list.some((d) => d.field === "aim" && d.subject.ourId === idOf("water"))).toBe(false);
+    });
+
+    it("TAKES THE NEWEST PUBLISHED CHANGE AS THE BASE, and compares our words through the same name swap", async () => {
+      const land = pageId(`${tag}-land`);
+      // Two accepts of one role, a week apart: the later one is the base.
+      await accepted("twice", { status: "published", draftModule: "saberra", aim: "The first words.", draftId: "d-twice-1", daysAgo: 7 });
+      await accepted("twice", { status: "published", draftModule: "saberra", aim: "The second words.", draftId: "d-twice-2", daysAgo: 1 });
+      await liveRole("twice", "The second words.");
+      // Our words name a member; the service's, as stored, carry the stand-in.
+      await accepted("named", { status: "published", draftModule: "saberra", aim: "Jane Example keeps the seeds." });
+      await liveRole("named", "Jane Example keeps the seeds.");
+      state.read = {
+        circle: [{ id: land, fields: { "Circle Name": `${tag} Land`, Status: "Active" } }],
+        role: [
+          { id: pageId(`${tag}-twice`), fields: { "Role Name": `${tag} twice`, Circle: [land], Body: "The third words.", Status: "Active" } },
+          { id: pageId(`${tag}-named`), fields: { "Role Name": `${tag} named`, Circle: [land], Body: "Jane Example keeps the seeds.", Status: "Active" } },
+        ],
+        role_assignment: [],
+      };
+      await syncByHand(pool);
+      const read = await readDifferences(pool);
+      const aimOf = (r: string) => read.list.find((d) => d.field === "aim" && d.subject.ourId === seatIdFor(pageId(`${tag}-${r}`), "unused"));
+      expect(aimOf("twice")).toMatchObject({ state: "suggestion", base: { value: "The second words." } });
+      expect(aimOf("named")).toBeUndefined();
     });
   });
 });
