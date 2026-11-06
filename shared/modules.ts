@@ -1443,6 +1443,43 @@ export const MODULES: ModuleDef[] = [
     // surface; saved results stay in their table and return when it is on.
   },
   {
+    id: "funding-rounds",
+    guild: [],
+    setupNeeds: [
+      {
+        id: "pot-holder",
+        kind: "hands",
+        ref: "pot.steward",
+        title: "Seat someone in the Treasury role, or another role that holds the funding pots",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/funding-rounds.md Setup; server/lib/starterRoles.ts POT_STEWARD_GRANTS",
+      },
+    ],
+    tier: "included",
+    // An idea names its author, kept even when the idea is shown without a
+    // name, and the interaction record names the member who acted (0333).
+    dataClass: "member-pii",
+    group: "coordinate",
+    setup: "none",
+    name: "Funding rounds",
+    description:
+      "The village chooses together which quests the season funds, within a pot. Members share rough ideas, shape them into quests, tick the ones they would fund, and the count shows both what Voice chose and what one member, one vote chose. Funded quests hold their share of the pot and are paid when the work is done.",
+    // Each idea opens a forum thread when the forum is on; funded ideas become
+    // quests; the pot's holder is a role seated on the map.
+    requires: [],
+    recommends: ["forum", "governance", "map"],
+    capabilities: ["pot.steward"],
+    variableKeys: [],
+    apiPrefixes: ["/api/funding-rounds"],
+    // openStateCheck attached by the server at boot: a round past its seed
+    // stage and not closed holds the module on (server/lib/fundingRounds.ts).
+  },
+  {
     id: "session-card",
     guild: [],
     tier: "included",

@@ -168,6 +168,7 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
+import { forgetMemberFundingRounds } from "./fundingRounds";
 import { forgetMemberTasks } from "../repos/memberTasks";
 import { forgetMoonReviews } from "../repos/moonRecaps";
 import { forgetMemberCards } from "./sessionCard";
@@ -1561,6 +1562,21 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "gene-keys-after-tombstone",
       run: async () => {
         await forgetMemberGeneKeys(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Funding rounds (0333): the member's interaction rows on anonymous ideas
+       * are deleted and the rest de-attributed; their ticks go; ideas still in
+       * seed are deleted, and ideas already on a round's record stay, shown as
+       * "a member", so a decided round keeps what it decided.
+       *
+       * AFTER THE TOMBSTONE, like the steps above: the idea door writes for
+       * anybody signed in, and the tombstone is where their sessions die.
+       */
+      name: "funding-rounds-after-tombstone",
+      run: async () => {
+        await forgetMemberFundingRounds(pool, target.id);
       },
     },
     {

@@ -185,6 +185,12 @@ export const POWERS: readonly PowerEntry[] = [
     routes: ["/api/cash-owed/queue", "/api/cash-owed/:id/paid"],
   },
   {
+    capability: "pot.steward",
+    title: "The village's funding pots",
+    surface: "Opening a funding pot and its rounds, and setting when each round moves from ideas to shaping, choosing and harvest",
+    routes: ["/api/funding-rounds/pots", "/api/funding-rounds/pots/:id/rounds", "/api/funding-rounds/rounds/:id/dates"],
+  },
+  {
     capability: "module.switch",
     title: "Which modules the village runs",
     surface: "Turning a module on after launch, without a vote",

@@ -59,6 +59,7 @@ export const POWER_FAMILY: Record<Capability, PowerFamily> = {
   "intake.moderate": "membership",
   "exchange.manage": "money",
   "cash.pay": "money",
+  "pot.steward": "money",
   "redemption.confirm": "money",
   "exchange.buy": "money",
   "exchange.swap": "money",
@@ -127,6 +128,7 @@ export const HANDOVER_GUIDANCE: Record<Capability, HandoverGuidance> = {
   "member.superVouch": "mature-only",
   "exchange.manage": "mature-only",
   "cash.pay": "mature-only",
+  "pot.steward": "after-practice",
   "module.switch": "mature-only",
   "dial.set": "mature-only",
   // Settings with no power of their own are structure; accounts, secrets and repair let a village run with no admin at all.

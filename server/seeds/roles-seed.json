@@ -45,7 +45,8 @@
       "proposal.open",
       "forum.post",
       "exchange.manage",
-      "cash.pay"
+      "cash.pay",
+      "pot.steward"
     ],
     "minStage": "member",
     "order": 3
