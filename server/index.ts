@@ -3878,9 +3878,20 @@ async function gratitudeAllowance(user: any) {
  *
  *   1. Did the operator say? `FRONTEND_URL` wins whenever it is set, so the
  *      hosted deployment and any fork that configures itself are unchanged.
+ *      A village cannot launch without it (the `site-address` row in
+ *      shared/launchRequirements.ts), so what follows is only ever the answer
+ *      for a village still setting up.
  *   2. Failing that, where have people actually reached this server? The
- *      first inbound request answers that, through the proxy headers the
- *      sitemap and the unfurl tags already read the host from.
+ *      first inbound request answers that, from its Host header.
+ *
+ * NEVER FROM X-Forwarded-Host (readiness R108, the coordinator's ruling of
+ * 2026-11-05). That header is written by the caller, and nothing promises a
+ * proxy in front of this server overwrites it; a docker-compose village has
+ * no proxy at all. Read here, it let the first stranger to send a request
+ * choose the address every later set-password link carried, in the village's
+ * own email. The Host header is the one the edge routed on, so a forged value
+ * does not reach this service through it, and it is held to the shape of a
+ * host besides. The protocol is http or https and nothing else.
  *
  * If neither has an answer the origin is empty and the caller gets no
  * absolute address at all, which reads as a broken link rather than as a
@@ -3889,13 +3900,13 @@ async function gratitudeAllowance(user: any) {
  * is a state somebody has to be told about rather than left to discover.
  */
 let observedOrigin = "";
+const HOST_SHAPE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/;
 function rememberDeploymentOrigin(req: express.Request): void {
   if (observedOrigin) return;
-  const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https")
-    .split(",")[0].trim();
-  const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "")
-    .split(",")[0].trim();
-  if (host) observedOrigin = `${proto}://${host}`.replace(/\/$/, "");
+  const said = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https").split(",")[0].trim().toLowerCase();
+  const proto = said === "http" || said === "https" ? said : "https";
+  const host = String(req.headers.host ?? "").trim();
+  if (host && HOST_SHAPE.test(host)) observedOrigin = `${proto}://${host}`;
 }
 let warnedNoOrigin = false;
 function deploymentOrigin(): string {
@@ -26113,7 +26124,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
   const requestOrigin = (req: express.Request): string => {
     const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https")
       .split(",")[0].trim();
-    const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "").trim();
+    // The Host header, never X-Forwarded-Host, which the caller writes and a
+    // cache in front could keep (R108; rememberDeploymentOrigin has the detail).
+    const host = String(req.headers.host ?? "").trim();
     return host ? `${proto}://${host}` : "";
   };
 
