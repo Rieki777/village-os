@@ -136,7 +136,10 @@
  *    collapses two rows onto one key. They will not catch a constraint that
  *    only real data violates. THE COUNT OF TABLES ACTUALLY SEEDED IS PRINTED
  *    ON EVERY RUN, including when it is zero, because "ran and found nothing"
- *    and "seeded nothing so found nothing" are different results.
+ *    and "seeded nothing so found nothing" are different results. Since
+ *    2026-11-05 a table the previous release has, that a new migration names
+ *    and that got no row at all, FAILS the run: the seeder is taught the
+ *    column, never the table skipped.
  *
  * WHEN IT DOES NOT RUN. New migrations plus no database is a FAILURE, not a
  * skip: this exits 1 and says TEST_DATABASE_URL is missing. No new migrations
@@ -180,7 +183,7 @@ const report = {
   deleted: [],
   unreadable: [],
   destructive: [],
-  seeded: { tables: 0, rows: 0, refused: [] },
+  seeded: { tables: 0, rows: 0, refused: [], unseeded: [] },
   applyError: null,
   gaps: [],
   violations: [],
@@ -592,6 +595,11 @@ function sampleValue(col, i) {
   const evs = enumValues(col.ctype);
   if (evs) return evs[Math.min(i, evs.length - 1)];
   if (/^(tinyint)$/.test(dt) && /tinyint\(1\)/i.test(String(col.ctype))) return i % 2;
+  // Each integer width gets a value it can hold, signed or unsigned. One number
+  // for all of them put 900000 into member_gene_keys.calc_version, a smallint,
+  // and the table was refused on #790 (2026-11-02) with "Out of range value".
+  if (dt === "tinyint") return 1 + i;
+  if (dt === "smallint") return 9000 + i;
   if (/int$/.test(dt)) return 900000 + i;
   if (/^(decimal|numeric|float|double)$/.test(dt)) return 1 + i;
   if (/^(date)$/.test(dt)) return `2020-01-0${i + 1}`;
@@ -619,10 +627,6 @@ async function seedRows(conn, snap, tables, log) {
     const cols = [...snap.cols.values()].filter(
       (c) => String(c.t) === table && String(c.gen || "") === "" && !/auto_increment/i.test(String(c.ex || "")),
     );
-    if (cols.length === 0) {
-      refused.push({ table, reason: "every column is generated or auto_increment" });
-      continue;
-    }
     let inserted = 0;
     let lastErr = null;
     for (let i = 0; i < 2; i += 1) {
@@ -630,7 +634,9 @@ async function seedRows(conn, snap, tables, log) {
       const marks = cols.map(() => "?").join(", ");
       const values = cols.map((c) => sampleValue(c, i));
       try {
-        await conn.query(`INSERT INTO \`${table}\` (${names}) VALUES (${marks})`, values);
+        // Every column generated or auto_increment: a row of defaults is still a row.
+        if (cols.length === 0) await conn.query(`INSERT INTO \`${table}\` () VALUES ()`);
+        else await conn.query(`INSERT INTO \`${table}\` (${names}) VALUES (${marks})`, values);
         inserted += 1;
       } catch (err) {
         lastErr = err.message;
@@ -907,11 +913,27 @@ if (report.newMigrations.length === 0) {
         say(`    not seeded: ${r.table} (${r.reason})`);
       }
     }
-    if (touched.length > 0 && report.seeded.tables === 0) {
-      say(
-        `  ::warning::the new migrations name ${touched.length} table(s) and NONE of them could be seeded, ` +
-          `so phase 3 proved nothing about behaviour on populated tables. Phase 4 still ran.`,
+    /*
+     * A table the new migrations name, that the previous release already has,
+     * and that got NO row is a phase 3 that proved nothing about it. Until
+     * 2026-11-05 that was a warning, and only when every table was refused: #790
+     * passed on 2 Nov with member_gene_keys unseeded, its ALTER tried on an empty
+     * table. Now it fails, and the fix is to teach sampleValue the column it
+     * refused. A table the change creates is not in `before` and needs no rows:
+     * no instance has any in it yet. NOT waivable by compat-ok, as phase 3's
+     * apply is not: this is whether the boot failure was looked for at all.
+     */
+    report.seeded.unseeded = report.seeded.refused.filter((r) => !/^only \d+ of 2 rows/.test(r.reason));
+    if (report.seeded.unseeded.length) {
+      failed = true;
+      console.error("");
+      console.error(
+        `::error::${report.seeded.unseeded.length} of ${touched.length} table(s) the new migrations name could not be ` +
+          `seeded, so phase 3 never ran those statements against rows.`,
       );
+      for (const r of report.seeded.unseeded) console.error(`    ${r.table}: ${r.reason}`);
+      console.error(`  Teach sampleValue in scripts/check-migration-compat.mjs a value that column accepts.`);
+      console.error(`  A compat-ok comment does NOT waive this: an untried ALTER is the boot failure unlooked-for.`);
     }
 
     /*
