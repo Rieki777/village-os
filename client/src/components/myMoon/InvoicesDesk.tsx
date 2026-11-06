@@ -169,7 +169,7 @@ export function InvoicesDeskView({ data, init, reload }: { data: QueueData; init
 
 /** What `GET /api/cash-owed/invoice-track` answers (invoice rails). */
 export interface RailsData {
-  tracks: Array<TrackRow & { userId: string; memberName: string | null }>;
+  tracks: Array<TrackRow & { userId: string; memberName: string | null; legalName?: string | null }>;
   flags: Array<{ id: string; userId: string | null; memberName: string | null; kind: FlagKind; subject: string; village: string; other: string; firstSeenAt: string }>;
   unmatched: Array<{ seraId: string; reference: string | null; currency: string; amountMinor: number; status: SeraInvoiceStatus; receivedAt: string }>;
 }
@@ -213,7 +213,7 @@ export function RailsPanel({ data, nameOf }: { data: RailsData; nameOf: (userId:
           {data.tracks.map((t) => (
             <li key={t.invoiceId} className="rounded-lg border border-border p-3">
               <p className="m-0 flex flex-wrap justify-between gap-2 text-sm font-medium text-foreground">
-                <span className="break-all">{t.memberName ?? nameOf(t.userId)}, {t.ref}</span>
+                <span className="break-words">{t.memberName ?? nameOf(t.userId)}{t.legalName ? ` (legal name ${t.legalName}, for the transfer)` : ""}, {t.ref}</span>
                 <Amount minor={t.totalMinor} currency={t.currency} />
               </p>
               <InvoiceTrack row={t} />

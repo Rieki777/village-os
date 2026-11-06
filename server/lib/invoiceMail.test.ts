@@ -30,6 +30,7 @@ describe.skipIf(!configured)("the invoice is emailed to the village's Sera inbox
     post: async (e) => { posted.push(e); return { status: answer, messageId: `msg-${posted.length}` } as PostResult; },
     seraInbox: async () => inbox,
     projectName: () => "Test Village",
+    identityOf: async () => ({ villageName: "Rieki Example", codeName: "cn-otter-12" }),
     audit: async (t) => { audits.push(t); },
   });
 
@@ -170,5 +171,19 @@ describe.skipIf(!configured)("the invoice is emailed to the village's Sera inbox
     answer = "sent";
     await retryUnsentInvoiceMail(d, async () => view());
     expect(who).toEqual([false, true]);
+  });
+
+  it("nothing sent to Sera carries the legal name or the home address: the village name and the code-name do (Rye, 6 Nov)", async () => {
+    const legal = view({ from: { legalName: "Tarence Legalname", address: "42 Private Lane, Hometown" } });
+    await emailInvoiceToSera(deps(), "u1", legal);
+    const e = posted[0];
+    const pdf = Buffer.from(e.attachments![0].contentBase64, "base64").toString("latin1");
+    const everything = [e.subject, e.html, e.text, e.to.email, e.to.name ?? "", JSON.stringify(e.source ?? {}), e.attachments![0].filename, pdf].join(" ");
+    expect(everything).not.toContain("Tarence");
+    expect(everything).not.toContain("Legalname");
+    expect(everything).not.toContain("Private Lane");
+    expect(pdf).toContain("Rieki Example");
+    expect(pdf).toContain("cn-otter-12");
+    expect(e.text).toContain("Rieki Example");
   });
 });

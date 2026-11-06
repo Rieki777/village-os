@@ -59,7 +59,7 @@ describe.skipIf(!testDbConfigured())("the invoice rails' doors: the caller's own
         return n > max;
       },
       treasury: treasury(),
-      mail: { getPool: () => pool, post: async () => ({ status: "sent", messageId: null }) as never, seraInbox: async () => null, projectName: () => "T", audit: async () => undefined },
+      mail: { getPool: () => pool, post: async () => ({ status: "sent", messageId: null }) as never, seraInbox: async () => null, projectName: () => "T", identityOf: async () => ({ villageName: "V", codeName: null }), audit: async () => undefined },
       invoiceViewOf: async () => null,
     });
     server = await new Promise<http.Server>((ok) => { const s = app.listen(0, () => ok(s)); });

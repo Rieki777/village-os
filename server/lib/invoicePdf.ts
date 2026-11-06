@@ -109,6 +109,13 @@ export interface InvoicePdfInput {
   memberNumber: string | null;
   period: string;
   from: { legalName: string; address: string } | null;
+  /**
+   * Who sent it, as the village knows them: their village name and their
+   * bridge code-name. Set on every copy that leaves the village (Rye,
+   * 2026-11-06: the legal name is always private), and then `from` is
+   * never printed.
+   */
+  sender?: { villageName: string; codeName: string | null } | null;
   billTo: { legalName: string; address: string; taxId: string | null } | null;
   lines: Array<{ roleNames: string[]; basisLine: string; amountMinor: number | null; currency: string | null; listedAs: string | null }>;
   currency: string | null;
@@ -119,7 +126,11 @@ export interface InvoicePdfInput {
 
 export function invoicePdfLines(v: InvoicePdfInput): string[][] {
   const head = [`Invoice for approval`, `Reference: ${v.billRef}`, ...(v.memberNumber ? [`Invoice number: ${v.memberNumber}`] : []), `Period: ${v.period}`];
-  const from = v.from ? ["From", v.from.legalName, ...v.from.address.split("\n")] : [];
+  const from = v.sender
+    ? ["From", `Village name: ${v.sender.villageName}`, ...(v.sender.codeName ? [`Code name: ${v.sender.codeName}`] : [])]
+    : v.from
+      ? ["From", v.from.legalName, ...v.from.address.split("\n")]
+      : [];
   const to = v.billTo ? ["Bill to", v.billTo.legalName, ...v.billTo.address.split("\n"), ...(v.billTo.taxId ? [`Tax number: ${v.billTo.taxId}`] : [])] : [];
   const lines = [
     "Lines",

@@ -33,7 +33,8 @@ import { unpaidCashOf } from "../lib/formerMember";
 import { readOnchainBalance } from "../lib/base-reads";
 import { preflight } from "../lib/saberraSync";
 import { callToolJson, listTools, openSession } from "../lib/saberraClient";
-import { resolveCodeName } from "../lib/codeNames";
+import { codeNameFor, resolveCodeName } from "../lib/codeNames";
+import { payRouteOf } from "../repos/moonRecaps";
 import { linesOf, payersDoc, settingsDoc } from "../lib/moonRecap";
 import { invoiceById } from "../repos/moonRecaps";
 import { SUPPORT_LINE, billRef, billToOf, type InvoiceView } from "../../shared/moonRecap";
@@ -108,7 +109,9 @@ export function register(app: Express, deps: Deps): void {
     const members = await membersWithInvoices(pool, 500);
     const named = await Promise.all(members.map(async (m) => ({ userId: m, name: (await directory.byId(m).catch(() => null))?.name ?? null })));
     const nameOf = new Map(named.map((n) => [n.userId, n.name]));
-    const tracks = (await Promise.all(members.map(async (m) => (await invoiceTracksFor(pool, m)).map((t) => ({ ...t, userId: m, memberName: nameOf.get(m) ?? null }))))).flat();
+    // The legal name, for the bank transfer only: this door is the Treasurer's (`cash.pay`) and admins'.
+    const legal = new Map(await Promise.all(members.map(async (m) => [m, (await payRouteOf(pool, m).catch(() => null))?.legalName ?? null] as const)));
+    const tracks = (await Promise.all(members.map(async (m) => (await invoiceTracksFor(pool, m)).map((t) => ({ ...t, userId: m, memberName: nameOf.get(m) ?? null, legalName: legal.get(m) ?? null }))))).flat();
     const [flags, unmatched] = await Promise.all([openFlags(pool), unmatchedSeraReports(pool)]);
     res.json({
       tracks,
@@ -159,7 +162,7 @@ export interface WiringInput {
   getPool(): Pool;
   postOffice: PostOfficeDeps;
   projectName(): string;
-  memberById(id: string): Promise<{ walletAddress?: string | null; walletVerifiedAt?: string | null } | null>;
+  memberById(id: string): Promise<{ name?: string | null; walletAddress?: string | null; walletVerifiedAt?: string | null } | null>;
   boolVar(key: string): boolean;
   stringVar(key: string): string;
 }
@@ -214,6 +217,11 @@ export function invoiceRailsDeps(w: WiringInput): Pick<Deps, "treasury" | "mail"
     post: (e) => post(w.postOffice, e),
     seraInbox: async () => (await settingsDoc(w.getPool())).seraInbox,
     projectName: w.projectName,
+    // The village name and the bridge code-name, never the legal name (Rye, 2026-11-06).
+    identityOf: async (uid) => ({
+      villageName: (await w.memberById(uid).catch(() => null))?.name?.trim() || "A member",
+      codeName: await codeNameFor(w.getPool(), uid, "journal").catch(() => null),
+    }),
     audit: (text, userId, system) =>
       recordEvent(w.getPool(), system ? { kind: "audit", text, actorUserId: null, actorKind: "system", entityType: "invoice", entityRef: userId, audience: "admin" } : { kind: "audit", text, actorUserId: userId, entityType: "invoice", audience: "admin" }),
   };

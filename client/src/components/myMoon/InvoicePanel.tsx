@@ -266,7 +266,7 @@ export default function InvoicePanel({ data, cycleId, editable, reload }: { data
               <label className={LABEL}>{MOON_WORDS.memberNumber}<input value={number} maxLength={40} onChange={(e) => setNumber(e.target.value)} className={INPUT} /></label>
               {route === "local_contractor" ? <label className={LABEL}>{MOON_WORDS.externalKey}<input inputMode="numeric" value={key} maxLength={64} onChange={(e) => setKey(e.target.value)} className={INPUT} /></label> : null}
               {inv.sendRefusal ? <p className={MUTED}>{inv.sendRefusal}</p> : null}
-              {rails.seraInbox ? <p className={MUTED} data-testid="emails-sera">Sending also emails this invoice as a PDF, with your legal name and address, to Sera at <span className="break-all font-medium text-foreground">{rails.seraInbox}</span> for the village's records.</p> : null}
+              {rails.seraInbox ? <p className={MUTED} data-testid="emails-sera">Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <span className="break-all font-medium text-foreground">{rails.seraInbox}</span>. It names you by your village name and code name. Your legal name and address stay private.</p> : null}
               <button type="button" className={`${SMALL_BTN} self-start`} disabled={busy || ackPending || !number.trim()} onClick={send}>{MOON_WORDS.sendInvoice}</button>
             </div>
           ) : null}

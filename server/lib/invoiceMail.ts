@@ -46,6 +46,11 @@ export interface InvoiceMailDeps {
   seraInbox(): Promise<string | null>;
   /** The village's name, for the email's words. */
   projectName(): string;
+  /**
+   * The member as Sera may know them: their village name and their bridge
+   * code-name. Never the legal name, which stays private (Rye, 2026-11-06).
+   */
+  identityOf(userId: string): Promise<{ villageName: string; codeName: string | null }>;
   /** An audit line. `system` is true for the daily retry, which no person pressed. */
   audit(text: string, userId: string, system?: boolean): Promise<void>;
   now?(): Date;
@@ -67,10 +72,14 @@ export function contentHashOf(v: InvoiceView): string {
   return crypto.createHash("sha256").update(canon).digest("hex");
 }
 
-function emailOf(v: InvoiceView, ref: string, updated: boolean, to: string, key: string, userId: string, village: string): OutgoingEmail {
+function emailOf(
+  v: InvoiceView, ref: string, updated: boolean, to: string, key: string, userId: string, village: string,
+  who: { villageName: string; codeName: string | null },
+): OutgoingEmail {
   const total = v.totalMinor !== null && v.currency ? moneyWords(v.totalMinor, v.currency) : "no amount";
+  const sender = `${who.villageName}${who.codeName ? ` (code name ${who.codeName})` : ""}`;
   const lines = [
-    `Invoice ${ref}${updated ? ", updated," : ""} sent for approval from ${village}, by the member at their own request.`,
+    `Invoice ${ref}${updated ? ", updated," : ""} sent for approval from ${village} by ${sender}, at their own request.`,
     `Period: ${v.period}. Total: ${total}.`,
     "The invoice is attached as a PDF. Its reference is in the subject.",
   ];
@@ -83,7 +92,8 @@ function emailOf(v: InvoiceView, ref: string, updated: boolean, to: string, key:
     subject: invoiceSubject(ref, updated),
     html: lines.map((l) => `<p>${esc(l)}</p>`).join(""),
     text: lines.join("\n\n"),
-    attachments: [{ filename: `invoice-${ref}.pdf`, contentType: "application/pdf", contentBase64: invoicePdf({ ...v, billRef: ref }).toString("base64") }],
+    attachments: [{ filename: `invoice-${ref}.pdf`, contentType: "application/pdf", contentBase64: invoicePdf({ ...v, billRef: ref, from: null, sender: who }).toString("base64") }],
+    // ^ The legal name and home address stay in the village: `from` is dropped and the sender block printed instead.
     urgent: true,
     // `userId` stays off `to`: the inbox is the village's, not the member's.
     source: { templateKey: `invoice:${userId}` },
@@ -108,7 +118,7 @@ async function attempt(deps: InvoiceMailDeps, row: InvoiceMailRow, v: InvoiceVie
   const key = `invoice-mail:${row.invoiceRef}:${row.contentHash.slice(0, 16)}:${n}`;
   let result: PostResult;
   try {
-    result = await deps.post(emailOf(v, row.invoiceRef, updated, row.toEmail, key, row.userId, deps.projectName()));
+    result = await deps.post(emailOf(v, row.invoiceRef, updated, row.toEmail, key, row.userId, deps.projectName(), await deps.identityOf(row.userId)));
   } catch {
     result = { status: "failed", messageId: null } as PostResult;
   }

@@ -3188,7 +3188,7 @@ export const MY_MOON_WORDS = {
   sent: "Sent.",
   routeHeading: "Your pay route",
   routeChoice: "Where you live and work, and your status",
-  legalName: "Your legal name",
+  legalName: "Your legal name (private: only you, the Treasurer and admins see it, and it never goes to Sera)",
   address: "Your address",
   currency: "Currency",
   statusValidUntil: "My status is valid until",
