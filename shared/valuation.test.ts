@@ -615,6 +615,10 @@ describe("what a change needs (plan 3.1)", () => {
     expect(diffModels(V1, fresh).find((c) => c.key === "band:care")?.door).toBe("version");
   });
 
+  it("lets a version turn hours on in receipts (C13: off by default)", () => {
+    expect(diffModels(V1, { ...V1, receiptShowsHours: true })).toEqual([{ key: "receiptShowsHours", label: "Receipts show hours", from: "off", to: "on", door: "version" }]);
+  });
+
   it("lets a version tune the engine's own dials", () => {
     expect(diffModels(V1, { ...V1, engine: { bandPct: 15 } })).toEqual([{ key: "engine:bandPct", label: "No-sign band", from: "10%", to: "15%", door: "version" }]);
   });

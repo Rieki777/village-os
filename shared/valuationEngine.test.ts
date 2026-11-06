@@ -106,7 +106,7 @@ describe("the suggestion for a goat fence repair, in colones", () => {
     expect(p.receipt.folded[0].result).toBe("₡15,668");
     const keys = p.receipt.unfolded.map((l) => l.key);
     expect(keys).toEqual(["labour:0", "complexity", "benefit", "base", "added", "reward", "range"]);
-    expect(p.receipt.unfolded.find((l) => l.key === "labour:0")).toMatchObject({ label: "Estimated effort, General help, 4 hours", result: "₡6,218" });
+    expect(p.receipt.unfolded.find((l) => l.key === "labour:0")).toMatchObject({ label: "Estimated effort, General help", result: "₡6,218" });
     expect(p.receipt.unfolded.find((l) => l.key === "benefit")?.label).toBe("Good for the village, 10%: keeps the goats in");
     expect(p.receipt.unfolded.length).toBeLessThanOrEqual(9);
   });
@@ -141,6 +141,35 @@ describe("no hourly figure on anything a member reads (II.10, II.11)", () => {
   });
 });
 
+describe("receipts do not show hours unless the village turns them on (C13, Rye 2026-11-06, US0)", () => {
+  // Rye: "we're not paying for hours we're paying for contributions (value in)".
+  const HOURS = /\bhours?\b|\d\s*h\b/i;
+  const works = [FENCE, FENCE_RANGED, { ...FENCE, lines: [{ band: "skilled", payee: "crew" as const, people: 3, estimatedHours: 2.5, estimateLow: 2, estimateHigh: 4 }] }];
+
+  it("names no number of hours in any folded or unfolded line, lever or reason by default", () => {
+    for (const work of works) {
+      for (const p of ok(suggestValuation(CRC, work, MEANING)).payees) {
+        for (const text of everyString(p)) expect(text).not.toMatch(HOURS);
+      }
+    }
+  });
+
+  it("shows them when the village's setting is on", () => {
+    const shown = { ...CRC, receiptShowsHours: true };
+    const p = lead(suggestValuation(shown, FENCE_RANGED, MEANING));
+    expect(p.receipt.unfolded.find((l) => l.key === "labour:0")?.label).toBe("Estimated effort, General help, 4 hours");
+    expect(p.range.why).toContain("the hours could be 3 to 6");
+  });
+
+  it("prices the same either way: the setting changes what is shown, never the figure", () => {
+    const a = lead(suggestValuation(CRC, FENCE_RANGED, MEANING));
+    const b = lead(suggestValuation({ ...CRC, receiptShowsHours: true }, FENCE_RANGED, MEANING));
+    expect(b.expected).toEqual(a.expected);
+    expect(b.range.lowTotalMinor).toBe(a.range.lowTotalMinor);
+    expect(b.band).toEqual(a.band);
+  });
+});
+
 describe("the range from the person's own estimates (US1.2)", () => {
   const p = lead(suggestValuation(CRC, FENCE_RANGED, MEANING));
   const priced = priceWork(CRC, FENCE_RANGED);
@@ -150,7 +179,7 @@ describe("the range from the person's own estimates (US1.2)", () => {
   it("is the TOTAL at the low and high estimates", () => {
     expect(p.range.lowTotalMinor).toBe(rewardFromBase(CRC, r.low).totalMinor);
     expect(p.range.highTotalMinor).toBe(rewardFromBase(CRC, r.high).totalMinor);
-    expect(p.range.why).toContain("the hours could be 3 to 6");
+    expect(p.range.why).toContain("the effort estimate is a range");
     expect(p.range.width).toBe("wide");
   });
 

@@ -138,6 +138,12 @@ export interface ValuationModel {
   exchange: { currency: string; perUnit: number; source: ValuationSource } | null;
   /** The engine's dials. Absent, or any one absent: the engine's defaults (`ENGINE_DEFAULTS`). */
   engine?: Partial<EngineDials>;
+  /**
+   * Whether a member's receipt names the estimated hours. Off unless a village
+   * turns it on (Rye, 2026-11-06: "we're not paying for hours we're paying for
+   * contributions (value in)"). It changes what is shown, never the figure.
+   */
+  receiptShowsHours?: boolean;
 }
 
 /**
@@ -835,6 +841,8 @@ export function diffModels(from: ValuationModel, to: ValuationModel, opts: { ado
   push("minQuest", "Minimum quest value", m(from)(from.minQuestMinor), m(to)(to.minQuestMinor), "version");
   const ex = (x: ValuationModel["exchange"]) => (x ? `${x.perUnit} ${x.currency} per unit (${x.source.date})` : "none");
   push("exchange", "Exchange rate", ex(from.exchange), ex(to.exchange), "version");
+  const onOff = (x: boolean | undefined) => (x ? "on" : "off");
+  push("receiptShowsHours", "Receipts show hours", onOff(from.receiptShowsHours), onOff(to.receiptShowsHours), "version");
   const ENGINE_LABELS: Record<keyof EngineDials, string> = {
     bandPct: "No-sign band",
     singleLowPct: "Range below a single estimate",

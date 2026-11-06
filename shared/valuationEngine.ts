@@ -15,8 +15,10 @@
  *     separate from the range on purpose: wide estimates never widen it, so a
  *     proposer cannot make any figure "inside" by guessing wide (QA G3).
  *   - A RECEIPT a member can follow, folded and unfolded, with NO per-hour
- *     figure anywhere (II.10, II.11). `priceWork`'s own lines keep the rates,
- *     and they belong to the economics page only.
+ *     figure anywhere (II.10, II.11), and no hours at all unless the village
+ *     turns `receiptShowsHours` on (Rye, 2026-11-06: "we're not paying for
+ *     hours we're paying for contributions (value in)"). `priceWork`'s own
+ *     lines keep the rates, and they belong to the economics page only.
  *   - LEVERS for the setter: the nearest level up and down, each repriced by
  *     this engine. A lever never changes the hours alone, because a step per
  *     hour is an hourly figure (QA F13).
@@ -179,7 +181,7 @@ export function suggestValuation(model: ValuationModel, work: WorkInputs, ctx: E
       highBase = p.rangeMinor.high;
       const lowH = mine.reduce((s, l) => s + (l.estimateLow ?? l.estimatedHours), 0);
       const highH = mine.reduce((s, l) => s + (l.estimateHigh ?? l.estimatedHours), 0);
-      why.push(`the hours could be ${hundredths(lowH)} to ${hundredths(highH)}`);
+      why.push(model.receiptShowsHours ? `the hours could be ${hundredths(lowH)} to ${hundredths(highH)}` : "the effort estimate is a range");
     } else {
       lowBase = Math.round((p.priceMinor * (100 - dials.singleLowPct)) / 100);
       highBase = Math.round((p.priceMinor * (100 + dials.singleHighPct)) / 100);
@@ -231,8 +233,8 @@ function receiptOf(
       const people = l.payee === "crew" ? Math.round(l.people ?? 1) : 1;
       const hours = hundredths(l.estimatedHours);
       const minor = Math.round(people * hours * band.hourValueMinor);
-      const who = people > 1 ? `${people} people, ${hoursWords(hours)} each` : hoursWords(hours);
-      unfolded.push({ key: `labour:${i}`, label: `Estimated effort, ${band.label}, ${who}`, result: money(minor) });
+      const who = model.receiptShowsHours ? (people > 1 ? `, ${people} people, ${hoursWords(hours)} each` : `, ${hoursWords(hours)}`) : people > 1 ? `, ${people} people` : "";
+      unfolded.push({ key: `labour:${i}`, label: `Estimated effort, ${band.label}${who}`, result: money(minor) });
     });
   const level = (list: { key: string; label: string; pct: number }[], key: string | null | undefined) => (key ? list.find((x) => x.key === key) : undefined);
   const cx = level(model.complexity, work.complexity);
