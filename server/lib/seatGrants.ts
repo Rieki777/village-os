@@ -48,25 +48,13 @@
  * small query and the bridge adds nothing.
  */
 import type { Pool } from "mysql2/promise";
-import { isLapsed, rowToAssignment, ASSIGN_COLS, type LapseContext, type OrgAssignment } from "./orgChart";
+import { isLapsed, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolvedExitUserIds } from "../repos/formerMembers";
+import { listSeatGroupLinks, liveSeatingsOn, seatFactsFor, type SeatFacts, type SeatGroupLink } from "../repos/seatPowerGroups";
 import { isFormerMember, type FormerMemberFacts } from "./formerMember";
 
-/** One seat-to-group link (0322). */
-export interface SeatGroupLink {
-  orgRoleId: string;
-  roleId: string;
-  createdBy?: string | null;
-  createdAt?: Date | string | null;
-}
-
-/** The org-seat facts the bridge reads. */
-export interface SeatFacts {
-  id: string;
-  active: boolean;
-  isExample: boolean;
-  expiresEachSeason: boolean | null;
-}
+export type { SeatFacts, SeatGroupLink };
+export { listSeatGroupLinks };
 
 /** What one refresh reads, as data, so the decision below stays pure. */
 export interface SeatGrantSnapshot {
@@ -158,19 +146,6 @@ export function isBridged(h: { id?: unknown; viaOrgRoleId?: unknown }): h is Bri
   return typeof h.viaOrgRoleId === "string";
 }
 
-/** Read the links. Raw SQL on purpose, like the org plane (0049): no `replaceAll`. */
-export async function listSeatGroupLinks(pool: Pool): Promise<SeatGroupLink[]> {
-  const [rows]: any = await pool.query(
-    "SELECT org_role_id, role_id, created_by, created_at FROM org_role_power_groups ORDER BY org_role_id, role_id",
-  );
-  return (rows as any[]).map((r) => ({
-    orgRoleId: String(r.org_role_id),
-    roleId: String(r.role_id),
-    createdBy: r.created_by ?? null,
-    createdAt: r.created_at ?? null,
-  }));
-}
-
 /**
  * Read everything one refresh needs. Only the linked seats' seatings are read.
  * `memberById` supplies the record the former-member test needs; an account
@@ -184,24 +159,8 @@ export async function readSeatGrantSnapshot(
   const links = await listSeatGroupLinks(pool);
   if (links.length === 0) return EMPTY_SNAPSHOT;
   const seatIds = Array.from(new Set(links.map((l) => l.orgRoleId)));
-  const [seatRows]: any = await pool.query(
-    "SELECT id, active, is_example, expires_each_season FROM org_roles WHERE id IN (?)",
-    [seatIds],
-  );
-  const [assignRows]: any = await pool.query(
-    `SELECT ${ASSIGN_COLS} FROM org_role_assignments WHERE ended_at IS NULL AND org_role_id IN (?)`,
-    [seatIds],
-  );
-  const seats = new Map<string, SeatFacts>();
-  for (const r of seatRows as any[]) {
-    seats.set(String(r.id), {
-      id: String(r.id),
-      active: !!r.active,
-      isExample: !!r.is_example,
-      expiresEachSeason: r.expires_each_season === null || r.expires_each_season === undefined ? null : !!r.expires_each_season,
-    });
-  }
-  const seatings = (assignRows as any[]).map(rowToAssignment);
+  const seats = await seatFactsFor(pool, seatIds);
+  const seatings = await liveSeatingsOn(pool, seatIds);
   const exited = await resolvedExitUserIds(pool);
   const formerUserIds = new Set<string>();
   for (const id of Array.from(new Set(seatings.map((a) => a.userId).filter((u): u is string => !!u && exited.has(u))))) {
