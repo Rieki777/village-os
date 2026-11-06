@@ -44,6 +44,8 @@ import { conflictAgreementCloser } from "../lib/conflictAgreementCloser";
 import { ballotById } from "../lib/ballots";
 import { conflictDoorFacts } from "../lib/launchGovernance";
 import { BALLOT_NAME_WITHHELD, register } from "./conflictAgreement";
+import { GPS_DOC_KEY, PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
+import { writeGoverningPurpose } from "../lib/governingPurpose";
 import { register as registerExits } from "./exits";
 
 const configured = testDbConfigured();
@@ -128,7 +130,8 @@ const agreement = (over: Record<string, unknown> = {}) => ({
 
 /** Put the village back where every case starts: no agreement, the old policy, not started. */
 async function reset() {
-  await pool.query("DELETE FROM app_config WHERE config_key IN (?,?,?,?,?) OR config_key LIKE ?", [ // module-review-ok: each case starts from the same village, on the scratch schema this suite provisioned
+  await pool.query("DELETE FROM app_config WHERE config_key IN (?,?,?,?,?,?) OR config_key LIKE ?", [ // module-review-ok: each case starts from the same village, on the scratch schema this suite provisioned
+    GPS_DOC_KEY,
     CONFLICT_AGREEMENT_KEY,
     CONFLICT_AGREEMENT_PROPOSAL_KEY,
     OMBUDS_ASKS_KEY,
@@ -451,6 +454,26 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       const second = await call("POST", "/api/governance/conflict-agreement-changes", "proposer", { agreement: agreement({ replyHours: 6 }) });
       expect(second.status).toBe(409);
       expect(second.body.ballotId).toBe(ballot!.id);
+    });
+
+    it("asks the proposer how the change serves the governing purpose, and keeps the line on the vote (W3a-agreement-vote-no-purpose-line)", async () => {
+      await call("PUT", "/api/admin/conflict-agreement", "admin", { agreement: agreement(), adopt: true });
+      await recordGameStart(pool, { ballotId: "b-birth", startedBy: "ca-admin", note: "The village began." });
+      expect((await writeGoverningPurpose(pool, { statement: PURPOSE_EXAMPLE, writtenBy: "ca-admin" })).ok).toBe(true);
+
+      const bare = await call("POST", "/api/governance/conflict-agreement-changes", "proposer", { agreement: agreement({ replyHours: 12 }) });
+      expect(bare.status).toBe(400);
+      expect(String(bare.body.error)).toContain("serves the governing purpose");
+      const [[none]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM ballots WHERE subject_type = ?", [CONFLICT_AGREEMENT]); // module-review-ok: reading the scratch schema this suite provisioned
+      expect(Number(none.n)).toBe(0);
+
+      const line = "A quicker reply keeps a hard moment from hardening, which is how this village keeps its promise of care.";
+      const opened = await call("POST", "/api/governance/conflict-agreement-changes", "proposer", {
+        agreement: agreement({ replyHours: 12 }),
+        purposeAlignment: line,
+      });
+      expect(opened.status, JSON.stringify(opened.body)).toBe(200);
+      expect((await ballotById(pool, opened.body.ballot.id))?.purposeAlignment).toBe(line);
     });
 
     it("the vote's page carries every part it would adopt, and members read the whole proposal beside it", async () => {

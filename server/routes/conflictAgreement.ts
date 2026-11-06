@@ -89,6 +89,7 @@ import {
 } from "../../shared/conflictAgreement";
 import { villageBallotMethod, type BallotMethod } from "../../shared/governanceEngine";
 import { mayReadCanvas } from "./canvas";
+import { purposeAlignmentRefusal } from "../lib/governingPurpose";
 
 /** The one subject ref, so a second change cannot open while one is running (`open_key` is unique while open). */
 export const AGREEMENT_BALLOT_REF = "agreement";
@@ -343,6 +344,14 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json({ error: "That is what the agreement already says." });
     }
 
+    // The judgement line (GPS ruling 1, constitution I.17): a change to how the
+    // village holds conflict says how it serves the purpose, once a statement
+    // exists. Asked here so a missing line is a 400 the editor can show beside
+    // the field, before any ballot exists.
+    const purposeAlignment = typeof req.body?.purposeAlignment === "string" ? req.body.purposeAlignment : null;
+    const alignmentProblem = await purposeAlignmentRefusal(pool, CONFLICT_AGREEMENT, purposeAlignment);
+    if (alignmentProblem) return res.status(400).json({ error: alignmentProblem });
+
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
     // The village's own settings ride along, so a structural bar the village
     // raised is the bar this vote freezes, as the Decision Matrix prints it.
@@ -380,6 +389,7 @@ export function register(app: Express, deps: Deps): void {
       durationDays: Math.max(1, numberVar(conducts === "consent" ? "governance.consent_window_days" : "governance.vote_days")),
       openedBy: user.id,
       electorate,
+      purposeAlignment,
       // One key per ballot, never shared: a carried change waiting for its
       // landing date keeps its own words however many open after it.
       onOpen: (conn, ballotId) =>
