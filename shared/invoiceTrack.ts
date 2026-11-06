@@ -219,7 +219,7 @@ export interface ReconciledView {
   sources: Record<SyncSourceName, { state: SourceState; readAt: string | null }>;
   tokens: Array<{ slug: string; name: string; amora: string; chain: string | null; chainReadAt: string | null; chainStale: boolean; disagree: boolean }>;
   cash: Array<{ currency: string; owedMinor: number }>;
-  invoices: Array<{ ref: string; status: InvoiceStatus; currency: string; amoraMinor: number; seraStatus: SeraInvoiceStatus | null; seraMinor: number | null; seraAt: string | null; disagree: boolean }>;
+  invoices: Array<{ ref: string; status: InvoiceStatus; currency: string; amoraMinor: number; seraStatus: SeraInvoiceStatus | null; seraMinor: number | null; seraCurrency: string | null; seraAt: string | null; disagree: boolean }>;
   flags: SyncFlag[];
 }
 
@@ -268,7 +268,7 @@ export function reconcile(input: ReconcileInput): ReconciledView {
         flags.push({ kind: "sera_status_differs", subject: i.ref, amora: i.status, other: s.status, dedupeKey: flagKey("sera_status_differs", i.ref, i.status, s.status) });
       }
     }
-    return { ref: i.ref, status: i.status, currency: i.currency, amoraMinor: i.totalMinor, seraStatus: s?.status ?? null, seraMinor: s?.amountMinor ?? null, seraAt: s?.statusAt ?? null, disagree };
+    return { ref: i.ref, status: i.status, currency: i.currency, amoraMinor: i.totalMinor, seraStatus: s?.status ?? null, seraMinor: s?.amountMinor ?? null, seraCurrency: s?.currency ?? null, seraAt: s?.statusAt ?? null, disagree };
   });
 
   return {
@@ -284,3 +284,53 @@ export function reconcile(input: ReconcileInput): ReconciledView {
     flags,
   };
 }
+
+// ── The words, keyed by the unions so a new member is a compile error ────────
+
+export const TRACK_STEP_WORDS: Record<TrackStepName, string> = {
+  sent: "Sent",
+  received: "Received by Sera",
+  approved: "Approved",
+  paid: "Paid",
+};
+
+export const TRACK_WAITING_WORDS: Record<TrackStepName, string> = {
+  sent: "Not sent yet",
+  received: "Waiting for Sera to confirm",
+  approved: "Waiting on approval",
+  paid: "Not paid yet",
+};
+
+export const TRACK_ACTOR_WORDS: Record<TrackActor, string> = {
+  member: "the member",
+  sera: "Sera",
+  finance: "the Finance role",
+  treasurer: "the Treasurer role",
+};
+
+export const SOURCE_WORDS: Record<SyncSourceName, string> = {
+  amora: "This village's records",
+  chain: "Base chain",
+  sera: "Sera",
+};
+
+export const SERA_STATE_WORDS: Record<"read" | "not_offered" | "not_connected" | "failed", string> = {
+  read: "",
+  not_offered: "Sera does not report invoices yet.",
+  not_connected: "Sera is not connected to this village.",
+  failed: "Sera did not answer this time. Sync again in a while.",
+};
+
+export const FLAG_WORDS: Record<FlagKind, string> = {
+  chain_differs: "The chain shows a different balance",
+  sera_amount_differs: "Sera has a different amount",
+  sera_status_differs: "Sera has a different status",
+  sera_unmatched: "Sera has an invoice that matches none here",
+};
+
+export const SERA_STATUS_WORDS: Record<SeraInvoiceStatus, string> = {
+  received: "Received",
+  approved: "Approved",
+  rejected: "Rejected",
+  paid: "Paid",
+};
