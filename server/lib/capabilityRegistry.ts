@@ -352,6 +352,10 @@ export const POWERS: readonly PowerEntry[] = [
  * `POWERS`, because `POWERS` is the list of keys a village can go on to HOLD,
  * and holding these would freeze the work they approve: no ballot approves a
  * recap.
+ *
+ * FOLLOW-UP (coordinator, 2026-11-06, "grant only, for now"): village HOLDING
+ * of these five waits on a recap-approval ballot; until one exists they stay
+ * out of TRANSFERABLE.
  */
 export const HIGHEST_TIER_GRANTS: readonly PowerEntry[] = [
   {
