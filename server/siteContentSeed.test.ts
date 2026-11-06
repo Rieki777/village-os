@@ -83,9 +83,13 @@ describe("the site content seed", () => {
     expect(SEED.milestones).toEqual([]);
   });
 
-  it("ships no FAQ, which are one village's answers, and keeps a list for each pathway", () => {
+  it("ships at most one neutral starter FAQ per pathway, pointing at pages every village has (2026-10-23)", () => {
     expect(Object.keys(SEED.faqs).sort()).toEqual(["investor", "prosperity", "resident", "steward"]);
-    for (const list of Object.values(SEED.faqs)) expect(list).toEqual([]);
+    for (const list of Object.values(SEED.faqs) as Array<Array<{ answer: string }>>) {
+      expect(list.length).toBeLessThanOrEqual(1);
+      // No figure, no place, no promise: only where to go to ask.
+      for (const f of list) expect(f.answer).not.toMatch(/[0-9$€%]|land share|school|tax/i);
+    }
   });
 
   it("states no visit term: a blank duration, format or cost draws no line on the Visit page", () => {

@@ -1,9 +1,33 @@
 {
   "faqs": {
-    "investor": [],
-    "steward": [],
-    "resident": [],
-    "prosperity": []
+    "investor": [
+      {
+        "id": "inv-1",
+        "question": "How do I find out more?",
+        "answer": "Request the investor pack on this page, or join a community call and ask the team directly."
+      }
+    ],
+    "steward": [
+      {
+        "id": "stw-1",
+        "question": "How do I find a role?",
+        "answer": "Every role is on the Roles page, with the work it holds. Pick one that fits you and apply from there."
+      }
+    ],
+    "resident": [
+      {
+        "id": "res-1",
+        "question": "Can I visit before I decide?",
+        "answer": "Yes. Plan a visit from the Visit page, or join a community call first to meet the people here."
+      }
+    ],
+    "prosperity": [
+      {
+        "id": "pro-1",
+        "question": "How do I bring a business here?",
+        "answer": "Send a proposal from the Work With Us page, with what you want to build and what you would need. The team will talk it through with you."
+      }
+    ]
   },
   "milestones": [],
   "visitConfig": {

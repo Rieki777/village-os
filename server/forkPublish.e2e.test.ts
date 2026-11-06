@@ -506,7 +506,10 @@ describe.skipIf(!DB_CONFIGURED)("the fresh fork is handed no other village's sto
     ).toEqual([]);
     for (const pathway of ["investor", "steward", "resident", "prosperity"]) {
       const faqs = (await call("GET", `/api/faqs/${pathway}`, undefined, "")).json;
-      expect(faqs, `the ${pathway} FAQ starts empty`).toEqual([]);
+      // The platform's one neutral starter per pathway (2026-10-23) points at
+      // pages every village has and states nothing; the regression list above
+      // holds the answers one village's seed used to serve.
+      expect(faqs.length, `the ${pathway} FAQ holds at most the neutral starter`).toBeLessThanOrEqual(1);
     }
     const listing = (await call("GET", "/api/content", undefined, "")).json;
     for (const journey of ["investor", "steward", "resident", "prosperity"]) {
