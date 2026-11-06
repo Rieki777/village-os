@@ -410,6 +410,7 @@ import {
   dialsForSubject,
   methodForSubject,
   thresholdSettingsFrom,
+  overrideDials as highestTierDials,
   rollProblem,
   thresholdsForSubject,
   LAUNCH_SUBJECT_REF,
@@ -20816,6 +20817,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       backed: rows.map((r) => ({ proposalId: String(r.proposal_id), kind: String(r.kind) })),
       mayOpenBallot: hasCapability("proposal.open", await capabilityCtx(user)),
       mine: mine.map((r) => String(r.id)),
+      // The door for a held outcome after launch, by the open-ballot route's own rule.
+      mayAskVillage: (await readGameStart(getPool())).started && hasCapability("ballot.vote", await capabilityCtx(user)),
     });
   });
 
@@ -21359,13 +21362,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
     }
     if (!boolVar("governance.auto_apply_enabled")) {
-      await notifyAdmins("governance", `Verified on-chain but applying is off: ${p.title}`, `gmp:${p.id}:frozen`);
+      await notifyAdmins("governance", `Verified on-chain but applying is off: ${p.title}${(await readGameStart(getPool())).started ? ". Any member can ask the village to decide it from Game Mechanics." : ""}`, `gmp:${p.id}:frozen`);
       return res.json({ received: true, status: "passed_verified", held: "applying is switched off" });
     }
     // R039: with a space id recorded, an outcome naming no space could be another
     // village's vote, so it waits for a person (POST /api/admin/mechanics/proposals/:id/apply).
     if (space.verdict === "unstated") {
-      await notifyAdmins("governance", `Verified, but the outcome named no Hypha space, so it waits for you to apply it: ${p.title}`, `gmp:${p.id}:unstated-space`);
+      await notifyAdmins("governance", (await readGameStart(getPool())).started ? `Verified, but the outcome named no Hypha space. Any member can ask the village to decide it from Game Mechanics: ${p.title}` : `Verified, but the outcome named no Hypha space, so it waits for you to apply it: ${p.title}`, `gmp:${p.id}:unstated-space`);
       return res.json({ received: true, status: "passed_verified", held: "the outcome named no Hypha space, so a person applies it" });
     }
     const result = await applyMechanicsProposal(fresh, null);
@@ -23012,15 +23015,24 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!user) return res.status(401).json({ error: "auth_required" });
     const p = await proposalById(getPool(), req.params.id);
     if (!p) return res.status(404).json({ error: "Not found" });
-    if (p.status !== "open") {
+    /*
+     * A HELD OUTCOME IS NEVER STUCK (R039, and Rye, 2026-11-06: "EVERYTHING can
+     * change with the highest village vote"). A Hypha outcome that named no
+     * space, or arrived while applying was switched off, waits at
+     * passed_verified. After launch the admin apply door is closed, so this is
+     * the way left: any member on the roll asks the village, which decides at
+     * its highest set tier whatever method it normally uses.
+     */
+    const held = p.status === "passed_verified" && (await readGameStart(getPool())).started;
+    if (p.status !== "open" && !held) {
       return res.status(409).json({ error: `This proposal is ${p.status.replace(/_/g, " ")}, not open for a ballot` });
     }
     const heldByFounders = await founderHeldVoteProblem(p.changeSet, () => founderPowerStands(getPool())); if (heldByFounders) return res.status(409).json({ error: heldByFounders });
     const ctx = await capabilityCtx(user);
-    if (p.proposerUserId !== user.id && !hasCapability("proposal.open", ctx)) {
-      return res.status(403).json({ error: "Taking a proposal to the vote is for its proposer or a proposal.open holder" });
+    if (held ? !hasCapability("ballot.vote", ctx) : p.proposerUserId !== user.id && !hasCapability("proposal.open", ctx)) {
+      return res.status(403).json({ error: held ? "Asking the village about a held outcome is for members on the roll" : "Taking a proposal to the vote is for its proposer or a proposal.open holder" });
     }
-    const threshold = Math.max(0, numberVar("governance.proposal_support_threshold"));
+    const threshold = held ? 0 : Math.max(0, numberVar("governance.proposal_support_threshold")); // a held outcome already passed a vote
     const backers = await backerCounts(getPool(), [p.id]);
     const supports = backers.get(p.id)?.supports ?? 0;
     if (supports < threshold) {
@@ -23046,10 +23058,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // function nothing called, which is two copies of one rule waiting to
     // disagree about what passing means.
     const conducts = villageBallotMethod(stringVar("governance.default_method"));
-    if (conducts === "hypha") {
+    if (conducts === "hypha" && !held) {
       return res.status(409).json({ error: "This village decides mechanics on Hypha. Use Take to Hypha, or change governance.default_method first" });
     }
-    const method: BallotMethod = conducts;
+    const method: BallotMethod = conducts === "hypha" ? "custom" : conducts;
     /*
      * WHICH SUBJECT THIS IS, READ OFF THE CHANGE SET (R81, R84).
      *
@@ -23080,7 +23092,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // proposal brought back after a veto is priced at the village's highest set
     // tier: that is what makes it land whatever any steward says.
     const { subjectType } = priced;
-    const dials = await overrideDials(getPool(), p, priced.dials);
+    const overridden = await overrideDials(getPool(), p, priced.dials);
+    const top = held ? highestTierDials(thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key))) : overridden;
+    const dials = { unityPct: Math.max(overridden.unityPct, top.unityPct), quorumPct: Math.max(overridden.quorumPct, top.quorumPct) };
     const conducted: BallotMethod = priced.method ?? method;
     const snapshot = weightModeNow();
     if (snapshot.mode === "token") {
@@ -23140,8 +23154,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       window: { elements: changeSetKinds(p.changeSet), comingBackFrom: await comingBackFrom(getPool(), p.id) }, // windows lane (19E): the strictest element decides, and anything coming back gets its grace
       onOpen: async (conn, ballotId) => {
         const [r] = await conn.query<any>(
-          "UPDATE mechanics_proposals SET status = 'onsite_vote', ballot_id = ? WHERE id = ? AND status = 'open'",
-          [ballotId, p.id],
+          "UPDATE mechanics_proposals SET status = 'onsite_vote', ballot_id = ? WHERE id = ? AND status = ?",
+          [ballotId, p.id, p.status],
         );
         if (Number(r.affectedRows) === 0) throw new Error("proposal moved while the ballot was opening");
         /*
