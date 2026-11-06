@@ -113,7 +113,7 @@ import { landProposal, markProposalDecided, proposalsInBatch } from "./externalP
 import { pollOnce, syncByHand } from "./saberraSync";
 import { SNAPSHOT_KEEP, TEXT_KEEP, writeSnapshot } from "./saberraSnapshot";
 import { countAnswer, readDifferences, snapshotsNeeded } from "./seraDifferencesRead";
-import { pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
+import { insertSnapshot, pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
 import { SNAPSHOT_MAX_AGE_DAYS, pruneByAge } from "./saberraSnapshot";
 import { writeSyncLogDocument } from "../repos/saberraSyncLog";
 
@@ -446,6 +446,24 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     const [row] = await recentSnapshots(pool, 1);
     expect(row!.seq).toBeGreaterThan(pressed);
     expect(row!.snapshot).toMatchObject({ trigger: "scheduled", roles: { read: "whole" }, circles: { read: "whole" } });
+  });
+
+  it("A STORED MATCH READS BACK WHOLE, the pay it carries included, and a malformed one reads as none", async () => {
+    const whole = { ourId: "role-1", via: "earlier", agreed: { name: true, aim: "Holds the water.", circle: "land" }, pay: "0123456789abcdef" };
+    const records = [
+      { id: pageId("rt-1"), fields: { "Role Name": "One" }, match: whole },
+      { id: pageId("rt-2"), fields: { "Role Name": "Two" }, match: null },
+      { id: pageId("rt-3"), fields: { "Role Name": "Three" }, match: { ourId: "role-3", via: "guess", agreed: {} } },
+      { id: pageId("rt-4"), fields: { "Role Name": "Four" }, match: { ourId: "role-4", via: "name", agreed: { name: 7, aim: true }, pay: 12 } },
+    ];
+    await insertSnapshot(pool, new Date(), { trigger: "by-hand", circles: { read: "empty", records: [] }, roles: { read: "whole", records: records as never } });
+    const back = (await newest()).roles.records;
+    expect(back[0]!.match).toEqual(whole);
+    expect(back[1]!.match).toBeNull();
+    // A way nobody matches by is no match at all: the record reads as one kept before matches were stored.
+    expect("match" in back[2]!).toBe(false);
+    // What is not text or true is left out, and so is a pay that is not text.
+    expect(back[3]!.match).toEqual({ ourId: "role-4", via: "name", agreed: { aim: true } });
   });
 
   it("A RENAME HERE BETWEEN TWO SYNCS IS OURS AHEAD: each read is kept with its match as it was made then (review C2)", async () => {

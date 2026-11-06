@@ -60,6 +60,8 @@ function recordOf(r: SnapshotRecord): SnapshotRecord {
     if (v === true || typeof v === "string") agreed[s] = v;
   }
   const match: SnapshotMatch = { ourId: m.ourId, via: m.via as MatchVia, agreed };
+  // The pay the service held when ours was last in step: a hash, kept only as text.
+  if (typeof m.pay === "string") match.pay = m.pay;
   return { ...r, match };
 }
 
