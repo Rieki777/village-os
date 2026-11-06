@@ -289,6 +289,14 @@ export interface Difference {
   /** Normalised values. For an add or a rest, `live` and `gone`; for a move, the circle ids joined by "|". */
   sera: string | null;
   ours: string | null;
+  /**
+   * What "Here now" shows: our name, or a role's words, exactly as stored
+   * here, before the name swap and the space collapse; `ours` for every other
+   * kind. Shown only: `ours` and `oursHash` are what is compared and checked
+   * (R6, R14). Always set by `differences`, optional so a hand-built one may
+   * leave it out.
+   */
+  oursAsStored?: string | null;
   base: DifferenceBase;
   seraHash: string;
   oursHash: string;
@@ -956,6 +964,8 @@ interface Draft {
   slot: string;
   sera: string | null;
   ours: string | null;
+  /** Our value as stored, for "Here now", where it is text; `ours` otherwise. */
+  oursAsStored?: string | null;
   base: DifferenceBase;
   flags: DifferenceFlag[];
   rec: SnapshotRecord | null;
@@ -1000,6 +1010,7 @@ function finish(d: Draft, table: LaneTable): Difference {
     field: d.field,
     sera: d.sera,
     ours: d.ours,
+    oursAsStored: d.oursAsStored !== undefined ? d.oursAsStored : d.ours,
     base: d.base,
     seraHash: valueHash(d.sera),
     oursHash: valueHash(d.ours),
@@ -1245,7 +1256,7 @@ export function differences(input: DifferencesInput): Difference[] {
       const renamed = threeWay(name, ourName, nameBase, sameName);
       if (renamed) {
         drafts.push({
-          kind: "rename", state: renamed, subject, field: "name", slot: "name", sera: name, ours: ourName, base: nameBase,
+          kind: "rename", state: renamed, subject, field: "name", slot: "name", sera: name, ours: ourName, oursAsStored: live.name, base: nameBase,
           flags: [...(nameBase === "unknown" ? [flag("baseUnknown")] : []), ...how, ...recordFlags(rec, [F.circleName])], rec,
         });
       }
@@ -1297,11 +1308,12 @@ export function differences(input: DifferencesInput): Difference[] {
 
     const field = (
       kind: DifferenceKind, slot: string, fieldName: string, sera: string | null, oursValue: string | null,
-      fieldBase: DifferenceBase, fieldState: DifferenceState | null, uses: string[], extra: DifferenceFlag[] = [], params?: Draft["params"],
+      fieldBase: DifferenceBase, fieldState: DifferenceState | null, uses: string[],
+      { extra = [], params, stored }: { extra?: DifferenceFlag[]; params?: Draft["params"]; stored?: string | null } = {},
     ) => {
       if (!fieldState) return;
       drafts.push({
-        kind, state: fieldState, subject, field: fieldName, slot, sera, ours: oursValue, base: fieldBase,
+        kind, state: fieldState, subject, field: fieldName, slot, sera, ours: oursValue, ...(stored !== undefined ? { oursAsStored: stored } : {}), base: fieldBase,
         flags: [...(fieldBase === "unknown" ? [flag("baseUnknown")] : []), ...how, ...extra, ...recordFlags(rec, uses)],
         rec, ...(params ? { params } : {}),
       });
@@ -1309,7 +1321,7 @@ export function differences(input: DifferencesInput): Difference[] {
 
     const nameBase = baseOr(base?.name, agreed("roles", rec, live.id, "name"));
     const ourName = norm.plain(live.name);
-    field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase, sameName), [F.roleName]);
+    field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase, sameName), [F.roleName], { stored: live.name });
 
     const keys = placed.refs.map((r) => r.key).sort();
     const circleBase = baseOr(base?.circleId, agreed("roles", rec, live.id, "circle"));
@@ -1318,15 +1330,15 @@ export function differences(input: DifferencesInput): Difference[] {
       ...(away ? [flag("circleNotHere", { circle: away.name })] : []),
       ...(placed.refs.length > 1 ? [flag("severalCircles", { count: placed.refs.length })] : []),
     ];
-    field("roleMove", "circle", "circle", keys.join("|") || null, live.circleId, circleBase, moveState(keys, live.circleId, circleBase), [], moveFlags, {
-      from: sitsIn?.name ?? null,
-      to: placed.refs.map((r) => r.name),
+    field("roleMove", "circle", "circle", keys.join("|") || null, live.circleId, circleBase, moveState(keys, live.circleId, circleBase), [], {
+      extra: moveFlags,
+      params: { from: sitsIn?.name ?? null, to: placed.refs.map((r) => r.name) },
     });
 
     const aim = textOf(rec, F.body, norm);
     const aimBase = baseOr(tracedUpToCase(base?.aim, aim), agreed("roles", rec, live.id, "aim"));
     const ourAim = norm.prose(live.aim);
-    field("textField", "aim", "aim", aim, ourAim, aimBase, threeWay(aim, ourAim, aimBase), [F.body]);
+    field("textField", "aim", "aim", aim, ourAim, aimBase, threeWay(aim, ourAim, aimBase), [F.body], { stored: live.aim });
 
     // Pay is information: its base is never known, so it is never taken in bulk (R23).
     const pay = payOf(rec, norm);
@@ -1338,7 +1350,7 @@ export function differences(input: DifferencesInput): Difference[] {
       const inStep = newestStampOf(input.snapshots, "roles", pk, live.id)?.match?.pay;
       const moved = inStep !== undefined ? inStep !== valueHash(pay.key) : was !== undefined && was !== pay.key;
       const payState: DifferenceState | null = !live.paySet ? "suggestion" : moved ? "conflict" : null;
-      field("pay", "pay", "pay", pay.key, live.paySet ? "set" : "none", "unknown", payState, [F.payTerms], [], pay.params);
+      field("pay", "pay", "pay", pay.key, live.paySet ? "set" : "none", "unknown", payState, [F.payTerms], { params: pay.params });
     }
 
     facts(rec, aDayAgo.roles.get(pk), ROLE_FACT_FIELDS, subject, how);

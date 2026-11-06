@@ -1115,6 +1115,40 @@ describe("second review: a name that differs only by case is no rename", () => {
   });
 });
 
+describe("second review: Here now shows our words as they are stored here", () => {
+  it("GIVES OUR NAME AND WORDS AS STORED, before the name swap and the space collapse, while the hashes keep the one normaliser", () => {
+    const K = pid(140);
+    const kid = roleIdOf(K);
+    const swap = (t: string) => t.replace(/\bJane Example\b/g, "a member");
+    const ourAim = "Holds  the water,\r\nwith Jane Example.";
+    const ourName = "Water   Steward";
+    const list = differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(K, "Water Keeper", [LAND], { fields: { Body: "Holds the wells." } })])],
+        live: { circles: [LAND_HERE], roles: [liveRole(kid, ourName, "land", { aim: ourAim })] },
+        accepted: [created(kid, { name: ourName, circleId: "land", aim: ourAim }, K)],
+        swap,
+      }),
+    );
+    const rename = list.find((d) => d.kind === "rename")!;
+    const aim = list.find((d) => d.field === "aim")!;
+    expect([rename.ours, rename.oursAsStored]).toEqual(["Water Steward", ourName]);
+    expect([aim.ours, aim.oursAsStored]).toEqual(["Holds the water, with a member.", ourAim]);
+    // The hashes, and so compare and set, still use the one normaliser.
+    expect(rename.oursHash).toBe(valueHash("Water Steward"));
+    expect(aim.oursHash).toBe(valueHash("Holds the water, with a member."));
+    // The control: every other kind shows `ours` as it is.
+    const [rest] = differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(K, "Water Keeper", [LAND], { fields: { Status: "Archived" } })])],
+        live: { circles: [LAND_HERE], roles: [liveRole(kid, "Water Keeper", "land")] },
+        accepted: [created(kid, { name: "Water Keeper", circleId: "land" }, K)],
+      }),
+    );
+    expect(rest).toMatchObject({ kind: "roleRest", ours: "live", oursAsStored: "live" });
+  });
+});
+
 describe("second review: pay never leaves the list undecided", () => {
   const K = pid(130);
   const kid = roleIdOf(K);
