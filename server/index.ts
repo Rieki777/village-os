@@ -24211,6 +24211,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
             // Additive, and always present: a page can show "2 of 3 seats
             // filled · 1 open call" without knowing anybody's name.
             holderCount: seated.length,
+            // The holders the gate and the launch checklist count: lapsed
+            // terms out. Departures' intake picker shows it (plan 6.2 frame 2).
+            liveHolderCount: liveHolderCount(holders, r.id),
             holders: maySeePeople
               ? seated.map((h) => ({ userId: h.userId, name: nameOf(h.userId) }))
               : [],
