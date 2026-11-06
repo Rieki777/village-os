@@ -539,3 +539,24 @@ describe.skipIf(!DB_CONFIGURED)("sheet 19: admin access through a power group", 
     expect(await opensPanel(sam.token)).toBe(true);
   });
 });
+
+describe.skipIf(!DB_CONFIGURED)("an admin route of a module that is off (R102)", () => {
+  // Every module's routes mount behind requireModule, and off means 404 for
+  // everybody, admins included. These admin routes sat outside their module's
+  // mount, so a switched-off shop could still confirm a purchase and a
+  // switched-off network could still sync with a peer.
+  const OFF: Array<[string, string, string]> = [
+    ["GET", "/api/admin/products", "commerce"],
+    ["POST", "/api/admin/products/purchases/p-none/confirm", "commerce"],
+    ["GET", "/api/admin/crowdpool/status", "crowdpool"],
+    ["GET", "/api/admin/network/peers", "network"],
+    ["POST", "/api/admin/network/sync", "network"],
+    ["POST", "/api/admin/exchange/reconcile", "exchange"],
+  ];
+  it.each(OFF)("%s %s answers as the off %s module does", async (method, route, module) => {
+    const r = await call(method, route, method === "GET" ? undefined : {});
+    expect(r.status, `${method} ${route}: ${r.text.slice(0, 200)}`).toBe(404);
+    expect(r.json?.error).toBe("module_disabled");
+    expect(r.json?.module).toBe(module);
+  });
+});
