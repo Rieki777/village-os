@@ -554,10 +554,10 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       // De-attribution is not enough: the TEXT restates the person. A
-      // restorative intake notification carries "A private intake from <their
-      // full name>" in the title and up to 2000 characters of their message in
-      // the body, and nulling the actor id leaves every word of that in the
-      // steward's inbox. Their own bell goes; every row naming them to
+      // restorative intake notification carries "<their full name> wrote:"
+      // and up to 2000 characters of their message in the body
+      // (server/lib/restorativeIntake.ts), and nulling the actor id leaves
+      // every word of that in the steward's inbox. Their own bell goes; every row naming them to
       // somebody else, found by its actor or, for rows the admin producers
       // wrote with no actor, by the record its key was built from, loses its
       // words, and its emailed copies go blank first (server/repos/noticesNaming.ts).

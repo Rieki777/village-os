@@ -1,15 +1,49 @@
 // @vitest-environment jsdom
 /**
- * The departure card on /exit-policy, where the delete screen's "Leave the
- * village instead" lands (`?focus=begin-departure`, Rye, 2026-10-30). It has
- * to exist under that id, be brought into view when the link asks for it, and
- * say that cash still owed keeps the account as tokens do.
+ * WHERE A CONFLICT GOES, AS A MEMBER READS IT ON /exit-policy (2026-09-27).
+ *
+ * The launch checklist's `conflict-door` row passes with an intake role that
+ * somebody holds, or with a named outside contact alone, and either way with a
+ * reply time. The cheapest passing setup for a small village is the second:
+ * no intake role, an outside contact, and a reply time. The page used to print
+ * "The village promises you a reply" and "You can also bring it to somebody
+ * outside" whatever the setup, so that village told a member in conflict about
+ * a promise with nobody behind it and an "also" beside a door that was not
+ * there. The four setups this file holds apart:
+ *
+ *   an intake role and an outside contact: the reply is the intake role's, and
+ *     the outside contact is also there;
+ *   the outside contact alone: it is the way in, with the reply, and no "also";
+ *   a reply time with no door at all: nothing is promised;
+ *   nothing stated: neither line.
+ *
+ * Read signed out, because the page is public and these lines are printed to
+ * anybody. `Layout` is a passthrough; the subject is the restorative card.
+ *
+ * A FIFTH SETUP (Wave 2 audit, 2026-09-28): an intake role nobody holds today.
+ * The page promised a reply from it, and offered a form that the server then
+ * refused, because it read the stored role id. It now reads `heldToday` off
+ * GET /api/exit-policy. The cases about the form are read SIGNED IN, since the
+ * form is only ever offered to a member.
+ *
+ * THE DEPARTURE CARD (main, Rye 2026-10-30): the delete screen's "Leave the
+ * village instead" lands here (`?focus=begin-departure`). It has to exist under
+ * that id, be brought into view when the link asks for it, and say that cash
+ * still owed keeps the account as tokens do.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 
-vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: unknown }) => <div>{children as any}</div> }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u-1", name: "Ash" } }) }));
+vi.mock("@/components/Layout", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+const auth = vi.hoisted(() => ({ user: null as null | { id: string; name: string } }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: auth.user, loading: false }) }));
+vi.mock("@/lib/gameApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/gameApi")>()),
+  authToken: () => null,
+}));
 vi.mock("@/components/alignment/LeavingEnds", () => ({ default: () => null, useTermsLeavingEnds: () => null }));
 vi.mock("@/components/auth/ConfirmWithGoogle", () => ({
   useIdentityConfirm: () => ({ confirmed: false, returnError: "", reset: () => {} }),
@@ -18,25 +52,153 @@ vi.mock("@/components/auth/ConfirmWithGoogle", () => ({
   identityReady: () => false,
 }));
 
-import ExitPolicy from "@/pages/ExitPolicy";
+import ExitPolicy from "./ExitPolicy";
 
-const policy = {
-  placeholder: true,
-  voluntary: { noticePeriodDays: 30, valuationMethod: "Terms.", unwindSteps: ["A step"] },
-  involuntary: { process: "Process." },
-  restorative: { steps: ["Repair"] },
-};
+const CONTACT = { name: "Jo Bell", organisation: "Cohort Care", howToReach: "ombuds@example.test" };
+
+function serve(restorative: Record<string, unknown>) {
+  const policy = {
+    placeholder: false,
+    voluntary: { noticePeriodDays: 21, valuationMethod: "Ours.", unwindSteps: ["Hand back the keys"] },
+    involuntary: { process: "Two stewards sit with the person first." },
+    restorative: { steps: ["Somebody who was not involved hears both people"], ...restorative },
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => ({ policy }) })),
+  );
+}
+
+/** The restorative card's text, once the policy has arrived. */
+async function card(): Promise<string> {
+  const heading = await screen.findByText("Repair before departure");
+  await screen.findByText("Somebody who was not involved hears both people");
+  return heading.closest("div.bg-card")?.textContent ?? "";
+}
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ policy }), { status: 200, headers: { "Content-Type": "application/json" } })));
   Element.prototype.scrollIntoView = vi.fn();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  auth.user = null;
   window.history.replaceState(null, "", "/");
 });
 
+const HELD = { id: "care", name: "Care", heldToday: true };
+const UNHELD = { id: "care", name: "Care", heldToday: false };
+
+describe("ExitPolicy, the conflict door", () => {
+  it("ties the reply to the intake role, and offers the outside contact as well", async () => {
+    serve({ intakeContactRole: "care", intakeRole: HELD, replyHours: 48, outsideContact: CONTACT });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain("Bring it to the Care role and you hear back within 48 hours.");
+    expect(text).toContain("You can also bring it to somebody outside the village: Jo Bell, Cohort Care. ombuds@example.test");
+    expect(text).not.toContain("The village promises you a reply");
+  });
+
+  it("with the outside contact as the only door, names it as the way in, with the reply, and never says also", async () => {
+    serve({ intakeContactRole: "", replyHours: 1, outsideContact: CONTACT });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain(
+      "Bring it to somebody outside the village: Jo Bell, Cohort Care. ombuds@example.test You hear back within 1 hour.",
+    );
+    expect(text).not.toContain("also");
+    expect(text).not.toContain("intake role");
+  });
+
+  it("promises no reply when there is no door at all", async () => {
+    serve({ intakeContactRole: "", replyHours: 48 });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).not.toContain("48 hours");
+    expect(text).not.toContain("hear back");
+    expect(text).not.toContain("outside the village");
+  });
+
+  it("prints neither line before the village has stated them", async () => {
+    serve({ intakeContactRole: "care", intakeRole: HELD });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).not.toContain("hear back");
+    expect(text).not.toContain("outside the village");
+  });
+});
+
+describe("ExitPolicy, an intake role nobody holds today", () => {
+  it("promises no reply from it, offers no form, and says nobody holds it", async () => {
+    auth.user = { id: "u-member", name: "Wren" };
+    serve({ intakeContactRole: "care", intakeRole: UNHELD, replyHours: 48 });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain("Nobody holds the Care role today, so a private intake would reach nobody.");
+    expect(text).not.toContain("hear back");
+    expect(text).not.toContain("48 hours");
+    expect(screen.queryByRole("button", { name: "Send privately" })).toBeNull();
+  });
+
+  it("with an outside contact named, sends a member there with the reply, and never says also", async () => {
+    auth.user = { id: "u-member", name: "Wren" };
+    serve({ intakeContactRole: "care", intakeRole: UNHELD, replyHours: 48, outsideContact: CONTACT });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain(
+      "Bring it to somebody outside the village: Jo Bell, Cohort Care. ombuds@example.test You hear back within 48 hours.",
+    );
+    expect(text).not.toContain("also");
+    expect(text).not.toContain("Bring it to the Care role");
+  });
+
+  // The control for the two cases above: a role somebody holds offers the form,
+  // so "no form" is about the role and never about a form this render cannot show.
+  it("a role somebody holds today keeps the promise and the form", async () => {
+    auth.user = { id: "u-member", name: "Wren" };
+    serve({ intakeContactRole: "care", intakeRole: HELD, replyHours: 48 });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain("Bring it to the Care role and you hear back within 48 hours.");
+    expect(text).not.toContain("Nobody holds");
+    expect(screen.getByRole("button", { name: "Send privately" })).toBeInTheDocument();
+  });
+});
+
+describe("ExitPolicy, read by somebody who is not a member", () => {
+  // The server serves the outside contact to a non-member by organisation
+  // alone (server/lib/conflictAgreement.ts, restorativeForPublic): no name and
+  // no way to reach them.
+  const PUBLIC_CONTACT = { name: "", organisation: "Cohort Care", howToReach: "" };
+
+  it("says an outside contact exists, at its organisation, and sends a reader to membership for the rest", async () => {
+    serve({ intakeContactRole: "care", intakeRole: HELD, replyHours: 48, outsideContact: PUBLIC_CONTACT });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain("You can also bring it to somebody outside the village, at Cohort Care. Members see who they are and how to reach them.");
+    expect(text).not.toContain("Jo Bell");
+  });
+
+  it("with no intake role, never says also", async () => {
+    serve({ intakeContactRole: "", replyHours: 48, outsideContact: PUBLIC_CONTACT });
+    render(<ExitPolicy />);
+    const text = await card();
+    expect(text).toContain("Bring it to somebody outside the village, at Cohort Care.");
+    expect(text).not.toContain("also");
+  });
+});
+
 describe("the departure card the delete screen points at", () => {
+  beforeEach(() => {
+    auth.user = { id: "u-1", name: "Ash" };
+    const policy = {
+      placeholder: true,
+      voluntary: { noticePeriodDays: 30, valuationMethod: "Terms.", unwindSteps: ["A step"] },
+      involuntary: { process: "Process." },
+      restorative: { steps: ["Repair"] },
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ policy }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  });
+
   it("carries the id the link names, and says cash still owed keeps the account", async () => {
     render(<ExitPolicy />);
     const card = (await screen.findByText("Begin your own departure")).closest("#begin-departure");

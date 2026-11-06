@@ -95,7 +95,7 @@ export function companionDisclosure(
   memberKey: MemberKeyFacts | null,
   villageName: string,
   env: NodeJS.ProcessEnv = process.env,
-  carries: { note?: boolean } = {},
+  carries: { note?: boolean; geneKeys?: boolean } = {},
 ): CompanionDisclosure {
   const village = villageName.trim() || "this village";
   let provider = "Anthropic";
@@ -121,7 +121,7 @@ export function companionDisclosure(
     provider,
     operator,
     source,
-    sentence: `To answer in its own words, the guide sends your question, ${carries.note ? "your note to your agent, " : ""}and what it reads from the village's record for you, to ${provider}, on ${key}.`,
+    sentence: `To answer in its own words, the guide sends your question, ${carries.note ? "your note to your agent, " : ""}${carries.geneKeys ? "the Gene Keys result you chose to share with it, " : ""}and what it reads from the village's record for you, to ${provider}, on ${key}.`,
   };
 }
 

@@ -93,6 +93,7 @@ import { setVariable, variableSetRefusal, type SetResult } from "./variables";
 import { applyMintRuleChanges } from "./economy";
 import { setWeight, weightChangeProblem, weightTokenProblem } from "./governanceWeights";
 import { effectiveLifecycle, setModuleLifecycle } from "./modules";
+import { raiseCanvasRevisitForLifecycle } from "./canvasRevisit";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { NEVER_BY_CHANGESET } from "../../shared/moduleSwitch";
 
@@ -633,6 +634,8 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
         oldValue: el.oldValue,
         newValue: el.newValue,
       });
+      // The crowdpool switched on by the village's own vote is a funding moment (plan 4.2). Fire and forget.
+      raiseCanvasRevisitForLifecycle(deps.pool, item.moduleId);
       applied.push(`module:${item.moduleId}`);
       touchedCaches = true;
       continue;

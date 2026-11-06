@@ -1,6 +1,9 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
 import LiveDecisionsBand from "@/components/governance/LiveDecisionsBand";
+import ConflictAgreementPublic from "@/components/canvas/ConflictAgreementPublic";
+import CanvasPublicLines from "@/components/canvas/CanvasPublicLines";
+import DecisionMatrix from "@/components/canvas/DecisionMatrix";
 import {
   Vote,
   Users,
@@ -13,6 +16,7 @@ import {
   ArrowRight,
   Scale,
   ShieldCheck,
+  Printer,
 } from "lucide-react";
 import { useStoryPageShown } from "@/lib/brochure";
 import { useHypha } from "@/modules/ModuleProvider";
@@ -22,6 +26,8 @@ import { useVetoHours } from "@/hooks/useVetoHours";
 import { Emphasized } from "@/components/PageText";
 import { fillVars } from "@shared/pageContent/resolve";
 import { GOVERNANCE_PAGE, VETO_HOURS_MIN, vetoWindowWords } from "@shared/pageContent/governance";
+import { CANVAS_CREDIT } from "@shared/governanceCanvasText";
+import { CANVAS_PUBLIC_MATRIX_PATH } from "@shared/canvasPublicLines";
 
 /** The icons the cards and steps take in turn, whatever the village wrote. */
 const PRINCIPLE_ICONS = [CheckCircle2, Users, Eye];
@@ -30,6 +36,29 @@ const STEP_ICONS = [Lightbulb, MessageSquare, Users, CheckCircle2, Eye];
 /** Paragraphs a village left blank are not drawn. */
 const paragraphs = (...texts: string[]) => texts.filter((t) => t.trim() !== "");
 
+/**
+ * HOW WE WORK TOGETHER, at /governance (plan section 1, 2026-09-28).
+ *
+ * The page every fork already has, renamed for what it now holds: the
+ * village's own account of how it works, block by block, from the Governance
+ * Canvas. The route stays /governance so every link, bookmark and sitemap
+ * entry keeps working. The hero's eyebrow, headline and intro are the
+ * village's own words (Admin, Pages, shared/pageContent/governance.ts), so
+ * this page no longer types a name for itself; the canvas sections below
+ * are drawn whatever the village wrote there.
+ *
+ * WHAT A VISITOR SEES, AND WHAT A MEMBER SEES BESIDE IT (plan 4.6):
+ *
+ *   - each block's public line under the canvas's question (CanvasPublicLines);
+ *   - who decides what: the Decision Matrix rows the platform generates, read
+ *     only, from the public door that serves nothing a village wrote;
+ *   - the conflict section: the adopted conflict agreement's public view
+ *     (ConflictAgreementPublic), roles only.
+ *
+ * A signed-in member also opens the village's words each block keeps for its
+ * members. The canvas's readings and its radar are never on this page, for
+ * anybody.
+ */
 export default function Governance() {
   // Each story page has its own switch now; a door goes with its page.
   const storyShown = useStoryPageShown();
@@ -82,6 +111,30 @@ export default function Governance() {
           governance while the village was holding a vote they never saw. The
           band renders nothing where the engine is off. */}
       <LiveDecisionsBand />
+
+      {/* The canvas, one public line per block. Visitors read the lines; a
+          signed-in member also opens the words kept for members. */}
+      <section className="bg-stone-50 py-16">
+        <div className="container max-w-5xl mx-auto px-4">
+          <CanvasPublicLines />
+        </div>
+      </section>
+
+      {/* Who decides what: the half of the canvas's Decision Matrix the
+          platform writes from the rules it enforces. Read only, and from the
+          PUBLIC door, which can serve nothing a village wrote. */}
+      <section className="bg-white py-16">
+        <div className="container max-w-5xl mx-auto px-4">
+          <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep mb-3">
+            Who Decides What
+          </h2>
+          <p className="text-stone-700 leading-relaxed">
+            Who approves each kind of decision, who is asked first, who is told, and how it is made. These answers come
+            from the rules this village runs on today, so they change when the village changes them.
+          </p>
+          <DecisionMatrix src={CANVAS_PUBLIC_MATRIX_PATH} />
+        </div>
+      </section>
 
       {/* Core Principles */}
       {!principles.hidden && (
@@ -192,7 +245,14 @@ export default function Governance() {
       </section>
       )}
 
-      {/* Conflict resolution */}
+      {/* Conflict resolution: the village's own words on how tension is worked
+          through (Admin, Pages), then its conflict agreement, public with roles
+          only, and before there is one the restorative steps of its published
+          exit policy. This used to be three compiled paragraphs every fork
+          published as its own practice, ending in a promise that nobody is
+          removed without a circle consent vote, while removal is an admin act
+          in the server. The reasoning is in VillageConflictSteps and
+          ConflictAgreementPublic. */}
       {!conflict.hidden && (
       <section className="bg-white py-20">
         <div className="container max-w-3xl mx-auto px-4">
@@ -202,12 +262,21 @@ export default function Governance() {
               {conflict.fields.heading}
             </h2>
           </div>
-          <div className="space-y-4 text-stone-700 leading-relaxed">
-            {conflictParagraphs.map((text, i) => (
-              <p key={i} className="break-words">
-                <Emphasized text={text} />
-              </p>
-            ))}
+          {conflictParagraphs.length > 0 && (
+            <div className="space-y-4 text-stone-700 leading-relaxed mb-6">
+              {conflictParagraphs.map((text, i) => (
+                <p key={i} className="break-words">
+                  <Emphasized text={text} />
+                </p>
+              ))}
+            </div>
+          )}
+          {/* THE ADOPTED CONFLICT AGREEMENT'S PUBLIC VIEW (plan 4.6 and 6.2), roles
+              only. Before the village saves an agreement, or when it cannot be
+              read, ConflictAgreementPublic prints the restorative steps of the
+              published exit policy (VillageConflictSteps) in its place. */}
+          <div data-testid="conflict-agreement-slot">
+            <ConflictAgreementPublic />
           </div>
         </div>
       </section>
@@ -256,6 +325,38 @@ export default function Governance() {
         </div>
       </section>
       )}
+
+      {/* The Governance Canvas on paper: twelve questions a group can talk
+          through about how it governs itself, printable by anyone, signed in
+          or not. Credited wherever the canvas appears. */}
+      <section className="bg-white py-16">
+        <div className="container max-w-3xl mx-auto px-4">
+          <div className="flex items-center gap-3 mb-4">
+            <Printer className="w-6 h-6 text-teal-deep" />
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep">
+              The Governance Canvas, on Paper
+            </h2>
+          </div>
+          <p className="text-stone-700 leading-relaxed mb-3">
+            Twelve blocks, from purpose to impact, that a group can talk through together: who decides, how conflict is
+            held, how resources move. The workbook prints each block on its own page with room to write, and it can be
+            saved as a Markdown file too.
+          </p>
+          <p className="text-sm text-stone-600 mb-4">
+            The canvas is the{" "}
+            <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="underline hover:text-teal-deep">
+              {CANVAS_CREDIT.text}
+            </a>
+            .
+          </p>
+          <Link
+            href="/canvas/workbook"
+            className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
+          >
+            Open the canvas workbook <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </section>
 
       {/* Hypha: drawn only while this village has a Hypha space to describe. */}
       {showHypha && (
