@@ -322,7 +322,9 @@ export const READERS: VillageReader[] = [
   },
   {
     key: "quests.library",
-    describe: "The quests on offer, with their circle and what they pay in gratitude.",
+    // No quest pays Gratitude (Rye, 2026-10-21), and the word belongs to the
+    // recognition token alone (2026-11-01), so the old reward label is not read.
+    describe: "The quests on offer, with their circle and status.",
     module: "quests",
     audience: "member",
     maxTokens: 800,
@@ -330,13 +332,12 @@ export const READERS: VillageReader[] = [
       (
         await rows(
           pool,
-          "SELECT id, title, circle, gratitude, status FROM quests WHERE is_example = 0 ORDER BY title LIMIT 120",
+          "SELECT id, title, circle, status FROM quests WHERE is_example = 0 ORDER BY title LIMIT 120",
         )
       ).map((r) => ({
         id: String(r.id),
         title: String(r.title),
         circle: r.circle ?? null,
-        gratitude: Number(r.gratitude ?? 0),
         status: String(r.status),
       })),
   },
