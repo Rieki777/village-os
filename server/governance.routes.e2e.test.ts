@@ -380,8 +380,9 @@ describe.skipIf(!DB_CONFIGURED)("the governance engine, driven", () => {
         question: "Would we welcome a second work morning each moon?",
         detail: "Nothing changes either way. This one is to find out where we already stand.",
         // A kind still practised: an agreement is binding since Wave 4
-        // (server/routes/governanceAgreements.ts), so it is not an advisory kind any more.
-        about: "badge_grant",
+        // (server/routes/governanceAgreements.ts) and a badge grant since R157
+        // (gap 6), so neither is an advisory kind any more.
+        about: "quest_payout",
       },
     });
     expect(asked.status, JSON.stringify(asked.json)).toBe(200);
@@ -395,7 +396,7 @@ describe.skipIf(!DB_CONFIGURED)("the governance engine, driven", () => {
     // It is in the FROZEN DOCUMENT, so it survives any client that has not
     // learned to read the flag yet.
     expect(String(ballot.docMarkdown)).toContain("changes nothing on its own");
-    expect(String(ballot.docMarkdown)).toContain("The kind of decision being practised: badge grant.");
+    expect(String(ballot.docMarkdown)).toContain("The kind of decision being practised: quest payout.");
 
     // Everything about the CONDUCT is identical to a binding ballot. A village
     // practising on a softer engine would learn something untrue about its own.
