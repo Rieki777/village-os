@@ -23,6 +23,7 @@
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import type { SeatSettings } from "../../shared/seatSettings";
 import type { ApplicationStatus } from "../../shared/seatApplications";
+import { seatingsChanged } from "../lib/orgChart";
 
 type Db = Pool | PoolConnection;
 
@@ -513,6 +514,7 @@ export async function endSeatingForRenewal(db: Db, assignmentId: string, applica
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? WHERE id = ? AND ended_at IS NULL",
     [`Renewed on the terms of ${applicationId}.`.slice(0, 255), assignmentId],
   );
+  seatingsChanged(); // 0322: ending a seating ends what it grants
   return Number(r?.affectedRows ?? 0) > 0;
 }
 

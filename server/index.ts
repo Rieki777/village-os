@@ -97,6 +97,8 @@ import { matchOnEvent } from "./lib/seraPersonMatch";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
+import { register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
+import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
@@ -1768,7 +1770,7 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
  */
 /** Whether this member row is an admin: the role, or a live admin group (sheet 19, server/lib/groupAdmin.ts). */
 function userIsAdmin(user: any): boolean {
-  return !!user && (user.role === "admin" || user.role === "founder" || adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0);
+  return !!user && (user.role === "admin" || user.role === "founder" || adminGroupsOf(String(user.id), loadRoles() as any, loadPowerHoldings(), new Date(), holdingHasLapsed).length > 0);
 }
 
 async function isAdmin(req: express.Request): Promise<boolean> {
@@ -2835,6 +2837,10 @@ function loadRoleHolders(): RoleHolderRow[] {
   return roleHoldersRepo.all();
 }
 
+/** What every power READ sees: role_holders plus what held seats grant (0322, server/lib/seatGrants.ts). Writers keep loadRoleHolders. */
+const seatGrants = new SeatGrantCache(() => readSeatGrantSnapshot(getPool(), (id) => members.byId(id)));
+const loadPowerHoldings = (): RoleHolderRow[] => effectiveHoldings(loadRoleHolders(), bridgedHoldings(seatGrants.snapshot(), lapseContext())) as RoleHolderRow[];
+
 /**
  * Serializes every role_holders snapshot→mutate→replaceAll cycle. replaceAll
  * yields to the event loop before it swaps the cache, so two overlapping
@@ -2878,7 +2884,7 @@ const rolesFor = (userId: string) => namedRoles(roleIdsFor(userId), loadRoles())
 function roleCapabilitiesFor(userId: string): string[] {
   const now = new Date();
   const held = new Set(
-    loadRoleHolders().filter((r) => r.userId === userId && !holdingHasLapsed(r, now)).map((r) => r.roleId),
+    loadPowerHoldings().filter((r) => r.userId === userId && !holdingHasLapsed(r, now)).map((r) => r.roleId),
   );
   const caps = new Set<string>();
   for (const role of loadRoles()) {
@@ -3030,7 +3036,7 @@ const holderReads: HolderReads = {
   badgesLive: () => effectiveLifecycle("badges") !== "off",
   dormantBadgeIds,
   badgeRows: () => badgeCapabilityRows(getPool()),
-  roleHolders: loadRoleHolders,
+  roleHolders: loadPowerHoldings,
   roles: loadRoles,
 };
 const liveHoldersOf = (capability: string): Promise<string[]> => liveHoldersNow(holderReads, capability);
@@ -3693,7 +3699,7 @@ function publicUser(u: any) {
     contributions: u.contributions ?? [],
     quests: u.quests ?? [],
     recognitionBalance: u.recognitionBalance ?? 0,
-    adminAccess: adminReaches(u.role) || adminGroupsOf(String(u.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0,
+    adminAccess: adminReaches(u.role) || adminGroupsOf(String(u.id), loadRoles() as any, loadPowerHoldings(), new Date(), holdingHasLapsed).length > 0,
     bio: u.bio ?? "",
     avatar: u.avatar ?? null,
     joinedAt: u.joinedAt ?? new Date().toISOString(),
@@ -3977,7 +3983,7 @@ function adminReaches(role: unknown): boolean {
  * does not exist.
  */
 async function accountsWithAdminReach(): Promise<any[]> {
-  return accountsWithReach(await members.all(), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed, isExampleUser); // sheet 19: a live admin group is a way in too
+  return accountsWithReach(await members.all(), loadRoles() as any, loadPowerHoldings(), new Date(), holdingHasLapsed, isExampleUser); // sheet 19: a live admin group is a way in too
 }
 
 /**
@@ -6454,6 +6460,7 @@ async function startServer() {
   app.use(["/api/map/draft", "/api/map/publish", "/api/agent/v1/map/draft"], express.json({ limit: SCENE_BODY_LIMIT }));
 
   app.use(express.json({ limit: "1mb" }));
+  registerSeatGrantFreshness(app, seatGrants); // 0322: the seat grants the synchronous gate reads, fresh for every API request
   registerPeopleLock(app, { authedUser, getPool, boolVar });
 
   // ── LANE L6 ZONE START: your agent ──────────────────────────────────────────
@@ -13049,7 +13056,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       // Roles, what each carries, and how many hold each as the gate counts them (lapsed terms
       // out), so the panel can say who could hold a power today and warn when nobody holds a role.
       roles: rolesRepo.all().map((r: any) => ({
-        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadRoleHolders(), r.id),
+        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadPowerHoldings(), r.id),
       })),
       notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()), // Power groups: the removal warning
     });
@@ -17154,7 +17161,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
   registerPathLadderRoutes(app, { authedUser, getPool, lapseContext, isAdmin, members });
-  registerGroupAdminRoutes(app, { isAdmin, getPool, members, rolesRepo, loadRoleHolders });
+  registerGroupAdminRoutes(app, { isAdmin, getPool, members, rolesRepo, loadRoleHolders: loadPowerHoldings });
+  registerSeatPowerGroupRoutes(app, { isAdmin, getPool, members, rolesRepo, loadRoleHolders, lapseContext, seatGrants, addActivity });
   registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
@@ -25747,7 +25755,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(400).json({ error: "userId and action (add|remove) are required" });
     }
     const member = await members.byId(userId);
-    if (action === "remove" && role.grantsAdmin && !accountsWithReach(await members.all(), loadRoles() as any, loadRoleHolders().filter((h) => !(h.roleId === role.id && h.userId === userId)), new Date(), holdingHasLapsed, isExampleUser).length) return res.status(409).json({ error: LAST_ADMIN_REFUSAL }); // sheet 19
+    if (action === "remove" && role.grantsAdmin && !accountsWithReach(await members.all(), loadRoles() as any, loadPowerHoldings().filter((h) => !(h.roleId === role.id && h.userId === userId)), new Date(), holdingHasLapsed, isExampleUser).length) return res.status(409).json({ error: LAST_ADMIN_REFUSAL }); // sheet 19
     if (!member || (action === "add" && !holderStands(member))) return res.status(404).json({ error: "Member not found" }); // a tombstone is nobody to appoint, and a stray holding of one can still be removed
 
     // A role can require a minimum stage: appointments respect the ladder too.
@@ -25814,7 +25822,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerPulseRoutes(app, { getPool });
   registerPlayersRoutes(app, {
     isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext,
-    adminGroupsFor: (id: string) => adminGroupsOf(id, loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).map((g) => g.name),
+    adminGroupsFor: (id: string) => adminGroupsOf(id, loadRoles() as any, loadPowerHoldings(), new Date(), holdingHasLapsed).map((g) => g.name),
     trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
     paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
   });
