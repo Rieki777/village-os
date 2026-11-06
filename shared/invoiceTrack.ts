@@ -202,7 +202,7 @@ export interface ReconcileInput {
   }>;
 }
 
-export type FlagKind = "chain_differs" | "sera_amount_differs" | "sera_status_differs";
+export type FlagKind = "chain_differs" | "sera_amount_differs" | "sera_status_differs" | "sera_unmatched";
 
 export interface SyncFlag {
   kind: FlagKind;

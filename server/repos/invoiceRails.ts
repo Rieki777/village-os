@@ -208,6 +208,10 @@ export async function writeFlags(db: Queryable, userId: string | null, kinds: re
   await db.query(sql, params);
 }
 
+export async function resolveFlag(db: Queryable, storedKey: string, at: string): Promise<void> {
+  await db.query("UPDATE `treasury_sync_flags` SET `resolved_at` = ? WHERE `dedupe_key` = ? AND `resolved_at` IS NULL", [at, storedKey]);
+}
+
 export async function openFlags(db: Queryable, limit = 500): Promise<FlagRow[]> {
   const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `treasury_sync_flags` WHERE `resolved_at` IS NULL ORDER BY `first_seen_at` DESC LIMIT ?", [limit]);
   return rows.map(toFlag);
@@ -230,4 +234,32 @@ export async function paidReferenceOf(db: Queryable, cashOwedIds: readonly strin
   const [rows] = await db.query<RowDataPacket[]>("SELECT DISTINCT `paid_note` AS `note` FROM `cash_owed` WHERE `id` IN (?) AND `state` = 'paid'", [cashOwedIds]);
   const refs = new Set(rows.map((r) => /Reference: (.+)$/.exec(String(r.note ?? ""))?.[1]?.trim() ?? null));
   return refs.size === 1 ? ([...refs][0] ?? null) : null;
+}
+
+// ── Reading moon_invoices for the rails (ids only; the row shape is moonRecaps') ──
+
+/** A member's invoices that are not void, newest first, capped. */
+export async function liveInvoiceIdsOf(db: Queryable, userId: string, limit = 24): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT `id` FROM `moon_invoices` WHERE `user_id` = ? AND `status` <> 'void' ORDER BY `cycle_id` DESC, `revision` DESC LIMIT ?",
+    [userId, limit],
+  );
+  return rows.map((r) => String(r.id));
+}
+
+/** The invoice a reference names: `<payer key>-<sequence>`, the shape `billRef` writes. */
+export async function invoiceIdByRef(db: Queryable, ref: string): Promise<string | null> {
+  const m = /^(.+)-(\d{1,9})$/.exec(ref);
+  if (!m) return null;
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT `id` FROM `moon_invoices` WHERE `payer_key` = ? AND `bill_ref_seq` = ? ORDER BY `revision` DESC LIMIT 1",
+    [m[1], Number(m[2])],
+  );
+  return rows[0] ? String(rows[0].id) : null;
+}
+
+/** Every member with an invoice that is not void, for the daily sync. */
+export async function membersWithInvoices(db: Queryable, limit = 2000): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT DISTINCT `user_id` FROM `moon_invoices` WHERE `status` <> 'void' LIMIT ?", [limit]);
+  return rows.map((r) => String(r.user_id));
 }
