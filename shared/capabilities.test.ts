@@ -383,7 +383,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is twenty-eight keys: the nineteen the ruling was given in, the comms power, the decide power, module.switch, cash.pay, power.assign and the four operator powers", () => {
+    it("is twenty-nine keys: the nineteen the ruling was given in, the comms power, the decide power, module.switch, cash.pay, power.assign, the four operator powers and pot.steward", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -443,8 +443,14 @@ describe("hasCapability truth table", () => {
        * TWENTY-EIGHT WITH THE FOUR OPERATOR POWERS, by the same ruling: "a
        * village should be able to run without admins or stewards", which needs
        * the panel's own powers to be ones a village can hold.
+       *
+       * TWENTY-NINE WITH `pot.steward`, the Funding rounds pot power. Rye gave the
+       * word on 2026-11-06, relayed by the master coordinator, adopting the plan's
+       * Q1: "a new transferable power, held by the treasury role by default, with
+       * each pot able to be handed to another role". A new key born transferable.
        */
-      expect(HANDOVER_SET).toHaveLength(28);
+      expect(HANDOVER_SET).toHaveLength(29);
+      expect(HANDOVER_SET).toContain("pot.steward");
       for (const k of ["operator.accounts", "operator.config", "operator.secrets", "operator.recover"]) expect(HANDOVER_SET).toContain(k);
       expect(HANDOVER_SET).toContain("power.assign");
       expect(HANDOVER_SET).toContain("comms.manage");

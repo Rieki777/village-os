@@ -121,6 +121,7 @@ export type Capability =
   // that a payment went out. It moves nothing on the platform, because the
   // platform never pays cash; it writes down that the village did.
   | "cash.pay" // read the cash the village owes, and mark a payment made
+  | "pot.steward" // hold a funding pot: open its rounds, set their dates, rule on whether an idea fits
   // ── The module switch (Rye, 2026-10-09) ──────────────────────────────────
   //
   // Before launch the founders turn modules on from the library. After launch
@@ -254,6 +255,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "quest.approve",
   "redemption.confirm",
   "cash.pay",
+  "pot.steward",
   "module.switch",
   "steward.veto",
   "comms.manage",
@@ -326,6 +328,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
   "cash.pay": "Read the cash the village owes its members, and mark a payment made",
+  "pot.steward": "Hold a funding pot: open its rounds, set their dates and rubric, and rule on whether an idea fits",
   "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",
   "comms.manage": "Run the village's email: its automations, their words, and letters",
@@ -538,6 +541,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // `grantCashPayToTreasury`). Its two routes ask `guardCapability`, so the
   // escape hatch and the public record this column promises are both there.
   "cash.pay": true,
+  "pot.steward": true,
   // Turning a module on after launch. Its route counts live holders without
   // the admin short-circuit, so the escape hatch this column describes is the
   // village vote itself: with no holder, anybody may propose it.
@@ -704,12 +708,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 28 keys
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 29 keys
  * today. The other 21 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 28 in the founding seat and has
+ * Read this way, a launched village holds all 29 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -744,6 +748,10 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * born transferable, the power that hands out powers being one a village takes
  * with the rest, which moved only the first: 24 and 21. The four operator powers
  * (the same build) were born transferable too, for the same ruling: 28 and 21.
+ * `pot.steward` (Funding rounds, 0333) was born transferable with Rye's word of
+ * 2026-11-06, relayed: a funding pot is a power the Treasurer holds by default
+ * and can be handed to another role or the village. That moved only the first:
+ * 29 and 21.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -941,6 +949,7 @@ export const DENIABLE: Record<Capability, boolean> = {
   // The same reasoning: a warning takes away signing off other people's cash,
   // and nothing about their own right to claim what they are owed.
   "cash.pay": true,
+  "pot.steward": true,
   // A job as well. Pausing it stops somebody switching modules on alone; the
   // village can still propose one, and the vote decides.
   "module.switch": true,
@@ -1107,6 +1116,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "quest.approve": true,
   "redemption.confirm": true,
   "cash.pay": true,
+  "pot.steward": true,
   // An ordinary appointment, the same as `feed.announce`: a badge is an
   // honest way to hand the village's email to somebody.
   "comms.manage": true,

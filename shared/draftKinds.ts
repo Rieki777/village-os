@@ -186,6 +186,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "redemption.confirm":
     "agree that a member has been paid off the platform, and destroy the tokens they redeemed",
   "cash.pay": "read the cash the village owes its members, and mark a payment as made once the money has gone out",
+  "pot.steward": "hold a funding pot: open its rounds, set their dates and rubric, and rule on whether an idea fits the pot",
   "module.switch": "turn a module on for the whole village, without a vote",
   "steward.veto":
     "stop a decision the village has already carried, inside the window before it lands, and say why",

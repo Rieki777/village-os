@@ -2089,3 +2089,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The End of moon meeting template (module `moon-review`, 2026-11-03, no migration)
 
 - A fourth meeting template, End of moon (category Moon rhythm, `seed_key` `end-of-moon`, flow in `MOON_TEMPLATE` in `shared/sessionTemplates.ts`), is written into `live_session_templates` the first time anyone opens the templates (`GET /api/session-templates`) while the `moon-review` module is on (any lifecycle but off). While the module is off nothing is written, and its three section kinds (Our moons, Moon goals, Sending together) are hidden in the template editor. Once written it is an ordinary row: turning the module off later leaves it, and an edited or archived copy is never written again. No env var and no manual step.
+
+## Funding rounds (module `funding-rounds`, migration 0333)
+
+- No env var. The Treasury role gains `pot.steward` two ways: `server/seeds/roles-seed.json` for a new village, and the `runOnce` step `pot-steward-to-treasury-2026-11-06` (`POT_STEWARD_GRANTS`, `server/lib/starterRoles.ts`) for a village that booted earlier and still has the seeded `treasury` role. The module ships off; a pot and its rounds are opened from `/funding-rounds` by a `pot.steward` holder.

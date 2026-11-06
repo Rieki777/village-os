@@ -77,7 +77,9 @@ describe("module images", () => {
   // sessions, gene-keys, session-card, moon-review) got bundled art Rye approved,
   // paid for by re-encoding all thirty images to share the unchanged ratchet.
   // `saberra` stays: it is a partner's module (tier "connected"), not a base one.
-  const DRAWN_FALLBACK = new Set(["saberra"]);
+  // `funding-rounds` (0333) joins on the drawn-fallback terms until Rye approves
+  // its art: hue 45 and Sprout, no file, nothing against the image budget.
+  const DRAWN_FALLBACK = new Set(["saberra", "funding-rounds"]);
 
   it("keeps the fallback list pointed at real modules", () => {
     const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));
