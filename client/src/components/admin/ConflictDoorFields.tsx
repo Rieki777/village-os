@@ -77,7 +77,7 @@ export function ConflictDoorFields({
   const unheld = chosen && chosen.liveHolderCount === 0 ? (
     <span className="block mt-1 text-[11px] text-amber-800">
       Nobody holds the {chosen.name ?? chosen.id} role today, so a request would reach nobody.{" "}
-      <a href="/admin?tab=game-roles" className="font-medium underline">Seat a holder under Power groups</a>, or name a contact
+      <a href="/admin?tab=game-roles" className="font-medium underline">Give the role a holder under Power groups</a>, or name a contact
       outside the village.
     </span>
   ) : null;

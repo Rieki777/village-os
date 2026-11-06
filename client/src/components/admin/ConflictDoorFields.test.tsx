@@ -80,7 +80,7 @@ describe("ConflictDoorFields", () => {
     const options = Array.from(intake().options).map((o) => o.textContent);
     expect(options).toContain("Care (nobody holds it today)");
     expect(options).toContain("Elders (held by 2 today)");
-    const seat = screen.getByRole("link", { name: /seat a holder/i });
+    const seat = screen.getByRole("link", { name: /give the role a holder/i });
     expect(seat.getAttribute("href")).toBe("/admin?tab=game-roles");
     expect(screen.getByText(/Nobody holds the Care role today/)).toBeTruthy();
   });
@@ -89,7 +89,7 @@ describe("ConflictDoorFields", () => {
     render(
       <ConflictDoorFields restorative={{ intakeContactRole: "elders" }} roles={[{ id: "elders", name: "Elders", liveHolderCount: 1 }]} onChange={vi.fn()} inputCls="" />,
     );
-    expect(screen.queryByRole("link", { name: /seat a holder/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /give the role a holder/i })).toBeNull();
     expect(Array.from(intake().options).map((o) => o.textContent)).toContain("Elders (held by 1 today)");
   });
 
