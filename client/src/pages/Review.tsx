@@ -66,80 +66,15 @@ import { toast } from "sonner";
 import { Inbox } from "lucide-react";
 import { Link } from "wouter";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
+import type { Batch, ProposalCard, Queue, StuckDraft } from "@/components/review/queueTypes";
 import { draftToBody, loadPayOptions } from "@/components/WorkValueEditor";
 import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
 import { STRUCTURE_KINDS } from "@shared/structurePlan";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
-import SeraDifferences, { SeraEarlierArrivals, SeraSummaryLine, seraWaiting, useSeraDifferences } from "@/components/review/SeraDifferences";
-import { SERA_MODULE, structureHrefFor } from "@/lib/seraReview";
+import { SeraFold, SeraMemberPage, SeraTop, useSeraOnReview } from "@/components/review/SeraDifferences";
 
 /** The kinds that change the chart, as the structure review reads them. */
 const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
-
-interface ProposalCard {
-  id: string;
-  batchId: string;
-  moduleId: string;
-  kind: string;
-  payload: Record<string, unknown>;
-  quote: string | null;
-  sourceRef: string | null;
-  sourceOccurredAt: string | null;
-  evidence: "quoted" | "anchored" | "absent";
-  audience: "steward" | "member";
-  trustTier: string;
-  confidence: number | null;
-  significance: number | null;
-  subjectRef: string | null;
-  receivedAt: string;
-  correlationId: string | null;
-}
-
-interface Batch {
-  batchId: string;
-  moduleId: string | null;
-  receivedAt: string | null;
-  /** Changes accepting the batch whole would propose. Null with no org proposals; absent from an older server. */
-  proposedChanges?: number | null;
-  /** Each org card's share of that count, by proposal id, so an edit is counted in its place. Absent from an older server. */
-  proposedChangesByItem?: Record<string, number>;
-  items: ProposalCard[];
-}
-
-interface Drop {
-  moduleId: string;
-  reason: string;
-  dropped: number;
-  lastAt: string | null;
-}
-
-interface Queue {
-  batches: Batch[];
-  quests: QuestCard[];
-  drops: Drop[];
-  /** Open drafts this queue made that cannot publish. Absent from an older server. */
-  stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown; unpreviewable?: boolean }[];
-  /** Every open draft this queue made, with the batch whose page shows it. Absent from an older server. */
-  openDrafts?: { draftId: string; title: string; changes: number; batchId: string | null }[];
-  counts: { proposals: number; quests: number };
-  /**
-   * The halves this reader was given. An older server sends no `scope`, and it
-   * only ever answered the key that reads both, so absent reads as both.
-   */
-  scope?: { proposals: boolean; quests: boolean };
-  /** `org.proposal_change_limit`, as the server reads it. Absent from an older server. */
-  proposalChangeLimit?: number;
-  /** Whether this reader can open the admin page where that limit is changed. */
-  mayChangeProposalLimit?: boolean;
-}
-
-/** A draft that cannot publish: how many seats are blocked, and why each one is. */
-interface StuckDraft {
-  blocked: number;
-  lines: string[];
-  /** The server could not preview it, so there is no count of blocked seats to give. */
-  unpreviewable?: boolean;
-}
 
 /**
  * A hand-kept map keyed by the server's own union, which is the shape
@@ -266,7 +201,7 @@ export default function Review() {
   }, []);
   const consent = useConsentClaims(headers);
   // The outside service's differences, one list (components/review/SeraDifferences.tsx).
-  const sera = useSeraDifferences(headers);
+  const sera = useSeraOnReview(headers);
 
   /**
    * Ask every unconfirmed store again. This is the only thing that can finish
@@ -618,12 +553,7 @@ export default function Review() {
     return (
       <Layout>
         <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
-          {sera.read.phase === "member" ? (
-            <>
-              <h1 className="text-2xl font-bold text-foreground">Review</h1>
-              <SeraDifferences read={sera.read} structureHref={null} draftOpen={false} onRetry={sera.load} />
-            </>
-          ) : <div className={card}>
+          {sera.read.phase === "member" ? <SeraMemberPage sera={sera} /> : <div className={card}>
             <h1 className="text-xl font-bold text-foreground">This queue is not open to you yet</h1>
             <p className="text-sm text-muted-foreground mt-2">
               Reviewing what an outside service proposes, and witnessing finished quests, are jobs this
@@ -639,10 +569,7 @@ export default function Review() {
   const totalDropped = drops.reduce((n, d) => n + d.dropped, 0);
   const readsProposals = queue?.scope?.proposals ?? true;
   const nothingWaiting =
-    queue !== null && (queue.counts?.proposals ?? 0) === 0 && (queue.counts?.quests ?? 0) === 0 && seraWaiting(sera.read) === 0;
-  // Once the list holds the service's records, its old batches fold away unoffered.
-  const seraListed = sera.read.phase === "listed" && sera.read.list.lastReadAt !== null;
-  const isSeraBatch = (b: Batch) => seraListed && b.moduleId === SERA_MODULE;
+    queue !== null && (queue.counts?.proposals ?? 0) === 0 && (queue.counts?.quests ?? 0) === 0 && sera.waits === 0;
 
   return (
     <Layout>
@@ -661,9 +588,7 @@ export default function Review() {
           )}
         </div>
 
-        <SeraSummaryLine read={sera.read} witness={(consent.claims ?? []).filter((c) => c.status === "submitted").length} />
-        <SeraDifferences read={sera.read} structureHref={structureHrefFor(queue?.batches ?? [], SERA_MODULE, CHART_KINDS)}
-          draftOpen={(queue?.openDrafts ?? []).length > 0} onRetry={sera.load} />
+        <SeraTop sera={sera} queue={queue} witness={(consent.claims ?? []).filter((c) => c.status === "submitted").length} />
 
         {/* Finished work, the summary line's other jump. Consent is the one step that
             releases value, and a claim sitting here is somebody's work going unpaid. */}
@@ -861,9 +786,8 @@ export default function Review() {
           </div>
         )}
 
-        {sera.read.phase === "listed" && <SeraEarlierArrivals agent={sera.read.list.agent} batches={(queue?.batches ?? []).filter(isSeraBatch)}
-          when={when} chartKinds={CHART_KINDS} />}
-        {(queue?.batches ?? []).filter((b) => !isSeraBatch(b)).map((batch) => (
+        <SeraFold sera={sera} batches={queue?.batches ?? []} when={when} />
+        {(queue?.batches ?? []).filter((b) => !sera.folds(b)).map((batch) => (
           <div key={batch.batchId} className={card}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="font-semibold text-foreground">
