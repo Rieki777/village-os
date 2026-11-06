@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `294d38cb52a57616`, which regenerating reproduces.
+It describes the sources at fingerprint `80b655b17c542013`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -207,6 +207,7 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 | `cycle_settlement` | 0% | 0% | 0 | no | the village's own | yes |
 | `gps_change` | 0% | 50% | 0 | no | the village's own | yes |
 | `org_draft` | 0% | 0% | 0 | no | the village's own | no, it conducts a decision and executes nothing |
+| `conflict_agreement` | 80% | 50% | 0 | no | `custom` | yes |
 | `mint_request` | 80% | 50% | 0 | no | `custom` | no, it conducts a decision and executes nothing |
 
 - `village_launch`: Starting the Game asks every member on the roll to vote yes. An abstention is not a yes, and a vote nobody cast is not a yes either.
@@ -215,11 +216,12 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 - `cycle_settlement`: Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar.
 - `gps_change`: This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
 - `org_draft`: A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.
+- `conflict_agreement`: This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.
 - `mint_request`: This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar.
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
-A member drafts through the wizard, which knows 10 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`. 8 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`, `role_application`, `badge_grant`); the other 2 open as practice votes (`agreement`, `quest_payout`).
+A member drafts through the wizard, which knows 10 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`. 9 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`, `agreement`, `role_application`, `badge_grant`); the other 1 open as practice votes (`quest_payout`).
 
 <!-- written by a person: practiceVotes -->
 The wizard offers types the executors have not reached. Those open as practice votes: the village holds a real decision, reads the real answer, and nothing moves. It is a ladder and never a scorecard.
@@ -241,7 +243,9 @@ What closing a decision DOES, per subject type, and the one place that question 
 | `power_transfer` | Moves a power from the admin panel to a role the village names. | its own entry in the close dispatcher |
 | `power_grant` | Gives a role a power it does not carry yet. | its own entry in the close dispatcher |
 | `power_return` | Hands a power the village was holding back to the admin panel. | its own entry in the close dispatcher |
+| `conflict_agreement` | Adopts a new version of the conflict agreement, which the exit policy's restorative path then reads through. Nothing already under way is reopened. | its own entry in the close dispatcher |
 | `gps_change` | Rewrites the governing purpose statement, the sentence every proposal opened after it answers to. Nothing already decided is reopened. | its own entry in the close dispatcher |
+| `agreement` | Makes a written agreement the village's own, exactly as worded, with the review date it names. Nothing else changes on its own. | its own entry in the close dispatcher |
 | `role_declare` | Writes a role into being: its name and what it is for. | its own entry in the close dispatcher |
 | `role_seat` | Puts a named member into a seat. | its own entry in the close dispatcher |
 | `role_unseat` | Takes a named member out of a seat. | its own entry in the close dispatcher |
@@ -249,7 +253,7 @@ What closing a decision DOES, per subject type, and the one place that question 
 | `governance_mode` | Changes how one vote is weighed, and which token carries the weight when it is a token. | its own entry in the close dispatcher |
 | `mint_rule` | Changes what the village mints and on what terms. It shares the dial executor and carries a higher quorum floor. | the same executor as `mechanics`, one executor and two subject types |
 
-13 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
+15 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
 
 ## Two kinds of decision, and when each one happens
 
@@ -475,6 +479,8 @@ What a village publishes, read from the route registrations. The door on each ro
 | POST | `/api/game/mechanics/proposals/dry-run` | signed in | none |
 | GET | `/api/game/mechanics/standing` | signed in | none |
 | POST | `/api/governance/advisory` | signed in | none |
+| GET | `/api/governance/agreements` | signed in | none |
+| POST | `/api/governance/agreements` | signed in | none |
 | GET | `/api/governance/ballots` | anyone, including a stranger | none |
 | GET | `/api/governance/ballots/:id` | administrator | none |
 | POST | `/api/governance/ballots/:id/close` | capability | `proposal.decide` |
@@ -488,6 +494,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | POST | `/api/governance/ballots/:id/vote` | signed in | none |
 | POST | `/api/governance/ballots/:id/withdraw` | capability | `proposal.decide` |
 | GET | `/api/governance/concentration` | signed in | none |
+| POST | `/api/governance/conflict-agreement-changes` | signed in | none |
 | DELETE | `/api/governance/delegation` | signed in | none |
 | GET | `/api/governance/delegation` | signed in | none |
 | PUT | `/api/governance/delegation` | signed in | none |
@@ -527,7 +534,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-66 routes: 52 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+69 routes: 55 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle a stranger reads the ballot list, one decision and the objection lineage as titles, counts, tallies, dials and status. Who voted, how, who has not voted yet, who objected and the document itself are for signed-in members, and ruling 22, still staged, is about what members read.
 
@@ -567,7 +574,7 @@ What is broken today, by name. A document that only described the parts that wor
 - **A stored reason on a no vote is shown to nobody.** The widget invites a member to say why and the reader that serves votes drops it.
 - **The module lifecycle is edited by hand**, so a village turns its own governance on through the admin panel and never through a vote.
 - **Four displays about the hub bridge are false.** The sync flag is never set true so the card always says pending, the space check idles on every delivery, an outcome's source is hardcoded, and the card credits a hub with issuing a secret it does not issue.
-- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 13, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
+- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 15, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
 
 ## What is staged
 
@@ -835,7 +842,7 @@ The case this answered: a proposal passes on the 20th of the moon, the steward i
 > Everything can be! But the more critical it is, the higher percentage of quorum you need (hard to get quorum) such that changing the most critical things would require a max high of 97% quorum where only 3% of the whole network would be able to not be informed and have 97% approval (max heights - we don't recommend more than those though they can exceed them (if they do we warn them) because the closer you get to 100% the chances of you getting a stalemate increase where the Game breaks even though a massive majority want to continue they can't because someone died suddenly or stopped playing the Game, etc.
 
 <!-- written by a person: ruling-21 -->
-Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 7 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
+Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 8 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
 
 ### 22. Who voted is visible, how they voted is hidden, and names appear after half
 
@@ -1063,7 +1070,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "294d38cb52a57616",
+  "commit": "80b655b17c542013",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1205,6 +1212,19 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "why": "A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar."
     },
     {
+      "subjectType": "conflict_agreement",
+      "minUnityPct": 80,
+      "minQuorumPct": 50,
+      "minElectorate": 0,
+      "everySeatWeighs": false,
+      "method": "custom",
+      "criticality": "structural",
+      "abstainPolicy": null,
+      "minYesHeads": null,
+      "executesAtClose": true,
+      "why": "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised."
+    },
+    {
       "subjectType": "mint_request",
       "minUnityPct": 80,
       "minQuorumPct": 50,
@@ -1225,7 +1245,9 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     "power_transfer",
     "power_grant",
     "power_return",
+    "conflict_agreement",
     "gps_change",
+    "agreement",
     "role_declare",
     "role_seat",
     "role_unseat",
@@ -1809,11 +1831,11 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "power_return",
       "role_seat",
       "gps_change",
+      "agreement",
       "role_application",
       "badge_grant"
     ],
     "advisory": [
-      "agreement",
       "quest_payout"
     ],
     "clientAgrees": true
@@ -1994,6 +2016,20 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "method": "GET",
+      "path": "/api/governance/agreements",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/governanceAgreements.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/agreements",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/governanceAgreements.ts"
+    },
+    {
+      "method": "GET",
       "path": "/api/governance/ballots",
       "door": "anyone, including a stranger",
       "capability": null,
@@ -2082,6 +2118,13 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "door": "signed in",
       "capability": null,
       "file": "server/routes/delegation.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/conflict-agreement-changes",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/conflictAgreement.ts"
     },
     {
       "method": "DELETE",
@@ -2934,7 +2977,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 231 migration files in `drizzle/`.
+Checked against the 234 migration files in `drizzle/`.
 
 ## What this file is made from
 
@@ -2966,6 +3009,7 @@ The generator reads these and fails loudly if any of them moves:
 - `shared/governingPurpose.ts`
 - `shared/needs.ts`
 - `server/lib/redemptionBallot.ts`
+- `shared/conflictAgreement.ts`
 - `server/routes`
 - `drizzle`
 - `client/src/components/governance/wizardConfig.ts`
