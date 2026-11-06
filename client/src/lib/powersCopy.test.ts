@@ -90,7 +90,13 @@ describe("who holds this, in one sentence", () => {
   it("names the role and the person sitting in it", () => {
     expect(
       holderSentence(power({ heldBy: { roleName: "The Library Keepers", byBallot: true, people: ["Ana"] } })),
-    ).toBe("The Library Keepers holds this. Ana sits there.");
+    ).toBe("The Library Keepers (Ana) holds this.");
+  });
+
+  it("names several holders by first name, in the role's parentheses", () => {
+    expect(holderSentence(power({ heldBy: { roleName: "Steward Circle", byBallot: false, people: ["Bea", "Sam"] } }))).toBe(
+      "Steward Circle (Bea and Sam) holds this.",
+    );
   });
 
   it("says plainly when a power the village took on has nobody in the chair", () => {
@@ -136,7 +142,7 @@ describe("role powers (2026-11-05): a power a role carries is never the panel's"
 
   it("the village holding it still wins over who held it before", () => {
     expect(holderSentence(power({ heldToday: ["Ops lead (Rye)"], heldBy: { roleName: "Library keepers", byBallot: false, people: ["Ana"] } }))).toBe(
-      "Library keepers holds this. Ana sits there.",
+      "Library keepers (Ana) holds this.",
     );
   });
 

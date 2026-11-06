@@ -34,7 +34,7 @@ export interface VillagePowerRow {
   movable: boolean;
   family: PowerFamily;
   guidance: HandoverGuidance;
-  /** The village holds it: the looking-after group and the full names sitting there. */
+  /** The village holds it: the looking-after group and the FIRST names sitting there (Rye, 2026-10-30: "Role (FirstName)"). */
   heldBy: { roleName: string; byBallot: boolean; movedAt: string; people: string[] } | null;
   /** Before the village holds it: who holds it today through a role, as "Role (FirstName)". */
   heldToday: string[];
@@ -79,7 +79,7 @@ export function villagePowerRows(input: VillagePowerInput): VillagePowerRow[] {
           movedAt: held.movedAt,
           people: live
             .filter((h) => h.roleId === held.roleId)
-            .map((h) => input.nameOf(String(h.userId))?.full ?? null)
+            .map((h) => input.nameOf(String(h.userId))?.first ?? null)
             .filter((n): n is string => !!n),
         }
       : null;

@@ -484,7 +484,9 @@ describe.skipIf(!DB_CONFIGURED)("harm metric 4: a member reads the powers, in se
     // And the holder is named as a role with the people sitting in it.
     const held = warm.json.powers.find((p: any) => p.capability === "intake.moderate");
     expect(held.heldBy.roleName).toBe("Steward Circle");
-    expect(held.heldBy.people).toContain("Kira Vance");
+    // The holder's first name only, the house form (Rye, 2026-10-30), never the full name.
+    expect(held.heldBy.people).toEqual(["Kira"]);
+    expect(JSON.stringify(warm.json.powers)).not.toContain("Vance");
     expect(held.heldBy.byBallot).toBe(false);
   });
 });

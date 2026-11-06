@@ -80,7 +80,8 @@ describe("villagePowerRows: every power, and who holds it today", () => {
       ),
       "library.keep",
     );
-    expect(r.heldBy).toEqual({ roleName: "Library keepers", byBallot: true, movedAt: "x", people: ["Ana Ruiz"] });
+    // First names only, the house form (Rye, 2026-10-30): never "Ana Ruiz".
+    expect(r.heldBy).toEqual({ roleName: "Library keepers", byBallot: true, movedAt: "x", people: ["Ana"] });
     expect(r.heldToday).toEqual([]);
     expect(r.suggestionsGoTo).toBe("vote");
   });

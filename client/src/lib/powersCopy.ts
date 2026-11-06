@@ -60,8 +60,8 @@ export function holderSentence(power: PowerRow): string {
     if (power.heldBy.people.length === 0) {
       return `${who} holds this, and nobody is sitting there yet.`;
     }
-    const verb = power.heldBy.people.length === 1 ? "sits" : "sit";
-    return `${who} holds this. ${namesSentence(power.heldBy.people)} ${verb} there.`;
+    // The house form, Rye 2026-10-30: the role first, the holders' first names in parentheses.
+    return `${who} (${namesSentence(power.heldBy.people)}) holds this.`;
   }
   // Role powers (2026-11-05): a power a role carries is held by that role's
   // holders today, for the stewards, and saying the panel has it would be false.
