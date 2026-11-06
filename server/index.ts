@@ -100,6 +100,7 @@ import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
 import { giveOnlyWhatYouHold, makePowerAssignGate, register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
 import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
+import { isMemberReadable } from "./lib/memberReadable";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
@@ -1784,7 +1785,11 @@ function userIsAdmin(user: any): boolean {
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!userIsAdmin(user)) return false;
+  if (!userIsAdmin(user)) {
+    // Q5: a member may READ the admin routes server/lib/memberReadable.ts lists, and nothing else. No adminUser: nothing is theirs to change.
+    const listed = isMemberReadable(req.method, (req as any).route?.path, true);
+    return listed && !!user && stageIndex(await stageOf(user)) >= stageIndex("member") && !(await leftTheVillage(getPool(), user));
+  }
   (req as any).adminUser = user;
   return true;
 }
