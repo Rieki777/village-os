@@ -8,15 +8,22 @@
  * swaps a string only while it is character for character a value this
  * platform seeded. Anything a person has since written is left exactly as it is.
  *
- * MOVED HERE FROM server/index.ts UNCHANGED (#781): the destination strings are
- * main's, pinned by server/lib/retiredContentCopy.test.ts. The step has already
- * run on most villages under the same id, so changing what it writes would be a
- * live-content write; that change is held for Rye in its own pull request.
+ * GRATITUDE IS THE RECOGNITION TOKEN'S NAME AND NOTHING ELSE'S (Rye,
+ * 2026-11-01: "Gratitude ONLY for the recognition token and NOT for the credit
+ * or earned equity tokens"). Until then these swaps wrote "Earn Gratitude for
+ * contributions" and "Gratitude Economy". The contribution line now becomes the
+ * line a fresh village's seed carries in its place (e23471e), and the circle
+ * focus names the economy without naming a token.
+ *
+ * A LIVE-CONTENT WRITE, HELD FOR RYE. The step keeps its `runOnce` id, so a
+ * village that already ran it keeps what it wrote (the next map retires that),
+ * and a village that never ran it writes these. server/lib/retiredContentCopy.test.ts
+ * pins every target.
  */
 export const RETIRED_CONTENT_COPY: ReadonlyMap<string, string> = new Map([
-  ["Earn Hearts for contributions", "Earn Gratitude for contributions"],
+  ["Earn Hearts for contributions", "See what each quest pays"],
   ["Learn about Hearts currency", "Learn how Gratitude and the value pool work"],
-  ["Hearts Economy", "Gratitude Economy"],
+  ["Hearts Economy", "Village Economy"],
 ]);
 
 /**
