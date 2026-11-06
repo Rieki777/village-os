@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `d15fbc3ebba586ec`, which regenerating reproduces.
+It describes the sources at fingerprint `c2ecdb1214bd1f20`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -169,6 +169,8 @@ The dials a village holds, with the ring that says who may move each one and the
 | `governance.window_grace_days` | How long a proposal coming back may open outside its window | `open` | `7` | 0 to 90 days | when it is written |
 | `governance.weight_mode` | How voting weight is assigned | `founder` | `equal` | `equal`, `token`, `custom` | when it is written |
 | `governance.weight_token` | The weight token | `founder` | `gratitude` | text | when it is written |
+| `governance.weight_cap_on` | Cap one member's voting weight | `founder` | `false` | boolean | when it is written |
+| `governance.weight_cap_pct` | The most voting weight one member can carry | `founder` | `20` | 1 to 100 % | when it is written |
 | `governance.unity_pct` | Unity needed to pass | `open` | `80` | 50 to 100 % | when it is written |
 | `governance.quorum_pct` | Quorum needed to count | `open` | `20` | 1 to 100 % | when it is written |
 | `governance.vote_days` | How long a ballot stays open | `open` | `7` | 1 to 30 days | when it is written |
@@ -189,7 +191,7 @@ The dials a village holds, with the ring that says who may move each one and the
 <!-- written by a person: dialsStorage -->
 Only CHANGED values are stored. An absent row means the platform default in the table above, so a fresh village starts with every one of these and no rows at all.
 
-12 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.equity_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 44 settings above is one of them, so every governance dial takes effect the moment it is written.
+12 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.equity_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 46 settings above is one of them, so every governance dial takes effect the moment it is written.
 
 ## What each kind of decision asks
 
@@ -470,7 +472,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/game/mechanics/standing` | signed in | none |
 | POST | `/api/governance/advisory` | signed in | none |
 | GET | `/api/governance/ballots` | anyone, including a stranger | none |
-| GET | `/api/governance/ballots/:id` | anyone, including a stranger | none |
+| GET | `/api/governance/ballots/:id` | administrator | none |
 | POST | `/api/governance/ballots/:id/close` | capability | `proposal.decide` |
 | GET | `/api/governance/ballots/:id/landing` | anyone, including a stranger | none |
 | POST | `/api/governance/ballots/:id/no-objection` | capability | `steward.veto` |
@@ -519,7 +521,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-64 routes: 50 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+64 routes: 50 under the governance prefix and 14 under the mechanics prefix. 8 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle a stranger reads the ballot list, one decision and the objection lineage as titles, counts, tallies, dials and status. Who voted, how, who has not voted yet, who objected and the document itself are for signed-in members, and ruling 22, still staged, is about what members read.
 
@@ -1055,7 +1057,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "d15fbc3ebba586ec",
+  "commit": "c2ecdb1214bd1f20",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1529,6 +1531,28 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "applyTiming": "instant"
     },
     {
+      "key": "governance.weight_cap_on",
+      "label": "Cap one member's voting weight",
+      "ring": "founder",
+      "type": "boolean",
+      "default": "false",
+      "min": null,
+      "max": null,
+      "choices": null,
+      "applyTiming": "instant"
+    },
+    {
+      "key": "governance.weight_cap_pct",
+      "label": "The most voting weight one member can carry",
+      "ring": "founder",
+      "type": "percentage",
+      "default": "20",
+      "min": 1,
+      "max": 100,
+      "choices": null,
+      "applyTiming": "instant"
+    },
+    {
       "key": "governance.unity_pct",
       "label": "Unity needed to pass",
       "ring": "open",
@@ -1948,7 +1972,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     {
       "method": "GET",
       "path": "/api/governance/ballots/:id",
-      "door": "anyone, including a stranger",
+      "door": "administrator",
       "capability": null,
       "file": "server/index.ts"
     },
@@ -2865,7 +2889,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 230 migration files in `drizzle/`.
+Checked against the 231 migration files in `drizzle/`.
 
 ## What this file is made from
 
