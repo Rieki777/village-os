@@ -620,6 +620,16 @@ describe.skipIf(!DB_CONFIGURED)("after launch, turning a module on is the villag
     expect(JSON.stringify(made.json)).toContain("set at launch");
   });
 
+  it("refuses that admin a pause of governance, which nothing could turn back on (R156)", async () => {
+    const res = await call("PUT", "/api/admin/modules/governance/lifecycle", {
+      body: { lifecycle: "off" },
+    });
+    expect(res.status, JSON.stringify(res.json)).toBe(403);
+    const catalog = await call("GET", "/api/modules/catalog");
+    const row = (catalog.json?.modules ?? []).find((m: any) => m.id === "governance");
+    expect(row?.lifecycle, "governance is still on for members").toBe("members");
+  });
+
   it("still lets that admin narrow a module that is on", async () => {
     // Members to preview narrows what anyone can see, so it is the valve.
     const res = await call("PUT", "/api/admin/modules/exchange/lifecycle", {
