@@ -102,6 +102,7 @@ import { villagePowerRows } from "./lib/villagePowers";
 import { GUIDANCE_WORDS, POWER_FAMILIES } from "../shared/powerBoard";
 import { giveOnlyWhatYouHold, makePowerAssignGate, register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
 import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
+import { isMemberReadable } from "./lib/memberReadable";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
@@ -1788,7 +1789,11 @@ function userIsAdmin(user: any): boolean {
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!userIsAdmin(user)) return false;
+  if (!userIsAdmin(user)) {
+    // Q5: a member may READ the admin routes server/lib/memberReadable.ts lists, and nothing else. No adminUser: nothing is theirs to change.
+    const listed = isMemberReadable(req.method, (req as any).route?.path, true);
+    return listed && !!user && stageIndex(await stageOf(user)) >= stageIndex("member") && !(await leftTheVillage(getPool(), user));
+  }
   (req as any).adminUser = user;
   return true;
 }
@@ -13081,7 +13086,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       roles: rolesRepo.all().map((r: any) => ({
         id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadPowerHoldings(), r.id),
       })),
-      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()), // Power groups: the removal warning
+      // The removal warning is keyed by the sole holder's account id, so a member reader (Q5, no adminUser) gets none of it.
+      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: adminActor(req) ? await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()) : {}, // Power groups: the removal warning
     });
   });
 

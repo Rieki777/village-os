@@ -517,3 +517,29 @@ describe.skipIf(!DB_CONFIGURED)("the ring becomes a floor as well as a ceiling",
     expect((await call("PUT", "/api/admin/variables/gratitude.base_budget", { value: "7" }, ottoToken)).status).toBe(401);
   });
 });
+
+describe.skipIf(!DB_CONFIGURED)("Q5: every member may READ the admin routes the allow-list names, and change nothing", () => {
+  it("a member reads the power holdings and the reorganisation drafts", async () => {
+    const holding = await call("GET", "/api/admin/capabilities/holding", undefined, ottoToken);
+    expect(holding.status, holding.text).toBe(200);
+    expect(Array.isArray(holding.json.powers)).toBe(true);
+    // The removal warning names accounts, so a member reader gets none of it; the admin still does.
+    expect(holding.json.leftEmptyByRemoval).toEqual({});
+    expect((await call("GET", "/api/admin/org/drafts", undefined, ottoToken)).status).toBe(200);
+    expect((await call("GET", "/api/admin/org/expiring", undefined, ottoToken)).status).toBe(200);
+  });
+
+  it("control: an admin read the list does not name stays the admin's", async () => {
+    expect((await call("GET", "/api/admin/modules", undefined, ottoToken)).status).toBe(401);
+    expect((await call("GET", "/api/admin/players", undefined, ottoToken)).status).toBe(401);
+  });
+
+  it("reading is not changing: the same member is refused the write beside the read", async () => {
+    expect((await call("PUT", "/api/admin/capabilities/library.keep/holding", { roleId: "steward-circle" }, ottoToken)).status).toBe(401);
+    expect((await call("POST", "/api/admin/org/drafts", { title: "Mine now" }, ottoToken)).status).toBe(401);
+  });
+
+  it("a visitor reads none of it", async () => {
+    expect((await call("GET", "/api/admin/capabilities/holding", undefined, "")).status).toBe(401);
+  });
+});
