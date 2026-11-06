@@ -876,7 +876,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       if (!rowId) return { ok: false, status: 500, body: { error: "The row could not be written." } };
       return { ok: true, outcome: { wrote: "matrix-row", rowId }, message: "Adopted. The Decision Matrix carries this row." };
     }
-    const answer = await saveExitPolicy(deps.exitPolicy, req, exitBodyWith(String(p.door), p.change ?? {}));
+    // Built inside the exit policy's lock, from the document as it then
+    // stands, so a Departures save landing first is not written over.
+    const answer = await saveExitPolicy(deps.exitPolicy, req, () => exitBodyWith(String(p.door), p.change ?? {}));
     // The save's own sentence speaks to the Departures editor ("reload this
     // page to edit the rest of the policy"), which is not where this is.
     if (answer.status === 409 && answer.body.error === "restorative_in_agreement") {
