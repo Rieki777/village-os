@@ -403,6 +403,7 @@ import { ADVISORY_TYPES, typeRefusesCapability } from "./lib/proposalDrafts";
 import {
   BALLOT_METHODS,
   dialsForMethod,
+  raiseDials,
   quorumPctOf,
   unityPctOf,
   villageBallotMethod,
@@ -413,6 +414,7 @@ import {
   delegatedRowsCountOn,
   dialsForSubject,
   methodForSubject,
+  overrideDials as highestTierBar,
   thresholdSettingsFrom,
   rollProblem,
   thresholdsForSubject,
@@ -24045,10 +24047,20 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
     const method: BallotMethod = villageMethod === "hypha" ? "custom" : villageMethod;
-    const dials = dialsForMethod(method, {
+    /*
+     * RE-POINTING A POWER THE VILLAGE HOLDS IS THE HIGHEST VOTE (Rye,
+     * 2026-11-06: "EVERYTHING can change with the highest village vote").
+     * The village owns a power it holds, so moving it to another role, the
+     * stewards included, clears the village's highest set tier and nothing
+     * less. A first crossing keeps the village's ordinary dials.
+     */
+    const ordinary = dialsForMethod(method, {
       unityPct: Math.max(0, numberVar("governance.unity_pct")),
       quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
     });
+    const dials = already
+      ? raiseDials(ordinary, highestTierBar(thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key))))
+      : ordinary;
     const snapshot = weightModeNow();
     if (snapshot.mode === "token") {
       const problem = weightTokenProblem(snapshot.token ?? "");
@@ -24083,6 +24095,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
       "",
       `${role.name ?? roleId} looks after it. An administrator who is not seated there stops passing this gate by being an administrator: they can still act on it, and every time they do, the village is told and the act goes on the village's own record. Handing it back is the same kind of act, in the open.`,
       "",
+      already
+        ? "The village already holds this power, so moving it to another role is decided at the village's highest tier."
+        : "",
       villageMethod === "hypha"
         ? "This village takes its rule changes to Hypha. A power has no Hypha leg to travel on, so this one is decided here, on the village's own dials."
         : "",
