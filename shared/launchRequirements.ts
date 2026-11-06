@@ -742,21 +742,6 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     runbookAnchor: "env",
   },
   {
-    id: "exit-policy-terms",
-    group: "reach",
-    title: "Write your exit policy's actual terms",
-    why:
-      "Every village ships with a placeholder that says the terms are still to be decided by the " +
-      "community. Honest on day one, a broken promise once people have contributed real value and " +
-      "money. Someone leaving needs to know how their contribution is honoured BEFORE they need to know.",
-    severity: "blocking",
-    checkKey: "exit-policy-terms",
-    // The terms are edited on Departures. Settings holds dues and land figures.
-    fixAt: "/admin?tab=exits-admin",
-    fixLabel: "Write the terms",
-    runbookAnchor: "exit-policy",
-  },
-  {
     id: "backups-drilled",
     group: "reach",
     title: "Take one backup and restore it once",
