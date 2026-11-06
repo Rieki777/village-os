@@ -900,6 +900,7 @@ import { latestSettlementRefusals } from "./repos/settlementBallots";
 import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
 import { precompressedAssets } from "./lib/precompressedAssets";
+import { memberFirstName } from "../shared/memberFirstName";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -3719,7 +3720,7 @@ function publicUser(u: any) {
 }
 
 function firstName(name: string): string {
-  return String(name ?? "").trim().split(/\s+/)[0] || "Someone";
+  return memberFirstName(name);
 }
 
 /**

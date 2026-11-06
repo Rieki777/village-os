@@ -223,6 +223,7 @@ import { forgetSubmissionWords } from "./submissionWords";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
 import { isTombstone } from "./oauthAccounts";
+import { DEPARTED_MEMBER_NAME } from "../../shared/memberFirstName";
 import {
   abandonErasure,
   beginErasure,
@@ -293,7 +294,7 @@ export interface SweepResult {
   stayed?: boolean;
 }
 
-const ANON = "A departed member";
+const ANON = DEPARTED_MEMBER_NAME;
 
 /** What a scrubbed key of a submission reads as. */
 const REMOVED = "[removed at member's request]";
