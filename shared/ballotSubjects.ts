@@ -1056,6 +1056,13 @@ export const META_SETTING_KEYS: readonly string[] = [
   // same power as moving the bar.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
+  // When and how often a proposal may reach the vote (change requests C17;
+  // Rye, 2026-11-06: "great go with all suggestions"). A cheap trial of any
+  // of these could empty the review or the vote just before a big change.
+  "governance.proposal_support_threshold",
+  "governance.proposals_per_member_per_cycle",
+  "governance.change_cooldown_days",
+  "governance.vote_days",
 ];
 
 /** Any key under one of these is a META_SETTING, whichever lane adds it. */

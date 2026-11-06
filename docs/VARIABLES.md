@@ -1726,7 +1726,7 @@ How many game-rule change proposals one member may open per cycle. A ceiling on 
 | Counted in | per cycle |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Supporters before a proposal can go to the vote
 
@@ -1741,7 +1741,7 @@ How many members must support a mechanics proposal in-game before it can be take
 | Counted in | supporters |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Governance hub URL
 
@@ -1885,7 +1885,7 @@ After a dial is changed by a passed proposal, this many days must pass before a 
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### When a change to the Game Mechanics can go to the vote
 
@@ -2148,7 +2148,7 @@ Days between a ballot opening and its votes locking. Votes can be changed freely
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### How long a consent window stays open
 

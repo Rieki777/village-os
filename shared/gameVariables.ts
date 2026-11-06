@@ -1048,6 +1048,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.proposals_per_member_per_cycle",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Mechanics proposals per member per cycle",
     description:
@@ -1064,6 +1067,9 @@ export const VARIABLES: VariableDef[] = [
     // governance.hypha_threshold's did. This gate stands in front of the
     // binding vote wherever the binding vote happens, so it says that.
     key: "governance.proposal_support_threshold",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Supporters before a proposal can go to the vote",
     description:
@@ -1240,6 +1246,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.change_cooldown_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Cooldown after a governed rule change",
     description:
@@ -1481,6 +1490,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.vote_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "How long a ballot stays open",
     description:
