@@ -283,4 +283,18 @@ check("the prose keeps the house writing rules", () => {
   assert.ok(!/\bnot (?:just|only) [a-z]+,? but\b/i.test(text), "no not-X-but-Y framing");
 });
 
+check("a blank amount reads as what the work names, never as null", () => {
+  // A rule whose amount is blank pays what the quest, role or proposal names
+  // (since #776 a seat is paid only its role's own list). The prose printed the
+  // raw value, so Village Voice "paid everyone holding a seat null of it".
+  const text = generate();
+  const prose = text.replace(/```json\n[\s\S]+?\n```/, "");
+  assert.ok(!/\bnull on `/.test(prose), "a seeded rule's amount printed as null");
+  assert.ok(!/\bnull of it\b/.test(prose), "a cycle payment printed as null of it");
+  assert.ok(!/^\| `[a-z.]+` \| `[a-z-]+` \| null \|/m.test(prose), "the seeded-rules table printed null");
+  const parsed = JSON.parse(/```json\n([\s\S]+?)\n```/.exec(text)[1]);
+  const blankSeat = parsed.tokens.some((t) => (t.seededRules ?? []).some((r) => r.trigger === "role.cycle" && r.enabled && r.amount === null));
+  if (blankSeat) assert.ok(prose.includes("what its role names of it"), "a blank seat rule must say the role decides");
+});
+
 console.log(`\n${run} check(s) passed\n`);
