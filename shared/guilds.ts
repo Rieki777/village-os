@@ -1185,11 +1185,14 @@ export const SEEDS: readonly GuildSeed[] = [
   },
   {
     id: "hypha-voice-webhook-secret",
-    kind: "hosting-var",
+    kind: "hand-carried",
     title: "Receive voice claims from Hypha",
-    provider: { name: "Railway", url: RAILWAY_VARIABLES },
+    provider: { name: "The sender of the Hypha space's claim results", url: null },
     scopes: [],
-    handles: [{ store: "env", name: "HYPHA_VOICE_WEBHOOK_SECRET" }],
+    handles: [
+      { store: "village-secret", slot: "hypha_voice_webhook_secret" },
+      { store: "env", name: "HYPHA_VOICE_WEBHOOK_SECRET" },
+    ],
     need: "required",
     onlyWhen: {
       setting: "economy.hypha_space",
@@ -1197,27 +1200,33 @@ export const SEEDS: readonly GuildSeed[] = [
     },
     risk: "ordinary",
     lifespan: "lasting",
-    plantedThrough: "railway-root",
-    byHand: { how: RAILWAY_BY_HAND + " At least 32 characters, and never a value any other secret uses." },
+    byHand: { how: "Make one with openssl rand -hex 32 and paste it under Admin, Integrations, or set HYPHA_VOICE_WEBHOOK_SECRET on the host. At least 32 characters, and never a value any other secret uses." },
     consequence: "Signed voice claims from the village's Hypha space are accepted.",
     undo: "Clear it and the claim receiver answers 503.",
     cost: "Free.",
-    dependsOn: [],
+    dependsOn: ["village-secrets-key"],
     liveCheck: {
       via: "probe",
-      probe: "env-present",
-      how: "The setup game asks the server whether the variable is set and long enough. Boot already refuses a short or borrowed one.",
+      probe: "secret-present",
+      how: "The integrations status reports the slot as configured. Admin, Integrations refuses a short or borrowed value before it is stored, and boot refuses one set on the host.",
       strength: "present",
       proves: "A usable secret is set.",
     },
     nursery: null,
-    compost: ["Delete HYPHA_VOICE_WEBHOOK_SECRET from Railway and from the sender's side."],
+    compost: [
+      "Clear the voice claims slot under Admin, Integrations.",
+      "Delete HYPHA_VOICE_WEBHOOK_SECRET from the host if it was set there, and remove it from the sender's side.",
+    ],
     rotation: { every: "year" },
     holder: { who: "any-founder" },
-    certainty: "verified",
+    certainty: "unverified",
+    open: [
+      "Where the sender of the claim results takes this secret. The dispatch that carries a claim to Hypha is not built yet (BRIDGE_DISPATCH_BUILT in server/lib/voiceClaim.ts), so no sender page can be named.",
+    ],
     source:
       "server/lib/voiceClaim.ts checkVoiceSecret and the receiver in server/index.ts, both gated on economy.hypha_space. " +
-      "ENVIRONMENT ONLY ON PURPOSE: boot refuses to start on a short or borrowed value (assertVoiceSecret). A value typed into the secrets store at runtime would skip that check until the next restart, and then a weak one would stop the village from booting at all.",
+      "A STORE SLOT SINCE READINESS R171, so a founder without the host can set it. It was environment-only so boot could refuse a short or borrowed value (assertVoiceSecret). " +
+      "That check now runs at the write as well (voiceSecretWriteRefusal, in the Integrations route), in both directions, and a stored value never stops the boot: the receiver refuses it instead (usableVoiceSecret).",
   },
   {
     id: "basescan-api-key",
