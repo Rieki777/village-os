@@ -8,13 +8,14 @@
  * right now, holds the group. This module decides who may change the links and
  * refuses the changes that would break a rule the group plane already keeps.
  *
- * ── WHO MAY CHANGE THEM, FOR NOW ───────────────────────────────────────────
+ * ── WHO MAY CHANGE THEM ────────────────────────────────────────────────────
  *
- * An admin, as `PUT /api/admin/roles/:id/capabilities` asks today. Linking a
- * group to a seat hands its powers to whoever sits there, which is the same act
- * as editing that group's list, so it cannot be easier to reach. The design
- * moves this to holders of a new `power.assign` key (§6); that is its own
- * change, and this route is the one it swaps.
+ * The holders of `power.assign`, and nobody else while anybody holds it: an
+ * admin who was never given it is refused (server/lib/holderOnly.ts). With
+ * nobody holding it an admin acts as the operator, which is how a fresh
+ * village sets itself up. `PUT /api/admin/roles/:id/capabilities` asks the
+ * same gate, because linking a group to a seat and editing the group's list
+ * are the same act. A holder may give only what they hold themselves (Q7).
  *
  * ── WHAT IT REFUSES ────────────────────────────────────────────────────────
  *
@@ -46,9 +47,47 @@ import {
 } from "../lib/seatGrants";
 import { onSeatingsChanged, type LapseContext } from "../lib/orgChart";
 import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
-import type { Capability } from "../../shared/capabilities";
+import { CAPABILITY_LABELS, capabilityLabel, type Capability, type CapabilityCtx } from "../../shared/capabilities";
+import { holderOnlyDecision, type HolderOnlyAnswer } from "../lib/holderOnly";
+import { markAdminGate } from "../lib/adminGate";
 
-interface Deps {
+export interface PowerAssignGateDeps {
+  authedUser(req: any): Promise<any>;
+  capabilityCtx(user: any): Promise<CapabilityCtx>;
+  liveHoldersOf(capability: string): Promise<string[]>;
+}
+
+/** Who is asking, and whether they may hand out powers: `power.assign`, holder-only. */
+export type PowerAssignAnswer = HolderOnlyAnswer & { actor: any };
+
+export function makePowerAssignGate(d: PowerAssignGateDeps): (req: any) => Promise<PowerAssignAnswer> {
+  return async (req) => {
+    markAdminGate(req); // a gate was consulted: the default-deny under /api/admin needs to hear it
+    const actor = await d.authedUser(req);
+    const ctx = actor ? await d.capabilityCtx(actor) : null;
+    const answer = holderOnlyDecision({
+      capability: "power.assign",
+      ctx,
+      liveHolders: await d.liveHoldersOf("power.assign"),
+      label: CAPABILITY_LABELS["power.assign"],
+    });
+    return { ...answer, actor };
+  };
+}
+
+/** The refusal when a holder tries to give a power they do not hold (Q7), or null. */
+export function giveOnlyWhatYouHold(may: PowerAssignAnswer, keys: readonly string[]): { error: string; code: string; capabilities: string[] } | null {
+  if (!may.ok) return null;
+  const cannot = Array.from(new Set(keys.filter((c) => !may.mayGive(c))));
+  if (!cannot.length) return null;
+  return {
+    error: `You can only give powers you hold yourself. You do not hold: ${cannot.map(capabilityLabel).join("; ")}.`,
+    code: "give_only_what_you_hold",
+    capabilities: cannot,
+  };
+}
+
+interface Deps extends PowerAssignGateDeps {
   isAdmin(req: any): Promise<boolean>;
   getPool(): Pool;
   members: { all(): Promise<any[]> };
@@ -78,6 +117,7 @@ export function registerSeatGrantFreshness(app: Express, cache: SeatGrantCache, 
 
 export function register(app: Express, deps: Deps): void {
   const { isAdmin, getPool, members, rolesRepo, loadRoleHolders, lapseContext, seatGrants, addActivity } = deps;
+  const powerAssignGate = makePowerAssignGate(deps);
 
   async function seatRow(id: string): Promise<{ id: string; name: string; isExample: boolean } | null> {
     const [rows]: any = await getPool().query("SELECT id, name, is_example FROM org_roles WHERE id = ?", [id]);
@@ -86,7 +126,7 @@ export function register(app: Express, deps: Deps): void {
   }
 
   app.get("/api/admin/org-roles/:id/power-groups", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    if (!(await isAdmin(req)) && !(await powerAssignGate(req)).ok) return res.status(401).json({ error: "auth_required" });
     const seat = await seatRow(String(req.params.id));
     if (!seat) return res.status(404).json({ error: "Role not found" });
     const linked = (await listSeatGroupLinks(getPool())).filter((l) => l.orgRoleId === seat.id).map((l) => l.roleId);
@@ -105,8 +145,9 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.put("/api/admin/org-roles/:id/power-groups", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const actor = (req as any).adminUser;
+    const may = await powerAssignGate(req);
+    if (!may.ok) return res.status(may.status).json(may.body);
+    const actor = may.actor;
     if (!Array.isArray(req.body?.roleIds)) return res.status(400).json({ error: "Send roleIds: the list of Power group ids this role carries" });
     const wanted = Array.from(new Set((req.body.roleIds as unknown[]).map(String)));
     const seat = await seatRow(String(req.params.id));
@@ -128,6 +169,8 @@ export function register(app: Express, deps: Deps): void {
       const locked = stewardSeatRefusal(byId.get(id));
       if (locked) return res.status(locked.status).json(locked.body);
     }
+    const notHeld = giveOnlyWhatYouHold(may, added.flatMap((id) => (byId.get(id)?.capabilities ?? []) as string[]));
+    if (notHeld) return res.status(403).json(notHeld);
     if (added.some((id) => byId.get(id)?.grantsAdmin === true) && (await founderPowerStands(getPool())) && actor?.role !== "founder") {
       return res.status(403).json({ error: "Until the village starts its Game, only a founder decides which roles can open the admin panel" });
     }

@@ -7,8 +7,10 @@
  *   - linking the seat to a group hands the seated member that group's powers,
  *     admin access included when the group carries it, and the counters count them;
  *   - ending the seating takes the power away on the very next request;
- *   - only an admin may change the links (power.assign comes next), and the
- *     change is audited.
+ *   - only the holders of power.assign may change the links (an admin acts
+ *     only while nobody holds it), a holder gives only what they hold, and
+ *     every change is audited;
+ *   - leaving the village ends the holder's seating and the power with it.
  *
  * Boots dist/index.js against a throwaway schema like every routes suite, and
  * skips loudly without TEST_DATABASE_URL.
@@ -122,9 +124,10 @@ describe.skipIf(!DB_CONFIGURED)("0322: holding a seat grants its Power groups", 
     expect((await call("GET", "/api/admin/org-roles/ops-lead/power-groups")).json?.roleIds).toEqual([]);
   });
 
-  it("only an admin may change a seat's links", async () => {
+  it("a member who does not hold power.assign may not change a seat's links", async () => {
     const r = await call("PUT", "/api/admin/org-roles/ops-lead/power-groups", { roleIds: ["founders-circle"] }, sam.token);
-    expect(r.status).toBe(401);
+    expect(r.status).toBe(403);
+    expect((await call("PUT", "/api/admin/org-roles/ops-lead/power-groups", { roleIds: [] }, "")).status).toBe(401);
   });
 
   it("refuses a group that does not exist, and a body that is not a list", async () => {
@@ -163,5 +166,77 @@ describe.skipIf(!DB_CONFIGURED)("0322: holding a seat grants its Power groups", 
     expect(r.json.removed).toEqual(["founders-circle"]);
     const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_role_power_groups WHERE org_role_id = 'ops-lead'"); // module-review-ok: the e2e harness reading its own scratch schema
     expect(Number(rows[0].n)).toBe(0);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("power.assign: only its holders hand out powers (Q2, Q7)", () => {
+  let ola = { id: "", token: "" };
+  let bee = { id: "", token: "" };
+  const join = async (name: string, email: string) => {
+    const r = await call("POST", "/api/auth/register", { name, email, password: PW, paths: ["resident"] }, "");
+    expect(r.status, r.text).toBe(200);
+    const who = { id: String(r.json?.user?.id ?? ""), token: String(r.json?.token ?? "") };
+    expect((await call("PUT", `/api/admin/players/${who.id}/stage`, { stageId: "member" })).status).toBe(200);
+    return who;
+  };
+  const link = (seat: string, roleIds: string[], token = founderToken) => call("PUT", `/api/admin/org-roles/${seat}/power-groups`, { roleIds }, token);
+
+  it("with nobody holding power.assign, the founder acts as the operator and seats it through a role", async () => {
+    ola = await join("Ola Convener", "ola-power-assign@example.test");
+    bee = await join("Bee Member", "bee-power-assign@example.test");
+    expect((await call("POST", "/api/admin/org/roles", { id: "convener", name: "Convener", aim: "Keep the village's roles and powers in order." })).status).toBeLessThan(300);
+    expect((await call("POST", "/api/admin/org/roles/convener/holders", { userId: ola.id })).status).toBeLessThan(300);
+    const groups = (await call("GET", "/api/roles")).json;
+    const founders = (Array.isArray(groups) ? groups : groups?.roles ?? []).find((g: any) => g.id === "founders-circle");
+    expect(founders?.capabilities).toContain("power.assign");
+    const r = await link("convener", ["founders-circle"]);
+    expect(r.status, r.text).toBe(200);
+  });
+
+  it("once somebody holds it, an admin who does not is refused, by name, on both routes", async () => {
+    const r = await link("convener", []);
+    expect(r.status, r.text).toBe(403);
+    expect(r.json.code).toBe("holders_only");
+    expect(r.json.holders).toContain(ola.id);
+    const g = await call("PUT", "/api/admin/roles/practitioners/capabilities", { capabilities: ["forum.post", "proposal.open"] });
+    expect(g.status, g.text).toBe(403);
+    expect(g.json.code).toBe("holders_only");
+  });
+
+  it("control: the same founder still passes an ordinary admin route", async () => {
+    expect((await call("GET", "/api/admin/players")).status).toBe(200);
+  });
+
+  it("a member who does not hold it is refused", async () => {
+    expect((await link("convener", [], bee.token)).status).toBe(403);
+  });
+
+  it("the holder may give only what they hold, on a seat and on a group", async () => {
+    const seat = await link("convener", ["founders-circle", "treasury"], ola.token);
+    expect(seat.status, seat.text).toBe(403);
+    expect(seat.json.code).toBe("give_only_what_you_hold");
+    expect(seat.json.capabilities).toContain("cash.pay");
+    const group = await call("PUT", "/api/admin/roles/practitioners/capabilities", { capabilities: ["forum.post", "cash.pay"] }, ola.token);
+    expect(group.status, group.text).toBe(403);
+    expect(group.json.code).toBe("give_only_what_you_hold");
+  });
+
+  it("the holder gives a power they hold, and the record names them", async () => {
+    const r = await call("PUT", "/api/admin/roles/practitioners/capabilities", { capabilities: ["forum.post", "proposal.open"] }, ola.token);
+    expect(r.status, r.text).toBe(200);
+    expect(r.json.added).toEqual(["proposal.open"]);
+    const [rows] = await pool.query<any[]>("SELECT actor_user_id FROM health_events WHERE kind = 'audit' AND text = 'role:capabilities:practitioners:+proposal.open:-none'"); // module-review-ok: the e2e harness reading its own scratch schema
+    expect(rows.map((x: any) => x.actor_user_id)).toContain(ola.id);
+  });
+
+  it("leaving the village ends the holder's seating, and with it the power, so the operator can act again", async () => {
+    const opened = await call("POST", "/api/profile/request-exit", { password: PW }, ola.token);
+    expect(opened.status, opened.text).toBe(200);
+    const resolved = await call("POST", `/api/admin/exits/${String(opened.json?.exit?.id ?? "")}/resolve`, {});
+    expect(resolved.status, resolved.text).toBe(200);
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_role_assignments WHERE user_id = ? AND ended_at IS NULL", [ola.id]); // module-review-ok: the e2e harness reading its own scratch schema
+    expect(Number(rows[0].n)).toBe(0);
+    const r = await link("convener", []);
+    expect(r.status, r.text).toBe(200);
   });
 });
