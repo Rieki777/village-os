@@ -30,7 +30,9 @@
  * chosen, which of them is the read a day before (the clock moves it), the
  * live chart, the published history, and who the name swap knows. The cheap
  * reads that decide the key run every time; the snapshots' records and the
- * history are read only on a miss.
+ * history are read only on a miss. A row pruned between choosing and reading
+ * makes the rows be chosen again, once, and an answer from part of its rows
+ * is never kept.
  *
  * ── WHO HOLDS EACH ROLE ──────────────────────────────────────────────────
  *
@@ -116,41 +118,48 @@ export function snapshotsNeeded(index: readonly SnapshotIndexRow[], nowSeconds: 
 let cached: { key: string; value: DifferencesRead } | null = null;
 
 export async function readDifferences(pool: Pool, now: number = Date.now()): Promise<DifferencesRead> {
-  const [index, liveIn, stamp, roster, seatings] = await Promise.all([
-    snapshotIndex(pool),
-    liveForDifferences(pool),
-    publishStamp(pool, MODULE_ID),
-    rosterRows(pool),
-    listOrgAssignments(pool),
-  ]);
-  const holders = holderNamesByRole(seatings, roster);
-  const check = nameCheckFor(roster);
-  const nowSeconds = Math.floor(now / 1000);
-  const seqs = snapshotsNeeded(index, nowSeconds);
-  // The read a day before, by the rule `snapshotsNeeded` chooses it by, so the key moves with the clock.
-  const older = index.slice(1);
-  const dayBefore = (older.find((r) => r.taken <= nowSeconds - DAY_SECONDS) ?? older[older.length - 1])?.seq ?? null;
-  const key = createHash("sha256").update(canonicalJson({ seqs, dayBefore, live: liveIn, stamp, names: check.fingerprint })).digest("hex");
-  if (cached?.key === key) return { ...cached.value, holders };
+  // Twice at most: a row pruned between choosing the rows and reading them is chosen again, once.
+  for (let attempt = 1; ; attempt += 1) {
+    const [index, liveIn, stamp, roster, seatings] = await Promise.all([
+      snapshotIndex(pool),
+      liveForDifferences(pool),
+      publishStamp(pool, MODULE_ID),
+      rosterRows(pool),
+      listOrgAssignments(pool),
+    ]);
+    const holders = holderNamesByRole(seatings, roster);
+    const check = nameCheckFor(roster);
+    const nowSeconds = Math.floor(now / 1000);
+    const seqs = snapshotsNeeded(index, nowSeconds);
+    // The read a day before, by the rule `snapshotsNeeded` chooses it by, so the key moves with the clock.
+    const older = index.slice(1);
+    const dayBefore = (older.find((r) => r.taken <= nowSeconds - DAY_SECONDS) ?? older[older.length - 1])?.seq ?? null;
+    const key = createHash("sha256").update(canonicalJson({ seqs, dayBefore, live: liveIn, stamp, names: check.fingerprint })).digest("hex");
+    if (cached?.key === key) return { ...cached.value, holders };
 
-  const [rows, accepted] = await Promise.all([snapshotsBySeq(pool, seqs), acceptedForDifferences(pool)]);
-  const snapshots = rows.map((r) => r.snapshot);
-  const list = differences({ snapshots, live: liveIn, accepted, asOf: new Date(now).toISOString(), swap: check.swap });
-  const top = snapshots[0];
-  // From the index, which is newest first; the two newest whole reads of each kind are in `seqs`, so the key moves with them.
-  const wholeAt = (kind: "circlesRead" | "rolesRead") => {
-    const row = index.find((r) => r[kind] === "whole");
-    return row ? new Date(row.taken * 1000).toISOString() : null;
-  };
-  const value: DifferencesRead = {
-    list,
-    latest: top ? { takenAt: top.takenAt, circles: top.circles.read, roles: top.roles.read } : null,
-    lastWhole: { circles: wholeAt("circlesRead"), roles: wholeAt("rolesRead") },
-    circleOrder: liveIn.circles.map((c) => c.id),
-    holders,
-  };
-  cached = { key, value };
-  return value;
+    const [rows, accepted] = await Promise.all([snapshotsBySeq(pool, seqs), acceptedForDifferences(pool)]);
+    // A chosen row went (a prune ran in between): choose again rather than answer from part of them.
+    const whole = rows.length === seqs.length;
+    if (!whole && attempt < 2) continue;
+    const snapshots = rows.map((r) => r.snapshot);
+    const list = differences({ snapshots, live: liveIn, accepted, asOf: new Date(now).toISOString(), swap: check.swap });
+    const top = snapshots[0];
+    // From the index, which is newest first; the two newest whole reads of each kind are in `seqs`, so the key moves with them.
+    const wholeAt = (kind: "circlesRead" | "rolesRead") => {
+      const row = index.find((r) => r[kind] === "whole");
+      return row ? new Date(row.taken * 1000).toISOString() : null;
+    };
+    const value: DifferencesRead = {
+      list,
+      latest: top ? { takenAt: top.takenAt, circles: top.circles.read, roles: top.roles.read } : null,
+      lastWhole: { circles: wholeAt("circlesRead"), roles: wholeAt("rolesRead") },
+      circleOrder: liveIn.circles.map((c) => c.id),
+      holders,
+    };
+    // An answer from part of its rows is given once and never kept.
+    if (whole) cached = { key, value };
+    return value;
+  }
 }
 
 /** For tests: forget the cached answer. */

@@ -39,6 +39,8 @@ const state = vi.hoisted(() => ({
   sessionThrows: false,
   /** When true, storing the facts throws: a failure after the service answered. */
   factsFail: false,
+  /** A row deleted just before the next read of rows by seq, the way a prune racing a read would. */
+  pruneOnRead: null as number | null,
 }));
 
 // The real facts store, with one switch: a write that throws after the read was kept.
@@ -61,6 +63,14 @@ vi.mock("../repos/saberraSnapshots", async (importOriginal) => {
     insertSnapshot: async (...args: Parameters<typeof real.insertSnapshot>) => {
       if (state.snapshotFails) throw Object.assign(new Error("Invalid JSON text"), { code: "ER_INVALID_JSON_TEXT" });
       return real.insertSnapshot(...args);
+    },
+    snapshotsBySeq: async (...args: Parameters<typeof real.snapshotsBySeq>) => {
+      if (state.pruneOnRead !== null) {
+        const seq = state.pruneOnRead;
+        state.pruneOnRead = null;
+        await args[0].query("DELETE FROM saberra_snapshots WHERE seq = ?", [seq]); // module-review-ok: fixture SQL, a prune racing a read
+      }
+      return real.snapshotsBySeq(...args);
     },
   };
 });
@@ -186,6 +196,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     state.snapshotFails = false;
     state.sessionThrows = false;
     state.factsFail = false;
+    state.pruneOnRead = null;
     await pool.query("DELETE FROM saberra_snapshots WHERE seq > 0"); // module-review-ok: fixture SQL, each test starts from no snapshot
     await writeSyncLogDocument(pool, { runs: [], landedFingerprint: null });
   });
@@ -522,7 +533,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect((await readDifferences(pool)).lastWhole).toEqual({ circles: whole.takenAt, roles: whole.takenAt });
   });
 
-  describe("which rows the list reads, as the clock moves", () => {
+  describe("which rows the list reads, as the clock moves and the table is pruned", () => {
     const H = 60 * 60 * 1000;
     const T = Date.parse("2026-11-04T12:00:00.000Z");
     const land = pageId("clk-land");
@@ -553,6 +564,19 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
       expect(await reviewFact(T)).toEqual([["2027-01-01", "2026-12-01"]]);
       // 23 hours on, the same rows, and a day before is the read at T-2h, which already said 2027-01-01.
       expect(await reviewFact(T + 23 * H)).toEqual([]);
+    });
+
+    it("A READ THAT RACES A PRUNE CHOOSES ITS ROWS AGAIN, never answering from part of them (review nit)", async () => {
+      await writeSnapshot(pool, read("2026-12-01", "whole"), "scheduled", new Date(T - 50 * H));
+      const dayOld = (await writeSnapshot(pool, read("2026-12-01", "whole"), "scheduled", new Date(T - 30 * H))).seq;
+      await writeSnapshot(pool, read("2027-01-01", "whole"), "scheduled", new Date(T - 1 * H));
+      await writeSnapshot(pool, read("2027-01-01", "whole"), "scheduled", new Date(T));
+      // The read a day before is pruned between choosing it and reading it.
+      state.pruneOnRead = dayOld;
+      const fact = await reviewFact(T);
+      expect(state.pruneOnRead).toBeNull();
+      // Chosen again, a day before is the read at T-50h, which said 2026-12-01 too.
+      expect(fact).toEqual([["2027-01-01", "2026-12-01"]]);
     });
   });
 
