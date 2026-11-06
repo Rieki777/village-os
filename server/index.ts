@@ -130,6 +130,7 @@ import { register as registerDelegationRoutes } from "./routes/delegation";
 import { register as registerVoiceSpreadRoutes } from "./routes/voiceSpread";
 import { register as registerGovernanceVetoRoutes } from "./routes/governanceVetoes";
 import { register as registerGovernanceLandingRoutes } from "./routes/governanceLanding";
+import { register as registerMechanicsHistoryRoutes } from "./routes/mechanicsHistory";
 import { register as registerStewardSlateRoutes } from "./routes/stewardSlate";
 import { registerMoonSettlementRoutes } from "./routes/moonSettlement";
 // The dispatcher lane: the landing path, the change-set executor and the roll notice.
@@ -138,7 +139,7 @@ import { register as registerGovernanceModeRoutes } from "./routes/governanceMod
 import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
-import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, publicAmendment, publicChangeSet, publicProposal, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, publicChangeSet, publicProposal, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
 import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
@@ -20510,29 +20511,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     };
   }
 
-  /**
-   * The amendment history — public, newest first. Actor names are first
-   * names only (the platform's standard privacy posture for public
-   * surfaces); proposal_ref carries the Hypha proposal id / tx hash once
-   * the governance loop lands, so every amendment can point at its vote.
-   */
-  app.get("/api/game/mechanics/history", async (req, res) => {
-    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 200));
-    const [rows] = await getPool().query<any[]>(
-      "SELECT id, config_key, old_value, new_value, actor_user_id, source, proposal_ref, note, at " +
-        "FROM mechanics_changes ORDER BY at DESC, id DESC LIMIT ?",
-      [limit],
-    );
-    const names = new Map<string, string>();
-    for (const r of rows) {
-      if (r.actor_user_id && !names.has(r.actor_user_id)) {
-        const u = await members.byId(r.actor_user_id);
-        names.set(r.actor_user_id, u ? firstName(u.name) : "A departed member");
-      }
-    }
-    // Values a stranger may not read (a withheld dial, a credential-shaped value) leave both sides blank: lib/mechanicsHistory.ts.
-    res.json(rows.map((r) => publicAmendment(r, VARIABLES_BY_KEY[String(r.config_key)], r.actor_user_id ? names.get(String(r.actor_user_id)) ?? null : null)));
-  });
+  // The amendment history and every setting's own: server/routes/mechanicsHistory.ts.
+  registerMechanicsHistoryRoutes(app, { authedUser, getPool, members, firstName });
 
   // ── Mechanics proposals: propose-on-the-page ──────────────────────────────
 
