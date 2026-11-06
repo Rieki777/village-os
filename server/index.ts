@@ -1,5 +1,6 @@
 import { anonymizeMember, backfillFinishedErasures, erasureBackfillJob } from "./lib/erasure";
 import { backfillSeasonGoalIds, SEASON_GOAL_ID_BACKFILL } from "./lib/seasonGoalIds";
+import { markNameFreeJournalLinesPublic } from "./repos/orgSeatErasure";
 import { FORMER_MEMBER_HOLD, resolveExit } from "./lib/exitResolve";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
@@ -25120,7 +25121,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       actorUserId: viewer.id,
       entityType: "circle",
       entityRef: before.id,
-      audience: "admin",
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     res.json({ success: true, circle: merged });
   });
@@ -26336,6 +26337,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const { words, rows } = await backfillSeasonGoalIds(getPool());
     console.log(`[startup] season goal ids: ${rows} link(s) across ${words} goal text(s)`);
   });
+  // R103: the seat journal's name-free lines from before 2026-11-06 become
+  // public, so members read the history. After listen for 0298's reason, and
+  // on every boot because its WHERE makes a repeat a no-op.
+  void markNameFreeJournalLinesPublic(getPool())
+    .then((n) => n && console.log(`[startup] role journal: ${n} name-free line(s) re-marked public`))
+    .catch((e) => console.error("[startup] role journal re-mark failed (continuing)", e));
   /*
    * A DEPLOY IS NOT A CRASH, and until now this process could not tell the
    * difference. `installCrashHandlers` above wires `unhandledRejection` and
