@@ -1,0 +1,146 @@
+# The second half of the daily release train (daily-release.yml has the
+# whole picture). Triggered by ci finishing, and acts only on a success:
+#
+#   merge  ci passed on a release/vX.Y.Z pull request, at its current head,
+#          and the pull request changes nothing but the version sites and
+#          CHANGELOG.md (RELEASE_FILES in scripts/release-train.mjs). Merge it.
+#   tag    ci passed on a push to main, main's package.json carries a version
+#          with no tag yet, and CHANGELOG.md has its section. Push the
+#          annotated tag vX.Y.Z on exactly the commit ci passed, which starts
+#          release.yml. release.yml asks ci about that commit again before it
+#          builds anything.
+#
+# Neither job ever acts on a red or cancelled ci, and neither can be reached
+# from a fork: ci's pull_request runs from forks carry no secrets, and the
+# merge job also requires the head branch to live in this repository.
+#
+# Inert, like the train, until RELEASE_TRAIN is `on` and RELEASE_BOT_TOKEN
+# exists. The token pushes the tag because a tag pushed with GITHUB_TOKEN
+# would not start release.yml.
+
+name: release-train-land
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: release-train-land-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'pull_request'
+      && startsWith(github.event.workflow_run.head_branch, 'release/v')
+      && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Is the train switched on
+        id: on
+        env:
+          SWITCH: ${{ vars.RELEASE_TRAIN }}
+          HAS_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN != '' }}
+        run: |
+          if [ "${SWITCH:-}" = "on" ] && [ "$HAS_TOKEN" = "true" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Release train paused or not set up (RELEASE_TRAIN='${SWITCH:-unset}', token present: ${HAS_TOKEN}). Not merging."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.on.outputs.ready == 'true'
+        with:
+          ref: main
+
+      - name: Merge the release pull request
+        if: steps.on.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          pr=$(gh pr list --state open --base main --head "$BRANCH" --json number --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            echo "::notice::No open pull request for ${BRANCH}. Nothing to merge."
+            exit 0
+          fi
+          head=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
+          if [ "$head" != "$SHA" ]; then
+            echo "::notice::#${pr} has moved on to ${head}; ci passed on ${SHA}. Waiting for ci on the new head."
+            exit 0
+          fi
+          allowed=$(node -e "import('./scripts/release-train.mjs').then(m => console.log(m.RELEASE_FILES.join('\n')))")
+          stray=$(gh pr view "$pr" --json files --jq '.files[].path' | grep -vxF "$allowed" || true)
+          if [ -n "$stray" ]; then
+            echo "::error::#${pr} is on a release branch but changes files a release never changes:"
+            echo "$stray"
+            echo "Not merging. A release pull request moves the version and the changelog, nothing else."
+            exit 1
+          fi
+          gh pr merge "$pr" --merge --match-head-commit "$SHA"
+          echo "::notice::Merged #${pr} (${BRANCH}) at ${SHA}. The tag follows when ci passes on main."
+
+  tag:
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Is the train switched on
+        id: on
+        env:
+          SWITCH: ${{ vars.RELEASE_TRAIN }}
+          HAS_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN != '' }}
+        run: |
+          if [ "${SWITCH:-}" = "on" ] && [ "$HAS_TOKEN" = "true" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Release train paused or not set up (RELEASE_TRAIN='${SWITCH:-unset}', token present: ${HAS_TOKEN}). Not tagging."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.on.outputs.ready == 'true'
+        with:
+          # Exactly the commit ci passed, never main's tip, which may have
+          # moved on to a commit ci has not finished.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_BOT_TOKEN }}
+
+      - name: Tag the release
+        if: steps.on.outputs.ready == 'true'
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          version=$(node -p "require('./package.json').version")
+          tag="v${version}"
+          if git rev-parse -q --verify "refs/tags/${tag}" > /dev/null; then
+            echo "${tag} already exists. Nothing to tag."
+            exit 0
+          fi
+          if ! grep -qE "^## ${version//./\\.}( |$)" CHANGELOG.md; then
+            echo "::notice::main carries ${version} with no tag, but CHANGELOG.md has no section for it, so this is not a release commit. Not tagging."
+            exit 0
+          fi
+          git -c user.name="village-os release train" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              tag -a "$tag" -m "village-os ${version}" "$SHA"
+          git push origin "refs/tags/${tag}"
+          echo "::notice::Tagged ${tag} at ${SHA}. release.yml takes it from here."
+          { echo "### Tagged ${tag}"; echo; echo "On ${SHA}, after ci passed on main. release.yml builds, boots and publishes it."; } >> "$GITHUB_STEP_SUMMARY"

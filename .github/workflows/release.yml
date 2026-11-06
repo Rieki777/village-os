@@ -652,3 +652,24 @@ jobs:
             echo "VILLAGE_OS_RELEASE_COMMIT = \"${commit}\""
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # The published image, pulled and started the way a founder starts it.
+  #
+  # The image job above boots the image it BUILT, inside the runner's daemon.
+  # This pulls the image the registry now SERVES and walks the self-host path
+  # with it (selfhost-smoke.yml: fork-init, compose up, migrations, claim,
+  # restart). It used to be run by hand after a tag; with a release every day
+  # (daily-release.yml) a step done by hand is a step skipped.
+  #
+  # It runs after publishing, so it cannot stop this release reaching the
+  # registry. What it stops is the release reaching a village: a deployment
+  # that upgrades automatically (the first village's pin bump) waits for this
+  # whole run to conclude success before it moves its pin.
+  # ---------------------------------------------------------------------------
+  selfhost:
+    needs: [plan, image]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.image.result == 'success' }}
+    uses: ./.github/workflows/selfhost-smoke.yml
+    with:
+      image: ghcr.io/rieki777/village-os:${{ needs.plan.outputs.version }}
