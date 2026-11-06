@@ -524,8 +524,9 @@ and no rule change: the flat rules go on paying the quests nobody has valued yet
 **Earned Equity means what each village says it means (Rye, 2026-11-05).** Its meaning is
 "unique project to project, SET IN ADMIN per village": the token's meaning field (Admin, Tokens;
 0283), shown on the wallet and on every pay line that pays it (`PayLine.meaning`). Its three
-rules are seeded on with the amount blank (`enableEarnedEquityRules` queued the same on running
-villages from the next cycle), so it pays only what a quest, role or proposal names, and
+rules are seeded on with the amount blank for a new village (a running village keeps its rules
+as they stand until a separate step, held for Rye's word, switches them), so it pays only what a
+quest, role or proposal names, and
 `payLineProblem` refuses any piece of work that names it until the village has written what it
 is a share of. A blank Earned Equity rule no role names is the ordinary state and is not
 reported as a rule that paid nobody.
