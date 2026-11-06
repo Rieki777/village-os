@@ -105,6 +105,14 @@ describe("groups by circle (R31, R37)", () => {
     expect(groups.map((g) => g.name)).toEqual(["Water", "Kitchen", "Bees", null]);
   });
 
+  it("sorts by the flags shown: a flag the screen leaves off never lifts a row", () => {
+    const pay = listed({ kind: "pay", field: "pay", flags: [{ key: "baseUnknown" }], subject: { name: "Cook" } });
+    const plain = listed({ subject: { name: "Alpha" } });
+    const [g] = groupByCircle([plain, pay]);
+    expect(g.rows.map((r) => r.d.key)).toEqual([plain.key, pay.key]);
+    expect(pay.flags.map((f) => f.key)).toEqual(["baseUnknown"]);
+  });
+
   it("sorts Check first rows to the top of their group, the rest in the order sent", () => {
     const plain = listed({ subject: { name: "Alpha" } });
     const flagged = listed({ subject: { name: "Beta" }, flags: [{ key: "matchedByName" }] });

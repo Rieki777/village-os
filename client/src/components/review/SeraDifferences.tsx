@@ -31,6 +31,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Link } from "wouter";
 import { ChevronDown } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
+import { headlineCount } from "@shared/seraWaiting";
+import { STRUCTURE_KINDS } from "@shared/structurePlan";
 import SeraCompare, { CompareBlocks } from "@/components/review/SeraCompare";
 import {
   aheadWords,
@@ -44,13 +46,18 @@ import {
   headlineWords,
   inStep,
   lastCheckedWords,
+  checkFirst,
   readCount,
   readDecidePower,
   readList,
+  readPower,
   readTrouble,
+  SERA_MODULE,
+  structureHrefFor,
   smallWords,
   splitWaiting,
   whoDecidesWords,
+  whoSetsPayWords,
   type CountAnswer,
   type DecidePower,
   type ListAnswer,
@@ -62,7 +69,7 @@ export type SeraRead =
   | { phase: "off" }
   | { phase: "failed"; error: string }
   | { phase: "member"; count: CountAnswer; agent: string; power: DecidePower | null }
-  | { phase: "listed"; count: CountAnswer; list: ListAnswer };
+  | { phase: "listed"; count: CountAnswer; list: ListAnswer; pay: DecidePower | null };
 
 /** Said wherever the agent's own name could not be read. */
 const NEUTRAL_AGENT = "The outside service";
@@ -109,7 +116,9 @@ export function useSeraDifferences(headers: () => Record<string, string>) {
       if (!l.ok) return setRead({ phase: "failed", error: errorOf(l.body) ?? "Could not read the differences" });
       const list = readList(l.body);
       if (!list) return setRead({ phase: "failed", error: "The list came back in a shape this page cannot read" });
-      setRead({ phase: "listed", count, list });
+      // Who sets pay, for a pay row (R23). A failed read leaves the line out, never a guess.
+      const powers = list.differences.some((d) => d.kind === "pay") ? await json("/api/village/powers").catch(() => null) : null;
+      setRead({ phase: "listed", count, list, pay: powers?.ok ? readPower(powers.body, "cash.pay") : null });
     } catch {
       setRead({ phase: "failed", error: "Could not reach the server" });
     }
@@ -212,12 +221,14 @@ function Source({ d }: { d: ListedDifference }) {
 interface Ctx {
   agent: string;
   structureHref: string | null;
+  /** Who holds the power to set pay, or null when it could not be read. */
+  pay: DecidePower | null;
   onCompare: (d: ListedDifference) => void;
 }
 
 /** The way on from a row while the list is read-only: the structure review, or a plain sentence when nothing waits there. */
 function DecideThere({ ctx, d, block }: { ctx: Ctx; d: ListedDifference; block?: boolean }) {
-  if (d.kind === "pay") return <p className="text-[13px] text-muted-foreground">Pay is set by hand, on the role's own terms here.</p>;
+  if (d.kind === "pay") return ctx.pay ? <p className="text-[13px] text-muted-foreground">{whoSetsPayWords(ctx.pay)}</p> : null;
   if (!ctx.structureHref) {
     return <p className="text-[13px] text-muted-foreground">No arrival from {ctx.agent} waits in the structure review right now.</p>;
   }
@@ -325,11 +336,13 @@ type Only = "checkFirst" | "conflicts" | null;
 /** The list a reader with the queue's key sees. */
 function SeraList({
   list,
+  pay,
   structureHref,
   draftOpen,
   onRetry,
 }: {
   list: ListAnswer;
+  pay: DecidePower | null;
   structureHref: string | null;
   draftOpen: boolean;
   onRetry: () => Promise<void>;
@@ -359,7 +372,7 @@ function SeraList({
   const allGroups = useMemo(() => groupByCircle(waiting, order), [waiting, order]);
   const shown = useMemo(() => {
     const lane = view === "decide" ? w.toDecide : view === "small" ? w.small : waiting;
-    const keep = lane.filter((d) => (only === "checkFirst" ? d.flags.length > 0 : only === "conflicts" ? d.state === "conflict" : true));
+    const keep = lane.filter((d) => (only === "checkFirst" ? checkFirst(d) : only === "conflicts" ? d.state === "conflict" : true));
     return groupByCircle(keep, order).filter((g) => circle === "" || g.key === circle);
   }, [view, only, circle, w, waiting, order]);
   const shownList = useMemo(() => shown.flatMap((g) => g.rows.flatMap((r) => [r.d, ...r.nested])), [shown]);
@@ -367,6 +380,7 @@ function SeraList({
   const ctx: Ctx = {
     agent,
     structureHref,
+    pay,
     onCompare: (d) => {
       backTo.current = d.key;
       setComparing(d.key);
@@ -395,7 +409,7 @@ function SeraList({
   const checked = lastCheckedWords(list.lastReadAt, now);
   const ahead = aheadWords(agent, w.oursAhead.length);
   const headCount = w.toDecide.length || w.small.length;
-  const nChecks = waiting.filter((d) => d.flags.length > 0).length;
+  const nChecks = waiting.filter(checkFirst).length;
   const nConflicts = waiting.filter((d) => d.state === "conflict").length;
   const status_ = (
     <p role="status" className={status ? "text-sm text-muted-foreground" : "sr-only"}>
@@ -684,10 +698,12 @@ function SeraList({
 /** R38: what a member without the queue's key sees. The count, who decides, and never a subject. */
 function SeraMember({ count, agent, power }: { count: CountAnswer; agent: string; power: DecidePower | null }) {
   const ids = useId();
-  const n = count.lanes.decision + count.lanes.lowRisk;
+  // The headline's own rule (shared/seraWaiting.ts), so a member and a moderator read one number.
+  const n = headlineCount(count);
+  const small = count.toDecide === 0;
   const heading =
     n > 0
-      ? `${agent} suggests ${changes(n)} for the chart`
+      ? `${agent} suggests ${small ? `${n} small ${n === 1 ? "change" : "changes"}` : changes(n)} for the chart`
       : count.lastReadWhole && count.lastReadAt
         ? `The chart and ${agent} are in step`
         : `Nothing from ${agent} waits for the chart`;
@@ -732,7 +748,7 @@ export default function SeraDifferences({
       </section>
     );
   }
-  return <SeraList list={read.list} structureHref={structureHref} draftOpen={draftOpen} onRetry={onRetry} />;
+  return <SeraList list={read.list} pay={read.pay} structureHref={structureHref} draftOpen={draftOpen} onRetry={onRetry} />;
 }
 
 /**
@@ -776,4 +792,64 @@ export function SeraEarlierArrivals({
       </ul>
     </details>
   );
+}
+
+// ── What /review carries of all this ────────────────────────────────────────
+
+/** The kinds that change the chart, as the structure review reads them. */
+const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
+
+/** The two reads, what waits on this reader, and which of the queue's batches fold away, for /review. */
+export function useSeraOnReview(headers: () => Record<string, string>) {
+  const { read, load } = useSeraDifferences(headers);
+  // Once the list holds the service's records, its old batches fold away unoffered (spec R28 retires them later).
+  const listed = read.phase === "listed" && read.list.lastReadAt !== null;
+  return {
+    read,
+    load,
+    waits: seraWaiting(read),
+    folds: (b: { moduleId: string | null }) => listed && b.moduleId === SERA_MODULE,
+  };
+}
+export type SeraOnReview = ReturnType<typeof useSeraOnReview>;
+
+type QueueBatch = { batchId: string; moduleId: string | null; receivedAt: string | null; items: ReadonlyArray<{ kind: string }> };
+
+/** The top of /review: the summary line with its jump links, then the section (R37). */
+export function SeraTop({
+  sera,
+  queue,
+  witness,
+}: {
+  sera: SeraOnReview;
+  queue: { batches?: QueueBatch[]; openDrafts?: unknown[] } | null;
+  witness: number;
+}) {
+  return (
+    <>
+      <SeraSummaryLine read={sera.read} witness={witness} />
+      <SeraDifferences
+        read={sera.read}
+        structureHref={structureHrefFor(queue?.batches ?? [], SERA_MODULE, CHART_KINDS)}
+        draftOpen={(queue?.openDrafts ?? []).length > 0}
+        onRetry={sera.load}
+      />
+    </>
+  );
+}
+
+/** The page a member the queue refuses is shown: how many changes wait and who decides them (R38). */
+export function SeraMemberPage({ sera }: { sera: SeraOnReview }) {
+  return (
+    <>
+      <h1 className="text-2xl font-bold text-foreground">Review</h1>
+      <SeraDifferences read={sera.read} structureHref={null} draftOpen={false} onRetry={sera.load} />
+    </>
+  );
+}
+
+/** The service's old batches, folded once the list holds them. */
+export function SeraFold({ sera, batches, when }: { sera: SeraOnReview; batches: QueueBatch[]; when: (iso: string | null) => string }) {
+  if (sera.read.phase !== "listed") return null;
+  return <SeraEarlierArrivals agent={sera.read.list.agent} batches={batches.filter(sera.folds)} when={when} chartKinds={CHART_KINDS} />;
 }

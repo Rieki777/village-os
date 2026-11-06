@@ -14,6 +14,8 @@
  * `agent` or the guide read, and this village is "here" and "ours".
  */
 import type { Difference, DifferenceCount, SnapshotRead } from "@shared/seraDifferences";
+import { waitingKind } from "@shared/seraWaiting";
+import { roleWithHolders } from "@shared/roleHolderLabel";
 
 /** One difference with its words, as `GET /api/saberra/differences` sends it. */
 export interface ListedDifference extends Difference {
@@ -48,6 +50,8 @@ function countOf(v: unknown): DifferenceCount | null {
   const lanes = v.lanes;
   return {
     total: num(v.total),
+    // An older server sends no toDecide; its decisions are the nearest it said.
+    toDecide: typeof v.toDecide === "number" ? num(v.toDecide) : num(lanes.decision),
     lanes: { facts: num(lanes.facts), lowRisk: num(lanes.lowRisk), decision: num(lanes.decision) },
     conflicts: num(v.conflicts),
     checkFirst: num(v.checkFirst),
@@ -116,15 +120,10 @@ export interface Waiting {
   oursAhead: ListedDifference[];
 }
 
-/** R29: the headline counts only what waits for a person. */
+/** R29: the headline counts only what waits for a person, by the rule the count uses (shared/seraWaiting.ts). */
 export function splitWaiting(list: readonly ListedDifference[]): Waiting {
   const out: Waiting = { toDecide: [], small: [], facts: [], oursAhead: [] };
-  for (const d of list) {
-    if (d.state === "oursAhead") out.oursAhead.push(d);
-    else if (d.state === "conflict" || d.lane === "decision") out.toDecide.push(d);
-    else if (d.lane === "lowRisk") out.small.push(d);
-    else out.facts.push(d);
-  }
+  for (const d of list) out[waitingKind(d)].push(d);
   return out;
 }
 
@@ -163,9 +162,10 @@ export function circleKeyOf(d: Difference): string {
   return d.subject.circleId ?? "none";
 }
 
-const checkFirst = (d: Difference): boolean => d.flags.length > 0;
+/** A row shows Check first when the server sent it a flag to show; a flag left off the screen lifts nothing (R39). */
+export const checkFirst = (d: ListedDifference): boolean => d.words.flags.length > 0;
 /** Check first rows to the top, everything else in the order the server sent (R37). */
-const flaggedFirst = <T>(items: T[], of: (t: T) => Difference): T[] =>
+const flaggedFirst = <T>(items: T[], of: (t: T) => ListedDifference): T[] =>
   items.map((t, i) => ({ t, i })).sort((a, b) => Number(checkFirst(of(b.t))) - Number(checkFirst(of(a.t))) || a.i - b.i).map((x) => x.t);
 const fold = (s: string) => s.normalize("NFKD").toLowerCase();
 
@@ -311,18 +311,19 @@ export function readTrouble(list: Pick<ListAnswer, "lastReadAt" | "reads" | "las
   return { noAnswer: false, lines };
 }
 
-// ── Who decides, for a member (R38) ─────────────────────────────────────────
+// ── Who decides, and who sets pay (R38, R23) ────────────────────────────────
 
-/** The one power row this reads from `GET /api/village/powers`. */
+/** One power row as `GET /api/village/powers` sends it. */
 export interface DecidePower {
   heldBy: { roleName: string; people: string[] } | null;
   heldToday?: string[];
   stage?: string | null;
 }
 
-export function readDecidePower(v: unknown): DecidePower | null {
+/** Who holds one power, read out of the village powers answer. Null when the answer is not one. */
+export function readPower(v: unknown, capability: string): DecidePower | null {
   if (!isObj(v) || !Array.isArray(v.powers)) return null;
-  const row = v.powers.find((p) => isObj(p) && p.capability === "org.decide");
+  const row = v.powers.find((p) => isObj(p) && p.capability === capability);
   if (!isObj(row)) return null;
   const held = isObj(row.heldBy) && typeof row.heldBy.roleName === "string" ? row.heldBy : null;
   return {
@@ -333,6 +334,9 @@ export function readDecidePower(v: unknown): DecidePower | null {
     stage: typeof row.stage === "string" ? row.stage : null,
   };
 }
+
+/** The power that decides the chart (R38). */
+export const readDecidePower = (v: unknown): DecidePower | null => readPower(v, "org.decide");
 
 const namesOf = (xs: readonly string[]): string =>
   xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
@@ -345,12 +349,27 @@ export function whoDecidesWords(p: DecidePower, n: number): string {
   const it = n === 1 ? "it" : "them";
   if (p.heldBy) {
     if (p.heldBy.people.length === 0) return NO_HOLDER_WORDS;
-    return `${p.heldBy.roleName} (${namesOf(p.heldBy.people)}) decides ${it}.`;
+    return `${roleWithHolders(p.heldBy.roleName, p.heldBy.people)} decides ${it}.`;
   }
   const today = p.heldToday ?? [];
   if (today.length > 0) return `${namesOf(today)} and the stewards decide ${it}.`;
   if (p.stage) return `Everyone at the ${p.stage} stage or past it can decide ${it}.`;
   return `The admins decide ${it} for now.`;
+}
+
+/** When nobody holds the power to set pay (R23). */
+export const NO_PAY_HOLDER_WORDS = "Nobody holds the power to set pay right now.";
+
+/** R23: who sets pay, from who holds `cash.pay` here, in the house form "The Treasurer (Rick) sets pay." */
+export function whoSetsPayWords(p: DecidePower): string {
+  if (p.heldBy) {
+    if (p.heldBy.people.length === 0) return NO_PAY_HOLDER_WORDS;
+    return `The ${roleWithHolders(p.heldBy.roleName, p.heldBy.people)} sets pay.`;
+  }
+  const today = p.heldToday ?? [];
+  if (today.length > 0) return `${namesOf(today.map((l, i) => `${i === 0 ? "The" : "the"} ${l}`))} ${today.length === 1 ? "sets" : "set"} pay.`;
+  if (p.stage) return `Everyone at the ${p.stage} stage or past it can set pay.`;
+  return NO_PAY_HOLDER_WORDS;
 }
 
 // ── The merged diff (R33) ───────────────────────────────────────────────────

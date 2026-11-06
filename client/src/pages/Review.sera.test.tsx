@@ -32,7 +32,7 @@ import { listed } from "@/test/seraDifferences";
 type Answer = [status: number, body: unknown];
 
 const EMPTY = { batches: [], quests: [], drops: [], counts: { proposals: 0, quests: 0 } };
-const COUNT = { total: 2, lanes: { facts: 0, lowRisk: 0, decision: 2 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
+const COUNT = { total: 2, toDecide: 2, lanes: { facts: 0, lowRisk: 0, decision: 2 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
 
 const item = (id: string, batchId: string, moduleId: string) => ({
   id,

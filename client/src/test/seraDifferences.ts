@@ -5,14 +5,14 @@
  * the page is sent. Test support only; nothing in the app imports it.
  */
 import type { Difference, DifferenceSubject } from "@shared/seraDifferences";
-import { differenceSentence, flagWords, openInUrl, openInWords, sourceWords } from "@shared/seraDifferenceWords";
+import { differenceSentence, flagWords, openInUrl, openInWords, shownFlags, sourceWords } from "@shared/seraDifferenceWords";
 import type { ListedDifference } from "@/lib/seraReview";
 
 let seq = 0;
 export type Over = Omit<Partial<Difference>, "subject"> & { subject?: Partial<DifferenceSubject> };
 
-/** One difference as the route sends it, words included. */
-export function listed(over: Over = {}, agent = "Sera"): ListedDifference {
+/** One difference as the route sends it, words included: the role's holders here, and the shown flags only. */
+export function listed(over: Over = {}, agent = "Sera", holders?: string[]): ListedDifference {
   seq += 1;
   const pageId = over.subject?.pageId ?? `0000${seq}aaaabbbbccccddddeeee`;
   const d: Difference = {
@@ -47,8 +47,8 @@ export function listed(over: Over = {}, agent = "Sera"): ListedDifference {
   return {
     ...d,
     words: {
-      sentence: differenceSentence(d, agent),
-      flags: d.flags.map((f) => flagWords(f, agent)),
+      sentence: differenceSentence(d, agent, holders ? { holders } : {}),
+      flags: shownFlags(d).map((f) => flagWords(f, agent)),
       source: sourceWords(d, agent),
       open: d.source.pageId ? openInUrl("https://dashboard.example.org/ws", d.source.pageId) : null,
       openWords: openInWords(agent),

@@ -35,7 +35,7 @@ import type { ListedDifference } from "@/lib/seraReview";
 
 type Answer = [status: number, body: unknown];
 
-const COUNT = { total: 0, lanes: { facts: 0, lowRisk: 0, decision: 0 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
+const COUNT = { total: 0, toDecide: 0, lanes: { facts: 0, lowRisk: 0, decision: 0 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
 const TODAY_1405 = () => {
   const d = new Date();
   d.setHours(14, 5, 0, 0);
@@ -66,7 +66,8 @@ function serve(routes: { count?: Answer; list?: Answer; guide?: Answer; powers?:
           : path === "/api/guide"
             ? (routes.guide ?? [404, {}])
             : path === "/api/village/powers"
-              ? (routes.powers ?? [404, {}])
+              ? // By default nobody holds the power to set pay; a test that needs a holder says so.
+                (routes.powers ?? [200, { powers: [{ capability: "cash.pay", heldBy: null, heldToday: [] }] }])
               : [404, {}];
     return { ok: status >= 200 && status < 300, status, json: async () => body };
   });
@@ -105,7 +106,7 @@ const SERA = "Keeps the village's water running: the pumps, the storage tanks, t
 /** The "Waiting for you" board: Water with a move, a conflict and a new role; Kitchen with a rest and pay. */
 function mainBoard(): ListedDifference[] {
   return [
-    listed({ kind: "roleMove", field: "circle", sera: "c-land", ours: "c-water", params: { from: "Water", to: ["Land & Ecology"] }, subject: { name: "Water Steward" } }),
+    listed({ kind: "roleMove", field: "circle", sera: "c-land", ours: "c-water", params: { from: "Water", to: ["Land & Ecology"] }, subject: { name: "Water Steward" } }, "Sera", ["Ana Moss"]),
     listed({ kind: "textField", field: "aim", lane: "lowRisk", state: "conflict", sera: SERA, ours: HERE, subject: { name: "Pump Keeper" } }),
     listed({
       kind: "roleAdd",
@@ -115,12 +116,15 @@ function mainBoard(): ListedDifference[] {
       flags: [{ key: "baseUnknown" }, { key: "firstSight" }],
       subject: { ourId: null, name: "Well Monitor" },
     }),
-    listed({ kind: "roleRest", field: null, sera: "gone", ours: "live", subject: { name: "Dish Rota", circleId: "c-kitchen", circleName: "Kitchen" } }),
+    listed({ kind: "roleRest", field: null, sera: "gone", ours: "live", subject: { name: "Dish Rota", circleId: "c-kitchen", circleName: "Kitchen" } }, "Sera", []),
     listed({
       kind: "pay",
       field: "pay",
       ours: "none",
       sera: "stipend|1200",
+      // As the server sends it: pay's base is never known, and the flag rides in the data.
+      flags: [{ key: "baseUnknown" }],
+      bulkEligible: false,
       params: { model: "Stipend", monthlyUsd: 1200, standing: "pending" },
       subject: { name: "Cook", circleId: "c-kitchen", circleName: "Kitchen" },
     }),
@@ -181,7 +185,15 @@ describe("the Waiting for you board", () => {
     // The new role carries Check first, so it leads the group though it was sent third.
     expect(rows[0].textContent).toContain("Sera suggests a new role, Well Monitor, in Water.");
     expect(rows[0].textContent).toContain("Check first: the first time Sera has sent this");
-    expect(rows[1].textContent).toContain("Sera suggests moving Water Steward from Water to Land & Ecology.");
+    // A first sight implies the unknown base, so the screen says only the first (R39).
+    expect(rows[0].textContent).not.toContain("no earlier version");
+    // Named with who holds it here, in the house form.
+    expect(rows[1].textContent).toContain("Sera suggests moving Water Steward (Ana) from Water to Land & Ecology.");
+    // The pay row carries the unknown base in its data and shows no chip, so it is not sorted first.
+    const kitchen = within(screen.getByRole("heading", { level: 3, name: "Kitchen: 2 changes" }).closest("section") as HTMLElement).getAllByRole("article");
+    expect(kitchen[0].textContent).toContain("Sera has archived Dish Rota. It is still live here, and nobody holds it.");
+    expect(kitchen[1].textContent).toContain("Sera lists Cook's pay");
+    expect(kitchen[1].textContent).not.toContain("Check first");
   });
 
   it("starts a group of more than eight collapsed, and opens it on request", async () => {
@@ -265,7 +277,27 @@ describe("the Waiting for you board", () => {
     // The move, the new role and the rest. The conflict compares first, and pay is set by hand.
     expect(links).toHaveLength(3);
     for (const l of links) expect(l.getAttribute("href")).toBe("/review/structure/sync-1");
-    expect(screen.getByText("Pay is set by hand, on the role's own terms here.")).toBeTruthy();
+    expect(screen.getByText("Nobody holds the power to set pay right now.")).toBeTruthy();
+  });
+
+  it("says who sets pay, from who holds the power to set it here, in the house form", async () => {
+    serve({
+      list: [200, listAnswer(mainBoard())],
+      powers: [200, { powers: [{ capability: "cash.pay", heldBy: null, heldToday: ["Treasurer (Rick)"] }] }],
+    });
+    show();
+    expect(await screen.findByText("The Treasurer (Rick) sets pay.")).toBeTruthy();
+    expect(screen.queryByText(/Nobody holds the power to set pay/)).toBeNull();
+  });
+
+  it("counts Check first by the flags shown, never by a flag the screen leaves off", async () => {
+    serve({ list: [200, listAnswer(mainBoard())] });
+    show();
+    await screen.findByRole("heading", { level: 2 });
+    // Two rows carry a flag in their data (the new role and the pay); one shows a chip.
+    expect(screen.getByRole("button", { name: "Check first 1" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check first 1" }));
+    expect(screen.getAllByRole("article").map((a) => a.textContent?.includes("Well Monitor"))).toEqual([true]);
   });
 
   it("says plainly when no arrival waits in the structure review, and draws no link", async () => {
@@ -297,7 +329,8 @@ describe("the conflict board", () => {
     await screen.findByRole("heading", { level: 2 });
     fireEvent.click(screen.getByRole("button", { name: "Compare them" }));
     const h2 = screen.getByRole("heading", { level: 2 });
-    expect(h2.textContent).toBe("Pump Keeper's purpose was changed here and in Sera, and the two differ.");
+    // The board's own sentence, the same on the row, here and in the 1280 pane.
+    expect(h2.textContent).toBe("You and Sera both changed Pump Keeper's purpose.");
     expect(document.activeElement).toBe(h2);
     const [here, theirs] = screen.getAllByRole("heading", { level: 3 });
     expect(here.textContent).toBe("Here now");
@@ -400,7 +433,8 @@ describe("the read states", () => {
 });
 
 describe("what a member sees", () => {
-  const count = { ...COUNT, total: 6, lanes: { facts: 1, lowRisk: 2, decision: 3 }, lastReadAt: TODAY_1405(), lastReadWhole: true };
+  // The board's set: four decisions and a purpose conflict to decide, two small changes, three facts.
+  const count = { ...COUNT, total: 10, toDecide: 5, lanes: { facts: 3, lowRisk: 3, decision: 4 }, conflicts: 1, lastReadAt: TODAY_1405(), lastReadWhole: true };
   const guide = { choice: "village", options: [{ id: "village", name: "the village guide" }, { id: "saberra", name: "Sera" }] };
 
   it("shows the count and who decides, and never a subject", async () => {
@@ -488,8 +522,8 @@ describe("the 1280 px board", () => {
     // The first row is shown first, and pressing another shows that one.
     const firstRow = screen.getAllByRole("button", { current: true })[0];
     expect(within(pane).getByRole("heading", { level: 3 }).textContent).toBe(firstRow.querySelector("span")?.textContent?.replace(/\.$/, ""));
-    fireEvent.click(screen.getByRole("button", { name: /Pump Keeper's purpose was changed here/ }));
-    expect(within(pane).getByRole("heading", { level: 3 }).textContent).toBe("Pump Keeper's purpose was changed here and in Sera, and the two differ");
+    fireEvent.click(screen.getByRole("button", { name: /You and Sera both changed Pump Keeper's purpose/ }));
+    expect(within(pane).getByRole("heading", { level: 3 }).textContent).toBe("You and Sera both changed Pump Keeper's purpose");
     const cols = within(pane).getAllByRole("heading", { level: 4 });
     expect(cols.map((h) => h.textContent)).toEqual(["Here now", "Sera's version"]);
     expect((cols[0].parentElement?.parentElement as HTMLElement).className).toContain("grid-cols-2");
