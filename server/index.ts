@@ -131,6 +131,7 @@ import { register as registerVoiceSpreadRoutes } from "./routes/voiceSpread";
 import { register as registerGovernanceVetoRoutes } from "./routes/governanceVetoes";
 import { register as registerGovernanceLandingRoutes } from "./routes/governanceLanding";
 import { register as registerMechanicsHistoryRoutes } from "./routes/mechanicsHistory";
+import { register as registerChangeRequestRoutes } from "./routes/changeRequests";
 import { register as registerStewardSlateRoutes } from "./routes/stewardSlate";
 import { registerMoonSettlementRoutes } from "./routes/moonSettlement";
 // The dispatcher lane: the landing path, the change-set executor and the roll notice.
@@ -366,7 +367,7 @@ import {
   currentMintRuleValue,
   mintRuleLabel, moduleChangeLabel,
   rowToProposal,
-  priceChangeSet, validateChangeSet, asChangeItem,
+  priceChangeSet, validateChangeSet, asChangeItem, CHANGE_SET_CAP_KEY,
   type MintRuleValues,
 } from "./lib/mechanics";
 import { buildMechanicsHandoff } from "./lib/hypha-bridge";
@@ -20699,6 +20700,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
   const readMintRulesForChangeSet = async (ruleIds: string[]): Promise<Map<string, MintRuleValues>> =>
     (await mintRulesByIds(getPool(), ruleIds)) as Map<string, MintRuleValues>;
 
+  /** One validator for a proposal's change set, wherever it is built: the create route and change requests (server/routes/changeRequests.ts). */
+  const validateProposalChanges = (changes: unknown) => validateChangeSet(getPool(), Array.isArray(changes) ? changes : [], rawValue, Math.max(0, numberVar("governance.change_cooldown_days")), readMintRulesForChangeSet, { ...moduleChangeReaders, changeSetCap: numberVar(CHANGE_SET_CAP_KEY), brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) });
   app.post("/api/game/mechanics/proposals", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to propose a change to the game" });
@@ -20717,14 +20720,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const rationale = String(req.body?.rationale ?? "").trim().slice(0, 8000);
     if (!title) return res.status(400).json({ error: "Give the proposal a title" });
     if (!rationale) return res.status(400).json({ error: "Say why. The village votes on reasons, not numbers" });
-    const cooldown = Math.max(0, numberVar("governance.change_cooldown_days"));
-    const { problems, normalized } = await validateChangeSet(
-      getPool(),
-      Array.isArray(req.body?.changes) ? req.body.changes : [],
-      rawValue,
-      cooldown,
-      readMintRulesForChangeSet, { ...moduleChangeReaders, brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) },
-    );
+    const { problems, normalized } = await validateProposalChanges(req.body?.changes);
     if (problems.length) return res.status(400).json({ error: "The change-set has problems", problems });
     const id = `gmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const status = standing.qualified ? "open" : "draft";
@@ -24801,6 +24797,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
   registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
+  registerChangeRequestRoutes(app, { authedUser, capabilityCtx, getPool, members, overLimit, validate: validateProposalChanges });
   // The two founder doors onto the moon's settlement: ask the village now,
   // and land what the village has already carried. server/routes/moonSettlement.ts.
   registerMoonSettlementRoutes(app, {

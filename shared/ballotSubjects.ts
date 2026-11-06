@@ -1063,6 +1063,12 @@ export const META_SETTING_KEYS: readonly string[] = [
   "governance.proposals_per_member_per_cycle",
   "governance.change_cooldown_days",
   "governance.vote_days",
+  // How many changes one proposal may carry (Rye, 2026-11-06). It shapes
+  // every other proposal, so a cheap trial of it would be a moon in which
+  // larger bundles go up at a bar nobody agreed to.
+  "governance.change_set_cap",
+  // How many change requests one member may gather (spec R20).
+  "governance.change_requests_gathering_per_member",
 ];
 
 /** Any key under one of these is a META_SETTING, whichever lane adds it. */
