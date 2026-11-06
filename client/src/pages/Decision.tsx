@@ -47,7 +47,8 @@ import VoterRoll from "@/components/governance/VoterRoll";
 import WeightRecord from "@/components/governance/WeightRecord";
 import { subjectNoun } from "@/components/governance/wizardConfig";
 import { CYCLE_SETTLEMENT } from "@shared/moonSettlement";
-import { VILLAGE_LAUNCH } from "@shared/ballotSubjects";
+import { DATABASE_EXPORT, VILLAGE_LAUNCH } from "@shared/ballotSubjects";
+import { ExportDelivery } from "@/components/governance/ExportByVote";
 import { ROLE_APPLICATION } from "@shared/seatApplications";
 import { useCatalyst } from "@/lib/gameApi";
 import { weightText } from "@/components/governance/voteBars";
@@ -459,6 +460,7 @@ export default function Decision() {
                 the same three facts read at two different times. It returns
                 null for every other subject type. */}
             {ballot.transfer && <TransferCeremony ballot={ballot} fresh={!!justClosed} />}
+            {ballot.subjectType === DATABASE_EXPORT && <ExportDelivery ballotId={ballot.id} />}
 
             {/* A CLOSED BALLOT KEEPS THE PICTURE. The whole point of drawing
                 the moon and the field is that a village can see how a decision
