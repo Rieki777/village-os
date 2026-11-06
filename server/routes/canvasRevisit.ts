@@ -119,13 +119,19 @@ async function startOf(deps: CanvasRevisitRouteDeps, newMoon: Date): Promise<{ s
   return { startsAt: zonedTimeToUtc(day.year, day.month, day.day, hour, minute, timeZone), timeZone };
 }
 
-/** The offered gathering, if one was offered and is still on the calendar. */
+/**
+ * The offered gathering, if one was offered and is still on the calendar.
+ * A CANCELLED one counts as gone (W4-moon-cancelled): the card would
+ * otherwise tell every member it is on the calendar, and the offer would stay
+ * refused until somebody deleted the event row.
+ */
 async function offered(deps: CanvasRevisitRouteDeps): Promise<{ id: string; status: string } | null> {
   const doc = await readConfigDocument<{ eventId?: unknown }>(deps.getPool(), CANVAS_MOON_KEY);
   const id = typeof doc?.eventId === "string" ? doc.eventId : "";
   if (!id) return null;
   const g = await getGathering(deps.getPool(), id);
-  return g ? { id: g.id, status: String(g.status) } : null;
+  if (!g || String(g.status) === "cancelled") return null;
+  return { id: g.id, status: String(g.status) };
 }
 
 export function register(app: Express, deps: CanvasRevisitRouteDeps): void {

@@ -240,4 +240,16 @@ describe.skipIf(!configured)("the key moments' wiring and the canvas moon", () =
     expect(r.body.gathering).toBeNull();
     expect(r.body.mayOffer).toBe(true);
   });
+
+  it("treats a cancelled gathering as gone: no 'on the calendar' claim, and it can be offered again (W4-moon-cancelled)", async () => {
+    const made = await call("POST", "/api/canvas/moon/gathering", "keeper");
+    expect(made.status, JSON.stringify(made.body)).toBe(201);
+    await pool.query("UPDATE events SET status = 'cancelled' WHERE id = ?", [made.body.gathering.id]); // module-review-ok: cancelling the gathering in the scratch schema, as the calendar's cancel does
+    const r = await call("GET", "/api/canvas/moon", "keeper");
+    expect(r.body.gathering).toBeNull();
+    expect(r.body.mayOffer).toBe(true);
+    const again = await call("POST", "/api/canvas/moon/gathering", "keeper");
+    expect(again.status, JSON.stringify(again.body)).toBe(201);
+    expect(again.body.gathering.id).not.toBe(made.body.gathering.id);
+  });
 });
