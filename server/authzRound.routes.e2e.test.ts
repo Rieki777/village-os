@@ -52,6 +52,8 @@ const serverLogs: string[] = [];
 /** The pre-upgrade endpoint, seeded as a plain variable row before the server boots. Fake. */
 const LEGACY_KEY = "AuthzLegacyFakeKey0123456789abcd";
 const LEGACY_URL = `https://base-mainnet.g.alchemy.com/v2/${LEGACY_KEY}`;
+/** The hub's shared header secret, a throwaway for the spawned scratch server. */
+const HUB_SECRET = "authz-round-hub-secret"; // module-review-ok: a throwaway value for the spawned scratch server, never a real credential
 
 async function call(
   method: string,
@@ -120,6 +122,7 @@ beforeAll(async () => {
       STRIPE_WEBHOOK_SECRET: "whsec_authzround", // module-review-ok: a throwaway value for the spawned scratch server, never a real credential
       VILLAGE_SECRETS_KEY: "1f".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
       BASE_RPC_URL: "",
+      GOVERNANCE_HUB_SECRET: HUB_SECRET,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -327,6 +330,49 @@ describe.skipIf(!DB_CONFIGURED)("the public amendment history", () => {
     const row = (feed.json as any[]).find((h) => h.key === "abuse.investor_docs_per_ip_hourly" && h.to === "51");
     expect(row, feed.text.slice(0, 400)).toBeTruthy();
     expect(row.withheld).toBe(false);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("a hub outcome that names no Hypha space (R039)", () => {
+  // One hub listener serves many villages, so a delivery about somebody
+  // else's space can arrive correctly signed. With a space id recorded, a
+  // delivery naming none cannot be checked: it is recorded, and it waits for
+  // a person instead of changing a dial on its own.
+  const deliver = async (proposalId: string, extra: Record<string, unknown>) => {
+    const res = await fetch(BASE + "/api/webhooks/mechanics-governance", { // module-review-ok: the test client dialing the server under test on localhost
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-governance-hub-secret": HUB_SECRET },
+      body: JSON.stringify({ outcome: "passed", marker: `[gm:${proposalId}]`, ...extra }),
+    });
+    return { status: res.status, json: (await res.json().catch(() => null)) as any };
+  };
+  const placeLine = async (): Promise<string | null> => {
+    const [rows] = await pool.query<any[]>("SELECT value FROM game_variables WHERE config_key = 'sessions.place_line'"); // module-review-ok: the e2e harness reading its own scratch schema
+    return rows[0] ? String(rows[0].value) : null;
+  };
+
+  it("holds an unstated outcome for a person, and applies one that names this village's space", async () => {
+    expect((await call("PUT", "/api/admin/variables/hypha.space_id", { value: "42" })).status).toBe(200);
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      title: "Meet at the long table", rationale: "The hall is warmer in the dry season.",
+      changes: [{ key: "sessions.place_line", to: "Meet at the long table" }],
+    });
+    expect(made.status, made.text).toBe(200);
+    const id = String(made.json?.id);
+    const sent = await call("POST", `/api/game/mechanics/proposals/${id}/to-hypha`, {});
+    expect(sent.status, sent.text).toBe(200);
+    const before = await placeLine();
+
+    const unstated = await deliver(id, { deliveryId: "r039-unstated" });
+    expect(unstated.status, JSON.stringify(unstated.json)).toBe(200);
+    expect(unstated.json?.status).toBe("passed_verified");
+    expect(String(unstated.json?.held)).toMatch(/named no Hypha space/);
+    expect(await placeLine(), "nothing changed on an outcome nobody could check").toBe(before);
+
+    const named = await deliver(id, { deliveryId: "r039-named", spaceId: "42" });
+    expect(named.status, JSON.stringify(named.json)).toBe(200);
+    expect(named.json?.status).toBe("applied");
+    expect(await placeLine()).toBe("Meet at the long table");
   });
 });
 

@@ -21204,9 +21204,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
     }
     if (space.verdict === "unstated") {
-      // Accepted, and said out loud. A check that cannot run must never read as
-      // a check that passed, and refusing instead would take a working
-      // integration down the first time a sender dropped an optional field.
+      // Recorded, said out loud, and never applied on its own (R039, below). A
+      // check that cannot run must never read as a check that passed, and
+      // refusing instead would take a working integration down the first time a
+      // sender dropped an optional field.
       void reportError(new Error("Hypha outcome carried no space id, so the space check did not run"), {
         where: "mechanics governance callback",
       });
@@ -21326,6 +21327,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!boolVar("governance.auto_apply_enabled")) {
       await notifyAdmins("governance", `Verified on-chain but applying is off: ${p.title}`, `gmp:${p.id}:frozen`);
       return res.json({ received: true, status: "passed_verified", held: "applying is switched off" });
+    }
+    // R039: with a space id recorded, an outcome naming no space could be another
+    // village's vote, so it waits for a person (POST /api/admin/mechanics/proposals/:id/apply).
+    if (space.verdict === "unstated") {
+      await notifyAdmins("governance", `Verified, but the outcome named no Hypha space, so it waits for you to apply it: ${p.title}`, `gmp:${p.id}:unstated-space`);
+      return res.json({ received: true, status: "passed_verified", held: "the outcome named no Hypha space, so a person applies it" });
     }
     const result = await applyMechanicsProposal(fresh, null);
     return res.json({ received: true, status: result.ok ? "applied" : "passed_verified", applied: result.applied, failed: result.failed });
