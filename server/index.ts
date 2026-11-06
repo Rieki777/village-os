@@ -60,7 +60,7 @@ import { contentVersion } from "../shared/pageContent/resolve";
 import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
 import { pageVarsFrom } from "../shared/pageContent/vars";
 import { visitProgramProblem } from "../shared/visitProgram";
-import { workWithUsAckEmail } from "./lib/workWithUsAck";
+import { greetingName, workWithUsAckEmail } from "./lib/workWithUsAck";
 import { investorPacketEmail } from "./lib/investorPacketMail";
 import { emailAccent } from "./lib/emailAccent";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
@@ -4592,6 +4592,16 @@ function getWorkWithUs() {
  * Fail-open on database trouble: an unreachable guard table must not take
  * login down with it; the guard protects against abuse, not outages.
  */
+/**
+ * A bucket for mail a stranger aims at a typed address (R106). Per-IP limits
+ * alone let anyone send the village's mail to one inbox from many addresses,
+ * so each public door also counts per recipient. The address is hashed, so the
+ * limits table never holds it.
+ */
+function recipientBucket(door: string, address: string): string {
+  return `${door}-to:${crypto.createHash("sha256").update(address.trim().toLowerCase()).digest("hex").slice(0, 32)}`;
+}
+
 async function overLimit(bucket: string, max: number, windowMs: number): Promise<boolean> {
   // `unavailable` reads as not-over-limit HERE, in one visible place, which is
   // what fail-open means for the twenty-odd callers written against it.
@@ -7522,7 +7532,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
      * Every other email link in the codebase already used this helper.
      */
     const origin = notifyDeps.origin();
-    const applicantName = (data as any)?.name ?? (data as any)?.firstName ?? (data as any)?.email ?? "Anonymous";
+    const applicantName = greetingName(data); // R106: a stranger's words, repeated by the village's mail, bounded (lib/workWithUsAck.ts)
 
     (async () => { // fire-and-forget notifications
       // Notify the pathway inbox
@@ -7537,7 +7547,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // Acknowledge the submitter of a Work With Us proposal: one typed address, never a list (lib/publicAddress.ts)
       const ackTo = type === "work-with-us" ? singlePublicAddress((data as any)?.email) : null;
       // Its words are the village's own (Admin, Pages, Work With Us): lib/workWithUsAck.ts.
-      if (ackTo) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName), brandColour(getBrand().theme)) });
+      if (ackTo && !(await overLimit(recipientBucket("ack", ackTo), 3, 24 * 60 * 60 * 1000))) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName), brandColour(getBrand().theme)) });
     })();
 
     res.json({ success: true, id: entry.id, ...ideaReceipt(proposal, !!entry.userId) }); // whether a quest idea reached /review: lib/questIdeaReceipt.ts
@@ -17582,6 +17592,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       if (!req.file) return res.status(400).json({ error: "Missing file" });
       try {
         const clean = await sanitiseForVolume(req.file.buffer, req.file.originalname);
+        // The filter above read the browser's claim; this reads the bytes (R107).
+        if (clean.kind !== "image" && clean.kind !== "pdf") return res.status(400).json({ error: "Only images or PDF are allowed" });
         const filename = stampedName("proposal", clean.ext || ".bin");
         writeToVolume(UPLOADS_DIR, filename, clean.bytes);
         res.json({ filename, originalName: req.file.originalname });
@@ -18208,7 +18220,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
        */
       const documents = packet.map((d) => ({ title: String(d.title ?? "Document"), href: absolute(String(d.url ?? "")), pageHref: d.pageLink ? absolute(String(d.pageLink)) : null }));
       try {
-        await sendResendEmail({ to: [email], origin: "investor.packet", ...(await investorPacketEmail(getPool, origin, { name: String(name), documents })) });
+        if (!(await overLimit(recipientBucket("investor-packet", email), 3, 24 * 60 * 60 * 1000))) await sendResendEmail({ to: [email], origin: "investor.packet", ...(await investorPacketEmail(getPool, origin, { name: String(name), documents })) });
       } catch (err) {
         console.error("[investor] the packet email could not be rendered, so it was not sent", err);
       }
