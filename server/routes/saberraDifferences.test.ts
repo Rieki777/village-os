@@ -181,6 +181,15 @@ describe("the list", () => {
     });
   });
 
+  it("SAYS WHEN EACH KIND WAS LAST READ WHOLE, so a failed read can name the check the list is from (R36)", async () => {
+    who.mayLook = true;
+    const r = await get("/api/saberra/differences");
+    expect(r.status).toBe(200);
+    expect(r.body.lastWholeAt).toEqual({ circles: "2025-11-06T09:00:00.000Z", roles: "2025-11-06T09:00:00.000Z" });
+    // The count is totals and the last read, and stays exactly that.
+    expect(Object.keys((await get("/api/saberra/differences/count")).body)).not.toContain("lastWholeAt");
+  });
+
   it("WITHOUT THE READ GATE WIRED, falls back to the module's own gate and never opens wider", async () => {
     const refused = await get("/api/saberra/differences", bareBase);
     expect(refused.status).toBe(403);

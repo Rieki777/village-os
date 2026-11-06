@@ -61,6 +61,8 @@ export interface DifferencesRead {
   list: Difference[];
   /** The newest read, or null before the first one. */
   latest: { takenAt: string; circles: SnapshotRead; roles: SnapshotRead } | null;
+  /** When each kind was last read whole, so a failed read can say which check the list is from (R36). */
+  lastWhole: { circles: string | null; roles: string | null };
 }
 
 /**
@@ -123,7 +125,16 @@ export async function readDifferences(pool: Pool, now: number = Date.now()): Pro
   const snapshots = rows.map((r) => r.snapshot);
   const list = differences({ snapshots, live: liveIn, accepted, asOf: new Date(now).toISOString(), swap: check.swap });
   const top = snapshots[0];
-  const value: DifferencesRead = { list, latest: top ? { takenAt: top.takenAt, circles: top.circles.read, roles: top.roles.read } : null };
+  // From the index, which is newest first; the two newest whole reads of each kind are in `seqs`, so the key moves with them.
+  const wholeAt = (kind: "circlesRead" | "rolesRead") => {
+    const row = index.find((r) => r[kind] === "whole");
+    return row ? new Date(row.taken * 1000).toISOString() : null;
+  };
+  const value: DifferencesRead = {
+    list,
+    latest: top ? { takenAt: top.takenAt, circles: top.circles.read, roles: top.roles.read } : null,
+    lastWhole: { circles: wholeAt("circlesRead"), roles: wholeAt("rolesRead") },
+  };
   cached = { key, value };
   return value;
 }
@@ -156,6 +167,7 @@ export function listAnswer(
   lastReadAt: string | null;
   lastReadWhole: boolean;
   reads: { circles: SnapshotRead; roles: SnapshotRead } | null;
+  lastWholeAt: { circles: string | null; roles: string | null };
   count: DifferenceCount;
   differences: ListedDifference[];
 } {
@@ -165,6 +177,7 @@ export function listAnswer(
     lastReadAt: read.latest?.takenAt ?? null,
     lastReadWhole: wholeRead(read),
     reads: read.latest ? { circles: read.latest.circles, roles: read.latest.roles } : null,
+    lastWholeAt: read.lastWhole,
     count: countDifferences(read.list),
     differences: read.list.map((d) => ({
       ...d,
