@@ -538,9 +538,15 @@ describe.skipIf(!DB_CONFIGURED)("the fresh fork is handed no other village's sto
     expect(res.status, "the visit page answers a stranger").toBe(200);
     const types = res.json?.visit_types;
     expect(Array.isArray(types) && types.length > 0, "the visit page still has its ways to visit").toBe(true);
+    // Unstated on the visit page is BLANK, where the investor summary's is
+    // "To be confirmed": client/src/pages/Visit.tsx draws a duration, format
+    // or cost line only when it has words (`v.duration?.trim() && ...`), so a
+    // blank draws nothing, while "To be confirmed" would draw three lines of
+    // it under every card. InvestorSummary.tsx is the page that knows the
+    // placeholder by name and styles it as one.
     for (const v of types) {
       for (const k of ["duration", "format", "cost"]) {
-        expect(v[k], `${v.title}: ${k} is unstated until the village states it`).toBe("To be confirmed");
+        expect(v[k], `${v.title}: ${k} is unstated until the village states it`).toBe("");
       }
     }
   });

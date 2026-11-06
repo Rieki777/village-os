@@ -1,86 +1,11 @@
 {
   "faqs": {
-    "investor": [
-      {
-        "id": "inv-1",
-        "question": "How do I find out more?",
-        "answer": "Request the investor pack on this page, or join a community call and ask the team directly."
-      }
-    ],
-    "steward": [
-      {
-        "id": "stw-1",
-        "question": "How do I find a role?",
-        "answer": "Every role is on the Roles page, with the work it holds. Pick one that fits you and apply from there."
-      }
-    ],
-    "resident": [
-      {
-        "id": "res-1",
-        "question": "Can I visit before I decide?",
-        "answer": "Yes. Plan a visit from the Visit page, or join a community call first to meet the people here."
-      }
-    ],
-    "prosperity": [
-      {
-        "id": "pro-1",
-        "question": "How do I bring a business here?",
-        "answer": "Send a proposal from the Work With Us page, with what you want to build and what you would need. The team will talk it through with you."
-      }
-    ]
+    "investor": [],
+    "steward": [],
+    "resident": [],
+    "prosperity": []
   },
-  "milestones": [
-    {
-      "id": "land-acquired",
-      "phase": "Phase 1",
-      "title": "Land Secured",
-      "description": "The land the village will grow on is secured.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 1
-    },
-    {
-      "id": "founding-team",
-      "phase": "Phase 1",
-      "title": "Founding Team Formed",
-      "description": "The people starting the village are gathered and meeting.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 2
-    },
-    {
-      "id": "site-planning",
-      "phase": "Phase 2",
-      "title": "Site Planning & Design",
-      "description": "A plan for the land: where homes, shared spaces, and paths will go.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 3
-    },
-    {
-      "id": "show-homes",
-      "phase": "Phase 3",
-      "title": "First Homes",
-      "description": "The first homes are built and ready to move into.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 4
-    },
-    {
-      "id": "full-village",
-      "phase": "Phase 4",
-      "title": "Full Village",
-      "description": "The village is built, with its shared spaces in place.",
-      "status": "future",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 5
-    }
-  ],
+  "milestones": [],
   "visitConfig": {
     "hero_subtitle": "Experience the land, meet the people, and decide if this is where you belong.",
     "visit_types": [
@@ -88,7 +13,7 @@
         "id": "community-call",
         "title": "Community Call",
         "duration": "",
-        "format": "Online",
+        "format": "",
         "cost": "",
         "description": "Meet the people behind the village, ask any question, and hear where it is heading. A good first step.",
         "cta_label": "Join the Next Call",
@@ -99,7 +24,7 @@
         "id": "land-tour",
         "title": "Visit in Person",
         "duration": "",
-        "format": "In person",
+        "format": "",
         "cost": "",
         "description": "Come and see the place with someone from the village. Tell us when you would like to come, and we will plan it together.",
         "cta_label": "Request a Visit",

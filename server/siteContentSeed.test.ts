@@ -5,7 +5,8 @@
  * visit programme and investor summary until it saves its own (the documents
  * fall back to it at read time, server/repos/store-db.ts `dbDocument`), and the
  * build milestones it is given on its first boot (seeded once, only into an
- * empty table). It used to carry one village's facts and its founder's notes
+ * empty table; since the canvas merge that list, and the FAQs, ship empty,
+ * because a roadmap and its answers are the village's own). It used to carry one village's facts and its founder's notes
  * to themselves, shown to visitors: "tax-free", "schools within 20 minutes",
  * a 90-minute Zoom call, camping on the land, "Say how much and where."
  *
@@ -73,9 +74,22 @@ describe("the site content seed", () => {
     expect(contact_note).not.toBe("");
   });
 
-  it("keeps the milestone ids the loop test ages and completes, and marks none complete", () => {
-    const ids = SEED.milestones.map((m: { id: string }) => m.id);
-    expect(ids).toEqual(expect.arrayContaining(["land-acquired", "site-planning"]));
-    expect(SEED.milestones.every((m: { status: string; completedDate: unknown }) => m.status !== "complete" && m.completedDate === null)).toBe(true);
+  // The roadmap is the village's own plan, so a fresh village is handed none
+  // (server/forkPublish.e2e.test.ts, "the fresh fork is handed no other
+  // village's story"; ruled platform-wide 2026-10-01). Nothing ships planned,
+  // and so nothing ships complete. loop.e2e writes the two milestones it ages
+  // and completes through the founder's own door.
+  it("ships no roadmap milestone, so none is planned or complete for the village", () => {
+    expect(SEED.milestones).toEqual([]);
+  });
+
+  it("ships no FAQ, which are one village's answers, and keeps a list for each pathway", () => {
+    expect(Object.keys(SEED.faqs).sort()).toEqual(["investor", "prosperity", "resident", "steward"]);
+    for (const list of Object.values(SEED.faqs)) expect(list).toEqual([]);
+  });
+
+  it("states no visit term: a blank duration, format or cost draws no line on the Visit page", () => {
+    expect(SEED.visitConfig.visit_types.length).toBeGreaterThan(0);
+    for (const v of SEED.visitConfig.visit_types) expect([v.duration, v.format, v.cost], v.id).toEqual(["", "", ""]);
   });
 });

@@ -2049,7 +2049,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const aliased = await api(
       "POST",
       "/api/admin/quests",
-      { title: "Mend the rain barrels", gratitude: "10", circle: "Land Stewardship" },
+      { title: "Mend the rain barrels", valueMinor: 500000, circle: "Land Stewardship" }, // every quest states its value (2026-10-21)
       founderToken,
     );
     expect(aliased.status, JSON.stringify(aliased.json)).toBe(200);
