@@ -34,6 +34,21 @@ import {
 import * as api from "./moonApi";
 import type { MyMoonData } from "./moonApi";
 import { Amount, ERROR, INPUT, LABEL, MUTED, SMALL_BTN, Section, useRoomView } from "./moonUi";
+import { authToken } from "@/lib/gameApi";
+import { InvoiceTrack, type TrackRow } from "../TreasurySync";
+
+/** The member's invoice tracks and whether a send emails Sera's inbox (invoice rails). Reloads when `key` changes. */
+function useInvoiceRails(key: string): { tracks: TrackRow[]; emailsSera: boolean } {
+  const [state, setState] = useState<{ tracks: TrackRow[]; emailsSera: boolean }>({ tracks: [], emailsSera: false });
+  useEffect(() => {
+    const t = authToken();
+    fetch("/api/me/invoice-track", { headers: t ? { Authorization: `Bearer ${t}` } : {} })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setState({ tracks: Array.isArray(d?.tracks) ? d.tracks : [], emailsSera: d?.emailsSera === true }))
+      .catch(() => setState({ tracks: [], emailsSera: false }));
+  }, [key]);
+  return state;
+}
 
 function CopyLine({ label, text }: { label: string; text: string }) {
   const [done, setDone] = useState(false);
@@ -134,6 +149,8 @@ export default function InvoicePanel({ data, cycleId, editable, reload }: { data
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => setNumber(inv?.memberNumber ?? ""), [inv?.memberNumber]);
+  const rails = useInvoiceRails(`${inv?.id ?? ""}:${inv?.status ?? ""}`);
+  const myTrack = inv?.id ? rails.tracks.find((t) => t.invoiceId === inv.id) ?? null : null;
 
   if (!data.invoiceNeeded) return data.noTermsLine ? <p className={MUTED}>{data.noTermsLine}</p> : null;
 
@@ -195,6 +212,7 @@ export default function InvoicePanel({ data, cycleId, editable, reload }: { data
       {inv ? (
         <div className="flex flex-col gap-3" data-testid="invoice">
           <p className="m-0 text-sm font-semibold text-foreground">{inv.statusLine}</p>
+          {!room && myTrack ? <InvoiceTrack row={myTrack} /> : null}
           <p className={MUTED}>{inv.supportLine || SUPPORT_LINE}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
@@ -248,6 +266,7 @@ export default function InvoicePanel({ data, cycleId, editable, reload }: { data
               <label className={LABEL}>{MOON_WORDS.memberNumber}<input value={number} maxLength={40} onChange={(e) => setNumber(e.target.value)} className={INPUT} /></label>
               {route === "local_contractor" ? <label className={LABEL}>{MOON_WORDS.externalKey}<input inputMode="numeric" value={key} maxLength={64} onChange={(e) => setKey(e.target.value)} className={INPUT} /></label> : null}
               {inv.sendRefusal ? <p className={MUTED}>{inv.sendRefusal}</p> : null}
+              {rails.emailsSera ? <p className={MUTED} data-testid="emails-sera">Sending also emails this invoice as a PDF, with your legal name and address, to Sera for the village's records.</p> : null}
               <button type="button" className={`${SMALL_BTN} self-start`} disabled={busy || ackPending || !number.trim()} onClick={send}>{MOON_WORDS.sendInvoice}</button>
             </div>
           ) : null}

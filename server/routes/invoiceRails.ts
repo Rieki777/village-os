@@ -44,7 +44,7 @@ export const TREASURY_SYNC_EVERY_MS = 24 * 60 * 60 * 1000;
 /** One manual sync per member a minute. */
 export const SYNC_LIMIT = { max: 1, windowMs: 60_000 } as const;
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit"> & {
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit" | "members"> & {
   treasury: TreasuryDeps;
   mail: InvoiceMailDeps;
   /** The member's live invoice as the member reads it, for the daily mail retry. */
@@ -52,14 +52,16 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLi
 };
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, guardCapability, overLimit, treasury } = deps;
+  const { authedUser, getPool, guardCapability, overLimit, treasury, members: directory } = deps;
   const audit = (text: string, actorUserId: string | null) =>
     recordEvent(getPool(), { kind: "audit", text, actorUserId, actorKind: actorUserId ? "human" : "system", entityType: "treasury", entityRef: actorUserId ?? undefined, audience: "admin" });
 
   app.get("/api/me/invoice-track", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    res.json({ tracks: await invoiceTracksFor(getPool(), String(user.id)) });
+    // `emailsSera` says whether a send also emails the invoice, so the page can say so before the press. Never the address.
+    const [tracks, inbox] = await Promise.all([invoiceTracksFor(getPool(), String(user.id)), deps.mail.seraInbox().catch(() => null)]);
+    res.json({ tracks, emailsSera: !!inbox });
   });
 
   app.get("/api/me/treasury", async (req, res) => {
@@ -86,11 +88,13 @@ export function register(app: Express, deps: Deps): void {
     if (!(await guardCapability(req, res, "cash.pay"))) return;
     const pool = getPool();
     const members = await membersWithInvoices(pool, 500);
-    const tracks = (await Promise.all(members.map((m) => invoiceTracksFor(pool, m)))).flat();
+    const named = await Promise.all(members.map(async (m) => ({ userId: m, name: (await directory.byId(m).catch(() => null))?.name ?? null })));
+    const nameOf = new Map(named.map((n) => [n.userId, n.name]));
+    const tracks = (await Promise.all(members.map(async (m) => (await invoiceTracksFor(pool, m)).map((t) => ({ ...t, userId: m, memberName: nameOf.get(m) ?? null }))))).flat();
     const [flags, unmatched] = await Promise.all([openFlags(pool), unmatchedSeraReports(pool)]);
     res.json({
       tracks,
-      flags: flags.map((f) => ({ id: f.id, userId: f.userId, kind: f.kind, subject: f.subject, amora: f.amora, other: f.other, firstSeenAt: f.firstSeenAt, lastSeenAt: f.lastSeenAt })),
+      flags: flags.map((f) => ({ id: f.id, userId: f.userId, memberName: f.userId ? (nameOf.get(f.userId) ?? null) : null, kind: f.kind, subject: f.subject, amora: f.amora, other: f.other, firstSeenAt: f.firstSeenAt, lastSeenAt: f.lastSeenAt })),
       unmatched: unmatched.map((r) => ({ seraId: r.id, reference: r.reference, moon: r.moon, currency: r.currency, amountMinor: r.amountMinor, status: r.status, receivedAt: r.receivedAt, matchState: r.matchState })),
     });
   });

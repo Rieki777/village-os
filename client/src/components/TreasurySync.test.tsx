@@ -105,3 +105,25 @@ describe("the Sync", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("Try again in a minute");
   });
 });
+
+import { RailsPanel } from "./myMoon/InvoicesDesk";
+
+describe("the Treasurer's rails panel", () => {
+  it("names each disagreement with both figures, lists Sera records that name nothing, and every track", () => {
+    render(
+      <RailsPanel
+        nameOf={() => "a member"}
+        data={{
+          tracks: [{ ...track, userId: "u1", memberName: "Ana" }],
+          flags: [{ id: "f1", userId: "u1", memberName: "Ana", kind: "sera_amount_differs", subject: "us-llc-0007", amora: "120000 USD", other: "110000 USD", firstSeenAt: "2026-11-06T12:00:00.000Z" }],
+          unmatched: [{ seraId: "s9", reference: null, currency: "USD", amountMinor: 5000, status: "received", receivedAt: "2026-11-06T10:00:00.000Z" }],
+        }}
+      />,
+    );
+    expect(screen.getByText(/Sources that disagree \(1\)/)).toBeTruthy();
+    expect(screen.getByText(/Sera has a different amount: us-llc-0007, Ana\. Here: 120000 USD\. There: 110000 USD\./)).toBeTruthy();
+    expect(screen.getByText(/No reference/)).toBeTruthy();
+    expect(screen.getByText(/Ana, us-llc-0007/)).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Invoice us-llc-0007" })).toBeTruthy();
+  });
+});

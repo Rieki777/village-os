@@ -45,6 +45,7 @@ describe.skipIf(!testDbConfigured())("the invoice rails' doors: the caller's own
     register(app, {
       authedUser: (async (req: express.Request) => (req.header("x-user") ? { id: req.header("x-user"), role: "member" } : null)) as never,
       getPool: () => pool,
+      members: { byId: async (id: string) => ({ id, name: id === "u1" ? "Ana" : "Someone" }) } as never,
       guardCapability: (async (req: express.Request, res: express.Response) => {
         if (treasurers.has(String(req.header("x-user")))) return true;
         res.status(req.header("x-user") ? 403 : 401).json({ error: "cash_pay_required" });
@@ -91,7 +92,7 @@ describe.skipIf(!testDbConfigured())("the invoice rails' doors: the caller's own
     const r = await get("/api/cash-owed/invoice-track", "treasurer-1");
     expect(r.status).toBe(200);
     const body = await r.json();
-    expect(body.tracks.map((t: any) => t.invoiceId)).toEqual(["mv-1"]);
+    expect(body.tracks.map((t: any) => [t.invoiceId, t.memberName])).toEqual([["mv-1", "Ana"]]);
     expect(body).toHaveProperty("flags");
     expect(body).toHaveProperty("unmatched");
   });
