@@ -30,7 +30,8 @@ import type { Pool } from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { loadVariables } from "./lib/variables";
 import { seatFoundersAtLaunch, type LaunchSeatingDeps } from "./lib/launchSeating";
-import { holdingHasLapsed, stewardHoldingId, STEWARD_ROLE_ID, STEWARD_VETO } from "./lib/stewardship";
+import { crossOwedLaunchSelection, holdingHasLapsed, stewardHoldingId, STEWARD_ROLE_ID, STEWARD_VETO } from "./lib/stewardship";
+import { LAUNCH_CROSSING_KEY, readLaunchCrossing, writeLaunchCrossing, writeLaunchSelection } from "./lib/launchHandover";
 import { HANDOVER_SET } from "../shared/capabilities";
 import { civilDateInstant, type SeatCalendar } from "../shared/seatTerms";
 
@@ -487,6 +488,8 @@ describe.skipIf(!configured)("a launch nobody stood for", () => {
     await stoodAtLaunch(pool, "cat-1", false);
     await stoodAtLaunch(pool, "cat-2", false);
     await stoodAtLaunch(pool, "cat-3", false);
+    // The stewards chose two powers to pass at launch (Rye, 2026-11-01), and nobody took the seat.
+    await writeLaunchSelection(pool, [HANDOVER_SET[0], HANDOVER_SET[1]], "cat-1");
     log = recorder(pool);
     out = await seatFoundersAtLaunch(log.deps());
   });
@@ -557,6 +560,34 @@ describe.skipIf(!configured)("a launch nobody stood for", () => {
 
     const [holders]: any = await pool.query("SELECT COUNT(*) AS n FROM role_holders"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(Number(holders[0].n)).toBe(0);
+  });
+
+  it("marks the selection as owed, because the seat it was meant for is empty (R165)", async () => {
+    expect(await readLaunchCrossing(pool)).toBe("waiting");
+  });
+
+  it("control: a village with no marker (launched before it existed) has nothing crossed by a seating", async () => {
+    await pool.query("DELETE FROM app_config WHERE config_key = ?", [LAUNCH_CROSSING_KEY]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    try {
+      expect(await crossOwedLaunchSelection(pool, "bal-seat-0")).toBeNull();
+      expect(await entrusted(pool)).toEqual([]);
+    } finally {
+      await writeLaunchCrossing(pool, "waiting");
+    }
+  });
+
+  it("the first vote-seating crosses exactly the selection, once, named by that vote (R165)", async () => {
+    const crossed = await crossOwedLaunchSelection(pool, "bal-seat-1");
+    expect(crossed?.moved).toEqual([HANDOVER_SET[0], HANDOVER_SET[1]]);
+    expect(crossed?.refusals).toEqual([]);
+    const rows = await entrusted(pool);
+    expect(rows.map((r) => [r.capability, r.holder, r.ballot])).toEqual(
+      [HANDOVER_SET[0], HANDOVER_SET[1]].sort().map((c) => [c, STEWARD_ROLE_ID, "bal-seat-1"]),
+    );
+    expect(await readLaunchCrossing(pool)).toBe("crossed");
+    // A second seating owes nothing: a power the village later votes back is never re-crossed.
+    expect(await crossOwedLaunchSelection(pool, "bal-seat-2")).toBeNull();
+    expect(await entrusted(pool)).toEqual(rows);
   });
 
   it("still leaves the role carrying every handover power, ready for the first vote that fills it", async () => {

@@ -138,7 +138,7 @@ import { landingRow } from "./lib/applyDue";
 import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
 import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
-import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_ROLE_ID, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
+import { crossOwedLaunchSelection, forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_ROLE_ID, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
 import { seatFoundersAtLaunch } from "./lib/launchSeating";
 import { launchProposalDoc, launchSlateProblem } from "./lib/launchProposal";
 import { insertSlate } from "./repos/stewardSlate";
@@ -22260,6 +22260,24 @@ Send an empty drafts array when you are still listening. A role payload is {name
         entityType: "user", // its subject, so an erasure finds it (server/repos/pulseLines.ts); the audit row below names the role
         entityRef: member.id,
       });
+      /*
+       * R165: a launch that seated nobody owes the village the stewards'
+       * selection, and this is the moment it was promised for. It crosses
+       * once, through the launch's own crossing (never re-pointing a power the
+       * village holds elsewhere), and the village reads that it did.
+       */
+      if (seatedRowId && role.id === STEWARD_ROLE_ID) {
+        const crossed = await crossOwedLaunchSelection(getPool(), b.id);
+        if (crossed && crossed.moved.length > 0) {
+          out.applied = crossed.moved;
+          await addActivity("governance", `The powers the stewards chose at launch are the village's now, looked after by ${who}.`, {
+            actorUserId: actorId,
+            entityType: "role",
+            entityRef: role.id,
+          });
+        }
+        if (crossed && crossed.refusals.length > 0) out.held = crossed.refusals.join(" ");
+      }
       void recordEvent(getPool(), {
         kind: "audit",
         text: `role:seated-by-ballot:${role.id}:${member.id}:${b.id}`,
