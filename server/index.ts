@@ -660,7 +660,7 @@ import { BRIEF_BY_ID, BRIEF_SECTIONS } from "../shared/villageBrief";
 import {
   // LANE Q: `fenceForPrompt` had exactly one caller, the tool loop, while three
   // routes in this file built prompts out of member-written text by hand.
-  callReader, fenceForPrompt, readerCatalog, toolNameForKey, toolNameToKey, wireReaders, type ReaderViewer,
+  callReader, deadlineInVillage, fenceForPrompt, readerCatalog, toolNameForKey, toolNameToKey, wireReaders, type ReaderViewer,
 } from "./lib/villageReaders";
 import {
   ASSISTANT_MODES, DEFAULT_ASSISTANT_MODEL, borrowingPlatformKey, callAssistant, parseJsonReply, sanitizeMessages,
@@ -5289,7 +5289,7 @@ async function startServer() {
       nudged += await notifyRoll(b, {
         type: "ballot_closing",
         title: `Your vote is still owed: ${b.title}`,
-        body: `Voting closes ${new Date(b.closesAt).toLocaleDateString()}. Quorum is counted against everyone on the roll, so an abstention is an answer too.`,
+        body: `Voting closes ${deadlineInVillage(b.closesAt)}. Quorum is counted against everyone on the roll, so an abstention is an answer too.`,
         keySuffix: "closing",
         roll: owing,
       });
@@ -13756,7 +13756,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is deciding whether to start its Game`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. This one asks everyone on the roll, so it needs your answer to reach its participation.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. This one asks everyone on the roll, so it needs your answer to reach its participation.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -23158,7 +23158,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is deciding: ${p.title}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. Your voice is on the roll for this one.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. Your voice is on the roll for this one.`,
       keySuffix: "open",
       except: [p.proposerUserId, user.id],
       roll: electorate.map((e) => e.userId),
@@ -23836,7 +23836,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `An advisory vote is open: ${question}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. This one records what the village would decide, and it changes nothing on its own.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. This one records what the village would decide, and it changes nothing on its own.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -24079,7 +24079,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked to take a power on: ${entry.title}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. If this carries, ${role.name ?? roleId} looks after it from that day.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. If this carries, ${role.name ?? roleId} looks after it from that day.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -24329,7 +24329,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked whether ${role.name ?? roleId} looks after this: ${entry.title}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. If this carries, anybody seated there can ${CAPABILITY_CONSEQUENCE[cap]}.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. If this carries, anybody seated there can ${CAPABILITY_CONSEQUENCE[cap]}.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -24484,7 +24484,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked to hand a power back: ${entry.title}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. If this carries, the admin panel carries it again from that day.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. If this carries, the admin panel carries it again from that day.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -24693,7 +24693,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked to declare a role: ${name}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. A role the village declares carries no powers until the village votes it some.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. A role the village declares carries no powers until the village votes it some.`,
       keySuffix: "open",
       except: [user.id],
       roll: setup.electorate.map((e) => e.userId),
@@ -24814,7 +24814,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked whether ${firstName(member.name)} keeps the role in ${who}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}.`,
       keySuffix: "open",
       except: [user.id],
       roll: setup.electorate.map((e) => e.userId),
