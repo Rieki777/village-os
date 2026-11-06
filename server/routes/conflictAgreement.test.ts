@@ -509,6 +509,31 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       expect(failed.applied).toEqual([]);
       expect(agreementOfRepo().replyHours).toBe(48);
 
+      // Switched off while the vote ran (review of 2026-11-05): the carried
+      // change waits, and the admins hear why, rather than landing in an
+      // agreement nobody can read.
+      const adminNotes: string[] = [];
+      const offCloser = conflictAgreementCloser({
+        getPool: () => pool,
+        agreement: agreementRepo,
+        loadRoles: () => ROLES,
+        notify: async (n) => {
+          notices.push(n);
+        },
+        notifyAdmins: async (_k, text) => {
+          adminNotes.push(text);
+        },
+        addActivity: async () => {},
+        recordAudit: () => {},
+        ballotLink: (b) => `/decisions/${b.id}`,
+        moduleOn: () => false,
+      });
+      const whileOff = await offCloser(ballot, "passed", "", "system");
+      expect(whileOff.applied).toEqual([]);
+      expect(whileOff.held).toContain("Conflict Evolution is switched off");
+      expect(adminNotes).toHaveLength(1);
+      expect(agreementOfRepo().replyHours).toBe(48);
+
       const other = await closer({ ...ballot, id: "some-other-ballot" }, "passed", "", "system");
       expect(other.held).toContain("was not recorded against it");
       expect(agreementOfRepo().replyHours).toBe(48);

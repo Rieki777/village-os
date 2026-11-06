@@ -61,6 +61,14 @@ export interface ConflictAgreementCloserDeps {
   recordAudit: (text: string, actorId: string) => void;
   ballotLink: (b: BallotRow) => string;
   now?: () => Date;
+  /**
+   * Whether Conflict Evolution is open to members now (`conflictEvolutionOn`,
+   * server/lib/canvasModules.ts). A change ballot can outlive the module: one
+   * opened while it was on still closes through the governance engine after a
+   * founder switches it off. That carried change waits instead of landing in an
+   * agreement nobody can read (review of 2026-11-05). Absent means on.
+   */
+  moduleOn?: () => boolean;
 }
 
 /** The body `twoPhase` wraps: settle on a failure, execute on a pass. */
@@ -94,6 +102,9 @@ export function conflictAgreementCloser(deps: ConflictAgreementCloserDeps) {
       return out;
     };
 
+    if (deps.moduleOn && !deps.moduleOn()) {
+      return hold("Conflict Evolution is switched off, so the agreement stays as it was. Switch it back on and put the change to the village again");
+    }
     const asked = (await readConfigDocument<{ ballotId?: unknown; agreement?: unknown }>(deps.getPool(), proposalKeyFor(b.id))) ?? null;
     if (!asked || String(asked.ballotId ?? "") !== b.id) {
       return hold("the agreement this vote would adopt was not recorded against it, so there is nothing to write");

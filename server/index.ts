@@ -21215,7 +21215,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * server/lib/gpsChangeCloser.ts.
      */
     // A carried change to the conflict agreement: server/lib/conflictAgreementCloser.ts.
-    [CONFLICT_AGREEMENT]: twoPhase(conflictAgreementCloser({ getPool, agreement: conflictAgreementRepo, loadRoles, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "conflict-agreement", audience: "admin" }) })),
+    [CONFLICT_AGREEMENT]: twoPhase(conflictAgreementCloser({ getPool, moduleOn: conflictEvolutionOn, agreement: conflictAgreementRepo, loadRoles, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "conflict-agreement", audience: "admin" }) })),
     [GPS_CHANGE]: twoPhase(gpsChangeCloser({ getPool, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "gps", audience: "admin" }) })),
     agreement: agreementCloser({ getPool, notify, notifyAdmins, addActivity, ballotLink }), // a village agreement: server/lib/agreementCloser.ts
 
