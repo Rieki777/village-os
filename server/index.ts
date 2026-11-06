@@ -109,6 +109,10 @@ import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/grou
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
+import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
+import { approveMintRequest, declineMintRequest, type MintRequestDeps } from "./lib/mintRequests";
+import { recentMintRequests } from "./repos/adminMintRequests";
+import { newMintRuleProblem } from "./lib/mintRuleCreate"; // a new minting rule by vote, checked at raise
 import { register as registerSeasonRoutes } from "./routes/seasons";
 import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
@@ -16377,44 +16381,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     return numberVar("ledger.admin_mint_cosign_over");
   }
 
-  interface MintRequestRow {
-    id: string;
-    tokenSlug: string;
-    toUserId: string;
-    amount: number;
-    reason: string;
-    requestedBy: string;
-    requestedAt: string | null;
-    status: string;
-    decidedBy: string | null;
-    decidedAt: string | null;
-    decisionNote: string | null;
-  }
-
-  function mintRequestRow(r: any): MintRequestRow {
-    return {
-      id: String(r.id),
-      tokenSlug: String(r.token_slug),
-      toUserId: String(r.to_user_id),
-      amount: Number(r.amount),
-      reason: String(r.reason ?? ""),
-      requestedBy: String(r.requested_by),
-      requestedAt: r.requested_at instanceof Date ? r.requested_at.toISOString() : r.requested_at ?? null,
-      status: String(r.status),
-      decidedBy: r.decided_by ?? null,
-      decidedAt: r.decided_at instanceof Date ? r.decided_at.toISOString() : r.decided_at ?? null,
-      decisionNote: r.decision_note ?? null,
-    };
-  }
-
-  async function mintRequestById(id: string): Promise<MintRequestRow | null> {
-    const [rows] = await getPool().query<any[]>(
-      "SELECT id, token_slug, to_user_id, amount, reason, requested_by, requested_at, status, " +
-        "decided_by, decided_at, decision_note FROM admin_mint_requests WHERE id = ?",
-      [id],
-    );
-    return rows[0] ? mintRequestRow(rows[0]) : null;
-  }
+  // The rows and their statements: server/repos/adminMintRequests.ts. The
+  // decisions: server/lib/mintRequests.ts, shared with the village's vote.
+  const mintRequestDeps = (): MintRequestDeps => ({ pool: getPool(), members, notify });
 
   /*
    * Stock the treasury: sys:mint -> sys:treasury, under the SAME per-cycle
@@ -16749,12 +16718,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
    */
   app.get("/api/admin/mint-requests", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [rows] = await getPool().query<any[]>(
-      "SELECT id, token_slug, to_user_id, amount, reason, requested_by, requested_at, status, " +
-        "decided_by, decided_at, decision_note FROM admin_mint_requests " +
-        "ORDER BY (status = 'pending') DESC, requested_at DESC LIMIT 100",
-    );
-    const requests = rows.map(mintRequestRow);
+    const requests = await recentMintRequests(getPool());
     // The names, so a steward reads people rather than ids. A member who has
     // since left resolves to null, which is what a tombstone means.
     const ids = Array.from(
@@ -16790,92 +16754,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const acting = adminActor(req);
     if (!acting) return res.status(401).json({ error: "auth_required" });
-    const request = await mintRequestById(String(req.params.id));
-    if (!request) return res.status(404).json({ error: "No such grant" });
-    if (request.status !== "pending") {
-      return res.status(409).json({ error: `This grant is already ${request.status}` });
-    }
-    if (request.requestedBy === acting.id) {
-      return res.status(409).json({
-        code: "second_steward_required",
-        error: "A second steward means somebody else. You asked for this grant",
-      });
-    }
-    const def = tokenDef(request.tokenSlug);
-    if (!def) return res.status(404).json({ error: `unknown token "${request.tokenSlug}"` });
-    if (def.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    if (def.governance !== "platform") {
-      return res.status(400).json({ error: `${request.tokenSlug} is issued on Hypha and cannot be minted here` });
-    }
-    // A grant queued before Gratitude stopped being mintable is refused at the second door too.
-    if (request.tokenSlug === HEARTS) return res.status(400).json({ error: GRATITUDE_ONLY_SENT });
-    const target = await members.byId(request.toUserId);
-    const refused = mintRecipientRefusal(target); if (!target || refused) return res.status(refused?.status ?? 404).json(refused?.body ?? { error: "Member not found" }); // a member who left after the asking is refused here: server/lib/gratitude.ts
-    // The rule that has no exception, re-read at the second door: the person
-    // this pays cannot be the person who asked for it, whoever signs.
-    if (target.id === request.requestedBy) {
-      return res.status(403).json({
-        code: "self_grant_refused",
-        error: "This grant pays the steward who asked for it. It cannot be signed",
-      });
-    }
-    const cap = numberVar("ledger.admin_mint_cycle_cap"); // whole tokens, and only weighed against 0 here
-    if (cap <= 0) return res.status(403).json({ error: "Manual minting is disabled (ledger.admin_mint_cycle_cap is 0)" });
-
-    /*
-     * CLAIM THE ROW FIRST. Two stewards pressing at the same moment both pass
-     * the read above; only one wins this UPDATE, because `status = 'pending'`
-     * is in the WHERE. The loser is told the grant is already decided.
-     *
-     * If the transfer then fails, the claim is put back so the grant can be
-     * signed again rather than sitting approved with no tokens behind it. The
-     * transfer's idempotency key is the request id, so even a retry that
-     * raced past this cannot write a second ledger row.
-     */
-    const [claim] = await getPool().query<any>(
-      "UPDATE admin_mint_requests SET status = 'approved', decided_by = ?, decided_at = NOW() " +
-        "WHERE id = ? AND status = 'pending'",
-      [acting.id, request.id],
-    );
-    if (Number(claim?.affectedRows ?? 0) === 0) {
-      return res.status(409).json({ error: "This grant has just been decided by somebody else" });
-    }
-
-    const r = await postTransfer(getPool(), {
-      from: "sys:mint",
-      to: memberAccount(target.id),
-      tokenType: request.tokenSlug,
-      amount: toLedgerUnits(request.tokenSlug, request.amount),
-      source: "admin_mint",
-      sourceRef: request.id,
-      description: request.reason.slice(0, 500),
-      idempotencyKey: `admin_mint:req:${request.id}`,
-    }, mintCapGuard(request.tokenSlug, toLedgerUnits(request.tokenSlug, request.amount)));
-    if (!r.ok) {
-      await getPool().query(
-        "UPDATE admin_mint_requests SET status = 'pending', decided_by = NULL, decided_at = NULL WHERE id = ?",
-        [request.id],
-      );
-      return res.status(r.error?.includes("mint cap") ? 409 : 400).json({ error: r.error });
-    }
-    // Recognition minted by hand still updates the profile's cached balance.
-    if (request.tokenSlug === "gratitude") {
-      await members.update(target.id, (u: any) => { u.recognitionBalance = r.toBalance; });
-    }
-    void recordEvent(getPool(), {
-      kind: "audit",
-      text: `mint-cosigned:${request.amount}:${request.tokenSlug}`,
-      actorUserId: acting.id,
-      entityType: "user",
-      entityRef: target.id,
-      audience: "admin",
-    });
-    const decided = await mintRequestById(request.id);
-    res.json({
-      success: true,
-      toBalance: r.toBalance,
-      request: decided,
-    });
+    const out = await approveMintRequest(mintRequestDeps(), { requestId: String(req.params.id), decidedBy: acting.id, signer: acting.id });
+    if (!out.ok) return res.status(out.status).json(out.body);
+    res.json({ success: true, toBalance: out.toBalance, request: out.request });
   });
 
   /**
@@ -16888,28 +16769,11 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const acting = adminActor(req);
     if (!acting) return res.status(401).json({ error: "auth_required" });
-    const request = await mintRequestById(String(req.params.id));
-    if (!request) return res.status(404).json({ error: "No such grant" });
-    if (request.status !== "pending") {
-      return res.status(409).json({ error: `This grant is already ${request.status}` });
-    }
-    const [claim] = await getPool().query<any>(
-      "UPDATE admin_mint_requests SET status = 'declined', decided_by = ?, decided_at = NOW(), decision_note = ? " +
-        "WHERE id = ? AND status = 'pending'",
-      [acting.id, String(req.body?.reason ?? "").trim().slice(0, 500) || null, request.id],
-    );
-    if (Number(claim?.affectedRows ?? 0) === 0) {
-      return res.status(409).json({ error: "This grant has just been decided by somebody else" });
-    }
-    void recordEvent(getPool(), {
-      kind: "audit",
-      text: `mint-declined:${request.amount}:${request.tokenSlug}`,
-      actorUserId: acting.id,
-      entityType: "user",
-      entityRef: request.toUserId,
-      audience: "admin",
+    const out = await declineMintRequest(mintRequestDeps(), {
+      requestId: String(req.params.id), decidedBy: acting.id, actor: acting.id, note: String(req.body?.reason ?? ""),
     });
-    res.json({ success: true, request: await mintRequestById(request.id) });
+    if (!out.ok) return res.status(out.status).json(out.body);
+    res.json({ success: true, request: out.request });
   });
 
   /**
@@ -20867,7 +20731,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       Array.isArray(req.body?.changes) ? req.body.changes : [],
       rawValue,
       cooldown,
-      readMintRulesForChangeSet, { ...moduleChangeReaders, brandOf: () => getBrand() },
+      readMintRulesForChangeSet, { ...moduleChangeReaders, brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) },
     );
     if (problems.length) return res.status(400).json({ error: "The change-set has problems", problems });
     const id = `gmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -22662,6 +22526,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   setVetoWindowCheck(vetoWindowOn);
   setSubjectCloserCheck((subjectType: string) => ballotBinds(subjectType));
   registerOrgDraftDecideRoutes(app, { authedUser, isAdmin, guardCapability, capabilityCtx, getPool, overLimit, notify, seasonState, circlesRepo, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
+  registerMintRequestVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
 
 
   /**

@@ -550,6 +550,7 @@ describe("which kinds this build will take to a vote", () => {
       "brand_field",
       "dial",
       "mint_rule",
+      "mint_rule_create",
       "mode_switch",
       "module_lifecycle",
       "weight_allocation",

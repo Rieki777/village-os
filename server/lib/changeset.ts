@@ -85,12 +85,13 @@ import { elementRowsForBallot, upsertElementRow } from "../repos/governanceEleme
 import { insertMechanicsChange } from "../repos/mechanicsChanges";
 import { markProposalApplied } from "../repos/mechanicsProposals";
 import { VARIABLES_BY_KEY, applyTimingOf, validateVariable } from "../../shared/gameVariables";
-import { isMintRuleKey } from "../../shared/mintRuleKeys";
+import { isMintRuleCreateKey, isMintRuleKey, mintRuleCreateKey, mintRuleDraftProblem, type MintRuleDraft } from "../../shared/mintRuleKeys";
 import { WEIGHING_KEYS, asChangeItem, type ChangeInput, type ChangeItem } from "./mechanics";
 import { kindOfItem, kindOfSet, type GovernanceKind } from "../../shared/governanceKinds";
 import { keyIsVetoLocked } from "./stewardship";
 import { setVariable, variableSetRefusal, type SetResult } from "./variables";
 import { applyMintRuleChanges } from "./economy";
+import { createMintRule } from "./mintRuleCreate";
 import { setWeight, weightChangeProblem, weightTokenProblem } from "./governanceWeights";
 import { effectiveLifecycle, setModuleLifecycle } from "./modules";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
@@ -117,6 +118,9 @@ export const WRITE_ORDER: readonly string[] = [
   "dial",
   "module_lifecycle",
   "mint_rule",
+  // After the edits: a new rule is new issuance, the dearest of the minting
+  // writes to undo, and it lands at the same next moon.
+  "mint_rule_create",
   "weight_allocation",
   "mode_switch",
   "brand_field",
@@ -241,6 +245,24 @@ export async function validateElements(
         oldValue: (raw as { from?: string }).from ?? null,
         newValue: String(item.to),
         sentence: `${item.key} is queued to become ${item.to} at the next moon`,
+      });
+      continue;
+    }
+
+    if (item.kind === "mint_rule_create") {
+      // The shape is judged here, writing nothing. The registry's half runs in
+      // `createMintRule` at the write, against the token and the table as they
+      // stand at landing.
+      const draft = draftOf(item);
+      const problem = mintRuleDraftProblem(draft);
+      if (problem) return refuse(index, item.kind, problem);
+      elements.push({
+        index,
+        item,
+        kind,
+        oldValue: null,
+        newValue: draft.amount,
+        sentence: `a new rule paying ${draft.tokenSlug} for ${draft.trigger} is created, paying from the next moon`,
       });
       continue;
     }
@@ -432,6 +454,16 @@ export function finalDialValues(elements: readonly ValidatedElement[]): Record<s
     }
   }
   return out;
+}
+
+/** A new rule's four strings, read off a typed or a stored element. */
+function draftOf(item: { trigger?: unknown; tokenSlug?: unknown; amount?: unknown; ceiling?: unknown }): MintRuleDraft {
+  return {
+    trigger: String(item.trigger ?? "").trim(),
+    tokenSlug: String(item.tokenSlug ?? "").trim(),
+    amount: String(item.amount ?? "").trim(),
+    ceiling: String(item.ceiling ?? "").trim(),
+  };
 }
 
 /** The value in force for a dial right now, or null when it sits at its default. */
@@ -759,6 +791,50 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
   }
 
   /*
+   * NEW RULES, after the edits. Each one is created disabled for the moon the
+   * village is in and live from the next (`createMintRule`), and a refusal at
+   * landing writes nothing and keeps the proposal unapplied.
+   */
+  for (const el of validated.elements) {
+    if (el.item.kind !== "mint_rule_create") continue;
+    const draft = draftOf(el.item);
+    const key = mintRuleCreateKey(draft.trigger, draft.tokenSlug);
+    if (landedBefore.has(`mint_rule_create:${el.index}`)) {
+      queued.push(key);
+      continue;
+    }
+    const out = await createMintRule(deps.pool, draft, input.actor ?? "governance");
+    if (!out.ok) {
+      failed.push({ key, problem: out.error });
+      continue;
+    }
+    queued.push(key);
+    landsAtCycle = out.fromCycle;
+    const summary = `${draft.amount} ${draft.tokenSlug}, ceiling ${draft.ceiling}`;
+    if (!out.alreadyThere) {
+      await deps.recordMechanicsChange(
+        key,
+        { value: summary, previous: null },
+        input.actor,
+        "governance",
+        input.proposalRef,
+        `Carried by the village. A new rule, paying from cycle ${out.fromCycle}.`,
+      );
+    }
+    await recordElement(deps.pool, {
+      ballotId: input.ballotId,
+      proposalId: input.proposalRef,
+      elementIndex: el.index,
+      elementKind: "mint_rule_create",
+      sentence: `${key} is created as rule ${out.ruleId}, paying from cycle ${out.fromCycle}`,
+      wroteTable: "mint_rules",
+      wroteId: out.ruleId,
+      oldValue: null,
+      newValue: summary,
+    });
+  }
+
+  /*
    * THE CACHES COME BACK FROM THE DATABASE, ALWAYS, and never from what this
    * routine believes it just wrote. A module lifecycle change reconciles a
    * graph, a dial writes through a delta store, and a role write goes through a
@@ -927,9 +1003,9 @@ export const changeSetWaitsForCycleClose = (changeSet: readonly { key?: string }
  */
 export const changeSetSnapsToBoundary = (changeSet: readonly { key?: string; kind?: string }[]): boolean =>
   changeSet.some((c) => {
-    if (String(c?.kind ?? "") === "mint_rule") return true;
+    if (String(c?.kind ?? "") === "mint_rule" || String(c?.kind ?? "") === "mint_rule_create") return true;
     const key = String(c?.key ?? "");
-    if (isMintRuleKey(key)) return true;
+    if (isMintRuleKey(key) || isMintRuleCreateKey(key)) return true;
     const def = VARIABLES_BY_KEY[key];
     return def ? applyTimingOf(def) === "cycle-close" : false;
   });
