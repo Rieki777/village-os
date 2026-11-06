@@ -13477,6 +13477,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       slate: slate.members,
       // Frozen here, in plain words: the hand-over control refuses to change it while this vote is open.
       handover: (await readLaunchSelection(getPool())).capabilities.map(powerInPlainWords),
+      carriedOpen: (await launchStatus(getPool(), launchDeps)).carriedOpen.map((c) => c.title), // host-only rows this vote carries
     });
 
     const result = await openBallot(getPool(), {
