@@ -22,7 +22,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { registerJob } from "../lib/scheduler";
 import { retryUnsentInvoiceMail, type InvoiceMailDeps } from "../lib/invoiceMail";
-import { readSeraInvoices } from "../lib/seraInvoices";
+import { readSeraInvoices, type SeraReadOutcome } from "../lib/seraInvoices";
 import { invoiceTracksFor, syncTreasury, type TreasuryDeps, type TreasuryView } from "../lib/treasurySync";
 import { membersWithInvoices, openFlags, syncViewOf, unmatchedSeraReports } from "../repos/invoiceRails";
 import crypto from "node:crypto";
@@ -56,12 +56,27 @@ export function register(app: Express, deps: Deps): void {
   const audit = (text: string, actorUserId: string | null) =>
     recordEvent(getPool(), { kind: "audit", text, actorUserId, actorKind: actorUserId ? "human" : "system", entityType: "treasury", entityRef: actorUserId ?? undefined, audience: "admin" });
 
+  /*
+   * ONE SERA READ A MINUTE FOR THE WHOLE VILLAGE. Sera's read is village-wide
+   * (every record changed since the last one), so a member's Sync reuses a
+   * read less than a minute old instead of opening a session per press. N
+   * members pressing at once is one read.
+   */
+  let seraRead: { at: number; outcome: Promise<SeraReadOutcome> } | null = null;
+  const villageSeraRead = (): Promise<SeraReadOutcome> => {
+    const now = Date.now();
+    if (seraRead && now - seraRead.at < SYNC_LIMIT.windowMs) return seraRead.outcome;
+    const outcome = (async () => readSeraInvoices(getPool(), await treasury.seraClient().catch(() => null), treasury))().catch((): SeraReadOutcome => ({ state: "failed", why: "threw" }));
+    seraRead = { at: now, outcome };
+    return outcome;
+  };
+
   app.get("/api/me/invoice-track", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
-    // `emailsSera` says whether a send also emails the invoice, so the page can say so before the press. Never the address.
+    // Where a send emails the invoice, so the member reads the address before the press and can see a wrong one.
     const [tracks, inbox] = await Promise.all([invoiceTracksFor(getPool(), String(user.id)), deps.mail.seraInbox().catch(() => null)]);
-    res.json({ tracks, emailsSera: !!inbox });
+    res.json({ tracks, emailsSera: !!inbox, seraInbox: inbox ?? null });
   });
 
   app.get("/api/me/treasury", async (req, res) => {
@@ -79,13 +94,16 @@ export function register(app: Express, deps: Deps): void {
       res.setHeader("Retry-After", String(Math.ceil(SYNC_LIMIT.windowMs / 1000)));
       return res.status(429).json({ error: "rate_limited", message: "You synced a moment ago. Try again in a minute." });
     }
-    const view = await syncTreasury(treasury, uid, "manual");
+    const view = await syncTreasury(treasury, uid, "manual", await villageSeraRead());
     void audit(`treasury:synced:manual:flags-${view.flags.length}`, uid);
     res.json({ view });
   });
 
   app.get("/api/cash-owed/invoice-track", async (req, res) => {
     if (!(await guardCapability(req, res, "cash.pay"))) return;
+    const reader = await authedUser(req);
+    if (reader && (await overLimit(`invoice-track-desk:${reader.id}`, 20, 60_000))) return res.status(429).json({ error: "rate_limited", message: "Try again in a minute." });
+    void audit("invoice-track:desk-read", reader ? String(reader.id) : null);
     const pool = getPool();
     const members = await membersWithInvoices(pool, 500);
     const named = await Promise.all(members.map(async (m) => ({ userId: m, name: (await directory.byId(m).catch(() => null))?.name ?? null })));
@@ -109,7 +127,8 @@ export function register(app: Express, deps: Deps): void {
   registerJob(TREASURY_SYNC_JOB, TREASURY_SYNC_EVERY_MS, async () => {
     const pool = getPool();
     const mailed = await retryUnsentInvoiceMail(deps.mail, deps.invoiceViewOf).catch((e) => `invoice mail failed: ${e instanceof Error ? e.name : "error"}`);
-    const sera = await readSeraInvoices(pool, await treasury.seraClient().catch(() => null), treasury).catch(() => ({ state: "failed" as const, why: "threw" }));
+    seraRead = null;
+    const sera = await villageSeraRead();
     let synced = 0;
     for (const uid of await membersWithInvoices(pool)) {
       try {
@@ -180,7 +199,8 @@ export function invoiceRailsDeps(w: WiringInput): Pick<Deps, "treasury" | "mail"
       const tokens = [];
       for (const c of contracts) {
         const b = await readOnchainBalance(w.getPool(), { userId: uid, walletAddress: m.walletAddress, tokenSlug: c.slug, contractAddress: c.address });
-        if (b) tokens.push({ slug: c.slug, formatted: b.formatted, readAt: b.fetchedAt, stale: b.stale });
+        // A token the chain could not read and never read before is kept, as not read: it closes no flag.
+        tokens.push(b ? { slug: c.slug, formatted: b.formatted, readAt: b.fetchedAt, stale: b.stale } : { slug: c.slug, formatted: null, readAt: new Date().toISOString(), stale: false });
       }
       return { offered: true, tokens };
     },
@@ -194,7 +214,8 @@ export function invoiceRailsDeps(w: WiringInput): Pick<Deps, "treasury" | "mail"
     post: (e) => post(w.postOffice, e),
     seraInbox: async () => (await settingsDoc(w.getPool())).seraInbox,
     projectName: w.projectName,
-    audit: (text, userId) => recordEvent(w.getPool(), { kind: "audit", text, actorUserId: userId, entityType: "invoice", audience: "admin" }),
+    audit: (text, userId, system) =>
+      recordEvent(w.getPool(), system ? { kind: "audit", text, actorUserId: null, actorKind: "system", entityType: "invoice", entityRef: userId, audience: "admin" } : { kind: "audit", text, actorUserId: userId, entityType: "invoice", audience: "admin" }),
   };
   /** The stored row as the PDF needs it: the same figures and parties the send carried. */
   const invoiceViewOf = async (invoiceId: string, userId: string): Promise<InvoiceView | null> => {

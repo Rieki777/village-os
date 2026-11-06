@@ -14,7 +14,7 @@ type Queryable = Pool | PoolConnection;
 
 // ── invoice_mail ─────────────────────────────────────────────────────────────
 
-export type MailStatus = "queued" | "sent" | "failed";
+export type MailStatus = "queued" | "sending" | "sent" | "failed";
 
 export interface InvoiceMailRow {
   id: string;
@@ -58,11 +58,16 @@ export async function insertMail(db: Queryable, m: Omit<InvoiceMailRow, "status"
   return res.affectedRows === 1;
 }
 
-/** Takes the next attempt on a row that has not gone out. Answers the attempt number, or 0 when it was sent or lost the race. */
+/** The most attempts a row ever gets, the member's presses and the retry together. */
+export const MAIL_ATTEMPT_CAP = 3;
+
+/**
+ * Takes the next attempt on a row that has not gone out, marking it
+ * `sending` so neither a second press nor the retry can take it meanwhile. Answers the attempt number, or 0 when it was sent or lost the race. */
 export async function claimMailAttempt(db: Queryable, id: string, seenAttempts: number): Promise<number> {
   const [res] = await db.query<ResultSetHeader>(
-    "UPDATE `invoice_mail` SET `attempts` = `attempts` + 1 WHERE `id` = ? AND `status` <> 'sent' AND `attempts` = ?",
-    [id, seenAttempts],
+    "UPDATE `invoice_mail` SET `attempts` = `attempts` + 1, `status` = 'sending' WHERE `id` = ? AND `status` IN ('queued', 'failed') AND `attempts` = ? AND `attempts` < ?",
+    [id, seenAttempts, MAIL_ATTEMPT_CAP],
   );
   return res.affectedRows === 1 ? seenAttempts + 1 : 0;
 }
@@ -71,10 +76,14 @@ export async function settleMail(db: Queryable, id: string, r: { status: MailSta
   await db.query("UPDATE `invoice_mail` SET `status` = ?, `message_id` = ?, `sent_at` = ? WHERE `id` = ? AND `status` <> 'sent'", [r.status, r.messageId, r.sentAt, id]);
 }
 
-/** Rows that never went out, for the daily retry, capped. */
+/**
+ * Rows the provider refused, for the daily retry, capped. A `queued` row is
+ * left: its send may have been taken and not yet settled, and sending it
+ * again could deliver the same invoice twice.
+ */
 export async function unsentMail(db: Queryable, maxAttempts: number, limit: number): Promise<InvoiceMailRow[]> {
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT * FROM `invoice_mail` WHERE `status` <> 'sent' AND `attempts` < ? ORDER BY `queued_at` LIMIT ?",
+    "SELECT * FROM `invoice_mail` WHERE `status` = 'failed' AND `attempts` < ? ORDER BY `queued_at` LIMIT ?",
     [maxAttempts, limit],
   );
   return rows.map(toMail);
@@ -102,25 +111,32 @@ const toReport = (r: RowDataPacket): SeraReportRow => ({
 
 /**
  * One Sera record, written or refreshed by Sera's id. A record once matched
- * keeps its match: a later read can update Sera's status and amount (which
- * the sync then compares) but never moves it to another invoice.
+ * keeps its match while its reference and code-name stay the same: a later
+ * read can update Sera's status and amount (which the sync then compares). A
+ * changed reference or code-name takes the new match the caller computed.
  */
 export async function upsertSeraReport(db: Queryable, r: SeraInvoice, match: { state: MatchState; invoiceId: string | null; by: string | null }, seenAt: string): Promise<void> {
   await db.query(
     "INSERT INTO `sera_invoice_reports` (`sera_id`, `reference`, `member_code`, `moon`, `currency`, `amount_minor`, `status`, `received_at`, `status_at`, `changed_at`, " +
       "`match_state`, `matched_invoice_id`, `match_by`, `first_seen_at`, `last_seen_at`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
-      "ON DUPLICATE KEY UPDATE `reference` = VALUES(`reference`), `member_code` = VALUES(`member_code`), `moon` = VALUES(`moon`), `currency` = VALUES(`currency`), " +
+      // MySQL assigns left to right, so the match is decided first, against the
+      // reference and code-name still stored: a record whose reference or member
+      // changed is matched again, never kept on the old invoice.
+      "ON DUPLICATE KEY UPDATE " +
+      "`match_by` = IF(`match_state` = 'matched' AND `reference` <=> VALUES(`reference`) AND `member_code` <=> VALUES(`member_code`), `match_by`, VALUES(`match_by`)), " +
+      "`matched_invoice_id` = IF(`match_state` = 'matched' AND `reference` <=> VALUES(`reference`) AND `member_code` <=> VALUES(`member_code`), `matched_invoice_id`, VALUES(`matched_invoice_id`)), " +
+      "`match_state` = IF(`match_state` = 'matched' AND `reference` <=> VALUES(`reference`) AND `member_code` <=> VALUES(`member_code`), `match_state`, VALUES(`match_state`)), " +
+      "`reference` = VALUES(`reference`), `member_code` = VALUES(`member_code`), `moon` = VALUES(`moon`), `currency` = VALUES(`currency`), " +
       "`amount_minor` = VALUES(`amount_minor`), `status` = VALUES(`status`), `status_at` = VALUES(`status_at`), `changed_at` = VALUES(`changed_at`), " +
-      "`match_by` = IF(`match_state` = 'matched', `match_by`, VALUES(`match_by`)), " +
-      "`matched_invoice_id` = IF(`match_state` = 'matched', `matched_invoice_id`, VALUES(`matched_invoice_id`)), " +
-      "`match_state` = IF(`match_state` = 'matched', `match_state`, VALUES(`match_state`)), `last_seen_at` = VALUES(`last_seen_at`)",
+      "`last_seen_at` = VALUES(`last_seen_at`)",
     [r.id, r.reference, r.member, r.moon, r.currency, r.amountMinor, r.status, r.receivedAt, r.statusAt, r.changedAt, match.state, match.invoiceId, match.by, seenAt, seenAt],
   );
 }
 
 export async function seraReportsForInvoices(db: Queryable, invoiceIds: readonly string[]): Promise<SeraReportRow[]> {
   if (invoiceIds.length === 0) return [];
-  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `sera_invoice_reports` WHERE `matched_invoice_id` IN (?) ORDER BY `received_at`", [invoiceIds]);
+  // Newest change first: a caller reading one record per invoice reads the latest.
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `sera_invoice_reports` WHERE `matched_invoice_id` IN (?) ORDER BY `changed_at` DESC, `sera_id`", [invoiceIds]);
   return rows.map(toReport);
 }
 
@@ -186,7 +202,14 @@ export const storedFlagKey = (userId: string | null, f: Pick<SyncFlag, "dedupeKe
  * one is opened again. Every OPEN flag of that owner and those kinds the sync
  * did not see is marked resolved, and kept.
  */
-export async function writeFlags(db: Queryable, userId: string | null, kinds: readonly string[], flags: readonly SyncFlag[], at: string, newId: () => string): Promise<void> {
+export async function writeFlags(
+  db: Queryable,
+  userId: string | null,
+  compared: ReadonlyArray<{ kind: string; subjects: readonly string[] }>,
+  flags: readonly SyncFlag[],
+  at: string,
+  newId: () => string,
+): Promise<void> {
   const keys: string[] = [];
   for (const f of flags) {
     const key = storedFlagKey(userId, f);
@@ -197,15 +220,19 @@ export async function writeFlags(db: Queryable, userId: string | null, kinds: re
       [newId(), key, userId, f.kind, f.subject.slice(0, 120), f.amora.slice(0, 100), f.other.slice(0, 100), at, at],
     );
   }
-  if (kinds.length === 0) return;
+  // Only a subject this sync compared on a fresh read of both sides may close
+  // a flag: a token or invoice it could not compare keeps its flag open.
   const owner = userId === null ? "`user_id` IS NULL" : "`user_id` = ?";
-  const params: unknown[] = userId === null ? [at, kinds] : [at, userId, kinds];
-  let sql = `UPDATE \`treasury_sync_flags\` SET \`resolved_at\` = ? WHERE ${owner} AND \`kind\` IN (?) AND \`resolved_at\` IS NULL`;
-  if (keys.length) {
-    sql += " AND `dedupe_key` NOT IN (?)";
-    params.push(keys);
+  for (const c of compared) {
+    if (c.subjects.length === 0) continue;
+    const params: unknown[] = userId === null ? [at, c.kind, c.subjects] : [at, userId, c.kind, c.subjects];
+    let sql = `UPDATE \`treasury_sync_flags\` SET \`resolved_at\` = ? WHERE ${owner} AND \`kind\` = ? AND \`subject\` IN (?) AND \`resolved_at\` IS NULL`;
+    if (keys.length) {
+      sql += " AND `dedupe_key` NOT IN (?)";
+      params.push(keys);
+    }
+    await db.query(sql, params);
   }
-  await db.query(sql, params);
 }
 
 export async function resolveFlag(db: Queryable, storedKey: string, at: string): Promise<void> {
@@ -262,4 +289,13 @@ export async function invoiceIdByRef(db: Queryable, ref: string): Promise<string
 export async function membersWithInvoices(db: Queryable, limit = 2000): Promise<string[]> {
   const [rows] = await db.query<RowDataPacket[]>("SELECT DISTINCT `user_id` FROM `moon_invoices` WHERE `status` <> 'void' LIMIT ?", [limit]);
   return rows.map((r) => String(r.user_id));
+}
+
+/** Every invoice of a member that a Sera record is attached to, void ones included: Sera paying a void invoice is a difference. */
+export async function invoiceIdsWithSeraReportsOf(db: Queryable, userId: string): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT DISTINCT r.`matched_invoice_id` AS `id` FROM `sera_invoice_reports` r JOIN `moon_invoices` i ON i.`id` = r.`matched_invoice_id` WHERE i.`user_id` = ? LIMIT 500",
+    [userId],
+  );
+  return rows.map((r) => String(r.id));
 }

@@ -131,4 +131,44 @@ describe.skipIf(!configured)("the invoice is emailed to the village's Sera inbox
     const [cols] = await pool.query<any[]>("SHOW COLUMNS FROM `invoice_mail`");
     expect(cols.map((c) => c.Field).sort()).toEqual(["attempts", "content_hash", "id", "invoice_id", "invoice_ref", "message_id", "queued_at", "sent_at", "status", "to_email", "user_id"]);
   });
+
+  it("clearing or changing the inbox stops every unsent email to the old address", async () => {
+    answer = "failed";
+    await emailInvoiceToSera(deps(), "u1", view());
+    answer = "sent";
+    inbox = null;
+    await retryUnsentInvoiceMail(deps(), async () => view());
+    inbox = "someone-else@example.test";
+    await retryUnsentInvoiceMail(deps(), async () => view());
+    expect(posted).toHaveLength(1);
+  });
+
+  it("the retry never emails an invoice the member took back, or one already approved", async () => {
+    answer = "failed";
+    await emailInvoiceToSera(deps(), "u1", view());
+    answer = "sent";
+    for (const status of ["draft", "returned", "approved", "paid"] as const) await retryUnsentInvoiceMail(deps(), async () => view({ status }));
+    expect(posted).toHaveLength(1);
+  });
+
+  it("a row being sent cannot be claimed again by a second press", async () => {
+    let release!: () => void;
+    const slow = { ...deps(), post: async (e: OutgoingEmail) => { posted.push(e); await new Promise<void>((ok) => { release = ok; }); return { status: "sent", messageId: "m" } as PostResult; } };
+    const first = emailInvoiceToSera(slow, "u1", view());
+    await new Promise((ok) => setTimeout(ok, 100));
+    expect(await emailInvoiceToSera(deps(), "u1", view())).toBe("duplicate");
+    release();
+    expect(await first).toBe("sent");
+    expect(posted).toHaveLength(1);
+  });
+
+  it("the daily retry is audited as the system, never as the member", async () => {
+    const who: Array<boolean | undefined> = [];
+    const d = { ...deps(), audit: async (_t: string, _u: string, system?: boolean) => { who.push(system); } };
+    answer = "failed";
+    await emailInvoiceToSera(d, "u1", view());
+    answer = "sent";
+    await retryUnsentInvoiceMail(d, async () => view());
+    expect(who).toEqual([false, true]);
+  });
 });

@@ -33,6 +33,10 @@ import { claimMailAttempt, insertMail, mailForRef, settleMail, unsentMail, type 
 import { invoicePdf, moneyWords } from "./invoicePdf";
 
 export const MAIL_MAX_ATTEMPTS = 3;
+/** The statuses in which an invoice still stands as the member sent it. */
+// Waiting only: an email "for approval" about an invoice already approved or
+// paid would invite a second approval or payment.
+const RETRY_STATUSES: ReadonlySet<InvoiceView["status"]> = new Set(["waiting"]);
 
 export interface InvoiceMailDeps {
   getPool(): Pool;
@@ -42,7 +46,8 @@ export interface InvoiceMailDeps {
   seraInbox(): Promise<string | null>;
   /** The village's name, for the email's words. */
   projectName(): string;
-  audit(text: string, userId: string): Promise<void>;
+  /** An audit line. `system` is true for the daily retry, which no person pressed. */
+  audit(text: string, userId: string, system?: boolean): Promise<void>;
   now?(): Date;
 }
 
@@ -92,8 +97,12 @@ const outcomeOf = (r: PostResult): { status: MailStatus; outcome: MailOutcome } 
       ? { status: "queued", outcome: "queued" }
       : { status: "failed", outcome: "failed" };
 
-async function attempt(deps: InvoiceMailDeps, row: InvoiceMailRow, v: InvoiceView, updated: boolean): Promise<MailOutcome> {
+async function attempt(deps: InvoiceMailDeps, row: InvoiceMailRow, v: InvoiceView, updated: boolean, system = false): Promise<MailOutcome> {
   const pool = deps.getPool();
+  // The inbox as the village names it NOW. A row written to an address since
+  // cleared or changed is never sent there: clearing the setting stops mail.
+  const inbox = await deps.seraInbox();
+  if (!inbox || inbox !== row.toEmail) return "no_inbox";
   const n = await claimMailAttempt(pool, row.id, row.attempts);
   if (n === 0) return "duplicate";
   const key = `invoice-mail:${row.invoiceRef}:${row.contentHash.slice(0, 16)}:${n}`;
@@ -106,7 +115,7 @@ async function attempt(deps: InvoiceMailDeps, row: InvoiceMailRow, v: InvoiceVie
   const { status, outcome } = outcomeOf(result);
   const at = (deps.now?.() ?? new Date()).toISOString();
   await settleMail(pool, row.id, { status, messageId: result.messageId ?? null, sentAt: status === "sent" ? at : null });
-  await deps.audit(`invoice:emailed:${row.invoiceRef}:${outcome}:attempt-${n}`, row.userId).catch(() => undefined);
+  await deps.audit(`invoice:emailed:${row.invoiceRef}:${outcome}:attempt-${n}${system ? ":retry" : ""}`, row.userId, system).catch(() => undefined);
   return outcome;
 }
 
@@ -145,8 +154,11 @@ export async function retryUnsentInvoiceMail(deps: InvoiceMailDeps, viewOf: (inv
   let sent = 0;
   for (const r of rows) {
     const v = await viewOf(r.invoiceId, r.userId).catch(() => null);
-    if (!v || contentHashOf(v) !== r.contentHash || v.status === "void") continue;
-    if ((await attempt(deps, r, v, false)) === "sent") sent++;
+    // Only an invoice still standing as sent: one taken back, returned or void
+    // was withdrawn, and the email waits for the member's next press.
+    if (!v || contentHashOf(v) !== r.contentHash || !RETRY_STATUSES.has(v.status)) continue;
+    const updated = (await mailForRef(deps.getPool(), r.invoiceRef)).some((m) => m.contentHash !== r.contentHash);
+    if ((await attempt(deps, r, v, updated, true)) === "sent") sent++;
   }
   return `invoice mail: ${sent} of ${rows.length} unsent sent`;
 }

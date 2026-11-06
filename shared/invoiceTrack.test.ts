@@ -159,3 +159,59 @@ describe("reconcile: one view, each number with its source, disagreements flagge
     expect(a.flags[0].dedupeKey).toBe(b.flags[0].dedupeKey);
   });
 });
+
+describe("after the money pass: nothing hidden, nothing resolved without a fresh read", () => {
+  const at = "2026-11-06T12:00:00.000Z";
+  const base = {
+    readAt: at,
+    ledger: { ok: true, readAt: at, tokens: [{ slug: "equity", name: "Equity", amount: "40.00" }], cash: [] },
+    chain: { ok: true, offered: true, readAt: at, tokens: [{ slug: "equity", formatted: "40", readAt: at, stale: false }] as Array<{ slug: string; formatted: string | null; readAt: string; stale: boolean }> },
+    sera: { ok: true, offered: true, readAt: at },
+    invoices: [] as Parameters<typeof reconcile>[0]["invoices"],
+  };
+  it("compares a token the chain holds and the ledger has no row for, as zero here", () => {
+    const r = reconcile({ ...base, chain: { ...base.chain, tokens: [...base.chain.tokens, { slug: "voice", formatted: "500", readAt: at, stale: false }] } });
+    expect(r.tokens.find((t) => t.slug === "voice")).toMatchObject({ amora: "0", chain: "500", disagree: true });
+    expect(r.flags.map((f) => f.subject)).toEqual(["voice"]);
+  });
+  it("a stale chain value is shown as differing but raises no flag and is not a fresh comparison", () => {
+    const r = reconcile({ ...base, chain: { ...base.chain, tokens: [{ slug: "equity", formatted: "39", readAt: "2026-11-01T00:00:00.000Z", stale: true }] } });
+    expect(r.tokens[0].disagree).toBe(true);
+    expect(r.flags).toEqual([]);
+    expect(r.compared.chain).toEqual([]);
+  });
+  it("a token the chain could not read is not compared", () => {
+    const r = reconcile({ ...base, chain: { ...base.chain, tokens: [{ slug: "equity", formatted: null, readAt: at, stale: false }] } });
+    expect(r.tokens[0]).toMatchObject({ chain: null, disagree: false });
+    expect(r.compared.chain).toEqual([]);
+  });
+  it("names every subject it compared fresh, so only those flags may resolve", () => {
+    const r = reconcile({ ...base, invoices: [{ ref: "p-0001", status: "waiting", currency: "USD", totalMinor: 1, sera: { status: "received", currency: "USD", amountMinor: 1, statusAt: at }, seraCount: 1 }] });
+    expect(r.compared).toEqual({ chain: ["equity"], sera: ["p-0001"] });
+  });
+  it("two Sera records for one invoice is a flag", () => {
+    const r = reconcile({ ...base, invoices: [{ ref: "p-0001", status: "approved", currency: "USD", totalMinor: 1, sera: { status: "approved", currency: "USD", amountMinor: 1, statusAt: at }, seraCount: 2 }] });
+    expect(r.flags.map((f) => f.kind)).toEqual(["sera_duplicate"]);
+  });
+  it("Sera approving or paying a void invoice is a disagreement", () => {
+    for (const status of ["approved", "paid"] as const) {
+      const r = reconcile({ ...base, invoices: [{ ref: "p-0001", status: "void", currency: "USD", totalMinor: 1, sera: { status, currency: "USD", amountMinor: 1, statusAt: at }, seraCount: 1 }] });
+      expect(r.flags.map((f) => f.kind)).toEqual(["sera_status_differs"]);
+    }
+  });
+  it("Sera rejecting an invoice the village is still waiting on is shown", () => {
+    const r = reconcile({ ...base, invoices: [{ ref: "p-0001", status: "waiting", currency: "USD", totalMinor: 1, sera: { status: "rejected", currency: "USD", amountMinor: 1, statusAt: at }, seraCount: 1 }] });
+    expect(r.flags.map((f) => f.kind)).toEqual(["sera_status_differs"]);
+  });
+  it("a reference that names another member's invoice than the record's code-name is not attached", () => {
+    const cands: MatchCandidate[] = [{ invoiceId: "mv-2", ref: "us-llc-0008", userId: "u2", codeName: "cn-heron", moon: "lunar-000328", currency: "USD", totalMinor: 90000 }];
+    expect(matchSeraReport(report({ reference: "us-llc-0008", member: "cn-otter" }), cands).kind).toBe("unmatched");
+    expect(matchSeraReport(report({ reference: "us-llc-0008", member: null }), cands).kind).toBe("matched");
+  });
+  it("normalises Sera's instants to ISO and refuses a far-future one", () => {
+    expect(readSeraInvoice({ ...report(), receivedAt: "2026-11-06T12:00:00.123456789+05:30" })?.receivedAt).toBe("2026-11-06T06:30:00.123Z");
+    expect(readSeraInvoice({ ...report(), receivedAt: "9999-01-01T00:00:00Z" })).toBeNull();
+    expect(readSeraInvoice({ ...report(), id: "has spaces and prose" })).toBeNull();
+    expect(readSeraInvoice({ ...report(), moon: "October, the month Rye invoiced" })?.moon).toBeNull();
+  });
+});

@@ -168,4 +168,36 @@ describe.skipIf(!configured)("the treasury sync reconciles three sources, flags 
     expect(lines.join("\n")).not.toContain(SECRET_TOKEN);
     expect(lines.join("\n")).not.toContain("RPCKEY");
   });
+
+  it("Sera paying an invoice the village voided is flagged, never dropped", async () => {
+    seraRecords = [{ id: "s1", reference: "us-llc-0007", currency: "USD", amountMinor: 120000, status: "received", receivedAt: "2026-11-06T10:00:00.000Z" }];
+    await syncTreasury(deps(base), "u1", "manual");
+    await base.query("UPDATE `moon_invoices` SET `status` = 'void' WHERE `id` = 'mv-1'");
+    seraRecords = [{ id: "s1", reference: "us-llc-0007", currency: "USD", amountMinor: 120000, status: "paid", receivedAt: "2026-11-06T10:00:00.000Z", changedAt: "2026-11-07T10:00:00.000Z" }];
+    const v = await syncTreasury(deps(base), "u1", "manual");
+    expect(v.tracks).toEqual([]);
+    expect(v.invoices[0]).toMatchObject({ ref: "us-llc-0007", status: "void", seraStatus: "paid", disagree: true });
+    expect((await openFlagsFor(base, "u1")).map((f) => f.kind)).toEqual(["sera_status_differs"]);
+  });
+
+  it("two Sera records on one invoice are flagged, and the newest is the one compared", async () => {
+    seraRecords = [
+      { id: "s1", reference: "us-llc-0007", currency: "USD", amountMinor: 120000, status: "received", receivedAt: "2026-11-06T10:00:00.000Z", changedAt: "2026-11-06T10:00:00.000Z" },
+      { id: "s2", reference: "us-llc-0007", currency: "USD", amountMinor: 120000, status: "paid", receivedAt: "2026-11-06T11:00:00.000Z", changedAt: "2026-11-06T11:00:00.000Z" },
+    ];
+    const v = await syncTreasury(deps(base), "u1", "manual");
+    expect(v.invoices[0].seraStatus).toBe("paid");
+    expect((await openFlagsFor(base, "u1")).map((f) => f.kind).sort()).toEqual(["sera_duplicate", "sera_status_differs"]);
+  });
+
+  it("a token the chain could not read, or a stale one, closes no flag", async () => {
+    const d = (chain: Awaited<ReturnType<TreasuryDeps["chain"]>>) => ({ ...deps(base), ledgerTokens: async () => [{ slug: "equity", name: "Equity", amount: "5" }], chain: async () => chain });
+    await syncTreasury(d({ offered: true, tokens: [{ slug: "equity", formatted: "7", readAt: "x", stale: false }] }), "u1", "manual");
+    await syncTreasury(d({ offered: true, tokens: [{ slug: "equity", formatted: null, readAt: "x", stale: false }] }), "u1", "manual");
+    expect(await openFlagsFor(base, "u1")).toHaveLength(1);
+    await syncTreasury(d({ offered: true, tokens: [{ slug: "equity", formatted: "5", readAt: "x", stale: true }] }), "u1", "manual");
+    expect(await openFlagsFor(base, "u1")).toHaveLength(1);
+    await syncTreasury(d({ offered: true, tokens: [{ slug: "equity", formatted: "5", readAt: "x", stale: false }] }), "u1", "manual");
+    expect(await openFlagsFor(base, "u1")).toEqual([]);
+  });
 });

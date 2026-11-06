@@ -98,8 +98,14 @@ export interface SeraInvoice {
   changedAt: string;
 }
 
-const isInstant = (v: unknown): v is string => typeof v === "string" && v.length <= 40 && !Number.isNaN(Date.parse(v));
-const shortText = (v: unknown, max: number): string | null => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null);
+const isInstant = (v: unknown): v is string => {
+  if (typeof v !== "string" || v.length > 40) return false;
+  const t = Date.parse(v);
+  // Year 2000 to 2100: a far-future instant would pin `since` and hide every later record.
+  return !Number.isNaN(t) && t >= Date.UTC(2000, 0, 1) && t < Date.UTC(2100, 0, 1);
+};
+const iso = (v: string) => new Date(Date.parse(v)).toISOString();
+const MOON_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/;
 const CODE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 
@@ -112,18 +118,22 @@ const REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 export function readSeraInvoice(raw: unknown): SeraInvoice | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
-  const id = shortText(r.id, 120);
+  const id = typeof r.id === "string" && REF.test(r.id) ? r.id : null;
   const currency = typeof r.currency === "string" && /^[A-Z]{3}$/.test(r.currency) ? r.currency : null;
   const amount = r.amountMinor;
   const status = (SERA_INVOICE_STATUSES as readonly string[]).includes(String(r.status)) ? (r.status as SeraInvoiceStatus) : null;
   if (!id || !currency || !Number.isSafeInteger(amount) || (amount as number) < 0 || !status) return null;
+  // Every instant is stored as the ISO form of what Sera said, so it fits its
+  // column and sorts: a long or local date format can neither break the write
+  // nor make `since` skip records.
   if (!isInstant(r.receivedAt)) return null;
-  const statusAt = isInstant(r.statusAt) ? r.statusAt : r.receivedAt;
-  const changedAt = isInstant(r.changedAt) ? r.changedAt : statusAt;
+  const receivedAt = iso(r.receivedAt);
+  const statusAt = isInstant(r.statusAt) ? iso(r.statusAt) : receivedAt;
+  const changedAt = isInstant(r.changedAt) ? iso(r.changedAt) : statusAt;
   const reference = typeof r.reference === "string" && REF.test(r.reference) ? r.reference : null;
   const member = typeof r.member === "string" && CODE_NAME.test(r.member) ? r.member : null;
-  const moon = shortText(r.moon, 40);
-  return { id, reference, member, moon, currency, amountMinor: amount as number, status, receivedAt: r.receivedAt, statusAt, changedAt };
+  const moon = typeof r.moon === "string" && MOON_ID.test(r.moon) ? r.moon : null;
+  return { id, reference, member, moon, currency, amountMinor: amount as number, status, receivedAt, statusAt, changedAt };
 }
 
 // ── Matching ─────────────────────────────────────────────────────────────────
@@ -153,6 +163,8 @@ export type MatchResult =
 export function matchSeraReport(report: SeraInvoice, candidates: readonly MatchCandidate[]): MatchResult {
   if (report.reference) {
     const hit = candidates.find((c) => c.ref === report.reference);
+    // A record that names a member must name the invoice's own member.
+    if (hit && report.member && hit.codeName !== report.member) return { kind: "unmatched" };
     return hit ? { kind: "matched", invoiceId: hit.invoiceId, by: "reference" } : { kind: "unmatched" };
   }
   if (!report.member || !report.moon) return { kind: "unmatched" };
@@ -191,18 +203,22 @@ export type SourceState = "read" | "not_read" | "not_offered";
 export interface ReconcileInput {
   readAt: string;
   ledger: { ok: boolean; readAt: string | null; tokens: Array<{ slug: string; name: string; amount: string }>; cash: Array<{ currency: string; owedMinor: number }> };
-  chain: { ok: boolean; offered: boolean; readAt: string | null; tokens: Array<{ slug: string; formatted: string; readAt: string; stale: boolean }> };
+  /** A token the chain could not read has `formatted: null`: it is shown and never compared. */
+  chain: { ok: boolean; offered: boolean; readAt: string | null; tokens: Array<{ slug: string; formatted: string | null; readAt: string; stale: boolean }> };
   sera: { ok: boolean; offered: boolean; readAt: string | null };
   invoices: Array<{
     ref: string;
     status: InvoiceStatus;
     currency: string;
     totalMinor: number;
+    /** The newest Sera record attached to this invoice. */
     sera: { status: SeraInvoiceStatus; currency: string; amountMinor: number; statusAt: string } | null;
+    /** How many Sera records are attached to it. More than one is flagged. */
+    seraCount?: number;
   }>;
 }
 
-export type FlagKind = "chain_differs" | "sera_amount_differs" | "sera_status_differs" | "sera_unmatched";
+export type FlagKind = "chain_differs" | "sera_amount_differs" | "sera_status_differs" | "sera_duplicate" | "sera_unmatched";
 
 export interface SyncFlag {
   kind: FlagKind;
@@ -221,16 +237,19 @@ export interface ReconciledView {
   cash: Array<{ currency: string; owedMinor: number }>;
   invoices: Array<{ ref: string; status: InvoiceStatus; currency: string; amoraMinor: number; seraStatus: SeraInvoiceStatus | null; seraMinor: number | null; seraCurrency: string | null; seraAt: string | null; disagree: boolean }>;
   flags: SyncFlag[];
+  /** The subjects compared on a fresh read of both sides, per source: only their flags may resolve. */
+  compared: { chain: string[]; sera: string[] };
 }
 
 /**
- * Sera's status a village status would agree with. Received and rejected say
- * nothing against an invoice still waiting or returned; approved agrees with
- * approved; paid agrees only with paid.
+ * Sera's status a village status would agree with. Received says nothing
+ * against any; rejected agrees only with returned or void; approved agrees
+ * with waiting, approved or paid, never with void; paid only with paid.
  */
 function statusAgrees(amora: InvoiceStatus, sera: SeraInvoiceStatus): boolean {
   if (sera === "received") return true;
-  if (sera === "rejected") return amora === "returned" || amora === "void" || amora === "waiting";
+  // A rejection while the village still waits is shown: someone should read it.
+  if (sera === "rejected") return amora === "returned" || amora === "void";
   if (sera === "approved") return amora === "approved" || amora === "paid" || amora === "waiting";
   return amora === "paid";
 }
@@ -239,17 +258,29 @@ const flagKey = (kind: FlagKind, subject: string, amora: string, other: string) 
 
 export function reconcile(input: ReconcileInput): ReconciledView {
   const flags: SyncFlag[] = [];
+  const compared = { chain: [] as string[], sera: [] as string[] };
   const state = (s: { ok: boolean; offered?: boolean }): SourceState => (s.offered === false ? "not_offered" : s.ok ? "read" : "not_read");
   const chainBySlug = new Map(input.chain.ok ? input.chain.tokens.map((t) => [t.slug, t] as const) : []);
+  const ledgerBySlug = new Map(input.ledger.tokens.map((t) => [t.slug, t] as const));
 
-  const tokens = input.ledger.tokens.map((t) => {
-    const c = chainBySlug.get(t.slug) ?? null;
+  // Every slug either side holds: a token on chain with no ledger row reads
+  // zero here and is compared, never left out.
+  const slugs = [...input.ledger.tokens.map((t) => t.slug), ...[...chainBySlug.keys()].filter((s) => !ledgerBySlug.has(s))];
+  const tokens = (input.ledger.ok ? slugs : []).map((slug) => {
+    const t = ledgerBySlug.get(slug) ?? { slug, name: slug, amount: "0" };
+    const c = chainBySlug.get(slug) ?? null;
+    const chain = c?.formatted ?? null;
     let disagree = false;
-    if (c) {
-      disagree = compareDecimal(t.amount, c.formatted) !== 0;
-      if (disagree) flags.push({ kind: "chain_differs", subject: t.slug, amora: t.amount, other: c.formatted, dedupeKey: flagKey("chain_differs", t.slug, t.amount, c.formatted) });
+    if (c && chain !== null) {
+      disagree = compareDecimal(t.amount, chain) !== 0;
+      // A stale value is shown, never flagged and never a fresh comparison:
+      // a balance cached last week can neither raise nor close today's flag.
+      if (!c.stale) {
+        compared.chain.push(slug);
+        if (disagree) flags.push({ kind: "chain_differs", subject: slug, amora: t.amount, other: chain, dedupeKey: flagKey("chain_differs", slug, t.amount, chain) });
+      }
     }
-    return { slug: t.slug, name: t.name, amora: t.amount, chain: c?.formatted ?? null, chainReadAt: c?.readAt ?? null, chainStale: c?.stale ?? false, disagree };
+    return { slug, name: t.name, amora: t.amount, chain, chainReadAt: chain !== null ? (c?.readAt ?? null) : null, chainStale: chain !== null && (c?.stale ?? false), disagree };
   });
 
   const seraRead = input.sera.ok && input.sera.offered;
@@ -257,6 +288,7 @@ export function reconcile(input: ReconcileInput): ReconciledView {
     const s = seraRead ? i.sera : null;
     let disagree = false;
     if (s) {
+      compared.sera.push(i.ref);
       if (s.currency !== i.currency || s.amountMinor !== i.totalMinor) {
         disagree = true;
         const amora = `${i.totalMinor} ${i.currency}`;
@@ -266,6 +298,11 @@ export function reconcile(input: ReconcileInput): ReconciledView {
       if (!statusAgrees(i.status, s.status)) {
         disagree = true;
         flags.push({ kind: "sera_status_differs", subject: i.ref, amora: i.status, other: s.status, dedupeKey: flagKey("sera_status_differs", i.ref, i.status, s.status) });
+      }
+      if ((i.seraCount ?? 1) > 1) {
+        disagree = true;
+        const other = `${i.seraCount} records`;
+        flags.push({ kind: "sera_duplicate", subject: i.ref, amora: "1 invoice", other, dedupeKey: flagKey("sera_duplicate", i.ref, "1", String(i.seraCount)) });
       }
     }
     return { ref: i.ref, status: i.status, currency: i.currency, amoraMinor: i.totalMinor, seraStatus: s?.status ?? null, seraMinor: s?.amountMinor ?? null, seraCurrency: s?.currency ?? null, seraAt: s?.statusAt ?? null, disagree };
@@ -282,6 +319,7 @@ export function reconcile(input: ReconcileInput): ReconciledView {
     cash: input.ledger.ok ? input.ledger.cash : [],
     invoices,
     flags,
+    compared,
   };
 }
 
@@ -325,6 +363,7 @@ export const FLAG_WORDS: Record<FlagKind, string> = {
   chain_differs: "The chain shows a different balance",
   sera_amount_differs: "Sera has a different amount",
   sera_status_differs: "Sera has a different status",
+  sera_duplicate: "Sera has more than one record for this invoice",
   sera_unmatched: "Sera has an invoice that matches none here",
 };
 

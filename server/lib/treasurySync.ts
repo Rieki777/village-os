@@ -26,7 +26,7 @@ import type { Pool } from "mysql2/promise";
 import { reconcile, trackOf, type FlagKind, type ReconciledView, type TrackStep } from "../../shared/invoiceTrack";
 import { billRef, type InvoiceStatus } from "../../shared/moonRecap";
 import { invoicesByIds } from "../repos/moonRecaps";
-import { liveInvoiceIdsOf, mailForInvoices, paidReferenceOf, saveSyncView, seraReportsForInvoices, syncViewOf, writeFlags } from "../repos/invoiceRails";
+import { invoiceIdsWithSeraReportsOf, liveInvoiceIdsOf, mailForInvoices, paidReferenceOf, saveSyncView, seraReportsForInvoices, syncViewOf, writeFlags } from "../repos/invoiceRails";
 import { linesOf } from "./moonRecap";
 import { readSeraInvoices, type SeraInvoiceClient, type SeraReadOutcome } from "./seraInvoices";
 
@@ -61,7 +61,7 @@ export interface TreasuryDeps {
    * for, read through `readOnchainBalance` (last known, marked stale, on an
    * RPC failure). `offered` is false with no verified wallet or no contract.
    */
-  chain(userId: string): Promise<{ offered: boolean; tokens: Array<{ slug: string; formatted: string; readAt: string; stale: boolean }> }>;
+  chain(userId: string): Promise<{ offered: boolean; tokens: Array<{ slug: string; formatted: string | null; readAt: string; stale: boolean }> }>;
   seraClient(): Promise<SeraInvoiceClient | null>;
   resolveCodeName(code: string): Promise<string | null>;
   now(): Date;
@@ -78,6 +78,7 @@ export async function invoiceTracksFor(pool: Pool, userId: string): Promise<Invo
     const ref = billRef(i.payerKey, i.billRefSeq);
     const sent = mail.filter((m) => m.invoiceId === i.id);
     const lastSent = [...sent].reverse().find((m) => m.status === "sent") ?? sent[sent.length - 1] ?? null;
+    // `seraReportsForInvoices` answers newest first: the track reads Sera's latest word.
     const report = reports.find((r) => r.matchedInvoiceId === i.id) ?? null;
     const paidReference = i.status === "paid" ? await paidReferenceOf(pool, linesOf(i).map((l) => l.cashOwedId).filter((x): x is string => !!x)) : null;
     rows.push({
@@ -88,8 +89,7 @@ export async function invoiceTracksFor(pool: Pool, userId: string): Promise<Invo
   return rows;
 }
 
-const CHAIN_KINDS: FlagKind[] = ["chain_differs"];
-const SERA_KINDS: FlagKind[] = ["sera_amount_differs", "sera_status_differs"];
+const SERA_KINDS: FlagKind[] = ["sera_amount_differs", "sera_status_differs", "sera_duplicate"];
 
 /**
  * One sync for one member. `seraRead` lets the daily job read Sera once for
@@ -106,7 +106,13 @@ export async function syncTreasury(deps: TreasuryDeps, userId: string, trigger: 
     deps.chain(userId).then((c) => ({ ok: true, ...c })).catch(() => ({ ok: false, offered: true, tokens: [] })),
     invoiceTracksFor(pool, userId),
   ]);
-  const reports = await seraReportsForInvoices(pool, tracks.map((t) => t.invoiceId));
+  // Compared: every live invoice, plus any other invoice of this member that
+  // a Sera record is attached to (a void one included), so Sera approving or
+  // paying an invoice the village voided is shown, never dropped.
+  const extraIds = (await invoiceIdsWithSeraReportsOf(pool, userId)).filter((id) => !tracks.some((t) => t.invoiceId === id));
+  const extra = (await invoicesByIds(pool, extraIds)).map((i) => ({ invoiceId: i.id, ref: billRef(i.payerKey, i.billRefSeq), status: i.status, currency: i.currency, totalMinor: i.totalMinor }));
+  const comparedInvoices = [...tracks, ...extra];
+  const reports = await seraReportsForInvoices(pool, comparedInvoices.map((t) => t.invoiceId));
   const seraOk = sera.state === "read";
   const seraOffered = sera.state !== "not_offered" && sera.state !== "not_connected";
 
@@ -115,18 +121,21 @@ export async function syncTreasury(deps: TreasuryDeps, userId: string, trigger: 
     ledger: { ok: ledger.ok, readAt: ledger.ok ? at : (previous?.sources.amora.readAt ?? null), tokens: ledger.tokens, cash: ledger.cash },
     chain: { ok: chain.ok, offered: chain.offered, readAt: chain.ok ? at : (previous?.sources.chain.readAt ?? null), tokens: chain.tokens },
     sera: { ok: seraOk, offered: seraOffered, readAt: seraOk ? at : (previous?.sources.sera.readAt ?? null) },
-    invoices: tracks.map((t) => {
-      const r = reports.find((x) => x.matchedInvoiceId === t.invoiceId);
-      return { ref: t.ref, status: t.status, currency: t.currency, totalMinor: t.totalMinor, sera: r ? { status: r.status, currency: r.currency, amountMinor: r.amountMinor, statusAt: r.statusAt } : null };
+    invoices: comparedInvoices.map((t) => {
+      const mine = reports.filter((x) => x.matchedInvoiceId === t.invoiceId);
+      const r = mine[0];
+      return { ref: t.ref, status: t.status, currency: t.currency, totalMinor: t.totalMinor, seraCount: mine.length, sera: r ? { status: r.status, currency: r.currency, amountMinor: r.amountMinor, statusAt: r.statusAt } : null };
     }),
   });
 
-  // Only a source that was read may resolve its own kind of flag.
-  // A chain difference needs both the chain and the ledger read.
-  const chainRead = chain.ok && chain.offered && ledger.ok;
-  const kinds = [...(chainRead ? CHAIN_KINDS : []), ...(seraOk ? SERA_KINDS : [])];
-  const seen = view.flags.filter((f) => (f.kind === "chain_differs" ? chainRead : seraOk));
-  await writeFlags(pool, userId, kinds, seen, at, deps.newId);
+  // A flag is closed only for a subject compared on a fresh read of both
+  // sides (`view.compared`): a token the chain could not read, a stale value,
+  // or an invoice Sera was not read for keeps its flag open.
+  const compared = [
+    { kind: "chain_differs", subjects: view.compared.chain },
+    ...SERA_KINDS.map((kind) => ({ kind, subjects: view.compared.sera })),
+  ];
+  await writeFlags(pool, userId, compared, view.flags, at, deps.newId);
 
   const out: TreasuryView = { ...view, syncedAt: at, trigger, tracks, sera: sera.state };
   await saveSyncView(pool, userId, out, at, trigger);

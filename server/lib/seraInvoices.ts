@@ -51,22 +51,33 @@ const recordsOf = (v: unknown): unknown[] | null => {
 };
 
 async function candidatesFor(pool: Pool, r: SeraInvoice, resolve: (code: string) => Promise<string | null>): Promise<MatchCandidate[]> {
+  // The code-name is resolved inside the village only. A candidate carries it
+  // only when it is that member's invoice, so a record naming one member never
+  // attaches to another member's invoice by reference.
+  const owner = r.member ? await resolve(r.member) : null;
   let ids: string[] = [];
-  let code: string | null = null;
   if (r.reference) {
     const id = await invoiceIdByRef(pool, r.reference);
     ids = id ? [id] : [];
-  } else if (r.member) {
-    const userId = await resolve(r.member);
-    if (userId) {
-      ids = await liveInvoiceIdsOf(pool, userId);
-      code = r.member;
-    }
+  } else if (owner) {
+    ids = await liveInvoiceIdsOf(pool, owner);
   }
   const rows = await invoicesByIds(pool, ids);
   return rows
     .filter((i) => i.status !== "void")
-    .map((i) => ({ invoiceId: i.id, ref: billRef(i.payerKey, i.billRefSeq), userId: i.userId, codeName: code, moon: i.cycleId, currency: i.currency, totalMinor: i.totalMinor }));
+    .map((i) => ({ invoiceId: i.id, ref: billRef(i.payerKey, i.billRefSeq), userId: i.userId, codeName: owner && i.userId === owner ? r.member : null, moon: i.cycleId, currency: i.currency, totalMinor: i.totalMinor }));
+}
+
+async function matchSeraReportSafely(pool: Pool, r: SeraInvoice, deps: { resolveCodeName(code: string): Promise<string | null>; now(): Date }) {
+  try {
+    const m = matchSeraReport(r, await candidatesFor(pool, r, deps.resolveCodeName));
+    const at = deps.now().toISOString();
+    if (m.kind === "matched") await upsertSeraReport(pool, r, { state: "matched", invoiceId: m.invoiceId, by: m.by }, at);
+    else await upsertSeraReport(pool, r, { state: m.kind, invoiceId: null, by: null }, at);
+    return m;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -92,20 +103,29 @@ export async function readSeraInvoices(
   const at = deps.now().toISOString();
   const out = { read: 0, skipped: 0, matched: 0, unmatched: 0, ambiguous: 0 };
   const flags: SyncFlag[] = [];
-  for (const item of raw.slice(0, MAX_RECORDS)) {
+  // Oldest change first, then capped: the next read asks from the newest one
+  // stored, so a capped answer loses nothing, whichever order Sera sent.
+  const parsed: SeraInvoice[] = [];
+  for (const item of raw) {
     const r = readSeraInvoice(item);
-    if (!r) {
+    if (r) parsed.push(r);
+    else out.skipped++;
+  }
+  parsed.sort((a, b) => (a.changedAt < b.changedAt ? -1 : a.changedAt > b.changedAt ? 1 : 0));
+  for (const r of parsed.slice(0, MAX_RECORDS)) {
+    out.read++;
+    const m = await matchSeraReportSafely(pool, r, deps);
+    if (!m) {
+      // One record that cannot be stored is counted and skipped; it never stops the read.
+      out.read--;
       out.skipped++;
       continue;
     }
-    out.read++;
-    const m = matchSeraReport(r, await candidatesFor(pool, r, deps.resolveCodeName));
     if (m.kind === "matched") {
       out.matched++;
-      await upsertSeraReport(pool, r, { state: "matched", invoiceId: m.invoiceId, by: m.by }, at);
+      await resolveFlag(pool, storedFlagKey(null, { dedupeKey: `sera_unmatched:${r.id}` }), at);
     } else {
       m.kind === "ambiguous" ? out.ambiguous++ : out.unmatched++;
-      await upsertSeraReport(pool, r, { state: m.kind, invoiceId: null, by: null }, at);
       const amora = m.kind === "ambiguous" ? `${m.invoiceIds.length} invoices fit` : "no invoice fits";
       const other = `${r.amountMinor} ${r.currency}${r.reference ? ` ref ${r.reference}` : ""}`;
       flags.push({ kind: "sera_unmatched", subject: r.id, amora, other, dedupeKey: `sera_unmatched:${r.id}` });
@@ -118,8 +138,8 @@ export async function readSeraInvoices(
   // emailed the inbox before sending in the app). Each is tried again; one that
   // now matches exactly one invoice is attached and its flag resolved.
   for (const r of await unmatchedSeraReports(pool)) {
-    const m = matchSeraReport(r, await candidatesFor(pool, r, deps.resolveCodeName));
-    if (m.kind !== "matched") continue;
+    const m = await candidatesFor(pool, r, deps.resolveCodeName).then((c) => matchSeraReport(r, c)).catch(() => null);
+    if (!m || m.kind !== "matched") continue;
     await upsertSeraReport(pool, r, { state: "matched", invoiceId: m.invoiceId, by: m.by }, at);
     await resolveFlag(pool, storedFlagKey(null, { dedupeKey: `sera_unmatched:${r.id}` }), at);
     out.matched++;

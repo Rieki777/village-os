@@ -38,14 +38,14 @@ import { authToken } from "@/lib/gameApi";
 import { InvoiceTrack, type TrackRow } from "../TreasurySync";
 
 /** The member's invoice tracks and whether a send emails Sera's inbox (invoice rails). Reloads when `key` changes. */
-function useInvoiceRails(key: string): { tracks: TrackRow[]; emailsSera: boolean } {
-  const [state, setState] = useState<{ tracks: TrackRow[]; emailsSera: boolean }>({ tracks: [], emailsSera: false });
+function useInvoiceRails(key: string): { tracks: TrackRow[]; seraInbox: string | null } {
+  const [state, setState] = useState<{ tracks: TrackRow[]; seraInbox: string | null }>({ tracks: [], seraInbox: null });
   useEffect(() => {
     const t = authToken();
     fetch("/api/me/invoice-track", { headers: t ? { Authorization: `Bearer ${t}` } : {} })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setState({ tracks: Array.isArray(d?.tracks) ? d.tracks : [], emailsSera: d?.emailsSera === true }))
-      .catch(() => setState({ tracks: [], emailsSera: false }));
+      .then((d) => setState({ tracks: Array.isArray(d?.tracks) ? d.tracks : [], seraInbox: typeof d?.seraInbox === "string" ? d.seraInbox : null }))
+      .catch(() => setState({ tracks: [], seraInbox: null }));
   }, [key]);
   return state;
 }
@@ -266,7 +266,7 @@ export default function InvoicePanel({ data, cycleId, editable, reload }: { data
               <label className={LABEL}>{MOON_WORDS.memberNumber}<input value={number} maxLength={40} onChange={(e) => setNumber(e.target.value)} className={INPUT} /></label>
               {route === "local_contractor" ? <label className={LABEL}>{MOON_WORDS.externalKey}<input inputMode="numeric" value={key} maxLength={64} onChange={(e) => setKey(e.target.value)} className={INPUT} /></label> : null}
               {inv.sendRefusal ? <p className={MUTED}>{inv.sendRefusal}</p> : null}
-              {rails.emailsSera ? <p className={MUTED} data-testid="emails-sera">Sending also emails this invoice as a PDF, with your legal name and address, to Sera for the village's records.</p> : null}
+              {rails.seraInbox ? <p className={MUTED} data-testid="emails-sera">Sending also emails this invoice as a PDF, with your legal name and address, to Sera at <span className="break-all font-medium text-foreground">{rails.seraInbox}</span> for the village's records.</p> : null}
               <button type="button" className={`${SMALL_BTN} self-start`} disabled={busy || ackPending || !number.trim()} onClick={send}>{MOON_WORDS.sendInvoice}</button>
             </div>
           ) : null}

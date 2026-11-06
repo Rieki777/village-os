@@ -118,4 +118,39 @@ describe.skipIf(!configured)("Sera's invoice records are read typed, stored once
     const failing: SeraInvoiceClient = { ...client(), list: async () => ({ ok: false, why: "vendor-error" }) };
     expect(await readSeraInvoices(pool, failing, deps)).toEqual({ state: "failed", why: "vendor-error" });
   });
+
+  it("a reference to another member's invoice from a record naming someone else is not attached", async () => {
+    codes["cn-heron-40"] = "u2";
+    records = [rec({ id: "sera-7", member: "cn-heron-40" })];
+    expect(await readSeraInvoices(pool, client(), deps)).toMatchObject({ matched: 0, unmatched: 1 });
+    expect(await seraReportsForInvoices(pool, ["mv-1"])).toEqual([]);
+  });
+
+  it("a record whose reference Sera corrects moves to the invoice it now names", async () => {
+    await invoice("mv-8", "u1", 8, 120000, "cr-srl");
+    records = [rec({ id: "sera-8" })];
+    await readSeraInvoices(pool, client(), deps);
+    expect((await seraReportsForInvoices(pool, ["mv-1"]))[0]?.id).toBe("sera-8");
+    records = [rec({ id: "sera-8", reference: "cr-srl-0008", changedAt: "2026-11-07T00:00:00.000Z" })];
+    await readSeraInvoices(pool, client(), deps);
+    expect(await seraReportsForInvoices(pool, ["mv-1"])).toEqual([]);
+    expect((await seraReportsForInvoices(pool, ["mv-8"]))[0]?.id).toBe("sera-8");
+  });
+
+  it("a stored unmatched record that matches on its next read closes its flag", async () => {
+    records = [rec({ id: "sera-9", reference: "us-llc-0010" })];
+    await readSeraInvoices(pool, client(), deps);
+    expect(await openFlags(pool)).toHaveLength(1);
+    await invoice("mv-10", "u1", 10, 120000, "us-llc", 2);
+    records = [rec({ id: "sera-9", reference: "us-llc-0010", changedAt: "2026-11-07T00:00:00.000Z" })];
+    await readSeraInvoices(pool, client(), deps);
+    expect(await openFlags(pool)).toEqual([]);
+  });
+
+  it("one record that cannot be stored is skipped and never stops the read", async () => {
+    records = [rec({ id: "sera-boom", reference: null, member: "cn-boom-1" }), rec({ id: "sera-ok" })];
+    const throwing = { ...deps, resolveCodeName: async (c: string) => { if (c === "cn-boom-1") throw new Error("lookup failed"); return codes[c] ?? null; } };
+    const out = await readSeraInvoices(pool, client(), throwing);
+    expect(out).toMatchObject({ state: "read", matched: 1, skipped: 1 });
+  });
 });

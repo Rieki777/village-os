@@ -25,13 +25,14 @@ describe.skipIf(!testDbConfigured())("the invoice rails' doors: the caller's own
   const treasurers = new Set(["treasurer-1"]);
   const buckets = new Map<string, number>();
   let limitAsked: Array<[string, number, number]> = [];
+  let seraClientCalls = 0;
 
   const treasury = (): TreasuryDeps => ({
     getPool: () => pool,
     ledgerTokens: async () => [],
     cashOwed: async () => [],
     chain: async () => ({ offered: false, tokens: [] }),
-    seraClient: async () => null,
+    seraClient: async () => { seraClientCalls++; return null; },
     resolveCodeName: async () => null,
     now: () => new Date("2026-11-06T12:00:00.000Z"),
     newId: () => `f-${Math.random()}`,
@@ -117,5 +118,12 @@ describe.skipIf(!testDbConfigured())("the invoice rails' doors: the caller's own
     await new Promise((ok) => setTimeout(ok, 50));
     const [rows] = await pool.query<any[]>("SELECT `text`, `audience`, `actor_user_id` FROM `health_events` WHERE `kind` = 'audit'");
     expect(rows).toEqual([expect.objectContaining({ text: "treasury:synced:manual:flags-0", audience: "admin", actor_user_id: "u1" })]);
+  });
+
+  it("members pressing Sync inside a minute share one Sera read for the village", async () => {
+    await postTo("/api/me/treasury/sync", "u1");
+    await postTo("/api/me/treasury/sync", "u2");
+    await postTo("/api/me/treasury/sync", "u3");
+    expect(seraClientCalls).toBe(1);
   });
 });
