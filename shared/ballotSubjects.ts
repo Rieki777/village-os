@@ -1060,6 +1060,8 @@ export const META_SETTING_KEYS: readonly string[] = [
   // every other proposal, so a cheap trial of it would be a moon in which
   // larger bundles go up at a bar nobody agreed to.
   "governance.change_set_cap",
+  // How many change requests one member may gather (spec R20).
+  "governance.change_requests_gathering_per_member",
 ];
 
 /** Any key under one of these is a META_SETTING, whichever lane adds it. */

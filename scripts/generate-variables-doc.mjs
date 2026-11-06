@@ -75,6 +75,8 @@ export const SOURCES = [
   // The change-set cap dial reads its default, floor and ceiling from here
   // (Rye, 2026-11-06).
   "shared/changeSetCap.ts",
+  // The change-request gathering limit dial reads its key and default here.
+  "shared/changeRequestLimits.ts",
   "shared/gameConfig.ts",
   "shared/capabilities.ts",
   "shared/villageMoon.ts",

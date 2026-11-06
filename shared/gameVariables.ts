@@ -27,6 +27,7 @@ import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects"
 import { isAnchorDateAcceptable } from "./villageMoon";
 import { villageSeasonsProblem } from "./villageSeasons";
 import { CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN } from "./changeSetCap";
+import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY } from "./changeRequestLimits";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
 
@@ -1266,6 +1267,22 @@ export const VARIABLES: VariableDef[] = [
     min: CHANGE_SET_CAP_MIN,
     max: CHANGE_SET_CAP_MAX,
     unit: "changes",
+  },
+  {
+    // Change requests (Rye, 2026-11-06; spec C7, R20). A ceiling on
+    // flooding: commenting on and supporting other change requests is never
+    // limited. Meta, so a trial can never lift it for a moon.
+    key: GATHERING_LIMIT_KEY,
+    category: "Governance",
+    label: "Change requests one member may gather at once",
+    criticality: "structural",
+    description:
+      "How many change requests one member may be gathering at the same time, before they open them for review. Reviewing, commenting on and supporting other members' change requests is never limited.",
+    type: "integer",
+    default: String(GATHERING_LIMIT_DEFAULT),
+    min: 1,
+    max: 50,
+    unit: "change requests",
   },
 
   // ── Governance windows, per proposal kind (19E, 19F, 20.11) ──────────────

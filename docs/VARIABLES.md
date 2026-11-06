@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 197 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 198 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 219 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 220 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-246 dials in 36 categories. 146 carry a minimum and a maximum. By type: 109 integer, 19 decimal, 19 percentage, 29 boolean, 31 choice, 38 text, 1 longtext.
+247 dials in 36 categories. 147 carry a minimum and a maximum. By type: 110 integer, 19 decimal, 19 percentage, 29 boolean, 31 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ Each dial also says WHEN a change lands. 219 of them as soon as it is saved, and
 | The Mint | 7 | 6 | 1 |
 | Progression | 31 | 31 | 0 |
 | Quests | 2 | 2 | 0 |
-| Governance | 48 | 42 | 6 |
+| Governance | 49 | 43 | 6 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -170,6 +170,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Cycles a passed decision waits before it is written off | `governance.landing_expiry_cycles` | Governance | integer | `3` | the whole village |
 | Cooldown after a governed rule change | `governance.change_cooldown_days` | Governance | integer | `0` | the whole village |
 | Changes one proposal may carry | `governance.change_set_cap` | Governance | integer | `22` | the whole village |
+| Change requests one member may gather at once | `governance.change_requests_gathering_per_member` | Governance | integer | `5` | the whole village |
 | When a change to the Game Mechanics can go to the vote | `governance.window_changeset` | Governance | text | `always_open` | the whole village |
 | When a change to what the village mints can go to the vote | `governance.window_mint_rule` | Governance | text | `always_open` | the whole village |
 | When a change to how votes are counted can go to the vote | `governance.window_governance_mode` | Governance | text | `always_open` | the whole village |
@@ -1663,7 +1664,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-48 dials. 42 for the whole village, 6 for the founder or an admin.
+49 dials. 43 for the whole village, 6 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -1899,6 +1900,21 @@ The most changes a single proposal may gather and put to one vote. Connected cha
 | Default | `22` |
 | Range | 1 to 50 |
 | Counted in | changes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### Change requests one member may gather at once
+
+How many change requests one member may be gathering at the same time, before they open them for review. Reviewing, commenting on and supporting other members' change requests is never limited.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.change_requests_gathering_per_member` |
+| Type | integer, a whole number |
+| Default | `5` |
+| Range | 1 to 50 |
+| Counted in | change requests |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a structural vote, at a higher bar |
@@ -4413,6 +4429,7 @@ The generator reads these and fails loudly if any of them moves:
 
 - `shared/ballotSubjects.ts`
 - `shared/capabilities.ts`
+- `shared/changeRequestLimits.ts`
 - `shared/changeSetCap.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
