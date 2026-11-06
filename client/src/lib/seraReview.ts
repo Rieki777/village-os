@@ -36,6 +36,8 @@ export interface ListAnswer {
   differences: ListedDifference[];
   /** When each kind was last read whole. Absent from a server that does not send it. */
   lastWholeAt?: { circles: string | null; roles: string | null } | null;
+  /** The circles here in chart order, by id. Absent from a server that does not send it. */
+  circleOrder?: string[];
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -97,6 +99,7 @@ export function readList(v: unknown): ListAnswer | null {
     lastWholeAt: whole
       ? { circles: typeof whole.circles === "string" ? whole.circles : null, roles: typeof whole.roles === "string" ? whole.roles : null }
       : null,
+    circleOrder: Array.isArray(v.circleOrder) ? v.circleOrder.filter((c): c is string => typeof c === "string") : [],
   };
 }
 
@@ -166,7 +169,11 @@ const flaggedFirst = <T>(items: T[], of: (t: T) => Difference): T[] =>
   items.map((t, i) => ({ t, i })).sort((a, b) => Number(checkFirst(of(b.t))) - Number(checkFirst(of(a.t))) || a.i - b.i).map((x) => x.t);
 const fold = (s: string) => s.normalize("NFKD").toLowerCase();
 
-export function groupByCircle(list: readonly ListedDifference[]): CircleGroup[] {
+/**
+ * The groups in chart order (US2.3): the circles here as the chart orders
+ * them, then circles that are not here yet by name, then roles in no circle.
+ */
+export function groupByCircle(list: readonly ListedDifference[], chartOrder: readonly string[] = []): CircleGroup[] {
   const groups = new Map<string, { name: string | null; items: ListedDifference[] }>();
   for (const d of list) {
     const key = circleKeyOf(d);
@@ -187,8 +194,15 @@ export function groupByCircle(list: readonly ListedDifference[]): CircleGroup[] 
     const ordered = flaggedFirst(top, (r) => r.d).sort((a, b) => Number(b.d === adds) - Number(a.d === adds));
     out.push({ key, name: g.name, rows: ordered, size: g.items.length });
   }
+  const rank = (g: CircleGroup) => {
+    const i = chartOrder.indexOf(g.key);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
   return out.sort(
-    (a, b) => Number(a.name === null) - Number(b.name === null) || fold(a.name ?? "").localeCompare(fold(b.name ?? "")),
+    (a, b) =>
+      Number(a.key === "none") - Number(b.key === "none") ||
+      rank(a) - rank(b) ||
+      fold(a.name ?? "").localeCompare(fold(b.name ?? "")),
   );
 }
 

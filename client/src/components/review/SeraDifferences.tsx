@@ -124,9 +124,16 @@ export function seraWaiting(read: SeraRead): number {
   return w.toDecide.length + w.small.length;
 }
 
+/** The headline's number: what is to decide, or the small changes when nothing else waits (R29). */
+function seraHeadCount(read: SeraRead): number {
+  if (read.phase !== "listed") return 0;
+  const w = splitWaiting(read.list.differences);
+  return w.toDecide.length || w.small.length;
+}
+
 /** R37: the summary line at the top of /review, with a jump link to each section that waits. */
 export function SeraSummaryLine({ read, witness }: { read: SeraRead; witness: number }) {
-  const sera = seraWaiting(read);
+  const sera = seraHeadCount(read);
   if (sera === 0 && witness === 0) return null;
   const agent = read.phase === "listed" ? read.list.agent : "";
   const parts: ReactNode[] = [];
@@ -348,12 +355,13 @@ function SeraList({
   const root = useRef<HTMLElement>(null);
   const ids = useId();
 
-  const allGroups = useMemo(() => groupByCircle(waiting), [waiting]);
+  const order = useMemo(() => list.circleOrder ?? [], [list]);
+  const allGroups = useMemo(() => groupByCircle(waiting, order), [waiting, order]);
   const shown = useMemo(() => {
     const lane = view === "decide" ? w.toDecide : view === "small" ? w.small : waiting;
     const keep = lane.filter((d) => (only === "checkFirst" ? d.flags.length > 0 : only === "conflicts" ? d.state === "conflict" : true));
-    return groupByCircle(keep).filter((g) => circle === "" || g.key === circle);
-  }, [view, only, circle, w, waiting]);
+    return groupByCircle(keep, order).filter((g) => circle === "" || g.key === circle);
+  }, [view, only, circle, w, waiting, order]);
   const shownList = useMemo(() => shown.flatMap((g) => g.rows.flatMap((r) => [r.d, ...r.nested])), [shown]);
   const pick = shownList.find((d) => d.key === selected) ?? shownList[0] ?? null;
   const ctx: Ctx = {

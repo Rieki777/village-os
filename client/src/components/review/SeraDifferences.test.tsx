@@ -50,6 +50,7 @@ function listAnswer(differences: ListedDifference[], over: Record<string, unknow
     reads: { circles: "whole", roles: "whole" },
     count: COUNT,
     differences,
+    circleOrder: ["c-water", "c-kitchen"],
     ...over,
   };
 }
@@ -149,8 +150,8 @@ describe("the Waiting for you board", () => {
     // small changes, the two facts and the one of ours are not in it.
     expect(h2.textContent).toBe("Sera suggests 5 changes for you to decide");
     expect(screen.getByText(/^2 small changes also wait for you, because automatic apply is off\. Last checked 14:05 today\.$/)).toBeTruthy();
-    // The summary line's jump links (R37).
-    const sera = screen.getByRole("link", { name: "7 Sera changes" });
+    // The summary line's jump links (R37), counting what the headline counts.
+    const sera = screen.getByRole("link", { name: "5 Sera changes" });
     expect(sera.getAttribute("href")).toBe("#sera-changes");
     expect(screen.getByRole("link", { name: "2 finished Quests to witness" }).getAttribute("href")).toBe("#witness");
   });
@@ -174,7 +175,8 @@ describe("the Waiting for you board", () => {
     serve({ list: [200, listAnswer(mainBoard())] });
     show();
     const water = await screen.findByRole("heading", { level: 3, name: "Water: 3 changes" });
-    expect(screen.getByRole("heading", { level: 3, name: "Kitchen: 2 changes" })).toBeTruthy();
+    // In chart order, which the server sends: Water before Kitchen, though K sorts first.
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Water: 3 changes", "Kitchen: 2 changes"]);
     const rows = within(water.closest("section") as HTMLElement).getAllByRole("article");
     // The new role carries Check first, so it leads the group though it was sent third.
     expect(rows[0].textContent).toContain("Sera suggests a new role, Well Monitor, in Water.");

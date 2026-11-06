@@ -92,6 +92,19 @@ describe("groups by circle (R31, R37)", () => {
     expect(groups.map(groupHeading)).toEqual(["Kitchen: 2 changes", "Water: 2 changes"]);
   });
 
+  it("puts the groups in chart order, circles not here yet after them, and roles in no circle last", () => {
+    const groups = groupByCircle(
+      [
+        listed({ subject: { circleId: "none", circleName: null } }),
+        listed({ subject: { circleId: "c-kitchen", circleName: "Kitchen" } }),
+        listed({ kind: "roleAdd", field: null, subject: { ourId: null, circleId: "sera:new", circleName: "Bees" } }),
+        listed(),
+      ],
+      ["c-water", "c-kitchen"],
+    );
+    expect(groups.map((g) => g.name)).toEqual(["Water", "Kitchen", "Bees", null]);
+  });
+
   it("sorts Check first rows to the top of their group, the rest in the order sent", () => {
     const plain = listed({ subject: { name: "Alpha" } });
     const flagged = listed({ subject: { name: "Beta" }, flags: [{ key: "matchedByName" }] });
