@@ -204,6 +204,7 @@ import { register as registerNeedsRoutes } from "./routes/needs";
 import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
 import { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing, register as registerGeneKeysRoutes } from "./routes/geneKeys";
 import { register as registerGuideChoiceRoutes } from "./routes/guideChoice";
+import { register as registerI18nRoutes } from "./routes/i18n";
 import { register as registerSessionCardRoutes } from "./routes/sessionCard";
 import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./routes/liveSessions";
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
@@ -18199,6 +18200,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, notify, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
+  registerI18nRoutes(app, { catalogDir: path.resolve(__dirname, ...(process.env.NODE_ENV === "production" ? [] : ["..", "dist"]), "i18n"), pseudoAllowed: () => process.env.NODE_ENV !== "production" });
   registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: guidePromptName(getWorkWithUs().assistantName), timeZone: getSeasonConfig().timezone }) });
   registerMemberAskRoutes(app, { authedUser, getPool, members, notify, overLimit, firstName });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, seasonState, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
