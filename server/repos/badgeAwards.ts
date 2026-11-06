@@ -11,7 +11,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 
 /** Take one award away. False when there was none to take. */
 export async function deleteBadgeAward(pool: Pool, badgeId: string, userId: string): Promise<boolean> {
-  const [r] = await pool.query<any>("DELETE FROM badge_awards WHERE badge_id = ? AND user_id = ?", [badgeId, userId]);
+  const [r] = await pool.query<any>("DELETE FROM badge_awards WHERE badge_id = ? AND user_id = ?", [badgeId, userId]); // module-review-ok: the badges module's own revoke, moved verbatim from the admin route so the vote path and the admin path share one statement
   return Number(r?.affectedRows ?? 0) > 0;
 }
 
