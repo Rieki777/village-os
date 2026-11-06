@@ -286,7 +286,7 @@ describe.skipIf(!DB_CONFIGURED)("the four key moments, each from its real event"
     const accepted = await call("PUT", `/api/admin/submissions/${sent.json.id}/status`, { status: "accepted" });
     expect(accepted.status, accepted.text).toBe(200);
     const rows = await settled(founderId, 1);
-    expect(rows.map((r) => r.title)).toEqual(["A new partner arrived. Does our Stakeholders answer still hold?"]);
+    expect(rows.map((r) => r.title)).toEqual(["A new partner arrived. Is our Stakeholders block ready for them?"]);
     expect(rows[0].body).toContain("Nothing was sent to them");
     expect(`${rows[0].title} ${rows[0].body}`).not.toContain("Mistle");
   });

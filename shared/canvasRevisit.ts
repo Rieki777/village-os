@@ -136,17 +136,18 @@ export const ANYONE_MAY_RAISE = "The village holds this power, so anyone may rai
 /**
  * The title, per moment. It is also the whole of what the digest email
  * shows, so it names the block and asks the moment's question, and nothing
- * else.
+ * else. It never presumes the block has an answer (W4-keymoment-no-answer):
+ * the claim moment fires on a brand-new instance, where every block is blank.
  */
 export function revisitTitle(moment: KeyMoment, block: CanvasBlockId): string {
   const name = CANVAS_BLOCKS[block].name;
   switch (moment) {
     case "collaboration":
-      return `Something new is starting. Does our ${name} answer still hold?`;
+      return `Something new is starting. Is our ${name} block ready for it?`;
     case "partners":
-      return `A new partner arrived. Does our ${name} answer still hold?`;
+      return `A new partner arrived. Is our ${name} block ready for them?`;
     case "conflict":
-      return `Is the pathway holding? Look at the ${name} answer again.`;
+      return `Is the pathway holding? Look at the ${name} block.`;
     case "funding":
       return `Before you raise: look at ${name} again.`;
   }
@@ -157,7 +158,7 @@ export function revisitBody(moment: KeyMoment, audience: RevisitAudience): strin
   const lines: string[] = [];
   switch (moment) {
     case "collaboration":
-      lines.push("When a village starts something new, the canvas asks it to look at its answers again.");
+      lines.push("When a village starts something new, the canvas asks it to look at these blocks, written or still blank.");
       break;
     case "partners":
       lines.push(

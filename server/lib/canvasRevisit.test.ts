@@ -334,7 +334,7 @@ describe.skipIf(!configured)("delivery through the real notification spine", () 
     expect(digest).toEqual({ users: 1, rows: 1 });
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toEqual(["rv-admin@example.test"]);
-    expect(sent[0].html).toContain("Does our Stakeholders answer still hold?");
+    expect(sent[0].html).toContain("Is our Stakeholders block ready for them?");
     expect(sent[0].html, "the body stays in the app").not.toContain("Nothing was sent to them");
   });
 
