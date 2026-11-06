@@ -763,6 +763,21 @@ check("PROSE: every count a region states equals the table it prints", () => {
   );
 });
 
+check("PROSE: the mint-rules table prints a ceiling only where one binds (Rye, 2026-10-22)", () => {
+  // No ceiling binds quest, role or proposal pay (`ceilingBinds` in
+  // shared/workValue.ts), and the table printed the stored number in the
+  // Ceiling column of every one of them, which reads as a cap.
+  const body = rendered["mint-rules"];
+  const rows = body.split("\n").filter((l) => /^\| `[a-z.]+` \|/.test(l));
+  assert.ok(rows.length > 0, "the mint-rules region printed no rule rows");
+  for (const row of rows) {
+    const cells = row.split("|").slice(1, -1).map((c) => c.trim());
+    const work = ["`quest.completed`", "`role.cycle`", "`proposal.accepted`"].includes(cells[0]);
+    if (work) assert.strictEqual(cells[3], "none, work is paid in full", `a ceiling printed on work pay: ${row}`);
+    else assert.match(cells[3], /^\d+$/, `a rule a ceiling binds lost its number: ${row}`);
+  }
+});
+
 check("a table cell holds ONE column whatever the value carries (CodeQL #429)", () => {
   // The escaper used to handle the pipe alone. A value holding a backslash
   // before a pipe then came out as an escaped backslash followed by a live
