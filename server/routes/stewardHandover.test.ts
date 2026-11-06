@@ -112,7 +112,7 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
   beforeEach(async () => {
     viewer = null;
     await q("DELETE FROM capability_holding");
-    await q("DELETE FROM app_config WHERE config_key IN ('launch-handover', 'handover-pending')");
+    await q("DELETE FROM app_config WHERE config_key IN ('launch-handover', 'handover-pending', 'handover-cooling')");
   });
 
   it("the fixture's steward is the one live holder of the veto, counted the way the gate counts a seat", () => {
@@ -297,7 +297,7 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
       });
     });
 
-    it("asks a second confirm for a mature-only power, and never blocks it", async () => {
+    it("asks a second confirm for a mature-only power, and never blocks it: it waits its week, the rest crosses now", async () => {
       viewer = "u-steward";
       const asked = await handOver({ capabilities: ["steward.veto", "story.tell"], confirm: true });
       expect(asked.status).toBe(400);
@@ -305,7 +305,9 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
       expect(await holdings(), "nothing moves on the first confirm alone").toEqual([]);
       const r = await handOver({ capabilities: ["steward.veto", "story.tell"], confirm: true, confirmMature: true });
       expect(r.status, JSON.stringify(r.json)).toBe(200);
-      expect(r.json.moved).toEqual(["steward.veto", "story.tell"]);
+      expect(r.json.moved).toEqual(["story.tell"]);
+      expect(r.json.cooling.map((c: any) => c.capability)).toEqual(["steward.veto"]);
+      expect((await holdings()).map((h: any) => h.capability), "the veto waits; story.tell crossed").toEqual(["story.tell"]);
       expect((await call("GET")).json.powers.filter((p: any) => p.matureOnly).map((p: any) => p.capability).sort()).toEqual(
         ["cash.pay", "dial.set", "exchange.manage", "module.switch", "steward.veto"],
       );
@@ -324,6 +326,58 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
       expect(stray.status).toBe(400);
       expect(stray.json.error).toBe(HAND_OVER_WORDS.notAPower("message.send"));
       expect(await holdings()).toEqual([]);
+    });
+
+    describe("a week to think again (ROLE_POWERS_DESIGN.md §4.1b)", () => {
+      const cool = async () => {
+        viewer = "u-steward";
+        const r = await handOver({ capabilities: ["cash.pay"], confirm: true, confirmMature: true });
+        expect(r.status, JSON.stringify(r.json)).toBe(200);
+        return r;
+      };
+      const stop = (capability: string, body: unknown) =>
+        fetch(`${base}${HAND_OVER_PATH}/cooling/${capability}/stop`, { // module-review-ok: this test IS the client, calling the server it booted itself
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }).then(async (r) => ({ status: r.status, json: (await r.json()) as any }));
+
+      it("a mature-only power waits seven days, in the open, and nothing crosses before", async () => {
+        const r = await cool();
+        expect(r.json.moved).toEqual([]);
+        const landsAt = new Date(r.json.cooling[0].landsAt).getTime();
+        expect(Math.round((landsAt - Date.now()) / 86400000)).toBe(7);
+        expect((await call("GET")).json.cooling.map((c: any) => c.capability)).toEqual(["cash.pay"]);
+        expect(await holdings()).toEqual([]);
+      });
+
+      it("crosses once its week is up, the next time a steward opens the checklist, held by the Steward role", async () => {
+        await cool();
+        await q("UPDATE app_config SET value = JSON_SET(value, '$.entries[0].landsAt', '2026-01-01T00:00:00.000Z') WHERE config_key = 'handover-cooling'");
+        const opened = await call("GET");
+        expect(opened.json.cooling).toEqual([]);
+        expect(await holdings()).toEqual([{ capability: "cash.pay", holder_role_id: STEWARD_ROLE_ID, moved_by_user_id: "u-steward", moved_by_ballot_id: null }]);
+      });
+
+      it("any steward stops it inside the week, with a reason, and it never crosses", async () => {
+        await cool();
+        viewer = "u-steward";
+        expect((await stop("cash.pay", { reason: "" })).status, "a stop needs its reason").toBe(400);
+        const stopped = await stop("cash.pay", { reason: "Our treasury is not ready yet." });
+        expect(stopped.status, JSON.stringify(stopped.json)).toBe(200);
+        expect((await call("GET")).json.cooling).toEqual([]);
+        expect(await holdings()).toEqual([]);
+        const [line] = await q("SELECT text FROM health_events WHERE kind = 'governance' AND entity_ref = 'cash.pay' ORDER BY id DESC LIMIT 1");
+        expect(line.text).toContain("Our treasury is not ready yet.");
+      });
+
+      it("a member cannot stop one, and stopping nothing is a 404", async () => {
+        await cool();
+        viewer = "u-member";
+        expect((await stop("cash.pay", { reason: "No thanks" })).status).toBe(403);
+        viewer = "u-steward";
+        expect((await stop("dial.set", { reason: "Nothing waits" })).status).toBe(404);
+      });
     });
   });
 });
