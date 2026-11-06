@@ -1115,6 +1115,29 @@ describe("second review: a name that differs only by case is no rename", () => {
   });
 });
 
+describe("second review C5: a steward's capitals at accept are never taken for the service's words", () => {
+  const R = pid(120);
+  const rid = roleIdOf(R);
+  // The steward fixed the capitals at accept. The stored payload carries the fix, and its claim,
+  // folded to lower case, still hashes to the key it landed under, so the reader calls it untouched.
+  const accepted = traceAccepted(
+    [{ draftId: "d1", op: "create_seat", orgRoleId: rid, payload: { name: "Water Steward", circleId: "land", aim: "Keeps The Wells Clear." } }],
+    [{ id: "x1", draftId: "d1", kind: "org.proposed", original: true, payload: { seats: [{ id: R, name: "Water Steward", circleName: "Land", aim: "Keeps The Wells Clear." }] } }],
+  );
+  const live = { circles: [LAND_HERE], roles: [liveRole(rid, "Water Steward", "land", { aim: "Keeps The Wells Clear." })] };
+  const said = (name: string, body: string) => [snapshot([circleRec(LAND, "Land")], [roleRec(R, name, [LAND], { fields: { Body: body } })])];
+
+  it("THE SERVICE'S OLD WORDS, DIFFERENT BY CAPITALS ALONE, ARE NEVER AN AUTOMATIC OR BULK CHANGE (probe 1 #3)", () => {
+    const list = differences(input({ snapshots: said("water steward", "keeps the wells clear."), live, accepted }));
+    expect(list.map((d) => [d.kind, d.field, d.state])).toEqual([["textField", "aim", "suggestion"]]);
+    expect(list[0]).toMatchObject({ base: "unknown", autoEligible: false, bulkEligible: false });
+    expect(list[0].flags.map((f) => f.key)).toContain("baseUnknown");
+    // The control: words the service changed past capitals are a suggestion on the known base.
+    const [changed] = differences(input({ snapshots: said("Water Steward", "Keeps the wells and the pumps clear."), live, accepted }));
+    expect(changed).toMatchObject({ state: "suggestion", base: { value: "Keeps The Wells Clear." }, autoEligible: true, bulkEligible: true });
+  });
+});
+
 describe("second review C2: a rename here never turns what was matched into something new", () => {
   type Stamp = (r: SnapshotRecord) => SnapshotMatch | null;
   /** A read as the sync keeps it: each record carrying its match as it was made at that read. A kind with no stamp is kept the old way. */

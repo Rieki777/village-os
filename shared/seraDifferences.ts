@@ -798,6 +798,20 @@ function agreedBase(
   return null;
 }
 
+/**
+ * A traced base is known only up to capitals (review C5). The proposal it was
+ * read from is called untouched when its claim, folded to lower case and one
+ * space (`normalizeClaim`), still hashes to the key it landed under, so a
+ * steward's edit of capitals alone at accept passes for the service's words.
+ * Where the service's value differs from the traced one by capitals alone,
+ * the base could be either: the steward's fix, or the service's own change.
+ * It is unknown, so it is flagged and never applies by itself or in bulk.
+ */
+function tracedUpToCase(traced: DifferenceBase | undefined, sera: string | null): DifferenceBase | undefined {
+  if (!traced || traced === "unknown" || traced.value === null || sera === null || traced.value === sera) return traced;
+  return traced.value.toLowerCase() === sera.toLowerCase() ? "unknown" : traced;
+}
+
 /** A traced base where the history knows one, else the newest agreed value, else unknown. */
 function baseOr(traced: DifferenceBase | undefined, agreed: () => DifferenceBase | null): DifferenceBase {
   if (traced && traced !== "unknown") return traced;
@@ -1285,7 +1299,7 @@ export function differences(input: DifferencesInput): Difference[] {
     });
 
     const aim = textOf(rec, F.body, norm);
-    const aimBase = baseOr(base?.aim, agreed("roles", rec, live.id, "aim"));
+    const aimBase = baseOr(tracedUpToCase(base?.aim, aim), agreed("roles", rec, live.id, "aim"));
     const ourAim = norm.prose(live.aim);
     field("textField", "aim", "aim", aim, ourAim, aimBase, threeWay(aim, ourAim, aimBase), [F.body]);
 
