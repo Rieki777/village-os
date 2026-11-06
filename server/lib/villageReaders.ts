@@ -29,6 +29,7 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import type { Capability } from "../../shared/capabilities";
 import { listCalendarItems } from "./calendar";
+import { civilDateKey } from "../../shared/lunar";
 
 export type ReaderAudience = "public" | "member" | "admin";
 
@@ -82,6 +83,31 @@ export function villageTimezone(): string {
     return deps.timezone?.() || "UTC";
   } catch {
     return "UTC";
+  }
+}
+
+/**
+ * A ballot's deadline as the village reads it (R134): the day in the village's
+ * own calendar, the month as a word, the way the seat-application notice already
+ * writes it (`civilDayWords(civilDateKey(...))`, the same words written here
+ * without importing shared/seasonPlans.ts, which would carry every module that
+ * moves value into the seat settings model: shared/seatSettings.boundary.test.ts).
+ * The notices said
+ * `toLocaleDateString()`, which on a server is the container's UTC and its
+ * M/D/Y, so a village a day ahead of UTC was told the wrong day. A zone the
+ * runtime does not know reads as UTC.
+ */
+export function deadlineInVillage(at: Date | string, zone: string = villageTimezone()): string {
+  const d = at instanceof Date ? at : new Date(String(at));
+  if (!Number.isFinite(d.getTime())) return "the date on the ballot";
+  const words = (key: string) => {
+    const [y, m, day] = key.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  };
+  try {
+    return words(civilDateKey(d, zone || "UTC"));
+  } catch {
+    return words(civilDateKey(d, "UTC"));
   }
 }
 
