@@ -111,16 +111,23 @@ in the database. They are in the folder you mounted at `/app/data` when you
 started the container:
 
 ```sh
-docker run --rm -v village-data:/data -v "$PWD":/backup alpine \
+MSYS_NO_PATHCONV=1 docker run --rm -v village-data:/data -v "$PWD":/backup alpine \
   tar czf /backup/village-uploads-$(date +%Y%m%d-%H%M).tar.gz -C /data .
 ```
 
 Check that both files exist and are not empty before you go on. A backup you
-have not looked at is not a backup.
+have not looked at is not a backup. On Windows in Git Bash, keep the
+`MSYS_NO_PATHCONV=1` in front of `docker run`, or `/data` and `/backup` are
+rewritten into Windows paths. Keep a private copy of your `.env` as well: it
+holds the keys the database is sealed with, and a restore without them cannot
+open what it stored.
 
-> Villages that ReGen Civics hosts are backed up automatically every day, and
-> the backup is restored into a scratch database on every run to prove it
-> works. You still want your own copy before an upgrade you chose to take.
+> A village ReGen Civics hosts is backed up only if a backup was set up for
+> it. The encrypted nightly backup with its restore drill
+> (`docs/RUNBOOK.md`, "Where the backup runs") runs once per village, from a
+> private repository, and nothing creates one for you. Ask whoever hosts your
+> village whether yours runs and when its last drill passed, and take your own
+> copy before an upgrade either way.
 
 ## Step 5. Start the new version
 
