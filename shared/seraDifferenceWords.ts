@@ -182,10 +182,12 @@ export const openInWords = (agent: string): string => `Open in ${agent}`;
 /**
  * "Open in Sera", built from the module's configured dashboard address and the
  * page id (R10), never from a stored page address. Null when no https
- * dashboard is set.
+ * dashboard is set, or when the address carries a query or a fragment, which
+ * would put the id inside it and open the wrong page.
  */
 export function openInUrl(dashboard: unknown, pageId: string): string | null {
   if (typeof dashboard !== "string" || dashboard.trim() === "" || pageId.trim() === "") return null;
+  if (/[?#]/.test(dashboard)) return null;
   let url: URL;
   try {
     url = new URL(dashboard.trim());

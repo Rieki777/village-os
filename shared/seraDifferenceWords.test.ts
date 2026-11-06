@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Difference, DifferenceSubject } from "./seraDifferences";
-import { differenceSentence, flagWords, shownFlags } from "./seraDifferenceWords";
+import { differenceSentence, flagWords, openInUrl, shownFlags } from "./seraDifferenceWords";
 
 type Over = Omit<Partial<Difference>, "subject"> & { subject?: Partial<DifferenceSubject> };
 
@@ -85,6 +85,18 @@ describe("a conflict over a purpose", () => {
     const both = diff({ kind: "textField", field: "aim", lane: "lowRisk", state: "conflict", subject: { name: "Pump Keeper" } });
     expect(differenceSentence(both, "Sera")).toBe("You and Sera both changed Pump Keeper's purpose.");
     expect(differenceSentence(both, "Maia")).toBe("You and Maia both changed Pump Keeper's purpose.");
+  });
+});
+
+describe("Open in the service (R10)", () => {
+  it("builds the link from a plain dashboard address and the page id", () => {
+    expect(openInUrl("https://dash.example.test/ws/", "abc123")).toBe("https://dash.example.test/ws/abc123");
+  });
+
+  it("gives no link when the configured address carries a query or a fragment, which would swallow the id", () => {
+    expect(openInUrl("https://dash.example.test/ws?view=all", "abc123")).toBeNull();
+    expect(openInUrl("https://dash.example.test/ws#board", "abc123")).toBeNull();
+    expect(openInUrl("https://dash.example.test/ws?", "abc123")).toBeNull();
   });
 });
 
