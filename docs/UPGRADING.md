@@ -41,16 +41,16 @@ real limit.
 Ask your own village. This works from any machine and needs no account:
 
 ```
-curl https://your-village.example/health
+curl https://your-village.example/api/platform/info
 ```
 
 ```json
-{ "status": "ok", "build": "2026-07-28-wave1-6de6629", "database": { "ok": true } }
+{ "name": "Your Village", "version": "1.2.0", "build": "2026-10-03-cfaa41f", "...": "..." }
 ```
 
-The last seven characters of `build` are the exact version of the software
-that is running right now. Write it down. You will want it if you have to go
-back.
+`version` is the release running right now. Write it down. You will want it if
+you have to go back. `build` is the date and the commit the image was built
+from, which is the detail to quote if you ask for help.
 
 ## Step 2. Find out what has been published
 
@@ -215,8 +215,8 @@ When it is up:
 curl https://your-village.example/health
 ```
 
-`"status": "ok"` and a `build` value ending in the new version means the
-upgrade landed. Open the village in a browser and click into two or three
+`"status": "ok"`, and `version` at `/api/platform/info` reading the new number,
+means the upgrade landed. Open the village in a browser and click into two or three
 pages before you call it done.
 
 ---

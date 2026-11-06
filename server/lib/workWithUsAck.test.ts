@@ -7,7 +7,7 @@
  * whatever its team could actually promise.
  */
 import { describe, expect, it } from "vitest";
-import { workWithUsAckEmail } from "./workWithUsAck";
+import { greetingName, workWithUsAckEmail } from "./workWithUsAck";
 import { markerDocument } from "../../shared/pageContent/resolve";
 import { WORK_WITH_US_PAGE } from "../../shared/pageContent/workWithUs";
 
@@ -50,5 +50,20 @@ describe("the acknowledgement email", () => {
 
   it("falls back to the defaults for a content document that is not an object", () => {
     expect(workWithUsAckEmail(null, vars, "Ana").subject).toBe("We've received your proposal");
+  });
+});
+
+describe("the name a public form's mail greets its sender by (R106)", () => {
+  it("is never longer than a name, however long the stranger typed it", () => {
+    expect(greetingName({ name: "R".repeat(500) })).toBe("R".repeat(120));
+  });
+
+  it("takes the first field a form carries, and says Anonymous when none is there", () => {
+    expect(greetingName({ name: "  Ana  ", email: "ana@example.test" })).toBe("Ana");
+    expect(greetingName({ firstName: "Bo" })).toBe("Bo");
+    expect(greetingName({ name: "", email: "cy@example.test" })).toBe("cy@example.test");
+    expect(greetingName({})).toBe("Anonymous");
+    expect(greetingName(null)).toBe("Anonymous");
+    expect(greetingName({ name: ["a", "list"] })).toBe("Anonymous");
   });
 });

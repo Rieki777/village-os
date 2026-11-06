@@ -62,6 +62,75 @@ export const SEAT_JOURNAL_LINE = {
   seated: "seated someone",
 } as const;
 
+/**
+ * THE SEAT JOURNAL'S OWN ROWS, as one SQL condition (readiness R103).
+ *
+ * The coordinator's ruling of 2026-11-05: the journal's name-free lines are
+ * written `audience = 'public'`, and `GET /api/org/:kind/:id/journal` serves a
+ * member only the public ones. Anything that names a person stays admin.
+ *
+ * "Public" on the event spine means two more things, and neither is wanted for
+ * these rows, so both read this condition and leave them alone:
+ *   - the Village Pulse (`recentEvents(pool, "public")`, server/lib/events.ts)
+ *     serves every public row to a signed-out stranger, and a bare "seated
+ *     someone" there is a line about no seat;
+ *   - the erasure deletes a leaver's public rows by actor ("public-health-
+ *     events" in server/lib/erasure.ts, and `forgetPulseLinesNaming`), while
+ *     this file KEEPS a journal line and rewrites its words, so the seat's
+ *     history still says what happened and when.
+ *
+ * It matches the kinds the journal writers use, `org` and `role`, on the two
+ * entity types the journal reads. The Pulse's own seat lines ("<seat> can now
+ * ...") are kind `governance` and still pass, and the groups audit line is
+ * kind `audit` and admin.
+ */
+export const SEAT_JOURNAL_ROWS_SQL = "(entity_type IN ('org_role', 'circle') AND kind IN ('org', 'role'))";
+
+/**
+ * The words the journal writers use that name nobody, for the re-mark below.
+ * Whole lines, then the three shapes whose only variable is a role, a link
+ * type or a decision rule. Never a shape that ever carried a person: the old
+ * "seated <name>", the old quoted ask, "a holding ended: <reason>", and the
+ * role edit line, whose prefix is a role name this cannot tell from a
+ * person's name.
+ */
+const NAME_FREE_LINES: readonly string[] = [
+  SEAT_JOURNAL_LINE.ask,
+  SEAT_JOURNAL_LINE.confirm,
+  SEAT_JOURNAL_LINE.decline,
+  SEAT_JOURNAL_LINE.seated,
+  "seated a member",
+  "carried a holder across to the new chart",
+  "a holding ended",
+];
+const NAME_FREE_PREFIXES: readonly string[] = ["linked: ", "role created: ", "decides by: "];
+
+/**
+ * RE-MARK THE JOURNAL LINES WRITTEN BEFORE R103 (2026-11-06).
+ *
+ * Every journal line went in admin-audience until the ruling, whatever its
+ * words, so the journal's audience filter alone would empty every seat's
+ * history for its members. This marks the name-free ones public.
+ *
+ * In TypeScript after listen, never in a migration: a migration number here
+ * would have landed above the canvas lane's claimed 0324 to 0326, and this is
+ * a plain UPDATE any database runs. IDEMPOTENT BY ITS WHERE (`audience =
+ * 'admin'`), so it runs on every boot: a line the previous release wrote
+ * during a deploy's overlap is picked up by the next start. `at = at` keeps
+ * each line's time, because the first TIMESTAMP column of a table may carry an
+ * implicit ON UPDATE. The entity index (`entity_type`, `entity_ref`, `at`)
+ * keeps it cheap. Returns how many lines it re-marked.
+ */
+export async function markNameFreeJournalLinesPublic(pool: Pool): Promise<number> {
+  const [r] = await pool.query<ResultSetHeader>(
+    `UPDATE health_events SET audience = 'public', at = at
+      WHERE ${SEAT_JOURNAL_ROWS_SQL} AND audience = 'admin'
+        AND (text IN (${NAME_FREE_LINES.map(() => "?").join(", ")}) OR ${NAME_FREE_PREFIXES.map(() => "text LIKE ?").join(" OR ")})`,
+    [...NAME_FREE_LINES, ...NAME_FREE_PREFIXES.map((p) => `${p}%`)],
+  );
+  return Number(r.affectedRows ?? 0);
+}
+
 /** The words the ask route wrote before the name came out, up to the quoted name. */
 const ASKED_MARKER = ' asks to be confirmed as the holder recorded "';
 

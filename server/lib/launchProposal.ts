@@ -50,6 +50,8 @@
 import type { Pool } from "mysql2/promise";
 import type { PowerInPlainWords } from "./launchHandover";
 import { HANDOVER_SET } from "../../shared/capabilities";
+import { MODULE_SWITCH_KEY, switchVerdict } from "../../shared/moduleSwitch";
+import { ORG_DECIDE } from "./orgDraftDecide";
 import { catalystRoster } from "../repos/users";
 
 /** One member a launch proposal puts forward, with the name the village reads. */
@@ -206,6 +208,7 @@ export function launchProposalDoc(input: LaunchProposalDocInput): string {
     "",
     "Token issuance turns on. Until then this village can be set up in every other way, and nothing can be issued to anybody.",
     "",
+    ...doorsSection(input),
     ...stewardSection(input),
     ...handoverSection(input),
     "## What this vote asks",
@@ -225,6 +228,36 @@ export function launchProposalDoc(input: LaunchProposalDocInput): string {
       : `Every item on the journey to launch read done when ${input.openedBy} opened this, on ${input.openedOn}.`,
     "",
   ].join("\n");
+}
+
+/**
+ * THE ADMIN DOORS THE LAUNCH CLOSES (R166). Read off the same predicates the
+ * routes ask, so the document cannot promise a door the code keeps open:
+ * `switchVerdict` for modules, and the org chart's admin door, which
+ * `publishDoorFor` (server/lib/orgDraftDecide.ts) shuts once a launch vote
+ * has carried. Who holds the two powers after the vote comes from the slate:
+ * the steward role carries every power in HANDOVER_SET.
+ */
+function doorsSection(input: LaunchProposalDocInput): string[] {
+  const after = { launched: true, admin: true, holder: false } as const;
+  const lines: string[] = [];
+  if (!switchVerdict({ ...after, from: "off", to: "members" }).ok) {
+    const valve = switchVerdict({ ...after, from: "members", to: "off" }).ok
+      ? " An admin can still pause a module or turn one off, and the village hears about it."
+      : "";
+    lines.push(`An admin can no longer turn a module on directly. Whoever holds the power to switch modules does it, or the village by vote.${valve}`, "");
+  }
+  lines.push("An admin can no longer publish a change to the org chart directly. Whoever holds the power to decide the org chart does it, or the village by vote.", "");
+  const stewardsCarry = HANDOVER_SET.includes(MODULE_SWITCH_KEY) && HANDOVER_SET.includes(ORG_DECIDE);
+  if (stewardsCarry) {
+    lines.push(
+      input.slate.length > 0
+        ? "Whoever on the list below accepts the steward role holds both powers from the day this carries."
+        : "Nobody holds those two powers after this vote, so both go to a village vote until the village seats somebody who carries them.",
+      "",
+    );
+  }
+  return lines;
 }
 
 /**

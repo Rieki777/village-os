@@ -131,7 +131,7 @@ export function register(app: Express, deps: CarryDeps): void {
         actorUserId: actor,
         entityType: "org_role",
         entityRef: toSeatId,
-        audience: "admin",
+        audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
       });
       // The seating door's notice, with the same words and the same dedupe key, because it is the same act.
       if (r.userId && r.assignmentId) {

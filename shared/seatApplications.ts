@@ -172,6 +172,21 @@ export function adoptionPath(rule: HandOpenerRule, candidateId: string): Adoptio
   return rule.holders.some((h) => h !== candidateId) ? "holder" : "ballot";
 }
 
+/**
+ * MAY A ROLE PROPOSAL THAT CHANGES ROLES GO TO A VOTE? (R164; coordinator
+ * ruling 2026-11-06, logged for Rye.) The 22 Oct rule holds that such a
+ * proposal is adopted by its circle or by the power, never by a vote. It
+ * leaves two cases where nobody can adopt it at all, and those two take a
+ * vote, opened by the candidate: (a) the village holds `org.seat`, which is
+ * Rye's 31 Oct "then the village decides by vote", and (b) nobody but the
+ * candidate holds it live, since a candidate never adopts their own. Those are
+ * exactly the cases `adoptionPath` already sends a plain application to a
+ * ballot, so the two roads read one rule.
+ */
+export function proposalMayGoToVote(rule: HandOpenerRule, candidateId: string): boolean {
+  return adoptionPath(rule, candidateId) === "ballot";
+}
+
 export interface DoorRefusal {
   status: number;
   error: string;
@@ -227,8 +242,10 @@ export interface AdopterFacts {
    * as adopting their own terms.
    */
   groups: ReadonlyArray<{ name: string; holders: readonly string[] }>;
-  /** It comes from a role proposal that changes roles, which is never put to a vote (Rye, 2026-10-22). */
+  /** It comes from a role proposal that changes roles, which goes to a vote only when nobody else can adopt it (R164). */
   changesRoles?: boolean;
+  /** Somebody other than the candidate holds it live, the way the gate counts. Read from the groups when absent. */
+  othersHoldLive?: boolean;
 }
 
 /** The power, said the way a member reads it. */
@@ -236,9 +253,13 @@ const PLACING_POWER = "the power to place people in roles";
 
 /** Once the village holds the power: what happens, as a whole sentence. */
 export const VOTE_DECIDES_WORDS = "The village holds the power to place people in roles, so the village decides it by vote.";
-/** The same, for a role proposal that changes roles, which never goes to a vote. */
-export const VOTE_CANNOT_WORDS =
-  "The village holds the power to place people in roles, and a proposal that changes roles never goes to a vote, so nobody can adopt it yet.";
+/** A role proposal that changes roles, in the two cases it goes to a vote (R164): the candidate opens it. */
+export const PROPOSAL_VOTE_WORDS = {
+  villageHolds:
+    "The village holds the power to place people in roles, so the village decides it by vote. The member who proposed it opens the vote from the application page.",
+  nobodyElse:
+    "Nobody but the member who proposed it holds the power to place people in roles, so the village decides it by vote. The member who proposed it opens the vote from the application page.",
+} as const;
 
 /** "A", "A or B", "A, B or C". */
 function orList(items: readonly string[]): string {
@@ -248,8 +269,13 @@ function orList(items: readonly string[]): string {
 
 /** The whole sentence once the village holds the power, or null while a role does. PURE. */
 export function voteWords(f: AdopterFacts): string | null {
+  if (f.changesRoles) {
+    if (f.villageHolds) return PROPOSAL_VOTE_WORDS.villageHolds;
+    const others = f.othersHoldLive ?? f.groups.some((g) => g.holders.some((h) => String(h ?? "").trim()));
+    return others ? null : PROPOSAL_VOTE_WORDS.nobodyElse;
+  }
   if (!f.villageHolds) return null;
-  return f.changesRoles ? VOTE_CANNOT_WORDS : VOTE_DECIDES_WORDS;
+  return VOTE_DECIDES_WORDS;
 }
 
 /**

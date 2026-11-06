@@ -35,8 +35,9 @@
  * for it. `trigger`, `token_slug` and `recipient` are absent on purpose: those
  * three ARE the identity of the rule, the natural key `mint_rules_natural` is
  * built on two of them, and changing one is a different rule with the same id.
- * A village that wants a different trigger is asking for a rule this build
- * cannot create by ballot, and saying so is more honest than half applying it.
+ * A village that wants a different trigger asks for a NEW rule, which a
+ * ballot can create (`mint-new:` below), and never for an edit that would
+ * half apply.
  */
 
 /** The one prefix. A key starting with this is a mint rule and never a dial. */
@@ -255,4 +256,93 @@ export function displayMintRuleValue(field: MintRuleField, raw: string): string 
   if (field === "enabled") return value === "true" ? "On" : "Off";
   if (field === "amount" && value === AMOUNT_FROM_SOURCE) return "however much the work was posted for";
   return value;
+}
+
+/*
+ * ── CREATING A RULE BY VOTE (vote-path gap 8, Rye 2026-11-06) ──────────────
+ *
+ * "EVERYTHING can change with the highest village vote." An edit names a rule
+ * that exists, and nothing created one: the seed was the only writer, and no
+ * admin route creates a rule either. So a village could vote on what a rule
+ * paid and never on whether a rule should exist.
+ *
+ * A new rule is filed under its own prefix, `mint-new:<trigger>:<token>`, and
+ * NEVER under `mint:`. An edit key parses into a rule id and a field, and a
+ * create key names no rule yet, so letting the two share a prefix would make
+ * every reader of `isMintRuleKey` guess which one it holds.
+ *
+ * The recipient is not on the ballot. Each trigger already has the one
+ * recipient the engine pays for it (the seed's own pairing), and a recipient
+ * the engine never reads for that trigger is a rule that pays nobody.
+ */
+
+/** The one prefix of a new rule. Never `mint:`, which is an edit. */
+export const MINT_RULE_CREATE_KEY_PREFIX = "mint-new:";
+
+/**
+ * The triggers a vote may create a rule on: the three the engine actually
+ * reads rules for (`rulesFor` is called with these and no others). A rule on
+ * any other trigger would be a row the engine never consults, which is a
+ * payment the village voted for and nobody receives. Same list as
+ * `WORK_PAY_TRIGGERS` in shared/workValue.ts, spelled here so this file stays
+ * free of imports.
+ */
+export const MINT_RULE_CREATE_TRIGGERS: readonly string[] = ["quest.completed", "role.cycle", "proposal.accepted"];
+
+/** Who a rule on this trigger pays, the seed's own pairing. */
+export function recipientForTrigger(trigger: string): "claimant" | "holder" {
+  return trigger === "role.cycle" ? "holder" : "claimant";
+}
+
+/** A new rule's id, the seed's own scheme (`rule-<trigger>-<token>`). */
+export function mintRuleIdFor(trigger: string, tokenSlug: string): string {
+  return `rule-${trigger}-${tokenSlug}`;
+}
+
+/** The change-set key a new rule is filed under. */
+export function mintRuleCreateKey(trigger: string, tokenSlug: string): string {
+  return `${MINT_RULE_CREATE_KEY_PREFIX}${trigger}:${tokenSlug}`;
+}
+
+export function isMintRuleCreateKey(key: string): boolean {
+  return typeof key === "string" && key.startsWith(MINT_RULE_CREATE_KEY_PREFIX);
+}
+
+/** A new rule as a change set carries it: strings, like every other value there. */
+export interface MintRuleDraft {
+  trigger: string;
+  tokenSlug: string;
+  /** A number, or `from-source`. */
+  amount: string;
+  ceiling: string;
+}
+
+/** `mint_rules.id` is varchar(64) and `token_slug` varchar(32). */
+const TOKEN_SLUG_SHAPE = /^[a-z0-9][a-z0-9-]{0,31}$/;
+
+/**
+ * The half of a new rule's validation that needs no registry and no database.
+ *
+ * Null means acceptable. The token's own refusals (Gratitude, Hypha, an
+ * example, a token with no faucet, an amount finer than the token holds) and
+ * the "already exists" check need the registry and the table, so they live in
+ * server/lib/mintRuleCreate.ts, which calls this first. Raise and landing both
+ * go through that one function.
+ */
+export function mintRuleDraftProblem(draft: MintRuleDraft): string | null {
+  const trigger = String(draft?.trigger ?? "").trim();
+  const slug = String(draft?.tokenSlug ?? "").trim();
+  if (!MINT_RULE_CREATE_TRIGGERS.includes(trigger)) {
+    return `A new minting rule pays for finished quests, roles held, or accepted proposals. "${trigger}" is none of those.`;
+  }
+  if (!TOKEN_SLUG_SHAPE.test(slug)) return "Name the token by its slug, in lower case.";
+  if (mintRuleIdFor(trigger, slug).length > 64) return "That token's slug is too long for a rule to be filed under it.";
+  const amount = mintRuleValueProblem("amount", String(draft?.amount ?? ""));
+  if (amount) return amount;
+  return mintRuleValueProblem("ceiling", String(draft?.ceiling ?? ""));
+}
+
+/** How a new rule reads on a document. */
+export function mintRuleCreateLabel(trigger: string, tokenSlug: string): string {
+  return `a new rule paying ${tokenSlug} for ${trigger}`;
 }

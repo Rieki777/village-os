@@ -54,16 +54,22 @@ import {
   AMOUNT_FROM_SOURCE,
   MINT_RULE_FIELD_LABEL,
   displayMintRuleValue,
+  isMintRuleCreateKey,
   isMintRuleKey,
+  MINT_RULE_CREATE_KEY_PREFIX,
+  mintRuleCreateKey,
+  mintRuleCreateLabel,
   mintRuleValueNumber,
   mintRuleValueProblem,
   normalizeMintRuleValue,
   parseMintRuleKey,
+  type MintRuleDraft,
   type MintRuleField,
 } from "../../shared/mintRuleKeys";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { ceilingBinds } from "../../shared/workValue";
 import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
+import { brandChangeKey, brandFieldValue, brandVoteProblem } from "../../shared/brandVote";
 
 /**
  * -- WHAT A CHANGE SET IS MADE OF, AFTER Q9 ----------------------------------
@@ -90,6 +96,21 @@ export interface MintRuleItem {
   /** A `mint:<ruleId>:<field>` key from `shared/mintRuleKeys.ts`. */
   key: string;
   to: string;
+}
+
+/**
+ * A NEW minting rule (vote-path gap 8). Every field is a string, like every
+ * other value a change set holds, and the recipient is not one of them: each
+ * trigger has the one recipient the engine pays (`recipientForTrigger`).
+ */
+export interface MintRuleCreateItem {
+  kind: "mint_rule_create";
+  /** One of `MINT_RULE_CREATE_TRIGGERS`. */
+  trigger: string;
+  tokenSlug: string;
+  /** A number, or `from-source`. */
+  amount: string;
+  ceiling: string;
 }
 
 export interface WeightAllocationItem {
@@ -138,6 +159,7 @@ export interface RoleItem {
 export type ChangeItem =
   | DialItem
   | MintRuleItem
+  | MintRuleCreateItem
   | WeightAllocationItem
   | ModeSwitchItem
   | ModuleLifecycleItem
@@ -187,6 +209,15 @@ export function pricingOf(item: ChangeItem): { subject: string; criticality: Cri
     return { subject, criticality: def ? criticalityOf(def) : "routine" };
   }
   const named = thresholdsForSubject(subject);
+  /*
+   * A NEW RULE IS NEW ISSUANCE, so it never costs less than structural, even
+   * under a subject whose own floor says routine. It keeps the subject's floor
+   * (MINT_RULE asks 50 of quorum) and adds the tier on top; an edit to a rule
+   * that already exists keeps the reasoning above unchanged.
+   */
+  if (named && item.kind === "mint_rule_create") {
+    return { subject, criticality: criticalityOfItems([named.criticality ?? "routine", CRITICALITY_FOR_ITEM_KIND[item.kind]]) };
+  }
   if (named) return { subject, criticality: named.criticality ?? "routine" };
   return { subject, criticality: CRITICALITY_FOR_ITEM_KIND[item.kind] };
 }
@@ -350,8 +381,15 @@ export interface ProposedChange {
    * executor reads it back as a `module_lifecycle` item and never as a dial:
    * `asChangeItem` takes any change carrying a `kind` exactly as written.
    */
-  kind?: "module_lifecycle";
+  kind?: "module_lifecycle" | "brand_field" | "mint_rule_create";
   moduleId?: string;
+  /** Present on a brand change only: the `section.field` it writes. */
+  field?: string;
+  /** Present on a new minting rule only, so the executor reads the rule back whole. */
+  trigger?: string;
+  tokenSlug?: string;
+  amount?: string;
+  ceiling?: string;
 }
 
 /** The key a module switch is filed under on a proposal: `module:<id>`. */
@@ -444,16 +482,19 @@ export function mintRuleLabel(rule: MintRuleValues, field: MintRuleField): strin
  * refused at validation rather than voted on and silently dropped.
  */
 // Widened by the dispatcher lane as each executor landed in
-// `server/lib/changeset.ts`. `brand_field` and `role` are deliberately still
-// outside it: a role act has its own subject types and its own closers, and the
-// brand writer has no change-set executor yet. Absence refuses at validation,
-// which is the fail-safe direction.
+// `server/lib/changeset.ts`. `role` is deliberately still outside it: a role
+// act has its own subject types and its own closers. `brand_field` came in with
+// Rye's 2026-11-06 rule ("EVERYTHING can change with the highest village
+// vote"), within the limits shared/brandVote.ts sets. Absence refuses at
+// validation, which is the fail-safe direction.
 export const EXECUTABLE_ITEM_KINDS: ReadonlySet<ChangeItemKind> = new Set<ChangeItemKind>([
   "dial",
   "mint_rule",
+  "mint_rule_create",
   "weight_allocation",
   "mode_switch",
   "module_lifecycle",
+  "brand_field",
 ]);
 
 /** The cap a change set may not pass. A proposal is read before it is voted on. */
@@ -478,6 +519,8 @@ export interface ValidateChangeSetOptions {
    * kept now the vote is binding).
    */
   openModuleProposal?: (moduleId: string) => Promise<string | null>;
+  /** The brand document as it stands, for a `brand_field` item. Refused without it. */
+  brandOf?: () => unknown;
   /**
    * True before the start, when the founders hold founder-held dials and a
    * founder adopts a proposal on them by hand (./founderDials.ts). A set may
@@ -485,6 +528,13 @@ export interface ValidateChangeSetOptions {
    * two ways.
    */
   foundersHold?: () => Promise<boolean>;
+  /**
+   * Why this new minting rule could not be created, or null. The registry's
+   * half lives in server/lib/mintRuleCreate.ts (`newMintRuleProblem`) and is
+   * injected for the reason `readMintRules` is: this file stays testable
+   * without a server. Absent, a new rule is refused.
+   */
+  newMintRuleProblem?: (draft: MintRuleDraft) => Promise<string | null>;
 }
 
 export async function validateChangeSet(
@@ -521,7 +571,7 @@ export async function validateChangeSet(
     };
   }
   const kinds = new Set(items.map((i) => i.kind));
-  if (kinds.has("dial") && kinds.has("mint_rule")) {
+  if (kinds.has("dial") && (kinds.has("mint_rule") || kinds.has("mint_rule_create"))) {
     return {
       problems: [{
         key: "*",
@@ -558,6 +608,40 @@ export async function validateChangeSet(
       const checked = await moduleSwitchProblem(item, seen, options);
       if (typeof checked === "string") problems.push({ key: moduleChangeKey(String(item.moduleId ?? "")), problem: checked });
       else normalized.push(checked);
+      continue;
+    }
+    if (item.kind === "brand_field") {
+      const field = String(item.field ?? "").trim();
+      const key = brandChangeKey(field);
+      if (!options?.brandOf) {
+        problems.push({ key, problem: "This build cannot read the village's brand from here" });
+        continue;
+      }
+      if (seen.has(key)) {
+        problems.push({ key, problem: "The same brand field appears twice in this proposal" });
+        continue;
+      }
+      seen.add(key);
+      const brand = options.brandOf();
+      const to = String(item.to ?? "");
+      const problem = brandVoteProblem(brand, field, to);
+      if (problem) {
+        problems.push({ key, problem });
+        continue;
+      }
+      const from = brandFieldValue(brand, field) ?? "";
+      if (from === to) {
+        problems.push({ key, problem: "That field already says this" });
+        continue;
+      }
+      normalized.push({ key, from, to, kind: "brand_field", field });
+      continue;
+    }
+    if (item.kind === "mint_rule_create") {
+      const checked = await mintRuleCreateProblem(pool, item, seen, cooldownDays, options);
+      if (typeof checked === "string") {
+        problems.push({ key: mintRuleCreateKey(String(item.trigger ?? "").trim(), String(item.tokenSlug ?? "").trim()), problem: checked });
+      } else normalized.push(checked);
       continue;
     }
     const key = String((item as DialItem | MintRuleItem).key ?? "");
@@ -700,6 +784,47 @@ async function moduleSwitchProblem(
   return { key, from, to, kind: "module_lifecycle", moduleId };
 }
 
+/**
+ * A new minting rule, checked the way an edit is: once in the set, against the
+ * registry and the table through the injected check, and cooling like any
+ * other change. The landing runs the same registry check again
+ * (`createMintRule`), because a token can be retired or a rule seeded between
+ * the raise and the close.
+ */
+async function mintRuleCreateProblem(
+  pool: Pool,
+  item: MintRuleCreateItem,
+  seen: Set<string>,
+  cooldownDays: number,
+  options: ValidateChangeSetOptions | undefined,
+): Promise<string | ProposedChange> {
+  const draft: MintRuleDraft = {
+    trigger: String(item.trigger ?? "").trim(),
+    tokenSlug: String(item.tokenSlug ?? "").trim(),
+    amount: String(item.amount ?? "").trim(),
+    ceiling: String(item.ceiling ?? "").trim(),
+  };
+  const key = mintRuleCreateKey(draft.trigger, draft.tokenSlug);
+  if (seen.has(key)) return "The same new minting rule appears twice in this proposal";
+  seen.add(key);
+  if (!options?.newMintRuleProblem) return "This build cannot take a new minting rule to a vote from here";
+  const problem = await options.newMintRuleProblem(draft);
+  if (problem) return problem;
+  const cooling = await cooldownProblem(pool, key, cooldownDays, "A rule like this one");
+  if (cooling) return cooling;
+  const amount = normalizeMintRuleValue("amount", draft.amount);
+  return {
+    key,
+    from: "",
+    to: amount,
+    kind: "mint_rule_create",
+    trigger: draft.trigger,
+    tokenSlug: draft.tokenSlug,
+    amount,
+    ceiling: normalizeMintRuleValue("ceiling", draft.ceiling),
+  };
+}
+
 /** The one cooldown read, shared by both vocabularies so they cool alike. */
 async function cooldownProblem(
   pool: Pool,
@@ -806,6 +931,7 @@ export function proposerStanding(
 /** A stored value shown the way a voter should read it. */
 export function displayChangeValue(key: string, raw: string): string {
   if (moduleOfChangeKey(key) !== null) return lifecycleWords(raw);
+  if (isMintRuleCreateKey(key)) return String(raw ?? "") === "" ? "no rule yet" : displayMintRuleValue("amount", raw);
   const parsed = parseMintRuleKey(key);
   if (parsed) return displayMintRuleValue(parsed.field, raw);
   const def = VARIABLES_BY_KEY[key];
@@ -826,6 +952,11 @@ export function displayChangeValue(key: string, raw: string): string {
  */
 function changeLabel(key: string, mintRules: Map<string, MintRuleValues>): string {
   if (moduleOfChangeKey(key) !== null) return moduleChangeLabel(key);
+  if (isMintRuleCreateKey(key)) {
+    const rest = key.slice(MINT_RULE_CREATE_KEY_PREFIX.length);
+    const cut = rest.lastIndexOf(":");
+    return cut > 0 ? mintRuleCreateLabel(rest.slice(0, cut), rest.slice(cut + 1)) : key;
+  }
   const parsed = parseMintRuleKey(key);
   if (parsed) {
     const rule = mintRules.get(parsed.ruleId);
@@ -862,7 +993,7 @@ export function proposalMarkdown(p: {
   mintRules?: Map<string, MintRuleValues>;
 }): string {
   const mintRules = p.mintRules ?? new Map<string, MintRuleValues>();
-  const mints = p.changeSet.some((c) => isMintRuleKey(c.key));
+  const mints = p.changeSet.some((c) => isMintRuleKey(c.key) || isMintRuleCreateKey(c.key));
   const switches = p.changeSet.length > 0 && p.changeSet.every((c) => moduleOfChangeKey(c.key) !== null);
   const lines: string[] = [
     `# [gm:${p.id}] ${p.title}`,

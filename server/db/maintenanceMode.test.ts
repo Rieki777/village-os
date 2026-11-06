@@ -48,6 +48,21 @@ describe("the maintenance page's content, per refusal kind", () => {
     });
   }
 
+  it("renders a plain page when the accounts did not add up at boot (R132)", () => {
+    // A ledger-invariant refusal threw before any port was bound: a bare 502,
+    // and nothing a steward could read. The page says what stopped, and the
+    // public text names how many checks failed, never an account.
+    const html = renderMaintenanceHtml({
+      detail: { kind: "ledger-invariant", problems: 2, message: "2 ledger checks failed at boot. The server log lists each one under [ledger invariant]." },
+      port: 0,
+      instanceLabel: "Riverbend",
+    });
+    expect(html).toContain("temporarily unavailable");
+    expect(html).toContain("did not add up");
+    expect(html).toContain("[ledger invariant]");
+    expect(html.toLowerCase()).toContain("nothing was moved");
+  });
+
   it("does not let the instance label or message break the page's HTML", () => {
     const html = renderMaintenanceHtml({
       detail: { kind: "migration-failed", file: "0001.sql", statementIndex: 1, statementsTotal: 1, message: '<script>alert(1)</script> & "quoted"' },

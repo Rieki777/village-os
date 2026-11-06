@@ -95,7 +95,7 @@ subtlety in this system; see section 7.
 | A moon closes | `runSettlement` | Pays each holder their role's own list, or the flat `role.cycle` amounts for a role with none, through `quoteWorkPay`, in full |
 | A cycle is closed by an admin | the cycle-close route | Splits `gratitude.pool_per_cycle` of the pool token by recognition received. A human act, never a job |
 | A member thanks another | `give()`, or `sendGratitude()` for a heart | Spends the member's cycle allowance |
-| An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold |
+| An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold. A grant waiting for its second signature is approved by `approveMintRequest` (`server/lib/mintRequests.ts`), which the admin route and a carried village vote on the grant both call |
 | A member spends | a stay night, a seat fee, a library escrow, a member-to-member send | See section 12 |
 | A member asks to redeem | `requestRedemption`, `server/lib/redemptionStore.ts` | Holds the asked amount in `sys:redemption-hold` when `redemption.holds_on_propose` is on, and holds nothing when it is off. A refusal, a withdrawal or an expiry returns a held amount by reversing the hold |
 | A redemption is confirmed | `settleRedemption`, `server/lib/redemptionStore.ts` | Retires the tokens to `sys:redeemed`, which only ever receives, taking them from the hold if one was taken and from the member otherwise |
@@ -132,7 +132,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `adj-<Date.now()>-<Math.random().toString(36).slice(2, 6)>` | `server/routes/stays.ts` |
 | `admin_mint:<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `admin_mint:<slug>:<body>` | `server/index.ts` |
-| `admin_mint:req:<id>` | `server/index.ts` |
+| `admin_mint:req:<id>` | `server/lib/mintRequests.ts` |
 | `circle_treasury:<kind>:<budgetId.slice(0, 40)>:<tail>` | `server/routes/circleTreasury.ts` |
 | `circle_treasury:dormant:<circleId.slice(0, 40)>:<tokenSlug>:<day>:<balanceMinor>:<accountRows>` | `server/lib/circleTreasury.ts` |
 | `circle-bonus:<recordId>:<unit>` | `server/lib/circleBonus.ts` |
@@ -708,7 +708,12 @@ directly to Base. **What exists today is stage 1**, and `server/lib/voiceClaim.t
 says so in one line that is worth reading before believing any of this reaches a
 chain: `export const BRIDGE_DISPATCH_BUILT = false;`. Nothing in this build
 dispatches a claim to Hypha. A claim is recorded, the voice is debited and held
-at the bridge, and something outside this repository has to confirm it.
+at the bridge, and something outside this repository has to confirm it. That
+confirmation arrives at a receiver signed with `HYPHA_VOICE_WEBHOOK_SECRET`, and
+the check that guards it (`checkVoiceSecret`) refuses a value shared with any
+other secret the village holds, the session key and the callback secrets typed
+into Admin, Integrations included (readiness R171): anything able to sign that
+other callback could otherwise confirm a claim on value.
 
 ### Earned equity crosses the same bridge (0266)
 
@@ -3312,7 +3317,10 @@ under the co-sign line and over it, so no grant waits for a second steward in a
 departed member's name. The co-signed approval
 (`POST /api/admin/mint-requests/:id/approve`) asks it again when the second
 steward signs, so a grant asked for while a member was here mints nothing once
-they have left; it stays pending, and a steward can decline it. A former member
+they have left; it stays pending, and a steward can decline it. The same
+function, `approveMintRequest` in `server/lib/mintRequests.ts`, lands a carried
+village vote on the grant (`POST /api/governance/mint-requests/:id/put-to-village`),
+so the vote meets every one of these refusals too. A former member
 can still be minted to. Pinned by `server/lib/gratitude.tombstone.test.ts` and
 `server/needsTombstone.routes.e2e.test.ts`.
 
@@ -3980,8 +3988,12 @@ type]
 It cannot: its change argument is `{ amount?, ceiling?, enabled? }` and it
 writes only `pending_amount`, `pending_ceiling`, `pending_enabled` and
 `pending_from_cycle`, which is exactly what `applyPendingRules` copies across.
-Nothing in this build can move a rule's trigger or its token at all, because
-the only writer of `mint_rules` ROWS is `seedEconomy` at boot.
+Nothing in this build can move a rule's trigger or its token at all. A row is
+written by `seedEconomy` at boot, and since vote-path gap 8 by a carried
+village vote creating a NEW rule (`createMintRule`, `server/lib/mintRuleCreate.ts`),
+which may name only `quest.completed`, `role.cycle` or `proposal.accepted` and
+refuses Gratitude, a Hypha token, an example token and a token with no faucet.
+No admin route creates a rule.
 
 What is true is the second half. Both seeded `village-voice` rules do pay
 contributions (`quest.completed`) and seats (`role.cycle`), so the shipped
@@ -4040,10 +4052,12 @@ measured five ways at `1861f7d` and all five agree.**
    over `ledger.ts`, `economy.ts`, `spending.ts`, `exchange.ts`, `exit.ts`,
    `library.ts`, `stays.ts`, `eventSeats.ts`, `voiceClaim.ts`, `mintCap.ts` and
    `gratitude.ts` returns nothing.
-4. **No mint rule can fire on one.** The only writer of `mint_rules` ROWS is
-   `seedEconomy` (section 16, R2), and the triggers it seeds are `quest.completed`
-   and `role.cycle`. There is no route that creates a rule, so there is no trigger
-   a campaign could be attached to even by an admin.
+4. **No mint rule can fire on one.** The writers of `mint_rules` ROWS are
+   `seedEconomy` (section 16, R2) and a carried village vote creating a new rule
+   (`createMintRule`), and the only triggers either can name are
+   `quest.completed`, `role.cycle` and `proposal.accepted`. No route creates a
+   rule on any other trigger, so there is no trigger a campaign could be
+   attached to even by a vote.
 5. **It has no dial of its own in the economy's plane.** There is no
    `crowdpool.*` game variable. The one variable it reads is `governance.hub_url`,
    which is an address and never an amount, and its campaign list lives in

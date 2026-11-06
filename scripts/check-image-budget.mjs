@@ -78,7 +78,10 @@ import { fileURLToPath } from "node:url";
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const SCAN_ROOT = path.join(ROOT, "client", "public");
-const BASELINE_PATH = path.join(ROOT, "scripts", "image-budget-baseline.json");
+const baselineArg = process.argv.indexOf("--baseline");
+const BASELINE_PATH = baselineArg !== -1 && process.argv[baselineArg + 1]
+  ? path.resolve(process.argv[baselineArg + 1])
+  : path.join(ROOT, "scripts", "image-budget-baseline.json");
 
 /** Matches the per-file cap CI already applies to dist/public. */
 const MAX_SINGLE_BYTES = 400 * 1024;
@@ -266,6 +269,12 @@ const orphans = everyImage
   .filter((f) => !haystack.includes(path.basename(f)))
   .map((f) => rel(f));
 
+// A missing baseline fails (R203). It used to read as today's total, so
+// deleting the file cleared the gate. `--update-baseline` writes a first one.
+if (!fs.existsSync(BASELINE_PATH) && !process.argv.includes("--update-baseline")) {
+  console.error(`::error::the image baseline is missing (${path.relative(ROOT, BASELINE_PATH)}). Write one on purpose with --update-baseline; a gate with no baseline holds nothing.`);
+  process.exit(1);
+}
 const baseline = fs.existsSync(BASELINE_PATH)
   ? JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"))
   : { totalBytes: total, files: files.length };

@@ -91,9 +91,10 @@ so it is not the dangerous shape, and checking which one you have costs one `ls`
 
 The authoritative list is printed straight from the workflows themselves, so it is right on the
 day you run it. It reads EVERY workflow that runs on a pull request, not only `ci.yml`: four of
-them do, and the gates reachable only through `module-intake.yml` include the raw-SQL burn-down.
-This sentence used to say "straight from `ci.yml`", which was true of the source and got read as
-true of the gate set, and the gap was 14 named steps:
+them do. The raw-SQL burn-down and the contribution rules used to be reachable only through the
+path-gated `module-intake.yml`, which skipped 98 of 150 landings; `ci.yml` runs the same validator
+on every pull request since readiness R207. This sentence used to say "straight from `ci.yml`",
+which was true of the source and got read as true of the gate set, and the gap was 14 named steps:
 
 ```
 node scripts/module-facts.mjs

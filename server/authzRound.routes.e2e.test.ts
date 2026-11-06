@@ -27,6 +27,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { TIER_FLOORS } from "../shared/governanceEngine";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
@@ -374,6 +375,41 @@ describe.skipIf(!DB_CONFIGURED)("a hub outcome that names no Hypha space (R039)"
     expect(named.json?.status).toBe("applied");
     expect(await placeLine()).toBe("Meet at the long table");
   });
+
+  it("after launch, any member can ask the village to decide a held outcome, at its highest tier (Rye, 2026-11-06)", async () => {
+    // This scratch village has started its Game, so the admin door is shut and
+    // the held outcome would otherwise wait forever. The village's own vote
+    // lives in the governance module, so it is on here.
+    const on = await call("PUT", "/api/admin/modules/governance/lifecycle", { lifecycle: "members", examples: false });
+    expect(on.status, on.text).toBe(200);
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      title: "Meet by the river", rationale: "Shade in the afternoon.",
+      changes: [{ key: "sessions.place_line", to: "Meet by the river" }],
+    });
+    expect(made.status, made.text).toBe(200);
+    const id = String(made.json?.id);
+    expect((await call("POST", `/api/game/mechanics/proposals/${id}/to-hypha`, {})).status).toBe(200);
+    const held = await deliver(id, { deliveryId: "r039-held-ask" });
+    expect(held.json?.status, JSON.stringify(held.json)).toBe("passed_verified");
+    expect((await call("POST", `/api/admin/mechanics/proposals/${id}/apply`, {})).status, "the admin door is closed after launch").toBe(409);
+
+    // The village's own door is open to a member on the roll, and the page is told.
+    expect((await call("GET", "/api/game/mechanics/standing")).json?.mayAskVillage).toBe(true);
+    const asked = await call("POST", `/api/governance/mechanics/${id}/open-ballot`, {});
+    expect(asked.status, asked.text).toBe(200);
+    const [rows] = await pool.query<any[]>( // module-review-ok: the e2e harness reading its own scratch schema
+      "SELECT m.status, b.unity_pct, b.quorum_pct FROM mechanics_proposals m JOIN ballots b ON b.id = m.ballot_id WHERE m.id = ?",
+      [id],
+    );
+    expect(rows[0]?.status).toBe("onsite_vote");
+    // The highest tier, never the ordinary mechanics dials (80 and 20 by default).
+    expect(Number(rows[0].unity_pct)).toBeGreaterThanOrEqual(TIER_FLOORS.constitutional.unityPct);
+    expect(Number(rows[0].quorum_pct)).toBeGreaterThanOrEqual(TIER_FLOORS.constitutional.quorumPct);
+
+    // The vote now under way decides; a late delivery cannot jump it.
+    const late = await deliver(id, { deliveryId: "r039-held-late", spaceId: "42" });
+    expect(String(late.json?.discarded)).toMatch(/not awaiting an outcome/);
+  });
 });
 
 describe.skipIf(!DB_CONFIGURED)("the public library catalogue", () => {
@@ -397,6 +433,44 @@ describe.skipIf(!DB_CONFIGURED)("the public library catalogue", () => {
     expect(adm.status).toBe(200);
     const full = (adm.json.items as any[]).find((i) => i.id === "lib-authz-1");
     expect(full.donorUserId).toBe("user-donor-authz");
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("a stranger cannot make the village mail one address over and over (R106)", () => {
+  // Both public doors send to the address the stranger typed. Bounded per IP
+  // only, so anyone could aim the village's own mail at one inbox, with a
+  // greeting they chose. Each address now hears from a door three times a day.
+  const toRows = async (origin: string, to: string) => {
+    const [rows] = await pool.query<any[]>("SELECT body_html FROM comms_messages WHERE origin = ? AND to_email = ?", [origin, to]); // module-review-ok: the e2e harness reading its own scratch schema
+    return rows.map((r) => String(r.body_html ?? ""));
+  };
+  const settle = async (origin: string, to: string, atLeast: number) => {
+    for (let i = 0; i < 40 && (await toRows(origin, to)).length < atLeast; i++) await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 400));
+    return toRows(origin, to);
+  };
+
+  it("acknowledges a work-with-us proposal to one address three times a day", async () => {
+    const longName = "R".repeat(500);
+    for (let i = 0; i < 4; i++) {
+      const sent = await call("POST", "/api/forms/submit", {
+        type: "work-with-us", data: { name: longName, email: "repeat@example.test", work: `proposal ${i}` },
+      }, "");
+      expect(sent.status, sent.text).toBe(200);
+    }
+    const acks = await settle("forms.ack", "repeat@example.test", 3);
+    // An acknowledgement is essential mail, so its body is never stored; the
+    // greeting's length is held by greetingName's own test (lib/workWithUsAck).
+    expect(acks.length, "the fourth acknowledgement is not sent").toBe(3);
+  });
+
+  it("sends the investor packet to one address three times a day", async () => {
+    expect((await call("PUT", "/api/admin/variables/abuse.investor_docs_per_ip_hourly", { value: "50" })).status).toBe(200);
+    for (let i = 0; i < 4; i++) {
+      const asked = await call("POST", "/api/investor-docs/request", { name: "Repeat Asker", email: "packet@example.test", accredited: true }, "");
+      expect(asked.status, asked.text).toBe(200);
+    }
+    expect((await settle("investor.packet", "packet@example.test", 3)).length).toBe(3);
   });
 });
 

@@ -48,3 +48,9 @@ PLAN_TO_A.md export-ignore
 # printed PDF the PDF reader's tests read; a line-ending rewrite would break its
 # cross-reference offsets.
 *.pdf binary
+# Migrations are checksummed at boot (server/db/migrate.ts). They are the
+# same text everywhere, so they are the same bytes everywhere: LF on every
+# checkout, whatever core.autocrlf says. sameMigrationText also accepts a
+# file whose only difference is its line endings (R130), for trees made
+# before this line.
+drizzle/*.sql text eol=lf

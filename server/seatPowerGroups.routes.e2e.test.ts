@@ -240,3 +240,25 @@ describe.skipIf(!DB_CONFIGURED)("power.assign: only its holders hand out powers 
     expect(r.status, r.text).toBe(200);
   });
 });
+
+describe.skipIf(!DB_CONFIGURED)("the members' powers page names who holds a power today, through a role", () => {
+  it("names a group holder the house way before the village holds the power, and sends suggestions to them", async () => {
+    const r = await call("POST", "/api/auth/register", { name: "Cy Storyteller", email: "cy-page@example.test", password: PW, paths: ["resident"] }, "");
+    expect(r.status, r.text).toBe(200);
+    const cy = { id: String(r.json?.user?.id ?? ""), token: String(r.json?.token ?? "") };
+    expect((await call("PUT", `/api/admin/players/${cy.id}/stage`, { stageId: "member" })).status).toBe(200);
+    const before = (await call("GET", "/api/village/powers", undefined, cy.token)).json.powers.find((p: any) => p.capability === "story.tell");
+    expect(before.heldToday).toEqual([]);
+    const g = await call("PUT", "/api/admin/roles/practitioners/capabilities", { capabilities: ["forum.post", "proposal.open", "story.tell"], grantedEscalations: ["story.tell"] });
+    expect(g.status, g.text).toBe(200);
+    expect((await call("POST", "/api/admin/roles/practitioners/holders", { userId: cy.id, action: "add" })).status).toBe(200);
+    const page = await call("GET", "/api/village/powers", undefined, cy.token);
+    expect(page.status, page.text).toBe(200);
+    const story = page.json.powers.find((p: any) => p.capability === "story.tell");
+    expect(story.heldBy).toBeNull();
+    expect(story.heldToday).toEqual(["Trained Practitioners (Cy)"]);
+    expect(story.suggestionsGoTo).toBe("holders");
+    expect(page.json.powers.map((p: any) => p.capability)).toContain("power.assign");
+    expect(page.json.families.map((f: any) => f.id)).toContain("structure");
+  });
+});

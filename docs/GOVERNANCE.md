@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `79bee16eb8fbb59b`, which regenerating reproduces.
+It describes the sources at fingerprint `9f00bb1304470957`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -183,6 +183,7 @@ The dials a village holds, with the ring that says who may move each one and the
 | `governance.tier_constitutional_quorum_pct` | Constitutional changes: quorum floor | `open` | `97` | 97 to 100 % | when it is written |
 | `governance.tier_constitutional_unity_pct` | Constitutional changes: unity floor | `open` | `97` | 97 to 100 % | when it is written |
 | `governance.highest_tier` | The tier a veto override is passed at | `open` | `constitutional` | `routine`, `structural`, `constitutional` | when it is written |
+| `governance.launch_min_electorate` | Members it takes to launch | `open` | `3` | 1 to 50 members | when it is written |
 | `governance.subject_mint_rule_quorum_pct` | Minting rule changes: quorum floor | `open` | `50` | 50 to 100 % | when it is written |
 | `governance.subject_mint_rule_unity_pct` | Minting rule changes: unity floor | `open` | `0` | 0 to 100 % | when it is written |
 | `governance.nonhuman_in_quorum` | Roles speaking for other beings count toward quorum | `open` | `false` | boolean | when it is written |
@@ -191,7 +192,7 @@ The dials a village holds, with the ring that says who may move each one and the
 <!-- written by a person: dialsStorage -->
 Only CHANGED values are stored. An absent row means the platform default in the table above, so a fresh village starts with every one of these and no rows at all.
 
-12 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.equity_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 46 settings above is one of them, so every governance dial takes effect the moment it is written.
+12 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.equity_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 47 settings above is one of them, so every governance dial takes effect the moment it is written.
 
 ## What each kind of decision asks
 
@@ -206,6 +207,7 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 | `cycle_settlement` | 0% | 0% | 0 | no | the village's own | yes |
 | `gps_change` | 0% | 50% | 0 | no | the village's own | yes |
 | `org_draft` | 0% | 0% | 0 | no | the village's own | no, it conducts a decision and executes nothing |
+| `mint_request` | 80% | 50% | 0 | no | `custom` | no, it conducts a decision and executes nothing |
 
 - `village_launch`: Starting the Game asks every member on the roll to vote yes. An abstention is not a yes, and a vote nobody cast is not a yes either.
 - `mint_rule`: This one changes what the village mints, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
@@ -213,10 +215,11 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 - `cycle_settlement`: Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar.
 - `gps_change`: This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
 - `org_draft`: A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.
+- `mint_request`: This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar.
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
-A member drafts through the wizard, which knows 10 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`. 7 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`, `role_application`); the other 3 open as practice votes (`agreement`, `badge_grant`, `quest_payout`).
+A member drafts through the wizard, which knows 10 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`. 8 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`, `role_application`, `badge_grant`); the other 2 open as practice votes (`agreement`, `quest_payout`).
 
 <!-- written by a person: practiceVotes -->
 The wizard offers types the executors have not reached. Those open as practice votes: the village holds a real decision, reads the real answer, and nothing moves. It is a ladder and never a scorecard.
@@ -265,6 +268,7 @@ Every other subject type is a `game_change`, including every one in the closing 
 | --- | --- |
 | `dial` | `game_change` |
 | `mint_rule` | `game_change` |
+| `mint_rule_create` | `game_change` |
 | `weight_allocation` | `game_change` |
 | `mode_switch` | `game_change` |
 | `module_lifecycle` | `game_change` |
@@ -494,6 +498,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | POST | `/api/governance/drafts` | signed in | none |
 | DELETE | `/api/governance/drafts/:id` | signed in | none |
 | POST | `/api/governance/mechanics/:id/open-ballot` | signed in | none |
+| POST | `/api/governance/mint-requests/:id/put-to-village` | signed in | none |
 | POST | `/api/governance/mode-switches` | signed in | none |
 | GET | `/api/governance/objections/answerable` | signed in | none |
 | GET | `/api/governance/objections/lineage` | anyone, including a stranger | none |
@@ -518,10 +523,11 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/standing` | signed in | none |
 | GET | `/api/governance/stewardship` | signed in | none |
 | POST | `/api/governance/vetoes/:id/redact` | administrator | none |
+| GET | `/api/governance/voice-spread` | anyone, including a stranger | none |
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-64 routes: 50 under the governance prefix and 14 under the mechanics prefix. 8 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+66 routes: 52 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle a stranger reads the ballot list, one decision and the objection lineage as titles, counts, tallies, dials and status. Who voted, how, who has not voted yet, who objected and the document itself are for signed-in members, and ruling 22, still staged, is about what members read.
 
@@ -829,7 +835,7 @@ The case this answered: a proposal passes on the 20th of the moon, the steward i
 > Everything can be! But the more critical it is, the higher percentage of quorum you need (hard to get quorum) such that changing the most critical things would require a max high of 97% quorum where only 3% of the whole network would be able to not be informed and have 97% approval (max heights - we don't recommend more than those though they can exceed them (if they do we warn them) because the closer you get to 100% the chances of you getting a stalemate increase where the Game breaks even though a massive majority want to continue they can't because someone died suddenly or stopped playing the Game, etc.
 
 <!-- written by a person: ruling-21 -->
-Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 6 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
+Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 7 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
 
 ### 22. Who voted is visible, how they voted is hidden, and names appear after half
 
@@ -1057,7 +1063,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "79bee16eb8fbb59b",
+  "commit": "9f00bb1304470957",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1197,6 +1203,19 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "minYesHeads": null,
       "executesAtClose": false,
       "why": "A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar."
+    },
+    {
+      "subjectType": "mint_request",
+      "minUnityPct": 80,
+      "minQuorumPct": 50,
+      "minElectorate": 0,
+      "everySeatWeighs": false,
+      "method": "custom",
+      "criticality": "structural",
+      "abstainPolicy": null,
+      "minYesHeads": null,
+      "executesAtClose": false,
+      "why": "This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar."
     }
   ],
   "executingSubjectTypes": [
@@ -1695,6 +1714,17 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "applyTiming": "instant"
     },
     {
+      "key": "governance.launch_min_electorate",
+      "label": "Members it takes to launch",
+      "ring": "open",
+      "type": "integer",
+      "default": "3",
+      "min": 1,
+      "max": 50,
+      "choices": null,
+      "applyTiming": "instant"
+    },
+    {
       "key": "governance.subject_mint_rule_quorum_pct",
       "label": "Minting rule changes: quorum floor",
       "ring": "open",
@@ -1779,11 +1809,11 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "power_return",
       "role_seat",
       "gps_change",
-      "role_application"
+      "role_application",
+      "badge_grant"
     ],
     "advisory": [
       "agreement",
-      "badge_grant",
       "quest_payout"
     ],
     "clientAgrees": true
@@ -2125,6 +2155,13 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "method": "POST",
+      "path": "/api/governance/mint-requests/:id/put-to-village",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/mintRequestVotes.ts"
+    },
+    {
+      "method": "POST",
       "path": "/api/governance/mode-switches",
       "door": "signed in",
       "capability": null,
@@ -2293,6 +2330,13 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "method": "GET",
+      "path": "/api/governance/voice-spread",
+      "door": "anyone, including a stranger",
+      "capability": null,
+      "file": "server/routes/voiceSpread.ts"
+    },
+    {
+      "method": "GET",
       "path": "/api/governance/weights",
       "door": "signed in",
       "capability": null,
@@ -2338,6 +2382,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     "byChangeSetItem": {
       "dial": "game_change",
       "mint_rule": "game_change",
+      "mint_rule_create": "game_change",
       "weight_allocation": "game_change",
       "mode_switch": "game_change",
       "module_lifecycle": "game_change",
