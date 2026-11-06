@@ -83,6 +83,23 @@ export interface RewardRule {
 }
 
 /**
+ * The valuation engine's own dials (`shared/valuationEngine.ts`, spec 3.8), in
+ * whole percents. `bandPct`: inside the expected total plus or minus this, one
+ * setter's word stands. `singleLowPct` / `singleHighPct`: the range when a work
+ * gives one estimate. `narrowPct` / `mediumPct`: how wide a range reads.
+ */
+export interface EngineDials {
+  bandPct: number;
+  singleLowPct: number;
+  singleHighPct: number;
+  narrowPct: number;
+  mediumPct: number;
+}
+
+/** The engine's dials as the spec ships them (spec 3.8). A village's own `model.engine` overrides any of them. */
+export const ENGINE_DEFAULTS: EngineDials = { bandPct: 10, singleLowPct: 15, singleHighPct: 25, narrowPct: 20, mediumPct: 50 };
+
+/**
  * One version of a village's model. Each save is a new version and none is
  * ever edited. Every field is a setting the valuation pages can change, within
  * the bounds `validateModel` holds; `diffModels` says which door a change needs.
@@ -119,6 +136,8 @@ export interface ValuationModel {
   minQuestMinor: number;
   /** The rate the floors are converted at, when they are set in another currency. Display only. */
   exchange: { currency: string; perUnit: number; source: ValuationSource } | null;
+  /** The engine's dials. Absent, or any one absent: the engine's defaults (`ENGINE_DEFAULTS`). */
+  engine?: Partial<EngineDials>;
 }
 
 /**
@@ -598,8 +617,8 @@ export function rolePriceTokens(p: RolePrice): TokenAmount[] {
  *
  * THE SOURCE'S FIGURE IS THE WHOLE ARRANGEMENT'S VALUE (its Operations role,
  * 2026-10-30), so it is the TOTAL reward, shared into the base, the Earned
- * Equity match and the Credits bonus (`rewardFromTotal`). Whether Earned Equity
- * should instead sit on top of it is Rye's to say.
+ * Equity match and the Credits bonus (`rewardFromTotal`). Rye ruled this on
+ * 2026-11-01 (ruling A): Earned Equity is a share of the target, never on top.
  *
  * It prices whatever the figure's standing, so a pending figure can be shown;
  * whether it may be WRITTEN is `sourcePayWrites`. `opts.cashMinorPerMoon` is
@@ -711,14 +730,23 @@ export function validateModel(model: ValuationModel): string[] {
   if (model.exchange && (!(model.exchange.perUnit > 0) || !ISO_DATE.test(model.exchange.source.date))) {
     out.push("The exchange rate needs a rate above zero and a dated source.");
   }
+  const e = { ...ENGINE_DEFAULTS, ...(model.engine ?? {}) };
+  if (!(e.bandPct >= 0 && e.bandPct <= 50)) out.push("The no-sign band must be between 0% and 50% of the suggestion.");
+  if (!(e.singleLowPct >= 0 && e.singleLowPct <= 100 && e.singleHighPct >= 0 && e.singleHighPct <= 100)) out.push("The range around a single estimate must be between 0% and 100%.");
+  if (!(e.narrowPct >= 0 && e.narrowPct < e.mediumPct)) out.push("A narrow range must be under a medium one.");
   return out;
 }
 
 /**
  * Which door a change needs: a saved version, a finance or steward role's
- * approval, a village proposal, or the founder ring.
+ * approval, a village proposal, or the village's highest-tier vote.
+ *
+ * There is no founder door. Rye, 2026-11-06: "EVERYTHING can change with the
+ * highest village vote" (constitution 0.1), and only hosting, secrets and
+ * environment settings are outside it (0.6). Every door here also opens to that
+ * vote; "vote" marks the changes ONLY it may make.
  */
-export type ChangeDoor = "version" | "steward" | "proposal" | "founder";
+export type ChangeDoor = "version" | "steward" | "proposal" | "vote";
 
 export interface ModelChange {
   key: string;
@@ -731,7 +759,7 @@ export interface ModelChange {
 /** How far one version may move a band's value before the change needs a village proposal. */
 export const VERSION_RATE_STEP_PCT = 10;
 
-const DOOR_RANK: Record<ChangeDoor, number> = { version: 0, steward: 1, proposal: 2, founder: 3 };
+const DOOR_RANK: Record<ChangeDoor, number> = { version: 0, steward: 1, proposal: 2, vote: 3 };
 
 /** The strictest door any of the changes needs. */
 export function doorFor(changes: readonly ModelChange[]): ChangeDoor {
@@ -740,33 +768,45 @@ export function doorFor(changes: readonly ModelChange[]): ChangeDoor {
 
 /**
  * Every difference between two versions, value by value, with the door each
- * one needs (VALUATION_MODEL_PLAN.md 3.1):
- *   - founder: the currency, the Voice rate, the Voice cap.
- *   - proposal: a band value moving more than 10%, a band removed, the band spread.
+ * one needs (VALUATION_MODEL_PLAN.md 3.1, remapped to Article 0 and the
+ * engine's adversarial review, QA G4):
+ *   - vote: the currency, the Voice rate, the Voice cap, and the reward
+ *     multiple (the Earned Equity match and the Credits bonus), because each
+ *     moves every price and every Voice at once.
+ *   - proposal: a band value moving more than 10% FROM THE VERSION THE VILLAGE
+ *     LAST ADOPTED (`opts.adopted`, so ten small versions cannot chain into a
+ *     big one), a band removed, the band spread, and a new band priced above a
+ *     band with the same legal floor.
  *   - steward: the village benefit range (a finance or steward role approves).
- *   - version: everything else within its bounds, the reward settings among them
+ *   - version: everything else within its bounds: the default cash share, the
+ *     levels, the minimum quest value, the exchange rate, the engine's dials
  *     (Rye, 2026-10-31: "these are all settings we should be able to tweak in
  *     our valuation model pages").
  */
-export function diffModels(from: ValuationModel, to: ValuationModel): ModelChange[] {
+export function diffModels(from: ValuationModel, to: ValuationModel, opts: { adopted?: ValuationModel } = {}): ModelChange[] {
   const out: ModelChange[] = [];
   const m = (model: ValuationModel) => moneyIn(model.currency);
   const push = (key: string, label: string, a: unknown, b: unknown, door: ChangeDoor): void => {
     if (String(a) !== String(b)) out.push({ key, label, from: String(a), to: String(b), door });
   };
-  push("currency", "Currency", from.currency, to.currency, "founder");
-  push("voicePerUnit", "Voice per unit paid", from.voicePerUnit, to.voicePerUnit, "founder");
+  push("currency", "Currency", from.currency, to.currency, "vote");
+  push("voicePerUnit", "Voice per unit paid", from.voicePerUnit, to.voicePerUnit, "vote");
   const cap = (x: number | null) => (x === null ? "off" : String(x));
-  push("voiceCap", "Voice cap per member per moon", cap(from.voiceCapPerMemberPerMoon), cap(to.voiceCapPerMemberPerMoon), "founder");
+  push("voiceCap", "Voice cap per member per moon", cap(from.voiceCapPerMemberPerMoon), cap(to.voiceCapPerMemberPerMoon), "vote");
+  const anchor = opts.adopted ?? from;
+  const sameFloor = (a: RateBand, b: RateBand): boolean =>
+    !!a.floor && !!b.floor && a.floor.currency === b.floor.currency && a.floor.perHourMinor === b.floor.perHourMinor;
   const per = (model: ValuationModel, minor: number) => `${m(model)(minor)} per estimated hour`;
   for (const b of to.bands) {
     const was = from.bands.find((x) => x.key === b.key);
     if (!was) {
-      out.push({ key: `band:${b.key}`, label: `Band ${b.label}`, from: "none", to: per(to, b.hourValueMinor), door: "version" });
+      const above = from.bands.some((x) => x.key !== b.key && sameFloor(x, b) && b.hourValueMinor > x.hourValueMinor);
+      out.push({ key: `band:${b.key}`, label: `Band ${b.label}`, from: "none", to: per(to, b.hourValueMinor), door: above ? "proposal" : "version" });
       continue;
     }
     if (was.hourValueMinor !== b.hourValueMinor) {
-      const step = was.hourValueMinor > 0 ? (Math.abs(b.hourValueMinor - was.hourValueMinor) / was.hourValueMinor) * 100 : Infinity;
+      const base = anchor.bands.find((x) => x.key === b.key)?.hourValueMinor ?? was.hourValueMinor;
+      const step = base > 0 ? (Math.abs(b.hourValueMinor - base) / base) * 100 : Infinity;
       out.push({
         key: `band:${b.key}`,
         label: `Band ${b.label}`,
@@ -789,12 +829,24 @@ export function diffModels(from: ValuationModel, to: ValuationModel): ModelChang
   levels(from.complexity, to.complexity, "complexity");
   levels(from.responsibility, to.responsibility, "responsibility");
   push("benefit", "Village benefit range", `±${from.benefit.maxPct}%`, `±${to.benefit.maxPct}%`, "steward");
-  push("equityMatch", "Earned Equity match", `${from.reward.equityMatchPct}%`, `${to.reward.equityMatchPct}%`, "version");
-  push("creditsBonus", "Credits bonus", `${from.reward.creditsBonusPct}%`, `${to.reward.creditsBonusPct}%`, "version");
+  push("equityMatch", "Earned Equity match", `${from.reward.equityMatchPct}%`, `${to.reward.equityMatchPct}%`, "vote");
+  push("creditsBonus", "Credits bonus", `${from.reward.creditsBonusPct}%`, `${to.reward.creditsBonusPct}%`, "vote");
   push("defaultCash", "Default cash share of the base", `${from.reward.defaultCashPct}%`, `${to.reward.defaultCashPct}%`, "version");
   push("minQuest", "Minimum quest value", m(from)(from.minQuestMinor), m(to)(to.minQuestMinor), "version");
   const ex = (x: ValuationModel["exchange"]) => (x ? `${x.perUnit} ${x.currency} per unit (${x.source.date})` : "none");
   push("exchange", "Exchange rate", ex(from.exchange), ex(to.exchange), "version");
+  const ENGINE_LABELS: Record<keyof EngineDials, string> = {
+    bandPct: "No-sign band",
+    singleLowPct: "Range below a single estimate",
+    singleHighPct: "Range above a single estimate",
+    narrowPct: "A narrow range is under",
+    mediumPct: "A medium range is under",
+  };
+  for (const k of Object.keys(ENGINE_LABELS) as (keyof EngineDials)[]) {
+    const a = from.engine?.[k] ?? ENGINE_DEFAULTS[k];
+    const b = to.engine?.[k] ?? ENGINE_DEFAULTS[k];
+    if (a !== b) out.push({ key: `engine:${k}`, label: ENGINE_LABELS[k], from: `${a}%`, to: `${b}%`, door: "version" });
+  }
   return out;
 }
 
