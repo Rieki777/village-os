@@ -578,6 +578,18 @@ jobs:
             scripts/fork-init.mjs
             docs/FOUNDER_SETUP_PROMPT.md
             docs/UPGRADING.md
+            # R185: every document these guides send a founder to. The list is held
+            # to the guides by scripts/starter-kit-contract.test.mjs.
+            CHANGELOG.md
+            SECURITY.md
+            docs/PROVISIONING.md
+            docs/RUNBOOK.md
+            docs/MODULES.md
+            docs/FOUNDER_AGENT_GUIDE.md
+            docs/SECURITY_ADVISORIES.md
+            docs/GOOGLE_SIGN_IN.md
+            docs/FORK_RUNBOOK.md
+            ops/RELEASES.md
           )
           git archive --format=zip --prefix="${kit}/" -o "${kit}.zip" "refs/tags/${TAG}" -- "${files[@]}"
           # Every listed file must be in the kit. git archive refuses a path the

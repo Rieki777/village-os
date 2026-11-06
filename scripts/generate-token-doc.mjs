@@ -1150,7 +1150,7 @@ function tokenSection(t, f) {
   const off = t.seededRules.filter((r) => !r.enabled);
   const paid = live.length
     ? live
-        .map((r) => `${r.amount} on \`${r.trigger}\` to the ${r.recipient}, up to ${r.ceiling} a moon`)
+        .map((r) => `${amountWords(r)} on \`${r.trigger}\` to the ${r.recipient}, up to ${r.ceiling} a moon`)
         .join("; ")
     : null;
   lines.push(`**Who can issue it, and how.** ${issuance(t, f, paid, off)}`);
@@ -1170,6 +1170,17 @@ function tokenSection(t, f) {
     );
   }
   return lines.join("\n");
+}
+
+/**
+ * A seeded rule's amount in words. A blank amount pays what the piece of work
+ * names (since #776 a seat is paid only its role's own list), and printing the
+ * raw value told a founder a seat was paid "null" of a token.
+ */
+function amountWords(r) {
+  if (r.amount != null) return String(r.amount);
+  const byTrigger = { "role.cycle": "what the role names", "quest.completed": "what the quest names", "proposal.accepted": "what the proposal names" };
+  return byTrigger[r.trigger] ?? "what the work names";
 }
 
 function issuance(t, f, paid, off = []) {
@@ -1205,7 +1216,7 @@ function issuance(t, f, paid, off = []) {
           ? "One rule ships switched OFF and pays nobody until the village turns it on: "
           : `${["Two", "Three", "Four", "Five"][off.length - 2] ?? off.length} rules ship switched OFF and pay nobody until the village turns them on: `) +
           off
-            .map((r) => `${r.amount} on \`${r.trigger}\` to the ${r.recipient}`)
+            .map((r) => `${amountWords(r)} on \`${r.trigger}\` to the ${r.recipient}`)
             .join("; ") +
           (one
             ? ". It is seeded off rather than left out because no route creates a mint rule, so a village that " +
@@ -1245,7 +1256,7 @@ function cycleClose(t, f) {
   const cycleRules = t.seededRules.filter((r) => r.trigger === "role.cycle" && r.enabled);
   if (cycleRules.length) {
     bits.push(
-      `Settlement pays everyone holding a seat ${cycleRules.map((r) => `${r.amount} of it`).join(" and ")}. A re-run pays ` +
+      `Settlement pays ${cycleRules.map((r) => (r.amount == null ? "each seat what its role names of it" : `everyone holding a seat ${r.amount} of it`)).join(" and ")}. A re-run pays ` +
         "nothing twice: each mint is keyed on the moon, the seat and the holder.",
     );
   }
@@ -1630,7 +1641,7 @@ export function render(f) {
       f.seededRules.map((r) => [
         `\`${r.trigger}\``,
         `\`${r.token}\``,
-        String(r.amount),
+        r.amount == null ? "read from the work" : String(r.amount),
         String(r.ceiling),
         String(r.recipient),
         r.enabled === false ? "no, seeded off" : "yes",

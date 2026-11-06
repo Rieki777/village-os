@@ -542,33 +542,52 @@ describe("which kinds this build will take to a vote", () => {
    * module's lifecycle, and the minting rules that were already here), so the
    * list this pins is longer. What has NOT changed is the property the test is
    * for: a kind outside the set is refused at validation rather than voted on
-   * and silently dropped, and `brand_field` and `role` are still outside it.
+   * and silently dropped. `role` is still outside it; `brand_field` came in
+   * with Rye's 2026-11-06 rule, inside the limits of shared/brandVote.ts.
    */
   it("names the kinds it can carry out, and no more", () => {
     expect(Array.from(EXECUTABLE_ITEM_KINDS).sort()).toEqual([
+      "brand_field",
       "dial",
       "mint_rule",
+      "mint_rule_create",
       "mode_switch",
       "module_lifecycle",
       "weight_allocation",
     ]);
     for (const kind of CHANGE_ITEM_KINDS) {
       if (EXECUTABLE_ITEM_KINDS.has(kind)) continue;
-      expect(["brand_field", "role"]).toContain(kind);
+      expect(["role"]).toContain(kind);
     }
   });
 
   it("refuses a kind it cannot apply, rather than voting on it and doing nothing", async () => {
     const { problems, normalized } = await validateChangeSet(
       noPool,
-      [{ kind: "brand_field", field: "project.name", to: "Somewhere" } as ChangeItem],
+      [{ kind: "role", act: "declare", role: "Seed Keeper" } as ChangeItem],
       effective,
       0,
     );
     expect(problems.length).toBe(1);
     expect(problems[0].problem).toContain("cannot yet carry out");
-    expect(problems[0].problem).toContain("brand_field");
+    expect(problems[0].problem).toContain("role");
     expect(normalized).toEqual([]);
+  });
+
+  it("takes a brand change to a vote, with where it starts from, and refuses what a vote may never write (Rye, 2026-11-06)", async () => {
+    const brand = { project: { name: "Larksfield", fiatCurrency: "EUR", apiKey: "" } };
+    const brandOf = () => brand;
+    const ok = await validateChangeSet(noPool, [{ kind: "brand_field", field: "project.name", to: "Larkfield" } as ChangeItem], effective, 0, undefined, { brandOf });
+    expect(ok.problems).toEqual([]);
+    expect(ok.normalized).toEqual([{ key: "brand:project.name", from: "Larksfield", to: "Larkfield", kind: "brand_field", field: "project.name" }]);
+    for (const [field, to] of [["project.fiatCurrency", "USD"], ["project.apiKey", "x"], ["project.nope", "x"], ["project.name", "Larksfield"]]) {
+      const refused = await validateChangeSet(noPool, [{ kind: "brand_field", field, to } as ChangeItem], effective, 0, undefined, { brandOf });
+      expect(refused.problems.length, `${field} -> ${to}`).toBe(1);
+      expect(refused.normalized).toEqual([]);
+    }
+    // Control: with no brand to read, nothing goes to a vote.
+    const blind = await validateChangeSet(noPool, [{ kind: "brand_field", field: "project.name", to: "Larkfield" } as ChangeItem], effective, 0);
+    expect(blind.problems[0].problem).toContain("cannot read the village's brand");
   });
 
   it("accepts one once the executor exists, which is the one line that lifts it", async () => {

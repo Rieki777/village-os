@@ -19,7 +19,7 @@ import {
   ROLE_APPLICATION,
   seatList,
   STATUS_WORDS,
-  VOTE_CANNOT_WORDS,
+  PROPOSAL_VOTE_WORDS,
   VOTE_DECIDES_WORDS,
   whoAdoptsWords,
 } from "./seatApplications";
@@ -135,12 +135,16 @@ describe("the words naming who adopts in this village (E8, Rye 2026-10-31)", () 
     expect(whoApprovesWords(f)).not.toContain("organisation power");
   });
 
-  it("once the village holds the power, the vote, with no circle line, and a proposal that changes roles waits", () => {
+  it("once the village holds the power, the vote, with no circle line, and a proposal that changes roles goes to it too (R164)", () => {
     const f = { villageHolds: true, heldLive: true, groups: [group("Steward Circle", ["Rye"])] };
     expect(whoAdoptsWords(f)).toBe(VOTE_DECIDES_WORDS);
     expect(whoApprovesWords(f)).toBe(VOTE_DECIDES_WORDS);
-    expect(whoAdoptsWords({ ...f, changesRoles: true })).toBe(VOTE_CANNOT_WORDS);
-    expect(whoApprovesWords({ ...f, changesRoles: true })).toBe(VOTE_CANNOT_WORDS);
+    expect(whoAdoptsWords({ ...f, changesRoles: true })).toBe(PROPOSAL_VOTE_WORDS.villageHolds);
+    expect(whoApprovesWords({ ...f, changesRoles: true })).toBe(PROPOSAL_VOTE_WORDS.villageHolds);
+    // Nobody but the candidate holds it: a proposal that changes roles goes to the vote the candidate opens.
+    const alone = { villageHolds: false, heldLive: true, groups: [group("Steward Circle", [])], changesRoles: true };
+    expect(whoAdoptsWords(alone)).toBe(PROPOSAL_VOTE_WORDS.nobodyElse);
+    expect(whoAdoptsWords({ ...alone, othersHoldLive: true }), "a holder the groups miss still adopts it").not.toBe(PROPOSAL_VOTE_WORDS.nobodyElse);
     // A proposal that changes roles reads the same as any other while a role holds the power.
     expect(whoAdoptsWords({ ...f, villageHolds: false, changesRoles: true })).toBe("Steward Circle (Rye) adopts it.");
   });

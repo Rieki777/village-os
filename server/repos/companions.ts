@@ -281,6 +281,14 @@ export async function questionsShownOn(pool: Q, companionId: string, dayKey: str
 }
 
 /** Questions shown to one member on one day, across every companion they have. */
+/** True when any of these addresses belongs to a member of this village, in any case. */
+export async function anyMemberAddress(pool: Q, addresses: readonly string[]): Promise<boolean> {
+  if (addresses.length === 0) return false;
+  const lower = addresses.map((a) => a.trim().toLowerCase());
+  const [rows] = await pool.query<RowDataPacket[]>(`SELECT 1 FROM users WHERE LOWER(email) IN (${lower.map(() => "?").join(", ")}) LIMIT 1`, lower);
+  return rows.length > 0;
+}
+
 export async function questionsShownToMemberOn(pool: Q, ownerUserId: string, dayKey: string): Promise<number> {
   const [[row]] = await pool.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n FROM companion_items WHERE owner_user_id = ? AND type = 'question' AND day_key = ? AND status <> 'held'",

@@ -39,9 +39,9 @@ import mysql from "mysql2/promise";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { anonymizeMember, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
-import { recordEvent } from "./events";
+import { recentEvents, recordEvent } from "./events";
 import { claimSeating, forgetDocumentedHolder, releaseSeatingsForUser, seatHolder } from "./orgChart";
-import { SEAT_JOURNAL_LINE } from "../repos/orgSeatErasure";
+import { markNameFreeJournalLinesPublic, SEAT_JOURNAL_LINE } from "../repos/orgSeatErasure";
 import { stageIndex } from "../../shared/gameConfig";
 import { usersRepo } from "../repos/users";
 import { erasureRecord } from "../repos/memberErasure";
@@ -59,6 +59,8 @@ let submissionsRepo: ReturnType<typeof dbCollection>;
 let handlers: Map<string, Handler>;
 /** Whoever the request is signed in as. Set per case. */
 let viewer: any = null;
+/** Whether that viewer is an admin. Off unless a case says so. */
+let viewerIsAdmin = false;
 /** The permission holdings the sweep reads and removes, by id. */
 let holders: Array<{ id: string; roleId: string; userId: string }> = [];
 /** Run once, at the last instant the member's sessions still live. */
@@ -177,7 +179,7 @@ describe.skipIf(!configured)("what a seat still held for a member who left", () 
     const members = usersRepo(pool);
     const { app, handlers: h } = collect();
     register(app, {
-      isAdmin: async () => false,
+      isAdmin: async () => viewerIsAdmin,
       authedUser: async () => viewer,
       // Every case here acts as a holder of org.seat, the power both doors ask.
       guardCapability: async () => true,
@@ -206,6 +208,7 @@ describe.skipIf(!configured)("what a seat still held for a member who left", () 
 
   beforeEach(() => {
     viewer = null;
+    viewerIsAdmin = false;
     holders = [];
     beforeTombstone = null;
   });
@@ -442,6 +445,89 @@ describe.skipIf(!configured)("what a seat still held for a member who left", () 
       expect(read.status, JSON.stringify(read.body)).toBe(200);
       expect(read.body.map((r: any) => r.text), "the line stays, so the seat's history does").toEqual([SEAT_JOURNAL_LINE.seated]);
       expect(JSON.stringify(read.body)).not.toMatch(/Maria|Lopez/);
+    });
+  });
+
+  // ── R103 ──────────────────────────────────────────────────────────────────
+  // The coordinator's ruling of 2026-11-05: the journal's name-free lines are
+  // public and the journal filters by audience; anything naming a person stays
+  // admin, and so does who wrote a line.
+  describe("R103: the journal a member reads", () => {
+    const read = async (id: string) => {
+      const r = await call("GET /api/org/:kind/:id/journal", { params: { kind: "roles", id } });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      return r.body as Array<{ text: string; by: string | null }>;
+    };
+
+    it("shows a member the seat's lines and never a name, and an admin every line with who wrote it", async () => {
+      await person("r103-wren", "Wren Halloway");
+      const water = await seat("r103-water", "Wren Halloway");
+      viewer = { id: "r103-wren", name: "Wren Halloway", email: "r103-wren@example.test" };
+      expect((await call("POST /api/org/seatings/:id/claim", { params: { id: water } })).status).toBe(200);
+      viewer = { id: "seat-steward", name: "Sam Steward" };
+      const confirmed = await call("POST /api/org/seatings/:id/claim/confirm", { params: { id: water }, body: { userId: "r103-wren" } });
+      expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(200);
+      // A line from before the names came out, and one an admin wrote in their own words.
+      await line("r103-water", "seated Wren Halloway", "seat-steward", "org");
+      await line("r103-water", "a holding ended: Wren moved to the coast", "seat-steward", "org");
+
+      viewer = { id: "r103-guest", name: "Gale Guest" };
+      const member = await read("r103-water");
+      expect(member.map((l) => l.text).sort()).toEqual([SEAT_JOURNAL_LINE.ask, SEAT_JOURNAL_LINE.confirm].sort());
+      expect(member.every((l) => l.by === null), "no line says who, to a member").toBe(true);
+      expect(JSON.stringify(member)).not.toMatch(/Wren|Halloway|Sam|Steward/);
+
+      viewerIsAdmin = true;
+      const admin = await read("r103-water");
+      expect(admin.map((l) => l.text)).toHaveLength(4);
+      expect(admin.find((l) => l.text === SEAT_JOURNAL_LINE.confirm)?.by).toBe("Sam");
+    });
+
+    it("re-marks the name-free lines written before the ruling, and leaves every line that named a person", async () => {
+      const seatId = "r103-old";
+      const kept = [
+        "seated Ada Lovelace",
+        'Ada asks to be confirmed as the holder recorded "Ada Lovelace"',
+        "a holding ended: Ada moved away",
+        "Old Bakers: renamed: Old Bakers -> Bakers",
+      ];
+      const freed = [
+        SEAT_JOURNAL_LINE.ask,
+        SEAT_JOURNAL_LINE.seated,
+        "seated a member",
+        "a holding ended",
+        "carried a holder across to the new chart",
+        "linked: feeds",
+        "role created: Bakers",
+      ];
+      for (const text of [...kept, ...freed]) await line(seatId, text, null, "org");
+      // An audit line on the same seat is never journal copy.
+      await recordEvent(pool, { kind: "audit", text: `org_role:groups:${seatId}:+g1:-none`, entityType: "org_role", entityRef: seatId, audience: "admin" });
+
+      expect(await markNameFreeJournalLinesPublic(pool)).toBeGreaterThanOrEqual(freed.length);
+      expect(await markNameFreeJournalLinesPublic(pool), "a second run finds nothing to do").toBe(0);
+      for (const r of await q("SELECT `text`, `audience` FROM `health_events` WHERE `entity_ref` = ?", [seatId])) {
+        expect(r.audience, String(r.text)).toBe(freed.includes(String(r.text)) ? "public" : "admin");
+      }
+      viewer = { id: "r103-guest2", name: "Gale Guest" };
+      expect((await read(seatId)).map((l) => l.text).sort()).toEqual([...freed].sort());
+    });
+
+    it("keeps a leaver's name-free lines through the erasure, and never puts them on the Pulse", async () => {
+      await person("r103-ash", "Ash Grey");
+      const fire = await seat("r103-fire", "Ash Grey");
+      viewer = { id: "r103-ash", name: "Ash Grey", email: "r103-ash@example.test" };
+      expect((await call("POST /api/org/seatings/:id/claim", { params: { id: fire } })).status).toBe(200);
+      // One of their Pulse lines, which the erasure does remove: the control.
+      await recordEvent(pool, { kind: "join", text: "Ash joined the village", actorUserId: "r103-ash", entityType: "user", entityRef: "r103-ash", audience: "public" });
+      const pulse = (await recentEvents(pool, "public", 500)).map((e) => e.text);
+      expect(pulse).toContain("Ash joined the village");
+      expect(pulse, "a seat journal's line is not village news").not.toContain(SEAT_JOURNAL_LINE.ask);
+
+      await erase("r103-ash");
+      viewer = { id: "r103-guest3", name: "Gale Guest" };
+      expect((await read("r103-fire")).map((l) => l.text), "the seat still says somebody asked").toContain(SEAT_JOURNAL_LINE.ask);
+      expect((await recentEvents(pool, "public", 500)).map((e) => e.text)).not.toContain("Ash joined the village");
     });
   });
 });

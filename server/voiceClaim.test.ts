@@ -47,6 +47,7 @@ import {
   settleVoiceClaim,
 } from "./lib/voiceClaim";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { loadSecrets, putSecret } from "./lib/secrets";
 
 const configured = testDbConfigured();
 
@@ -537,6 +538,27 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     expect(checkVoiceSecret({ HYPHA_VOICE_WEBHOOK_SECRET: "b".repeat(64) } as NodeJS.ProcessEnv)).toEqual({
       ok: true,
     });
+  });
+
+  it("refuses a voice secret borrowed from the session key or from a secret typed into Admin (R171)", async () => {
+    const shared = "c".repeat(64);
+    // The key member sessions are signed with, which the env list used to leave out.
+    expect(checkVoiceSecret({ HYPHA_VOICE_WEBHOOK_SECRET: shared, AUTH_TOKEN_SECRET: shared } as NodeJS.ProcessEnv)).toMatchObject({ ok: false, fatal: true });
+
+    // A hub secret that lives only in the store, as Admin, Integrations writes it.
+    const env = { HYPHA_VOICE_WEBHOOK_SECRET: shared, VILLAGE_SECRETS_KEY: "3c".repeat(32) } as NodeJS.ProcessEnv;
+    await loadSecrets(pool, env);
+    await putSecret(pool, "governance_hub_secret", shared, "voice-test", env);
+    try {
+      const verdict = checkVoiceSecret(env);
+      expect(verdict).toMatchObject({ ok: false, fatal: true });
+      expect((verdict as { error: string }).error).toContain("another secret this village holds");
+      // The control: the same store, a different hub secret, and the voice secret stands.
+      await putSecret(pool, "governance_hub_secret", "d".repeat(64), "voice-test", env);
+      expect(checkVoiceSecret(env)).toEqual({ ok: true });
+    } finally {
+      await putSecret(pool, "governance_hub_secret", "", "voice-test", env);
+    }
   });
 
   it("does not kill the boot over a space with no secret", async () => {

@@ -277,6 +277,15 @@ function walkDir(dir, out = []) {
 }
 
 const REFUSING = refusingRoutes();
+
+// A FLOOR ON WHAT WAS READ (R206). Reading no refusing routes would check no
+// client call and pass. 536 prefixes were read on 2026-11-05; the floor is half
+// that, and AUTH_FETCH_MIN moves it.
+const REFUSING_FLOOR = Number(process.env.AUTH_FETCH_MIN ?? 250);
+if (REFUSING.length < REFUSING_FLOOR) {
+  console.error(`::error::the auth guard read only ${REFUSING.length} refusing route prefix(es), under its floor of ${REFUSING_FLOOR}. It has stopped reading the server, so nothing was checked.`);
+  process.exit(1);
+}
 /** A client `*` stands for one path segment, exactly like an Express param. */
 const refuses = (route, method) =>
   REFUSING.find((r) => r.method === method && r.pattern.test(route.replace(/\*/g, "x")));

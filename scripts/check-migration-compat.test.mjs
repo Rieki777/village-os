@@ -439,6 +439,82 @@ if (!DB_URL) {
   }
 }
 
+// ── 12. A table phase 3 cannot seed FAILS; the seeder is taught, not skipped ──
+// #790 (2026-11-02) passed with member_gene_keys unseeded: every integer column
+// got 900000, calc_version is a smallint, and the old warning fired only when
+// EVERY named table was refused. Its ALTER was never tried against rows.
+if (DB_URL) {
+  // 12a. The member_gene_keys shape, a NOT NULL smallint and tinyint: seeded now, so green.
+  {
+    const repo = makeFixture();
+    try {
+      writeMigration(
+        repo,
+        "0001_a.sql",
+        "CREATE TABLE gk (user_id varchar(64) NOT NULL, calc_version smallint NOT NULL, sign tinyint NOT NULL, " +
+          "flag tinyint(1) NOT NULL DEFAULT 0, PRIMARY KEY (user_id));\n",
+      );
+      commitAll(repo, "base: 0001");
+      writeMigration(repo, "0002_signs.sql", "ALTER TABLE gk ADD COLUMN sun_sign tinyint NULL;\n");
+      const r = runJson(repo, []);
+      checkTrue("a smallint and a tinyint NOT NULL table is seeded", r.json?.seeded?.tables === 1, JSON.stringify(r.json?.seeded));
+      checkTrue("both rows went in, so a collapse onto one key could show", r.json?.seeded?.rows === 2, JSON.stringify(r.json?.seeded));
+      checkTrue("and the additive ALTER passes", r.status === 0, `status ${r.status}: ${r.stderr}`);
+    } finally {
+      cleanup(repo);
+    }
+  }
+  // 12b. A table no synthetic row satisfies: phase 3 fails and names it.
+  {
+    const repo = makeFixture();
+    try {
+      writeMigration(
+        repo,
+        "0001_a.sql",
+        "CREATE TABLE picky (id varchar(30) NOT NULL, n int NOT NULL, PRIMARY KEY (id), CONSTRAINT picky_neg CHECK (n < 0));\n" +
+          "CREATE TABLE easy (id varchar(30) NOT NULL, PRIMARY KEY (id));\n",
+      );
+      commitAll(repo, "base: 0001");
+      writeMigration(
+        repo,
+        "0002_add.sql",
+        "ALTER TABLE picky ADD COLUMN note varchar(80) NULL;\nALTER TABLE easy ADD COLUMN note varchar(80) NULL;\n",
+      );
+      const r = runJson(repo, []);
+      checkTrue("one unseedable table fails the run, even with another seeded", r.status === 1, `status ${r.status}`);
+      checkTrue(
+        "the failure names the table it could not seed",
+        (r.json?.seeded?.unseeded ?? []).map((u) => u.table).join(",") === "picky",
+        JSON.stringify(r.json?.seeded),
+      );
+      checkTrue("the other table was still seeded", r.json?.seeded?.tables === 1, JSON.stringify(r.json?.seeded));
+      checkTrue("the migration itself applied: the failure is the unseeded table alone", r.json?.applyError === null);
+    } finally {
+      cleanup(repo);
+    }
+  }
+  // 12c. A table the change CREATES needs no rows, and never fails for having none.
+  {
+    const repo = makeFixture();
+    try {
+      writeMigration(repo, "0001_a.sql", "CREATE TABLE keep_me (id varchar(30) NOT NULL, PRIMARY KEY (id));\n");
+      commitAll(repo, "base: 0001");
+      writeMigration(
+        repo,
+        "0002_new.sql",
+        "CREATE TABLE fresh (id varchar(30) NOT NULL, PRIMARY KEY (id));\nALTER TABLE fresh ADD COLUMN note varchar(80) NULL;\n",
+      );
+      const r = runJson(repo, []);
+      checkTrue("a brand new table, altered in the same change, passes", r.status === 0, `status ${r.status}: ${r.stderr}`);
+      checkTrue("and is not reported unseeded", (r.json?.seeded?.unseeded ?? []).length === 0, JSON.stringify(r.json?.seeded));
+    } finally {
+      cleanup(repo);
+    }
+  }
+} else {
+  skip("a table phase 3 cannot seed fails (scenario 12)", "TEST_DATABASE_URL not set");
+}
+
 // ── 11. The base ref comes from the scenario, never from the runner ─────────
 {
   const repo = makeFixture();

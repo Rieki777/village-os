@@ -93,3 +93,15 @@ describe("the names of the story pages in the menu and footer", () => {
     expect(words.menuChanged).toEqual(["/visit"]);
   });
 });
+
+describe("a title that carries a replacement pattern (R114)", () => {
+  it("is written as typed, never expanded into the page around it", () => {
+    // String.replace reads $&, $' and $` in a replacement STRING. A quest
+    // titled with one used to copy pieces of the shell into the head.
+    const meta = { ...sitePageMeta("/", "https://willow.example", config, null), title: "Save $& and $' and $` now" };
+    const out = spliceMeta(SHELL, meta);
+    expect(out).toContain("Save $&amp; and $' and $` now");
+    expect(out.match(/<\/head>/g)?.length).toBe(1);
+    expect(out.match(/<html>/g)?.length).toBe(1);
+  });
+});

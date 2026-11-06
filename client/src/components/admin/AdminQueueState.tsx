@@ -5,7 +5,7 @@
  * today and the queue is clear. A first visit with an empty queue says
  * nothing is waiting yet.
  */
-import { handledOnThisDevice } from "./adminQueueState";
+import { handledOnThisDevice } from "./adminQueueModel";
 
 const TAP = "inline-flex min-h-[44px] items-center justify-center rounded-lg px-4 text-base font-medium";
 

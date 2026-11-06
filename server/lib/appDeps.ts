@@ -348,10 +348,10 @@ export interface AppDeps {
   /**
    * The weight-mode snapshot the NEXT ballot would freeze.
    *
-   * Six lines over two game variables, and the one place that decides what a
-   * village's weight mode is. A route module that rebuilt it locally would be
-   * the second place, which is how a seat reads "equal" on one screen and
-   * "token" on the next.
+   * A reader over the weight dials (server/lib/governanceWeights.ts), and the
+   * one place that decides what a village's weight mode is. A route module
+   * that rebuilt it locally would be the second place, which is how a seat
+   * reads "equal" on one screen and "token" on the next.
    */
   weightModeNow(): WeightModeSnapshot;
 

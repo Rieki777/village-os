@@ -90,9 +90,15 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { stripComments } from "./brand-strip.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const flagValue = (name) => {
+  const i = process.argv.indexOf(name);
+  return i !== -1 ? process.argv[i + 1] : undefined;
+};
+// `--root` and `--baseline` exist for the self-test (readiness R209), so the
+// gate and its write path run against a fixture and never this tree's files.
+const ROOT = path.resolve(flagValue("--root") ?? path.join(path.dirname(fileURLToPath(import.meta.url)), ".."));
 const SCAN_ROOT = path.join(ROOT, "client", "src");
-const BASELINE_PATH = path.join(ROOT, "scripts", "theme-literals-baseline.json");
+const BASELINE_PATH = flagValue("--baseline") ? path.resolve(flagValue("--baseline")) : path.join(ROOT, "scripts", "theme-literals-baseline.json");
 
 const rel = (p) => path.relative(ROOT, p).split(path.sep).join("/");
 
@@ -565,6 +571,24 @@ if (process.argv.includes("--update-baseline")) {
       `This number only ever falls. Route the new colour through a --tone-* var or a token-backed Tailwind class ` +
       `(see client/src/index.css's @theme inline block), or wrap a genuine one-off in var(--something, #literal) so ` +
       `it is at least a fallback rather than a dead end.`);
+    process.exit(1);
+  }
+  // PER FILE, NOT ONLY THE TOTAL (readiness R205). The gate below is per file,
+  // and this write path compared totals alone, so a fall in one file recorded
+  // a NEW hit in another as allowed and printed "lowered". sql-burndown.mjs
+  // closed the same hole in 2026-09.
+  const recorded = baseline ? (baseline.files ?? baseline) : null;
+  const rising = recorded
+    ? Object.entries(counts)
+        .filter(([file, n]) => n > (recorded[file] ?? 0))
+        .map(([file, n]) => `${file}: ${n}, the baseline allows ${recorded[file] ?? 0}`)
+    : [];
+  if (rising.length) {
+    console.error(
+      `::error::refusing to write the theme-literal baseline: ${rising.length} file(s) are above their recorded number, ` +
+        `so writing now would record them as allowed. The baseline only ever falls per file; a fall elsewhere does ` +
+        `not buy this.\n    ${rising.join("\n    ")}`,
+    );
     process.exit(1);
   }
   fs.writeFileSync(

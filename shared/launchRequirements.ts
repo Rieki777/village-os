@@ -90,6 +90,20 @@ export interface LaunchRequirement {
    * does not carry this, so the registry decides and nothing else can.
    */
   declinable?: boolean;
+  /**
+   * A precondition only the HOST can clear, which the launch vote may carry
+   * open (the coordinator, 2026-11-06, under Rye's rule that nothing is stuck
+   * without a vote path). A vote cannot set an environment variable, so a
+   * village whose host never sets it would otherwise never be asked. Such a
+   * row stays on the journey, open and counted, and stops holding the vote;
+   * the launch document names it. The launch vote is unanimous by its subject
+   * (`VILLAGE_LAUNCH`, 100/100), so it already sits at the highest tier.
+   *
+   * Only for a row whose absence the platform survives. `session-secret` is
+   * NOT one: no vote makes sessions survive a restart, so it stays a host-only
+   * precondition (the same ruling, option a).
+   */
+  carriedByVote?: boolean;
 }
 
 /**
@@ -592,6 +606,34 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     checkKey: "session-secret",
     // An environment variable, so no screen in the village can set it. The
     // Integrations tab this used to open cannot, and said nothing of the kind.
+    fixAt: `${FORK_RUNBOOK_URL}#environment-variables`,
+    fixLabel: "How to set it on your host",
+    runbookAnchor: "env",
+  },
+  {
+    id: "site-address",
+    group: "reach",
+    title: "Tell the server its own address",
+    /*
+     * BLOCKING, by the coordinator's ruling on readiness R108 (2026-11-05).
+     * Without FRONTEND_URL the server learns its address from the first
+     * request it answers, and every set-password link it emails sits on
+     * that. It no longer believes X-Forwarded-Host for this, but a village
+     * should not launch on a guess at all. Launched villages are unaffected:
+     * `launchedAt` is written by the launch ballot and never derived from
+     * this list, so the row only holds a village's launch vote until it says
+     * where it lives.
+     */
+    why:
+      "Every link this village emails is built on FRONTEND_URL: set-password links, invitations, sign-in letters. " +
+      "Without it the server guesses its address from the first request it answered, and a stranger can be first. " +
+      "Set FRONTEND_URL to the address members use, such as https://village.example.org, with no quotes, then redeploy.",
+    severity: "blocking",
+    checkKey: "site-address",
+    // Emailed links still work from the address the server learns, so the
+    // launch vote may carry this open (coordinator 2026-11-06, option b).
+    carriedByVote: true,
+    // An environment variable, so the host's own settings are the door.
     fixAt: `${FORK_RUNBOOK_URL}#environment-variables`,
     fixLabel: "How to set it on your host",
     runbookAnchor: "env",

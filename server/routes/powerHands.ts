@@ -107,6 +107,7 @@ import type { WeightModeSnapshot } from "../lib/governanceWeights";
 import { seatVoteLandsAt } from "../lib/seatTermLanding";
 import { STEWARD_VETO } from "../lib/stewardship";
 import { freezeSeatTerm } from "../repos/ballotSeatTerms";
+import { deadlineInVillage } from "../lib/villageReaders"; // R134: a deadline in the village's own zone
 
 /**
  * WHAT ONE DOOR HANDS THE OTHER. `registerSeatVote` returns `openSeatVote`,
@@ -718,7 +719,7 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): OpenSeatVote
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked whether ${firstName(member.name)} sits in ${who}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}.`,
       keySuffix: "open",
       except: [user.id],
       roll: setup.electorate.map((e) => e.userId),

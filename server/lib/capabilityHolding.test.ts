@@ -16,6 +16,7 @@ import {
   assertCapabilityHoldingInvariants,
   capabilityHoldings,
   moveCapabilityToVillage,
+  reservedRoleIdRefusal,
   returnCapabilityToScaffolding,
   STEWARD_ROLE_ID,
   villageHandoverState,
@@ -295,5 +296,14 @@ describe.skipIf(!configured)("capability holding", () => {
       expect(state.held).not.toContain("message.send");
       expect(state.total).toBe(HANDOVER_SET.length);
     });
+  });
+});
+
+describe("a role made from a typed name never takes a seat's id (R159)", () => {
+  it("refuses the founding seat's id, and says what to do instead", () => {
+    expect(reservedRoleIdRefusal(STEWARD_ROLE_ID)).toMatch(/another name/);
+  });
+  it("lets every other role id through, a steward circle included", () => {
+    for (const id of ["steward-circle", "stewards", "game-steward", "treasurer"]) expect(reservedRoleIdRefusal(id)).toBeNull();
   });
 });

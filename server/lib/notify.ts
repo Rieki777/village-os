@@ -335,6 +335,11 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
       return "immediate";
     case "payments_alert":
       return "immediate"; // ops: sig-fails and disputes cannot wait for a digest
+    // The whole village's database left through the admin-password export
+    // (server/routes/villageExport.ts). Told the same hour: an admin or steward
+    // who did not do it needs to know today, while changing the password helps.
+    case "village_export":
+      return "immediate";
     // The failed-actions report, at most once a day. Daily and not immediate on
     // purpose: the failures that cannot wait already alert on their own
     // (payments_alert for a refused signature or a dispute, reportError for a
