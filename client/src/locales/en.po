@@ -1,0 +1,40 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-11-06 11:16-0800\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: en\n"
+
+#: client/src/components/Layout.tsx
+msgid "Sign in"
+msgstr "Sign in"
+
+#: client/src/components/Layout.tsx
+msgid "Open menu"
+msgstr "Open menu"
+
+#: client/src/components/Layout.tsx
+msgid "Skip to content"
+msgstr "Skip to content"
+
+#: client/src/components/Layout.tsx
+msgid "Sign out everywhere"
+msgstr "Sign out everywhere"
+
+#: client/src/components/Layout.tsx
+msgid "Close menu"
+msgstr "Close menu"
+
+#: client/src/components/Layout.tsx
+msgid "Main Site"
+msgstr "Main Site"
+
+#: client/src/components/Layout.tsx
+msgid "Your account, {firstName}"
+msgstr "Your account, {firstName}"
+
+#: client/src/components/Layout.tsx
+msgid "Sign in or join"
+msgstr "Sign in or join"
