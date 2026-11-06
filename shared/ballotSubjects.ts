@@ -279,6 +279,20 @@ export const ORG_DRAFT = "org_draft";
  */
 export const MINT_REQUEST = "mint_request";
 
+/**
+ * A MEMBER'S SUGGESTED EDIT TO AN ADMIN CONTROL, decided by the village
+ * (ROLE_POWERS_DESIGN.md §4.5). Opened when the village holds the power behind
+ * the control or nobody does, when a holder sends a suggestion to a vote, or
+ * when the suggester raises one that waited 14 days. `subject_ref` is the
+ * suggestion id in `assistant_drafts`. Carried, the closer applies the edit
+ * through the same function the direct route calls (server/lib/adminSuggestions.ts).
+ *
+ * Priced like ORG_DRAFT: a holder of the power could make the same edit with
+ * no vote at all, so the vote asks the village's own bar and no more. Absent
+ * from `KIND_FOR_SUBJECT`, so it is a Game change that waits its window.
+ */
+export const ADMIN_EDIT = "admin_edit";
+
 export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
   [VILLAGE_LAUNCH]: {
     minUnityPct: 100,
@@ -465,6 +479,13 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
     minElectorate: 0,
     criticality: "routine",
     why: "A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.",
+  },
+  [ADMIN_EDIT]: {
+    minUnityPct: 0,
+    minQuorumPct: 0,
+    minElectorate: 0,
+    criticality: "routine",
+    why: "A suggested change to one admin control asks whatever this village asks of any decision. A holder of the power could make it without a vote, so the vote is not priced above the village's own bar.",
   },
   [MINT_REQUEST]: {
     ...tierFloors("structural"),
