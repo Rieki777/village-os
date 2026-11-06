@@ -103,7 +103,7 @@ export const AFTER_LAUNCH_ON =
  * holder nothing could ever turn it back on.
  */
 export const GOVERNANCE_PAUSE_STRANDS =
-  "Nobody holds the power to switch modules, so if governance went quiet nothing could turn it back on: the vote that would do it runs on governance. Seat somebody who looks after modules first.";
+  "Nobody holds the power to switch modules, so if governance went quiet nothing could turn it back on: the vote that would do it runs on governance. The village can hand that power to a role by vote first.";
 
 /**
  * May this actor move this module from `from` to `to`?
