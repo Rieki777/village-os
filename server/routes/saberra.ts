@@ -105,7 +105,7 @@ import { villageTimezone } from "../lib/villageReaders";
  * way every other route here does.
  */
 type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser"> &
-  Partial<Pick<AppDeps, "mayStillSee" | "overLimit" | "members">> & {
+  Partial<Pick<AppDeps, "mayStillSee" | "overLimit" | "members" | "lapseContext">> & {
     /** The holder reads the count's "who decides" needs (review S2). Without them the count says nothing about it. */
     deciders?: Deciders;
   };
@@ -128,7 +128,9 @@ function addressSet(): boolean {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, deciders } = deps;
+  const { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, deciders, lapseContext } = deps;
+  // The lapse context, so a lapsed holder is never named in a sentence (review N5).
+  const read = () => readDifferences(getPool(), Date.now(), lapseContext?.());
 
   // The pool is read when the job RUNS, never when it is registered: this runs
   // during boot, before the pool is guaranteed to be the one the village uses.
@@ -336,7 +338,7 @@ export function register(app: Express, deps: Deps): void {
       return res.status(429).json(TOO_MANY);
     }
     try {
-      const count = countAnswer(await readDifferences(getPool()));
+      const count = countAnswer(await read());
       // Who decides and who sets pay, by the holder test: role names and first names only (S2).
       const doors = deciders && members ? await doorsNow(getPool(), deciders, members) : { decides: null, paySetBy: null };
       res.json({ ...count, ...doors });
@@ -365,9 +367,9 @@ export function register(app: Express, deps: Deps): void {
     }
     try {
       const cfg = (moduleConfig(MODULE_ID) as Record<string, unknown> | null) ?? {};
-      const read = await readDifferences(getPool());
+      const listed = await read();
       const waiting = await waitingChartProposals(getPool(), MODULE_ID);
-      res.json(listAnswer(read, { agent: saberraAgentName(), dashboard: cfg.dashboardUrl, timeZone: villageTimezone(), waiting }));
+      res.json(listAnswer(listed, { agent: saberraAgentName(), dashboard: cfg.dashboardUrl, timeZone: villageTimezone(), waiting }));
     } catch {
       res.status(500).json({ error: "Could not read the differences." });
     }

@@ -13,12 +13,13 @@
  * The door a decision goes through:
  *   holders  the live holders, by role in the house form "Role (FirstName)",
  *            at most three roles and `more` beside; `stewards` when the steward
- *            role is among them; `others` holders no role names (a badge);
+ *            role is among them; `others` holders no role names; `admins` before
+ *            launch, when the admin panel holds the door beside them;
  *   admins   before launch, with nobody holding the power: the admin panel;
  *   vote     after launch, with the door open to nobody: the village decides.
  */
 export type Door =
-  | { by: "holders"; labels: string[]; more: number; stewards: boolean; others: number }
+  | { by: "holders"; labels: string[]; more: number; stewards: boolean; others: number; admins: boolean }
   | { by: "admins" }
   | { by: "vote" };
 
@@ -37,8 +38,14 @@ function parts(d: Extract<Door, { by: "holders" }>, prefix: string): { words: st
   if (d.more > 0 && words.length) words[words.length - 1] += ` +${d.more}`;
   if (d.others > 0) words.push(d.others === 1 ? "1 member" : `${d.others} members`);
   if (d.stewards) words.push("the stewards");
-  return { words, one: words.length === 1 && d.labels.length === 1 && d.more === 0 };
+  if (d.admins) words.push("the admins");
+  // One role with nobody beside it, or one member: a singular verb (review N4).
+  const one = words.length === 1 && ((d.labels.length === 1 && d.more === 0) || (d.labels.length === 0 && d.others === 1));
+  return { words, one };
 }
+
+/** Until the village launches, the admins' share of the door ends at launch. */
+const untilLaunch = (d: Extract<Door, { by: "holders" }>): string => (d.admins ? " until the village launches" : "");
 
 /** Who decides what waits, for a count of `n`. */
 export function whoDecidesWords(d: Door, n: number): string {
@@ -46,7 +53,7 @@ export function whoDecidesWords(d: Door, n: number): string {
   if (d.by === "vote") return NO_HOLDER_WORDS;
   if (d.by === "admins") return `The admins decide ${it} until the village launches.`;
   const p = parts(d, "");
-  return cap(`${listOf(p.words)} ${p.one ? "decides" : "decide"} ${it}.`);
+  return cap(`${listOf(p.words)} ${p.one ? "decides" : "decide"} ${it}${untilLaunch(d)}.`);
 }
 
 /** Who sets pay: "The Treasurer (Rick) sets pay." */
@@ -54,7 +61,7 @@ export function whoSetsPayWords(d: Door): string {
   if (d.by === "vote") return NO_PAY_HOLDER_WORDS;
   if (d.by === "admins") return "The admins set pay until the village launches.";
   const p = parts(d, "the ");
-  return cap(`${listOf(p.words)} ${p.one ? "sets" : "set"} pay.`);
+  return cap(`${listOf(p.words)} ${p.one ? "sets" : "set"} pay${untilLaunch(d)}.`);
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -71,5 +78,6 @@ export function readDoor(v: unknown): Door | null {
     more: n(v.more),
     stewards: v.stewards === true,
     others: n(v.others),
+    admins: v.admins === true,
   };
 }

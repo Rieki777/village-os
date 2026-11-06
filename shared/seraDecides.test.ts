@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { NO_HOLDER_WORDS, NO_PAY_HOLDER_WORDS, whoDecidesWords, whoSetsPayWords, type Door } from "./seraDecides";
 
-const holders = (over: Partial<Extract<Door, { by: "holders" }>> = {}): Door => ({ by: "holders", labels: [], more: 0, stewards: false, others: 0, ...over });
+const holders = (over: Partial<Extract<Door, { by: "holders" }>> = {}): Door => ({ by: "holders", labels: [], more: 0, stewards: false, others: 0, admins: false, ...over });
 
 describe("who decides", () => {
   it("names the roles that hold the power, in the house form", () => {
@@ -29,6 +29,18 @@ describe("who decides", () => {
     expect(whoDecidesWords({ by: "admins" }, 5)).toBe("The admins decide them until the village launches.");
     expect(whoDecidesWords({ by: "vote" }, 5)).toBe(NO_HOLDER_WORDS);
     expect(NO_HOLDER_WORDS).toBe("Nobody holds the power to decide these right now, so the village decides by vote.");
+  });
+});
+
+describe("who decides, the plain cases (N4)", () => {
+  it("says one member decides, never one member decide", () => {
+    expect(whoDecidesWords(holders({ others: 1 }), 5)).toBe("1 member decides them.");
+    expect(whoDecidesWords(holders({ others: 2 }), 5)).toBe("2 members decide them.");
+  });
+
+  it("says the admins hold the door too before launch, until the village launches", () => {
+    expect(whoDecidesWords(holders({ labels: ["Ops lead (Rye)"], admins: true }), 5)).toBe("Ops lead (Rye) and the admins decide them until the village launches.");
+    expect(whoSetsPayWords(holders({ labels: ["Treasurer (Rick)"], admins: true }))).toBe("The Treasurer (Rick) and the admins set pay until the village launches.");
   });
 });
 
