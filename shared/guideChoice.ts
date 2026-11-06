@@ -74,6 +74,19 @@ export function parseGuideId(v: unknown): GuideId | null {
 }
 
 /**
+ * The guide a member's PERSONAL companion speaks through (Rye, 2026-11-06: it
+ * follows the member's own chosen guide, never the village's). PURE.
+ *
+ * The member's choice, kept even while that guide cannot answer, since the
+ * companion's page says when the other one answers for it. With no choice, the
+ * rule every guide surface follows (resolveGuide): the outside agent when it
+ * can answer, the village guide otherwise.
+ */
+export function companionGuideOf(stored: unknown, outsideCanAnswer: boolean): GuideId {
+  return parseGuideId(stored) ?? (outsideCanAnswer ? "saberra" : "village");
+}
+
+/**
  * Who answers, given the member's choice and what is reachable. PURE.
  *
  * The chosen guide when it can answer. Otherwise the other one, with a
