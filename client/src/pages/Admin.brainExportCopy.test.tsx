@@ -41,9 +41,9 @@ describe("the Brain tab's sentence about the canvas export", () => {
     const line = (await screen.findByText(/A member may export the canvas/)).textContent ?? "";
     // The Setup Studio sends admin rows to the model provider, so no sentence here may promise they stay.
     expect(line).not.toMatch(/leaves? this village/);
-    expect(Object.keys(NAMED_AS).sort()).toEqual([...ADMIN_ONLY_BRIEF_SECTIONS].sort());
+    expect(Object.keys(NAMED_AS).sort()).toEqual(Array.from(ADMIN_ONLY_BRIEF_SECTIONS).sort());
     const never = line.slice(line.indexOf("never"));
-    for (const section of ADMIN_ONLY_BRIEF_SECTIONS) expect(never, section).toContain(NAMED_AS[section]);
+    for (const section of Array.from(ADMIN_ONLY_BRIEF_SECTIONS)) expect(never, section).toContain(NAMED_AS[section]);
     expect(never).toContain("anything kept to admins");
   });
 });
