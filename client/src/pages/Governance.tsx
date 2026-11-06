@@ -1,6 +1,7 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
 import LiveDecisionsBand from "@/components/governance/LiveDecisionsBand";
+import VillageAgreements from "@/components/governance/VillageAgreements";
 import { lazy, Suspense } from "react";
 import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
 import { useModuleOn } from "@/modules/ModuleProvider";
@@ -128,6 +129,10 @@ export default function Governance() {
           governance while the village was holding a vote they never saw. The
           band renders nothing where the engine is off. */}
       <LiveDecisionsBand />
+
+      {/* The agreements the village adopted, for members (W4-agreements-no-page).
+          Renders nothing to a visitor or while governance is off. */}
+      <VillageAgreements />
 
       {/* The canvas, one public line per block. Visitors read the lines; a
           signed-in member also opens the words kept for members. */}

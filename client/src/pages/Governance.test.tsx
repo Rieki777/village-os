@@ -59,6 +59,7 @@ vi.mock("@/components/Layout", () => ({
 }));
 // The live ballots are the village's real votes, not page words.
 vi.mock("@/components/governance/LiveDecisionsBand", () => ({ default: () => null }));
+vi.mock("@/components/governance/VillageAgreements", () => ({ default: () => null }));
 // The real module but for the config, so the canvas sections' authToken reads an empty store.
 vi.mock("@/lib/gameApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/gameApi")>()),
