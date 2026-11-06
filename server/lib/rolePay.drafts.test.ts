@@ -20,6 +20,7 @@ import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { createOrgRole, listOrgRoles } from "./orgChart";
 import { addChange, createDraft, previewDraft, publishDraft, revertDraft } from "./orgDrafts";
+import { orgDraftCloser, putDraftToVillage } from "./orgDraftDecide";
 
 const configured = testDbConfigured();
 let db: TestDb;
@@ -44,12 +45,30 @@ describe.skipIf(!configured)("a role's pay rides an org draft a member wrote", (
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    for (const name of ["Pay Human Seat", "Pay Vendor Seat", "Pay Bad Seat", "Pay Revert Seat"]) await createOrgRole(pool, { name });
+    for (const name of ["Pay Human Seat", "Pay Vendor Seat", "Pay Bad Seat", "Pay Revert Seat", "Pay Vote Seat"]) await createOrgRole(pool, { name });
   }, 180_000);
 
   afterAll(async () => {
     await pool?.end();
     await db?.drop();
+  });
+
+  it("goes to the village: put to a vote, carried, and the role's value_minor changes (the vote path the engine names, 0.4)", async () => {
+    const id = await draftWith("human", "pay-vote-seat", { valueMinor: 4321000, valueTokens: [] });
+    const opened = await putDraftToVillage(pool, {
+      draftId: id,
+      openedBy: "u-member",
+      why: "village" as any,
+      setup: { method: "majority", dials: { unityPct: 50, quorumPct: 0 }, snapshot: { mode: "equal", token: null } as any, tokenProblem: null, electorate: [{ userId: "u-member", weight: 1 }], durationDays: 7 },
+    });
+    expect(opened.ok, !opened.ok ? JSON.stringify(opened.body) : "").toBe(true);
+    if (!opened.ok) return;
+    // What a carried org_draft vote runs at its close.
+    const closer = orgDraftCloser({ pool, reloadCircles: async () => {}, notify: async () => {}, seasonState: () => ({ current: null, seasons: [], timezone: "UTC" }) });
+    const done = await closer.execute(opened.ballot, "u-member");
+    expect(done.held, String(done.held)).toBeNull();
+    expect(done.applied).toEqual([`org_draft:${id}`]);
+    expect((await roleOf("pay-vote-seat")).valueMinor).toBe(4321000);
   });
 
   it("previews clean, publishes, and writes the role's worth, tokens and cash in the village's currency", async () => {
