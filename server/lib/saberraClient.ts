@@ -78,6 +78,34 @@ export function callSignal(o: Pick<ClientOptions, "timeoutMs" | "signal">): Abor
   return parts.length === 1 ? parts[0] : AbortSignal.any(parts);
 }
 
+/**
+ * The most of one reply a call reads (R169). A real page of records is a few
+ * hundred kilobytes. A stream that keeps coming past this is a stall or a
+ * mistake, and reading it whole held the sync lock for as long as it ran.
+ */
+export const MAX_REPLY_BYTES = 8 * 1024 * 1024;
+
+/** The reply's text, or null once it passes MAX_REPLY_BYTES, the rest unread. */
+async function readCapped(res: Response): Promise<string | null> {
+  const declared = Number(res.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > MAX_REPLY_BYTES) return null;
+  if (!res.body) return res.text();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_REPLY_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 /** Every way a call comes back with nothing, each one named. */
 export type CallFailure = { ok: false; why: "no-session" | "refused" | "unreadable" | "vendor-error"; detail: string };
 
@@ -257,7 +285,11 @@ async function request(
 
   let body: string;
   try {
-    body = await res.text();
+    const text = await readCapped(res);
+    if (text === null) {
+      return { ok: false, why: "refused", detail: `the reply was larger than ${MAX_REPLY_BYTES / (1024 * 1024)} MB, so it was not read` };
+    }
+    body = text;
   } catch (e) {
     return { ok: false, why: "refused", detail: clip(e instanceof Error ? e.message : String(e)) };
   }
