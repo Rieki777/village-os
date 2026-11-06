@@ -92,6 +92,18 @@ describe("the launch proposal's frozen document", () => {
     );
   });
 
+  it("names the admin doors the launch closes, on modules and the org chart, and who holds them after (R166)", () => {
+    const section = (doc: string) => doc.split("## What changes when this carries")[1].split("## ")[0];
+    const empty = section(launchProposalDoc(BASE));
+    expect(empty, "turning a module on leaves the admin panel").toContain("An admin can no longer turn a module on directly.");
+    expect(empty, "the valve that stays is said too").toContain("An admin can still pause a module or turn one off");
+    expect(empty, "the org chart's door closes").toContain("An admin can no longer publish a change to the org chart directly.");
+    expect(empty, "with nobody named, the vote is the door").toContain("Nobody holds those two powers after this vote, so both go to a village vote");
+    const named = section(launchProposalDoc({ ...BASE, slate: [{ id: "u1", name: "Wren" }, { id: "u2", name: "Ida" }] }));
+    expect(named, "with a slate, whoever accepts holds both").toContain("Whoever on the list below accepts the steward role holds both powers");
+    expect(named).not.toContain("Nobody holds those two powers");
+  });
+
   it("keeps every sentence the launch document already carried", () => {
     /*
      * The regression this extraction could have caused. The document moved out
