@@ -21,7 +21,7 @@
 /** `GET /api/admin/...` as Express registers it, to why it is safe for every member. */
 export const MEMBER_READABLE_ADMIN_GETS: Readonly<Record<string, string>> = {
   "/api/admin/capabilities/holding":
-    "Which powers the village holds, which groups carry what and how many hold each. Role-level only; no person is named.",
+    "Which powers the village holds, which groups carry what and how many hold each. Role-level only: the removal warning, keyed by account, is left out for a member.",
   "/api/admin/org/drafts":
     "The village's reorganisation drafts. Anyone may propose a change to the structure (Rye, 2026-09-24), so the drafts are the village's business.",
   "/api/admin/org/drafts/:id/preview": "What one reorganisation draft would change, role by role.",

@@ -13075,7 +13075,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       roles: rolesRepo.all().map((r: any) => ({
         id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadPowerHoldings(), r.id),
       })),
-      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()), // Power groups: the removal warning
+      // The removal warning is keyed by the sole holder's account id, so a member reader (Q5, no adminUser) gets none of it.
+      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: adminActor(req) ? await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()) : {}, // Power groups: the removal warning
     });
   });
 

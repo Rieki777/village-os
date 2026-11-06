@@ -518,6 +518,8 @@ describe.skipIf(!DB_CONFIGURED)("Q5: every member may READ the admin routes the 
     const holding = await call("GET", "/api/admin/capabilities/holding", undefined, ottoToken);
     expect(holding.status, holding.text).toBe(200);
     expect(Array.isArray(holding.json.powers)).toBe(true);
+    // The removal warning names accounts, so a member reader gets none of it; the admin still does.
+    expect(holding.json.leftEmptyByRemoval).toEqual({});
     expect((await call("GET", "/api/admin/org/drafts", undefined, ottoToken)).status).toBe(200);
     expect((await call("GET", "/api/admin/org/expiring", undefined, ottoToken)).status).toBe(200);
   });
