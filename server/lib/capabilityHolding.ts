@@ -82,6 +82,19 @@ export async function villageHeldCapabilities(pool: Pool): Promise<string[]> {
  */
 export const STEWARD_ROLE_ID = "steward";
 
+/**
+ * A village role made from a typed name never takes a seat's reserved id (R159).
+ * Both doors that turn a name into a role id (a structure draft accepted, a
+ * role the village declares) ask this first: the launch adopts a `steward` row
+ * as the founding seat, holders and all, so a role a member named "Steward"
+ * would hand its holders the veto and every power the launch moves.
+ */
+export function reservedRoleIdRefusal(id: string): string | null {
+  return id === STEWARD_ROLE_ID
+    ? "Steward is the seat the village fills when it starts its Game, so a role made here cannot take that name. Give this role another name, such as Steward Circle."
+    : null;
+}
+
 /** Where this village has got to in moving power out of the founding seat. */
 export interface VillageHandoverState {
   /** No power in `HANDOVER_SET` is still held by the founding steward seat. */
