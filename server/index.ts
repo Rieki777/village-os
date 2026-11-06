@@ -901,6 +901,7 @@ import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
 import { precompressedAssets } from "./lib/precompressedAssets";
 import { memberFirstName } from "../shared/memberFirstName";
+import { exportCanvasForMember } from "./lib/canvasExport";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -25246,6 +25247,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       geneKeys: await exportMemberGeneKeys(pool, user.id), // their saved Gene Keys result and settings; no birth data exists to export (server/lib/geneKeys.ts)
       memberTasks: await exportMemberTasks(pool, user.id), // their own list, private detail and tombstones included (server/repos/memberTasks.ts)
       moonReviews: await exportMoonReviews(pool, user.id), // their moon recaps, items, invoices, pay route and review events (server/repos/moonRecaps.ts)
+      canvas: await exportCanvasForMember(pool, user.id), // canvas suggestions, decisions, readings, matrix rows, ombuds asks and agreement proposals (server/lib/canvasExport.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *
