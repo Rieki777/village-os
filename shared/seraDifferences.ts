@@ -576,20 +576,32 @@ function settle(out: Matching, tentative: Map<string, Array<{ pk: string; via: M
   for (const m of Array.from(out.byPage.values())) out.claimed.add(m.ourId);
 }
 
-/** The page ids it answered to before: a page id still sent is the same subject, whatever its name says now. */
-function matchEarlier(out: Matching, records: readonly SnapshotRecord[], earlier: ReadonlyMap<string, string>, exists: (id: string) => boolean): void {
+/**
+ * The page ids it answered to before: a page id still sent is the same subject,
+ * whatever its name says now. One whose name still names that subject is
+ * matched by name or alias, as it was then (review C3): only a name that moved
+ * since is a match under an older name, and only that one is checked for a
+ * rename.
+ */
+function matchEarlier(
+  out: Matching,
+  records: readonly SnapshotRecord[],
+  earlier: ReadonlyMap<string, Match>,
+  exists: (id: string) => boolean,
+  byName: (rec: SnapshotRecord, ourId: string) => MatchVia | null,
+): void {
   const taken = new Set(Array.from(out.byPage.values()).map((m) => m.ourId));
   for (const rec of records) {
     const pk = pageKey(rec.id);
     if (out.byPage.has(pk)) continue;
-    const ourId = earlier.get(pk);
+    const ourId = earlier.get(pk)?.ourId;
     if (!ourId || !exists(ourId)) continue;
     out.claimed.add(ourId);
     if (taken.has(ourId)) {
       out.wasOurs.set(pk, ourId);
       continue;
     }
-    out.byPage.set(pk, { ourId, via: "earlier" });
+    out.byPage.set(pk, { ourId, via: byName(rec, ourId) ?? "earlier" });
     taken.add(ourId);
   }
 }
@@ -599,7 +611,7 @@ function matchRoles(
   roles: readonly LiveRoleIn[],
   norm: Normaliser,
   links?: Readonly<Record<string, string>>,
-  earlier: ReadonlyMap<string, string> = new Map(),
+  earlier: ReadonlyMap<string, Match> = new Map(),
 ): Matching {
   const out = emptyMatching();
   const byId = new Map(roles.map((r) => [r.id, r]));
@@ -613,7 +625,10 @@ function matchRoles(
     const hit = seatIdsFor(rec.id).find((id) => byId.has(id));
     if (hit) out.byPage.set(pk, { ourId: hit, via: "pageId" });
   }
-  matchEarlier(out, records, earlier, (id) => byId.has(id));
+  matchEarlier(out, records, earlier, (id) => byId.has(id), (rec, ourId) => {
+    const name = textOf(rec, F.roleName, norm);
+    return name !== null && seatNameKey(name) === seatNameKey(byId.get(ourId)?.name) ? "name" : null;
+  });
   const taken = new Set(Array.from(out.byPage.values()).map((m) => m.ourId));
   const tentative = new Map<string, Array<{ pk: string; via: MatchVia }>>();
   for (const rec of records) {
@@ -640,7 +655,7 @@ function matchCircles(
   circles: readonly LiveCircleIn[],
   norm: Normaliser,
   links?: Readonly<Record<string, string>>,
-  earlier: ReadonlyMap<string, string> = new Map(),
+  earlier: ReadonlyMap<string, Match> = new Map(),
 ): Matching {
   const out = emptyMatching();
   const byId = new Map(circles.map((c) => [c.id, c]));
@@ -648,7 +663,11 @@ function matchCircles(
     const linked = linkFor(links, rec.id);
     if (linked && byId.has(linked)) out.byPage.set(pageKey(rec.id), { ourId: linked, via: "link" });
   }
-  matchEarlier(out, records, earlier, (id) => byId.has(id));
+  matchEarlier(out, records, earlier, (id) => byId.has(id), (rec, ourId) => {
+    const name = textOf(rec, F.circleName, norm);
+    if (name === null || !circlesNamed(name, circles).includes(ourId)) return null;
+    return fold(byId.get(ourId)?.name ?? "") === fold(name) ? "name" : "alias";
+  });
   const taken = new Set(Array.from(out.byPage.values()).map((m) => m.ourId));
   const tentative = new Map<string, Array<{ pk: string; via: MatchVia }>>();
   for (const rec of records) {
@@ -678,19 +697,20 @@ function matchCircles(
 function earlierLinks(
   older: readonly SnapshotKind[],
   history: ReadonlyMap<string, Base>,
-  matchAll: (records: readonly SnapshotRecord[], earlier: ReadonlyMap<string, string>) => Matching,
-): { earlier: Map<string, string>; last: Map<string, string> } {
-  const earlier = new Map<string, string>();
+  matchAll: (records: readonly SnapshotRecord[], earlier: ReadonlyMap<string, Match>) => Matching,
+): { earlier: Map<string, Match>; last: Map<string, string> } {
+  const earlier = new Map<string, Match>();
   const last = new Map<string, string>();
   for (const [ourId, b] of Array.from(history.entries())) {
     if (!b.pageId) continue;
-    earlier.set(pageKey(b.pageId), ourId);
+    earlier.set(pageKey(b.pageId), { ourId, via: "earlier" });
     last.set(ourId, pageKey(b.pageId));
   }
   for (const k of older) {
     const m = matchAll(dedupe(k.records), earlier);
     for (const [pk, mm] of Array.from(m.byPage.entries())) {
-      earlier.set(pk, mm.ourId);
+      // The match as it was made at that read, its way included (review C3).
+      earlier.set(pk, mm);
       last.set(mm.ourId, pk);
     }
   }
@@ -914,8 +934,8 @@ export function differences(input: DifferencesInput): Difference[] {
   const dayBefore = readADayBefore(input.snapshots, Number.isFinite(asOfParsed) ? asOfParsed : Date.parse(latest.takenAt));
   const previous = input.snapshots[1] ?? null;
 
-  const matchCirclesWith = (r: readonly SnapshotRecord[], e: ReadonlyMap<string, string>) => matchCircles(r, liveCircles, norm, links.circles, e);
-  const matchRolesWith = (r: readonly SnapshotRecord[], e: ReadonlyMap<string, string>) => matchRoles(r, liveRoles, norm, links.roles, e);
+  const matchCirclesWith = (r: readonly SnapshotRecord[], e: ReadonlyMap<string, Match>) => matchCircles(r, liveCircles, norm, links.circles, e);
+  const matchRolesWith = (r: readonly SnapshotRecord[], e: ReadonlyMap<string, Match>) => matchRoles(r, liveRoles, norm, links.roles, e);
   const olderOldestFirst = input.snapshots.slice(1).reverse();
   const circleLinks = earlierLinks(olderOldestFirst.map((s) => s.circles), bases.circles, matchCirclesWith);
   const roleLinks = earlierLinks(olderOldestFirst.map((s) => s.roles), bases.roles, matchRolesWith);
@@ -1004,8 +1024,9 @@ export function differences(input: DifferencesInput): Difference[] {
       });
     }
     if (presence === "gone" || ours === "gone") continue;
-    // A circle matched by its name has that name; one matched by its page id may have a new one.
-    if (m.via === "link" || m.via === "earlier") {
+    // While the service's name still names our circle, by its name or an alias, it is no
+    // rename (review C3); one matched by a link or an older read may carry a new one.
+    if (name === null || !circlesNamed(name, liveCircles).includes(live.id)) {
       const nameBase = base?.name ?? "unknown";
       const ourName = norm.plain(live.name);
       const renamed = threeWay(name, ourName, nameBase);

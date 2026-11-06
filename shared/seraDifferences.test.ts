@@ -195,13 +195,13 @@ describe("R1: what each record is matched to", () => {
   });
 
   it("matches a circle by name or alias, and keys on the page id so a stored link can take over later", () => {
-    const viaAlias = differences(
-      input({
-        snapshots: [snapshot([circleRec(LAND, "Land & Ecology")], [])],
-        live: { circles: [liveCircle("land", "Land", { aliases: ["Land & Ecology"] })], roles: [] },
-      }),
-    );
-    expect(viaAlias).toEqual([]);
+    // Read once, twice and three times: an older read's alias match is still a match by alias,
+    // never a rename to suggest (review C3, the reviewer's probe 3).
+    const aliased = { circles: [liveCircle("land", "Land", { aliases: ["Land & Ecology"] })], roles: [] };
+    for (const reads of [1, 2, 3]) {
+      const snapshots = Array.from({ length: reads }, (_, i) => snapshot([circleRec(LAND, "Land & Ecology")], [], reads - i));
+      expect(differences(input({ snapshots, live: aliased })), `${reads} reads`).toEqual([]);
+    }
 
     // The link the next slice stores: page id to our id. A rename at the
     // service then reads as a rename, and the key never carries a name.
@@ -216,6 +216,25 @@ describe("R1: what each record is matched to", () => {
     expect(viaLink[0]).toMatchObject({ kind: "rename", subject: { kind: "circle", ourId: "water", via: "link" } });
     expect(viaLink[0].key).toBe(`circle:${WATER}:name`);
     expect(viaLink[0].key).not.toContain("Water");
+  });
+
+  it("A SUBJECT AN OLDER READ MATCHED BY NAME IS STILL MATCHED BY NAME, never flagged as matched under an old name (C3)", () => {
+    const reads = (body: string) => [
+      snapshot([circleRec(LAND, "Land & Ecology")], [roleRec(STEWARD, "Treasurer", [LAND], { fields: { Body: body } })], 2),
+      snapshot([circleRec(LAND, "Land & Ecology")], [roleRec(STEWARD, "Treasurer", [LAND], { fields: { Body: "Counts the money." } })], 1),
+    ];
+    const live = { circles: [liveCircle("land", "Land", { aliases: ["Land & Ecology"] })], roles: [liveRole("treasurer", "Treasurer", "land", { aim: "Counts the money." })] };
+    const [aim] = differences(input({ snapshots: reads("Keeps the books."), live }));
+    expect(aim).toMatchObject({ field: "aim", subject: { ourId: "treasurer", via: "name" } });
+    expect(aim.flags.map((f) => f.key)).toEqual(["baseUnknown", "matchedByName"]);
+    // The control: a subject whose name the service changed since the older read IS matched under its old name.
+    const renamed = [
+      snapshot([circleRec(LAND, "Land & Ecology")], [roleRec(STEWARD, "Head Treasurer", [LAND], { fields: { Body: "Counts the money." } })], 2),
+      reads("Counts the money.")[1],
+    ];
+    const [rename] = differences(input({ snapshots: renamed, live }));
+    expect(rename).toMatchObject({ kind: "rename", subject: { ourId: "treasurer", via: "earlier" } });
+    expect(rename.flags.map((f) => f.key)).toContain("matchedEarlier");
   });
 });
 
