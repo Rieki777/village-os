@@ -57,14 +57,27 @@
  */
 import type { Pool } from "mysql2/promise";
 import type { SyncTrigger } from "../../shared/saberraSyncLog";
-import { stampMatches, type Snapshot, type SnapshotKind, type SnapshotRead, type SnapshotRecord, type SnapshotRef, type SnapshotValue } from "../../shared/seraDifferences";
+import {
+  stampMatches,
+  traceAccepted,
+  type AcceptedChange,
+  type DifferencesInput,
+  type Snapshot,
+  type SnapshotKind,
+  type SnapshotRead,
+  type SnapshotRecord,
+  type SnapshotRef,
+  type SnapshotValue,
+} from "../../shared/seraDifferences";
+import { dedupeKeyFor } from "./externalProposals";
 import { nameCheckFor, type NameCheck } from "./saberraNames";
 import type { VendorRecord } from "./saberraProposals";
 import { readVendorRecord, type SaberraRecordKind } from "./saberraRecords";
 import { idShapeOk, labelOf, normaliseId, plainText, relationRefs } from "./saberraRelations";
-import { acceptedForDifferences, liveForDifferences } from "./seraDifferencesInput";
+import { liveChart } from "./structureReview";
 import { rosterRows } from "../repos/peopleRoster";
 import { insertSnapshot, pruneSnapshots, pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
+import { acceptedProposalsFor, circlesForDifferences, publishedFromModule, rolesWithPaySet } from "../repos/seraDifferences";
 
 /** How many reads are kept. R4 needs two whole ones; the rest are history. */
 export const SNAPSHOT_KEEP = 30;
@@ -199,6 +212,58 @@ function readOf(kind: string, read: ReadForSnapshot, records: readonly SnapshotR
   if (read.failed.includes(kind)) return "failed";
   if (read.truncated.includes(kind)) return "cut-short";
   return records.length === 0 ? "empty" : "whole";
+}
+
+// ── What the matches are made from, and the list reads too ─────────────────
+
+/*
+ * The live chart and the traced history, gathered in one place for both of the
+ * differences' readers: the matches each read is kept with (below) and the list
+ * (server/lib/seraDifferencesRead.ts). One gatherer, so a read is kept with
+ * matches made from exactly the chart and history the list reads (review C2).
+ * Reads only.
+ */
+
+const MODULE_ID = "saberra";
+
+/** The live chart as the differences read it: circles in chart order, and each role with whether pay is set here, never its figure. */
+export async function liveForDifferences(pool: Pool): Promise<DifferencesInput["live"]> {
+  const [circles, paid] = await Promise.all([circlesForDifferences(pool), rolesWithPaySet(pool)]);
+  const live = await liveChart(pool, circles);
+  return {
+    circles: live.circles.map((c) => ({ id: c.id, name: c.name, aliases: c.aliases, status: c.status, isExample: c.isExample })),
+    roles: live.seats.map((s) => ({
+      id: s.id,
+      name: s.name,
+      circleId: s.circleId,
+      active: s.active,
+      isExample: s.isExample,
+      holders: s.holders,
+      aim: s.words?.aim ?? null,
+      paySet: paid.has(s.id),
+    })),
+  };
+}
+
+/**
+ * What this village published from the service, each change traced to what
+ * the service itself said (R2): only to a proposal whose stored payload still
+ * hashes to the dedupe key it landed under.
+ */
+export async function acceptedForDifferences(pool: Pool): Promise<AcceptedChange[]> {
+  const changes = await publishedFromModule(pool, MODULE_ID);
+  const proposals = await acceptedProposalsFor(pool, MODULE_ID, Array.from(new Set(changes.map((c) => c.draftId))));
+  return traceAccepted(
+    changes,
+    proposals.map((p) => ({
+      id: p.id,
+      draftId: p.draftId,
+      kind: p.kind,
+      payload: p.payload,
+      // Untouched: the payload still hashes to the key it landed under.
+      original: dedupeKeyFor({ moduleId: MODULE_ID, kind: p.kind, sourceRef: p.sourceRef, payload: p.payload }) === p.dedupeKey,
+    })),
+  );
 }
 
 /** How many stored reads before this one its matches are made against. Each carries the matches of the ones before it. */

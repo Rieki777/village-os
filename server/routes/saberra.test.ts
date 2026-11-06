@@ -167,10 +167,14 @@ vi.mock("../repos/saberraSnapshots", async (importOriginal) => {
   };
 });
 vi.mock("../repos/peopleRoster", () => ({ rosterRows: async () => [] }));
-// The chart and the history the differences read: an empty chart here, so whatever the service holds is new.
-vi.mock("../lib/seraDifferencesInput", () => ({ liveForDifferences: async () => ({ circles: [], roles: [] }), acceptedForDifferences: async () => [] }));
+// The reads the differences make beside the snapshots: no circle and no pay here, and nothing
+// published from the service, so whatever it holds is new. The gatherers over them run for real.
 vi.mock("../repos/seraDifferences", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../repos/seraDifferences")>()),
+  circlesForDifferences: async () => [],
+  rolesWithPaySet: async () => new Set<string>(),
+  publishedFromModule: async () => [],
+  acceptedProposalsFor: async () => [],
   publishStamp: async () => "0:0",
 }));
 

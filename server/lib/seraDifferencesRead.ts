@@ -57,7 +57,7 @@ import {
 } from "../../shared/seraDifferences";
 import { differenceSentence, flagWords, openInUrl, openInWords, shownFlags, sourceWords } from "../../shared/seraDifferenceWords";
 import { nameCheckFor } from "./saberraNames";
-import { acceptedForDifferences, liveForDifferences } from "./seraDifferencesInput";
+import { acceptedForDifferences, liveForDifferences } from "./saberraSnapshot";
 import { listOrgAssignments, type OrgAssignment } from "./orgChart";
 import { rosterRows } from "../repos/peopleRoster";
 import { snapshotIndex, snapshotsBySeq, type SnapshotIndexRow } from "../repos/saberraSnapshots";
