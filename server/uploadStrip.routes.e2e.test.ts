@@ -224,6 +224,15 @@ describe.skipIf(!DB_CONFIGURED)("the public proposal attachment door", () => {
     expect(up.text).toContain("Only images or PDF");
   });
 
+  it("refuses bytes that are neither an image nor a PDF, whatever type the browser claimed (R107)", async () => {
+    // The type filter reads the browser's claim. The bytes are what is stored.
+    const before = fs.readdirSync(path.join(dataDir, "uploads")).length;
+    const up = await postAttachment(Buffer.from("<html><script>alert(1)</script></html>"), "x.html", "image/png");
+    expect(up.status, up.text).toBe(400);
+    expect(up.text).toContain("Only images or PDF");
+    expect(fs.readdirSync(path.join(dataDir, "uploads")).length, "nothing was written").toBe(before);
+  });
+
   /*
    * Adversarial round 3, finding 10, through the routes an applicant uses.
    * The erasure wrote over the row's `attachment` and left the file, so the

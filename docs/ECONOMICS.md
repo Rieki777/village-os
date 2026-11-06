@@ -521,6 +521,12 @@ rule stayed on would have paid 65 for one piece of work. Under `quoteWorkPay` a 
 replaces the flat amounts for that piece of work, so turning values on needs no flag day
 and no rule change: the flat rules go on paying the quests nobody has valued yet.
 
+**Earned Equity means what each village says it means (Rye, 2026-11-05).** Its meaning is
+"unique project to project, SET IN ADMIN per village": the token's meaning field (Admin, Tokens;
+0283), shown on the wallet and on every pay line that pays it (`PayLine.meaning`).
+`payLineProblem` refuses any piece of work that names it until the village has written what it
+is a share of.
+
 **An accepted proposal is work (Rye, 2026-10-23: "definitely a work token").** An accepted
 Work With Us proposal is priced like a quest, from the `proposal.accepted` rules (seeded at 10
 Village Voice and 25 Village Credits, Earned Equity off), through `quoteWorkPay`, by

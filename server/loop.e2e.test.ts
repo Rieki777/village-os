@@ -1248,7 +1248,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
    */
   it("S2 after R90: the founder role has ended, so admins run the admins and the last way in stays", async () => {
     // The founder promotes peer to admin…
-    const promote = await api("PUT", `/api/admin/users/${peerId}/role`, { role: "admin" }, founderToken);
+    const promote = await api("PUT", `/api/admin/users/${peerId}/role`, { role: "admin", addressUnprovedOk: true }, founderToken);
     expect(promote.status).toBe(200);
 
     // …and peer's EXISTING token now opens admin surfaces (role is read live).
@@ -1258,7 +1258,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // An administrator who is not a founder may change roles here, because
     // after launch there is no founder tier to be short of. Before launch this
     // same request is a 403 naming the founder.
-    const byPeer = await api("PUT", `/api/admin/users/${doerId}/role`, { role: "admin" }, peerToken);
+    const byPeer = await api("PUT", `/api/admin/users/${doerId}/role`, { role: "admin", addressUnprovedOk: true }, peerToken);
     expect(byPeer.status).toBe(200);
     expect((await api("PUT", `/api/admin/users/${doerId}/role`, { role: "member" }, peerToken)).status).toBe(200);
 
@@ -3264,7 +3264,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const selfApprove = await api("POST", `/api/admin/library/items/${big.json.itemId}/approve`, {}, founderToken);
     expect(selfApprove.status).toBe(409);
     expect(String(selfApprove.json.error)).toContain("SECOND");
-    await api("PUT", `/api/admin/users/${doerId}/role`, { role: "admin" }, founderToken);
+    await api("PUT", `/api/admin/users/${doerId}/role`, { role: "admin", addressUnprovedOk: true }, founderToken);
     const secondSig = await api("POST", `/api/admin/library/items/${big.json.itemId}/approve`, {}, doerToken);
     expect(secondSig.status).toBe(200);
     expect(secondSig.json.award).toBe(225);

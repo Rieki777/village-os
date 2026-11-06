@@ -270,6 +270,12 @@ export const POWERS: readonly PowerEntry[] = [
     surface: "Who is on the roll when this village holds a ballot",
     routes: ["/api/governance/ballots/:id/vote", "/api/governance/standing"],
   },
+  {
+    capability: "power.assign",
+    title: "Powers on roles",
+    surface: "Which Power groups each role carries, and what each Power group can do",
+    routes: ["/api/admin/org-roles/:id/power-groups", "/api/admin/roles/:id/capabilities"],
+  },
 ];
 
 /**

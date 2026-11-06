@@ -1997,6 +1997,11 @@ const KNOWN_DIALS = [
   "governance.window_grace_days",
   "governance.weight_mode",
   "governance.weight_token",
+  // Rye, 2026-11-05: the cap on one member's weight is "built as an option, OFF
+  // by default". It builds no staged ruling here: ruling 8 allows concentration
+  // and asks for it to be visible, and the cap ships off, so that stands as is.
+  "governance.weight_cap_on",
+  "governance.weight_cap_pct",
   "governance.unity_pct",
   "governance.quorum_pct",
   "governance.vote_days",

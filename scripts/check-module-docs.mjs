@@ -52,7 +52,10 @@ import ts from "typescript";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
-const BASELINE_PATH = path.join(ROOT, "scripts", "module-docs-baseline.json");
+const baselineArg = process.argv.indexOf("--baseline");
+const BASELINE_PATH = baselineArg !== -1 && process.argv[baselineArg + 1]
+  ? path.resolve(process.argv[baselineArg + 1])
+  : path.join(ROOT, "scripts", "module-docs-baseline.json");
 const DOCS_DIR = path.join(ROOT, "docs", "modules");
 
 const asJson = process.argv.includes("--json");
@@ -142,6 +145,11 @@ const unclaimed = fs.existsSync(DOCS_DIR)
 const baseline = fs.existsSync(BASELINE_PATH)
   ? JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"))
   : null;
+// A missing baseline fails (R203). It used to read as infinity, so deleting the
+// file cleared the gate. `--update-baseline` writes a first one.
+if (!baseline && !updating) {
+  fail(`the module-docs baseline is missing (${path.relative(ROOT, BASELINE_PATH)}). Write one on purpose with --update-baseline; a gate with no baseline holds nothing.`);
+}
 const allowed = baseline?.undocumented ?? Infinity;
 
 if (updating) {

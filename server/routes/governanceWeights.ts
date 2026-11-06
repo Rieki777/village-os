@@ -20,9 +20,9 @@
  * nothing in this file should: one place decides, and it is upstream.
  *
  * `weightModeNow` COMES IN THROUGH deps AND IS NOT REBUILT HERE. It is a
- * six-line reader over two game variables, and copying it would be the second
- * place that decides what a village's weight mode is. Thirteen call sites
- * read it; twelve are still in server/index.ts.
+ * reader over the weight dials in server/lib/governanceWeights.ts, and copying
+ * it would be the second place that decides what a village's weight mode is.
+ * Thirteen call sites read it; twelve are still in server/index.ts.
  *
  * WEIGHTS ARE POWER, AND THIS GAME HOLDS NO HIDDEN POWER. That promise is
  * server/lib/governanceWeights.ts's, and the reason the trail is append-only
@@ -36,7 +36,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { sortMembersByName } from "../../shared/memberOrder";
 import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "../lib/examples";
-import { allWeights, setWeight, weightChangeProblem, weightHistory } from "../lib/governanceWeights";
+import { allWeights, setWeight, weightCapLine, weightChangeProblem, weightHistory } from "../lib/governanceWeights";
 import { readGameStart } from "../lib/gameStart";
 
 type Deps = Pick<
@@ -127,6 +127,8 @@ export function register(app: Express, deps: Deps): void {
     res.json({
       mode: snapshot.mode,
       token: snapshot.token,
+      // The cap's sentence while it is on in token mode, else null.
+      capLine: weightCapLine(snapshot),
       members: rows,
       // The standing warning: a half-allocated village is visible before it
       // fails a quorum, never after.

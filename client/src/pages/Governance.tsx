@@ -5,6 +5,7 @@ import VillageAgreements from "@/components/governance/VillageAgreements";
 import { lazy, Suspense } from "react";
 import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
 import { useModuleOn } from "@/modules/ModuleProvider";
+import VoiceSpreadBand from "@/components/governance/VoiceSpreadBand";
 import {
   Vote,
   Users,
@@ -96,7 +97,7 @@ export default function Governance() {
       </Layout>
     );
   }
-  const { hero, principles, decision, circles, conflict, stewards, rules, cta } = page;
+  const { hero, spread, principles, decision, circles, conflict, stewards, rules, cta } = page;
   const hyphaSection = page.hypha;
   const showHypha = !hyphaSection.hidden && hypha.configured;
   const veto = vetoHours === null ? `at least ${vetoWindowWords(VETO_HOURS_MIN)}` : vetoWindowWords(vetoHours);
@@ -129,6 +130,11 @@ export default function Governance() {
           governance while the village was holding a vote they never saw. The
           band renders nothing where the engine is off. */}
       <LiveDecisionsBand />
+
+      {/* Who holds the Voice: the spread across everyone who votes, in groups,
+          and this season's votes as counts. Draws nothing while governance is
+          off, or for a stranger while the village keeps its people. */}
+      {!spread.hidden && <VoiceSpreadBand heading={spread.fields.heading} intro={spread.fields.intro} />}
 
       {/* The agreements the village adopted, for members (W4-agreements-no-page).
           Renders nothing to a visitor or while governance is off. */}

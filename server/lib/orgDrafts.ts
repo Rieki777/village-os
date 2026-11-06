@@ -42,7 +42,7 @@ import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
 import { readHeldSeatIds, readRolesForPreview } from "../repos/orgDrafts";
 import { roleHoldersNow } from "../repos/pathLadders";
-import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
+import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatingsChanged, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
 import { moveWords, placementOf } from "./circlePlacement";
@@ -1698,6 +1698,7 @@ async function applyChange(
       "UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP, ended_reason = ? WHERE id = ? AND ended_at IS NULL",
       [String(p.reason ?? "reorganisation").slice(0, 200), String(p.assignmentId ?? "")],
     );
+    seatingsChanged();
     return null;
   }
   // update_seat: only the fields the draft names, mapped through a fixed
@@ -1841,6 +1842,7 @@ export async function revertDraft(
           [c.orgRoleId, c.payload?.userId ? String(c.payload.userId)
             : documentedKey(String(c.payload?.displayName ?? "unnamed"))],
         );
+        seatingsChanged();
       } else if (c.op === "end_holding" && c.beforeJson && !(c.beforeJson.user_id && (await isAgentAccount(conn, String(c.beforeJson.user_id))))) {
         // 0319: a holder marked as an agent account since the holding ended is not seated again; it holds no role.
         const b = c.beforeJson;
@@ -1854,6 +1856,7 @@ export async function revertDraft(
           [newId("orgasg"), b.org_role_id, b.holder_kind, b.user_id, b.display_name, b.holder_key,
             b.focus, b.note ?? null, b.season_id, b.term_ends_at, Number(b.term_follows_season ?? 0) ? 1 : 0],
         );
+        seatingsChanged();
       } else if (c.beforeJson) {
         const b = c.beforeJson;
         /*

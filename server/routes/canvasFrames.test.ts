@@ -38,7 +38,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { capabilityDecision, HANDOVER_SET, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
-import { DOCUMENT_SHARE_DOOR, PROPOSAL_BODY_MAX } from "../../shared/canvasFrames";
+import { CANVAS_DOOR_IDS, DOCUMENT_SHARE_DOOR, PROPOSAL_BODY_MAX } from "../../shared/canvasFrames";
 import { CANVAS_BLOCK_IDS } from "../../shared/governanceCanvas";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { NOTE_IS_PUBLIC } from "../../shared/powerHands";
@@ -53,7 +53,7 @@ import { proposalById, proposalsOpenedSince } from "../lib/mechanics";
 import { effectiveLifecycle, loadModuleSettings } from "../lib/modules";
 import type { NotifyInput } from "../lib/notify";
 import type { IntakeHolding } from "../lib/restorativeIntake";
-import { loadVariables, numberVar, setVariable, stringVar } from "../lib/variables";
+import { boolVar, loadVariables, numberVar, setVariable, stringVar } from "../lib/variables";
 import { briefGet, briefWrite } from "../lib/villageBrain";
 import { wireReaders } from "../lib/villageReaders";
 import { allDecisionMatrixRows } from "../repos/decisionMatrixRows";
@@ -831,6 +831,29 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       // Filed by its own author: nobody is told of their own act, and it is listed as filed.
       expect(NOTICES.some((n) => n.dedupeKey.startsWith(`canvas-proposal:${p.id}:`))).toBe(false);
       expect((await block("teller", "team")).body.decided.find((x: any) => x.id === p.id)).toMatchObject({ status: "filed", filed: true });
+    });
+
+    /*
+     * THE WEIGHT CAP IS NOT A CANVAS DOOR (#898).
+     * After the Birthing the admin panel refuses the cap
+     * (server/launchWeight.routes.e2e.test.ts), and the village changes it by
+     * a proposal. The pen's Adopt must not be a second way round that, so the
+     * canvas does not take a suggestion aimed at either cap dial, nothing is
+     * recorded, and neither dial moves.
+     */
+    it("the vote-weight cap is no door of the canvas: a suggestion aimed at it is refused and neither cap dial moves", async () => {
+      for (const key of ["governance.weight_cap_on", "governance.weight_cap_pct"]) {
+        expect(CANVAS_DOOR_IDS as readonly string[], key).not.toContain(`dial:${key}`);
+        const before = await pool.query<any[]>("SELECT COUNT(*) AS n FROM canvas_proposals"); // module-review-ok: reading the scratch schema this suite provisioned
+        const r = await propose("member", {
+          blockId: "power", target: "setting", door: `dial:${key}`, change: { value: "10" }, servesPurpose: LINE, body: "Cap one member's weight.",
+        });
+        expect(r.status, `${key}: ${JSON.stringify(r.body)}`).toBe(400);
+        const after = await pool.query<any[]>("SELECT COUNT(*) AS n FROM canvas_proposals"); // module-review-ok: reading the scratch schema this suite provisioned
+        expect(Number(after[0][0].n), key).toBe(Number(before[0][0].n));
+      }
+      expect(boolVar("governance.weight_cap_on")).toBe(false);
+      expect(numberVar("governance.weight_cap_pct")).toBe(20);
     });
 
     it("only the member who wrote a dial suggestion files it, in their own name, and a draft says it is a draft", async () => {

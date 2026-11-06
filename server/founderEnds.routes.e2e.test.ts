@@ -339,9 +339,24 @@ describe.skipIf(!DB_CONFIGURED)("before the vote, the founder holds everything t
   });
 
   it("is the only account that can change a role, and appoints an administrator", async () => {
-    const madeAdmin = await call("PUT", `/api/admin/users/${annaId}/role`, { body: { role: "admin" } });
+    // R104: Anna signed up with a password and never proved her address, so a
+    // stranger could have made this account at it. The first ask is refused
+    // with the reason; the founder's yes, having read it, goes through.
+    const asked = await call("PUT", `/api/admin/users/${annaId}/role`, { body: { role: "admin" } });
+    expect(asked.status, JSON.stringify(asked.json)).toBe(409);
+    expect(asked.json?.code).toBe("address_unproved");
+    expect(await roleOf(annaId)).toBe("member");
+    const madeAdmin = await call("PUT", `/api/admin/users/${annaId}/role`, { body: { role: "admin", addressUnprovedOk: true } });
     expect(madeAdmin.status, JSON.stringify(madeAdmin.json)).toBe(200);
     expect(await roleOf(annaId)).toBe("admin");
+    // The audit row says the founder was told. recordEvent is fire-and-forget, so wait for it.
+    let audited = "";
+    for (let i = 0; i < 30 && !audited; i++) {
+      const [rows] = await pool.query<any[]>("SELECT text FROM health_events WHERE kind = 'audit' AND entity_ref = ? AND text LIKE 'role:%'", [annaId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      audited = String(rows[0]?.text ?? "");
+      if (!audited) await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(audited).toBe("role:member->admin (address unconfirmed)");
 
     // The administrator cannot: before launch, founders run the admins.
     const coup = await call("PUT", `/api/admin/users/${benId}/role`, {
@@ -440,7 +455,7 @@ describe.skipIf(!DB_CONFIGURED)("after the vote the founder holds nothing an adm
     // The administrator who was refused before launch is refused no longer.
     const byAdmin = await call("PUT", `/api/admin/users/${benId}/role`, {
       token: annaToken,
-      body: { role: "admin" },
+      body: { role: "admin", addressUnprovedOk: true },
     });
     expect(byAdmin.status, JSON.stringify(byAdmin.json)).toBe(200);
     expect(await roleOf(benId)).toBe("admin");

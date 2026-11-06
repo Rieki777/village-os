@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { limitNav, simpleNav, showEverything, weekKey } from "./adminFeel";
+import { limitNav, simpleNav, showEverything, weekKey } from "./adminFeelState";
 import type { NavGroup } from "./adminNavGroups";
 
 beforeEach(() => localStorage.clear());
