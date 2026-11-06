@@ -112,13 +112,15 @@ They need different answers, so establish which one it is before anything else.
   `Authorization: Bearer <token>`. It stands for one signed-in account, and it
   can be revoked from inside the app. The remedy below covers it.
 - **`ADMIN_PASSWORD`.** An environment variable, and the harder loss. It
-  authenticates exactly one route, `POST /api/admin/bootstrap` in
-  `server/index.ts`, the call that creates the first founder account on a
-  village that has no admin to authenticate as. The route refuses once any admin
-  exists, and it refuses outright while the value is still the shipped
-  placeholder. On a village nobody has bootstrapped yet, that one string mints
-  the account that can do everything, and there is no in-app revocation for an
-  environment variable. The fix is to change it in Railway and redeploy.
+  authenticates two routes. `POST /api/admin/bootstrap` in `server/index.ts`
+  creates the first founder account on a village that has no admin to
+  authenticate as, and refuses once any admin exists. `GET
+  /api/admin/export/database` (`server/routes/villageExport.ts`) hands out the
+  whole database, every member's data, for as long as the value is set. Both
+  refuse outright while the value is still the shipped placeholder. So a leaked
+  value is a leaked village on every deployment, bootstrapped or not, and there
+  is no in-app revocation for an environment variable. The fix is to change it
+  in Railway and redeploy, today.
 
 ### When the credential is already in the transcript
 
