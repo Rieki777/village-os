@@ -4259,7 +4259,7 @@ export function ModulesTab({ password }: { password: string }) {
  * application is real and usable and nobody has agreed to it yet, and that
  * difference is what the guide cites when she leans on it.
  */
-function VillageBrainTab({ password }: { password: string }) {
+export function VillageBrainTab({ password }: { password: string }) {
   const [sections, setSections] = useState<any[]>([]);
   const [record, setRecord] = useState<any[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
