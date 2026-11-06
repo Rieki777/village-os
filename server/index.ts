@@ -3582,7 +3582,7 @@ async function recordAdminReach(cap: Capability, user: any, _where: string): Pro
   });
   try {
     const holderIds = holder
-      ? loadRoleHolders().filter((r: any) => r.roleId === holder.holderRoleId).map((r: any) => r.userId)
+      ? loadPowerHoldings().filter((r: any) => r.roleId === holder.holderRoleId).map((r: any) => r.userId)
       : [];
     for (const userId of holderIds) {
       if (userId === user.id) continue;
@@ -13177,7 +13177,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         { roleId: h.holderRoleId, roleName: h.holderRoleName, movedAt: h.movedAt, byBallot: !!h.movedByBallotId },
       ]),
     );
-    const seats = loadRoleHolders();
+    const seats = loadPowerHoldings(); // 0322: whoever sits there through a role, too
     const names = new Map((await members.all()).map((m: any) => [m.id, m.name]));
     res.json({
       powers: powersForReading(holders).map((p) => ({
@@ -14103,7 +14103,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     );
     let notified = 0;
     for (const task of tasks) {
-      const holders = loadRoleHolders().filter((h: any) => h.roleId === String(task.role_id));
+      const holders = loadPowerHoldings().filter((h: any) => h.roleId === String(task.role_id));
       for (const h of holders as any[]) {
         await notify({
           userId: h.userId,
@@ -14401,7 +14401,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const policy: any = readExitPolicy();
     const roleId = String(policy?.restorative?.intakeContactRole ?? "");
     if (!roleId) return res.status(409).json({ error: "No intake contact role is configured yet. Write to the stewards directly" });
-    const holders = loadRoleHolders().filter((h: any) => h.roleId === roleId);
+    const holders = loadPowerHoldings().filter((h: any) => h.roleId === roleId);
     if (!holders.length) return res.status(409).json({ error: "The intake role has no holders right now. Write to the stewards directly" });
     const intakeId = `ri-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     for (const h of holders as any[]) {
