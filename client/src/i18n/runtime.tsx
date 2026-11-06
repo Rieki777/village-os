@@ -1,6 +1,6 @@
-import { LinguiContext } from "@lingui/react";
+import { LinguiContext, type TransProps } from "@lingui/react";
 import { TransNoContext } from "@lingui/react/server";
-import { useContext, type ComponentProps } from "react";
+import { useContext } from "react";
 import { i18n } from "./i18n";
 
 /**
@@ -19,8 +19,6 @@ const fallback = { i18n, _: i18n.t.bind(i18n), defaultComponent: undefined };
 export function useLingui() {
   return useContext(LinguiContext) ?? fallback;
 }
-
-type TransProps = Omit<ComponentProps<typeof TransNoContext>, "lingui">;
 
 export function Trans(props: TransProps) {
   const lingui = useContext(LinguiContext) ?? fallback;
