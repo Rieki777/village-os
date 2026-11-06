@@ -88,13 +88,18 @@ describe("AdminGate", () => {
       fetched.push(url);
       const body = url.endsWith("capabilities/holding")
         ? { powers: [{ capability: "org.seat", title: "The village's roles", consequence: "seat people", heldBy: null }], roles: [] }
-        : [];
+        : url.endsWith("org/expiring")
+          ? [{ assignmentId: "a1", roleName: "Land steward", holder: "Jess Okafor", lapsed: false }]
+          : [];
       return new Response(JSON.stringify(body), { status: 200 });
     }));
     try {
       render(<AdminGate onAuth={vi.fn()} />);
       expect(screen.getByRole("heading", { name: "How the village is run" })).toBeInTheDocument();
       expect(await screen.findByText("The village's roles")).toBeInTheDocument();
+      // Role (FirstName), never a full name, even for a documented holder sent in full.
+      expect(await screen.findByText(/Land steward \(Jess\)/)).toBeInTheDocument();
+      expect(screen.queryByText(/Okafor/)).not.toBeInTheDocument();
       expect(screen.queryByRole("heading", { name: "Not an admin" })).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
       // Only the reads the server allows members, and every one a GET.

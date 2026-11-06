@@ -40,6 +40,9 @@ interface Expiring {
   lapsed: boolean;
 }
 
+/** The first word of a name: the house form names a holder by first name only (Rye, 2026-10-30). */
+const firstNameOf = (name: string) => name.trim().split(/\s+/)[0] ?? name;
+
 type Read<T> = { state: "loading" } | { state: "refused" } | { state: "ready"; data: T };
 
 async function read<T>(path: string): Promise<Read<T>> {
@@ -149,7 +152,8 @@ export default function MemberAdminView({ userName, onSignOut }: { userName: str
                 {expiring.data.map((e) => (
                   <li key={e.assignmentId}>
                     {e.roleName}
-                    {e.holder ? ` (${e.holder})` : ""}
+                    {/* Role (FirstName), the house form: a documented holder arrives as a full display name. */}
+                    {e.holder ? ` (${firstNameOf(e.holder)})` : ""}
                     {e.lapsed ? ": the term has ended, waiting to be chosen again." : ": the term ends soon."}
                   </li>
                 ))}
