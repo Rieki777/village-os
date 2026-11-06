@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { forgetHandNoteIn, HAND_NOTE_WENT, nameInTitle, scrubBallotText, spellingsOf } from "./ballotErasure";
+import { badgeGrantTitle } from "./badgeGrantCloser";
 import { HAND_WROTE_NOTHING, handVoteReason, SEAT_VOTE_REASON_HEADING } from "../../shared/powerHands";
 
 /** A seat vote's document as openSeatVote lays it out, around a reason. */
@@ -46,6 +47,12 @@ describe("nameInTitle", () => {
     expect(nameInTitle("role_unseat", "Steward: the village asks to take the role back from Wren")).toBe("Wren");
     expect(nameInTitle("role_seat", "Treasurer: the village asks Wren to sit in it")).toBe("Wren");
     expect(nameInTitle("advisory", "Treasurer: the village asks Wren to sit in it")).toBeNull();
+  });
+
+  it("reads the name a badge vote wrote, both ways (gap 6)", () => {
+    expect(nameInTitle("badge_grant", badgeGrantTitle("Calendar Keeper", "Wren", false))).toBe("Wren");
+    expect(nameInTitle("badge_grant", badgeGrantTitle("Calendar Keeper", "Wren", true))).toBe("Wren");
+    for (const who of ["A", "Someone"]) expect(nameInTitle("badge_grant", badgeGrantTitle("Keeper", who, false)), who).toBeNull();
   });
 
   /*
