@@ -77,6 +77,7 @@ import type { ClockMode, ProposalTiming } from "../cycleClock";
 export const CHANGE_ITEM_KINDS = [
   "dial",
   "mint_rule",
+  "mint_rule_create",
   "weight_allocation",
   "mode_switch",
   "module_lifecycle",

@@ -43,11 +43,12 @@ describe("the change item kinds", () => {
     expect(CHANGE_ITEM_KINDS.slice()).toEqual(ENGINE_CHANGE_ITEM_KINDS.slice());
   });
 
-  it("names the seven the engine prices, so a green above is not a green about two empty lists", () => {
+  it("names the eight the engine prices, so a green above is not a green about two empty lists", () => {
     expect(CHANGE_ITEM_KINDS.slice().sort()).toEqual([
       "brand_field",
       "dial",
       "mint_rule",
+      "mint_rule_create",
       "mode_switch",
       "module_lifecycle",
       "role",
