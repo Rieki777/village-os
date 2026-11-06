@@ -41,6 +41,25 @@ export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
  * What decides whether a holding has lapsed. Passed in rather than read here,
  * because this file must stay a pure function of its inputs.
  */
+/**
+ * WHO IS TOLD WHEN A SEATING CHANGES (0322).
+ *
+ * Holding a seat can grant its Power groups (server/lib/seatGrants.ts), and the
+ * gate reads those from an in-memory snapshot. Every writer of a member
+ * seating below calls `seatingsChanged()` after its statement, so the snapshot
+ * is re-read before the next request and a power ends on the very next one.
+ * A listener only MARKS the snapshot stale: a writer inside a transaction has
+ * not committed yet, so reading here would read the old rows.
+ */
+const seatingListeners = new Set<() => void>();
+export function onSeatingsChanged(listener: () => void): () => void {
+  seatingListeners.add(listener);
+  return () => seatingListeners.delete(listener);
+}
+export function seatingsChanged(): void {
+  for (const l of Array.from(seatingListeners)) l();
+}
+
 export interface LapseContext {
   /** The dated season running today, or null. */
   currentSeasonId: string | null;
@@ -1155,6 +1174,7 @@ export async function seatHolder(
         h.applicationId ?? null,
       ],
     );
+    seatingsChanged();
     return { ok: true, assignmentId };
   } catch (e: any) {
     // The unique key is on (seat, active holder key), so this is the one
@@ -1176,6 +1196,7 @@ export async function endSeating(pool: Pool | PoolConnection, assignmentId: stri
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? WHERE id = ? AND ended_at IS NULL",
     [reason ?? null, assignmentId],
   );
+  seatingsChanged();
   return !!r?.affectedRows;
 }
 
@@ -1207,6 +1228,7 @@ export async function releaseSeatingsForUser(
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? WHERE user_id = ? AND ended_at IS NULL",
     [reason, userId],
   );
+  seatingsChanged();
   await pool.query(
     "UPDATE org_role_assignments SET display_name = NULL, note = NULL WHERE user_id = ?",
     [userId],
@@ -1283,6 +1305,7 @@ export async function claimSeating(pool: Pool, assignmentId: string, userId: str
     // 0319: an agent account holds no role, by this door either (seatHolder's refusal, and why).
     [userId, userId, assignmentId, userId, userId],
   );
+  seatingsChanged();
   return !!r?.affectedRows;
 }
 
