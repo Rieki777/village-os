@@ -86,60 +86,123 @@ export function topShares(weights: ReadonlyMap<string, bigint | number>, n: numb
   return all.slice(0, bound);
 }
 
+/** A cap percentage as the arithmetic reads it: 0 to 100, and rubbish is 0. */
+function capPctOf(capPct: number): number {
+  return Number.isFinite(capPct) ? Math.min(100, Math.max(0, capPct)) : 0;
+}
+
 /**
- * THE CAP ON ONE MEMBER'S WEIGHT (Rye, 2026-11-05: an option, OFF by default).
+ * The fewest members who must hold weight for anyone to stay under the cap.
+ * Below it, everyone holding weight weighs the same (`capWeights`). Five at
+ * 20, four at 30, two at 50, one at 100. `weightCapLine` says this number to
+ * members, so it is computed once, here, for both.
+ */
+export function fewestHoldersForCap(capPct: number): number {
+  const pct = capPctOf(capPct);
+  return pct > 0 ? Math.ceil(100 / pct) : Number.POSITIVE_INFINITY;
+}
+
+/** Round DOWN to the four places `ballot_electorate.weight` stores. */
+function floorToStored(w: number): number {
+  // The 1e-6 is a millionth of a stored step: enough to absorb a double that
+  // lands a hair under a whole step, far too small to lift a weight past one.
+  return Math.floor(w * 10_000 + 1e-6) / 10_000;
+}
+
+/**
+ * THE CAP ON ONE MEMBER'S SHARE OF THE VOTE (Rye, 2026-11-05: an option, OFF
+ * by default).
  *
- * Each weight is clamped to `capPct` percent of the roll's UNCAPPED total, in
- * one pass. Nobody under the ceiling moves, and nobody is raised.
+ * The share it bounds is a share of the FROZEN total, because that is what
+ * quorum and unity read: a member capped at 20 carries at most 20% of the
+ * vote on that ballot.
  *
- * ── WHY ONE PASS AGAINST THE UNCAPPED TOTAL ────────────────────────────────
+ * ── HOW: A WATER-FILL ──────────────────────────────────────────────────────
  *
- * The other shape is a fixed point: lower the ceiling until no member holds
- * more than `capPct` of the CAPPED total. It was rejected for two reasons.
+ * Everyone starts at their raw share. Anyone above `capPct` of the vote is
+ * clamped to exactly `capPct` and held there. The rest of the vote, 100 less
+ * the clamped members' shares, is shared among the members still unclamped in
+ * proportion to their raw weights. That can lift somebody else over the cap,
+ * so it repeats until nobody unclamped is over. Each round only raises the
+ * unclamped members' shares, so a member clamped in one round stays clamped.
  *
- *   It collapses on a small roll. With fewer than 100 / capPct members holding
- *   anything (fewer than five at 20) no positive ceiling satisfies it at all,
- *   so it ends at zero weight for everybody, and `openBallot` refuses a roll
- *   whose total is zero. At exactly five holders it flattens the roll to equal
- *   weights. A dial that silently becomes "one person, one vote" or "nobody
- *   may vote" depending on how many people hold the token is not one a founder
- *   can predict.
- *   One pass can be checked by hand. Anybody can read the roll's balances, take
- *   the cap's share of their sum, and know every member's frozen weight.
+ * In weights: a member under the cap keeps their raw weight exactly, so their
+ * order and their proportions to each other are untouched. Every clamped
+ * member weighs `capPct x rest / (100 - capPct x clamped)`, where `rest` is
+ * what the unclamped members hold, and that is their share of the vote to the
+ * last stored digit. A clamped member always ends below their own raw weight,
+ * and never below anybody unclamped. On one holder of 90 and four of 2.5 at
+ * 20, all five end at 2.5, a fifth of the vote each.
  *
- * ── WHAT IT COSTS WHEN FEW MEMBERS HOLD ALL THE WEIGHT ─────────────────────
+ * ── TOO FEW HOLDERS FOR ANYONE TO STAY UNDER IT ────────────────────────────
  *
- * The frozen total shrinks by whatever the cap trimmed, and quorum and unity
- * are shares of the FROZEN total. So a capped member's share of the vote can
- * still be above `capPct`. One member holding 90 and four holding 2.5 each, at
- * 20: the big holder freezes at 20, the roll totals 30, and 20 of 30 is two
- * thirds of the vote. The cap guarantees nobody carries more than `capPct` of
- * the weight the roll held; it cannot share power out among people who hold
- * none. A lone holder stays the whole roll however low the cap is.
+ * With fewer than `fewestHoldersForCap(capPct)` members holding weight (fewer
+ * than five at 20), every share can never be at or under the cap: five shares
+ * of 20 is the least that adds up to the whole vote. The only fair result is
+ * that EVERYONE HOLDING WEIGHT WEIGHS THE SAME, so they do, each at the
+ * smallest holding among them, which raises nobody above what they hold. A
+ * lone holder therefore stays the whole vote however low the cap is. The cap
+ * cannot share power out among people who hold none.
  *
  * ── THE NUMBERS AT THE EDGES ───────────────────────────────────────────────
  *
- * Caps fail closed: 0 means zero, never unlimited, and so does a percentage
- * that is not a number. Above 100 is read as 100, which trims nobody. The
- * registry refuses both ends (`governance.weight_cap_pct` runs 1 to 100); this
- * is belt to those braces. The ceiling is rounded DOWN to the four places
- * `ballot_electorate.weight` stores, so a frozen weight cannot round up past
- * the cap on its way into the column.
+ * Members with zero raw weight stay at zero. Caps fail closed: 0 means zero
+ * for everybody, never unlimited, and so does a percentage that is not a
+ * number, and `openBallot` refuses a roll whose total is zero. Above 100 is
+ * read as 100, which clamps nobody. The registry refuses both ends
+ * (`governance.weight_cap_pct` runs 1 to 100); this is belt to those braces.
+ * Every weight is rounded DOWN to the four places `ballot_electorate.weight`
+ * stores, and a clamped weight is computed from the rounded weights beside
+ * it, so no frozen weight rounds above its share on the way into the column.
  */
 export function capWeights(weights: ReadonlyMap<string, number>, capPct: number): Map<string, number> {
+  const pct = capPctOf(capPct);
   const held = new Map<string, number>();
-  let total = 0;
-  weights.forEach((raw, id) => {
-    const w = Math.max(0, asNumber(raw));
-    held.set(id, w);
-    total += w;
-  });
-  const pct = Number.isFinite(capPct) ? Math.min(100, Math.max(0, capPct)) : 0;
-  // The 1e-6 is a millionth of a stored step: enough to absorb a double that
-  // lands a hair under a whole step, far too small to lift a ceiling past one.
-  const ceiling = Math.floor(((total * pct) / 100) * 10_000 + 1e-6) / 10_000;
+  weights.forEach((raw, id) => held.set(id, floorToStored(Math.max(0, asNumber(raw)))));
   const out = new Map<string, number>();
-  held.forEach((w, id) => out.set(id, Math.min(w, ceiling)));
+  if (!(pct > 0)) {
+    held.forEach((_w, id) => out.set(id, 0));
+    return out;
+  }
+
+  const holders: string[] = [];
+  held.forEach((w, id) => {
+    if (w > 0) holders.push(id);
+  });
+  const everyoneTheSame = (): Map<string, number> => {
+    let least = Number.POSITIVE_INFINITY;
+    holders.forEach((id) => {
+      least = Math.min(least, held.get(id) ?? 0);
+    });
+    held.forEach((w, id) => out.set(id, w > 0 ? least : 0));
+    return out;
+  };
+  if (holders.length < fewestHoldersForCap(pct)) return everyoneTheSame();
+
+  const clamped = new Set<string>();
+  let rest = 0;
+  for (;;) {
+    rest = 0;
+    held.forEach((w, id) => {
+      if (!clamped.has(id)) rest += w;
+    });
+    // The share of the vote, in percent, left to the unclamped members.
+    const left = 100 - clamped.size * pct;
+    // Unreachable with enough holders, and kept so a rounding surprise can
+    // never divide by nothing: fall back to the same answer a small roll gets.
+    if (!(left > 0) || !(rest > 0)) return everyoneTheSame();
+    const over: string[] = [];
+    held.forEach((w, id) => {
+      // w / rest x left > pct, multiplied out. Exact on whole minor units; the
+      // relative hair absorbs a double on a fractional weight sitting AT the cap.
+      if (!clamped.has(id) && w * left > pct * rest * (1 + 1e-12)) over.push(id);
+    });
+    if (over.length === 0) break;
+    over.forEach((id) => clamped.add(id));
+  }
+
+  const atCap = floorToStored((pct * rest) / (100 - clamped.size * pct));
+  held.forEach((w, id) => out.set(id, clamped.has(id) ? atCap : w));
   return out;
 }
 

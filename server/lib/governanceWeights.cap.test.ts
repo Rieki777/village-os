@@ -4,8 +4,9 @@
  * Rye, 2026-11-05: the cap is "built as an option, OFF by default". In token
  * mode a member weighs their raw balance of the weight token, and quorum is a
  * share of the weight frozen when a ballot opens, so one large holder can meet
- * quorum alone or carry a vote. The cap limits how much of the roll any one
- * member carries, and only when a founder switches it on.
+ * quorum alone or carry a vote. The cap limits how much of the VOTE any one
+ * member carries (a share of the frozen total, which quorum reads), and only
+ * when a founder switches it on.
  *
  * The roll every case freezes: one member holds 90 Village Voice and four hold
  * 2.5 each, 100 between them. Village Voice keeps hundredths and a weight is
@@ -66,8 +67,11 @@ describe("the switch and the cap, as the registry ships them", () => {
     expect(criticalityOf(pct!)).toBe("constitutional");
   });
 
-  it("says the cap only while it is on, and only in token mode", () => {
-    expect(weightCapLine({ mode: "token", token: VILLAGE_VOICE, capPct: 20 })).toContain("20%");
+  it("says the cap is a share of the vote, and where everyone weighs the same, only while it is on in token mode", () => {
+    const line = weightCapLine({ mode: "token", token: VILLAGE_VOICE, capPct: 20 }) ?? "";
+    expect(line).toContain("more than 20% of the vote");
+    expect(line).toContain("fewer than 5 members holding weight, everyone weighs the same");
+    expect(weightCapLine({ mode: "token", token: VILLAGE_VOICE, capPct: 30 })).toContain("fewer than 4 members");
     expect(weightCapLine({ mode: "token", token: VILLAGE_VOICE, capPct: null })).toBeNull();
     expect(weightCapLine({ mode: "token", token: VILLAGE_VOICE })).toBeNull();
     expect(weightCapLine({ mode: "equal", token: null, capPct: 20 })).toBeNull();
@@ -138,19 +142,19 @@ describe.skipIf(!configured)("the cap on a frozen roll (MySQL)", () => {
     expect(total).toBe(UNCAPPED_TOTAL);
   });
 
-  it("with the cap on at 20, nobody's frozen weight is over 20% of the uncapped total", async () => {
+  it("with the cap on at 20, each of the five weighs exactly 20% of the frozen total", async () => {
     expect((await setVariable(pool, WEIGHT_CAP_ON_KEY, "true")).ok).toBe(true);
     expect((await setVariable(pool, WEIGHT_CAP_PCT_KEY, "20")).ok).toBe(true);
     try {
       const { total, frozen } = await freeze();
+      // The frozen total is what quorum and unity read, so the share of the
+      // VOTE is a share of it. Five holders at 20 is exactly one fifth each.
       for (const id of ROLL) {
-        expect(frozen.get(id)!, `${id} carries ${frozen.get(id)}`).toBeLessThanOrEqual(UNCAPPED_TOTAL * 0.2);
+        expect(frozen.get(id)! * 5, `${id} carries ${frozen.get(id)} of ${total}`).toBe(total);
       }
-      // The big holder is trimmed to the ceiling and nobody under it moves.
-      expect(frozen.get(BIG)).toBe(2000);
+      // Nobody under the cap moves: the four smaller holders keep 250 each.
       for (const id of SMALL) expect(frozen.get(id), id).toBe(250);
-      // The frozen total is the capped sum, and it is what quorum reads.
-      expect(total).toBe(3000);
+      expect(total).toBe(1250);
     } finally {
       await setVariable(pool, WEIGHT_CAP_ON_KEY, "false");
     }

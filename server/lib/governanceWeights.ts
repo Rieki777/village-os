@@ -22,7 +22,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { tokenDef, memberAccount } from "./ledger";
 import { isListedForTrade } from "./exchange";
 import { boolVar, numberVar, stringVar } from "./variables";
-import { capWeights } from "../../shared/governanceShare";
+import { capWeights, fewestHoldersForCap } from "../../shared/governanceShare";
 
 /**
  * The share arithmetic, re-exported so a server caller has ONE door to
@@ -30,7 +30,7 @@ import { capWeights } from "../../shared/governanceShare";
  * run needs it and may not import this file: `shared/dryRun/` has no import
  * path to a connection, and this module opens one on its second line.
  */
-export { capWeights, shareOfTotal, topShares } from "../../shared/governanceShare";
+export { capWeights, fewestHoldersForCap, shareOfTotal, topShares } from "../../shared/governanceShare";
 
 export type WeightMode = "equal" | "token" | "custom";
 
@@ -43,7 +43,7 @@ export interface WeightModeSnapshot {
   /** The token slug when mode = token, else null. */
   token: string | null;
   /**
-   * The cap on one member's share of the roll, in percent, when mode = token
+   * The cap on one member's share of the vote, in percent, when mode = token
    * and the cap is switched on. Null or absent means no cap, which is the
    * shipped posture, so a snapshot built before the cap existed reads the same.
    */
@@ -76,7 +76,12 @@ export function weightModeNow(): WeightModeSnapshot {
  */
 export function weightCapLine(snapshot: WeightModeSnapshot): string | null {
   if (snapshot.mode !== "token" || snapshot.capPct == null) return null;
-  return `The cap is on: when a ballot opens, no member's weight goes above ${snapshot.capPct}% of the whole roll's balance.`;
+  const share = `The cap is on: when a ballot opens, no member carries more than ${snapshot.capPct}% of the vote.`;
+  // The same number `capWeights` switches on, so the sentence and the
+  // arithmetic cannot disagree about where everyone starts to weigh the same.
+  const fewest = fewestHoldersForCap(snapshot.capPct);
+  if (!(fewest > 1) || !Number.isFinite(fewest)) return share;
+  return `${share} With fewer than ${fewest} members holding weight, everyone weighs the same.`;
 }
 
 /**

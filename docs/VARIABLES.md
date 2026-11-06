@@ -2077,7 +2077,7 @@ Which token weighs votes when the weight mode is token. Only tokens this platfor
 
 ### Cap one member's voting weight
 
-Turns on a ceiling on how much voting weight any one member carries. It only matters when the weight mode is token, where a member weighs their balance, so one large holder could meet quorum alone or carry a vote. With this on, when a ballot opens no member's weight goes above the cap below, counted against the whole roll's balance. What it costs: a large holder's extra balance stops counting at the cap, and with few holders the trimmed total is smaller, so a capped member can still hold a large share of what is left. It is off unless you turn it on.
+Turns on a ceiling on how much of the vote any one member carries. It only matters when the weight mode is token, where a member weighs their balance, so one large holder could meet quorum alone or carry a vote. With this on, when a ballot opens no member carries more than the share below of that ballot's vote, and the rest of the vote is shared among everyone else in proportion to what they hold. What it costs: a large holder's balance past the cap stops counting, and on a small roll balances stop counting at all: with fewer than 5 members holding weight at the default 20 (100 divided by the cap), everyone weighs the same. It is off unless you turn it on.
 
 | Fact | Value |
 | --- | --- |
@@ -2091,7 +2091,7 @@ Turns on a ceiling on how much voting weight any one member carries. It only mat
 
 ### The most voting weight one member can carry
 
-While the cap above is on, the largest share of the roll's total balance that one member's weight can reach when a ballot opens. It only matters in token mode, and only with the cap switched on. 20 means a member holding 90 of 100 counts as 20, and members under the cap count in full. Lower spreads power wider and discards more of what the largest holders hold. To have no cap, turn the switch off. This number never does that.
+While the cap above is on, the largest share of a ballot's vote that one member can carry. It only matters in token mode, and only with the cap switched on. At 20, a member holding 90 beside four members holding 2.5 each carries a fifth of the vote, the same as each of them, and members under the cap keep their balance in full. With fewer than 5 members holding weight at 20, everyone weighs the same, because five shares of 20 is the least that makes a whole vote. Lower spreads power wider and needs more holders before balances count at all. To have no cap, turn the switch off. This number never does that.
 
 | Fact | Value |
 | --- | --- |
