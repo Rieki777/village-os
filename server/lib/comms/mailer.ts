@@ -57,7 +57,7 @@ export const DEFAULT_EMAIL_CONFIG = {
   // dormant and the site shows the plain form instead. No key, no cost.
   assistant_api_key: "",
   // The From: address every village email leaves under. Blank inherits
-  // EMAIL_FROM, then the platform's last-resort literal. So an existing
+  // EMAIL_FROM; with neither set nothing is sent (there is no fallback sender). So an existing
   // deployment changes nothing, and a fork can set its own sender from Admin
   // without a deploy. Must be `addr@dom.tld` or `Name <addr@dom.tld>`.
   sender: "",
