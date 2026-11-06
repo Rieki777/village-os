@@ -289,12 +289,12 @@ describe("the See frame's gaps between the words and the settings", () => {
     const gaps = gapFacts({
       block: block("roles", ["work"]),
       answer: { sections: [{ id: "work", title: "Work", readable: false, status: "not-shared" }] },
-      doors: [{ label: "The term on each seat", href: "/roles", why: "Seat terms are set on each seat.", wired: false }],
+      doors: [{ label: "The term on each role", href: "/roles", why: "Role terms are set on each role.", wired: false }],
       proposals: [],
     });
     expect(gaps.map((g) => g.text)).toEqual([
       "Words under Work are written and not opened to members, so members read the settings without them.",
-      "The term on each seat cannot be changed from the canvas yet. Seat terms are set on each seat.",
+      "The term on each role cannot be changed from the canvas yet. Role terms are set on each role.",
     ]);
     expect(gaps[1].href).toBe("/roles");
 

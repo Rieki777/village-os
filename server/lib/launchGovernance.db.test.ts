@@ -28,6 +28,7 @@ import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { PROPORTIONAL_CLOSING_STATEMENT } from "../../shared/closingPolicies";
 import { recordCanvasReading } from "../repos/canvasReadings";
 import { writeConfigDocument } from "../repos/appConfigDocs";
+import { dbDocument } from "../repos/store-db";
 import { insertRoleIfAbsent } from "../repos/stewardRoles";
 import { insertHoldingIfAbsent } from "../repos/permissionHoldings";
 import { usersRepo } from "../repos/users";
@@ -169,6 +170,12 @@ describe.skipIf(!configured)("the governance rows on the launch vote", () => {
     expect((await confirmManual(pool, "issuance-cap", "usr-founder", "declined")).ok).toBe(true);
     expect((await writeGoverningPurpose(pool, { statement: PURPOSE_EXAMPLE, writtenBy: "usr-founder" })).ok).toBe(true);
     await writePolicy(policy() as any);
+    // The village's clock, answered: blocking since readiness R059 (main grew
+    // the row while the canvas was held), read from the stored season document.
+    await dbDocument(pool, "season", {} as any).put({
+      seasons: [], cadence: "solstice-equinox", timezone: "UTC",
+      timezoneAnswer: { at: "2026-10-31T00:00:00.000Z", by: "usr-founder" },
+    } as any);
 
     // Eleven of the twelve blocks read, all at Absent. The twelfth is the first test.
     for (const blockId of CANVAS_BLOCK_IDS) if (blockId !== "impact") await readBlock(blockId);

@@ -127,6 +127,9 @@ export const SOURCES = [
   "shared/governingPurpose.ts",
   "shared/needs.ts",
   "server/lib/redemptionBallot.ts",
+  // The conflict agreement's subject name (`[CONFLICT_AGREEMENT]` in
+  // SUBJECT_CLOSERS) is read out of here, one import away, like the three above.
+  "shared/conflictAgreement.ts",
   // Every route module, walked as a directory rather than named one by one.
   // The three-file list this replaced made `server/routes/delegation.ts`,
   // `governanceVetoes.ts` and `governanceLanding.ts` invisible, and the

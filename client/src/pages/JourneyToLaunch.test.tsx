@@ -50,6 +50,18 @@ vi.mock("@/lib/gameApi", () => ({
   },
 }));
 
+/*
+ * The canvas is an optional module, off by default (Rye's module ruling,
+ * 2026-10-01). The page asks the catalogue through the REAL `moduleIsOn`, over
+ * this one: canvas ON for every test unless a test turns it off.
+ */
+const catalog = vi.hoisted(() => ({ modules: [] as any[], loaded: true, failed: false }));
+vi.mock("@/modules/ModuleProvider", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/modules/ModuleProvider")>();
+  return { ...real, useModules: () => ({ ...catalog }), useModuleOn: (id: string) => real.moduleIsOn(catalog, id) };
+});
+const CANVAS_ON = { id: "canvas", name: "Governance Canvas", description: "", core: false, lifecycle: "members", hyphaLinks: [] };
+
 import JourneyToLaunch from "./JourneyToLaunch";
 
 /**
@@ -147,6 +159,9 @@ const draw = () =>
   );
 
 beforeEach(() => {
+  catalog.modules = [CANVAS_ON];
+  catalog.loaded = true;
+  catalog.failed = false;
   auth.current = { user: null, loading: false };
   me.current = { membership: true };
   me.asked = 0;
@@ -514,6 +529,41 @@ describe("the canvas view", () => {
     fireEvent.click(screen.getByRole("button", { name: /Ask the guide/ }));
     expect(screen.getByRole("button", { name: "Organizing" })).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole("dialog"), "the companion stepped out of the corner").toBeNull());
+  });
+});
+
+/*
+ * THE CANVAS IS A MODULE (Rye's module ruling, 2026-10-01). Off, nobody is
+ * offered the tab, an address that names the canvas lands on the launch view,
+ * the canvas is never asked for, and an admin reads one line to Modules.
+ */
+describe("the canvas view while the canvas module is off", () => {
+  it("offers no Canvas tab to a member or an admin, lands ?view=canvas on the launch view, and points the admin to Modules", async () => {
+    catalog.modules = [];
+    window.history.replaceState({}, "", "/journey-to-launch?view=canvas");
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    const member = draw();
+    await waitFor(() => expect(me.asked).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole("button", { name: "Canvas" })).toBeNull();
+    expect(screen.getByText("See what these settings would do")).toBeTruthy();
+    expect(screen.queryByText("How this village governs itself")).toBeNull();
+    expect(screen.queryByTestId("canvas-radar")).toBeNull();
+    member.unmount();
+
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: STATUS },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Canvas" })).toBeNull();
+    expect(screen.queryByTestId("canvas-radar")).toBeNull();
+    const off = screen.getByTestId("journey-canvas-off");
+    expect(off.textContent).toContain("Governance Canvas is off.");
+    expect(off.querySelector("a")?.getAttribute("href")).toBe("/admin?tab=modules&module=canvas");
+    expect(calls.map((c) => c.url).filter((u) => u.startsWith("/api/canvas")), "the canvas is never asked for").toEqual([]);
   });
 });
 

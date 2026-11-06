@@ -79,6 +79,7 @@
 import {
   GOVERNANCE_MODE,
   MINT_RULE,
+  ORG_DRAFT,
   SUBJECT_THRESHOLDS,
   thresholdsFor,
   thresholdsForSubject,
@@ -254,7 +255,7 @@ export interface DecisionMatrixInputs {
   /** governance.sensing_days. */
   sensingDays: number;
   steward: StewardReach;
-  /** Every transferable power has left the founding seat (`villageHandoverState`). */
+  /** Every transferable power has left the founding role (`villageHandoverState`). */
   handoverComplete: boolean;
   powers: readonly PowerHolding[];
   /** cycle.settlement_mode, through `settlementModeFrom`: whether a moon's end opens a vote at all. */
@@ -281,6 +282,7 @@ export const SUBJECT_DECISIONS: Readonly<Record<string, string>> = {
   [CYCLE_SETTLEMENT]: "Settling a moon and releasing its pool",
   [GPS_CHANGE]: "Changing the governing purpose statement",
   [CONFLICT_AGREEMENT]: "Changing the conflict agreement",
+  [ORG_DRAFT]: "Changing the village's circles and roles",
 };
 
 /** The votes that move a power or a seat, which carry no floor of their own. */
@@ -289,8 +291,8 @@ export const MOVING_DECISIONS: Readonly<Record<string, string>> = {
   power_grant: "Giving a role a power it does not carry yet",
   power_return: "Handing a power back to the admin panel",
   role_seat: "Seating somebody in a role",
-  role_unseat: "Taking somebody out of a seat",
-  [ROLE_APPLICATION]: "Seating a member who applied for seats, on their terms",
+  role_unseat: "Taking somebody out of a role",
+  [ROLE_APPLICATION]: "Seating a member who applied for roles, on their terms",
 };
 
 /** The three power votes. Every ceremony among them refuses an opener whose only path is an admin account. */
@@ -318,7 +320,7 @@ const GROUP_WORDS: Readonly<Record<DecisionMatrixGroupId, { title: string; intro
     intro: "Each of these is a vote, and the platform sets the least it has to clear.",
   },
   "moving-power": {
-    title: "Moving a power or a seat",
+    title: "Moving a power or a role",
     intro: "The votes that hand a power to a role, take it back, or change who sits where.",
   },
   powers: {
@@ -385,8 +387,8 @@ export function seatDoor(subject: "role_seat" | "role_unseat", decideHeldByVilla
       : `An administrator can also seat anybody in any role but the steward's, with no vote, themselves included. So can anyone else who holds ${power}: never themselves, and only in a role whose powers they hold.`;
   }
   return decideHeldByVillage
-    ? `An administrator who also holds ${power} can take somebody out of any seat but the steward's, with no vote.`
-    : "An administrator can also take somebody out of any seat but the steward's, with no vote.";
+    ? `An administrator who also holds ${power} can take somebody out of any role but the steward's, with no vote.`
+    : "An administrator can also take somebody out of any role but the steward's, with no vote.";
 }
 
 /**
@@ -705,7 +707,7 @@ function voteRow(
   if (subject === GPS_CHANGE && !inp.handoverComplete) {
     approval = {
       who: "founder",
-      text: "The founder, who writes the statement until every transferable power has left the founding seat. Until then this vote cannot be opened.",
+      text: "The founder, who writes the statement until every transferable power has left the founding role. Until then this vote cannot be opened.",
     };
   } else if (subject === CONFLICT_AGREEMENT && !inp.gameStarted) {
     // The consequence pen (plan 2.3): the founders write it until the Birthing.
@@ -773,7 +775,7 @@ function rollText(subject: string): string {
   const t = thresholdsForSubject(subject);
   const extra: string[] = [];
   if (t && t.minElectorate > 0) extra.push(`at least ${t.minElectorate} people on it`);
-  if (t?.everySeatWeighs) extra.push("every seat carrying weight");
+  if (t?.everySeatWeighs) extra.push("every role carrying weight");
   if (t?.minYesHeads === "all") extra.push("every one of them voting yes");
   else if (typeof t?.minYesHeads === "number" && t.minYesHeads > 0) extra.push(`at least ${t.minYesHeads} of them voting yes`);
   const base = "The roll: the members frozen onto the ballot when it opens";
@@ -802,8 +804,8 @@ function stewardVetoApproval(h: PowerHolding, role: string, governanceOnForMembe
     return { who: "holder", text: `${held}The stewards: whoever is seated in ${where} acts on it. ${admin}` };
   }
   const seat = governanceOnForMembers
-    ? "The village seats one by vote."
-    : "A vote seats one, once the governance module is on for members.";
+    ? "The village chooses a holder by vote."
+    : "A vote chooses a holder, once the governance module is on for members.";
   return {
     who: "nobody",
     text: `${held}Nobody today: no steward is seated, so no carried decision can be stopped. ${seat} ${admin}`,
@@ -812,12 +814,14 @@ function stewardVetoApproval(h: PowerHolding, role: string, governanceOnForMembe
 
 /**
  * The dial proposal sentence, read off the registry the proposal path reads.
- * `validateChangeSet` (server/lib/mechanics.ts) refuses every dial whose ring
- * is not "open", so while any such dial exists, "any dial" would be untrue.
+ * Every dial is proposable from day one (Rye, 2026-09-25); a founder-held dial
+ * (`ringOf` not "open") is adopted by the founders before the start and by the
+ * village's vote after it (server/lib/founderDials.ts). `governance.weight_mode`
+ * is the one dial with a door of its own, the mode switch.
  */
 export function dialProposalLine(): string {
   return VARIABLES.some((v) => ringOf(v) !== "open")
-    ? "Any member can propose a change to a dial the village governs, whoever holds this. A dial marked founder-held cannot be moved by a proposal."
+    ? "Any member can propose a change to any dial, whoever holds this. Before the village starts its Game, the founders adopt a change to a dial they hold; after it, the village's vote does."
     : "Any member can propose a change to any dial, whoever holds this.";
 }
 
@@ -873,7 +877,7 @@ function powerRow(cap: Capability, p: PowerHolding | undefined, inp: DecisionMat
     // neither of which is a vote. What stays true is that no admin route SEATS
     // anybody there (`stewardSeatRefusal` in server/lib/roleGrants.ts).
     lines.push(
-      "The steward's seat is filled only by a village vote, and no admin route seats anybody in it. " +
+      "The steward's role is filled only by a village vote, and no admin route seats anybody in it. " +
         "It empties by a vote, when its term ends, or when the steward leaves the village, " +
         "and an administrator can remove them from the village without a vote.",
     );

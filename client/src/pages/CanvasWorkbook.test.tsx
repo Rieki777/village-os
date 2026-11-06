@@ -40,6 +40,24 @@ vi.mock("@/lib/gameApi", async (importOriginal) => ({
   useGameConfig: () => config,
 }));
 
+// The canvas is an optional module, off by default (Rye's module ruling,
+// 2026-10-01). These tests read the workbook where it is ON, through the REAL
+// `moduleIsOn` over the catalog below; the last describe turns it off.
+const catalog = vi.hoisted(() => ({ modules: [] as any[], loaded: true, failed: false }));
+vi.mock("@/modules/ModuleProvider", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/modules/ModuleProvider")>();
+  return { ...real, useModules: () => ({ ...catalog }), useModuleOn: (id: string) => real.moduleIsOn(catalog, id) };
+});
+const CANVAS_ON = { id: "canvas", name: "Governance Canvas", description: "", core: false, lifecycle: "public", hyphaLinks: [] };
+
+// The gate is the platform's own card, proven in ModuleGate.test.tsx; here it
+// only has to be the thing that renders, for the right module.
+vi.mock("@/components/modules/ModuleGate", () => ({
+  default: ({ moduleId, name }: { moduleId: string; name: string }) => (
+    <div data-testid="module-gate" data-module={moduleId}>{name}</div>
+  ),
+}));
+
 import CanvasWorkbook from "./CanvasWorkbook";
 
 /** A Blob's text, through FileReader where the environment's Blob has no text(). */
@@ -54,6 +72,9 @@ function readBlob(b: Blob): Promise<string> {
 
 beforeEach(() => {
   config = { project: { name: "Willowbrook" } };
+  catalog.modules = [CANVAS_ON];
+  catalog.loaded = true;
+  catalog.failed = false;
   // The workbook reads nothing over the network. Any request is a failure.
   vi.stubGlobal(
     "fetch",
@@ -217,5 +238,19 @@ describe("the controls", () => {
       u.createObjectURL = before.create;
       u.revokeObjectURL = before.revoke;
     }
+  });
+});
+
+describe("behind the canvas module", () => {
+  it("shows the module gate, and no workbook, where the canvas module is off", () => {
+    catalog.modules = [];
+    render(<CanvasWorkbook />);
+    const gate = screen.getByTestId("module-gate");
+    expect(gate.getAttribute("data-module")).toBe("canvas");
+    expect(gate.textContent).toBe("Governance Canvas");
+    expect(screen.queryByTestId("workbook-village")).toBeNull();
+    expect(screen.queryByTestId("workbook-levels")).toBeNull();
+    expect(screen.queryAllByTestId(/^workbook-block-/)).toHaveLength(0);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

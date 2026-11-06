@@ -68,7 +68,14 @@ vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }
 vi.mock("@/hooks/useVillageContent", () => ({
   readVillageSection: (section: string) => Promise.resolve(stored[section] ?? null),
 }));
+/**
+ * The canvas's two optional modules, both off by default (Rye's module ruling,
+ * 2026-10-01). Every case here reads the page with both ON, as it was written
+ * when the canvas was always there; the last describe turns them off.
+ */
+let modulesOn: Set<string>;
 vi.mock("@/modules/ModuleProvider", () => ({
+  useModuleOn: (id: string) => modulesOn.has(id),
   useHypha: () =>
     hyphaConfigured
       ? { configured: true, orgUrl: "https://dho.example.org/willowbrook", links: {} }
@@ -102,6 +109,7 @@ const said = (sectionId: string, key = "heading") =>
 const stewardsHeading = () => screen.findByRole("heading", { name: said("stewards") });
 
 beforeEach(() => {
+  modulesOn = new Set(["canvas", "conflict-evolution"]);
   gameConfig = { project: { name: "Willowbrook", commitmentName: "Village Pledge" }, currency: { name: "Thanks" }, brochurePages: true };
   stored = {};
   hyphaConfigured = false;
@@ -762,6 +770,36 @@ describe("what a village without the brochure is told", () => {
     await screen.findByTestId("public-line-purpose");
     expect(screen.queryByText(/sociocracy/i)).toBeNull();
     expect(screen.queryByText(/Hypha/)).toBeNull();
+  });
+});
+
+/*
+ * BOTH CANVAS MODULES OFF: the page is what it was before the canvas build.
+ * No public lines, no matrix, no workbook card, none of their requests, and
+ * the conflict section prints the exit policy's steps without asking for an
+ * agreement, even where one is stored.
+ */
+describe("the Governance page with the canvas modules off", () => {
+  it("draws no canvas section, asks no canvas door, and prints the exit policy's steps in the conflict section", async () => {
+    modulesOn = new Set();
+    answerWith(policy(VILLAGE_STEPS), true, { stored: true, agreement: { steps: [{ what: "An agreement step", whoInRoom: null }] } });
+    renderPage();
+    await headline();
+    const slot = await screen.findByTestId("conflict-agreement-slot");
+    expect(await within(slot).findByText(VILLAGE_STEPS[0])).toBeTruthy();
+    await waitFor(() => expect(fetched("GET /api/game/mechanics")).toBe(true));
+    await new Promise((r) => setTimeout(r, 0));
+    const h2s = Array.from(document.querySelectorAll("h2")).map((h) => h.textContent);
+    expect(h2s.length, "the page's own sections still draw").toBeGreaterThan(0);
+    for (const h of CANVAS_SECTION_HEADINGS) expect(h2s, h).not.toContain(h);
+    expect(screen.queryByTestId("public-line-purpose")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show who decides what" })).toBeNull();
+    expect(document.querySelector('a[href="/canvas/workbook"]')).toBeNull();
+    expect(screen.queryByText("An agreement step")).toBeNull();
+    expect(fetched(`GET ${CANVAS_PUBLIC_PATH}`)).toBe(false);
+    expect(fetched(`GET ${CANVAS_PUBLIC_MATRIX_PATH}`)).toBe(false);
+    expect(fetched("GET /api/conflict-agreement/public")).toBe(false);
+    expect(fetched("GET /api/exit-policy")).toBe(true);
   });
 });
 });

@@ -178,7 +178,7 @@ describe("pinned to the engine: change what the engine enforces and the row chan
     const r = row(generateDecisionMatrix(inputs()), `vote:${VILLAGE_LAUNCH}`);
     expect(r.approval.who).toBe("roll");
     expect(r.approval.text).toContain(`at least ${t.minElectorate} people on it`);
-    expect(r.approval.text).toContain("every seat carrying weight");
+    expect(r.approval.text).toContain("every role carrying weight");
     expect(r.approval.text).toContain("every one of them voting yes");
     expect(r.detail).toBe(t.why);
   });
@@ -599,7 +599,7 @@ describe("the steward's veto names who can really stop a carried decision", () =
   it("its seat empties at the end of its term as well as by a vote, and no other power's row says so", () => {
     const m = generateDecisionMatrix(inputs());
     const said = row(m, "power:steward.veto").method.lines.join(" ");
-    expect(said).toContain("The steward's seat is filled only by a village vote, and no admin route seats anybody in it.");
+    expect(said).toContain("The steward's role is filled only by a village vote, and no admin route seats anybody in it.");
     expect(said).toContain("It empties by a vote, when its term ends, or when the steward leaves the village");
     expect(row(m, "power:dial.set").method.lines.join(" ")).not.toContain("steward's seat");
   });
@@ -698,18 +698,19 @@ describe("a vote is not always the only door", () => {
 });
 
 describe("dial proposals, as the proposal path answers them", () => {
-  it("a founder-held dial is refused by the proposal path, and the dial.set row says so", async () => {
+  it("a founder-held dial passes the proposal path (Rye, 2026-09-25), and the dial.set row says who adopts it", async () => {
     const founderHeld = VARIABLES.find((v) => ringOf(v) !== "open" && v.key !== "governance.weight_mode");
     expect(founderHeld, "the registry holds a founder-held dial").toBeTruthy();
     const pool = { query: async () => [[]] } as never;
     const value = String(founderHeld!.default);
     const { problems } = await validateChangeSet(pool, [{ key: founderHeld!.key, to: value }], () => value, 0);
-    expect(problems.map((p) => p.problem)).toContain("This dial is founder-held and cannot be moved by proposal");
+    expect(problems.map((p) => p.problem).join(" ")).not.toMatch(/founder-held/i);
 
     const r = row(generateDecisionMatrix(inputs()), "power:dial.set");
     expect(r.consultation).toContain(dialProposalLine());
-    expect(dialProposalLine()).toContain("A dial marked founder-held cannot be moved by a proposal.");
-    expect(r.consultation.join(" ")).not.toContain("any dial,");
+    expect(dialProposalLine()).toContain("Any member can propose a change to any dial");
+    expect(dialProposalLine()).toContain("the founders adopt a change to a dial they hold");
+    expect(dialProposalLine()).not.toContain("cannot be moved");
   });
 });
 

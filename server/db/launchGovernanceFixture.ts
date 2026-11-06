@@ -10,9 +10,14 @@
  * other two through the real routes, so a suite passing here passed the same
  * doors a founder walks through.
  *
- *   recordEveryCanvasBlock   one reading per block, at Absent, with its
- *                            sentence: "not decided yet, because..." is a
- *                            reading, and it is the cheapest honest one.
+ *   recordEveryCanvasBlock   switches the Governance Canvas module on for
+ *                            members through the real lifecycle route (it is
+ *                            an optional module, off by default, and its
+ *                            launch row applies only while it is on: Rye's
+ *                            module ruling, 2026-10-01), then one reading per
+ *                            block, at Absent, with its sentence: "not decided
+ *                            yet, because..." is a reading, and it is the
+ *                            cheapest honest one.
  *   CONFLICT_DOOR_READY      spread into the exit policy's `restorative` body.
  *                            A named outside contact, which opens the door in
  *                            a village of any size, and a reply time the
@@ -42,6 +47,8 @@ export const CONFLICT_DOOR_READY = {
  * so a suite never proceeds on a checklist it believes is clear.
  */
 export async function recordEveryCanvasBlock(call: LaunchSuiteCall): Promise<void> {
+  const on = await call("PUT", "/api/admin/modules/canvas/lifecycle", { body: { lifecycle: "members" } });
+  if (on.status !== 200) throw new Error(`switching the canvas on answered ${on.status}: ${JSON.stringify(on.json)}`);
   for (const blockId of CANVAS_BLOCK_IDS) {
     const r = await call("POST", "/api/canvas/readings", {
       body: {

@@ -245,7 +245,8 @@ describe.skipIf(!configured)("the canvas readers against the database", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
-    wireReaders({ moduleIsOn: () => false, boolVar: () => false });
+    // The canvas is an optional module (Rye, 2026-10-01): these suites run with it on, as a village that switched it on.
+    wireReaders({ moduleIsOn: (id: string) => id === "canvas", boolVar: () => false });
     const brief = [
       ["b-aims", "aims", "Aims", WORDS.memberAims, "member", "confirmed"],
       ["b-rhythm", "rhythm", "Rhythm", WORDS.memberRhythm, "member", "confirmed"],

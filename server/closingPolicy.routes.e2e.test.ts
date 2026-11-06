@@ -53,7 +53,7 @@ if (!DB_CONFIGURED) {
 
 const DIST = path.resolve(process.cwd(), "dist/index.js");
 // A window checked by scripts/check-e2e-ports.mjs, never claimed by hand here.
-const PORT = 6500 + (process.pid % 60);
+const PORT = 4150 + (process.pid % 40);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "closing-admin";
 const PASSWORD = "ClosingTest123!";

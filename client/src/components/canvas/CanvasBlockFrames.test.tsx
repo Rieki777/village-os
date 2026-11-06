@@ -35,6 +35,24 @@ vi.mock("./DecisionMatrix", () => ({
   default: () => <div data-testid="generated-matrix">The platform's half of the matrix</div>,
 }));
 
+/*
+ * The conflict agreement follows its own optional module, `conflict-evolution`,
+ * off by default beside the canvas (Rye's module ruling, 2026-10-01). Both are
+ * ON here, read through the REAL `moduleIsOn`; one case below turns the
+ * conflict module off and reads the restorative steps in its place, which are
+ * stood in for like the other children that fetch for themselves.
+ */
+const catalog = vi.hoisted(() => ({ modules: [] as any[], loaded: true, failed: false }));
+vi.mock("@/modules/ModuleProvider", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/modules/ModuleProvider")>();
+  return { ...real, useModules: () => ({ ...catalog }), useModuleOn: (id: string) => real.moduleIsOn(catalog, id) };
+});
+const moduleOn = (id: string) => ({ id, name: id, description: "", core: false, lifecycle: "members", hyphaLinks: [] });
+const BOTH_ON = [moduleOn("canvas"), moduleOn("conflict-evolution")];
+vi.mock("@/components/governance/VillageConflictSteps", () => ({
+  default: () => <div data-testid="restorative-steps">The village's restorative steps</div>,
+}));
+
 import { CanvasBaseline } from "./CanvasBaseline";
 
 const NOTE_IS_PUBLIC = "Everyone in the village can read what you write here.";
@@ -165,6 +183,9 @@ const answer = (method: string, url: string, status: number, body: unknown) => {
 };
 
 beforeEach(() => {
+  catalog.modules = [...BOTH_ON];
+  catalog.loaded = true;
+  catalog.failed = false;
   calls = [];
   answers = new Map();
   vi.stubGlobal(
@@ -657,6 +678,22 @@ describe("the blocks that host an editor", () => {
     // agreement's "When power is involved", which the cover role does not take.
     expect(form.getByLabelText("The cover role, which hears a request when the care role cannot")).toBeTruthy();
     expect(form.queryByText(/for when the care role is part of it/)).toBeNull();
+  });
+
+  it("Conflict, with the conflict-evolution module off, shows the restorative steps and no agreement editor", async () => {
+    catalog.modules = [moduleOn("canvas")];
+    answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", "/api/canvas/blocks/conflict", 200, conflictBlock());
+    answer("GET", "/api/roles", 200, []);
+    draw();
+    fireEvent.click(within(await screen.findByTestId("canvas-block-conflict")).getByRole("button", { name: "Open this block: Conflict" }));
+    const frames = within(await screen.findByTestId("canvas-frames-conflict"));
+    fireEvent.click(frames.getByRole("button", { name: "Say" }));
+    const steps = within(await frames.findByTestId("canvas-say-restorative"));
+    expect(steps.getByRole("heading", { name: "The restorative steps" })).toBeTruthy();
+    expect(steps.getByTestId("restorative-steps")).toBeTruthy();
+    expect(frames.queryByTestId("canvas-say-agreement")).toBeNull();
+    expect(frames.queryByTestId("agreement-editor")).toBeNull();
   });
 
   it("Conflict, before the Birthing, once an agreement is saved: the box says the care door is the agreement's, and the pen's card offers Decline and no Adopt", async () => {

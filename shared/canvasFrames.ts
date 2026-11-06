@@ -145,9 +145,9 @@ export function isCanvasDoorId(value: unknown): value is CanvasDoorId {
 export const UNWIRED_DOORS: ReadonlyArray<{ block: CanvasBlockId; label: string; href: string; why: string }> = [
   {
     block: "roles",
-    label: "The term on each seat",
+    label: "The term on each role",
     href: "/roles",
-    why: "Seat terms are set on each seat, where the seat is filled.",
+    why: "Role terms are set on each role, where the role is filled.",
   },
   {
     block: "meetings",

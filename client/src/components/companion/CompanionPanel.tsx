@@ -60,7 +60,7 @@ const READ_FROM: Record<string, string> = {
   "events.week": "the calendar",
   "record.decisions": "the decision record",
   "roles.all": "the roles",
-  "seats.vacant": "the seats",
+  "seats.vacant": "the roles",
   "circles.all": "the circles",
   "quests.library": "the quests",
   "badges.all": "the badges",

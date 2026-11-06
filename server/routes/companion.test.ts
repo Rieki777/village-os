@@ -25,6 +25,7 @@
 import http from "node:http";
 import express from "express";
 import type { Pool } from "mysql2/promise";
+import { loadModuleSettings } from "../lib/modules";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import type { CapabilityCtx } from "../../shared/capabilities";
@@ -98,7 +99,11 @@ describe.skipIf(!configured)("the member companion", () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await ensureInstanceIdentity(pool);
-    wireReaders({ moduleIsOn: () => false, boolVar: () => false });
+    // canvasOn() reads the stored lifecycle, the way boot loads it.
+    await pool.query("INSERT INTO module_settings (module_id, lifecycle) VALUES ('canvas','members')"); // module-review-ok: switching a module on in the scratch schema
+    await loadModuleSettings(pool);
+    // The canvas is an optional module (Rye, 2026-10-01): these suites run with it on, as a village that switched it on.
+    wireReaders({ moduleIsOn: (id: string) => id === "canvas", boolVar: () => false });
     wireAssistant({
       villageKey: () => villageKey,
       rateLimited: async () => false,

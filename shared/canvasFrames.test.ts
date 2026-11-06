@@ -77,7 +77,7 @@ describe("parsing a suggestion", () => {
     expect(on.ok && on.proposal.change).toEqual({ to: "members" });
     expect(parseCanvasProposal({ blockId: "power", target: "setting", door: "module:governance", change: { to: "everyone" }, body: "Let us vote here." }).ok).toBe(false);
     const roles = parseCanvasProposal({ blockId: "roles", target: "setting", body: "A year." });
-    expect(!roles.ok && roles.error).toContain("Seat terms");
+    expect(!roles.ok && roles.error).toContain("Role terms");
   });
 
   it("reads an exit-policy door's change field by field, and refuses an empty one", () => {

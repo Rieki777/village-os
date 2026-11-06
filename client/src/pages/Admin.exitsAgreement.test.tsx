@@ -20,12 +20,25 @@ const POLICY = {
   restorative: { intakeContactRole: "", steps: ["We talk it out. In the room: the two of us"] },
 };
 
-function serve(conflictAgreementStored: boolean, gameStarted = false) {
+/**
+ * GET /api/admin/exits in the server's shape (server/routes/exits.ts). The
+ * conflict agreement is the Conflict Evolution module's, off by default (Rye's
+ * module ruling, 2026-10-01), and the SERVER applies it: off, `agreementStored()`
+ * answers false and `restorativeByVote` is false even after the Birthing. The
+ * page reads those two facts, so the fixture derives them the way the route does.
+ */
+function serve(agreementSaved: boolean, gameStarted = false, conflictEvolution = true) {
+  const conflictAgreementStored = conflictEvolution && agreementSaved;
+  const restorativeByVote = conflictEvolution && gameStarted;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       if (String(url).endsWith("/admin/exits")) {
-        return { ok: true, status: 200, json: async () => ({ policy: POLICY, defaults: POLICY, circles: [], exits: [], conflictAgreementStored, gameStarted }) };
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ policy: POLICY, defaults: POLICY, circles: [], exits: [], conflictAgreementStored, gameStarted, restorativeByVote, conflictEvolution }),
+        };
       }
       return { ok: true, status: 200, json: async () => [] };
     }),
@@ -65,5 +78,14 @@ describe("the Departures tab and the conflict agreement", () => {
     render(<ExitsAdminTab password="secret" />);
     expect(await screen.findByDisplayValue("We talk it out. In the room: the two of us")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Change it in the agreement" })).toBeNull();
+  });
+
+  it("with Conflict Evolution off, the restorative fields stay editable after the Birthing and even over a saved agreement", async () => {
+    serve(true, true, false);
+    render(<ExitsAdminTab password="secret" />);
+    expect(await screen.findByDisplayValue("We talk it out. In the room: the two of us")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Change it in the agreement" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open the agreement, where a member who can open votes proposes a change" })).toBeNull();
+    expect(screen.queryByText(/change only by a village vote on its conflict agreement/)).toBeNull();
   });
 });

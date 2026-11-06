@@ -325,7 +325,7 @@ function facts(block: CanvasBlockId, deps: ObservedDeps): FactReader[] {
         {
           id: "seat-terms",
           href: "/roles",
-          label: "Seat terms",
+          label: "Role terms",
           read: async () => {
             const soon = now.getTime() + 30 * 24 * 60 * 60 * 1000;
             const ending = deps.roleHolders().filter((h) => {
@@ -334,8 +334,8 @@ function facts(block: CanvasBlockId, deps: ObservedDeps): FactReader[] {
               return Number.isFinite(t) && t >= now.getTime() && t <= soon;
             });
             return ending.length
-              ? `${plural(ending.length, "seat ends", "seats end")} in the next thirty days.`
-              : "No seat ends in the next thirty days.";
+              ? `${plural(ending.length, "role ends", "roles end")} in the next thirty days.`
+              : "No role ends in the next thirty days.";
           },
         },
       ];
@@ -438,8 +438,8 @@ function facts(block: CanvasBlockId, deps: ObservedDeps): FactReader[] {
             if (!atSeat.length) return "The village holds none of its transferable powers yet. The administrators carry them.";
             const seat = atSeat[0].holderRoleName ?? "steward";
             return h.remaining.length === atSeat.length
-              ? `The village holds none of its transferable powers yet. The ${seat} seat holds them until the village moves them to roles its members hold.`
-              : `The village holds none of its transferable powers yet. The ${seat} seat holds some of them and the administrators carry the rest.`;
+              ? `The village holds none of its transferable powers yet. The ${seat} role holds them until the village moves them to roles its members hold.`
+              : `The village holds none of its transferable powers yet. The ${seat} role holds some of them and the administrators carry the rest.`;
           },
         },
         {

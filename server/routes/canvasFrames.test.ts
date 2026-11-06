@@ -231,6 +231,10 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         readMintRules: async () => new Map(),
         addActivity,
         firstName: (name: string) => String(name ?? "").trim().split(/\s+/)[0] ?? "",
+        // No module switch rides in these change sets, so the readers answer
+        // the plain case and nobody holding a switch is told.
+        moduleChangeReaders: { moduleLifecycleOf: () => "off", openModuleProposal: async () => null, foundersHold: async () => true },
+        tellSwitchHolders: async () => 0,
       },
       sharedPasswordPosture: async () => false,
       addActivity,
@@ -420,7 +424,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect((await propose("member", { blockId: "conflict", body: "Some words." })).status).toBe(400);
       const seat = await propose("member", { blockId: "roles", target: "setting", body: "Terms of a year." });
       expect(seat.status).toBe(400);
-      expect(seat.body.error).toContain("Seat terms are set on each seat");
+      expect(seat.body.error).toContain("Role terms are set on each role");
       expect((await propose("member", { blockId: "purpose", target: "purpose", body: "We grow food." })).status).toBe(400);
     });
 
@@ -849,7 +853,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       }
       const text = (await block("member", "power")).body.observed.find((f: any) => f.id === "powers-held").text;
       expect(text).toBe(
-        "The village holds none of its transferable powers yet. The Founding Stewards seat holds them until the village moves them to roles its members hold.",
+        "The village holds none of its transferable powers yet. The Founding Stewards role holds them until the village moves them to roles its members hold.",
       );
     });
   });
