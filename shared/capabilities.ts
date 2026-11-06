@@ -188,7 +188,17 @@ export type Capability =
   // Decision 19 (3 November, an interim step): approve one's OWN moon recap
   // and invoice, marked "Approved by the member themselves" for review after
   // the fact. Granted once to the Treasury power group only.
-  | "moon.approve_own"; // approve one's own moon recap and invoice
+  | "moon.approve_own" // approve one's own moon recap and invoice
+  //
+  // ── The power that hands out powers (Rye, 2026-11-01; ROLE_POWERS_DESIGN.md §6) ──
+  //
+  // Giving powers to the village's roles and taking them away: which Power
+  // groups a seat carries, and what a group can do. HOLDER-ONLY on the routes
+  // that use it (server/lib/holderOnly.ts): an admin who was never given it is
+  // refused while anybody holds it, so "only the holders" is enforced rather
+  // than described. With nobody holding it the routes fall through to an
+  // admin, which is how a fresh village sets itself up.
+  | "power.assign"; // give powers to roles, and take them away
 
 /**
  * The canonical list, as a VALUE: badge validation and unlock diffs iterate
@@ -240,6 +250,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "moon.approve",
   "moon.approve_alone",
   "moon.approve_own",
+  "power.assign",
 ];
 
 /**
@@ -307,6 +318,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "moon.approve": "Approve the work in a member's end-of-moon recap",
   "moon.approve_alone": "Give both approvals of a member's end-of-moon recap by yourself",
   "moon.approve_own": "Approve your own end-of-moon recap and invoice, marked for review",
+  "power.assign": "Give powers to the village's roles, and take them away",
 };
 
 /**
@@ -478,6 +490,10 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // product, and a ceiling an operator cannot climb over is not a ceiling, it
   // is an outage.
   "intake.moderate": true,
+  // The power that hands out powers (ROLE_POWERS_DESIGN.md §6). A village
+  // that matures takes it with the rest: Rye, 2026-11-01, "All powers should be
+  // able to be passed to a village".
+  "power.assign": true,
   // Accepting a quest proposal is the moment a payout obligation is created,
   // which is exactly the sort of thing a village takes on for itself. Its one
   // route asks `guardCapability`, so the escape hatch and the public record
@@ -662,12 +678,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 23 keys
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 24 keys
  * today. The other 21 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 23 in the founding seat and has
+ * Read this way, a launched village holds all 24 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -698,7 +714,9 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * 18. `moon.approve` (0313) was born held back, which moved only the second
  * once more: 23 and 19. `moon.approve_alone` and `moon.approve_own` (the same
  * build, decision 18 and decision 19) were born held back too, and the pair
- * today is 23 and 21.
+ * today was 23 and 21. `power.assign` (the role powers build, 2026-11-05) was
+ * born transferable, the power that hands out powers being one a village takes
+ * with the rest, which moved only the first: 24 and 21.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -917,6 +935,9 @@ export const DENIABLE: Record<Capability, boolean> = {
   // Jobs as well: a warning pauses them and takes nothing the member holds.
   "moon.approve_alone": true,
   "moon.approve_own": true,
+  // A job, like keeping the library: a warning pauses somebody handing out
+  // powers and takes away nothing they hold as a say.
+  "power.assign": true,
 };
 
 /**
@@ -1004,6 +1025,10 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   // from a seat in a named power group, never a badge (decisions 18 and 19).
   "moon.approve_alone": false,
   "moon.approve_own": false,
+  // FALSE: a badge is minted by an admin, and a badge that carried this would
+  // let an admin hand themselves the power to give every other power. Seats
+  // and Power groups only, the reason `steward.veto` gives.
+  "power.assign": false,
 
   // ── TRUE: every other key. A badge is an ordinary way to hand out a power
   // nobody should have to climb to, and the Cartographer badge over the

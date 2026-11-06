@@ -481,10 +481,12 @@ describe.skipIf(!DB_CONFIGURED)("sheet 19: admin access through a power group", 
   });
 
   it("gives the panel and no power: the capability gate still reads the account's own role", async () => {
-    // Steward Circle carries no proposal.decide, and an admin account would pass it by short-circuit.
+    // Steward Circle carries no quest.approve, and an admin account would pass it by short-circuit.
+    // (It carried no proposal.decide either until Rye's answer of 2026-11-01 put that on the group.)
     const me = (await call("GET", "/api/game/progression", undefined, sam.token)).json;
-    const decide = (me?.capabilityCatalogue ?? []).find((c: any) => c.key === "proposal.decide");
-    expect(decide?.held).toBe(false);
+    const manage = (me?.capabilityCatalogue ?? []).find((c: any) => c.key === "quest.approve");
+    expect(manage, "the catalogue lists the key").toBeTruthy();
+    expect(manage?.held).toBe(false);
   });
 
   it("a holder of the steward ORG seat who is not in Steward Circle gets no admin access", async () => {
@@ -527,10 +529,12 @@ describe.skipIf(!DB_CONFIGURED)("sheet 19: admin access through a power group", 
     const off = await call("PUT", "/api/admin/roles/steward-circle/admin-access", { on: false }, sam.token);
     expect(off.status, off.text).toBe(409);
     expect(off.json.error).toContain("nobody able to open the admin panel");
-    // Removing a holder needs proposal.decide, which admin access through a group never gives,
-    // so Sam cannot take himself out at all; the founder, stood down, no longer reaches the route.
+    // Removing a holder needs proposal.decide, which Steward Circle carries since Rye's answer of
+    // 2026-11-01, so Sam reaches the route, and the last-admin guard refuses him taking himself out.
+    // The founder, stood down, no longer reaches the route at all.
     const self = await call("POST", "/api/admin/roles/steward-circle/holders", { userId: sam.id, action: "remove" }, sam.token);
-    expect(self.status).toBe(401);
+    expect(self.status, self.text).toBe(409);
+    expect(self.json.error).toContain("nobody able to open the admin panel");
     expect((await hold("steward-circle", sam.id, "remove")).status).toBe(401);
     expect(await opensPanel(sam.token)).toBe(true);
   });
