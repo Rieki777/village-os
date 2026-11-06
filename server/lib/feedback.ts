@@ -108,6 +108,19 @@ export function feedbackStatusNotice(
   }
 }
 
+/**
+ * The page a piece of feedback came from, as it is stored and relayed (R051).
+ * The client sends `document.referrer`, and a referrer can be the set-password
+ * page with its token in the query string, so the record keeps the origin and
+ * path and drops the query and the fragment.
+ */
+export function pageUrlForRecord(raw: unknown): string | null {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  const cut = text.split(/[?#]/)[0];
+  return cut ? cut.slice(0, 500) : null;
+}
+
 export async function recordFeedback(
   pool: Pool,
   input: FeedbackInput,
@@ -122,7 +135,7 @@ export async function recordFeedback(
       input.kind,
       input.title.slice(0, 200),
       input.detail.slice(0, 8000),
-      input.pageUrl ? String(input.pageUrl).slice(0, 500) : null,
+      pageUrlForRecord(input.pageUrl),
       input.submittedBy ?? null,
       feedbackFingerprint(input.kind, input.title, input.detail),
       mayRelay ? 1 : 0,
@@ -168,7 +181,7 @@ export async function relayFeedback(
       kind: String(r.kind),
       title: String(r.title),
       detail: String(r.detail),
-      pageUrl: r.page_url ? String(r.page_url) : null,
+      pageUrl: pageUrlForRecord(r.page_url), // rows stored before R051 carry their query string
       fingerprint: String(r.fingerprint),
       createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
     })),
