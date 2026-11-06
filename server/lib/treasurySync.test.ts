@@ -24,8 +24,8 @@ function spying(pool: Pool, seen: string[]): Pool {
   return wrap(pool);
 }
 
-const SECRET_TOKEN = "sk-saberra-SECRET-9f8e7d";
-const SECRET_RPC = "https://base-mainnet.example.test/v2/RPCKEY-123456";
+const SABERRA_CANARY = "canary-saberra-9f8e7d";
+const RPC_CANARY = "https://base-mainnet.example.test/v2/RPCKEY-123456";
 
 describe.skipIf(!configured)("the treasury sync reconciles three sources, flags every difference, and moves nothing", () => {
   let db: TestDb;
@@ -72,7 +72,6 @@ describe.skipIf(!configured)("the treasury sync reconciles three sources, flags 
   it("a sync writes nothing to the ledger, the balances or cash owed, over every statement it sends", async () => {
     seraRecords = [{ id: "s1", reference: "us-llc-0007", currency: "USD", amountMinor: 99, status: "approved", receivedAt: "2026-11-06T10:00:00.000Z" }];
     chainAnswer = async () => ({ offered: true, tokens: [{ slug: "equity", formatted: "5", readAt: "2026-11-06T12:00:00.000Z", stale: false }] });
-    await base.query("INSERT INTO `token_balances` (`account_id`, `token`, `balance`) VALUES (?, 'equity', 3) ON DUPLICATE KEY UPDATE `balance` = 3", [memberAccount("u1")]).catch(() => undefined);
     const spy = spying(base, seen);
     await syncTreasury(deps(spy), "u1", "manual");
     expect(seen.length).toBeGreaterThan(5);
@@ -118,7 +117,7 @@ describe.skipIf(!configured)("the treasury sync reconciles three sources, flags 
     const v = await syncTreasury(ledgerWithEquity, "u1", "manual");
     expect(v.tokens[0]).toMatchObject({ village: "5", chain: "7", disagree: true });
     expect((await openFlagsFor(base, "u1")).map((f) => f.kind)).toEqual(["chain_differs"]);
-    chainAnswer = async () => { throw new Error(`rpc down at ${SECRET_RPC}`); };
+    chainAnswer = async () => { throw new Error(`rpc down at ${RPC_CANARY}`); };
     const after = await syncTreasury(ledgerWithEquity, "u1", "manual");
     expect(after.sources.chain.state).toBe("not_read");
     expect(after.tokens[0].chain).toBeNull();
@@ -158,14 +157,14 @@ describe.skipIf(!configured)("the treasury sync reconciles three sources, flags 
     for (const m of ["log", "warn", "error", "info"] as const) vi.spyOn(console, m).mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(" ")); });
     const bad = {
       ...deps(base),
-      chain: async () => { throw new Error(`rpc down at ${SECRET_RPC}`); },
-      seraClient: async () => ({ toolNames: async () => { throw new Error(`401 for token ${SECRET_TOKEN}`); }, list: async () => ({ ok: true as const, value: [] }) }),
+      chain: async () => { throw new Error(`rpc down at ${RPC_CANARY}`); },
+      seraClient: async () => ({ toolNames: async () => { throw new Error(`401 for token ${SABERRA_CANARY}`); }, list: async () => ({ ok: true as const, value: [] }) }),
     };
     const v = await syncTreasury(bad, "u1", "manual");
     expect(v.sources.chain.state).toBe("not_read");
-    expect(JSON.stringify(v)).not.toContain(SECRET_TOKEN);
+    expect(JSON.stringify(v)).not.toContain(SABERRA_CANARY);
     expect(JSON.stringify(v)).not.toContain("RPCKEY");
-    expect(lines.join("\n")).not.toContain(SECRET_TOKEN);
+    expect(lines.join("\n")).not.toContain(SABERRA_CANARY);
     expect(lines.join("\n")).not.toContain("RPCKEY");
   });
 

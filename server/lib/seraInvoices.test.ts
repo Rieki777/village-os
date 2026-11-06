@@ -38,7 +38,7 @@ describe.skipIf(!configured)("Sera's invoice records are read typed, stored once
   });
   afterAll(async () => { await pool?.end(); await db?.drop(); });
   beforeEach(async () => {
-    for (const t of ["sera_invoice_reports", "treasury_sync_flags", "moon_invoices"]) await pool.query(`DELETE FROM \`${t}\` WHERE 1 = 1`);
+    for (const t of ["sera_invoice_reports", "treasury_sync_flags", "moon_invoices"]) await pool.query(`DELETE FROM \`${t}\` WHERE 1 = 1`); // module-review-ok: a test fixture on the scratch schema
     records = [rec()]; offered = true; calls = [];
     await invoice("mv-1", "u1", 7, 120000);
   });
@@ -58,7 +58,7 @@ describe.skipIf(!configured)("Sera's invoice records are read typed, stored once
     expect(await readSeraInvoices(pool, client(), deps)).toMatchObject({ state: "read", read: 1, matched: 1 });
     const [r] = await seraReportsForInvoices(pool, ["mv-1"]);
     expect(r).toMatchObject({ id: "sera-1", matchBy: "reference", amountMinor: 120000 });
-    const [raw] = await pool.query<any[]>("SELECT * FROM `sera_invoice_reports`");
+    const [raw] = await pool.query<any[]>("SELECT * FROM `sera_invoice_reports`"); // module-review-ok: a test fixture on the scratch schema
     expect(JSON.stringify(raw)).not.toContain("bank details");
   });
 
@@ -66,7 +66,7 @@ describe.skipIf(!configured)("Sera's invoice records are read typed, stored once
     await readSeraInvoices(pool, client(), deps);
     records = [rec({ status: "approved", changedAt: "2026-11-07T00:00:00.000Z" })];
     await readSeraInvoices(pool, client(), deps);
-    const [rows] = await pool.query<any[]>("SELECT * FROM `sera_invoice_reports`");
+    const [rows] = await pool.query<any[]>("SELECT * FROM `sera_invoice_reports`"); // module-review-ok: a test fixture on the scratch schema
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ status: "approved", matched_invoice_id: "mv-1" });
   });

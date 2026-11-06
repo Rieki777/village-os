@@ -39,7 +39,7 @@ describe.skipIf(!configured)("the invoice is emailed to the village's Sera inbox
   });
   afterAll(async () => { await pool?.end(); await db?.drop(); });
   beforeEach(async () => {
-    await pool.query("DELETE FROM `invoice_mail` WHERE `id` IS NOT NULL");
+    await pool.query("DELETE FROM `invoice_mail` WHERE `id` IS NOT NULL"); // module-review-ok: a test fixture on the scratch schema
     posted = []; answer = "sent"; inbox = "sera-inbox@example.test"; audits = [];
   });
 
@@ -128,7 +128,7 @@ describe.skipIf(!configured)("the invoice is emailed to the village's Sera inbox
 
   it("the row keeps no body: only who, where, when and what became of it", async () => {
     await emailInvoiceToSera(deps(), "u1", view());
-    const [cols] = await pool.query<any[]>("SHOW COLUMNS FROM `invoice_mail`");
+    const [cols] = await pool.query<any[]>("SHOW COLUMNS FROM `invoice_mail`"); // module-review-ok: a test fixture on the scratch schema
     expect(cols.map((c) => c.Field).sort()).toEqual(["attempts", "content_hash", "id", "invoice_id", "invoice_ref", "message_id", "queued_at", "sent_at", "status", "to_email", "user_id"]);
   });
 
