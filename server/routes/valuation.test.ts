@@ -24,6 +24,7 @@ import { saveModelVersion } from "../lib/valuationStore";
 import { modelForVillage } from "../../shared/valuationEngine";
 import type { ValuationModel } from "../../shared/valuation";
 import { register } from "./valuation";
+import { getDraft } from "../lib/orgDrafts";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
 function collect() {
@@ -191,6 +192,12 @@ describe.skipIf(!configured)("setting a role's pay with the Treasurer and the al
     const id = await makeRole();
     const out = await setPay(id, Math.round(expectedTotal * 0.6), { reason: "Cash budget this cycle" });
     expect(out.body).toMatchObject({ state: "awaiting_vote", proposeInstead: "/api/org/drafts/:id/put-to-village" });
+    // The draft is opened now, carrying the figure, so the vote is one press away (B3, 0.4).
+    expect(out.body.putToVillage).toBe(`/api/org/drafts/${out.body.draftId}/put-to-village`);
+    const draft: any = await getDraft(pool, out.body.draftId);
+    expect(draft.changes[0]).toMatchObject({ op: "update_seat", orgRoleId: id });
+    expect(draft.changes[0].payload.valueMinor).toBeLessThanOrEqual(Math.round(expectedTotal * 0.6));
+    expect((await roleOf(id)).valueMinor ?? null).toBeNull();
   });
 
   it("makes a role that pays its setter wait, even inside the band, and never lets someone the role pays sign it", async () => {
@@ -222,5 +229,46 @@ describe.skipIf(!configured)("setting a role's pay with the Treasurer and the al
     holdsRolePay = true;
     expect((await call("PUT /api/org/roles/:id/pay", { params: { id: "no-such-role" }, body: { work: WORK, set: { totalMinor: 1 } } })).status).toBe(404);
     expect((await call("PUT /api/org/roles/:id/pay", { params: { id }, body: { set: { totalMinor: 1 } } })).status).toBe(400);
+  });
+
+  describe("P4, the retro top-up", () => {
+    const topUp = (id: string, body: Record<string, unknown>) => call("POST /api/org/roles/:id/pay/top-up", { params: { id }, body });
+
+    it("lets any member propose to raise a set figure, opening an org draft for the village and writing nothing yet", async () => {
+      const id = await makeRole();
+      expect((await setPay(id, expectedTotal)).body.state).toBe("set");
+      const before = (await roleOf(id)).valueMinor;
+      as("member-9");
+      const out = await topUp(id, { totalMinor: before * 2, outcome: "The beds fed the whole kitchen through the dry moon" });
+      expect(out.status, JSON.stringify(out.body)).toBe(200);
+      expect(out.body.putToVillage).toBe(`/api/org/drafts/${out.body.draftId}/put-to-village`);
+      const draft: any = await getDraft(pool, out.body.draftId);
+      expect(draft.changes[0].payload.valueMinor).toBe(before * 2);
+      expect((await roleOf(id)).valueMinor).toBe(before);
+      const rec = await call("GET /api/org/roles/:id/pay/settings", { params: { id } });
+      expect(rec.body.settings[0]).toMatchObject({ state: "awaiting_vote", reason: "Retro top-up", setterId: "member-9" });
+      expect(rec.body.settings[1]).toMatchObject({ state: "set", setterId: "treasurer-1" });
+    });
+
+    it("never lowers a figure, and names the different proposal that can", async () => {
+      const id = await makeRole();
+      await setPay(id, expectedTotal);
+      const current = (await roleOf(id)).valueMinor;
+      for (const totalMinor of [current, current - 100]) {
+        const out = await topUp(id, { totalMinor, outcome: "anything" });
+        expect(out.status).toBe(409);
+        expect(out.body.error).toMatch(/only raises/);
+        expect(out.body.proposeInstead).toBe("/api/org/drafts/:id/put-to-village");
+      }
+    });
+
+    it("asks what the work achieved, and refuses a role with no figure yet", async () => {
+      const id = await makeRole();
+      expect((await topUp(id, { totalMinor: 100000, outcome: "x" })).body.error).toMatch(/no figure set yet/);
+      await setPay(id, expectedTotal);
+      expect((await topUp(id, { totalMinor: expectedTotal * 3, outcome: "  " })).body.error).toMatch(/achieved/);
+      actor = null;
+      expect((await topUp(id, { totalMinor: expectedTotal * 3, outcome: "x" })).status).toBe(401);
+    });
   });
 });
