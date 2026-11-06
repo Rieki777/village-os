@@ -13,11 +13,12 @@
  * A steward sees the dials themselves in the steward panel and changes them
  * there; this section is for everybody else who is signed in.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link } from "wouter";
 import { SlidersHorizontal } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
 import { proposalHref } from "./switchModules";
+import { addChange, myGathering, type ChangeRequestSummary } from "@/components/governance/changeRequestClient";
 
 interface PublicDial {
   key: string;
@@ -44,6 +45,40 @@ function SuggestOne({ d }: { d: PublicDial }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  // Change requests (Rye, 2026-11-06; spec R35): the same form ends two ways,
+  // each with the sentence that says what happens next.
+  const [gathering, setGathering] = useState<ChangeRequestSummary[]>([]);
+  const [into, setInto] = useState<string>("");
+  const [added, setAdded] = useState<{ id: string; title: string; changes: number } | null>(null);
+  const aloneId = useId();
+  const gatherId = useId();
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    myGathering().then((list) => {
+      if (!alive) return;
+      setGathering(list);
+      setInto(list[0]?.id ?? "");
+    });
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  const gather = async () => {
+    setBusy(true);
+    setError(null);
+    const out = await addChange({
+      into: into || null,
+      title: `Change ${d.label}`.slice(0, 120),
+      why: reason.trim(),
+      change: { key: d.key, to: to.trim() },
+    }).catch(() => ({ ok: false as const, message: "That did not go through. Try again in a moment." }));
+    setBusy(false);
+    if (!out.ok) setError(out.message);
+    else setAdded({ id: out.id, title: out.title, changes: out.changes });
+  };
+  const target = gathering.find((g) => g.id === into);
 
   const send = async () => {
     setBusy(true);
@@ -71,7 +106,12 @@ function SuggestOne({ d }: { d: PublicDial }) {
         <p className="text-sm font-medium text-foreground">{d.label}</p>
         <p className="text-sm text-muted-foreground">{d.withheld ? "Set by the village" : shown(d, d.value)}</p>
       </div>
-      {sent ? (
+      {added ? (
+        <p className="mt-1 text-sm" role="status">
+          Added. {added.title} has {added.changes} change{added.changes === 1 ? "" : "s"}.{" "}
+          <Link href={`/changes/${added.id}`} className="text-teal-deep underline">Open it</Link>
+        </p>
+      ) : sent ? (
         <p className="mt-1 text-sm">
           Suggested.{" "}
           <Link href={proposalHref(sent)} className="text-teal-deep underline">See your proposal</Link>
@@ -105,14 +145,45 @@ function SuggestOne({ d }: { d: PublicDial }) {
             Why
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={2000} className="mt-1 block w-full rounded-lg border border-border bg-background p-2 text-base" />
           </label>
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={busy || reason.trim().length < 10 || to.trim() === d.value} className="min-h-[44px] px-4 rounded-lg bg-teal-deep text-white text-sm font-semibold disabled:opacity-40">
-              {busy ? "Sending…" : "Suggest it"}
-            </button>
-            <button type="button" onClick={() => setOpen(false)} className="min-h-[44px] px-4 rounded-lg border border-border text-sm font-medium">
-              Not now
-            </button>
+          {gathering.length > 1 && (
+            <label className="block text-sm font-medium text-foreground">
+              Which change request
+              <select value={into} onChange={(e) => setInto(e.target.value)} className="mt-1 block w-full min-h-[44px] rounded-lg border border-border bg-background px-2 text-base">
+                {gathering.map((g) => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+                <option value="">A new change request</option>
+              </select>
+            </label>
+          )}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <button
+                type="submit"
+                aria-describedby={aloneId}
+                disabled={busy || reason.trim().length < 10 || to.trim() === d.value}
+                className="w-full min-h-[44px] px-4 rounded-lg bg-teal-deep text-white text-sm font-semibold disabled:opacity-40"
+              >
+                {busy ? "Sending…" : "Send it on its own"}
+              </button>
+              <p id={aloneId} className="mt-1 text-xs text-muted-foreground">The village votes on this change by itself.</p>
+            </div>
+            <div>
+              <button
+                type="button"
+                aria-describedby={gatherId}
+                onClick={() => void gather()}
+                disabled={busy || reason.trim().length < 10 || to.trim() === d.value}
+                className="w-full min-h-[44px] px-4 rounded-lg border border-teal-deep text-teal-deep text-sm font-semibold disabled:opacity-40"
+              >
+                {target ? `Add to ${target.title}` : "Add to a new change request"}
+              </button>
+              <p id={gatherId} className="mt-1 text-xs text-muted-foreground">Gather it with other changes and send them to one vote.</p>
+            </div>
           </div>
+          <button type="button" onClick={() => setOpen(false)} className="min-h-[44px] px-4 rounded-lg border border-border text-sm font-medium">
+            Not now
+          </button>
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         </form>
       )}

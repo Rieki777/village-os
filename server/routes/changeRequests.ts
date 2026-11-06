@@ -39,6 +39,7 @@ import {
   GATHERING_LIMIT_DEFAULT,
   GATHERING_LIMIT_KEY,
   changeKeyOf,
+  changeLabel,
   changeRequestTextProblem,
   withChangeAdded,
   withChangeRemoved,
@@ -281,7 +282,7 @@ export function register(app: Express, deps: Deps): void {
     const objections = notes
       .filter((n) => n.kind === "objection")
       .map((n) => ({ answered: n.outcome !== "open", postedAfterEnd: new Date(n.createdAt).getTime() > end.getTime() }));
-    const ready = readiness({ now: now(), endsAt: end, changes: cr.changes.length, objections });
+    const ready = readiness({ now: now(), endsAt: end, changes: cr.changes.length, objections, forAuthor: cr.authorUserId === viewerId });
     const shown = [];
     for (const n of notes) {
       if (n.kind === "system") continue;
@@ -331,7 +332,7 @@ export function register(app: Express, deps: Deps): void {
         position: c.position,
         key: c.changeKey,
         kind: String(item.kind ?? "dial"),
-        label: def?.label ?? c.changeKey,
+        label: changeLabel(c.changeKey),
         withheld: !!def?.withheld,
         before: def?.withheld ? null : c.beforeValue,
         after: def?.withheld ? null : String(item.to ?? ""),
@@ -488,7 +489,7 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json({ error: "out_of_date", message: "This change request changed since you opened it. Reload it to see what is there now." });
     }
     const id = newId();
-    const label = VARIABLES_BY_KEY[moved.changeKey]?.label ?? moved.changeKey;
+    const label = changeLabel(moved.changeKey);
     const title = `${label}`.slice(0, 120);
     await store.create({
       id,
