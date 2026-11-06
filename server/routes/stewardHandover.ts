@@ -58,6 +58,8 @@ import { recordEvent } from "../lib/events";
 import { founderPowerStands } from "../lib/gameStart";
 import { askForCosign, clearPendingHandover, needsCosign, readPendingHandover, sameList } from "../lib/handoverCosign";
 import { isMatureOnly, powerInPlainWords as plainWords, readLaunchSelection, writeLaunchSelection } from "../lib/launchHandover";
+import { COOLING_DAYS, landDueCooling, readCooling, startCooling, stopCooling, type CoolingEntry } from "../lib/handoverCooling";
+import { registerJob } from "../lib/scheduler";
 import { catalystUserIds } from "../repos/users";
 
 export const HAND_OVER_PATH = "/api/governance/powers/hand-to-village";
@@ -76,6 +78,8 @@ export const HAND_OVER_WORDS = {
   matureUnconfirmed: (titles: readonly string[]) =>
     `${titles.join("; ")}: for mature villages only. Confirm that this village is ready to hold ${titles.length === 1 ? "it" : "them"}, and send the hand-over again.`,
   signedAlready: "You signed this already. It waits for a second steward to sign the same list.",
+  stopNeedsReason: "Say why you are stopping it. The village reads the reason beside the stop.",
+  notCooling: "That power is not waiting to cross.",
   adminDoorClosed:
     "Since the Game started, the stewards decide which powers the village holds. A steward hands one over from the hand-over checklist on the Journey to Launch page.",
 } as const;
@@ -115,6 +119,41 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit"> & {
 };
 
 export function register(app: Express, deps: Deps): void {
+  /**
+   * A mature-only power whose week is up crosses here (server/lib/handoverCooling.ts),
+   * held by the Steward role exactly as an immediate hand-over is.
+   */
+  async function landOne(entry: CoolingEntry): Promise<boolean> {
+    const pool = deps.getPool();
+    if ((await capabilityHoldings(pool)).some((h) => h.capability === entry.capability)) return true;
+    const r = await moveCapabilityToVillage(pool, {
+      capability: entry.capability,
+      holderRoleId: STEWARD_ROLE_ID,
+      movedByUserId: entry.signedBy.split("+")[0] || null,
+      note: `Handed to the village by its stewards after a week's wait, signed by ${entry.signedBy}.`,
+    });
+    if (!r.ok) return false;
+    await recordEvent(pool, {
+      kind: "governance",
+      text: `After its week, this crossed to the village: whoever holds it can ${plainWords(entry.capability).consequence}.`,
+      entityType: "capability",
+      entityRef: entry.capability,
+    });
+    await recordEvent(pool, {
+      kind: "audit",
+      text: `capability:handed-to-village:${entry.capability}:signed:${entry.signedBy}:after-cooling`,
+      entityType: "capability",
+      entityRef: entry.capability,
+      audience: "admin",
+    });
+    return true;
+  }
+  const landDue = () => landDueCooling(deps.getPool(), landOne);
+  registerJob("handover-cooling", 60 * 60 * 1000, async () => {
+    const landed = await landDue();
+    return landed.length ? `landed ${landed.map((e) => e.capability).join(", ")}` : undefined;
+  });
+
   /** May this person use the control, which stage are we in, and who else may sign. */
   async function standing(user: any): Promise<{ started: boolean; mayAct: boolean; signers: string[] }> {
     const started = !(await founderPowerStands(deps.getPool()));
@@ -131,7 +170,9 @@ export function register(app: Express, deps: Deps): void {
     const { started, mayAct, signers } = await standing(user);
     if (!mayAct) return res.json({ gameStarted: started, mayAct: false });
     const pool = deps.getPool();
+    if (started) await landDue();
     const held = new Set((await capabilityHoldings(pool)).map((h) => h.capability));
+    const cooling = started ? await readCooling(pool) : [];
     const selected = started ? [] : (await readLaunchSelection(pool)).capabilities;
     const frozen = !started && !!(await openBallotFor(pool, VILLAGE_LAUNCH, LAUNCH_SUBJECT_REF));
     const waiting = await readPendingHandover(pool, started ? "now" : "launch");
@@ -142,6 +183,7 @@ export function register(app: Express, deps: Deps): void {
       frozen,
       twoSign: needsCosign(signers),
       pending: waiting ? { capabilities: waiting.capabilities, mine: waiting.requestedBy === String(user.id) } : null,
+      cooling: cooling.map((e) => ({ capability: e.capability, title: plainWords(e.capability).title, landsAt: e.landsAt })),
       powers: HANDOVER_SET.map((capability) => ({
         capability,
         ...plainWords(capability),
@@ -231,15 +273,39 @@ export function register(app: Express, deps: Deps): void {
       return res.json({ stage: "launch", selected: selection.capabilities });
     }
 
+    await landDue();
     const held = new Set((await capabilityHoldings(pool)).map((h) => h.capability));
     const moved: string[] = [];
     const alreadyHeld: string[] = [];
     const refused: Array<{ capability: string; error: string }> = [];
+    /*
+     * A WEEK FOR THE MATURE-ONLY POWERS (server/lib/handoverCooling.ts). They
+     * wait seven days in the open, and any steward may stop one with a reason;
+     * the rest of the list crosses now, as it always did.
+     */
+    const toCool = named.filter((c) => isMatureOnly(c) && !held.has(c));
+    const cooling = await startCooling(pool, toCool, signedBy);
+    if (cooling.length) {
+      await recordEvent(pool, {
+        kind: "governance",
+        text: `The stewards signed to hand the village ${cooling.map((e) => plainWords(e.capability).title).join("; ")}. It crosses in ${COOLING_DAYS === 7 ? "seven" : COOLING_DAYS} days, unless a steward stops it and says why.`,
+        actorUserId: actorId,
+        entityType: "launch-handover",
+      });
+      await recordEvent(pool, {
+        kind: "audit",
+        text: `capability:cooling:${cooling.map((e) => e.capability).join(",")}:signed:${signedBy}`,
+        actorUserId: actorId,
+        entityType: "launch-handover",
+        audience: "admin",
+      });
+    }
     for (const capability of named) {
       if (held.has(capability)) {
         alreadyHeld.push(capability);
         continue;
       }
+      if (toCool.includes(capability)) continue;
       const r = await moveCapabilityToVillage(pool, {
         capability,
         holderRoleId: STEWARD_ROLE_ID,
@@ -267,6 +333,39 @@ export function register(app: Express, deps: Deps): void {
         audience: "admin",
       });
     }
-    res.json({ stage: "now", moved, alreadyHeld, refused });
+    res.json({ stage: "now", moved, alreadyHeld, refused, cooling: (await readCooling(pool)).filter((e) => toCool.includes(e.capability)).map((e) => ({ capability: e.capability, landsAt: e.landsAt })) });
+  });
+
+  /** Stop a mature-only power inside its week. Any steward, with a reason the village reads. */
+  app.post(`${HAND_OVER_PATH}/cooling/:capability/stop`, async (req, res) => {
+    const user = await deps.authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const actorId = String(user.id);
+    if (await deps.overLimit(`hand-to-village:${actorId}`, ASKS, WINDOW_MS)) {
+      return res.status(429).json({ error: HAND_OVER_WORDS.tooMany });
+    }
+    const { started, mayAct } = await standing(user);
+    if (!mayAct || !started) return res.status(403).json({ error: HAND_OVER_WORDS.notSteward });
+    const reason = String(req.body?.reason ?? "").trim().slice(0, 500);
+    if (reason.length < 3) return res.status(400).json({ error: HAND_OVER_WORDS.stopNeedsReason });
+    const pool = deps.getPool();
+    const stopped = await stopCooling(pool, String(req.params.capability));
+    if (!stopped) return res.status(404).json({ error: HAND_OVER_WORDS.notCooling });
+    await recordEvent(pool, {
+      kind: "governance",
+      text: `A steward stopped ${plainWords(stopped.capability).title} from crossing to the village: "${reason}"`,
+      actorUserId: actorId,
+      entityType: "capability",
+      entityRef: stopped.capability,
+    });
+    await recordEvent(pool, {
+      kind: "audit",
+      text: `capability:cooling-stopped:${stopped.capability}:by:${actorId}`,
+      actorUserId: actorId,
+      entityType: "capability",
+      entityRef: stopped.capability,
+      audience: "admin",
+    });
+    res.json({ stopped: stopped.capability });
   });
 }
