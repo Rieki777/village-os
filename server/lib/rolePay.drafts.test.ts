@@ -65,7 +65,8 @@ describe.skipIf(!configured)("a role's pay rides an org draft a member wrote", (
     if (!opened.ok) return;
     // What a carried org_draft vote runs at its close.
     const closer = orgDraftCloser({ pool, reloadCircles: async () => {}, notify: async () => {}, seasonState: () => ({ current: null, seasons: [], timezone: "UTC" }) });
-    const done = await closer.execute(opened.ballot, "u-member");
+    expect(closer.execute, "an org_draft vote executes at its close").toBeTypeOf("function");
+    const done = await closer.execute!(opened.ballot, "u-member");
     expect(done.held, String(done.held)).toBeNull();
     expect(done.applied).toEqual([`org_draft:${id}`]);
     expect((await roleOf("pay-vote-seat")).valueMinor).toBe(4321000);
