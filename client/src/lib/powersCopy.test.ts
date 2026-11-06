@@ -18,7 +18,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { holderSentence, namesSentence, type PowerRow } from "./powersCopy";
+import { holderSentence, inFamilies, namesSentence, suggestionSentence, type PowerRow } from "./powersCopy";
 
 const PAGE = fs.readFileSync(
   path.join(process.cwd(), "client", "src", "pages", "Powers.tsx"),
@@ -90,7 +90,13 @@ describe("who holds this, in one sentence", () => {
   it("names the role and the person sitting in it", () => {
     expect(
       holderSentence(power({ heldBy: { roleName: "The Library Keepers", byBallot: true, people: ["Ana"] } })),
-    ).toBe("The Library Keepers holds this. Ana sits there.");
+    ).toBe("The Library Keepers (Ana) holds this.");
+  });
+
+  it("names several holders by first name, in the role's parentheses", () => {
+    expect(holderSentence(power({ heldBy: { roleName: "Steward Circle", byBallot: false, people: ["Bea", "Sam"] } }))).toBe(
+      "Steward Circle (Bea and Sam) holds this.",
+    );
   });
 
   it("says plainly when a power the village took on has nobody in the chair", () => {
@@ -119,5 +125,47 @@ describe("names read out loud", () => {
 
   it("says nothing at all when there is nobody, rather than an empty list", () => {
     expect(namesSentence([])).toBe("");
+  });
+});
+
+describe("role powers (2026-11-05): a power a role carries is never the panel's", () => {
+  it("names who holds it today through a role, the house way", () => {
+    expect(holderSentence(power({ heldToday: ["Ops lead (Rye)"] }))).toBe("Ops lead (Rye) holds this today, for the stewards.");
+    expect(holderSentence(power({ heldToday: ["Ops lead (Rye)", "Steward Circle (Sam)"] }))).toBe(
+      "Ops lead (Rye) and Steward Circle (Sam) hold this today, for the stewards.",
+    );
+  });
+
+  it("control: with nobody holding it through a role, the panel sentence stands", () => {
+    expect(holderSentence(power({ heldToday: [] }))).toBe("The admin panel looks after this one. It is one the village can take on.");
+  });
+
+  it("the village holding it still wins over who held it before", () => {
+    expect(holderSentence(power({ heldToday: ["Ops lead (Rye)"], heldBy: { roleName: "Library keepers", byBallot: false, people: ["Ana"] } }))).toBe(
+      "Library keepers (Ana) holds this.",
+    );
+  });
+
+  it("says who holds a stage power without calling a guest a member", () => {
+    expect(holderSentence(power({ stage: "Guest", movable: false }))).toBe("Everyone at the Guest stage or past it holds this.");
+  });
+
+  it("says where a suggestion goes", () => {
+    expect(suggestionSentence(power({ suggestionsGoTo: "holders" }))).toBe("A suggested change to this goes to its holders to review.");
+    expect(suggestionSentence(power({ suggestionsGoTo: "vote" }))).toBe("A suggested change to this goes to a village vote.");
+  });
+
+  it("groups by family in the families' order, the same whoever holds what", () => {
+    const fams = [{ id: "structure", title: "Structure" }, { id: "gatherings", title: "Gatherings" }];
+    const a = power({ capability: "event.manage", family: "gatherings" });
+    const b = power({ capability: "org.seat", family: "structure", heldToday: ["Ops lead (Rye)"] });
+    const c = power({ capability: "library.keep", family: "gatherings", heldBy: { roleName: "Keepers", byBallot: true, people: [] } });
+    const grouped = inFamilies([a, b, c], fams);
+    expect(grouped.map((f) => [f.id, f.powers.map((p) => p.capability)])).toEqual([
+      ["structure", ["org.seat"]],
+      ["gatherings", ["event.manage", "library.keep"]],
+    ]);
+    const unheld = inFamilies([a, { ...b, heldToday: [] }, { ...c, heldBy: null }], fams);
+    expect(unheld.map((f) => f.powers.map((p) => p.capability))).toEqual(grouped.map((f) => f.powers.map((p) => p.capability)));
   });
 });

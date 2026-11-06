@@ -1,5 +1,6 @@
 import { anonymizeMember, backfillFinishedErasures, erasureBackfillJob } from "./lib/erasure";
 import { backfillSeasonGoalIds, SEASON_GOAL_ID_BACKFILL } from "./lib/seasonGoalIds";
+import { markNameFreeJournalLinesPublic } from "./repos/orgSeatErasure";
 import { FORMER_MEMBER_HOLD, resolveExit } from "./lib/exitResolve";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
@@ -98,8 +99,11 @@ import { matchOnEvent } from "./lib/seraPersonMatch";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
+import { villagePowerRows } from "./lib/villagePowers";
+import { GUIDANCE_WORDS, POWER_FAMILIES } from "../shared/powerBoard";
 import { giveOnlyWhatYouHold, makePowerAssignGate, register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
 import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
+import { isMemberReadable } from "./lib/memberReadable";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
@@ -1786,7 +1790,11 @@ function userIsAdmin(user: any): boolean {
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!userIsAdmin(user)) return false;
+  if (!userIsAdmin(user)) {
+    // Q5: a member may READ the admin routes server/lib/memberReadable.ts lists, and nothing else. No adminUser: nothing is theirs to change.
+    const listed = isMemberReadable(req.method, (req as any).route?.path, true);
+    return listed && !!user && stageIndex(await stageOf(user)) >= stageIndex("member") && !(await leftTheVillage(getPool(), user));
+  }
   (req as any).adminUser = user;
   return true;
 }
@@ -3871,9 +3879,20 @@ async function gratitudeAllowance(user: any) {
  *
  *   1. Did the operator say? `FRONTEND_URL` wins whenever it is set, so the
  *      hosted deployment and any fork that configures itself are unchanged.
+ *      A village cannot launch without it (the `site-address` row in
+ *      shared/launchRequirements.ts), so what follows is only ever the answer
+ *      for a village still setting up.
  *   2. Failing that, where have people actually reached this server? The
- *      first inbound request answers that, through the proxy headers the
- *      sitemap and the unfurl tags already read the host from.
+ *      first inbound request answers that, from its Host header.
+ *
+ * NEVER FROM X-Forwarded-Host (readiness R108, the coordinator's ruling of
+ * 2026-11-05). That header is written by the caller, and nothing promises a
+ * proxy in front of this server overwrites it; a docker-compose village has
+ * no proxy at all. Read here, it let the first stranger to send a request
+ * choose the address every later set-password link carried, in the village's
+ * own email. The Host header is the one the edge routed on, so a forged value
+ * does not reach this service through it, and it is held to the shape of a
+ * host besides. The protocol is http or https and nothing else.
  *
  * If neither has an answer the origin is empty and the caller gets no
  * absolute address at all, which reads as a broken link rather than as a
@@ -3882,13 +3901,13 @@ async function gratitudeAllowance(user: any) {
  * is a state somebody has to be told about rather than left to discover.
  */
 let observedOrigin = "";
+const HOST_SHAPE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/;
 function rememberDeploymentOrigin(req: express.Request): void {
   if (observedOrigin) return;
-  const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https")
-    .split(",")[0].trim();
-  const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "")
-    .split(",")[0].trim();
-  if (host) observedOrigin = `${proto}://${host}`.replace(/\/$/, "");
+  const said = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https").split(",")[0].trim().toLowerCase();
+  const proto = said === "http" || said === "https" ? said : "https";
+  const host = String(req.headers.host ?? "").trim();
+  if (host && HOST_SHAPE.test(host)) observedOrigin = `${proto}://${host}`;
 }
 let warnedNoOrigin = false;
 function deploymentOrigin(): string {
@@ -13079,7 +13098,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       roles: rolesRepo.all().map((r: any) => ({
         id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadPowerHoldings(), r.id),
       })),
-      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()), // Power groups: the removal warning
+      // The removal warning is keyed by the sole holder's account id, so a member reader (Q5, no adminUser) gets none of it.
+      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: adminActor(req) ? await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()) : {}, // Power groups: the removal warning
     });
   });
 
@@ -13193,32 +13213,17 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         { roleId: h.holderRoleId, roleName: h.holderRoleName, movedAt: h.movedAt, byBallot: !!h.movedByBallotId },
       ]),
     );
-    const seats = loadPowerHoldings(); // 0322: whoever sits there through a role, too
-    const names = new Map((await members.all()).map((m: any) => [m.id, m.name]));
-    res.json({
-      powers: powersForReading(holders).map((p) => ({
-        capability: p.capability,
-        title: p.title,
-        surface: p.surface,
-        consequence: p.consequence,
-        movable: TRANSFERABLE[p.capability] === true,
-        heldBy: p.heldBy
-          ? {
-              roleName: p.heldBy.roleName ?? p.heldBy.roleId,
-              byBallot: p.heldBy.byBallot,
-              movedAt: p.heldBy.movedAt,
-              // Who is actually sitting there. A power held by a role nobody
-              // sits in is a real state and the page says so plainly, because
-              // "the library keepers" with nobody in the chair is exactly the
-              // thing a village needs to notice.
-              people: seats
-                .filter((s: any) => s.roleId === p.heldBy!.roleId)
-                .map((s: any) => names.get(s.userId) ?? null)
-                .filter((n): n is string => !!n),
-            }
-          : null,
-      })),
+    // Who holds each power today through a role, too (server/lib/villagePowers.ts), so a power a role
+    // carries is never described as the admin panel's. Fixed order, no count: the R55 rules hold there.
+    const people = new Map((await members.all()).filter((m: any) => !isExampleUser(m)).map((m: any) => [String(m.id), { full: String(m.name ?? ""), first: firstName(m.name ?? "Member") }]));
+    const orgNames = new Map((await listOrgRoles(getPool())).map((r) => [r.id, r.name]));
+    const ladder = servedLadder(mergedConfig().project.commitmentName) as Array<{ id: string; name?: string }>;
+    const unlock = stageUnlockOverridesFromVars();
+    const rows = villagePowerRows({
+      holders, groups: loadRoles() as any, holdings: loadPowerHoldings() as any, orgRoleName: (id) => orgNames.get(id), nameOf: (id) => people.get(id) ?? null,
+      stageName: (cap) => { const id = unlock[cap] ?? STAGE_UNLOCKS[cap]; return id ? ladder.find((st) => st.id === id)?.name ?? id : null; },
     });
+    res.json({ families: POWER_FAMILIES, guidance: GUIDANCE_WORDS, powers: rows });
   });
 
   /** What's on the shelf — the admin UI lists it for transparency. */
@@ -25163,7 +25168,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       actorUserId: viewer.id,
       entityType: "circle",
       entityRef: before.id,
-      audience: "admin",
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     res.json({ success: true, circle: merged });
   });
@@ -26120,7 +26125,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
   const requestOrigin = (req: express.Request): string => {
     const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https")
       .split(",")[0].trim();
-    const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "").trim();
+    // The Host header, never X-Forwarded-Host, which the caller writes and a
+    // cache in front could keep (R108; rememberDeploymentOrigin has the detail).
+    const host = String(req.headers.host ?? "").trim();
     return host ? `${proto}://${host}` : "";
   };
 
@@ -26379,6 +26386,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const { words, rows } = await backfillSeasonGoalIds(getPool());
     console.log(`[startup] season goal ids: ${rows} link(s) across ${words} goal text(s)`);
   });
+  // R103: the seat journal's name-free lines from before 2026-11-06 become
+  // public, so members read the history. After listen for 0298's reason, and
+  // on every boot because its WHERE makes a repeat a no-op.
+  void markNameFreeJournalLinesPublic(getPool())
+    .then((n) => n && console.log(`[startup] role journal: ${n} name-free line(s) re-marked public`))
+    .catch((e) => console.error("[startup] role journal re-mark failed (continuing)", e));
   /*
    * A DEPLOY IS NOT A CRASH, and until now this process could not tell the
    * difference. `installCrashHandlers` above wires `unhandledRejection` and

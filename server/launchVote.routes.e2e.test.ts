@@ -225,6 +225,8 @@ beforeAll(async () => {
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "launchvote-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
+      // A launch vote needs the site-address row (R108), and this village is meant to be ready.
+      FRONTEND_URL: BASE,
       VILLAGE_SECRETS_KEY: "1f".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",

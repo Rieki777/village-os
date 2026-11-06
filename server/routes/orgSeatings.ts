@@ -62,7 +62,9 @@ export function register(app: Express, deps: Deps): void {
         kind: "org",
         text: reason ? `a holding ended: ${reason}` : "a holding ended",
         actorUserId: (await authedUser(req))?.id ?? null,
-        entityType: "org_role", entityRef: String(before.org_role_id), audience: "admin",
+        entityType: "org_role", entityRef: String(before.org_role_id),
+        // A reason is an admin's own words and can name the person, so it stays admin (R103).
+        audience: reason ? "admin" : "public",
       });
     }
     res.json({ success: true });

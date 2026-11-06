@@ -465,7 +465,10 @@ describe.skipIf(!DB_CONFIGURED)("harm metric 4: a member reads the powers, in se
     // denominator in it, and the surest way to keep one off the page is to
     // never put one on the wire.
     const { json } = await call("GET", "/api/village/powers", undefined, ottoToken);
-    expect(Object.keys(json)).toEqual(["powers"]);
+    // The families and the launch guidance joined the payload on 2026-11-05 (role powers,
+    // Rye's Q5 and Q11). Both are words, the same for every village: no number between them.
+    expect(Object.keys(json)).toEqual(["families", "guidance", "powers"]);
+    expect(JSON.stringify([json.families, json.guidance])).not.toMatch(/\d/);
     const serialized = JSON.stringify(json.powers.map((p: any) => ({ ...p, heldBy: p.heldBy ? "..." : null })));
     expect(serialized).not.toMatch(/"(total|count|held|remaining|percent|progress)"\s*:/i);
   });
@@ -481,7 +484,9 @@ describe.skipIf(!DB_CONFIGURED)("harm metric 4: a member reads the powers, in se
     // And the holder is named as a role with the people sitting in it.
     const held = warm.json.powers.find((p: any) => p.capability === "intake.moderate");
     expect(held.heldBy.roleName).toBe("Steward Circle");
-    expect(held.heldBy.people).toContain("Kira Vance");
+    // The holder's first name only, the house form (Rye, 2026-10-30), never the full name.
+    expect(held.heldBy.people).toEqual(["Kira"]);
+    expect(JSON.stringify(warm.json.powers)).not.toContain("Vance");
     expect(held.heldBy.byBallot).toBe(false);
   });
 });
@@ -510,5 +515,31 @@ describe.skipIf(!DB_CONFIGURED)("the ring becomes a floor as well as a ceiling",
 
   it("refuses a member who holds nothing, on either ring", async () => {
     expect((await call("PUT", "/api/admin/variables/gratitude.base_budget", { value: "7" }, ottoToken)).status).toBe(401);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("Q5: every member may READ the admin routes the allow-list names, and change nothing", () => {
+  it("a member reads the power holdings and the reorganisation drafts", async () => {
+    const holding = await call("GET", "/api/admin/capabilities/holding", undefined, ottoToken);
+    expect(holding.status, holding.text).toBe(200);
+    expect(Array.isArray(holding.json.powers)).toBe(true);
+    // The removal warning names accounts, so a member reader gets none of it; the admin still does.
+    expect(holding.json.leftEmptyByRemoval).toEqual({});
+    expect((await call("GET", "/api/admin/org/drafts", undefined, ottoToken)).status).toBe(200);
+    expect((await call("GET", "/api/admin/org/expiring", undefined, ottoToken)).status).toBe(200);
+  });
+
+  it("control: an admin read the list does not name stays the admin's", async () => {
+    expect((await call("GET", "/api/admin/modules", undefined, ottoToken)).status).toBe(401);
+    expect((await call("GET", "/api/admin/players", undefined, ottoToken)).status).toBe(401);
+  });
+
+  it("reading is not changing: the same member is refused the write beside the read", async () => {
+    expect((await call("PUT", "/api/admin/capabilities/library.keep/holding", { roleId: "steward-circle" }, ottoToken)).status).toBe(401);
+    expect((await call("POST", "/api/admin/org/drafts", { title: "Mine now" }, ottoToken)).status).toBe(401);
+  });
+
+  it("a visitor reads none of it", async () => {
+    expect((await call("GET", "/api/admin/capabilities/holding", undefined, "")).status).toBe(401);
   });
 });
