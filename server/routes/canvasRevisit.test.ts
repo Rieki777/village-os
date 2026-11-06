@@ -228,6 +228,12 @@ describe.skipIf(!configured)("the key moments' wiring and the canvas moon", () =
     const after = await call("GET", "/api/canvas/moon", "keeper");
     expect(after.body.gathering).toEqual({ id: made.body.gathering.id, status: "draft" });
     expect(after.body.mayOffer).toBe(false);
+    // W4-moon-publish-there: whoever manages events publishes the draft from
+    // the card itself, since /admin is closed to a non-admin holder.
+    expect(made.body.message).not.toMatch(/there/);
+    expect(made.body.publishAt).toBeUndefined();
+    expect(after.body.mayPublish).toBe(true);
+    expect((await call("GET", "/api/canvas/moon", "member")).body.mayPublish).toBe(false);
     const [[doc]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM app_config WHERE config_key = ?", [CANVAS_MOON_KEY]); // module-review-ok: reading the scratch schema this suite provisioned
     expect(Number(doc.n)).toBe(1);
   });

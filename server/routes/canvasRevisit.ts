@@ -158,11 +158,13 @@ export function register(app: Express, deps: CanvasRevisitRouteDeps): void {
     ]);
     const calendarOn = effectiveLifecycle("events") !== "off";
     const { startsAt } = await startOf(deps, next);
+    const managesEvents = calendarOn && capabilityDecision("event.manage", ctx).allowed;
     res.json({
       next: { ...question, startsAt: startsAt.toISOString() },
       gathering,
       calendarOn,
-      mayOffer: calendarOn && !gathering && capabilityDecision("event.manage", ctx).allowed,
+      mayOffer: managesEvents && !gathering,
+      mayPublish: managesEvents && gathering?.status === "draft",
     });
   });
 
@@ -199,8 +201,7 @@ export function register(app: Express, deps: CanvasRevisitRouteDeps): void {
     });
     res.status(201).json({
       gathering: { id: created.id, status: String(created.status) },
-      message: "The canvas moon is on the calendar's list as a draft. Set its place and publish it there when it suits the village.",
-      publishAt: "/admin?tab=events-admin",
+      message: "The canvas moon is on the calendar's list as a draft. Publish it from this card when its time suits the village.",
     });
   });
 }

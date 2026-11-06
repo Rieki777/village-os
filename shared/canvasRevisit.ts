@@ -207,6 +207,13 @@ export interface CanvasMoonPayload {
   calendarOn: boolean;
   /** This member may offer it now: they manage events, the calendar is on, and none is offered yet. */
   mayOffer: boolean;
+  /**
+   * This member may publish the offered draft from the card: they manage
+   * events, the calendar is on, and the gathering is still a draft. The card
+   * is the door because /admin is closed to a non-admin who holds
+   * `event.manage` (W4-moon-publish-there). Absent on an older server.
+   */
+  mayPublish?: boolean;
 }
 
 /** The title a gathering offered for the canvas moon carries. */

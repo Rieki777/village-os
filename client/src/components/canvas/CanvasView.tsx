@@ -95,6 +95,25 @@ export function CanvasView({
     }
   };
 
+  // Publishing the draft goes through the calendar's own write, which follows
+  // `event.manage`; the card is the door because /admin is closed to a
+  // non-admin holder (W4-moon-publish-there).
+  const publishMoon = async (gatheringId: string): Promise<MoonOfferAnswer> => {
+    try {
+      const r = await fetch(`/api/admin/events/${encodeURIComponent(gatheringId)}`, {
+        method: "PUT",
+        headers: headers(),
+        body: JSON.stringify({ status: "scheduled" }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: String(d?.error ?? "The gathering was not published.") };
+      loadMoon();
+      return { ok: true, message: "The canvas moon is on the village calendar." };
+    } catch {
+      return { ok: false, error: "That did not reach the server." };
+    }
+  };
+
   const save = async (season: Season): Promise<string | null> => {
     try {
       const r = await fetch("/api/canvas/season", { method: "PUT", headers: headers(), body: JSON.stringify(season) });
@@ -147,7 +166,7 @@ export function CanvasView({
           onSave={save}
           onRemove={remove}
         />
-        <CanvasMoon payload={moon} onOffer={offerMoon} />
+        <CanvasMoon payload={moon} onOffer={offerMoon} onPublish={publishMoon} />
         <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
       </div>
     </CompanionProvider>

@@ -8,7 +8,7 @@
  *
  * For whoever manages the calendar, one offer: a canvas moon gathering that
  * recurs every new moon. It is OFFERED and never seeded. Pressing it puts a
- * DRAFT on the calendar's list, and a person publishes it there once its
+ * DRAFT on the calendar's list, and they publish it from this card once its
  * place and time suit the village. The network lives in CanvasView, as the
  * season's does; this card is handed its payload and one function.
  *
@@ -31,9 +31,12 @@ function dayLabel(iso: string): string {
 export function CanvasMoon({
   payload,
   onOffer,
+  onPublish,
 }: {
   payload: CanvasMoonPayload | null;
   onOffer: () => Promise<MoonOfferAnswer>;
+  /** Publishes the offered draft. The card is the door for whoever manages events (W4-moon-publish-there). */
+  onPublish?: (gatheringId: string) => Promise<MoonOfferAnswer>;
 }) {
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<MoonOfferAnswer | null>(null);
@@ -45,6 +48,13 @@ export function CanvasMoon({
   const offer = async () => {
     setBusy(true);
     setAnswer(await onOffer());
+    setBusy(false);
+  };
+  const draftId = payload?.gathering?.status === "draft" ? payload.gathering.id : null;
+  const publish = async () => {
+    if (!draftId || !onPublish) return;
+    setBusy(true);
+    setAnswer(await onPublish(draftId));
     setBusy(false);
   };
 
@@ -91,8 +101,21 @@ export function CanvasMoon({
             {busy ? "Offering" : "Offer a canvas moon gathering"}
           </button>
           <p className="mt-1.5 text-xs text-stone-600">
-            It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until you publish it there.
+            It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until you publish it.
           </p>
+        </div>
+      )}
+      {payload?.mayPublish && draftId && onPublish && !answer?.ok && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={publish}
+            disabled={busy}
+            className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+          >
+            {busy ? "Publishing" : "Publish the canvas moon"}
+          </button>
+          <p className="mt-1.5 text-xs text-stone-600">It goes on the village calendar for every member, recurring each new moon.</p>
         </div>
       )}
       {answer?.ok && (
