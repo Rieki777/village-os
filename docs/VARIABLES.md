@@ -401,7 +401,7 @@ How many tokens the village shares out when a lunar cycle closes. The pool is sp
 | Key | `gratitude.pool_per_cycle` |
 | Type | integer, a whole number |
 | Default | `1000` |
-| Range | 0 to 1000000 |
+| Range | 0 to 1000000000 |
 | Counted in | tokens |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
@@ -812,7 +812,7 @@ How much voice someone gathers before their chip turns claimable. What this real
 | Key | `economy.voice_claim_threshold` |
 | Type | integer, a whole number |
 | Default | `100` |
-| Range | 1 to 100000 |
+| Range | 1 to 100000000 |
 | Counted in | voice |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
@@ -827,7 +827,7 @@ How much earned equity someone gathers before they can carry it across to Hypha.
 | Key | `economy.equity_claim_threshold` |
 | Type | integer, a whole number |
 | Default | `1` |
-| Range | 1 to 100000 |
+| Range | 1 to 100000000 |
 | Counted in | equity |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |

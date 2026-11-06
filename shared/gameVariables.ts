@@ -340,7 +340,19 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "1000",
     min: 0,
-    max: 1000000,
+    /*
+     * SIZED FOR A COLON VILLAGE. The pool pays a credit, and credits are priced
+     * in the village's own currency, so a village counting in colones (about
+     * 500 to the dollar) holds about 500 times the numbers a dollar village
+     * does. The old 1,000,000 let it reach twice its scaled default.
+     *
+     * 1,000,000,000 IS THE CEILING THE STORAGE ALLOWS. One member can be
+     * credited the whole pool, and `gratitude_distributions.credited` is a
+     * signed INT (0010), so the next power of ten would overflow it and fail
+     * the close. In minor units it is 1e11 at two decimals, a safe integer.
+     * shared/currencyScaleBounds.test.ts holds both limits.
+     */
+    max: 1000000000,
     unit: "tokens",
   },
   {
@@ -674,7 +686,15 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "100",
     min: 1,
-    max: 100000,
+    /*
+     * SIZED FOR A COLON VILLAGE (Rye, 2026-10-31: Voice is paid at one per
+     * unit of the village's currency). A village counting in colones gathers
+     * about 500 times the Voice a dollar village does, and the old 100,000 let
+     * it reach twice its scaled default. 100,000,000 is 1e10 minor units at
+     * two decimals, a safe integer, and fits `voice_claims.amount`
+     * (decimal(18,4)). shared/currencyScaleBounds.test.ts holds both.
+     */
+    max: 100000000,
     unit: "voice",
   },
   {
@@ -689,7 +709,9 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "1",
     min: 1,
-    max: 100000,
+    // Sized for a colon village for the reason on the voice threshold above:
+    // Earned Equity matches the base pay 1:1, in the village's own currency.
+    max: 100000000,
     unit: "equity",
   },
   {
