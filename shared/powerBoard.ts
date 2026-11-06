@@ -43,6 +43,11 @@ export const POWER_FAMILY: Record<Capability, PowerFamily> = {
   "org.seatAgent": "structure",
   "power.assign": "structure",
   "dial.set": "structure",
+  // The operator powers (PR 3): the admin routes that had no power of their own.
+  "operator.config": "structure",
+  "operator.secrets": "structure",
+  "operator.recover": "structure",
+  "operator.accounts": "membership",
   "module.switch": "structure",
   "proposal.open": "decisions",
   "proposal.decide": "decisions",
@@ -124,6 +129,11 @@ export const HANDOVER_GUIDANCE: Record<Capability, HandoverGuidance> = {
   "cash.pay": "mature-only",
   "module.switch": "mature-only",
   "dial.set": "mature-only",
+  // Settings with no power of their own are structure; accounts, secrets and repair let a village run with no admin at all.
+  "operator.config": "usually-last",
+  "operator.accounts": "mature-only",
+  "operator.secrets": "mature-only",
+  "operator.recover": "mature-only",
   "proposal.open": "everyday",
   "mechanics.propose": "everyday",
   "ballot.vote": "everyday",

@@ -198,7 +198,19 @@ export type Capability =
   // refused while anybody holds it, so "only the holders" is enforced rather
   // than described. With nobody holding it the routes fall through to an
   // admin, which is how a fresh village sets itself up.
-  | "power.assign"; // give powers to roles, and take them away
+  | "power.assign" // give powers to roles, and take them away
+  //
+  // ── The operator powers (ROLE_POWERS_DESIGN.md §9a) ──────────────────────
+  //
+  // About 150 admin routes had no power behind them, so a village that held
+  // every power still needed an administrator. These four name the clusters
+  // no other key describes (server/lib/operatorRoutes.ts maps each route), so
+  // a mature village can hold them too. Secrets are their own key, so that
+  // holding the settings never reaches a provider key.
+  | "operator.accounts" // members' accounts, stages and exits
+  | "operator.config" // settings with no power of their own
+  | "operator.secrets" // provider keys and the email sender, write-only
+  | "operator.recover"; // the repair tools
 
 /**
  * The canonical list, as a VALUE: badge validation and unlock diffs iterate
@@ -251,6 +263,10 @@ export const ALL_CAPABILITIES: Capability[] = [
   "moon.approve_alone",
   "moon.approve_own",
   "power.assign",
+  "operator.accounts",
+  "operator.config",
+  "operator.secrets",
+  "operator.recover",
 ];
 
 /**
@@ -319,6 +335,10 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "moon.approve_alone": "Give both approvals of a member's end-of-moon recap by yourself",
   "moon.approve_own": "Approve your own end-of-moon recap and invoice, marked for review",
   "power.assign": "Give powers to the village's roles, and take them away",
+  "operator.accounts": "Look after members' accounts: access, stage and exits",
+  "operator.config": "Keep the village's settings that have no power of their own",
+  "operator.secrets": "Write the village's provider keys and email sender",
+  "operator.recover": "Run the village's repair tools",
 };
 
 /**
@@ -494,6 +514,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // that matures takes it with the rest: Rye, 2026-11-01, "All powers should be
   // able to be passed to a village".
   "power.assign": true,
+  // The operator powers: a village that runs with no admins holds these too
+  // (Rye, 2026-11-01). Mature villages only, by guidance and never by lock.
+  "operator.accounts": true,
+  "operator.config": true,
+  "operator.secrets": true,
+  "operator.recover": true,
   // Accepting a quest proposal is the moment a payout obligation is created,
   // which is exactly the sort of thing a village takes on for itself. Its one
   // route asks `guardCapability`, so the escape hatch and the public record
@@ -678,12 +704,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 24 keys
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 28 keys
  * today. The other 21 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 24 in the founding seat and has
+ * Read this way, a launched village holds all 28 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -716,7 +742,8 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * build, decision 18 and decision 19) were born held back too, and the pair
  * today was 23 and 21. `power.assign` (the role powers build, 2026-11-05) was
  * born transferable, the power that hands out powers being one a village takes
- * with the rest, which moved only the first: 24 and 21.
+ * with the rest, which moved only the first: 24 and 21. The four operator powers
+ * (the same build) were born transferable too, for the same ruling: 28 and 21.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -938,6 +965,11 @@ export const DENIABLE: Record<Capability, boolean> = {
   // A job, like keeping the library: a warning pauses somebody handing out
   // powers and takes away nothing they hold as a say.
   "power.assign": true,
+  // Jobs: a warning pauses them and takes nothing the member holds as a say.
+  "operator.accounts": true,
+  "operator.config": true,
+  "operator.secrets": true,
+  "operator.recover": true,
 };
 
 /**
@@ -1029,6 +1061,12 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   // let an admin hand themselves the power to give every other power. Seats
   // and Power groups only, the reason `steward.veto` gives.
   "power.assign": false,
+  // FALSE, the reason `power.assign` gives: an admin mints badges, and these
+  // are the panel's own powers. Seats and Power groups only.
+  "operator.accounts": false,
+  "operator.config": false,
+  "operator.secrets": false,
+  "operator.recover": false,
 
   // ── TRUE: every other key. A badge is an ordinary way to hand out a power
   // nobody should have to climb to, and the Cartographer badge over the
