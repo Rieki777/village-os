@@ -49,9 +49,6 @@ importers:
       '@lingui/core':
         specifier: 6.12.0
         version: 6.12.0(@babel/core@7.29.7)
-      '@lingui/message-utils':
-        specifier: 6.12.0
-        version: 6.12.0
       '@lingui/react':
         specifier: 6.12.0
         version: 6.12.0(@babel/core@7.29.7)(react@19.3.1)
@@ -158,13 +155,13 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
-      '@lingui/babel-plugin-lingui-macro':
-        specifier: 6.12.0
-        version: 6.12.0(@babel/core@7.29.7)
       '@lingui/cli':
         specifier: 6.12.0
         version: 6.12.0(esbuild@0.28.2)
       '@lingui/format-po':
+        specifier: 6.12.0
+        version: 6.12.0
+      '@lingui/message-utils':
         specifier: 6.12.0
         version: 6.12.0
       '@lingui/vite-plugin':

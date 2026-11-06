@@ -35,11 +35,13 @@ function separators(locale: string): { group: string; decimal: string } {
 const DIGIT_ZEROS = [0x660, 0x6f0, 0x966, 0x9e6, 0xa66, 0xae6, 0xbe6, 0xc66, 0xce6, 0xd66, 0xe50, 0xed0, 0xf20, 0x1040, 0x17e0, 0x1810, 0xff10];
 
 function asciiDigits(text: string): string {
-  return text.replace(/\p{Nd}/gu, (d) => {
-    const cp = d.codePointAt(0)!;
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const cp = text.charCodeAt(i);
     const zero = DIGIT_ZEROS.find((z) => cp >= z && cp <= z + 9);
-    return zero === undefined ? d : String(cp - zero);
-  });
+    out += zero === undefined ? text[i] : String(cp - zero);
+  }
+  return out;
 }
 
 const SPACES = /[\s\u00a0\u202f\u2009]/g;
