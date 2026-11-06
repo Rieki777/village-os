@@ -952,6 +952,52 @@ export function register(app: Express, deps: Deps): void {
     res.json({ success: ok });
   });
 
+  /*
+   * THE TREASURER'S DOOR TO A ROLE'S PAY (Rye, 2026-11-06, C2: a new power,
+   * `role.pay`, held by the Treasury role). Role pay was writable only through
+   * the admin route above, so a village with no admin had no way to pay a role.
+   * This route writes the role's worth, tokens and cash and nothing else, with
+   * the same checks the admin door makes (`checkedRoleValue`).
+   *
+   * THE CONFLICT RULE. A holder of the role being paid never sets its pay
+   * alone. They are told where the vote is: an org draft carrying the change,
+   * put to the village (`/api/org/drafts/:id/put-to-village`), so nothing waits
+   * without a vote path (constitution 0.4). The valuation engine's second-signer
+   * rule (shared/valuationSetting.ts) replaces this refusal once its record is
+   * stored.
+   */
+  app.put("/api/org/roles/:id/pay", async (req, res) => {
+    if (!(await guardCapability(req, res, "role.pay"))) return;
+    const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
+    if (!role) return res.status(404).json({ error: "Role not found" });
+    if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    const actor = await authedUser(req);
+    const holders = (await listOrgAssignments(getPool())).filter((a) => a.orgRoleId === role.id && a.userId);
+    if (actor && holders.some((a) => a.userId === actor.id)) {
+      return res.status(409).json({
+        error: "This is your own role, so its pay is not yours to set alone. Put the change to the village in an org draft.",
+        proposeInstead: "/api/org/drafts/:id/put-to-village",
+      });
+    }
+    const body = req.body ?? {};
+    const pay = { valueMinor: body.valueMinor, valueTokens: body.valueTokens, cashMinor: body.cashMinor };
+    const valued = await checkedRoleValue(pay, res);
+    if (!valued) return;
+    if (valued.valueMinor === undefined && valued.valueTokens === undefined && valued.cashMinor === undefined) {
+      return res.status(400).json({ error: "Say what the role is worth or pays: a value, tokens or cash." });
+    }
+    const ok = await updateOrgRole(getPool(), role.id, {}, valued);
+    if (ok) {
+      await recordEvent(getPool(), {
+        kind: "org", text: `${role.name}: what the role is worth and pays updated by the Treasurer`,
+        actorUserId: actor?.id ?? null,
+        entityType: "org_role", entityRef: role.id,
+        audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
+      });
+    }
+    res.json({ success: ok });
+  });
+
   app.post("/api/admin/org/roles/:id/holders", async (req, res) => {
     // 0098: `org.seat`. Deciding who sits in the village's seats is the
     // archetypal power a village takes back, and it was an admin check.
