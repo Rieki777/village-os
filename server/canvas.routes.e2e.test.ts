@@ -47,7 +47,7 @@ if (!DB_CONFIGURED) {
 
 const DIST = path.resolve(process.cwd(), "dist/index.js");
 // Its window is checked by scripts/check-e2e-ports.mjs, never claimed by hand here.
-const PORT = 3310 + (process.pid % 85);
+const PORT = 6680 + (process.pid % 15);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "canvas-admin";
 const PASSWORD = "CanvasPen123!";
