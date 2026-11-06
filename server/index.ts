@@ -117,6 +117,7 @@ import { budgetDeleteProblem, treasuryFacts, register as registerCircleTreasuryR
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
 import { register as registerDelegationRoutes } from "./routes/delegation";
+import { register as registerVoiceSpreadRoutes } from "./routes/voiceSpread";
 import { register as registerGovernanceVetoRoutes } from "./routes/governanceVetoes";
 import { register as registerGovernanceLandingRoutes } from "./routes/governanceLanding";
 import { register as registerStewardSlateRoutes } from "./routes/stewardSlate";
@@ -24865,6 +24866,16 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
   registerGovernanceWizardRoutes(app, { authedUser, getPool, capabilityCtx, weightModeNow });
   registerDelegationRoutes(app, { authedUser, getPool, capabilityCtx, members, firstName });
+  // How Voice is spread over the roll a ballot would ask, and this season's votes as counts.
+  registerVoiceSpreadRoutes(app, {
+    authedUser,
+    getPool,
+    electorate: async () => (await buildElectorate()).map((e) => e.userId),
+    weightModeNow,
+    seasonStartsOn: () => seasonState().current?.startsOn ?? null,
+    quorumPct: () => Math.max(0, numberVar("governance.quorum_pct")),
+    peopleArePublic: () => boolVar("org.public_people"),
+  });
   registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
   // The two founder doors onto the moon's settlement: ask the village now,
