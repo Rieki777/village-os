@@ -217,7 +217,7 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
 
   it("is an admin account marked as an agent's, which a person marks", async () => {
     agent = await register("Claude (Operations agent)", "ops-agent");
-    expect((await call("PUT", `/api/admin/users/${agent.id}/role`, { role: "admin" })).status).toBe(200);
+    expect((await call("PUT", `/api/admin/users/${agent.id}/role`, { role: "admin", addressUnprovedOk: true })).status).toBe(200);
     const marked = await call("PUT", `/api/admin/players/${agent.id}/agent`, { isAgent: true });
     expect(marked.status, marked.text).toBe(200);
     const login = await call("POST", "/api/auth/login", { email: `ops-agent-${PORT}@example.test`, password: "AgentTest123!" }, "");
