@@ -113,6 +113,11 @@ caddy reverse-proxy --from village.example.org --to localhost:3000
 Set `FRONTEND_URL=https://village.example.org` in `.env`, then run
 `docker compose up -d` again so the village reads it.
 
+Nothing outside the server tells you when the village stops answering. Point a
+free uptime checker at `https://village.example.org/health` (it answers `503`
+when the database does not), and set `ERROR_WEBHOOK_URL` in `.env` to a chat
+webhook if you want crashes sent somewhere you will see them.
+
 ### 8. Email
 
 Create an account at <https://resend.com>, verify your domain there (it shows

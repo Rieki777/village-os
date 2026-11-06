@@ -49,6 +49,7 @@ import {
   capabilityHoldings,
   moveCapabilityToVillage,
   MOVE_NEEDS_A_VOTE, RETURN_NEEDS_A_VOTE,
+  reservedRoleIdRefusal,
   returnCapabilityToScaffolding,
   villageHandoverState, villageHoldsRefusal,
   villageHeldCapabilities,
@@ -61,7 +62,7 @@ import { contentVersion } from "../shared/pageContent/resolve";
 import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
 import { pageVarsFrom } from "../shared/pageContent/vars";
 import { visitProgramProblem } from "../shared/visitProgram";
-import { workWithUsAckEmail } from "./lib/workWithUsAck";
+import { greetingName, workWithUsAckEmail } from "./lib/workWithUsAck";
 import { investorPacketEmail } from "./lib/investorPacketMail";
 import { emailAccent } from "./lib/emailAccent";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
@@ -117,6 +118,7 @@ import { budgetDeleteProblem, treasuryFacts, register as registerCircleTreasuryR
 import { register as registerGovernanceWeightRoutes } from "./routes/governanceWeights";
 import { register as registerGovernanceWizardRoutes } from "./routes/governanceWizard";
 import { register as registerDelegationRoutes } from "./routes/delegation";
+import { register as registerVoiceSpreadRoutes } from "./routes/voiceSpread";
 import { register as registerGovernanceVetoRoutes } from "./routes/governanceVetoes";
 import { register as registerGovernanceLandingRoutes } from "./routes/governanceLanding";
 import { register as registerStewardSlateRoutes } from "./routes/stewardSlate";
@@ -4593,6 +4595,16 @@ function getWorkWithUs() {
  * Fail-open on database trouble: an unreachable guard table must not take
  * login down with it; the guard protects against abuse, not outages.
  */
+/**
+ * A bucket for mail a stranger aims at a typed address (R106). Per-IP limits
+ * alone let anyone send the village's mail to one inbox from many addresses,
+ * so each public door also counts per recipient. The address is hashed, so the
+ * limits table never holds it.
+ */
+function recipientBucket(door: string, address: string): string {
+  return `${door}-to:${crypto.createHash("sha256").update(address.trim().toLowerCase()).digest("hex").slice(0, 32)}`;
+}
+
 async function overLimit(bucket: string, max: number, windowMs: number): Promise<boolean> {
   // `unavailable` reads as not-over-limit HERE, in one visible place, which is
   // what fail-open means for the twenty-odd callers written against it.
@@ -4850,7 +4862,13 @@ async function startServer() {
     const inv = await checkLedgerInvariants(getPool());
     if (!inv.ok) {
       for (const p of inv.problems) console.error(`[ledger invariant] ${p}`);
-      throw new Error(`ledger invariants violated (${inv.problems.length}), refusing to serve`);
+      // R132: still refusing to serve, now with a page a steward can read instead of a bare 502.
+      const n = inv.problems.length;
+      await startMaintenanceServer({
+        detail: { kind: "ledger-invariant", problems: n, message: `${n} ledger check${n === 1 ? "" : "s"} failed at boot. The server log lists each one under [ledger invariant].` },
+        port: Number(process.env.PORT) || 3000,
+      });
+      return;
     }
     console.log("[ledger] invariants hold: conservation ≡ 0, no hypha rows, no non-faucet negatives");
   }
@@ -7523,7 +7541,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
      * Every other email link in the codebase already used this helper.
      */
     const origin = notifyDeps.origin();
-    const applicantName = (data as any)?.name ?? (data as any)?.firstName ?? (data as any)?.email ?? "Anonymous";
+    const applicantName = greetingName(data); // R106: a stranger's words, repeated by the village's mail, bounded (lib/workWithUsAck.ts)
 
     (async () => { // fire-and-forget notifications
       // Notify the pathway inbox
@@ -7538,7 +7556,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // Acknowledge the submitter of a Work With Us proposal: one typed address, never a list (lib/publicAddress.ts)
       const ackTo = type === "work-with-us" ? singlePublicAddress((data as any)?.email) : null;
       // Its words are the village's own (Admin, Pages, Work With Us): lib/workWithUsAck.ts.
-      if (ackTo) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName), brandColour(getBrand().theme)) });
+      if (ackTo && !(await overLimit(recipientBucket("ack", ackTo), 3, 24 * 60 * 60 * 1000))) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName), brandColour(getBrand().theme)) });
     })();
 
     res.json({ success: true, id: entry.id, ...ideaReceipt(proposal, !!entry.userId) }); // whether a quest idea reached /review: lib/questIdeaReceipt.ts
@@ -13523,6 +13541,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
         grantedEscalations: granted,
       });
       const id = slugify(String(payload.name), `role-${Date.now().toString(36)}`).slice(0, 64);
+      const reserved = reservedRoleIdRefusal(id); // R159: a draft's role never takes a seat's id
+      if (reserved) return res.status(409).json({ error: reserved });
       if (rolesRepo.all().some((r) => r.id === id)) return res.status(409).json({ error: "A role with that name already exists" });
       await rolesRepo.insert({
         id,
@@ -17583,6 +17603,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       if (!req.file) return res.status(400).json({ error: "Missing file" });
       try {
         const clean = await sanitiseForVolume(req.file.buffer, req.file.originalname);
+        // The filter above read the browser's claim; this reads the bytes (R107).
+        if (clean.kind !== "image" && clean.kind !== "pdf") return res.status(400).json({ error: "Only images or PDF are allowed" });
         const filename = stampedName("proposal", clean.ext || ".bin");
         writeToVolume(UPLOADS_DIR, filename, clean.bytes);
         res.json({ filename, originalName: req.file.originalname });
@@ -18209,7 +18231,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
        */
       const documents = packet.map((d) => ({ title: String(d.title ?? "Document"), href: absolute(String(d.url ?? "")), pageHref: d.pageLink ? absolute(String(d.pageLink)) : null }));
       try {
-        await sendResendEmail({ to: [email], origin: "investor.packet", ...(await investorPacketEmail(getPool, origin, { name: String(name), documents })) });
+        if (!(await overLimit(recipientBucket("investor-packet", email), 3, 24 * 60 * 60 * 1000))) await sendResendEmail({ to: [email], origin: "investor.packet", ...(await investorPacketEmail(getPool, origin, { name: String(name), documents })) });
       } catch (err) {
         console.error("[investor] the packet email could not be rendered, so it was not sent", err);
       }
@@ -24621,6 +24643,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!roleId) {
       return res.status(400).json({ error: "That name has no letters or numbers in it, so there is nothing to call the role." });
     }
+    const reservedId = reservedRoleIdRefusal(roleId); // R159: a declared role never takes a seat's id
+    if (reservedId) return res.status(409).json({ error: reservedId });
     if (rolesRepo.all().some((r: any) => r.id === roleId)) {
       return res.status(409).json({ error: "This village already has a role by that name." });
     }
@@ -24843,6 +24867,16 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
   registerGovernanceWizardRoutes(app, { authedUser, getPool, capabilityCtx, weightModeNow });
   registerDelegationRoutes(app, { authedUser, getPool, capabilityCtx, members, firstName });
+  // How Voice is spread over the roll a ballot would ask, and this season's votes as counts.
+  registerVoiceSpreadRoutes(app, {
+    authedUser,
+    getPool,
+    electorate: async () => (await buildElectorate()).map((e) => e.userId),
+    weightModeNow,
+    seasonStartsOn: () => seasonState().current?.startsOn ?? null,
+    quorumPct: () => Math.max(0, numberVar("governance.quorum_pct")),
+    peopleArePublic: () => boolVar("org.public_people"),
+  });
   registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
   // The two founder doors onto the moon's settlement: ask the village now,

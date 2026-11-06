@@ -24,6 +24,17 @@ import { WORK_WITH_US_PAGE } from "../../shared/pageContent/workWithUs";
 import { escapeHtml } from "./comms/mailer";
 import { emailAccent } from "./emailAccent";
 
+/**
+ * The name a public form's mail greets its sender by (R106): the first of the
+ * fields a form carries, and never longer than a name, because a stranger
+ * types it and the village's own mail repeats it to an address they chose.
+ */
+export function greetingName(data: unknown): string {
+  const d = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const raw = [d.name, d.firstName, d.email].find((v) => typeof v === "string" && v.trim() !== "");
+  return (typeof raw === "string" ? raw.trim() : "Anonymous").slice(0, 120);
+}
+
 export function workWithUsAckEmail(
   content: unknown,
   vars: PageVars,

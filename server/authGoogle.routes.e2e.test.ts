@@ -720,6 +720,25 @@ describe.skipIf(!DB_CONFIGURED)("attacks the callback has to refuse", () => {
     expect(second.status).toBe(401);
   });
 
+  it("refuses a header carrying the handoff cookie twice, which is the cookie-tossing attack (R041)", async () => {
+    // A sibling subdomain can set a cookie of the same name with a longer
+    // path, and the browser sends it first. The reader took the first match,
+    // so a handoff minted for the attacker's own account signed the victim in
+    // as the attacker. Two of the name is now no sign-in at all.
+    const mint = async (sub: string, email: string) => {
+      const { state, nonce } = await beginSignIn();
+      nextResponse = { status: 200, claims: claimsFor({ nonce, sub, email, email_verified: true }) };
+      return (await callback(state)).cookie;
+    };
+    const tossed = await mint("tossed-subject", "tossed@example.com");
+    const own = await mint("own-subject", "own@example.com");
+    const both = await fetch(`${BASE}/api/auth/google/exchange`, { // module-review-ok: the test client dialling the built server on localhost
+      method: "POST",
+      headers: { cookie: `village_oauth_handoff=${tossed}; village_oauth_handoff=${own}` },
+    });
+    expect(both.status).toBe(401);
+  });
+
   it("refuses a forged handoff cookie", async () => {
     const res = await exchange("invented.cookie");
     expect(res.status).toBe(401);
