@@ -398,6 +398,23 @@ describe.skipIf(!DB_CONFIGURED)("the Hypha voice secret, typed into Admin, Integ
   });
 });
 
+describe.skipIf(!DB_CONFIGURED)("a satellite provider chosen on the dial shows its key card (R171)", () => {
+  const cardKeys = async () => ((await call("GET", "/api/admin/integrations")).json?.cards as any[]).map((c) => c.key);
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED) return;
+    await call("PUT", "/api/admin/variables/village.satellite_provider", { value: "" });
+  });
+
+  it("has no satellite card while no provider is chosen, and the chosen provider's once one is", async () => {
+    expect(await cardKeys(), "the control: nothing chosen, no card").not.toContain("satellite_mapbox_token");
+    const chose = await call("PUT", "/api/admin/variables/village.satellite_provider", { value: "mapbox" });
+    expect(chose.status, chose.text).toBe(200);
+    expect(await cardKeys()).toContain("satellite_mapbox_token");
+    expect(await cardKeys(), "only the chosen provider's").not.toContain("satellite_esri_api_key");
+  });
+});
+
 describe.skipIf(!DB_CONFIGURED)("a hub outcome that names no Hypha space (R039)", () => {
   // One hub listener serves many villages, so a delivery about somebody
   // else's space can arrive correctly signed. With a space id recorded, a

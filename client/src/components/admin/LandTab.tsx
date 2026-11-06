@@ -507,13 +507,13 @@ export default function LandTab({ password }: { password: string }) {
         {!provider?.providerId && (
           <p className="text-xs text-gray-500">
             No imagery provider is set up for this deployment, so there is nothing to fetch from yet.
-            Until one is, the map draws its own ground.
+            Choose one in Game Mechanics, under Village. Until one is, the map draws its own ground.
           </p>
         )}
         {provider?.providerId && !provider?.ready && (
           <p className="text-xs text-amber-700">
-            {provider.providerLabel} is selected and {provider.missingEnv} is not set, so there is no
-            key to call it with.
+            {provider.providerLabel} is selected and its key is not set, in Admin, Integrations or as{" "}
+            {provider.missingEnv} on the host, so there is no key to call it with.
           </p>
         )}
         {active?.imagery?.error && (
