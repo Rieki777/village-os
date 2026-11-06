@@ -101,6 +101,7 @@ import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
 import { villagePowerRows } from "./lib/villagePowers";
 import { GUIDANCE_WORDS, POWER_FAMILIES } from "../shared/powerBoard";
+import { adminOrRouteHolder, routePower } from "./lib/operatorRoutes";
 import { giveOnlyWhatYouHold, makePowerAssignGate, register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
 import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
 import { isMemberReadable } from "./lib/memberReadable";
@@ -1801,9 +1802,14 @@ async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
   if (!userIsAdmin(user)) {
-    // Q5: a member may READ the admin routes server/lib/memberReadable.ts lists, and nothing else. No adminUser: nothing is theirs to change.
-    const listed = isMemberReadable(req.method, (req as any).route?.path, true);
-    return listed && !!user && stageIndex(await stageOf(user)) >= stageIndex("member") && !(await leftTheVillage(getPool(), user));
+    // An admin first, unchanged; then a holder of the power this route names (server/lib/operatorRoutes.ts).
+    const power = user ? routePower(req.method, (req as any).route?.path) : null;
+    const holds = await adminOrRouteHolder(false, power, async (cap) => hasCapability(cap, { ...(await capabilityCtx(user)), isAdmin: false }));
+    if (!holds) {
+      // Q5: a member may READ the admin routes server/lib/memberReadable.ts lists, and nothing else. No adminUser: nothing is theirs to change.
+      const listed = isMemberReadable(req.method, (req as any).route?.path, true);
+      return listed && !!user && stageIndex(await stageOf(user)) >= stageIndex("member") && !(await leftTheVillage(getPool(), user));
+    }
   }
   (req as any).adminUser = user;
   return true;
