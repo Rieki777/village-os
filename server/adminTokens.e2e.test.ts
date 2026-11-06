@@ -176,7 +176,7 @@ describe.skipIf(!DB_CONFIGURED)("the tokens tab, and what a member sees afterwar
     expect(bo.status, "Bo must register").toBe(200);
     boToken = String(bo.json?.token ?? "");
     boId = String(bo.json?.user?.id ?? "");
-    const promote = await call("PUT", `/api/admin/users/${boId}/role`, { role: "admin" }, founderToken);
+    const promote = await call("PUT", `/api/admin/users/${boId}/role`, { role: "admin", addressUnprovedOk: true }, founderToken);
     expect(promote.status, `Bo must become an admin: ${promote.text.slice(0, 200)}`).toBe(200);
 
     // The wallet page reads `/api/exchange`, which is behind the module gate.

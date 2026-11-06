@@ -207,7 +207,7 @@ beforeAll(async () => {
   // launch the route refuses to make anybody a founder (R90), which is its
   // own rule and not this file's subject.
   for (const p of [people.eme, people.fin]) {
-    const r = await call("PUT", `/api/admin/users/${p.id}/role`, { role: "admin" });
+    const r = await call("PUT", `/api/admin/users/${p.id}/role`, { role: "admin", addressUnprovedOk: true });
     expect(r.status, `${p.id} becomes an admin: ${r.text}`).toBe(200);
   }
 

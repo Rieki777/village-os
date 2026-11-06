@@ -250,7 +250,7 @@ beforeAll(async () => {
   const wrenStage = await call("PUT", `/api/admin/players/${people.wren.id}/stage`, { stageId: "co-creator" });
   expect(wrenStage.status, wrenStage.text).toBe(200);
 
-  const finAdmin = await call("PUT", `/api/admin/users/${people.fin.id}/role`, { role: "admin" });
+  const finAdmin = await call("PUT", `/api/admin/users/${people.fin.id}/role`, { role: "admin", addressUnprovedOk: true });
   expect(finAdmin.status, `Fin becomes an admin: ${finAdmin.text}`).toBe(200);
 
   // Badges on, so a badge row reaches the gate at all.

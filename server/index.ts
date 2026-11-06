@@ -675,6 +675,7 @@ import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
+import { isUnprovedRaise, UNPROVED_RAISE_REFUSAL } from "./lib/founderGrant";
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
@@ -8272,6 +8273,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       });
     }
     const fromRole = target.role ?? "member";
+    // R104: never raise an account whose address nobody proved without saying so (lib/founderGrant.ts).
+    const unprovedRaise = isUnprovedRaise(fromRole, role, target as any);
+    if (unprovedRaise && req.body?.addressUnprovedOk !== true) return res.status(409).json(UNPROVED_RAISE_REFUSAL);
     if (founderStands) {
       if (fromRole === "founder" && role !== "founder") {
         const founders = (await members.all()).filter((u: any) => u.role === "founder");
@@ -8290,7 +8294,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     await members.update(target.id, (u: any) => { u.role = role; });
     void recordEvent(getPool(), {
       kind: "audit",
-      text: `role:${fromRole}->${role}`,
+      text: `role:${fromRole}->${role}${unprovedRaise ? " (address unconfirmed)" : ""}`,
       actorUserId: actor.id,
       entityType: "user",
       entityRef: target.id,
