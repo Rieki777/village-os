@@ -206,14 +206,15 @@ const round4 = (n: number): number => Math.round(n * 10000) / 10000;
  */
 export function calibrate(records: readonly SettingRecord[], dials: Partial<typeof CALIBRATION_DEFAULTS> = {}): CategoryCalibration[] {
   const d = { ...CALIBRATION_DEFAULTS, ...dials };
-  const groups = new Map<string, SettingRecord[]>();
+  const groups: Record<string, SettingRecord[]> = {};
   for (const r of records) {
     if (r.conflicted || !(r.suggestedMinor > 0)) continue;
     const key = r.eeHeld ? `${r.category}:ee-held` : r.category;
-    groups.set(key, [...(groups.get(key) ?? []), r]);
+    (groups[key] ??= []).push(r);
   }
   const out: CategoryCalibration[] = [];
-  for (const [key, rs] of groups) {
+  for (const key of Object.keys(groups)) {
+    const rs = groups[key];
     const ratios = rs.map((r) => r.setMinor / r.suggestedMinor).sort((a, b) => a - b);
     const pairs = new Set(rs.map((r) => `${r.setterId}:${r.signerId ?? "-"}`)).size;
     const n = ratios.length;
