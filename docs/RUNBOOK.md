@@ -117,7 +117,7 @@ A well village:
 ```json
 {
   "status": "ok",
-  "build": "2026-07-28-wave1-a1b2c3d",
+  "build": "2026-10-03-cfaa41f",
   "timestamp": "2026-09-02T02:14:07.221Z",
   "database": { "ok": true, "ms": 11 },
   "uploads": { "files": 412, "mb": 730, "photoFiles": 118, "photoMb": 402 }
@@ -387,7 +387,9 @@ a copy and most of a copy.
 To put the files back: copy everything in `unpacked/` except `MANIFEST.txt` and
 `EXPORT-STATUS.txt` into `/app/data/uploads/` on the volume. That needs a shell
 on the running service (`railway ssh`), so it needs someone with Railway
-access. Restoring the database and the volume from the same day keeps names and
+access. No command is given for the copy, because none has been rehearsed on a
+hosted village: plan it with whoever holds the Railway project before you need
+it, and treat a hosted uploads restore as unsupported until one has been. Restoring the database and the volume from the same day keeps names and
 files together.
 
 ---
