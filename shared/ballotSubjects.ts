@@ -298,12 +298,12 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      * numberVar. This field supplies its DEFAULT and nothing more. A village
      * that wants a thicker membrane raises the dial and never touches this.
      *
-     * This field itself is a hardcoded platform constant. `thresholdSettingsFrom`
-     * raises unity and quorum from village settings and never reads
-     * minElectorate, so no village can change how many founders it takes to
-     * launch. That may well be right, since launch happens once, and it is an
-     * open question with the founder rather than an oversight to fix in
-     * passing.
+     * This field is the DEFAULT of a village dial now,
+     * `governance.launch_min_electorate` (Rye, 2026-11-06: "EVERYTHING can
+     * change with the highest village vote"). The dial is constitutional, so
+     * after launch only the highest tier moves it, and it never goes below one.
+     * `rollProblem` takes the village's value; this number is what a village
+     * that never touched the dial gets.
      *
      * Until this comment existed the coupling was asserted in prose in three
      * files and enforced in none. It is now enforced in one and stated here,
@@ -831,11 +831,13 @@ export function criticalityOfItems(tiers: readonly Criticality[]): Criticality {
  * two is young. It is not behind, it is not failing, and nothing here tells it
  * what to want. `null` means the floor is met.
  */
-export function electorateFloorProblem(subjectType: string, onTheRoll: number): string | null {
+export function electorateFloorProblem(subjectType: string, onTheRoll: number, villageMin?: number): string | null {
   const floor = thresholdsForSubject(subjectType);
   if (!floor || floor.minElectorate <= 0) return null;
-  if (onTheRoll >= floor.minElectorate) return null;
-  const short = floor.minElectorate - onTheRoll;
+  // The launch's head count is the village's own dial (Rye, 2026-11-06), never below one.
+  const min = subjectType === VILLAGE_LAUNCH && villageMin !== undefined && Number.isFinite(villageMin) ? Math.max(1, Math.floor(villageMin)) : floor.minElectorate;
+  if (onTheRoll >= min) return null;
+  const short = min - onTheRoll;
   const people = onTheRoll === 1 ? "One member holds a voice" : `${onTheRoll} members hold a voice`;
   const more = short === 1 ? "One more member" : `${short} more members`;
   return `${people} in this village today. ${more} and the village can vote to start its Game.`;
@@ -915,8 +917,8 @@ export function weightFloorProblem(subjectType: string, roll: readonly RollSeat[
  * be asked this?") and one place a route refuses. Two separate calls at each of
  * the two call sites is how the second check gets added to one of them.
  */
-export function rollProblem(subjectType: string, roll: readonly RollSeat[]): string | null {
-  return electorateFloorProblem(subjectType, roll.length) ?? weightFloorProblem(subjectType, roll);
+export function rollProblem(subjectType: string, roll: readonly RollSeat[], villageMin?: number): string | null {
+  return electorateFloorProblem(subjectType, roll.length, villageMin) ?? weightFloorProblem(subjectType, roll);
 }
 
 /**

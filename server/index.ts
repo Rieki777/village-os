@@ -12245,7 +12245,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     try {
       const roll = await buildElectorate();
       onTheRoll = roll.length;
-      tooFew = rollProblem(VILLAGE_LAUNCH, roll);
+      tooFew = rollProblem(VILLAGE_LAUNCH, roll, numberVar("governance.launch_min_electorate"));
     } catch (e: any) {
       // Building the roll reads the weight mode, which can refuse (a weight
       // token the engine may not conduct). That is a real answer about this
@@ -12258,7 +12258,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       tooFew,
       unityPct: threshold?.minUnityPct ?? null,
       quorumPct: threshold?.minQuorumPct ?? null,
-      minElectorate: threshold?.minElectorate ?? null,
+      minElectorate: threshold ? Math.max(1, Math.floor(numberVar("governance.launch_min_electorate"))) : null,
       // The subject's own fact, then this village's. `why` is what the card
       // renders in the ready-to-ask state, so a mode note appended here lands
       // in front of the founder with no new field for a client to learn.
@@ -13724,7 +13724,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * says the whole village agreed. `rollProblem` is both, in one sentence,
      * and the reasoning is in `shared/ballotSubjects.ts`.
      */
-    const rollNotReady = rollProblem(VILLAGE_LAUNCH, electorate);
+    const rollNotReady = rollProblem(VILLAGE_LAUNCH, electorate, numberVar("governance.launch_min_electorate"));
     if (rollNotReady) return res.status(409).json({ error: rollNotReady, onTheRoll: electorate.length });
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
