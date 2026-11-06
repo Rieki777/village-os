@@ -672,6 +672,7 @@ import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
+import { register as registerVillageExportRoutes } from "./routes/villageExport";
 import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
@@ -1755,9 +1756,10 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
  * S1: admins are real users (MODULES_MASTER_PLAN.md Block 1).
  *
  * A request is admin when it carries a valid MEMBER token whose account role is
- * 'admin' or 'founder'. The shared password authenticates NOTHING here — its
- * only remaining power is the one-shot founder bootstrap endpoint, and that
- * power expires the moment a founder exists. The matched account is attached to
+ * 'admin' or 'founder'. The shared password authenticates NOTHING here. It has
+ * two doors of its own: the one-shot founder bootstrap, whose power expires the
+ * moment a founder exists, and the whole-village export (R071,
+ * server/routes/villageExport.ts), which it keeps. The matched account is attached to
  * the request so every admin mutation can name a real person in the audit log.
  *
  * Roles are a template concept every fork inherits:
@@ -7396,6 +7398,13 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     } finally {
       uploadsExportInFlight = false;
     }
+  });
+
+  // The whole village as one SQL file, for whoever runs the deployment (R071).
+  // Gated by ADMIN_PASSWORD alone, audited and announced; server/routes/villageExport.ts.
+  registerVillageExportRoutes(app, {
+    getPool, notify, members, overLimit, clientIp, secretEquals,
+    adminPassword: () => (adminPasswordIsUsable ? ADMIN_PASSWORD : null),
   });
 
   /*

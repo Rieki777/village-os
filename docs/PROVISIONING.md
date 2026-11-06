@@ -280,9 +280,14 @@ that account out everywhere before it makes it the founder, and the response
 carries a `claimUrl` to set your own. Anybody can sign up with any address,
 so a password nobody confirmed may not be yours (readiness finding R104).
 
-Either way, `ADMIN_PASSWORD` now stops working. Once your village has a
-founder it refuses everyone except the account named in
+Either way, `ADMIN_PASSWORD` now stops working at `/claim`. Once your village
+has a founder it refuses everyone there except the account named in
 `BREAK_GLASS_ADMIN_EMAIL`, and that account still has to give it.
+
+It keeps one other door, for as long as it is set: the whole-village export
+(`docs/RUNBOOK.md`, "Taking the whole village with you"), which hands every
+member's data to whoever gives it. So keep it as you keep the database
+password, and change it when anyone who has seen it stops running the village.
 
 ### Keep a way back in
 

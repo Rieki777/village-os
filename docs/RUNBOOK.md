@@ -20,6 +20,7 @@ it is the part that saves the other forty.
 4. [Rolling back to the last version that worked](#rolling-back-to-the-last-version-that-worked)
 5. [Restoring the database from a backup](#restoring-the-database-from-a-backup)
 6. [Restoring the uploads volume](#restoring-the-uploads-volume)
+6a. [Taking the whole village with you](#taking-the-whole-village-with-you)
 7. [The backup is red](#the-backup-is-red)
 8. [Turning on the uploads backup](#turning-on-the-uploads-backup)
 9. [The two minute check, once a week](#the-two-minute-check-once-a-week)
@@ -389,6 +390,66 @@ To put the files back: copy everything in `unpacked/` except `MANIFEST.txt` and
 on the running service (`railway ssh`), so it needs someone with Railway
 access. Restoring the database and the volume from the same day keeps names and
 files together.
+
+---
+
+## Taking the whole village with you
+
+**The file this makes holds every member's data**: names, email addresses,
+password hashes, messages, the ledger and votes. Anyone holding it holds the
+village. Keep it where you keep the database password, never in a chat or a
+shared drive, and delete copies you no longer need.
+
+Use it when you are moving the village to a new host, or want a copy you can
+restore without the backup workflow. It is one gzipped SQL file, taken in one
+consistent snapshot, that `mysql` reads straight back into an empty database.
+It needs `ADMIN_PASSWORD`, the value in the deployment's environment. A signed-in
+admin or founder account does not open it.
+
+```bash
+read -rs ADMIN_PASSWORD     # paste it; nothing shows, and it stays out of your shell history
+curl -fS -D export-headers.txt \
+  -H "x-village-admin-password: $ADMIN_PASSWORD" \
+  https://<your village's address>/api/admin/export/database \
+  -o village-export.sql.gz
+unset ADMIN_PASSWORD
+gunzip -c village-export.sql.gz | tail -1
+```
+
+The last line must start `-- Export complete:` and give the counts. A file cut
+off partway still loads, partly, and looks plausible; without that line it is
+not the whole village, so take it again.
+
+**How big, how long.** `export-headers.txt` carries
+`x-village-export-estimate-bytes`, the database's own estimate of the
+uncompressed size, before the first byte arrives. The file itself is gzip and
+usually much smaller. It streams, so a large village does not time out on size
+alone, but a host that caps how long one request may run can still cut it
+short. If the last line is missing twice, use the database backup workflow
+(section 0) instead.
+
+**What is not in it.** Nothing from the environment. Sealed secrets
+(Admin, Integrations) and members' own AI keys are in the file still sealed,
+and the keys that open them are not: carry `VILLAGE_SECRETS_KEY` and
+`MEMBER_SECRETS_KEY` to the new home yourself, or those values cannot be
+opened there. Uploads are not in it either; section 6 has the uploads archive.
+
+**To restore** into an empty database:
+
+```bash
+gunzip -c village-export.sql.gz | mysql -h <host> -P <port> -u <user> -p <database>
+```
+
+Then point the village at that database and start it. The migration records
+travel in the file, so the server starts on the schema it left with and applies
+only what is newer.
+
+**Every export is told.** Each one that hands anything out is written to the
+audit log (when, how much, and the address it came from) and sent to every
+admin and every steward in a live term, the same hour. If one of those notices
+names an export nobody running the deployment made, change `ADMIN_PASSWORD`
+and redeploy. After ten wrong passwords in an hour from one address the rest are
+refused outright, and only one export runs at a time.
 
 ---
 
