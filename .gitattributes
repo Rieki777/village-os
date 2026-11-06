@@ -43,3 +43,10 @@ PLAN_TO_A.md export-ignore
 .env.* export-ignore
 # Attributes have no negation, so the template is switched back on by name.
 .env.example -export-ignore
+
+# Migrations are checksummed at boot (server/db/migrate.ts). They are the
+# same text everywhere, so they are the same bytes everywhere: LF on every
+# checkout, whatever core.autocrlf says. sameMigrationText also accepts a
+# file whose only difference is its line endings (R130), for trees made
+# before this line.
+drizzle/*.sql text eol=lf
