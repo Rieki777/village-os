@@ -4858,7 +4858,13 @@ async function startServer() {
     const inv = await checkLedgerInvariants(getPool());
     if (!inv.ok) {
       for (const p of inv.problems) console.error(`[ledger invariant] ${p}`);
-      throw new Error(`ledger invariants violated (${inv.problems.length}), refusing to serve`);
+      // R132: still refusing to serve, now with a page a steward can read instead of a bare 502.
+      const n = inv.problems.length;
+      await startMaintenanceServer({
+        detail: { kind: "ledger-invariant", problems: n, message: `${n} ledger check${n === 1 ? "" : "s"} failed at boot. The server log lists each one under [ledger invariant].` },
+        port: Number(process.env.PORT) || 3000,
+      });
+      return;
     }
     console.log("[ledger] invariants hold: conservation ≡ 0, no hypha rows, no non-faucet negatives");
   }

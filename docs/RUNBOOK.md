@@ -166,6 +166,24 @@ number that failed. Send that page, or a photograph of it, to whoever operates
 your deployment. If the version before this update was working, rolling back
 to it (section 4) restores service while the failed update is looked at.
 
+### A page that says the village's accounts did not add up.
+
+Maintenance mode again, for a different reason: `/health` answers `503` with
+`"status": "maintenance"` and an error of kind `ledger-invariant`. Before it
+answers anyone, the server checks that every token's balances sum to zero and
+that only the accounts that issue a token are below zero. One of those checks
+failed, so it refused to open the village on numbers it could not trust.
+Nothing was moved by the check.
+
+1. Railway, the app service log: copy every line that starts
+   `[ledger invariant]`. Each one names the token or the account. The public
+   page shows only how many there are, on purpose.
+2. Do not change a balance by hand to make the check pass. Balances are
+   worked out from the ledger, so an edited balance hides the cause and is
+   recomputed away.
+3. The previous version runs the same check, so rolling back does not bring
+   the village back. Send the lines to whoever operates your deployment.
+
 ### It loads, and everything a member does errors.
 
 `/health` says `ok`, so the database is answering, and something above it is
