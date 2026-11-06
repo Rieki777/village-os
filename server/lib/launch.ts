@@ -58,6 +58,46 @@ const GPS_CHECK_KEY = "gps-written";
 
 /** The sealing key's row, resolved by name for the same reason. */
 const SECRETS_KEY_CHECK_KEY = "village-secrets-key";
+
+/**
+ * Whether FRONTEND_URL names an address a link can sit on (readiness R108).
+ *
+ * Shape only: an http or https URL with a host, no quotes, no `NAME=` pasted
+ * in front. Whether that address really reaches this village is DNS's
+ * question, and the custom-domain row asks it. The detail names what is
+ * wrong, the way the sealing key's does, because "not set" for a value that
+ * is set in the wrong shape sends a founder looking in the wrong place.
+ */
+export function siteAddressLaunchCheck(env: NodeJS.ProcessEnv = process.env): { state: CheckState; detail: string } {
+  const raw = String(env.FRONTEND_URL ?? "").trim();
+  if (!raw) {
+    return {
+      state: "missing",
+      detail: "FRONTEND_URL is not set, so emailed links take their address from the first request this server answered.",
+    };
+  }
+  if (/^["']|["']$/.test(raw)) return { state: "missing", detail: "FRONTEND_URL is set with quotes around it. Set the address alone." };
+  if (/^[A-Z_]+=/.test(raw)) return { state: "missing", detail: "FRONTEND_URL starts with a variable name and an equals sign. Set the address alone." };
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { state: "missing", detail: "FRONTEND_URL does not read as an address. Write it with its scheme, such as https://village.example.org." };
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    return { state: "missing", detail: `FRONTEND_URL starts with ${url.protocol} and links need http or https.` };
+  }
+  if (!url.hostname) return { state: "missing", detail: "FRONTEND_URL names no host." };
+  return { state: "ok", detail: `Emailed links go to ${url.origin}.` };
+}
+
+/**
+ * Rows read straight from the environment, beside the evidence rows below. An
+ * injected check still wins, so a test can hold every other row still.
+ */
+const ENV_CHECKS: Record<string, (env: NodeJS.ProcessEnv) => { state: CheckState; detail: string }> = {
+  "site-address": siteAddressLaunchCheck,
+};
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { commsChecklist, commsLaunchRow, type SetupItem } from "./comms/setup";
 import { normalizeSeasonConfig } from "./seasonCalendar";
@@ -393,7 +433,10 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
      * An injected check still wins, so a test can hold every other row still.
      */
     const proof = LAUNCH_PROOFS[req.checkKey];
-    const check = deps.checks[req.checkKey] ?? (proof ? () => proof(pool, deps.env ?? process.env) : undefined);
+    const fromEnv = ENV_CHECKS[req.checkKey];
+    const check =
+      deps.checks[req.checkKey] ??
+      (proof ? () => proof(pool, deps.env ?? process.env) : fromEnv ? () => fromEnv(deps.env ?? process.env) : undefined);
     if (!check) {
       // A registry entry without a resolver is a wiring bug. Fail VISIBLY on
       // the page rather than silently dropping the row â€” a checklist that

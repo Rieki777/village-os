@@ -27,6 +27,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { TIER_FLOORS } from "../shared/governanceEngine";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
@@ -373,6 +374,41 @@ describe.skipIf(!DB_CONFIGURED)("a hub outcome that names no Hypha space (R039)"
     expect(named.status, JSON.stringify(named.json)).toBe(200);
     expect(named.json?.status).toBe("applied");
     expect(await placeLine()).toBe("Meet at the long table");
+  });
+
+  it("after launch, any member can ask the village to decide a held outcome, at its highest tier (Rye, 2026-11-06)", async () => {
+    // This scratch village has started its Game, so the admin door is shut and
+    // the held outcome would otherwise wait forever. The village's own vote
+    // lives in the governance module, so it is on here.
+    const on = await call("PUT", "/api/admin/modules/governance/lifecycle", { lifecycle: "members", examples: false });
+    expect(on.status, on.text).toBe(200);
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      title: "Meet by the river", rationale: "Shade in the afternoon.",
+      changes: [{ key: "sessions.place_line", to: "Meet by the river" }],
+    });
+    expect(made.status, made.text).toBe(200);
+    const id = String(made.json?.id);
+    expect((await call("POST", `/api/game/mechanics/proposals/${id}/to-hypha`, {})).status).toBe(200);
+    const held = await deliver(id, { deliveryId: "r039-held-ask" });
+    expect(held.json?.status, JSON.stringify(held.json)).toBe("passed_verified");
+    expect((await call("POST", `/api/admin/mechanics/proposals/${id}/apply`, {})).status, "the admin door is closed after launch").toBe(409);
+
+    // The village's own door is open to a member on the roll, and the page is told.
+    expect((await call("GET", "/api/game/mechanics/standing")).json?.mayAskVillage).toBe(true);
+    const asked = await call("POST", `/api/governance/mechanics/${id}/open-ballot`, {});
+    expect(asked.status, asked.text).toBe(200);
+    const [rows] = await pool.query<any[]>( // module-review-ok: the e2e harness reading its own scratch schema
+      "SELECT m.status, b.unity_pct, b.quorum_pct FROM mechanics_proposals m JOIN ballots b ON b.id = m.ballot_id WHERE m.id = ?",
+      [id],
+    );
+    expect(rows[0]?.status).toBe("onsite_vote");
+    // The highest tier, never the ordinary mechanics dials (80 and 20 by default).
+    expect(Number(rows[0].unity_pct)).toBeGreaterThanOrEqual(TIER_FLOORS.constitutional.unityPct);
+    expect(Number(rows[0].quorum_pct)).toBeGreaterThanOrEqual(TIER_FLOORS.constitutional.quorumPct);
+
+    // The vote now under way decides; a late delivery cannot jump it.
+    const late = await deliver(id, { deliveryId: "r039-held-late", spaceId: "42" });
+    expect(String(late.json?.discarded)).toMatch(/not awaiting an outcome/);
   });
 });
 

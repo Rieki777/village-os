@@ -106,7 +106,9 @@ export function nameInTitle(subjectType: string, title: string): string | null {
       ? /^.+: the village asks to take the role back from (.+)$/.exec(title)
       : subjectType === "role_seat"
         ? /^.+: the village asks (.+) to sit in it$/.exec(title)
-        : null;
+        : subjectType === "badge_grant"
+          ? /^.+: the village asks to (?:give it to|take it back from) (.+)$/.exec(title)
+          : null;
   const name = m?.[1]?.trim() ?? "";
   return name && !NEVER_A_SPELLING.has(name) ? name : null;
 }

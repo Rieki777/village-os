@@ -909,6 +909,11 @@ export const SUBJECT_NOUN: Record<string, string> = {
    */
   org_draft: "A change to the structure",
   /*
+   * ALSO NOT A WIZARD TYPE. A grant of new tokens that waited for a second
+   * steward, put to the village instead (server/routes/mintRequestVotes.ts).
+   */
+  mint_request: "A grant of new tokens",
+  /*
    * The vote mode became something the village decides on 2026-09-02 (Q8),
    * with its own subject type so it can carry the constitutional bar. The
    * noun is what is being decided, which is how every vote after it will be

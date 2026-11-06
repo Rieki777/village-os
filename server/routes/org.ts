@@ -440,7 +440,8 @@ export function register(app: Express, deps: Deps): void {
         kind: "org",
         text: `linked: ${String(req.body?.typeId)}`,
         actorUserId: (await authedUser(req))?.id ?? null,
-        entityType: end.kind, entityRef: end.id, audience: "admin",
+        entityType: end.kind, entityRef: end.id,
+        audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
       });
     }
     res.json({ success: true, id: r.id });
@@ -490,26 +491,35 @@ export function register(app: Express, deps: Deps): void {
    * before you change a seat, you can see what has already been tried with it,
    * and by whom. Governance history stops living in people's memory.
    */
+  /*
+   * WHO READS WHAT (readiness R103, the coordinator's ruling of 2026-11-05).
+   * An admin reads every line, and who wrote it. Everybody else holding
+   * `map.viewPeople`, which opens at the guest rung, reads the PUBLIC lines
+   * and no names: the writers mark a line public only when its words name
+   * nobody, and `by` is a person's name, so it goes to admins alone. Lines
+   * written before the ruling were admin-audience whatever they said;
+   * `markNameFreeJournalLinesPublic` re-marks the name-free ones at boot, and
+   * the ones that named a person stay admin.
+   */
   app.get("/api/org/:kind/:id/journal", async (req, res) => {
     const viewer = await authedUser(req);
-    const maySee =
-      (await isAdmin(req)) ||
-      (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
+    const admin = await isAdmin(req);
+    const maySee = admin || (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
     if (!maySee) return res.status(401).json({ error: "auth_required", message: "Sign in to read this history" });
     const kind = req.params.kind === "circles" ? "circle" : "org_role";
     const [rows]: any = await getPool().query(
       `SELECT id, kind, text, actor_user_id, at FROM health_events
-        WHERE entity_type = ? AND entity_ref = ?
+        WHERE entity_type = ? AND entity_ref = ?${admin ? "" : " AND audience = 'public'"}
         ORDER BY at DESC, id DESC LIMIT 200`,
       [kind, req.params.id],
     );
-    const allMembers = await members.all();
+    const allMembers = admin ? await members.all() : [];
     res.json(
       (rows as any[]).map((r) => ({
         id: r.id,
         text: r.text,
         at: r.at,
-        by: r.actor_user_id
+        by: admin && r.actor_user_id
           ? firstName((allMembers as any[]).find((u: any) => u.id === r.actor_user_id)?.name ?? "Someone")
           : null,
       })),
@@ -721,7 +731,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: user.id,
       entityType: "org_role",
       entityRef: wanted.orgRoleId,
-      audience: "admin",
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     // A request nobody hears is the failure this repo has already paid for on
     // the raised-hand path and on both seating paths. Same shape as the
@@ -805,7 +815,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: actor?.id ?? null,
       entityType: "org_role",
       entityRef: before?.orgRoleId ?? req.params.id,
-      audience: "admin",
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     await closeSeatClaim((s) => s.data?.assignmentId === req.params.id && s.userId === userId, "accepted");
     await notify({
@@ -841,7 +851,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: actor?.id ?? null,
       entityType: "org_role",
       entityRef: String(closed.data?.roleId ?? ""),
-      audience: "admin",
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     const words = submissionStatusNotice(SEAT_CLAIM_TYPE, "declined", closed.data ?? null);
     if (closed.userId && words) {
@@ -904,7 +914,8 @@ export function register(app: Express, deps: Deps): void {
     await recordEvent(getPool(), {
       kind: "org", text: `role created: ${String(req.body?.name ?? id)}`,
       actorUserId: (await authedUser(req))?.id ?? null,
-      entityType: "org_role", entityRef: id, audience: "admin",
+      entityType: "org_role", entityRef: id,
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     res.json({ success: true, id });
   });
@@ -933,7 +944,9 @@ export function register(app: Express, deps: Deps): void {
       await recordEvent(getPool(), {
         kind: "org", text: `${role.name}: ${changes.join("; ")}`,
         actorUserId: (await authedUser(req))?.id ?? null,
-        entityType: "org_role", entityRef: req.params.id, audience: "admin",
+        entityType: "org_role", entityRef: req.params.id,
+        // The role's own facts (describeOrgChange in server/lib/orgChart.ts), never a holder's.
+        audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
       });
     }
     res.json({ success: ok });
@@ -1019,7 +1032,8 @@ export function register(app: Express, deps: Deps): void {
       kind: "org",
       text: req.body?.userId ? "seated a member" : SEAT_JOURNAL_LINE.seated,
       actorUserId: actor?.id ?? null,
-      entityType: "org_role", entityRef: req.params.id, audience: "admin",
+      entityType: "org_role", entityRef: req.params.id,
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     /*
      * SWEEP (the incomplete loop). Seating somebody is an appointment, and

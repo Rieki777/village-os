@@ -33,6 +33,7 @@ import type express from "express";
 import type { Pool } from "mysql2/promise";
 import type { Capability } from "../../shared/capabilities";
 import { ringOf, VARIABLES_BY_KEY } from "../../shared/gameVariables";
+import { floorDialRefusal } from "./villageFloors";
 import type { CapabilityVerdict } from "./appDeps";
 import { readGameStart } from "./gameStart";
 import { setVariable } from "./variables";
@@ -114,6 +115,9 @@ export async function writeDial(
     if (hatch) return { status: 409, body: hatch };
     return { status: 401, body: { error: "auth_required" } };
   }
+  // An everyday power's stage the village sets changes only by its vote, for every path here (server/lib/villageFloors.ts).
+  const floorNo = await floorDialRefusal(getPool(), key);
+  if (floorNo) return { status: 409, body: { error: floorNo, proposeInstead: true } };
   if (verdict.source !== "admin") {
     if (def && ringOf(def) !== "open") {
       return {

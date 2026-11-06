@@ -1,5 +1,6 @@
 import { anonymizeMember, backfillFinishedErasures, erasureBackfillJob } from "./lib/erasure";
 import { backfillSeasonGoalIds, SEASON_GOAL_ID_BACKFILL } from "./lib/seasonGoalIds";
+import { markNameFreeJournalLinesPublic } from "./repos/orgSeatErasure";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
@@ -103,12 +104,19 @@ import { matchOnEvent } from "./lib/seraPersonMatch";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
+import { villagePowerRows } from "./lib/villagePowers";
+import { GUIDANCE_WORDS, POWER_FAMILIES } from "../shared/powerBoard";
 import { giveOnlyWhatYouHold, makePowerAssignGate, register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
 import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
+import { isMemberReadable } from "./lib/memberReadable";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
+import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
+import { approveMintRequest, declineMintRequest, type MintRequestDeps } from "./lib/mintRequests";
+import { recentMintRequests } from "./repos/adminMintRequests";
+import { newMintRuleProblem } from "./lib/mintRuleCreate"; // a new minting rule by vote, checked at raise
 import { register as registerSeasonRoutes } from "./routes/seasons";
 import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
@@ -151,7 +159,7 @@ import { landingRow } from "./lib/applyDue";
 import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
 import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
-import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_ROLE_ID, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
+import { crossOwedLaunchSelection, forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_ROLE_ID, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
 import { seatFoundersAtLaunch } from "./lib/launchSeating";
 import { launchProposalDoc, launchSlateProblem } from "./lib/launchProposal";
 import { insertSlate } from "./repos/stewardSlate";
@@ -201,6 +209,7 @@ import { seraDigest, seraDigestLink } from "./lib/seraAgent";
 import { readConfigDocument, writeConfigDocument } from "./repos/appConfigDocs";
 import { villageDayKey } from "../shared/companionItems";
 import { register as registerBadgesRoutes } from "./routes/badges";
+import { register as registerBadgeGrantRoutes } from "./routes/badgeGrants";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
 import { register as registerSitePullRoutes } from "./routes/sitePull";
@@ -416,6 +425,7 @@ import { ADVISORY_TYPES, typeRefusesCapability } from "./lib/proposalDrafts";
 import {
   BALLOT_METHODS,
   dialsForMethod,
+  raiseDials,
   quorumPctOf,
   unityPctOf,
   villageBallotMethod,
@@ -426,7 +436,9 @@ import {
   delegatedRowsCountOn,
   dialsForSubject,
   methodForSubject,
+  overrideDials as highestTierBar,
   thresholdSettingsFrom,
+  overrideDials as highestTierDials,
   rollProblem,
   thresholdsForSubject,
   LAUNCH_SUBJECT_REF,
@@ -679,7 +691,7 @@ import { BRIEF_BY_ID, BRIEF_SECTIONS } from "../shared/villageBrief";
 import {
   // LANE Q: `fenceForPrompt` had exactly one caller, the tool loop, while three
   // routes in this file built prompts out of member-written text by hand.
-  fenceForPrompt, wireReaders,
+  deadlineInVillage, fenceForPrompt, wireReaders,
 } from "./lib/villageReaders";
 import {
   ASSISTANT_MODES, DEFAULT_ASSISTANT_MODEL, borrowingPlatformKey, callAssistant, parseJsonReply, sanitizeMessages,
@@ -689,6 +701,7 @@ import { recordAssistantUsage, type AssistantPath } from "./lib/assistantUsage";
 import { renderWeeklyBrief } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
+import { register as registerVillageExportRoutes } from "./routes/villageExport";
 import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
@@ -1784,9 +1797,10 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
  * S1: admins are real users (MODULES_MASTER_PLAN.md Block 1).
  *
  * A request is admin when it carries a valid MEMBER token whose account role is
- * 'admin' or 'founder'. The shared password authenticates NOTHING here — its
- * only remaining power is the one-shot founder bootstrap endpoint, and that
- * power expires the moment a founder exists. The matched account is attached to
+ * 'admin' or 'founder'. The shared password authenticates NOTHING here. It has
+ * two doors of its own: the one-shot founder bootstrap, whose power expires the
+ * moment a founder exists, and the whole-village export (R071,
+ * server/routes/villageExport.ts), which it keeps. The matched account is attached to
  * the request so every admin mutation can name a real person in the audit log.
  *
  * Roles are a template concept every fork inherits:
@@ -1803,7 +1817,11 @@ function userIsAdmin(user: any): boolean {
 async function isAdmin(req: express.Request): Promise<boolean> {
   markAdminGate(req);
   const user = await authedUser(req);
-  if (!userIsAdmin(user)) return false;
+  if (!userIsAdmin(user)) {
+    // Q5: a member may READ the admin routes server/lib/memberReadable.ts lists, and nothing else. No adminUser: nothing is theirs to change.
+    const listed = isMemberReadable(req.method, (req as any).route?.path, true);
+    return listed && !!user && stageIndex(await stageOf(user)) >= stageIndex("member") && !(await leftTheVillage(getPool(), user));
+  }
   (req as any).adminUser = user;
   return true;
 }
@@ -3888,9 +3906,20 @@ async function gratitudeAllowance(user: any) {
  *
  *   1. Did the operator say? `FRONTEND_URL` wins whenever it is set, so the
  *      hosted deployment and any fork that configures itself are unchanged.
+ *      A village cannot launch without it (the `site-address` row in
+ *      shared/launchRequirements.ts), so what follows is only ever the answer
+ *      for a village still setting up.
  *   2. Failing that, where have people actually reached this server? The
- *      first inbound request answers that, through the proxy headers the
- *      sitemap and the unfurl tags already read the host from.
+ *      first inbound request answers that, from its Host header.
+ *
+ * NEVER FROM X-Forwarded-Host (readiness R108, the coordinator's ruling of
+ * 2026-11-05). That header is written by the caller, and nothing promises a
+ * proxy in front of this server overwrites it; a docker-compose village has
+ * no proxy at all. Read here, it let the first stranger to send a request
+ * choose the address every later set-password link carried, in the village's
+ * own email. The Host header is the one the edge routed on, so a forged value
+ * does not reach this service through it, and it is held to the shape of a
+ * host besides. The protocol is http or https and nothing else.
  *
  * If neither has an answer the origin is empty and the caller gets no
  * absolute address at all, which reads as a broken link rather than as a
@@ -3899,13 +3928,13 @@ async function gratitudeAllowance(user: any) {
  * is a state somebody has to be told about rather than left to discover.
  */
 let observedOrigin = "";
+const HOST_SHAPE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/;
 function rememberDeploymentOrigin(req: express.Request): void {
   if (observedOrigin) return;
-  const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https")
-    .split(",")[0].trim();
-  const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "")
-    .split(",")[0].trim();
-  if (host) observedOrigin = `${proto}://${host}`.replace(/\/$/, "");
+  const said = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https").split(",")[0].trim().toLowerCase();
+  const proto = said === "http" || said === "https" ? said : "https";
+  const host = String(req.headers.host ?? "").trim();
+  if (host && HOST_SHAPE.test(host)) observedOrigin = `${proto}://${host}`;
 }
 let warnedNoOrigin = false;
 function deploymentOrigin(): string {
@@ -5317,7 +5346,7 @@ async function startServer() {
       nudged += await notifyRoll(b, {
         type: "ballot_closing",
         title: `Your vote is still owed: ${b.title}`,
-        body: `Voting closes ${new Date(b.closesAt).toLocaleDateString()}. Quorum is counted against everyone on the roll, so an abstention is an answer too.`,
+        body: `Voting closes ${deadlineInVillage(b.closesAt)}. Quorum is counted against everyone on the roll, so an abstention is an answer too.`,
         keySuffix: "closing",
         roll: owing,
       });
@@ -7316,6 +7345,13 @@ async function startServer() {
     } finally {
       uploadsExportInFlight = false;
     }
+  });
+
+  // The whole village as one SQL file, for whoever runs the deployment (R071).
+  // Gated by ADMIN_PASSWORD alone, audited and announced; server/routes/villageExport.ts.
+  registerVillageExportRoutes(app, {
+    getPool, notify, members, overLimit, clientIp, secretEquals,
+    adminPassword: () => (adminPasswordIsUsable ? ADMIN_PASSWORD : null),
   });
 
   /*
@@ -12137,7 +12173,7 @@ async function startServer() {
     try {
       const roll = await buildElectorate();
       onTheRoll = roll.length;
-      tooFew = rollProblem(VILLAGE_LAUNCH, roll);
+      tooFew = rollProblem(VILLAGE_LAUNCH, roll, numberVar("governance.launch_min_electorate"));
     } catch (e: any) {
       // Building the roll reads the weight mode, which can refuse (a weight
       // token the engine may not conduct). That is a real answer about this
@@ -12150,7 +12186,7 @@ async function startServer() {
       tooFew,
       unityPct: threshold?.minUnityPct ?? null,
       quorumPct: threshold?.minQuorumPct ?? null,
-      minElectorate: threshold?.minElectorate ?? null,
+      minElectorate: threshold ? Math.max(1, Math.floor(numberVar("governance.launch_min_electorate"))) : null,
       // The subject's own fact, then this village's. `why` is what the card
       // renders in the ready-to-ask state, so a mode note appended here lands
       // in front of the founder with no new field for a client to learn.
@@ -12801,7 +12837,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       roles: rolesRepo.all().map((r: any) => ({
         id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadPowerHoldings(), r.id),
       })),
-      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()), // Power groups: the removal warning
+      // The removal warning is keyed by the sole holder's account id, so a member reader (Q5, no adminUser) gets none of it.
+      notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: adminActor(req) ? await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()) : {}, // Power groups: the removal warning
     });
   });
 
@@ -12915,32 +12952,17 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         { roleId: h.holderRoleId, roleName: h.holderRoleName, movedAt: h.movedAt, byBallot: !!h.movedByBallotId },
       ]),
     );
-    const seats = loadPowerHoldings(); // 0322: whoever sits there through a role, too
-    const names = new Map((await members.all()).map((m: any) => [m.id, m.name]));
-    res.json({
-      powers: powersForReading(holders).map((p) => ({
-        capability: p.capability,
-        title: p.title,
-        surface: p.surface,
-        consequence: p.consequence,
-        movable: TRANSFERABLE[p.capability] === true,
-        heldBy: p.heldBy
-          ? {
-              roleName: p.heldBy.roleName ?? p.heldBy.roleId,
-              byBallot: p.heldBy.byBallot,
-              movedAt: p.heldBy.movedAt,
-              // Who is actually sitting there. A power held by a role nobody
-              // sits in is a real state and the page says so plainly, because
-              // "the library keepers" with nobody in the chair is exactly the
-              // thing a village needs to notice.
-              people: seats
-                .filter((s: any) => s.roleId === p.heldBy!.roleId)
-                .map((s: any) => names.get(s.userId) ?? null)
-                .filter((n): n is string => !!n),
-            }
-          : null,
-      })),
+    // Who holds each power today through a role, too (server/lib/villagePowers.ts), so a power a role
+    // carries is never described as the admin panel's. Fixed order, no count: the R55 rules hold there.
+    const people = new Map((await members.all()).filter((m: any) => !isExampleUser(m)).map((m: any) => [String(m.id), { full: String(m.name ?? ""), first: firstName(m.name ?? "Member") }]));
+    const orgNames = new Map((await listOrgRoles(getPool())).map((r) => [r.id, r.name]));
+    const ladder = servedLadder(mergedConfig().project.commitmentName) as Array<{ id: string; name?: string }>;
+    const unlock = stageUnlockOverridesFromVars();
+    const rows = villagePowerRows({
+      holders, groups: loadRoles() as any, holdings: loadPowerHoldings() as any, orgRoleName: (id) => orgNames.get(id), nameOf: (id) => people.get(id) ?? null,
+      stageName: (cap) => { const id = unlock[cap] ?? STAGE_UNLOCKS[cap]; return id ? ladder.find((st) => st.id === id)?.name ?? id : null; },
     });
+    res.json({ families: POWER_FAMILIES, guidance: GUIDANCE_WORDS, powers: rows });
   });
 
   /** What's on the shelf — the admin UI lists it for transparency. */
@@ -13422,7 +13444,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * says the whole village agreed. `rollProblem` is both, in one sentence,
      * and the reasoning is in `shared/ballotSubjects.ts`.
      */
-    const rollNotReady = rollProblem(VILLAGE_LAUNCH, electorate);
+    const rollNotReady = rollProblem(VILLAGE_LAUNCH, electorate, numberVar("governance.launch_min_electorate"));
     if (rollNotReady) return res.status(409).json({ error: rollNotReady, onTheRoll: electorate.length });
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
@@ -13489,7 +13511,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is deciding whether to start its Game`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. This one asks everyone on the roll, so it needs your answer to reach its participation.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. This one asks everyone on the roll, so it needs your answer to reach its participation.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -15803,44 +15825,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     return numberVar("ledger.admin_mint_cosign_over");
   }
 
-  interface MintRequestRow {
-    id: string;
-    tokenSlug: string;
-    toUserId: string;
-    amount: number;
-    reason: string;
-    requestedBy: string;
-    requestedAt: string | null;
-    status: string;
-    decidedBy: string | null;
-    decidedAt: string | null;
-    decisionNote: string | null;
-  }
-
-  function mintRequestRow(r: any): MintRequestRow {
-    return {
-      id: String(r.id),
-      tokenSlug: String(r.token_slug),
-      toUserId: String(r.to_user_id),
-      amount: Number(r.amount),
-      reason: String(r.reason ?? ""),
-      requestedBy: String(r.requested_by),
-      requestedAt: r.requested_at instanceof Date ? r.requested_at.toISOString() : r.requested_at ?? null,
-      status: String(r.status),
-      decidedBy: r.decided_by ?? null,
-      decidedAt: r.decided_at instanceof Date ? r.decided_at.toISOString() : r.decided_at ?? null,
-      decisionNote: r.decision_note ?? null,
-    };
-  }
-
-  async function mintRequestById(id: string): Promise<MintRequestRow | null> {
-    const [rows] = await getPool().query<any[]>(
-      "SELECT id, token_slug, to_user_id, amount, reason, requested_by, requested_at, status, " +
-        "decided_by, decided_at, decision_note FROM admin_mint_requests WHERE id = ?",
-      [id],
-    );
-    return rows[0] ? mintRequestRow(rows[0]) : null;
-  }
+  // The rows and their statements: server/repos/adminMintRequests.ts. The
+  // decisions: server/lib/mintRequests.ts, shared with the village's vote.
+  const mintRequestDeps = (): MintRequestDeps => ({ pool: getPool(), members, notify });
 
   /*
    * Stock the treasury: sys:mint -> sys:treasury, under the SAME per-cycle
@@ -16175,12 +16162,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
    */
   app.get("/api/admin/mint-requests", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [rows] = await getPool().query<any[]>(
-      "SELECT id, token_slug, to_user_id, amount, reason, requested_by, requested_at, status, " +
-        "decided_by, decided_at, decision_note FROM admin_mint_requests " +
-        "ORDER BY (status = 'pending') DESC, requested_at DESC LIMIT 100",
-    );
-    const requests = rows.map(mintRequestRow);
+    const requests = await recentMintRequests(getPool());
     // The names, so a steward reads people rather than ids. A member who has
     // since left resolves to null, which is what a tombstone means.
     const ids = Array.from(
@@ -16216,92 +16198,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const acting = adminActor(req);
     if (!acting) return res.status(401).json({ error: "auth_required" });
-    const request = await mintRequestById(String(req.params.id));
-    if (!request) return res.status(404).json({ error: "No such grant" });
-    if (request.status !== "pending") {
-      return res.status(409).json({ error: `This grant is already ${request.status}` });
-    }
-    if (request.requestedBy === acting.id) {
-      return res.status(409).json({
-        code: "second_steward_required",
-        error: "A second steward means somebody else. You asked for this grant",
-      });
-    }
-    const def = tokenDef(request.tokenSlug);
-    if (!def) return res.status(404).json({ error: `unknown token "${request.tokenSlug}"` });
-    if (def.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    if (def.governance !== "platform") {
-      return res.status(400).json({ error: `${request.tokenSlug} is issued on Hypha and cannot be minted here` });
-    }
-    // A grant queued before Gratitude stopped being mintable is refused at the second door too.
-    if (request.tokenSlug === HEARTS) return res.status(400).json({ error: GRATITUDE_ONLY_SENT });
-    const target = await members.byId(request.toUserId);
-    const refused = mintRecipientRefusal(target); if (!target || refused) return res.status(refused?.status ?? 404).json(refused?.body ?? { error: "Member not found" }); // a member who left after the asking is refused here: server/lib/gratitude.ts
-    // The rule that has no exception, re-read at the second door: the person
-    // this pays cannot be the person who asked for it, whoever signs.
-    if (target.id === request.requestedBy) {
-      return res.status(403).json({
-        code: "self_grant_refused",
-        error: "This grant pays the steward who asked for it. It cannot be signed",
-      });
-    }
-    const cap = numberVar("ledger.admin_mint_cycle_cap"); // whole tokens, and only weighed against 0 here
-    if (cap <= 0) return res.status(403).json({ error: "Manual minting is disabled (ledger.admin_mint_cycle_cap is 0)" });
-
-    /*
-     * CLAIM THE ROW FIRST. Two stewards pressing at the same moment both pass
-     * the read above; only one wins this UPDATE, because `status = 'pending'`
-     * is in the WHERE. The loser is told the grant is already decided.
-     *
-     * If the transfer then fails, the claim is put back so the grant can be
-     * signed again rather than sitting approved with no tokens behind it. The
-     * transfer's idempotency key is the request id, so even a retry that
-     * raced past this cannot write a second ledger row.
-     */
-    const [claim] = await getPool().query<any>(
-      "UPDATE admin_mint_requests SET status = 'approved', decided_by = ?, decided_at = NOW() " +
-        "WHERE id = ? AND status = 'pending'",
-      [acting.id, request.id],
-    );
-    if (Number(claim?.affectedRows ?? 0) === 0) {
-      return res.status(409).json({ error: "This grant has just been decided by somebody else" });
-    }
-
-    const r = await postTransfer(getPool(), {
-      from: "sys:mint",
-      to: memberAccount(target.id),
-      tokenType: request.tokenSlug,
-      amount: toLedgerUnits(request.tokenSlug, request.amount),
-      source: "admin_mint",
-      sourceRef: request.id,
-      description: request.reason.slice(0, 500),
-      idempotencyKey: `admin_mint:req:${request.id}`,
-    }, mintCapGuard(request.tokenSlug, toLedgerUnits(request.tokenSlug, request.amount)));
-    if (!r.ok) {
-      await getPool().query(
-        "UPDATE admin_mint_requests SET status = 'pending', decided_by = NULL, decided_at = NULL WHERE id = ?",
-        [request.id],
-      );
-      return res.status(r.error?.includes("mint cap") ? 409 : 400).json({ error: r.error });
-    }
-    // Recognition minted by hand still updates the profile's cached balance.
-    if (request.tokenSlug === "gratitude") {
-      await members.update(target.id, (u: any) => { u.recognitionBalance = r.toBalance; });
-    }
-    void recordEvent(getPool(), {
-      kind: "audit",
-      text: `mint-cosigned:${request.amount}:${request.tokenSlug}`,
-      actorUserId: acting.id,
-      entityType: "user",
-      entityRef: target.id,
-      audience: "admin",
-    });
-    const decided = await mintRequestById(request.id);
-    res.json({
-      success: true,
-      toBalance: r.toBalance,
-      request: decided,
-    });
+    const out = await approveMintRequest(mintRequestDeps(), { requestId: String(req.params.id), decidedBy: acting.id, signer: acting.id });
+    if (!out.ok) return res.status(out.status).json(out.body);
+    res.json({ success: true, toBalance: out.toBalance, request: out.request });
   });
 
   /**
@@ -16314,28 +16213,11 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const acting = adminActor(req);
     if (!acting) return res.status(401).json({ error: "auth_required" });
-    const request = await mintRequestById(String(req.params.id));
-    if (!request) return res.status(404).json({ error: "No such grant" });
-    if (request.status !== "pending") {
-      return res.status(409).json({ error: `This grant is already ${request.status}` });
-    }
-    const [claim] = await getPool().query<any>(
-      "UPDATE admin_mint_requests SET status = 'declined', decided_by = ?, decided_at = NOW(), decision_note = ? " +
-        "WHERE id = ? AND status = 'pending'",
-      [acting.id, String(req.body?.reason ?? "").trim().slice(0, 500) || null, request.id],
-    );
-    if (Number(claim?.affectedRows ?? 0) === 0) {
-      return res.status(409).json({ error: "This grant has just been decided by somebody else" });
-    }
-    void recordEvent(getPool(), {
-      kind: "audit",
-      text: `mint-declined:${request.amount}:${request.tokenSlug}`,
-      actorUserId: acting.id,
-      entityType: "user",
-      entityRef: request.toUserId,
-      audience: "admin",
+    const out = await declineMintRequest(mintRequestDeps(), {
+      requestId: String(req.params.id), decidedBy: acting.id, actor: acting.id, note: String(req.body?.reason ?? ""),
     });
-    res.json({ success: true, request: await mintRequestById(request.id) });
+    if (!out.ok) return res.status(out.status).json(out.body);
+    res.json({ success: true, request: out.request });
   });
 
   /**
@@ -20117,6 +19999,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       backed: rows.map((r) => ({ proposalId: String(r.proposal_id), kind: String(r.kind) })),
       mayOpenBallot: hasCapability("proposal.open", await capabilityCtx(user)),
       mine: mine.map((r) => String(r.id)),
+      // The door for a held outcome after launch, by the open-ballot route's own rule.
+      mayAskVillage: (await readGameStart(getPool())).started && hasCapability("ballot.vote", await capabilityCtx(user)),
     });
   });
 
@@ -20134,7 +20018,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   // The body moved to server/lib/mechanicsPropose.ts, so the canvas adopt door
   // files a dial change through the same checks after the Birthing.
-  const mechanicsProposeDeps: MechanicsProposeDeps = { getPool, standingFor: mechanicsStandingFor, readMintRules: readMintRulesForChangeSet, addActivity, firstName, moduleChangeReaders, tellSwitchHolders: (p) => tellSwitchHolders({ liveHoldersOf, notify }, p) };
+  const mechanicsProposeDeps: MechanicsProposeDeps = { getPool, standingFor: mechanicsStandingFor, readMintRules: readMintRulesForChangeSet, addActivity, firstName, moduleChangeReaders: { ...moduleChangeReaders, brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) }, tellSwitchHolders: (p) => tellSwitchHolders({ liveHoldersOf, notify }, p) };
   app.post("/api/game/mechanics/proposals", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to propose a change to the game" });
@@ -20360,6 +20244,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       await Promise.all([rolesRepo.load(), roleHoldersRepo.load(), loadModuleSettings(getPool()), loadVariables(getPool())]);
     },
     sharedPasswordPosture: () => false,
+    // A `brand_field` vote writes through the same document the admin brand route writes (Rye, 2026-11-06).
+    brand: { read: () => getBrand(), write: async (next) => { await brandRepo.put(next as any); } },
   });
 
   async function applyMechanicsProposal(
@@ -20619,13 +20505,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
     }
     if (!boolVar("governance.auto_apply_enabled")) {
-      await notifyAdmins("governance", `Verified on-chain but applying is off: ${p.title}`, `gmp:${p.id}:frozen`);
+      await notifyAdmins("governance", `Verified on-chain but applying is off: ${p.title}${(await readGameStart(getPool())).started ? ". Any member can ask the village to decide it from Game Mechanics." : ""}`, `gmp:${p.id}:frozen`);
       return res.json({ received: true, status: "passed_verified", held: "applying is switched off" });
     }
     // R039: with a space id recorded, an outcome naming no space could be another
     // village's vote, so it waits for a person (POST /api/admin/mechanics/proposals/:id/apply).
     if (space.verdict === "unstated") {
-      await notifyAdmins("governance", `Verified, but the outcome named no Hypha space, so it waits for you to apply it: ${p.title}`, `gmp:${p.id}:unstated-space`);
+      await notifyAdmins("governance", (await readGameStart(getPool())).started ? `Verified, but the outcome named no Hypha space. Any member can ask the village to decide it from Game Mechanics: ${p.title}` : `Verified, but the outcome named no Hypha space, so it waits for you to apply it: ${p.title}`, `gmp:${p.id}:unstated-space`);
       return res.json({ received: true, status: "passed_verified", held: "the outcome named no Hypha space, so a person applies it" });
     }
     const result = await applyMechanicsProposal(fresh, null);
@@ -21516,6 +21402,24 @@ Send an empty drafts array when you are still listening. A role payload is {name
         entityType: "user", // its subject, so an erasure finds it (server/repos/pulseLines.ts); the audit row below names the role
         entityRef: member.id,
       });
+      /*
+       * R165: a launch that seated nobody owes the village the stewards'
+       * selection, and this is the moment it was promised for. It crosses
+       * once, through the launch's own crossing (never re-pointing a power the
+       * village holds elsewhere), and the village reads that it did.
+       */
+      if (seatedRowId && role.id === STEWARD_ROLE_ID) {
+        const crossed = await crossOwedLaunchSelection(getPool(), b.id);
+        if (crossed && crossed.moved.length > 0) {
+          out.applied = crossed.moved;
+          await addActivity("governance", `The powers the stewards chose at launch are the village's now, looked after by ${who}.`, {
+            actorUserId: actorId,
+            entityType: "role",
+            entityRef: role.id,
+          });
+        }
+        if (crossed && crossed.refusals.length > 0) out.held = crossed.refusals.join(" ");
+      }
       void recordEvent(getPool(), {
         kind: "audit",
         text: `role:seated-by-ballot:${role.id}:${member.id}:${b.id}`,
@@ -21893,6 +21797,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   setVetoWindowCheck(vetoWindowOn);
   setSubjectCloserCheck((subjectType: string) => ballotBinds(subjectType));
   registerOrgDraftDecideRoutes(app, { authedUser, isAdmin, guardCapability, capabilityCtx, getPool, overLimit, notify, seasonState, circlesRepo, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
+  registerMintRequestVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
 
 
   /**
@@ -22275,15 +22180,24 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!user) return res.status(401).json({ error: "auth_required" });
     const p = await proposalById(getPool(), req.params.id);
     if (!p) return res.status(404).json({ error: "Not found" });
-    if (p.status !== "open") {
+    /*
+     * A HELD OUTCOME IS NEVER STUCK (R039, and Rye, 2026-11-06: "EVERYTHING can
+     * change with the highest village vote"). A Hypha outcome that named no
+     * space, or arrived while applying was switched off, waits at
+     * passed_verified. After launch the admin apply door is closed, so this is
+     * the way left: any member on the roll asks the village, which decides at
+     * its highest set tier whatever method it normally uses.
+     */
+    const held = p.status === "passed_verified" && (await readGameStart(getPool())).started;
+    if (p.status !== "open" && !held) {
       return res.status(409).json({ error: `This proposal is ${p.status.replace(/_/g, " ")}, not open for a ballot` });
     }
     const heldByFounders = await founderHeldVoteProblem(p.changeSet, () => founderPowerStands(getPool())); if (heldByFounders) return res.status(409).json({ error: heldByFounders });
     const ctx = await capabilityCtx(user);
-    if (p.proposerUserId !== user.id && !hasCapability("proposal.open", ctx)) {
-      return res.status(403).json({ error: "Taking a proposal to the vote is for its proposer or a proposal.open holder" });
+    if (held ? !hasCapability("ballot.vote", ctx) : p.proposerUserId !== user.id && !hasCapability("proposal.open", ctx)) {
+      return res.status(403).json({ error: held ? "Asking the village about a held outcome is for members on the roll" : "Taking a proposal to the vote is for its proposer or a proposal.open holder" });
     }
-    const threshold = Math.max(0, numberVar("governance.proposal_support_threshold"));
+    const threshold = held ? 0 : Math.max(0, numberVar("governance.proposal_support_threshold")); // a held outcome already passed a vote
     const backers = await backerCounts(getPool(), [p.id]);
     const supports = backers.get(p.id)?.supports ?? 0;
     if (supports < threshold) {
@@ -22309,10 +22223,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // function nothing called, which is two copies of one rule waiting to
     // disagree about what passing means.
     const conducts = villageBallotMethod(stringVar("governance.default_method"));
-    if (conducts === "hypha") {
+    if (conducts === "hypha" && !held) {
       return res.status(409).json({ error: "This village decides mechanics on Hypha. Use Take to Hypha, or change governance.default_method first" });
     }
-    const method: BallotMethod = conducts;
+    const method: BallotMethod = conducts === "hypha" ? "custom" : conducts;
     /*
      * WHICH SUBJECT THIS IS, READ OFF THE CHANGE SET (R81, R84).
      *
@@ -22343,7 +22257,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // proposal brought back after a veto is priced at the village's highest set
     // tier: that is what makes it land whatever any steward says.
     const { subjectType } = priced;
-    const dials = await overrideDials(getPool(), p, priced.dials);
+    const overridden = await overrideDials(getPool(), p, priced.dials);
+    const top = held ? highestTierDials(thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key))) : overridden;
+    const dials = { unityPct: Math.max(overridden.unityPct, top.unityPct), quorumPct: Math.max(overridden.quorumPct, top.quorumPct) };
     const conducted: BallotMethod = priced.method ?? method;
     const snapshot = weightModeNow();
     if (snapshot.mode === "token") {
@@ -22403,8 +22319,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       window: { elements: changeSetKinds(p.changeSet), comingBackFrom: await comingBackFrom(getPool(), p.id) }, // windows lane (19E): the strictest element decides, and anything coming back gets its grace
       onOpen: async (conn, ballotId) => {
         const [r] = await conn.query<any>(
-          "UPDATE mechanics_proposals SET status = 'onsite_vote', ballot_id = ? WHERE id = ? AND status = 'open'",
-          [ballotId, p.id],
+          "UPDATE mechanics_proposals SET status = 'onsite_vote', ballot_id = ? WHERE id = ? AND status = ?",
+          [ballotId, p.id, p.status],
         );
         if (Number(r.affectedRows) === 0) throw new Error("proposal moved while the ballot was opening");
         /*
@@ -22460,7 +22376,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is deciding: ${p.title}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. Your voice is on the roll for this one.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. Your voice is on the roll for this one.`,
       keySuffix: "open",
       except: [p.proposerUserId, user.id],
       roll: electorate.map((e) => e.userId),
@@ -23141,7 +23057,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `An advisory vote is open: ${question}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. This one records what the village would decide, and it changes nothing on its own.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. This one records what the village would decide, and it changes nothing on its own.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -23303,10 +23219,20 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
     const method: BallotMethod = villageMethod === "hypha" ? "custom" : villageMethod;
-    const dials = dialsForMethod(method, {
+    /*
+     * RE-POINTING A POWER THE VILLAGE HOLDS IS THE HIGHEST VOTE (Rye,
+     * 2026-11-06: "EVERYTHING can change with the highest village vote").
+     * The village owns a power it holds, so moving it to another role, the
+     * stewards included, clears the village's highest set tier and nothing
+     * less. A first crossing keeps the village's ordinary dials.
+     */
+    const ordinary = dialsForMethod(method, {
       unityPct: Math.max(0, numberVar("governance.unity_pct")),
       quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
     });
+    const dials = already
+      ? raiseDials(ordinary, highestTierBar(thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key))))
+      : ordinary;
     const snapshot = weightModeNow();
     if (snapshot.mode === "token") {
       const problem = weightTokenProblem(snapshot.token ?? "");
@@ -23341,6 +23267,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
       "",
       `${role.name ?? roleId} looks after it. An administrator who is not seated there stops passing this gate by being an administrator: they can still act on it, and every time they do, the village is told and the act goes on the village's own record. Handing it back is the same kind of act, in the open.`,
       "",
+      already
+        ? "The village already holds this power, so moving it to another role is decided at the village's highest tier."
+        : "",
       villageMethod === "hypha"
         ? "This village takes its rule changes to Hypha. A power has no Hypha leg to travel on, so this one is decided here, on the village's own dials."
         : "",
@@ -23384,7 +23313,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked to take a power on: ${entry.title}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. If this carries, ${role.name ?? roleId} looks after it from that day.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. If this carries, ${role.name ?? roleId} looks after it from that day.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -23634,7 +23563,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked whether ${role.name ?? roleId} looks after this: ${entry.title}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. If this carries, anybody seated there can ${CAPABILITY_CONSEQUENCE[cap]}.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. If this carries, anybody seated there can ${CAPABILITY_CONSEQUENCE[cap]}.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -23789,7 +23718,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked to hand a power back: ${entry.title}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. If this carries, the admin panel carries it again from that day.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. If this carries, the admin panel carries it again from that day.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
@@ -24000,7 +23929,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked to declare a role: ${name}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. A role the village declares carries no powers until the village votes it some.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. A role the village declares carries no powers until the village votes it some.`,
       keySuffix: "open",
       except: [user.id],
       roll: setup.electorate.map((e) => e.userId),
@@ -24011,6 +23940,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // The seat vote itself is server/routes/powerHands.ts. It registers HERE, below the
   // requireModule("governance") mount, which is what keeps that gate in front of the door.
   seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
+  registerBadgeGrantRoutes(app, { authedUser, capabilityCtx, getPool, notify, notifyAdmins, members, firstName, badgesOn: () => effectiveLifecycle("badges") !== "off", refuseUnlessMemberMayOpen, roleBallotSetup, notifyRoll, serveBallot, closers: SUBJECT_CLOSERS }); // a badge by the village's vote (gap 6)
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
@@ -24121,7 +24051,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
       title: `The village is asked whether ${firstName(member.name)} keeps the role in ${who}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}.`,
       keySuffix: "open",
       except: [user.id],
       roll: setup.electorate.map((e) => e.userId),
@@ -24440,7 +24370,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       actorUserId: viewer.id,
       entityType: "circle",
       entityRef: before.id,
-      audience: "admin",
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     res.json({ success: true, circle: merged });
   });
@@ -25399,7 +25329,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
   const requestOrigin = (req: express.Request): string => {
     const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "https")
       .split(",")[0].trim();
-    const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "").trim();
+    // The Host header, never X-Forwarded-Host, which the caller writes and a
+    // cache in front could keep (R108; rememberDeploymentOrigin has the detail).
+    const host = String(req.headers.host ?? "").trim();
     return host ? `${proto}://${host}` : "";
   };
 
@@ -25658,6 +25590,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const { words, rows } = await backfillSeasonGoalIds(getPool());
     console.log(`[startup] season goal ids: ${rows} link(s) across ${words} goal text(s)`);
   });
+  // R103: the seat journal's name-free lines from before 2026-11-06 become
+  // public, so members read the history. After listen for 0298's reason, and
+  // on every boot because its WHERE makes a repeat a no-op.
+  void markNameFreeJournalLinesPublic(getPool())
+    .then((n) => n && console.log(`[startup] role journal: ${n} name-free line(s) re-marked public`))
+    .catch((e) => console.error("[startup] role journal re-mark failed (continuing)", e));
   /*
    * A DEPLOY IS NOT A CRASH, and until now this process could not tell the
    * difference. `installCrashHandlers` above wires `unhandledRejection` and

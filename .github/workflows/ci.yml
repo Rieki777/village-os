@@ -728,6 +728,24 @@ jobs:
         # exists. Green at a54d417 before wiring.
         run: node scripts/check-file-lines.mjs
 
+      - name: Ratchet baselines only fall
+        # Every scripts/*-baseline.json against the merge base. Each ratchet
+        # refuses a raise inside its own --update-baseline, and the gate path of
+        # each only asks whether the tree fits, so a raise typed into the JSON
+        # passed everything (PR #575, issue #600, readiness R029). It does not
+        # ask for TIGHT baselines: lowering one after a fall stays the
+        # integrator's, at landing. Sub-second, no database.
+        run: node scripts/check-ratchet-baselines.mjs
+
+      - name: Module validator, on every pull request
+        # The raw-SQL burn-down and clause 13's contribution rules (raw fetch,
+        # raw SQL, eval, protected-table writes, embedded credentials, new
+        # dependencies) ran only in module-intake.yml, which is path-gated and
+        # skipped 98 of 150 landings (readiness R207). The same command, on
+        # every pull request. On a push to main the diff is empty and the
+        # repo-wide burn-down still runs.
+        run: node scripts/validate-module.mjs --all --diff="origin/${{ github.base_ref || 'main' }}"
+
       - name: Tailwind gray ratchet
         # Same story, same fix: present in the tree, invoked by nothing.
         run: node scripts/check-tailwind-gray.mjs

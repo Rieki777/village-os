@@ -261,6 +261,25 @@ export const GOVERNANCE_MODE = "governance_mode";
  */
 export const ORG_DRAFT = "org_draft";
 
+/**
+ * A manual mint that waits for a second steward, put to the village instead
+ * (vote-path gap 8, Rye 2026-11-06: "EVERYTHING can change with the highest
+ * village vote"). `subject_ref` is the `admin_mint_requests` id. Carried, the
+ * closer approves it through the same function the admin route calls
+ * (server/lib/mintRequests.ts); not carried, it is declined.
+ *
+ * PRICED AT THE STRUCTURAL TIER. A grant is new issuance into one member's
+ * hands and it cannot be un-issued, so it asks at least what a new minting
+ * rule asks, and it is conducted by `custom` so the tier's unity is counted.
+ * No electorate floor, for the reason MINT_RULE gives.
+ *
+ * Absent from `KIND_FOR_SUBJECT` in shared/governanceKinds.ts on purpose, so
+ * it is a Game change: it waits its window and a seated steward may stop it.
+ * That is the conservative reading of a token send nobody priced, and moving
+ * it to `token_send` is one line there.
+ */
+export const MINT_REQUEST = "mint_request";
+
 export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
   [VILLAGE_LAUNCH]: {
     minUnityPct: 100,
@@ -299,12 +318,12 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      * numberVar. This field supplies its DEFAULT and nothing more. A village
      * that wants a thicker membrane raises the dial and never touches this.
      *
-     * This field itself is a hardcoded platform constant. `thresholdSettingsFrom`
-     * raises unity and quorum from village settings and never reads
-     * minElectorate, so no village can change how many founders it takes to
-     * launch. That is the rule, and it is settled: Rye ruled on 2026-09-14,
-     * "Launch takes 3 founders, fixed." Keep it a constant; turning it into a
-     * village setting would reverse that ruling.
+     * This field is the DEFAULT of a village dial now,
+     * `governance.launch_min_electorate` (Rye, 2026-11-06: "EVERYTHING can
+     * change with the highest village vote"). The dial is constitutional, so
+     * after launch only the highest tier moves it, and it never goes below one.
+     * `rollProblem` takes the village's value; this number is what a village
+     * that never touched the dial gets.
      *
      * Until this comment existed the coupling was asserted in prose in three
      * files and enforced in none. It is now enforced in one and stated here,
@@ -469,6 +488,19 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      */
     method: "custom",
     why: "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
+  },
+  [MINT_REQUEST]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    /*
+     * `custom` for GOVERNANCE_MODE's reason: the structural unity floor is
+     * above 50, and `custom` is the only method that reads the unity a ballot
+     * freezes. Under `majority` or `consent` the 80 would be printed and never
+     * counted, which is a bar in name only on a decision that mints.
+     */
+    method: "custom",
+    why: "This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar.",
   },
 };
 
@@ -789,6 +821,7 @@ export function evaluationRulesFor(
  *
  *   dial              a game variable moves within its bounds.
  *   mint_rule         a minting rule changes what the village pays for what.
+ *   mint_rule_create  a new minting rule starts paying, from the next moon.
  *   weight_allocation the custom allocation table gives somebody weight.
  *   mode_switch       how votes are counted changes.
  *   module_lifecycle  a part of the Game is turned on, opened or closed.
@@ -803,6 +836,7 @@ export function evaluationRulesFor(
 export const CHANGE_ITEM_KINDS = [
   "dial",
   "mint_rule",
+  "mint_rule_create",
   "weight_allocation",
   "mode_switch",
   "module_lifecycle",
@@ -820,6 +854,7 @@ export type ChangeItemKind = (typeof CHANGE_ITEM_KINDS)[number];
 export const SUBJECT_FOR_ITEM_KIND: Readonly<Record<ChangeItemKind, string>> = {
   dial: "mechanics",
   mint_rule: MINT_RULE,
+  mint_rule_create: MINT_RULE,
   weight_allocation: "mechanics",
   mode_switch: GOVERNANCE_MODE,
   module_lifecycle: "mechanics",
@@ -835,6 +870,10 @@ export const SUBJECT_FOR_ITEM_KIND: Readonly<Record<ChangeItemKind, string>> = {
  */
 export const CRITICALITY_FOR_ITEM_KIND: Readonly<Record<Exclude<ChangeItemKind, "dial">, Criticality>> = {
   mint_rule: "structural",
+  // A new rule is new issuance, so it is priced at structural EVEN THOUGH its
+  // subject declares a floor of its own (`pricingOf` in server/lib/mechanics.ts
+  // takes the higher of the two for this kind alone).
+  mint_rule_create: "structural",
   weight_allocation: "structural",
   mode_switch: "constitutional",
   module_lifecycle: "structural",
@@ -854,11 +893,13 @@ export function criticalityOfItems(tiers: readonly Criticality[]): Criticality {
  * two is young. It is not behind, it is not failing, and nothing here tells it
  * what to want. `null` means the floor is met.
  */
-export function electorateFloorProblem(subjectType: string, onTheRoll: number): string | null {
+export function electorateFloorProblem(subjectType: string, onTheRoll: number, villageMin?: number): string | null {
   const floor = thresholdsForSubject(subjectType);
   if (!floor || floor.minElectorate <= 0) return null;
-  if (onTheRoll >= floor.minElectorate) return null;
-  const short = floor.minElectorate - onTheRoll;
+  // The launch's head count is the village's own dial (Rye, 2026-11-06), never below one.
+  const min = subjectType === VILLAGE_LAUNCH && villageMin !== undefined && Number.isFinite(villageMin) ? Math.max(1, Math.floor(villageMin)) : floor.minElectorate;
+  if (onTheRoll >= min) return null;
+  const short = min - onTheRoll;
   const people = onTheRoll === 1 ? "One member holds a voice" : `${onTheRoll} members hold a voice`;
   const more = short === 1 ? "One more member" : `${short} more members`;
   return `${people} in this village today. ${more} and the village can vote to start its Game.`;
@@ -938,8 +979,8 @@ export function weightFloorProblem(subjectType: string, roll: readonly RollSeat[
  * be asked this?") and one place a route refuses. Two separate calls at each of
  * the two call sites is how the second check gets added to one of them.
  */
-export function rollProblem(subjectType: string, roll: readonly RollSeat[]): string | null {
-  return electorateFloorProblem(subjectType, roll.length) ?? weightFloorProblem(subjectType, roll);
+export function rollProblem(subjectType: string, roll: readonly RollSeat[], villageMin?: number): string | null {
+  return electorateFloorProblem(subjectType, roll.length, villageMin) ?? weightFloorProblem(subjectType, roll);
 }
 
 /**

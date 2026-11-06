@@ -22,9 +22,11 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { spawn, type ChildProcess } from "child_process";
+import zlib from "zlib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
+import { loadSecrets, putSecret } from "./lib/secrets";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -42,6 +44,11 @@ const PORT_NO_TOKEN = PORT + 400;
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "backup-uploads-admin";
 const EXPORT_TOKEN = "backup-uploads-export-token-fixture";
+// The whole-village export (R071). A sealing key, and a secret sealed under it
+// before the server boots, so the dump can be searched for the plaintext.
+const SECRETS_KEY = "2e".repeat(32); // module-review-ok: fixture sealing key, same as every e2e suite
+const SEALED_PLAINTEXT = "sk-export-fixture-plaintext-must-stay-sealed-0001";
+const TOKEN_SECRET = "backup-uploads-token-secret"; // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
 
 let child: ChildProcess | undefined;
 let childNoToken: ChildProcess | undefined;
@@ -81,7 +88,7 @@ async function boot(port: number, env: Record<string, string>): Promise<ChildPro
       DATA_DIR: dataDir,
       DATABASE_URL: testDb!.url,
       ADMIN_PASSWORD: ADMIN,
-      AUTH_TOKEN_SECRET: "backup-uploads-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
+      AUTH_TOKEN_SECRET: TOKEN_SECRET,
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
       ...env,
@@ -114,8 +121,16 @@ beforeAll(async () => {
     fs.writeFileSync(path.join(uploadsDir, name), bytes);
   }
   testDb = await provisionTestDb();
-  child = await boot(PORT, { BACKUP_EXPORT_TOKEN: EXPORT_TOKEN });
-  childNoToken = await boot(PORT_NO_TOKEN, { BACKUP_EXPORT_TOKEN: "" });
+  // Sealed exactly as Admin, Integrations seals it, before either server boots.
+  const sealer = testPool(testDb, { connectionLimit: 1 });
+  const sealEnv = { VILLAGE_SECRETS_KEY: SECRETS_KEY } as NodeJS.ProcessEnv;
+  await loadSecrets(sealer, sealEnv);
+  await putSecret(sealer, "assistant_api_key", SEALED_PLAINTEXT, "export-fixture", sealEnv);
+  await sealer.end();
+  child = await boot(PORT, { BACKUP_EXPORT_TOKEN: EXPORT_TOKEN, VILLAGE_SECRETS_KEY: SECRETS_KEY });
+  // No export token AND no admin password of its own, so both doors' 503s are
+  // exercised on a real instance.
+  childNoToken = await boot(PORT_NO_TOKEN, { BACKUP_EXPORT_TOKEN: "", ADMIN_PASSWORD: "" });
 }, 300_000);
 
 afterAll(async () => {
@@ -210,6 +225,133 @@ describe.skipIf(!DB_CONFIGURED)("the uploads archive route", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toContain("uploads-archive.tar");
     await res.arrayBuffer();
+  });
+});
+
+// ── The whole-village export (R071) ─────────────────────────────────────────
+
+const exportDb = (password?: string, port = PORT, extra: Record<string, string> = {}) =>
+  fetch(`http://localhost:${port}/api/admin/export/database`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+    headers: { ...(password === undefined ? {} : { "x-village-admin-password": password }), ...extra },
+  });
+
+const post = async (route: string, body: unknown) => {
+  const r = await fetch(`${BASE}${route}`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return { status: r.status, json: (await r.json().catch(() => null)) as any };
+};
+
+const idFor = async (email: string) => {
+  const [rows] = await testDb!.conn.query<any[]>("SELECT id FROM users WHERE email = ?", [email]);
+  return String(rows[0]?.id ?? "");
+};
+
+const exportAudits = async () => {
+  const [rows] = await testDb!.conn.query<any[]>(
+    "SELECT text FROM health_events WHERE kind = 'audit' AND text LIKE 'GET /api/admin/export/database%'",
+  );
+  return rows.map((r) => String(r.text));
+};
+
+describe.skipIf(!DB_CONFIGURED)("the whole-village export", () => {
+  const founderEmail = `export-founder-${PORT}@example.test`;
+  let founderToken = "";
+  const ids = { founder: "", steward: "", lapsed: "", member: "" };
+
+  beforeAll(async () => {
+    const boot = await post("/api/admin/bootstrap", { password: ADMIN, email: founderEmail, name: "Export Founder" });
+    const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
+    expect(claim, `bootstrap must return a claim link: ${JSON.stringify(boot.json).slice(0, 200)}`).toBeTruthy();
+    const setPw = await post("/api/auth/set-password", { token: claim, password: "ExportFounder123!" });
+    founderToken = String(setPw.json?.token ?? "");
+    expect(founderToken, "the founder must hold a session").toBeTruthy();
+    ids.founder = await idFor(founderEmail);
+    for (const who of ["steward", "lapsed", "member"] as const) {
+      const email = `export-${who}-${PORT}@example.test`;
+      const r = await post("/api/auth/register", { name: `Export ${who}`, email, password: "ExportMember123!", paths: ["resident"] });
+      expect(r.status, `${who} must register`).toBe(200);
+      ids[who] = await idFor(email);
+    }
+    // One steward in a live term, one whose term ran out yesterday.
+    await testDb!.conn.query(
+      "INSERT INTO role_holders (id, role_id, user_id, term_ends_at) VALUES (?, 'steward', ?, NULL), (?, 'steward', ?, ?)",
+      [`rh-export-live-${PORT}`, ids.steward, `rh-export-lapsed-${PORT}`, ids.lapsed, new Date(Date.now() - 24 * 60 * 60 * 1000)],
+    );
+  }, 120_000);
+
+  it("refuses without ADMIN_PASSWORD, and a founder's session does not stand in for it", async () => {
+    expect((await exportDb()).status).toBe(401);
+    expect((await exportDb("")).status).toBe(401);
+    expect((await exportDb("not-the-password")).status).toBe(401);
+    // Same length, so the constant-time compare is what refuses.
+    expect((await exportDb("x".repeat(ADMIN.length))).status).toBe(401);
+    // The highest session a village hands out opens nothing here.
+    expect((await exportDb(undefined, PORT, { authorization: `Bearer ${founderToken}` })).status).toBe(401);
+    // A refusal hands out nothing, so it is neither audited as an export nor rung.
+    expect(await exportAudits()).toEqual([]);
+  });
+
+  it("refuses with a 503 that NAMES the variable when the deployment never set one", async () => {
+    // The placeholder printed in the source must never open every member's data.
+    const res = await exportDb("change-me", PORT_NO_TOKEN);
+    expect(res.status).toBe(503);
+    expect(String((await res.json()).error)).toContain("ADMIN_PASSWORD");
+  });
+
+  it("the control: with ADMIN_PASSWORD it streams the whole database, sealed secrets still sealed", async () => {
+    const res = await exportDb(ADMIN);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/gzip");
+    expect(res.headers.get("content-disposition")).toMatch(/village-export-\d{4}-\d{2}-\d{2}\.sql\.gz/);
+    // Streamed, never assembled in memory first.
+    expect(res.headers.get("content-length")).toBeNull();
+    // The size note, before the first byte of the file.
+    expect(Number(res.headers.get("x-village-export-estimate-bytes"))).toBeGreaterThan(0);
+
+    const sql = zlib.gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
+    expect(sql).toContain("EVERY MEMBER'S DATA IS IN THIS FILE");
+    expect(sql).toContain("CREATE TABLE `users`");
+    expect(sql).toContain(founderEmail);
+    expect(sql.trimEnd().split("\n").pop()).toMatch(/^-- Export complete: \d+ tables, \d+ rows/);
+    // The sealed row is in the file, and only sealed.
+    expect(sql).toContain("assistant_api_key");
+    expect(sql).not.toContain(SEALED_PLAINTEXT);
+    // Nothing from the environment: not the key that opens the seal, not the
+    // token signing secret, not the password that opened this door.
+    expect(sql).not.toContain(SECRETS_KEY);
+    expect(sql).not.toContain(TOKEN_SECRET);
+    expect(sql).not.toContain(ADMIN);
+  });
+
+  it("is written to the audit log and told to every admin and seated steward, never what was in it", async () => {
+    // Both are written after the last byte, so give them a moment.
+    let audits: string[] = [];
+    let notices: any[] = [];
+    for (let i = 0; i < 50; i++) {
+      audits = await exportAudits();
+      const [rows] = await testDb!.conn.query<any[]>("SELECT user_id, title, body FROM notifications WHERE type = 'village_export'");
+      notices = rows;
+      if (audits.length > 0 && notices.length >= 2) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatch(/with ADMIN_PASSWORD \(\d+ tables, \d+ rows, .* gzipped, .*s, from /);
+
+    const told = notices.map((n) => String(n.user_id)).sort();
+    expect(told).toEqual([ids.founder, ids.steward].sort());
+    // A lapsed steward and an ordinary member hear nothing.
+    expect(told).not.toContain(ids.lapsed);
+    expect(told).not.toContain(ids.member);
+    for (const n of notices) {
+      expect(String(n.title)).toContain("admin password");
+      expect(String(n.title)).toMatch(/\((\d+ bytes|\d+ KB|[\d.]+ MB)\)/);
+      const said = `${n.title} ${n.body}`;
+      expect(said).not.toContain(founderEmail);
+      expect(said).not.toContain(SEALED_PLAINTEXT);
+    }
   });
 });
 

@@ -192,10 +192,10 @@ describe.skipIf(!configured)("the legacy apply throws rather than half-applying"
         deps(),
         {
           id: "gmp-untyped",
-          title: "A brand change this build cannot make",
+          title: "A role change this build cannot make",
           changeSet: [
             { kind: "dial", key: "governance.consent_window_days", to: "6" },
-            { kind: "brand_field", field: "project.name", to: "Something" },
+            { kind: "role", act: "declare", role: "Something" },
           ],
           proposerUserId: "u-a",
           hyphaRef: null,
@@ -237,6 +237,55 @@ describe.skipIf(!configured)("the legacy apply throws rather than half-applying"
       expect((e as UntypedElementError).kind).toBe("role");
       expect((e as Error).message).toContain("Item 2 of 2");
     }
+  });
+
+  it("a carried brand change writes the one field, through the brand writer, on the ledger (Rye, 2026-11-06)", async () => {
+    let stored: any = { project: { name: "Larksfield", tagline: "By the river" } };
+    const withBrand = (): ChangesetDeps => ({ ...deps(), brand: { read: () => stored, write: async (next) => { stored = next; } } });
+    await applyMechanicsProposal(
+      withBrand(),
+      {
+        id: "gmp-brand",
+        title: "Rename the village",
+        changeSet: [{ kind: "brand_field", field: "project.name", to: "Larkfield" }],
+        proposerUserId: "u-a",
+        hyphaRef: null,
+        status: "passed_onsite",
+        ballotId: "bal-brand",
+      },
+      "u-a",
+      { onApplied: async () => {} },
+    );
+    expect(stored.project).toEqual({ name: "Larkfield", tagline: "By the river" });
+    const rows = await elementsFor(pool, "bal-brand");
+    expect(rows.map((r) => [r.kind, r.oldValue, r.newValue])).toEqual([["brand_field", "Larksfield", "Larkfield"]]);
+    expect(rows[0].sentence).toContain("project.name");
+  });
+
+  it("control: with no brand writer, a brand change is refused before the first write", async () => {
+    const before = numberVar("governance.vote_days");
+    const out = await applyMechanicsProposal(
+        deps(),
+        {
+          id: "gmp-brand-blind",
+          title: "Rename, with no writer",
+          changeSet: [
+            { kind: "dial", key: "governance.vote_days", to: String(before + 1) },
+            { kind: "brand_field", field: "project.name", to: "Larkfield" },
+          ],
+          proposerUserId: "u-a",
+          hyphaRef: null,
+          status: "passed_onsite",
+          ballotId: "bal-brand-blind",
+        },
+        "u-a",
+        { onApplied: async () => {} },
+      );
+    expect((out as any).ok).toBe(false);
+    expect(JSON.stringify(out)).toContain("cannot write the village's brand");
+    await loadVariables(pool);
+    expect(numberVar("governance.vote_days")).toBe(before);
+    expect(await elementsFor(pool, "bal-brand-blind")).toEqual([]);
   });
 
   it("returns cleanly on a proposal that already applied", async () => {

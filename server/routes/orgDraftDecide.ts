@@ -67,6 +67,7 @@ import {
   type PublishDoor,
 } from "../lib/orgDraftDecide";
 import type { Pool } from "mysql2/promise";
+import { deadlineInVillage } from "../lib/villageReaders"; // R134: a deadline in the village's own zone
 
 type Deps = Pick<
   AppDeps,
@@ -266,7 +267,7 @@ export function register(app: Express, deps: Deps): void {
     void notifyRoll(opened.ballot, {
       type: "ballot_opened",
       title: "The village is asked to decide a change to its structure",
-      body: `Voting is open until ${new Date(opened.ballot.closesAt).toLocaleDateString()}.`,
+      body: `Voting is open until ${deadlineInVillage(opened.ballot.closesAt)}.`,
       keySuffix: "open",
       except: [String(user.id)],
       roll: opened.electorate,

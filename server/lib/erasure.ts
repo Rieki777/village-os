@@ -213,7 +213,7 @@ import { forgetStayNotesOf } from "../repos/stays";
 import { forgetPayerEmailOf, liveSubscriptionsOf } from "../repos/productPurchases";
 import { recordSubscriptionCancels } from "../repos/subscriptionCancels";
 import { cancelSubscription, stripeConfigured } from "./payments";
-import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
+import { forgetSeatJournalNames, SEAT_JOURNAL_ROWS_SQL } from "../repos/orgSeatErasure";
 import { leaveEveryCrewOf } from "../repos/questCrewErasure";
 import { releaseOpenClaimsOf } from "../repos/questClaimErasure";
 import { forgetReportReasonsOf } from "../repos/placePhotos";
@@ -577,7 +577,8 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     {
       name: "public-health-events",
       run: async () => {
-        await pool.query("DELETE FROM health_events WHERE audience = 'public' AND actor_user_id = ?", [target.id]); // module-review-ok: a public health event naming a departed member is removed; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on
+        // A seat journal's line is kept and rewritten by "seat-journal-after-tombstone" instead (R103).
+        await pool.query(`DELETE FROM health_events WHERE audience = 'public' AND actor_user_id = ? AND NOT ${SEAT_JOURNAL_ROWS_SQL}`, [target.id]); // module-review-ok: a public health event naming a departed member is removed; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on
       },
     },
     {

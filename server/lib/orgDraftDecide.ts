@@ -71,6 +71,7 @@ import { circleWordsLine } from "./circleWordsDraft";
 import { recordEvent } from "./events";
 import { launchedByBallotIdOf } from "./launch";
 import type { WeightModeSnapshot } from "./governanceWeights";
+import type { BallotSetup } from "./ballotSetup";
 import {
   blockedLinesOf,
   draftChangeCap,
@@ -341,15 +342,8 @@ export function orgDraftBallotText(
   return { title, doc };
 }
 
-/** What the vote needs that only server/index.ts has. */
-export interface BallotSetup {
-  method: BallotMethod;
-  dials: { unityPct: number; quorumPct: number };
-  snapshot: WeightModeSnapshot;
-  tokenProblem: string | null;
-  electorate: Array<{ userId: string; weight: number }>;
-  durationDays: number;
-}
+/** What the vote needs that only server/index.ts has. Its home is ./ballotSetup. */
+export type { BallotSetup };
 
 export type PutToVillage =
   | { ok: true; ballot: BallotRow; electorate: string[] }

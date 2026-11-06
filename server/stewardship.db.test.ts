@@ -341,6 +341,41 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     expect(Number(after[0].n)).toBe(2);
   });
 
+  it("never re-points a power the village already holds: a selected key held by another role stays with it (R158)", async () => {
+    /*
+     * Rye, 2026-11-01: the launch moves exactly the stewards' selection. A power
+     * the village has already handed to a role of its own is not the launch's to
+     * take back, even when the stewards tick it. Before R158 the crossing upserted
+     * the row onto the Steward role and nobody heard.
+     */
+    const kept = HANDOVER_SET.find((c) => c !== "org.seat" && c !== "story.tell")!;
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO roles (id, name, capabilities) VALUES ('village-keepers', 'Village Keepers', ?)",
+      [JSON.stringify([kept])],
+    );
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO capability_holding (capability, holder_role_id, moved_by_ballot_id, note) VALUES (?, 'village-keepers', 'bal-keepers', 'the village chose them')",
+      [kept],
+    );
+    try {
+      await writeLaunchSelection(pool, [kept, "org.seat"], "cat-1");
+      const r = await seatCatalystsAsStewards(pool, LAUNCH_BALLOT, SEASON);
+      expect(r.ok).toBe(true);
+      expect(r.capabilitiesMoved, "the held power did not cross again").not.toContain(kept);
+      expect(r.capabilitiesKeptElsewhere, "and the report says who keeps it").toEqual([{ capability: kept, holderRoleId: "village-keepers" }]);
+      expect(r.holdingMoved, "a power the village already holds is not a failure to cross").toBe(true);
+      const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT holder_role_id, moved_by_ballot_id FROM capability_holding WHERE capability = ?",
+        [kept],
+      );
+      expect([String(rows[0].holder_role_id), String(rows[0].moved_by_ballot_id)], "still the village's own choice, untouched").toEqual(["village-keepers", "bal-keepers"]);
+    } finally {
+      await pool.query("DELETE FROM capability_holding WHERE capability = ?", [kept]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("DELETE FROM roles WHERE id = 'village-keepers'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await writeLaunchSelection(pool, [], "cat-1");
+    }
+  });
+
   it("reads the seat as held, by two people, any one of whom can stop a decision", async () => {
     const state = await vacancyState(pool);
     expect(state.seated).toBe(true);

@@ -150,6 +150,7 @@ export const KIND_FOR_SUBJECT: Readonly<Record<string, GovernanceKind>> = {
 export const KIND_FOR_ITEM_KIND: Readonly<Record<string, GovernanceKind>> = {
   dial: "game_change",
   mint_rule: "game_change",
+  mint_rule_create: "game_change",
   weight_allocation: "game_change",
   mode_switch: "game_change",
   module_lifecycle: "game_change",

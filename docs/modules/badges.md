@@ -120,6 +120,9 @@ V1 ships as JSON stores (data/badges.json, data/badge-awards.json, data/badge-ev
 - `POST /api/admin/badges/evaluate — manual earned-rule run (same idempotent engine the cycle-close hook calls); returns {awarded, stacked, expired}`
 - `GET /api/admin/badges/events?badgeId=&userId=&action= — paged audit journal`
 - `(internal) evaluateEarnedBadges(cycleNumber) called from the existing admin-triggered cycle close after distributions settle — not a new HTTP path, extends the current close flow in server/lib/gratitude-cycles.ts callers`
+- `POST /api/governance/badge-grants — {badgeId, userId, reason, revoke?}; a binding badge_grant ballot (2026-11-06, vote-path gap 6). Opened by a member holding proposal.open as a member; granted badges only; the keys TYPE_CAPABILITY_REFUSALS names for badge_grant (steward.veto among them) refused at open and at landing. The landing awards or revokes through the same awardBadge / revokeBadge the admin routes use (server/lib/badgeGrantCloser.ts). A badge carrying a power the village holds is decided at the village's highest set tier.`
+
+**Since 2026-11-06 (R157, Rye: "EVERYTHING can change with the highest village vote"):** the admin create, edit, award and revoke routes refuse (409) any badge that carries a capability the village holds, and point at `POST /api/governance/badge-grants`. An admin may not award themselves a badge that carries any capability (403). An admin edit is also refused while a badge_grant vote about that badge is open or waiting to land.
 
 ## Surfaces
 

@@ -27,7 +27,7 @@
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CONSENT_WORDS, shortDay } from "../../shared/roleProposalConsent";
-import { VOTE_CANNOT_WORDS, VOTE_DECIDES_WORDS } from "../../shared/seatApplications";
+import { PROPOSAL_VOTE_WORDS, VOTE_DECIDES_WORDS } from "../../shared/seatApplications";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { createOrgRole } from "../lib/orgChart";
 import { readApplication } from "../repos/seatApplications";
@@ -231,10 +231,10 @@ describe.skipIf(!configured)("who may adopt a role proposal, on a real schema (E
     expect((await readApplication(pool, s.applicationId))?.status).toBe("awaiting-holder");
     await withdraw(s.applicationId);
 
-    // A proposal that changes roles never goes to a vote (Rye, 2026-10-22), so the page says it waits, and offers no vote.
+    // A proposal that changes roles goes to a vote here, because the village holds the power (R164): the candidate opens it, so a reader is offered none.
     const changing = await submitNewRole(OWNER, "c-solo", "Lantern Keeper");
     const read = await page(changing.applicationId, READER);
-    expect(read.whoAdopts).toBe(VOTE_CANNOT_WORDS);
+    expect(read.whoAdopts).toBe(PROPOSAL_VOTE_WORDS.villageHolds);
     expect(read.you).toMatchObject({ mayAdopt: false, mayPutToVillage: false });
     await withdraw(changing.applicationId);
   });

@@ -212,5 +212,5 @@ export function harness() {
   const as = (id: string | null, stage = "member") => {
     state.viewer = id ? { id, stage } : null;
   };
-  return { state, notices, start, stop, call, raw, as };
+  return { state, notices, closers, start, stop, call, raw, as };
 }

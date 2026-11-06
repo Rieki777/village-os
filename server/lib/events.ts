@@ -10,6 +10,7 @@
  * would invert their importance. Failures are logged loudly instead.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { SEAT_JOURNAL_ROWS_SQL } from "../repos/orgSeatErasure";
 
 /**
  * WHAT KIND of actor did this (S74). Assistant paths pass 'agent', so the first
@@ -167,8 +168,12 @@ export async function recentEvents(
     // Example events are illustrative, not history. This spine feeds the
     // public Pulse and the feed's "village happenings", so an unfiltered read
     // presents seeded copy as things that actually happened here.
+    // A seat journal's public lines are for the journal, never the Pulse (R103,
+    // SEAT_JOURNAL_ROWS_SQL in server/repos/orgSeatErasure.ts).
     "SELECT id, kind, text, actor_user_id, actor_kind, origin_module_id, entity_type, entity_ref, audience, at " +
-      "FROM health_events WHERE audience = ? AND is_example = 0 ORDER BY at DESC, id DESC LIMIT ?",
+      "FROM health_events WHERE audience = ? AND is_example = 0" +
+      (audience === "public" ? ` AND NOT ${SEAT_JOURNAL_ROWS_SQL}` : "") +
+      " ORDER BY at DESC, id DESC LIMIT ?",
     [audience, Math.max(1, Math.min(500, limit))],
   );
   return rows.map(rowToEvent);
