@@ -180,6 +180,13 @@ export interface LaunchProposalDocInput {
    * is what crosses.
    */
   handover: readonly PowerInPlainWords[];
+  /**
+   * Journey rows only the host can clear, open when the vote opened, which
+   * this vote carries (`carriedByVote`, shared/launchRequirements.ts). Named
+   * in the document so the last line never claims a done the village did not
+   * have. Absent or empty means every row read done.
+   */
+  carriedOpen?: readonly string[];
 }
 
 /**
@@ -216,7 +223,9 @@ export function launchProposalDoc(input: LaunchProposalDocInput): string {
     // roll and the dials are already frozen here; the rule that turned
     // members into weights was not written down anywhere a member reads.
     ...(input.weightNote ? [input.weightNote, ""] : []),
-    `Every item on the journey to launch read done when ${input.openedBy} opened this, on ${input.openedOn}.`,
+    input.carriedOpen?.length
+      ? `Every item on the journey to launch read done when ${input.openedBy} opened this, on ${input.openedOn}, except what only the host can set, which this vote carries open: ${input.carriedOpen.join("; ")}.`
+      : `Every item on the journey to launch read done when ${input.openedBy} opened this, on ${input.openedOn}.`,
     "",
   ].join("\n");
 }
