@@ -12,9 +12,21 @@
  * source line R35's last row. No kind, field key, page id or JSON is ever
  * part of a sentence.
  *
+ * A ROLE IS NAMED WITH ITS HOLDERS (Rye, 2026-10-30, "Role (FirstName)"): the
+ * read hands in the first names of who holds the role HERE, from the live
+ * chart at view time, never from the service. A role nobody holds gets no
+ * parentheses, and a possessive ("Treasurer's purpose") stays plain.
+ *
  * Pure: no pool, no clock. A date is formatted in the time zone handed in.
  */
 import type { Difference, DifferenceFlag, FlagKey } from "./seraDifferences";
+import { roleWithHolders } from "./roleHolderLabel";
+
+/** What the read knows here that the difference does not carry. */
+export interface SentenceContext {
+  /** Who holds the role here now, by name, read from the live chart. Absent when it was not read. */
+  holders?: readonly string[];
+}
 
 const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const possessive = (name: string): string => (name.endsWith("s") ? `${name}'` : `${name}'s`);
@@ -27,6 +39,10 @@ function listOf(items: readonly string[]): string {
 
 /** How a subject is named in a sentence: a role by its name, a circle as "the X circle". */
 const label = (d: Difference): string => (d.subject.kind === "circle" ? `the ${d.subject.name} circle` : d.subject.name);
+
+/** The same, with a role's holders here in parentheses. Only where the name stands alone, never in a possessive. */
+const named = (d: Difference, ctx: SentenceContext): string =>
+  d.subject.kind === "role" && d.subject.ourId !== null ? roleWithHolders(d.subject.name, ctx.holders ?? []) : label(d);
 
 /** Dollars with thousands marked and cents only when there are some: "1,200", "1,200.50". */
 function dollars(n: number): string {
@@ -57,9 +73,9 @@ function paySentence(d: Difference, agent: string): string {
   return `${said} It changed since the read before, and pay is already set here.`;
 }
 
-function presenceSentence(d: Difference, agent: string): string {
+function presenceSentence(d: Difference, agent: string, ctx: SentenceContext): string {
   const missing = d.params?.reason === "missingTwice";
-  const name = label(d);
+  const name = named(d, ctx);
   const adding = d.kind === "circleAdd" || d.kind === "roleAdd";
   if (adding && d.subject.ourId === null) {
     if (d.kind === "circleAdd") {
@@ -80,18 +96,20 @@ function presenceSentence(d: Difference, agent: string): string {
   if (d.state === "oursAhead") {
     return `${cap(name)} was brought back here. ${agent} ${missing ? "still does not list it" : "still has it archived"}.`;
   }
-  return `${agent} ${missing ? "no longer lists" : "has archived"} ${name}. It is still live here.`;
+  // Whether anybody holds it here, when the read said: nobody is worth saying out loud.
+  const nobody = d.subject.kind === "role" && ctx.holders !== undefined && ctx.holders.length === 0;
+  return `${agent} ${missing ? "no longer lists" : "has archived"} ${name}. It is still live here${nobody ? ", and nobody holds it" : ""}.`;
 }
 
-/** One difference as a sentence. */
-export function differenceSentence(d: Difference, agent: string): string {
-  const name = label(d);
+/** One difference as a sentence. `ctx` carries what the read knows here, such as who holds the role. */
+export function differenceSentence(d: Difference, agent: string, ctx: SentenceContext = {}): string {
+  const name = named(d, ctx);
   switch (d.kind) {
     case "circleAdd":
     case "roleAdd":
     case "circleRest":
     case "roleRest":
-      return presenceSentence(d, agent);
+      return presenceSentence(d, agent, ctx);
     case "roleMove": {
       const from = typeof d.params?.from === "string" ? d.params.from : null;
       const to = listOf(Array.isArray(d.params?.to) ? d.params!.to : []);
@@ -105,9 +123,9 @@ export function differenceSentence(d: Difference, agent: string): string {
       return `${agent} suggests renaming ${name} to ${d.sera}.`;
     case "textField":
       if (d.field === "aim") {
-        if (d.state === "oursAhead") return `${possessive(cap(name))} purpose was changed here. ${agent} still has the earlier words.`;
-        if (d.state === "conflict") return `${possessive(cap(name))} purpose was changed here and in ${agent}, and the two differ.`;
-        return `${agent} has new words for ${possessive(name)} purpose.`;
+        if (d.state === "oursAhead") return `${possessive(cap(label(d)))} purpose was changed here. ${agent} still has the earlier words.`;
+        if (d.state === "conflict") return `You and ${agent} both changed ${possessive(label(d))} purpose.`;
+        return `${agent} has new words for ${possessive(label(d))} purpose.`;
       }
       return `${possessive(agent)} ${d.field === "Notes" ? "notes" : d.field} for ${name} changed.`;
     case "valueField":
@@ -119,7 +137,7 @@ export function differenceSentence(d: Difference, agent: string): string {
 
 /** R39: each flag as the words a person reads before acting. Keyed by the union, so a new flag is a build error here. */
 const FLAG_WORDS: Record<FlagKey, (p: Readonly<Record<string, string | number>>, agent: string) => string> = {
-  baseUnknown: (_p, agent) => `Check first: nothing was taken from ${agent} for this before, so there is no earlier version to compare`,
+  baseUnknown: (_p, agent) => `Check first: no earlier version from ${agent} to compare`,
   firstSight: (_p, agent) => `Check first: the first time ${agent} has sent this`,
   matchedByName: () => "Check first: matched by name only",
   matchedEarlier: (_p, agent) => `Check first: matched by the page ${agent} sent it under before, under its old name`,
@@ -136,6 +154,18 @@ const FLAG_WORDS: Record<FlagKey, (p: Readonly<Record<string, string | number>>,
 
 export function flagWords(f: DifferenceFlag, agent: string): string {
   return FLAG_WORDS[f.key](f.params ?? {}, agent);
+}
+
+/**
+ * The flags a person is shown. The unknown base says nothing beside a first
+ * sight, which implies it, or on pay, whose base is never known and which is
+ * always a person's act, so it is left off the screen there. DISPLAY ONLY: the
+ * difference keeps every flag, because an unknown base is never bulk-taken or
+ * applied by itself (R2).
+ */
+export function shownFlags(d: Pick<Difference, "kind" | "flags">): DifferenceFlag[] {
+  const firstSight = d.flags.some((f) => f.key === "firstSight");
+  return d.flags.filter((f) => f.key !== "baseUnknown" || (!firstSight && d.kind !== "pay"));
 }
 
 /** R35's source line: the edited time alone, never who edited it. */
