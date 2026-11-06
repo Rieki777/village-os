@@ -10,7 +10,16 @@
  * shift it (the TIMESTAMP trap the test pools are pinned against).
  */
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import { SNAPSHOT_READS, type Snapshot, type SnapshotKind, type SnapshotRead, type SnapshotRecord } from "../../shared/seraDifferences";
+import {
+  SNAPSHOT_READS,
+  type AgreedSlot,
+  type MatchVia,
+  type Snapshot,
+  type SnapshotKind,
+  type SnapshotMatch,
+  type SnapshotRead,
+  type SnapshotRecord,
+} from "../../shared/seraDifferences";
 
 export interface SnapshotRow {
   seq: number;
@@ -28,13 +37,39 @@ function jsonOf(raw: unknown): unknown {
   }
 }
 
+const VIAS: ReadonlySet<string> = new Set<MatchVia>(["link", "pageId", "earlier", "name", "alias"]);
+const SLOTS: readonly AgreedSlot[] = ["name", "aim", "circle"];
+
+/**
+ * A record's stored match, read without trusting it (review C2). A malformed
+ * one is dropped, so the record reads the way one kept before matches were
+ * stored does; an agreed value that is neither text nor `true` is left out.
+ */
+function recordOf(r: SnapshotRecord): SnapshotRecord {
+  const raw = (r as { match?: unknown }).match;
+  if (raw === undefined || raw === null) return r;
+  const m = raw as Record<string, unknown>;
+  if (typeof m !== "object" || typeof m.ourId !== "string" || !VIAS.has(String(m.via))) {
+    const { match: _dropped, ...rest } = r;
+    return rest;
+  }
+  const given = m.agreed && typeof m.agreed === "object" && !Array.isArray(m.agreed) ? (m.agreed as Record<string, unknown>) : {};
+  const agreed: Partial<Record<AgreedSlot, string | true>> = {};
+  for (const s of SLOTS) {
+    const v = given[s];
+    if (v === true || typeof v === "string") agreed[s] = v;
+  }
+  const match: SnapshotMatch = { ourId: m.ourId, via: m.via as MatchVia, agreed };
+  return { ...r, match };
+}
+
 /** A stored kind, read without trusting it: an unknown read word is a failed read, a non-list holds nothing. */
 function kindOf(read: unknown, records: unknown): SnapshotKind {
   const list = jsonOf(records);
   return {
     read: readWord(read),
     records: Array.isArray(list)
-      ? list.filter((r): r is SnapshotRecord => !!r && typeof r === "object" && typeof (r as SnapshotRecord).id === "string")
+      ? list.filter((r): r is SnapshotRecord => !!r && typeof r === "object" && typeof (r as SnapshotRecord).id === "string").map(recordOf)
       : [],
   };
 }

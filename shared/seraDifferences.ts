@@ -82,6 +82,31 @@ export interface SnapshotRecord {
   clipped?: string[];
   /** The page id arrived more than once in this read; the first copy is kept (R7). */
   duplicate?: boolean;
+  /**
+   * What the record was matched to here when its read was kept, and how (R1,
+   * review C2), so an older read keeps its match after a rename here. Null:
+   * it matched nothing then. Absent: the row was kept before matches were
+   * stored, and is matched against today's chart the old way.
+   */
+  match?: SnapshotMatch | null;
+}
+
+/** A compared field that can agree: a name, a role's description, a role's circle. */
+export type AgreedSlot = "name" | "aim" | "circle";
+
+/** One record's match as the sync made it, with what both sides last held the same. */
+export interface SnapshotMatch {
+  /** Our id. Ids are not personal data (review C2). */
+  ourId: string;
+  via: MatchVia;
+  /**
+   * The value both sides last held for each compared field, normalised: the
+   * base for a field the history gives none (review C2). Set where they agree
+   * at this read and carried from the read before where they do not, so it
+   * outlives the reads it was seen in. `true` is the service's own value in
+   * this record, kept once; a circle is our circle's id.
+   */
+  agreed?: Partial<Record<AgreedSlot, string | true>>;
 }
 
 export interface SnapshotKind {
@@ -688,16 +713,24 @@ function matchCircles(
   return out;
 }
 
+/** A kind whose read was kept with each record's match (review C2). One kept before carries none. */
+const stamped = (k: SnapshotKind | undefined): boolean => !!k && Array.isArray(k.records) && k.records.some((r) => !!r && r.match !== undefined);
+
 /**
  * Which page id each subject last answered to, and the reverse, from the
- * history first and then every older read in order, oldest to newest, each
- * read matched with what the reads before it established. So a rename at the
+ * history first and then every older read in order, oldest to newest. A read
+ * kept with its matches gives them as they were made then, so a rename here
+ * since never undoes one (review C2); a read kept before matches were stored
+ * is matched with what the reads before it established, against today's
+ * chart. The newest read's own stored matches come last. So a rename at the
  * service is carried from one read to the next for as long as reads are kept.
  */
 function earlierLinks(
   older: readonly SnapshotKind[],
+  latest: SnapshotKind | undefined,
   history: ReadonlyMap<string, Base>,
   matchAll: (records: readonly SnapshotRecord[], earlier: ReadonlyMap<string, Match>) => Matching,
+  exists: (id: string) => boolean,
 ): { earlier: Map<string, Match>; last: Map<string, string> } {
   const earlier = new Map<string, Match>();
   const last = new Map<string, string>();
@@ -706,7 +739,20 @@ function earlierLinks(
     earlier.set(pageKey(b.pageId), { ourId, via: "earlier" });
     last.set(ourId, pageKey(b.pageId));
   }
+  const fromStamps = (k: SnapshotKind) => {
+    for (const rec of dedupe(k.records)) {
+      const m = rec.match;
+      if (!m || typeof m.ourId !== "string" || !exists(m.ourId)) continue;
+      const pk = pageKey(rec.id);
+      earlier.set(pk, { ourId: m.ourId, via: m.via });
+      last.set(m.ourId, pk);
+    }
+  };
   for (const k of older) {
+    if (stamped(k)) {
+      fromStamps(k);
+      continue;
+    }
     const m = matchAll(dedupe(k.records), earlier);
     for (const [pk, mm] of Array.from(m.byPage.entries())) {
       // The match as it was made at that read, its way included (review C3).
@@ -714,7 +760,48 @@ function earlierLinks(
       last.set(mm.ourId, pk);
     }
   }
+  if (latest && stamped(latest)) fromStamps(latest);
   return { earlier, last };
+}
+
+/** The field a slot compares, in the service's record. A circle's placement is not one field. */
+const slotField = (kind: "circles" | "roles", slot: AgreedSlot): string | null =>
+  slot === "aim" ? F.body : slot === "name" ? (kind === "circles" ? F.circleName : F.roleName) : null;
+
+/** The value a stored match says both sides last held for a slot, or null when it says nothing. */
+function agreedValue(rec: SnapshotRecord, kind: "circles" | "roles", slot: AgreedSlot, norm: Normaliser): string | null {
+  const v = rec.match?.agreed?.[slot];
+  if (typeof v === "string") return v;
+  const field = slotField(kind, slot);
+  return v === true && field !== null ? textOf(rec, field, norm) : null;
+}
+
+/**
+ * The value both sides last held for one subject's field, from the newest read
+ * kept with its match to that subject (review C2): the base for a field the
+ * history gives none.
+ */
+function agreedBase(
+  snapshots: readonly Snapshot[],
+  kind: "circles" | "roles",
+  pk: string,
+  ourId: string,
+  slot: AgreedSlot,
+  norm: Normaliser,
+): DifferenceBase | null {
+  for (const s of snapshots) {
+    const rec = (s?.[kind]?.records ?? []).find((r) => !!r && typeof r.id === "string" && pageKey(r.id) === pk);
+    if (!rec || rec.match?.ourId !== ourId) continue;
+    const value = agreedValue(rec, kind, slot, norm);
+    if (value !== null) return { value };
+  }
+  return null;
+}
+
+/** A traced base where the history knows one, else the newest agreed value, else unknown. */
+function baseOr(traced: DifferenceBase | undefined, agreed: () => DifferenceBase | null): DifferenceBase {
+  if (traced && traced !== "unknown") return traced;
+  return agreed() ?? "unknown";
 }
 
 // ── The three ways ──────────────────────────────────────────────────────────
@@ -923,33 +1010,115 @@ function readADayBefore(snapshots: readonly Snapshot[], asOf: number): Snapshot 
 
 // ── The function ────────────────────────────────────────────────────────────
 
-/** Every way the newest snapshot and the live chart differ, three ways against what this village took from the service. */
-export function differences(input: DifferencesInput): Difference[] {
+/** The newest read matched to the live chart: what the list and the sync's stored matches both start from. */
+interface Prepared {
+  latest: Snapshot;
+  norm: Normaliser;
+  liveCircles: LiveCircleIn[];
+  liveRoles: LiveRoleIn[];
+  circleById: Map<string, LiveCircleIn>;
+  roleById: Map<string, LiveRoleIn>;
+  bases: { roles: Map<string, Base>; circles: Map<string, Base> };
+  circleLinks: { earlier: Map<string, Match>; last: Map<string, string> };
+  roleLinks: { earlier: Map<string, Match>; last: Map<string, string> };
+  circles: SnapshotRecord[];
+  roles: SnapshotRecord[];
+  circleMatch: Matching;
+  roleMatch: Matching;
+  chart: Chart;
+}
+
+function prepare(input: DifferencesInput): Prepared | null {
   const latest = input.snapshots[0];
-  if (!latest) return [];
+  if (!latest) return null;
   const norm = normaliserFor(input.swap);
-  const table = input.lanes ?? {};
   const links = input.links ?? {};
   const liveCircles = input.live.circles.filter((c) => !c.isExample);
   const liveRoles = input.live.roles.filter((r) => !r.isExample);
   const circleById = new Map(liveCircles.map((c) => [c.id, c]));
   const roleById = new Map(liveRoles.map((r) => [r.id, r]));
   const bases = basesFrom(input.accepted ?? [], liveCircles, norm);
-  const asOfParsed = Date.parse(String(input.asOf ?? latest.takenAt));
-  const dayBefore = readADayBefore(input.snapshots, Number.isFinite(asOfParsed) ? asOfParsed : Date.parse(latest.takenAt));
-  const previous = input.snapshots[1] ?? null;
 
   const matchCirclesWith = (r: readonly SnapshotRecord[], e: ReadonlyMap<string, Match>) => matchCircles(r, liveCircles, norm, links.circles, e);
   const matchRolesWith = (r: readonly SnapshotRecord[], e: ReadonlyMap<string, Match>) => matchRoles(r, liveRoles, norm, links.roles, e);
   const olderOldestFirst = input.snapshots.slice(1).reverse();
-  const circleLinks = earlierLinks(olderOldestFirst.map((s) => s.circles), bases.circles, matchCirclesWith);
-  const roleLinks = earlierLinks(olderOldestFirst.map((s) => s.roles), bases.roles, matchRolesWith);
+  const circleLinks = earlierLinks(olderOldestFirst.map((s) => s.circles), latest.circles, bases.circles, matchCirclesWith, (id) => circleById.has(id));
+  const roleLinks = earlierLinks(olderOldestFirst.map((s) => s.roles), latest.roles, bases.roles, matchRolesWith, (id) => roleById.has(id));
 
   const circles = dedupe(latest.circles?.records ?? []);
   const roles = dedupe(latest.roles?.records ?? []);
   const circleMatch = matchCirclesWith(circles, circleLinks.earlier);
   const roleMatch = matchRolesWith(roles, roleLinks.earlier);
   const chart: Chart = { circleById, liveCircles, seraCircles: new Map(circles.map((c) => [pageKey(c.id), c])), circleMatch, norm };
+  return { latest, norm, liveCircles, liveRoles, circleById, roleById, bases, circleLinks, roleLinks, circles, roles, circleMatch, roleMatch, chart };
+}
+
+/**
+ * The newest read with each record's match as it is made now, and where both
+ * sides hold the same value (review C2). The sync keeps this, so a later read
+ * of the list never re-matches an older read against a chart renamed since: a
+ * rename here is ours ahead, and a change at the service after both agreed is
+ * a suggestion against the value they agreed on. Null with no read.
+ */
+export function stampMatches(input: DifferencesInput): Snapshot | null {
+  const p = prepare(input);
+  if (!p) return null;
+  const { latest, norm, circleById, roleById, circleMatch, roleMatch, chart } = p;
+  const older = input.snapshots.slice(1);
+  /** One slot: `true` when both sides hold the service's value now, else what an older read carried, if anything. */
+  const slot = (kind: "circles" | "roles", rec: SnapshotRecord, ourId: string, s: AgreedSlot, sera: string | null, agreesNow: boolean, now: string | true) => {
+    if (agreesNow) return now;
+    const carried = agreedBase(older, kind, pageKey(rec.id), ourId, s, norm);
+    if (!carried || carried === "unknown" || carried.value === null) return undefined;
+    return s !== "circle" && carried.value === sera ? true : carried.value;
+  };
+  const agreedOf = (entries: Array<[AgreedSlot, string | true | undefined]>) =>
+    Object.fromEntries(entries.filter((e): e is [AgreedSlot, string | true] => e[1] !== undefined)) as Partial<Record<AgreedSlot, string | true>>;
+
+  const circleStamp = (rec: SnapshotRecord): SnapshotMatch | null => {
+    const m = circleMatch.byPage.get(pageKey(rec.id));
+    const live = m ? circleById.get(m.ourId) : undefined;
+    if (!m || !live) return null;
+    const name = textOf(rec, F.circleName, norm);
+    const nameNow = name !== null && sameName(name, norm.plain(live.name));
+    return { ourId: live.id, via: m.via, agreed: agreedOf([["name", slot("circles", rec, live.id, "name", name, nameNow, true)]]) };
+  };
+  const roleStamp = (rec: SnapshotRecord): SnapshotMatch | null => {
+    const m = roleMatch.byPage.get(pageKey(rec.id));
+    const live = m ? roleById.get(m.ourId) : undefined;
+    if (!m || !live) return null;
+    const name = textOf(rec, F.roleName, norm);
+    const aim = textOf(rec, F.body, norm);
+    const inCircle = live.circleId !== null && placementOf(rec, chart).refs.some((r) => r.key === live.circleId);
+    return {
+      ourId: live.id,
+      via: m.via,
+      agreed: agreedOf([
+        ["name", slot("roles", rec, live.id, "name", name, name !== null && sameName(name, norm.plain(live.name)), true)],
+        ["aim", slot("roles", rec, live.id, "aim", aim, aim !== null && aim === norm.prose(live.aim), true)],
+        ["circle", slot("roles", rec, live.id, "circle", null, inCircle, live.circleId ?? "")],
+      ]),
+    };
+  };
+  const kind = (k: SnapshotKind | undefined, stamp: (rec: SnapshotRecord) => SnapshotMatch | null): SnapshotKind => ({
+    read: k?.read ?? "empty",
+    records: (k?.records ?? []).map((rec) => ({ ...rec, match: stamp(rec) })),
+  });
+  return { ...latest, circles: kind(latest.circles, circleStamp), roles: kind(latest.roles, roleStamp) };
+}
+
+/** Every way the newest snapshot and the live chart differ, three ways against what this village took from the service. */
+export function differences(input: DifferencesInput): Difference[] {
+  const p = prepare(input);
+  if (!p) return [];
+  const { latest, norm, liveCircles, liveRoles, circleById, roleById, bases, circleLinks, roleLinks, circles, roles, circleMatch, roleMatch, chart } = p;
+  const table = input.lanes ?? {};
+  const asOfParsed = Date.parse(String(input.asOf ?? latest.takenAt));
+  const dayBefore = readADayBefore(input.snapshots, Number.isFinite(asOfParsed) ? asOfParsed : Date.parse(latest.takenAt));
+  const previous = input.snapshots[1] ?? null;
+  /** The value both sides last agreed on for this subject's field, from a read kept with its matches (review C2). */
+  const agreed = (kind: "circles" | "roles", rec: SnapshotRecord, ourId: string, slot: AgreedSlot) => () =>
+    agreedBase(input.snapshots, kind, pageKey(rec.id), ourId, slot, norm);
   const keyed = (list: readonly SnapshotRecord[] | undefined) => new Map(dedupe(list ?? []).map((r) => [pageKey(r.id), r]));
   const seenBefore = { circles: keyed(previous?.circles.records), roles: keyed(previous?.roles.records) };
   const aDayAgo = { circles: keyed(dayBefore?.circles.records), roles: keyed(dayBefore?.roles.records) };
@@ -1032,7 +1201,7 @@ export function differences(input: DifferencesInput): Difference[] {
     // While the service's name still names our circle, by its name or an alias, it is no
     // rename (review C3); one matched by a link or an older read may carry a new one.
     if (name === null || !circlesNamed(name, liveCircles).includes(live.id)) {
-      const nameBase = base?.name ?? "unknown";
+      const nameBase = baseOr(base?.name, agreed("circles", rec, live.id, "name"));
       const ourName = norm.plain(live.name);
       const renamed = threeWay(name, ourName, nameBase, sameName);
       if (renamed) {
@@ -1099,12 +1268,12 @@ export function differences(input: DifferencesInput): Difference[] {
       });
     };
 
-    const nameBase = base?.name ?? "unknown";
+    const nameBase = baseOr(base?.name, agreed("roles", rec, live.id, "name"));
     const ourName = norm.plain(live.name);
     field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase, sameName), [F.roleName]);
 
     const keys = placed.refs.map((r) => r.key).sort();
-    const circleBase = base?.circleId ?? "unknown";
+    const circleBase = baseOr(base?.circleId, agreed("roles", rec, live.id, "circle"));
     const away = placed.refs.find((r) => !r.here);
     const moveFlags = [
       ...(away ? [flag("circleNotHere", { circle: away.name })] : []),
@@ -1116,7 +1285,7 @@ export function differences(input: DifferencesInput): Difference[] {
     });
 
     const aim = textOf(rec, F.body, norm);
-    const aimBase = base?.aim ?? "unknown";
+    const aimBase = baseOr(base?.aim, agreed("roles", rec, live.id, "aim"));
     const ourAim = norm.prose(live.aim);
     field("textField", "aim", "aim", aim, ourAim, aimBase, threeWay(aim, ourAim, aimBase), [F.body]);
 

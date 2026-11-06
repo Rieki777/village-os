@@ -42,16 +42,27 @@
  * with and without its dashes) is kept once, the first copy, marked
  * `duplicate`, and its differences are flagged.
  *
+ * ── WHAT EACH RECORD WAS MATCHED TO (review C2) ───────────────────────────
+ *
+ * Each record is kept with its match as it is made at this read (our id, and
+ * how), and the value both sides last held for its name, a role's description
+ * and a role's circle, carried from the read before where they differ now. So
+ * the list never re-matches an older read against a chart renamed since: a
+ * rename here is ours ahead, and the service's change after both agreed is a
+ * suggestion against the value they agreed on. Our ids are not personal data.
+ * A row kept before this has no match, and is read the old way.
+ *
  * Every read writes one row, under the sync's lock, and the newest
  * `SNAPSHOT_KEEP` are kept.
  */
 import type { Pool } from "mysql2/promise";
 import type { SyncTrigger } from "../../shared/saberraSyncLog";
-import type { SnapshotKind, SnapshotRead, SnapshotRecord, SnapshotRef, SnapshotValue } from "../../shared/seraDifferences";
+import { stampMatches, type Snapshot, type SnapshotKind, type SnapshotRead, type SnapshotRecord, type SnapshotRef, type SnapshotValue } from "../../shared/seraDifferences";
 import { nameCheckFor, type NameCheck } from "./saberraNames";
 import type { VendorRecord } from "./saberraProposals";
 import { readVendorRecord, type SaberraRecordKind } from "./saberraRecords";
 import { idShapeOk, labelOf, normaliseId, plainText, relationRefs } from "./saberraRelations";
+import { acceptedForDifferences, liveForDifferences } from "./seraDifferencesInput";
 import { rosterRows } from "../repos/peopleRoster";
 import { insertSnapshot, pruneSnapshots, pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
 
@@ -190,10 +201,30 @@ function readOf(kind: string, read: ReadForSnapshot, records: readonly SnapshotR
   return records.length === 0 ? "empty" : "whole";
 }
 
+/** How many stored reads before this one its matches are made against. Each carries the matches of the ones before it. */
+const MATCH_FROM = 5;
+
 /**
- * Keep one read: each kind whole, or carried from the snapshot before, then
- * delete everything older than the newest `SNAPSHOT_KEEP`. Says which row it
- * wrote and how each kind came out.
+ * The read with each record's match as it is made now (`stampMatches`), from
+ * the same chart and history the list reads. A chart that cannot be read
+ * leaves the row as rows were kept before matches were stored, which the list
+ * reads the old way, and is said once by its error code.
+ */
+async function withMatches(pool: Pool, read: Snapshot, older: readonly Snapshot[], check: NameCheck): Promise<Snapshot> {
+  try {
+    const [live, accepted] = await Promise.all([liveForDifferences(pool), acceptedForDifferences(pool)]);
+    return stampMatches({ snapshots: [read, ...older], live, accepted, swap: check.swap }) ?? read;
+  } catch (e) {
+    const code = typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "unknown";
+    console.warn(`[saberra] this read is kept without its matches (${code}); the list matches it against today's chart`);
+    return read;
+  }
+}
+
+/**
+ * Keep one read: each kind whole, or carried from the snapshot before, each
+ * record with its match as made now, then delete everything older than the
+ * newest `SNAPSHOT_KEEP`. Says which row it wrote and how each kind came out.
  */
 export async function writeSnapshot(
   pool: Pool,
@@ -202,7 +233,8 @@ export async function writeSnapshot(
   at: Date,
 ): Promise<{ seq: number; circles: SnapshotRead; roles: SnapshotRead }> {
   const check = nameCheckFor(await rosterRows(pool));
-  const previous = (await recentSnapshots(pool, 1))[0]?.snapshot ?? null;
+  const older = (await recentSnapshots(pool, MATCH_FROM)).map((r) => r.snapshot);
+  const previous = older[0] ?? null;
   const kept: Record<"circles" | "roles", SnapshotKind> = { circles: { read: "empty", records: [] }, roles: { read: "empty", records: [] } };
   for (const { kind, key } of KINDS) {
     // An id is an id (R10): a record with an address for one is never kept.
@@ -210,7 +242,8 @@ export async function writeSnapshot(
     const state = readOf(kind, read, fresh);
     kept[key] = state === "whole" ? { read: state, records: fresh } : { read: state, records: previous?.[key].records ?? [] };
   }
-  const seq = await insertSnapshot(pool, at, { trigger, circles: kept.circles, roles: kept.roles });
+  const stamped = await withMatches(pool, { takenAt: at.toISOString(), trigger, circles: kept.circles, roles: kept.roles }, older, check);
+  const seq = await insertSnapshot(pool, at, { trigger, circles: stamped.circles, roles: stamped.roles });
   await pruneSnapshots(pool, SNAPSHOT_KEEP);
   return { seq, circles: kept.circles.read, roles: kept.roles.read };
 }

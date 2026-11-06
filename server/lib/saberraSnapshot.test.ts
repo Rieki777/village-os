@@ -384,6 +384,38 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect(row!.snapshot).toMatchObject({ trigger: "scheduled", roles: { read: "whole" }, circles: { read: "whole" } });
   });
 
+  it("A RENAME HERE BETWEEN TWO SYNCS IS OURS AHEAD: each read is kept with its match as it was made then (review C2)", async () => {
+    const land = pageId("c2-land");
+    const water = pageId("c2-water");
+    // A circle and a role made here, never published from the service: matched by name alone.
+    await pool.query("INSERT INTO circles (id, name, status) VALUES ('c2-land', 'c2 Land', 'active')"); // module-review-ok: fixture SQL, a circle made here
+    await pool.query( // module-review-ok: fixture SQL, a role made here
+      "INSERT INTO org_roles (id, circle_id, name, seats, active, aim) VALUES ('c2-water', 'c2-land', 'c2 Water Steward', 1, 1, 'Holds the water.')",
+    );
+    state.read = {
+      circle: [{ id: land, fields: { "Circle Name": "c2 Land", Status: "Active" } }],
+      role: [{ id: water, fields: { "Role Name": "c2 Water Steward", Circle: [land], Body: "Holds the water.", Status: "Active" } }],
+      role_assignment: [],
+    };
+    await syncByHand(pool);
+    const first = await newest();
+    // Both renamed here; the service sends exactly what it sent before.
+    await pool.query("UPDATE circles SET name = 'c2 Land & Ecology' WHERE id = 'c2-land'"); // module-review-ok: fixture SQL, a rename made here
+    await pool.query("UPDATE org_roles SET name = 'c2 Water Keeper' WHERE id = 'c2-water'"); // module-review-ok: fixture SQL, a rename made here
+    await syncByHand(pool);
+    const mine = (await readDifferences(pool)).list.filter((d) => d.subject.pageId === land || d.subject.pageId === water);
+    // Never a circle to add or a role to add that would duplicate ours: two renames of ours, ahead.
+    expect(mine.map((d) => [d.kind, d.state, d.subject.ourId])).toEqual([
+      ["rename", "oursAhead", "c2-land"],
+      ["rename", "oursAhead", "c2-water"],
+    ]);
+    // What the first read was kept with, and the second: the match made then, and what both sides held.
+    expect(first.circles.records[0]!.match).toEqual({ ourId: "c2-land", via: "name", agreed: { name: true } });
+    expect(first.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "name", agreed: { name: true, aim: true, circle: "c2-land" } });
+    const second = await newest();
+    expect(second.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "earlier", agreed: { name: true, aim: true, circle: "c2-land" } });
+  });
+
   it("A SNAPSHOT THAT CANNOT BE KEPT NEVER STOPS THE SYNC: the proposals still land", async () => {
     serviceHolds("fails");
     await syncByHand(pool);

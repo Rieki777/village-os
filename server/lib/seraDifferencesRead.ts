@@ -48,20 +48,17 @@ import { canonicalJson } from "../../shared/canonicalJson";
 import {
   countDifferences,
   differences,
-  traceAccepted,
   type Difference,
   type DifferenceCount,
-  type DifferencesInput,
   type SnapshotRead,
 } from "../../shared/seraDifferences";
 import { differenceSentence, flagWords, openInUrl, openInWords, shownFlags, sourceWords } from "../../shared/seraDifferenceWords";
-import { dedupeKeyFor } from "./externalProposals";
 import { nameCheckFor } from "./saberraNames";
-import { liveChart } from "./structureReview";
+import { acceptedForDifferences, liveForDifferences } from "./seraDifferencesInput";
 import { listOrgAssignments, type OrgAssignment } from "./orgChart";
 import { rosterRows } from "../repos/peopleRoster";
 import { snapshotIndex, snapshotsBySeq, type SnapshotIndexRow } from "../repos/saberraSnapshots";
-import { acceptedProposalsFor, circlesForDifferences, publishedFromModule, publishStamp, rolesWithPaySet } from "../repos/seraDifferences";
+import { publishStamp } from "../repos/seraDifferences";
 
 const MODULE_ID = "saberra";
 const DAY_SECONDS = 24 * 60 * 60;
@@ -112,47 +109,20 @@ export function snapshotsNeeded(index: readonly SnapshotIndexRow[], nowSeconds: 
 let cached: { key: string; value: DifferencesRead } | null = null;
 
 export async function readDifferences(pool: Pool, now: number = Date.now()): Promise<DifferencesRead> {
-  const [index, circles, paid, stamp, roster, seatings] = await Promise.all([
+  const [index, liveIn, stamp, roster, seatings] = await Promise.all([
     snapshotIndex(pool),
-    circlesForDifferences(pool),
-    rolesWithPaySet(pool),
+    liveForDifferences(pool),
     publishStamp(pool, MODULE_ID),
     rosterRows(pool),
     listOrgAssignments(pool),
   ]);
   const holders = holderNamesByRole(seatings, roster);
-  const live = await liveChart(pool, circles);
   const check = nameCheckFor(roster);
   const seqs = snapshotsNeeded(index, Math.floor(now / 1000));
-  const liveIn: DifferencesInput["live"] = {
-    circles: live.circles.map((c) => ({ id: c.id, name: c.name, aliases: c.aliases, status: c.status, isExample: c.isExample })),
-    roles: live.seats.map((s) => ({
-      id: s.id,
-      name: s.name,
-      circleId: s.circleId,
-      active: s.active,
-      isExample: s.isExample,
-      holders: s.holders,
-      aim: s.words?.aim ?? null,
-      paySet: paid.has(s.id),
-    })),
-  };
   const key = createHash("sha256").update(canonicalJson({ seqs, live: liveIn, stamp, names: check.fingerprint })).digest("hex");
   if (cached?.key === key) return { ...cached.value, holders };
 
-  const [rows, changes] = await Promise.all([snapshotsBySeq(pool, seqs), publishedFromModule(pool, MODULE_ID)]);
-  const proposals = await acceptedProposalsFor(pool, MODULE_ID, Array.from(new Set(changes.map((c) => c.draftId))));
-  const accepted = traceAccepted(
-    changes,
-    proposals.map((p) => ({
-      id: p.id,
-      draftId: p.draftId,
-      kind: p.kind,
-      payload: p.payload,
-      // Untouched: the payload still hashes to the key it landed under.
-      original: dedupeKeyFor({ moduleId: MODULE_ID, kind: p.kind, sourceRef: p.sourceRef, payload: p.payload }) === p.dedupeKey,
-    })),
-  );
+  const [rows, accepted] = await Promise.all([snapshotsBySeq(pool, seqs), acceptedForDifferences(pool)]);
   const snapshots = rows.map((r) => r.snapshot);
   const list = differences({ snapshots, live: liveIn, accepted, asOf: new Date(now).toISOString(), swap: check.swap });
   const top = snapshots[0];
