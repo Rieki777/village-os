@@ -91,7 +91,7 @@ export const STEWARD_ROLE_ID = "steward";
  */
 export function reservedRoleIdRefusal(id: string): string | null {
   return id === STEWARD_ROLE_ID
-    ? "Steward is the seat the village fills when it starts its Game, so a role made here cannot take that name. Give this role another name, such as Steward Circle."
+    ? "Steward is the role the village fills from its own vote when it starts its Game, so a role made here cannot take that name. Give this role another name, such as Steward Circle."
     : null;
 }
 
