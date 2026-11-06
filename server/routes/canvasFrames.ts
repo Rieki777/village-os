@@ -907,7 +907,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       if (effect === "answered") return "answered" as const;
       if (!effect.ok) return { status: effect.status, body: effect.body };
       const moved = await decideCanvasProposal(pool, {
-        id: p.id, status: "adopted", decidedBy: String(user.id), note: note || null, outcome: effect.outcome,
+        // A filing hands the change to the village's vote, so it is recorded as
+        // filed: "adopted" would claim a decision nobody has made yet.
+        id: p.id, status: effect.outcome?.filed ? "filed" : "adopted", decidedBy: String(user.id), note: note || null, outcome: effect.outcome,
       });
       if (!moved) return { status: 409, body: { error: "This suggestion was decided by somebody else at the same moment." } };
       void recordEvent(pool, {
