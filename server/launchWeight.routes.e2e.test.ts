@@ -588,6 +588,38 @@ describe.skipIf(!DB_CONFIGURED)("after launch, turning a module on is the villag
     expect(res.json?.proposeInstead).toBe(true);
   });
 
+  it("the village renames itself by vote, through the change set (Rye, 2026-11-06)", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Rename the village",
+        rationale: "We picked the old name in a hurry, and the river has a better one.",
+        changes: [{ kind: "brand_field", field: "project.tagline", to: "Where the two rivers meet" }],
+      },
+    });
+    expect(made.status, `propose: ${JSON.stringify(made.json)}`).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${String(made.json?.id)}/open-ballot`, {
+      body: { purposeAlignment: "Members asked for this together, and it lets the village name itself in the open." },
+    });
+    expect(opened.status, `open: ${JSON.stringify(opened.json)}`).toBe(200);
+    const ballotId = String(opened.json?.ballot?.id ?? "");
+    for (const t of [founderToken, wrenToken, idaToken]) expect((await vote(ballotId, t, "yes")).status).toBe(200);
+    await expire(ballotId);
+    const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, { body: { outcomeNote: "Everyone agreed to the new tagline." } });
+    expect(closed.json?.outcome, JSON.stringify(closed.json)).toBe("passed");
+    await pool.query("UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the suite's own scratch schema
+    expect((await call("POST", "/api/admin/cycles/close", { body: {} })).status).toBe(200);
+    const brand = await call("GET", "/api/admin/brand");
+    expect(brand.json?.brand?.project?.tagline).toBe("Where the two rivers meet");
+  });
+
+  it("control: a vote may not move the currency the village launched with", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: { title: "Change currency", rationale: "A test of the lock.", changes: [{ kind: "brand_field", field: "project.fiatCurrency", to: "USD" }] },
+    });
+    expect(made.status).toBe(400);
+    expect(JSON.stringify(made.json)).toContain("set at launch");
+  });
+
   it("still lets that admin narrow a module that is on", async () => {
     // Members to preview narrows what anyone can see, so it is the valve.
     const res = await call("PUT", "/api/admin/modules/exchange/lifecycle", {
