@@ -1077,3 +1077,38 @@ describe("review 8 and 9: one normaliser, the name swap included", () => {
     expect(d.flags.map((f) => f.key)).toContain("namesAMember");
   });
 });
+
+// ── The second review of 2026-11-06 ─────────────────────────────────────────
+// Each block below is one finding, built from the reviewer's probes 1 to 4.
+
+describe("second review: a name that differs only by case is no rename", () => {
+  it("A ROLE'S NAME IN OTHER CAPITALS IS NO RENAME, matched by name or by page id, the same as a circle's (probe 1 #5)", () => {
+    const T = pid(100);
+    // Matched by name: no base, so this read as a rename with an unknown base.
+    const byName = differences(
+      input({ snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(T, "treasurer", [LAND])])], live: { circles: [LAND_HERE], roles: [liveRole("t", "Treasurer", "land")] } }),
+    );
+    expect(byName).toEqual([]);
+    // Matched by page id, with a known base in other capitals: still nothing.
+    const tid = roleIdOf(T);
+    const byPage = differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(T, "TREASURER", [LAND])])],
+        live: { circles: [LAND_HERE], roles: [liveRole(tid, "Treasurer", "land")] },
+        accepted: [created(tid, { name: "Treasurer", circleId: "land" }, T)],
+      }),
+    );
+    expect(byPage).toEqual([]);
+    // A circle by a link, in other capitals: nothing either.
+    expect(differences(input({ snapshots: [snapshot([circleRec(WATER, "WATER")], [])], live: { circles: [WATER_HERE], roles: [] }, links: { circles: { [WATER]: "water" } } }))).toEqual([]);
+    // The control: a name that changed is a rename.
+    const renamed = differences(
+      input({
+        snapshots: [snapshot([circleRec(LAND, "Land")], [roleRec(T, "Head Treasurer", [LAND])])],
+        live: { circles: [LAND_HERE], roles: [liveRole(tid, "Treasurer", "land")] },
+        accepted: [created(tid, { name: "Treasurer", circleId: "land" }, T)],
+      }),
+    );
+    expect(renamed.map((d) => [d.kind, d.state, d.sera])).toEqual([["rename", "suggestion", "Head Treasurer"]]);
+  });
+});

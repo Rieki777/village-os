@@ -719,11 +719,16 @@ function earlierLinks(
 
 // ── The three ways ──────────────────────────────────────────────────────────
 
+type Same = (a: string | null, b: string | null) => boolean;
+const exactly: Same = (a, b) => a === b;
+/** Two names are one name when only their capitals differ, the rule matching by name already keeps: no rename. */
+const sameName: Same = (a, b) => a === b || (a !== null && b !== null && fold(a) === fold(b));
+
 /** A field's state, or null when there is nothing to say (absent at the service, or both the same). */
-function threeWay(sera: string | null, ours: string | null, base: DifferenceBase): DifferenceState | null {
-  if (sera === null || sera === ours) return null;
-  if (base === "unknown" || base.value === ours) return "suggestion";
-  return base.value === sera ? "oursAhead" : "conflict";
+function threeWay(sera: string | null, ours: string | null, base: DifferenceBase, same: Same = exactly): DifferenceState | null {
+  if (sera === null || same(sera, ours)) return null;
+  if (base === "unknown" || same(base.value, ours)) return "suggestion";
+  return same(base.value, sera) ? "oursAhead" : "conflict";
 }
 
 /**
@@ -1029,7 +1034,7 @@ export function differences(input: DifferencesInput): Difference[] {
     if (name === null || !circlesNamed(name, liveCircles).includes(live.id)) {
       const nameBase = base?.name ?? "unknown";
       const ourName = norm.plain(live.name);
-      const renamed = threeWay(name, ourName, nameBase);
+      const renamed = threeWay(name, ourName, nameBase, sameName);
       if (renamed) {
         drafts.push({
           kind: "rename", state: renamed, subject, field: "name", slot: "name", sera: name, ours: ourName, base: nameBase,
@@ -1096,7 +1101,7 @@ export function differences(input: DifferencesInput): Difference[] {
 
     const nameBase = base?.name ?? "unknown";
     const ourName = norm.plain(live.name);
-    field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase), [F.roleName]);
+    field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase, sameName), [F.roleName]);
 
     const keys = placed.refs.map((r) => r.key).sort();
     const circleBase = base?.circleId ?? "unknown";
