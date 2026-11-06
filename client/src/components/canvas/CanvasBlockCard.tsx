@@ -60,6 +60,19 @@ export function CanvasBlockCard({
 }) {
   /** Closed (null), or open, and whether the reading form starts open. */
   const [open, setOpen] = useState<{ recording: boolean } | null>(null);
+  /**
+   * How the frames were first opened, or null until they are. Once mounted
+   * they stay mounted and closing only hides them, so a Say draft or a
+   * half-recorded reading survives "Close this block" (W3b-close-discards-draft).
+   */
+  const [mounted, setMounted] = useState<{ recording: boolean } | null>(null);
+  /** Counts presses of "Record a reading" after the frames are mounted, so they move to Sense with the form open. */
+  const [recordAsks, setRecordAsks] = useState(0);
+  const openBlock = (recording: boolean) => {
+    setOpen({ recording });
+    if (!mounted) setMounted({ recording });
+    else if (recording) setRecordAsks((n) => n + 1);
+  };
   const latest = view.latest;
   const canvas = CANVAS_BLOCK_TEXT[block.id];
 
@@ -135,7 +148,7 @@ export function CanvasBlockCard({
         {mayRecord && !open && (
           <button
             type="button"
-            onClick={() => setOpen({ recording: true })}
+            onClick={() => openBlock(true)}
             className="min-h-[44px] text-sm font-medium rounded-lg px-3 text-teal-deep border border-teal-deep hover:bg-stone-50"
           >
             Record a reading
@@ -146,7 +159,7 @@ export function CanvasBlockCard({
           aria-expanded={!!open}
           aria-controls={`canvas-frames-region-${block.id}`}
           aria-label={`${open ? "Close this block" : "Open this block"}: ${block.name}`}
-          onClick={() => setOpen(open ? null : { recording: false })}
+          onClick={() => (open ? setOpen(null) : openBlock(false))}
           className={`min-h-[44px] text-sm font-medium rounded-lg px-3 border ${
             open ? "text-stone-800 border-stone-300 hover:bg-stone-50" : "text-white bg-teal-deep border-teal-deep"
           }`}
@@ -156,15 +169,16 @@ export function CanvasBlockCard({
         <AskButton block={block.id} label="Ask" name={`Ask about ${block.name}`} />
       </div>
 
-      <div id={`canvas-frames-region-${block.id}`}>
-        {open && (
+      <div id={`canvas-frames-region-${block.id}`} hidden={!open}>
+        {mounted && (
           <Suspense fallback={<p className="mt-4 text-sm text-stone-600">Opening {block.name}</p>}>
             <CanvasBlockFrames
               block={block}
               view={view}
               mayRecord={mayRecord}
               onSaveReading={onSave}
-              startRecording={open.recording}
+              startRecording={mounted.recording}
+              recordAsks={recordAsks}
             />
           </Suspense>
         )}

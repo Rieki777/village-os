@@ -71,6 +71,12 @@ export interface CanvasBlockFramesProps {
   initialFrame?: FrameId;
   /** Open the reading form straight away (the card's "Record a reading"). */
   startRecording?: boolean;
+  /**
+   * Bumped by the card each time "Record a reading" is pressed while the
+   * frames are already mounted (closed and hidden): move to Sense and open
+   * the form, keeping whatever was typed (W3b-close-discards-draft).
+   */
+  recordAsks?: number;
 }
 
 export default function CanvasBlockFrames({
@@ -80,6 +86,7 @@ export default function CanvasBlockFrames({
   onSaveReading,
   initialFrame = "sense",
   startRecording = false,
+  recordAsks = 0,
 }: CanvasBlockFramesProps) {
   const [frame, setFrame] = useState<FrameId>(initialFrame);
   /**
@@ -91,6 +98,11 @@ export default function CanvasBlockFrames({
    * still ask the server for nothing.
    */
   const [opened, setOpened] = useState<readonly FrameId[]>([initialFrame]);
+  useEffect(() => {
+    if (!recordAsks) return;
+    setFrame("sense");
+    setOpened((o) => (o.includes("sense") ? o : [...o, "sense"]));
+  }, [recordAsks]);
   const [payload, setPayload] = useState<BlockFramesPayload | null>(null);
   const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
   /** What the last write did. `n` tells two identical sentences apart, so each one is brought into view. */
@@ -199,7 +211,7 @@ export default function CanvasBlockFrames({
       <div>
         {opened.includes("sense") && (
           <div hidden={frame !== "sense"}>
-            <SenseFrame block={block} view={view} mayRecord={mayRecord} onSave={onSaveReading} startRecording={startRecording} />
+            <SenseFrame block={block} view={view} mayRecord={mayRecord} onSave={onSaveReading} startRecording={startRecording} recordAsks={recordAsks} />
           </div>
         )}
         {opened.includes("learn") && (
@@ -234,14 +246,19 @@ function SenseFrame({
   mayRecord,
   onSave,
   startRecording,
+  recordAsks,
 }: {
   block: CanvasBlock;
   view: CanvasBlockView;
   mayRecord: boolean;
   onSave: (reading: CanvasReadingInput) => Promise<string | null>;
   startRecording: boolean;
+  recordAsks: number;
 }) {
   const [writing, setWriting] = useState(startRecording && mayRecord);
+  useEffect(() => {
+    if (recordAsks && mayRecord) setWriting(true);
+  }, [recordAsks, mayRecord]);
   const earlier = view.history.slice(1);
 
   return (
