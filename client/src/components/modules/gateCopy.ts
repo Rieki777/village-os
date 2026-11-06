@@ -38,6 +38,7 @@
 /** Module id to the one line a signed-out reader gets. */
 export const GATE_LINES: Record<string, string> = {
   badges: "The skills members declare here, and the badges their finished work has earned them.",
+  canvas: "How this village governs itself, block by block on the Governance Canvas, and a workbook of the canvas to print.",
   commerce:
     "What this project charges for and what it accepts: application fees, donations, deposits and memberships.",
   comms:

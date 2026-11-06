@@ -1020,7 +1020,13 @@ jobs:
           # splitting a chunk raises it without slowing any visitor. The
           # visitor-facing limits above, MAX_MAIN_JS_KB (400) and
           # MAX_BOOT_JS_KB (750), are unchanged and are the real guard.
-          MAX_TOTAL_DIST_KB: 7000
+          # 7200 since 2026-11-05 (the master coordinator's decision, logged for
+          # Rye, on #807's precedent): the Governance Canvas and its notebook
+          # are real code, about 230 KB block-charged over main's 6820, loaded
+          # lazily behind two modules that ship off. Grouping them into one
+          # chunk saved 12 KB and would have made /governance visitors fetch it
+          # all, so the ceiling moved instead. Main and first-page JS did not.
+          MAX_TOTAL_DIST_KB: 7200
           MAX_SINGLE_IMAGE_KB: 400
         run: |
           echo "## Bundle sizes" >> "$GITHUB_STEP_SUMMARY"

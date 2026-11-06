@@ -19,6 +19,7 @@ import { oweProposalCash } from "./cashOwed";
 import type { WorkValue } from "../../shared/workValue";
 import { tokenDef } from "./ledger";
 import { DEPARTED_RECIPIENT, departedRecipient } from "./departed";
+import { memberFirstName } from "../../shared/memberFirstName";
 
 /** The trigger an accepted proposal fires, in the dotted spelling of `mint_rules`. */
 export const PROPOSAL_TRIGGER = "proposal.accepted";
@@ -105,7 +106,8 @@ export interface AcceptRewardDeps {
   activity(text: string, actorUserId: string, submissionId: string): Promise<void>;
 }
 
-const firstName = (name: string): string => String(name ?? "").trim().split(/s+/)[0] || "Someone";
+export const firstNameForAward = (name: string): string => memberFirstName(name);
+const firstName = firstNameForAward;
 
 export async function applyAcceptReward(
   pool: Pool,

@@ -20,6 +20,7 @@
 export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/": "", // the home page is the village itself; no prefix
   "/journey-to-launch": "Journey to launch",
+  "/canvas/workbook": "Canvas workbook",
   "/setup-game": "The Setup Game",
   "/project-history": "Command Centre",
   "/feedback": "Feedback",

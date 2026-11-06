@@ -29,7 +29,7 @@ import { keepFile } from "@/lib/profilePrefill";
 const HERE = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1");
 const ROOT = path.join(HERE, "..", "..", "..", "..");
 const CARD = fs.readFileSync(path.join(ROOT, "shared", "__fixtures__", "regen-card-riverbend.json"), "utf8");
-const SEED = JSON.parse(fs.readFileSync(path.join(ROOT, "server", "seeds", "circles-seed.json"), "utf8")) as Array<{ id: string; name: string }>;
+const SEED = JSON.parse(fs.readFileSync(path.join(ROOT, "shared", "__fixtures__", "standing-councils.json"), "utf8")) as Array<{ id: string; name: string }>;
 
 type Call = { method: string; url: string; body: any };
 let calls: Call[] = [];

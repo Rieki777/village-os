@@ -94,6 +94,13 @@ export const TARGETS = [
   // HELD on the same terms. A member-pii module holding pay routes and
   // invoices, which a village turns on for its own team deliberately.
   ["moon-review", "held", "security review pending (Module Library Contract clause 13)"],
+  // The canvas build's two optional modules (Rye, 2026-10-01). HELD on the
+  // session-card terms: both are member-pii (a reading names who recorded it,
+  // an ombuds ask names who sent it) and neither has had the human security
+  // review Module Library Contract clause 13 asks. Once it closes and Rye signs
+  // off, each line becomes ["<id>", "members"]. Neither requires the other.
+  ["canvas", "held", "security review pending (Module Library Contract clause 13)"],
+  ["conflict-evolution", "held", "security review pending (Module Library Contract clause 13)"],
 ];
 
 /** A public probe per module: what a signed-out visitor should be able to reach. */
