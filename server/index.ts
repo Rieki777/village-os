@@ -104,6 +104,7 @@ import { GUIDANCE_WORDS, POWER_FAMILIES } from "../shared/powerBoard";
 import { giveOnlyWhatYouHold, makePowerAssignGate, register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
 import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
 import { isMemberReadable } from "./lib/memberReadable";
+import { floorDialRefusal } from "./lib/villageFloors";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
@@ -20392,6 +20393,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
       if (hatch) return res.status(409).json(hatch);
       return res.status(401).json({ error: "auth_required" });
     }
+    // An everyday power's stage the village sets changes only by its vote, for every path here (server/lib/villageFloors.ts).
+    const floorNo = await floorDialRefusal(getPool(), req.params.key);
+    if (floorNo) return res.status(409).json({ error: floorNo, proposeInstead: true });
     if (verdict.source !== "admin") {
       if (def && ringOf(def) !== "open") {
         return res.status(403).json({
