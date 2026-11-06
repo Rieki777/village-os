@@ -27,9 +27,10 @@
  * ── THE CACHE ────────────────────────────────────────────────────────────
  *
  * The answer is computed once per change of anything it depends on: the rows
- * chosen, the live chart, the published history, and who the name swap knows.
- * The cheap reads that decide the key run every time; the snapshots' records
- * and the history are read only on a miss.
+ * chosen, which of them is the read a day before (the clock moves it), the
+ * live chart, the published history, and who the name swap knows. The cheap
+ * reads that decide the key run every time; the snapshots' records and the
+ * history are read only on a miss.
  *
  * ── WHO HOLDS EACH ROLE ──────────────────────────────────────────────────
  *
@@ -106,6 +107,12 @@ export function snapshotsNeeded(index: readonly SnapshotIndexRow[], nowSeconds: 
   return Array.from(want).sort((a, b) => b - a);
 }
 
+/**
+ * The last answer and what it was computed from. The key holds the row the
+ * facts digest and a pay figure compare with, chosen by the clock: the set of
+ * rows can stay the same while that row moves within it, and an answer for
+ * yesterday's clock must never serve today's.
+ */
 let cached: { key: string; value: DifferencesRead } | null = null;
 
 export async function readDifferences(pool: Pool, now: number = Date.now()): Promise<DifferencesRead> {
@@ -118,8 +125,12 @@ export async function readDifferences(pool: Pool, now: number = Date.now()): Pro
   ]);
   const holders = holderNamesByRole(seatings, roster);
   const check = nameCheckFor(roster);
-  const seqs = snapshotsNeeded(index, Math.floor(now / 1000));
-  const key = createHash("sha256").update(canonicalJson({ seqs, live: liveIn, stamp, names: check.fingerprint })).digest("hex");
+  const nowSeconds = Math.floor(now / 1000);
+  const seqs = snapshotsNeeded(index, nowSeconds);
+  // The read a day before, by the rule `snapshotsNeeded` chooses it by, so the key moves with the clock.
+  const older = index.slice(1);
+  const dayBefore = (older.find((r) => r.taken <= nowSeconds - DAY_SECONDS) ?? older[older.length - 1])?.seq ?? null;
+  const key = createHash("sha256").update(canonicalJson({ seqs, dayBefore, live: liveIn, stamp, names: check.fingerprint })).digest("hex");
   if (cached?.key === key) return { ...cached.value, holders };
 
   const [rows, accepted] = await Promise.all([snapshotsBySeq(pool, seqs), acceptedForDifferences(pool)]);

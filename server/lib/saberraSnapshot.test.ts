@@ -522,6 +522,40 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect((await readDifferences(pool)).lastWhole).toEqual({ circles: whole.takenAt, roles: whole.takenAt });
   });
 
+  describe("which rows the list reads, as the clock moves", () => {
+    const H = 60 * 60 * 1000;
+    const T = Date.parse("2026-11-04T12:00:00.000Z");
+    const land = pageId("clk-land");
+    /** One read: our circle with a review date, and a role only when the roles came back whole. */
+    const read = (review: string, roles: "whole" | "failed") => ({
+      asked: ["circle", "role"],
+      failed: roles === "failed" ? ["role"] : [],
+      truncated: [],
+      records: [
+        { id: land, kind: "circle" as const, fields: { "Circle Name": "clk Land", Status: "Active", "Next Review Date": review } },
+        ...(roles === "whole" ? [{ id: pageId("clk-role"), kind: "role" as const, fields: { "Role Name": "clk Cook", Status: "Active" } }] : []),
+      ],
+    });
+    const reviewFact = async (now: number) =>
+      (await readDifferences(pool, now)).list.filter((d) => d.subject.pageId === land && d.field === "Next Review Date").map((d) => [d.sera, d.ours]);
+
+    beforeEach(async () => {
+      await pool.query("INSERT IGNORE INTO circles (id, name, status) VALUES ('clk-land', 'clk Land', 'active')"); // module-review-ok: fixture SQL, the live circle
+    });
+
+    it("THE CACHE MOVES WITH THE CLOCK: the read a day before is part of its key (review nit)", async () => {
+      // The roles were last whole in the two oldest reads, so all four rows are read at either clock below.
+      await writeSnapshot(pool, read("2026-12-01", "whole"), "scheduled", new Date(T - 50 * H));
+      await writeSnapshot(pool, read("2026-12-01", "whole"), "scheduled", new Date(T - 30 * H));
+      await writeSnapshot(pool, read("2027-01-01", "failed"), "scheduled", new Date(T - 2 * H));
+      await writeSnapshot(pool, read("2027-01-01", "failed"), "scheduled", new Date(T));
+      // A day before T is the read at T-30h: the date moved since.
+      expect(await reviewFact(T)).toEqual([["2027-01-01", "2026-12-01"]]);
+      // 23 hours on, the same rows, and a day before is the read at T-2h, which already said 2027-01-01.
+      expect(await reviewFact(T + 23 * H)).toEqual([]);
+    });
+  });
+
   it("A SNAPSHOT THAT CANNOT BE KEPT NEVER STOPS THE SYNC: the proposals still land", async () => {
     serviceHolds("fails");
     await syncByHand(pool);
