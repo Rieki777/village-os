@@ -107,6 +107,13 @@ export interface SnapshotMatch {
    * this record, kept once; a circle is our circle's id.
    */
   agreed?: Partial<Record<AgreedSlot, string | true>>;
+  /**
+   * With pay set here: a hash of the service's pay as it stood when ours was
+   * last in step with it, carried while pay stays set, so a figure the service
+   * changed shows until a person settles it, however many reads go by. Never
+   * the figure itself.
+   */
+  pay?: string;
 }
 
 export interface SnapshotKind {
@@ -764,6 +771,15 @@ function earlierLinks(
   return { earlier, last };
 }
 
+/** The newest kept copy of a record that was stored matched to this subject, or null when none was. */
+function newestStampOf(snapshots: readonly Snapshot[], kind: "circles" | "roles", pk: string, ourId: string): SnapshotRecord | null {
+  for (const s of snapshots) {
+    const rec = (s?.[kind]?.records ?? []).find((r) => !!r && typeof r.id === "string" && pageKey(r.id) === pk);
+    if (rec?.match && rec.match.ourId === ourId) return rec;
+  }
+  return null;
+}
+
 /** The field a slot compares, in the service's record. A circle's placement is not one field. */
 const slotField = (kind: "circles" | "roles", slot: AgreedSlot): string | null =>
   slot === "aim" ? F.body : slot === "name" ? (kind === "circles" ? F.circleName : F.roleName) : null;
@@ -1079,6 +1095,7 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
   if (!p) return null;
   const { latest, norm, circleById, roleById, circleMatch, roleMatch, chart } = p;
   const older = input.snapshots.slice(1);
+  const dayBefore = readADayBefore(input.snapshots, Date.parse(latest.takenAt));
   /** One slot: `true` when both sides hold the service's value now, else what an older read carried, if anything. */
   const slot = (kind: "circles" | "roles", rec: SnapshotRecord, ourId: string, s: AgreedSlot, sera: string | null, agreesNow: boolean, now: string | true) => {
     if (agreesNow) return now;
@@ -1104,7 +1121,7 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
     const name = textOf(rec, F.roleName, norm);
     const aim = textOf(rec, F.body, norm);
     const inCircle = live.circleId !== null && placementOf(rec, chart).refs.some((r) => r.key === live.circleId);
-    return {
+    const out: SnapshotMatch = {
       ourId: live.id,
       via: m.via,
       agreed: agreedOf([
@@ -1113,6 +1130,14 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
         ["circle", slot("roles", rec, live.id, "circle", null, inCircle, live.circleId ?? "")],
       ]),
     };
+    // Pay set here: the service's pay when ours was last in step, carried while it stays set. The
+    // first time, the read a day before stands in, the rule a row kept before this one is read by.
+    if (live.paySet) {
+      const carried = newestStampOf(older, "roles", pageKey(rec.id), live.id)?.match?.pay;
+      const prior = dayBefore?.roles?.records?.find((r) => !!r && typeof r.id === "string" && pageKey(r.id) === pageKey(rec.id));
+      out.pay = carried ?? valueHash(prior ? (payOf(prior, norm)?.key ?? null) : (payOf(rec, norm)?.key ?? null));
+    }
+    return out;
   };
   const kind = (k: SnapshotKind | undefined, stamp: (rec: SnapshotRecord) => SnapshotMatch | null): SnapshotKind => ({
     read: k?.read ?? "empty",
@@ -1308,7 +1333,11 @@ export function differences(input: DifferencesInput): Difference[] {
     if (pay) {
       const prior = aDayAgo.roles.get(pk);
       const was = prior ? (payOf(prior, norm)?.key ?? null) : undefined;
-      const payState: DifferenceState | null = !live.paySet ? "suggestion" : was !== undefined && was !== pay.key ? "conflict" : null;
+      // With pay set here, against the pay the stored match carries: it shows until a person
+      // settles it, never only for a day. A row kept before matches were stored keeps the day.
+      const inStep = newestStampOf(input.snapshots, "roles", pk, live.id)?.match?.pay;
+      const moved = inStep !== undefined ? inStep !== valueHash(pay.key) : was !== undefined && was !== pay.key;
+      const payState: DifferenceState | null = !live.paySet ? "suggestion" : moved ? "conflict" : null;
       field("pay", "pay", "pay", pay.key, live.paySet ? "set" : "none", "unknown", payState, [F.payTerms], [], pay.params);
     }
 

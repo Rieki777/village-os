@@ -1115,6 +1115,35 @@ describe("second review: a name that differs only by case is no rename", () => {
   });
 });
 
+describe("second review: pay never leaves the list undecided", () => {
+  const K = pid(130);
+  const kid = roleIdOf(K);
+  const accepted = [created(kid, { name: "Kitchen", circleId: "land" }, K)];
+  const live = { circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land", { paySet: true })] };
+  const pay = (usd: number) => ({ "Compensation Model": "Stipend", "Compensation Status": "Proposed", "Compensation Target (Monthly)": usd });
+  const at = (hours: number, usd: number) =>
+    snapshotAt(new Date(Date.parse("2026-11-01T09:00:00.000Z") + hours * 3_600_000).toISOString(), [circleRec(LAND, "Land")], [roleRec(K, "Kitchen", [LAND], { fields: pay(usd) })]);
+  /** The reads as the sync keeps them, each stamped against the chart, the newest thirty. */
+  const chain = (reads: Snapshot[]) => {
+    let kept: Snapshot[] = [];
+    for (const s of reads) kept = [stampMatches(input({ snapshots: [s, ...kept], live, accepted }))!, ...kept].slice(0, 30);
+    return kept;
+  };
+  const later = (from: number, n: number, usd: number) => Array.from({ length: n }, (_, i) => at(from + i, usd));
+
+  it("THE SERVICE'S CHANGED PAY, WITH PAY SET HERE, STAYS PAST A DAY AND THROUGH THIRTY MORE READS", () => {
+    const kept = chain([at(0, 1200), at(24, 1500), ...later(48, 30, 1500)]);
+    const shown = differences(input({ snapshots: kept, live, accepted, asOf: kept[0].takenAt }));
+    expect(shown.map((d) => [d.kind, d.state, d.ours, d.params?.monthlyUsd])).toEqual([["pay", "conflict", "set", 1500]]);
+    expect(shown[0]).toMatchObject({ bulkEligible: false, autoEligible: false });
+    // The controls: no change at the service is nothing, however many reads.
+    expect(differences(input({ snapshots: chain([at(0, 1200), ...later(24, 31, 1200)]), live, accepted }))).toEqual([]);
+    // And reads kept before matches were stored keep the old rule: a day, then gone.
+    const old = [at(0, 1200), at(24, 1500), ...later(48, 30, 1500)].reverse().slice(0, 30);
+    expect(differences(input({ snapshots: old, live, accepted, asOf: old[0].takenAt }))).toEqual([]);
+  });
+});
+
 describe("second review C5: a steward's capitals at accept are never taken for the service's words", () => {
   const R = pid(120);
   const rid = roleIdOf(R);
