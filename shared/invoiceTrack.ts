@@ -58,6 +58,11 @@ export interface TrackStep {
   note: string | null;
   /** On the sent step: when the email to the Sera inbox went out, if it did. */
   emailedAt?: string | null;
+  /**
+   * On the approved step: the invoice stopped here. Returned to the member,
+   * or void. The steps after it will not happen for this invoice.
+   */
+  stopped?: "returned" | "void" | null;
 }
 
 export interface TrackInput {
@@ -74,7 +79,10 @@ export function trackOf(input: TrackInput): TrackStep[] {
   return [
     { step: "sent", done: !!invoice.sentAt, at: invoice.sentAt, by: invoice.sentAt ? "member" : null, note: null, emailedAt: mail?.sentAt ?? null },
     { step: "received", done: !!report, at: report?.receivedAt ?? null, by: report ? "sera" : null, note: null },
-    { step: "approved", done: approved, at: approved ? invoice.approvedAt : null, by: approved ? "finance" : null, note: null },
+    {
+      step: "approved", done: approved, at: approved ? invoice.approvedAt : null, by: approved ? "finance" : null, note: null,
+      stopped: invoice.status === "returned" || invoice.status === "void" ? invoice.status : null,
+    },
     { step: "paid", done: paid, at: paid ? invoice.paidOn : null, by: paid ? "treasurer" : null, note: paid ? (input.paidReference ?? null) : null },
   ];
 }
@@ -334,7 +342,7 @@ export const TRACK_STEP_WORDS: Record<TrackStepName, string> = {
 
 export const TRACK_WAITING_WORDS: Record<TrackStepName, string> = {
   sent: "Not sent yet",
-  received: "Waiting for Sera to confirm",
+  received: "Not confirmed by Sera yet",
   approved: "Waiting on approval",
   paid: "Not paid yet",
 };
@@ -373,3 +381,23 @@ export const SERA_STATUS_WORDS: Record<SeraInvoiceStatus, string> = {
   rejected: "Rejected",
   paid: "Paid",
 };
+
+/** Where an invoice stopped, read on its approved step. */
+export const TRACK_STOPPED_WORDS: Record<"returned" | "void", string> = {
+  returned: "Sent back to you. Read the note, then send it again",
+  void: "Void. A new invoice replaces it",
+};
+
+/** The short column names a phone can hold. */
+export const SOURCE_SHORT_WORDS: Record<SyncSourceName, string> = {
+  village: "Village",
+  chain: "Chain",
+  sera: "Sera",
+};
+
+/** "1200.00" as "1,200.00": an exact decimal string, grouped, never through a float. */
+export function groupDecimal(s: string): string {
+  const m = /^(-?)(\d+)(\.\d+)?$/.exec(s);
+  if (!m) return s;
+  return `${m[1]}${m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${m[3] ?? ""}`;
+}

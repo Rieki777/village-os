@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compareDecimal,
+  groupDecimal,
   invoiceSubject,
   matchSeraReport,
   readSeraInvoice,
@@ -213,5 +214,19 @@ describe("after the money pass: nothing hidden, nothing resolved without a fresh
     expect(readSeraInvoice({ ...report(), receivedAt: "9999-01-01T00:00:00Z" })).toBeNull();
     expect(readSeraInvoice({ ...report(), id: "has spaces and prose" })).toBeNull();
     expect(readSeraInvoice({ ...report(), moon: "October, the month Rye invoiced" })?.moon).toBeNull();
+  });
+});
+
+describe("after the UX pass", () => {
+  it("a returned or void invoice says where it stopped, on its approved step", () => {
+    expect(trackOf({ invoice: inv({ status: "returned" }), mail: null, report: null })[2]).toMatchObject({ done: false, stopped: "returned" });
+    expect(trackOf({ invoice: inv({ status: "void" }), mail: null, report: null })[2]).toMatchObject({ done: false, stopped: "void" });
+    expect(trackOf({ invoice: inv(), mail: null, report: null })[2].stopped).toBeNull();
+  });
+  it("groups an exact decimal string without a float", () => {
+    expect(groupDecimal("1200.00")).toBe("1,200.00");
+    expect(groupDecimal("-1234567.5")).toBe("-1,234,567.5");
+    expect(groupDecimal("12345678901234567890.123456789012345678")).toBe("12,345,678,901,234,567,890.123456789012345678");
+    expect(groupDecimal("999")).toBe("999");
   });
 });

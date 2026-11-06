@@ -50,11 +50,12 @@ describe("the invoice track", () => {
   it("reads four steps in order, each done one with its date and who acted, and the email to Sera", async () => {
     routes({ "GET /api/me/treasury": { body: { view: null } } });
     render(<TreasurySync tracks={[track]} />);
-    const list = screen.getByRole("list", { name: "Invoice us-llc-0007" });
+    const list = screen.getByRole("list", { name: /Invoice us-llc-0007, \$1,200\.00, 2 of 4 steps done/ });
     const steps = within(list).getAllByRole("listitem").map((li) => li.textContent ?? "");
-    expect(steps[0]).toMatch(/Sent.*by the member/);
+    expect(steps[0]).toMatch(/Sent.*by you/);
     expect(steps[0]).toMatch(/Emailed to Sera/);
-    expect(steps[1]).toContain("Waiting for Sera to confirm");
+    expect(steps[1]).toContain("Not confirmed by Sera yet");
+    expect(within(list).getAllByRole("listitem")[1].getAttribute("aria-current")).toBe("step");
     expect(steps[2]).toMatch(/Approved.*by the Finance role/);
     expect(steps[3]).toContain("Not paid yet");
   });
@@ -91,11 +92,13 @@ describe("the Sync", () => {
     render(<TreasurySync tracks={[]} />);
     expect(await screen.findByText(/Not synced yet/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Sync/ }));
-    expect(await screen.findByText(/Some sources disagree/)).toBeTruthy();
+    expect(await screen.findByText(/2 of your numbers differ between sources/)).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("2 rows differ");
     expect(calls.some((c) => c.method === "POST" && c.url === "/api/me/treasury/sync")).toBe(true);
     expect(screen.getAllByText("Differs")).toHaveLength(2);
-    expect(screen.getByText("$1,100.00")).toBeTruthy();
-    expect(screen.getByText(/It only reads: nothing is paid or moved/)).toBeTruthy();
+    expect(screen.getByText(/\$1,100\.00, Approved/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Sync again in/ })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/It only reads, so nothing is paid or moved/)).toBeTruthy();
   });
 
   it("a second press inside a minute reads a sentence, never a blank", async () => {
@@ -121,9 +124,9 @@ describe("the Treasurer's rails panel", () => {
       />,
     );
     expect(screen.getByText(/Sources that disagree \(1\)/)).toBeTruthy();
-    expect(screen.getByText(/Sera has a different amount: us-llc-0007, Ana\. Here: 120000 USD\. There: 110000 USD\./)).toBeTruthy();
+    expect(screen.getByText(/Sera has a different amount: us-llc-0007, Ana\. This village's records: \$1,200\.00\. Sera: \$1,100\.00\./)).toBeTruthy();
     expect(screen.getByText(/No reference/)).toBeTruthy();
     expect(screen.getByText(/Ana, us-llc-0007/)).toBeTruthy();
-    expect(screen.getByRole("list", { name: "Invoice us-llc-0007" })).toBeTruthy();
+    expect(screen.getByRole("list", { name: /Invoice us-llc-0007/ })).toBeTruthy();
   });
 });

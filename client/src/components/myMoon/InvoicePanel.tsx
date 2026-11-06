@@ -38,14 +38,14 @@ import { authToken } from "@/lib/gameApi";
 import { InvoiceTrack, type TrackRow } from "../TreasurySync";
 
 /** The member's invoice tracks and whether a send emails Sera's inbox (invoice rails). Reloads when `key` changes. */
-function useInvoiceRails(key: string): { tracks: TrackRow[]; seraInbox: string | null } {
-  const [state, setState] = useState<{ tracks: TrackRow[]; seraInbox: string | null }>({ tracks: [], seraInbox: null });
+function useInvoiceRails(key: string): { tracks: TrackRow[]; seraInbox: string | null; loaded: boolean } {
+  const [state, setState] = useState<{ tracks: TrackRow[]; seraInbox: string | null; loaded: boolean }>({ tracks: [], seraInbox: null, loaded: false });
   useEffect(() => {
     const t = authToken();
     fetch("/api/me/invoice-track", { headers: t ? { Authorization: `Bearer ${t}` } : {} })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setState({ tracks: Array.isArray(d?.tracks) ? d.tracks : [], seraInbox: typeof d?.seraInbox === "string" ? d.seraInbox : null }))
-      .catch(() => setState({ tracks: [], seraInbox: null }));
+      .then((d) => setState({ tracks: Array.isArray(d?.tracks) ? d.tracks : [], seraInbox: typeof d?.seraInbox === "string" ? d.seraInbox : null, loaded: true }))
+      .catch(() => setState({ tracks: [], seraInbox: null, loaded: true }));
   }, [key]);
   return state;
 }
@@ -212,7 +212,7 @@ export default function InvoicePanel({ data, cycleId, editable, reload }: { data
       {inv ? (
         <div className="flex flex-col gap-3" data-testid="invoice">
           <p className="m-0 text-sm font-semibold text-foreground">{inv.statusLine}</p>
-          {!room && myTrack ? <InvoiceTrack row={myTrack} /> : null}
+          {!room && myTrack ? <InvoiceTrack row={myTrack} own /> : null}
           <p className={MUTED}>{inv.supportLine || SUPPORT_LINE}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
@@ -266,8 +266,8 @@ export default function InvoicePanel({ data, cycleId, editable, reload }: { data
               <label className={LABEL}>{MOON_WORDS.memberNumber}<input value={number} maxLength={40} onChange={(e) => setNumber(e.target.value)} className={INPUT} /></label>
               {route === "local_contractor" ? <label className={LABEL}>{MOON_WORDS.externalKey}<input inputMode="numeric" value={key} maxLength={64} onChange={(e) => setKey(e.target.value)} className={INPUT} /></label> : null}
               {inv.sendRefusal ? <p className={MUTED}>{inv.sendRefusal}</p> : null}
-              {rails.seraInbox ? <p className={MUTED} data-testid="emails-sera">Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <span className="break-all font-medium text-foreground">{rails.seraInbox}</span>. It names you by your village name and code name. Your legal name and address stay private.</p> : null}
-              <button type="button" className={`${SMALL_BTN} self-start`} disabled={busy || ackPending || !number.trim()} onClick={send}>{MOON_WORDS.sendInvoice}</button>
+              {rails.seraInbox ? <p className="m-0 text-sm text-foreground" data-testid="emails-sera">Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <span className="break-all font-medium text-foreground">{rails.seraInbox}</span>. It names you by your village name and code name. Your legal name and address stay private.</p> : null}
+              <button type="button" className={`${SMALL_BTN} self-start`} disabled={busy || ackPending || !number.trim() || !rails.loaded} onClick={send}>{MOON_WORDS.sendInvoice}</button>
             </div>
           ) : null}
 

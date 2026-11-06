@@ -16,9 +16,11 @@
  * permission: a refusal from the server draws its sentence.
  */
 import { useCallback, useEffect, useState } from "react";
-import { FLAG_WORDS, SERA_STATUS_WORDS, type FlagKind, type SeraInvoiceStatus } from "@shared/invoiceTrack";
+import { FLAG_WORDS, SERA_STATUS_WORDS, groupDecimal, type FlagKind, type SeraInvoiceStatus } from "@shared/invoiceTrack";
+import { formatMoney } from "@shared/money";
 import { InvoiceTrack, type TrackRow } from "../TreasurySync";
 import {
+  INVOICE_STATUS_WORDS,
   LINE_BASIS_WORDS,
   MOON_WORDS,
   MY_MOON_WORDS,
@@ -179,6 +181,15 @@ export interface RailsData {
  * for the Treasurer. A difference is shown as both figures, never resolved
  * here: the village's own approval and the bank transfer stay the record.
  */
+/** A flag's stored figure in words: money formatted, statuses named, token amounts grouped. */
+export function flagFigure(kind: FlagKind, raw: string): string {
+  const money = /^(-?\d+) ([A-Z]{3})$/.exec(raw);
+  if (kind === "sera_amount_differs" && money) return formatMoney(Number(money[1]), money[2]);
+  if (kind === "sera_status_differs") return (INVOICE_STATUS_WORDS as Record<string, string>)[raw] ?? (SERA_STATUS_WORDS as Record<string, string>)[raw] ?? raw;
+  if (kind === "chain_differs") return groupDecimal(raw);
+  return raw;
+}
+
 export function RailsPanel({ data, nameOf }: { data: RailsData; nameOf: (userId: string | null) => string }) {
   return (
     <div className="flex flex-col gap-4" data-testid="invoice-rails">
@@ -188,7 +199,8 @@ export function RailsPanel({ data, nameOf }: { data: RailsData; nameOf: (userId:
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm text-foreground">
             {data.flags.map((f) => (
               <li key={f.id} className="break-words">
-                {FLAG_WORDS[f.kind]}: {f.subject}{f.userId ? `, ${f.memberName ?? nameOf(f.userId)}` : ""}. Here: {f.village}. There: {f.other}.
+                {FLAG_WORDS[f.kind]}: {f.subject}{f.userId ? `, ${f.memberName ?? nameOf(f.userId)}` : ""}. This village's records: {flagFigure(f.kind, f.village)}.{" "}
+                {f.kind === "chain_differs" ? "Chain" : "Sera"}: {flagFigure(f.kind, f.other)}. First seen {new Date(f.firstSeenAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}.
               </li>
             ))}
           </ul>
@@ -241,12 +253,12 @@ function InvoicesDeskLoader({ password }: { password: string }) {
     }
   }, [password]);
   useEffect(() => { void load(); }, [load]);
-  const [rails, setRails] = useState<RailsData | null>(null);
+  const [rails, setRails] = useState<RailsData | "failed" | null>(null);
   useEffect(() => {
     fetch("/api/cash-owed/invoice-track", { headers: { Authorization: `Bearer ${password}` } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setRails(d && Array.isArray(d.tracks) ? (d as RailsData) : null))
-      .catch(() => setRails(null));
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => setRails(d && Array.isArray(d.tracks) ? (d as RailsData) : "failed"))
+      .catch(() => setRails("failed"));
   }, [password, data]);
   if (error) return <p role="alert" className={ERROR}>{error}</p>;
   if (!data) return <p className={MUTED}>{QUEUE_WORDS.loading}</p>;
@@ -254,7 +266,9 @@ function InvoicesDeskLoader({ password }: { password: string }) {
   return (
     <>
       <InvoicesDeskView data={data} init={init} reload={load} />
-      {rails ? <RailsPanel data={rails} nameOf={nameOf} /> : null}
+      {rails === "failed" ? (
+        <p role="alert" className={ERROR}>The invoice tracks and the disagreements did not load. Close and open again in a moment.</p>
+      ) : rails ? <RailsPanel data={rails} nameOf={nameOf} /> : <p className={MUTED}>Reading the invoice tracks.</p>}
     </>
   );
 }
