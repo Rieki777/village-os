@@ -115,12 +115,15 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/decisions": "Decisions",
   "/propose": "Start a proposal",
   "/role-applications": "Role application",
+  "/open-proposals": "A proposed role", // somebody with no account proposed it (0305)
   "/seat-applications": "Role application",
   "/season-plans": "The village's season",
   "/season-plans/mine": "Your season",
   "/aligned": "Aligned",
   "/gratitude": "Gratitude",
   "/404": "Page not found",
+  // The OAuth consent page a connector sends a member to (B4); the name is the page's own heading.
+  "/oauth/authorize": "Connect an agent",
 };
 
 /**

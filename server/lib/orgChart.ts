@@ -19,6 +19,7 @@
  * village genuinely knows better than the derivation, and it carries an
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
+import { isAgentAccount } from "../repos/agentAccounts";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
@@ -1107,6 +1108,19 @@ export async function seatHolder(
      */
     return { ok: false, reason: "A role-plane agent holds its role as documented, with no member account" };
   }
+  if (h.userId && (await isAgentAccount(pool, String(h.userId)))) {
+    /*
+     * AN AGENT ACCOUNT HOLDS NO ROLE (0319; addendum v6, B6 and B7). The
+     * Operations agent and Sera's agent are member accounts with `is_agent`,
+     * and the refusal above explains why a member-account agent must never be
+     * seated: it would pass the settlement job's `holder_kind = 'member'`
+     * filter and could open the declare door. The addendum asks only that it
+     * never hold a role carrying `moon.approve` or `cash.pay`; refusing every
+     * role keeps the settlement and declare paths closed as well, and an
+     * agent account needs no role to do its work.
+     */
+    return { ok: false, reason: "An agent account holds no role. Its access comes from its own scopes" };
+  }
   const kind = h.userId ? "member" : "documented";
   if (kind === "documented" && !String(h.displayName ?? "").trim()) {
     return { ok: false, reason: "A documented holder needs a name" };
@@ -1264,8 +1278,10 @@ export async function claimSeating(pool: Pool, assignmentId: string, userId: str
         SET holder_kind = 'member', user_id = ?, holder_key = ?
       WHERE id = ? AND ended_at IS NULL AND holder_kind = 'documented' AND is_example = 0
         AND is_agent = 0
-        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND LOWER(u.email) LIKE '%@anonymized.invalid')`,
-    [userId, userId, assignmentId, userId],
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND LOWER(u.email) LIKE '%@anonymized.invalid')
+        AND NOT EXISTS (SELECT 1 FROM users a WHERE a.id = ? AND a.is_agent = 1)`,
+    // 0319: an agent account holds no role, by this door either (seatHolder's refusal, and why).
+    [userId, userId, assignmentId, userId, userId],
   );
   return !!r?.affectedRows;
 }

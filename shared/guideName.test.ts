@@ -102,3 +102,13 @@ describe("the name a system prompt gives the guide", () => {
     expect(`You are ${guidePromptName(undefined)}, the launch guide`).toBe("You are the village guide, the launch guide");
   });
 });
+
+describe("asTheVillageGuide", () => {
+  it("introduces a named guide and never doubles the label for an unnamed one", async () => {
+    const { asTheVillageGuide, guidePromptName } = await import("./guideName");
+    expect(asTheVillageGuide(guidePromptName("Sol"))).toBe("Sol, the village guide");
+    expect(asTheVillageGuide(guidePromptName(""))).toBe("the village guide");
+    expect(asTheVillageGuide(guidePromptName("   "))).toBe("the village guide");
+    expect(asTheVillageGuide("")).toBe("the village guide");
+  });
+});

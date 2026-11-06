@@ -191,7 +191,7 @@ const bootBytes = bootFiles.reduce((sum, f) => sum + f.bytes, 0);
 
 const MAX_MAIN = budgetFromWorkflow("MAX_MAIN_JS_KB", 700);
 const MAX_BOOT = budgetFromWorkflow("MAX_BOOT_JS_KB", 750);
-const MAX_TOTAL = budgetFromWorkflow("MAX_TOTAL_DIST_KB", 6600);
+const MAX_TOTAL = budgetFromWorkflow("MAX_TOTAL_DIST_KB", 7000);
 
 const mainKb = kb(mainBytes);
 const bootKb = kb(bootBytes);

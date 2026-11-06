@@ -59,7 +59,8 @@ import fs from "fs";
 import path from "path";
 import type { AppDeps } from "../lib/appDeps";
 import type { LimitState } from "../repos/rateHits";
-import { getStage, stageIndex } from "../../shared/gameConfig";
+import { stageIndex } from "../../shared/gameConfig";
+import { stageName } from "../lib/villagePaths";
 import { sceneStopsFor } from "../../shared/questScenes";
 import { cleanCrewName } from "../lib/crews";
 import { recordEvent } from "../lib/events";
@@ -807,9 +808,8 @@ export function register(app: Express, deps: Deps): void {
     if (quest.minStage) {
       const needed = stageIndex(quest.minStage);
       if (needed >= 0 && stageIndex(await stageOf(user)) < needed) {
-        const stage = getStage(quest.minStage);
         return res.status(403).json({
-          error: `This quest opens at the ${stage?.name ?? quest.minStage} stage. Keep walking the path and it will unlock.`,
+          error: `This quest opens at the ${stageName(quest.minStage)} stage. Keep walking the path and it will unlock.`,
           minStage: quest.minStage,
         });
       }

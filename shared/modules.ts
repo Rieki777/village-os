@@ -1465,6 +1465,59 @@ export const MODULES: ModuleDef[] = [
     // the session it was pulled in.
   },
   {
+    id: "moon-review",
+    guild: [],
+    setupNeeds: [
+      {
+        id: "work-approver",
+        kind: "hands",
+        ref: "moon.approve",
+        title: "Seat someone in a power group that approves the work in moon recaps",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/moon-review.md Setup; shared/moonRecap.ts eligibleApprovers",
+      },
+      {
+        id: "invoice-approver",
+        kind: "hands",
+        ref: "cash.pay",
+        title: "Choose who approves invoices and records the pay",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=cash-payouts",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/moon-review.md Setup; shared/moonRecap.ts eligibleApprovers",
+      },
+    ],
+    tier: "included",
+    // A recap names a member and what they did; a pay route holds their legal
+    // name and address, and an invoice holds what they are owed.
+    dataClass: "member-pii",
+    group: "coordinate",
+    // A recap sends with no pay route and no payer, so the module works the
+    // moment it is on. Invoices wait on the payers document and a confirmed
+    // route, and say so in their own sentences.
+    setup: "none",
+    name: "End-of-Moon Review",
+    description:
+      "Once a moon, each member who holds a role gathers what they delivered, checks it against their role cards and the season goals, does a role audit and sends a recap. When their role's adopted terms carry money they also send a draft invoice. One person approves the work and a different person approves the invoice, neither of them the member. Pay is recorded here and paid outside the platform.",
+    requires: [],
+    // The room sections live in Live Sessions; the role audit lands in the
+    // circle backlog; Sera drafts from the knowledge library.
+    recommends: ["sessions", "governance", "saberra"],
+    capabilities: ["moon.approve", "moon.approve_alone", "moon.approve_own"],
+    variableKeys: [],
+    apiPrefixes: ["/api/me/moon", "/api/me/pay-route", "/api/moon-review"],
+    // No openStateCheck yet: what a member is owed lives in cash_owed, which
+    // the cash payouts desk reads whether this module is on or off.
+  },
+  {
     id: "sessions",
     guild: [],
     tier: "included",

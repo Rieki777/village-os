@@ -209,7 +209,7 @@ export default function WorkValueEditor({
         />
       </label>
       {draft.held && (
-        <p className="text-xs opacity-70">
+        <p className="text-sm text-muted-foreground">
           Valued at {heldWords(draft.held)} before this village changed its currency. Left empty, that value stays as it is.
           {currency ? ` Type a figure to value it in ${currency} instead.` : ""}
         </p>
@@ -225,19 +225,19 @@ export default function WorkValueEditor({
           className={`w-full mt-1 ${inputClassName}`}
         />
       </label>
-      <p className="text-xs opacity-70">
+      <p className="text-sm text-muted-foreground">
         The village pays the cash itself. The platform writes down what is owed when the work is paid, the member claims it, and
         whoever keeps the books marks it paid.
       </p>
       {draft.cashHeld && (
-        <p className="text-xs opacity-70">
+        <p className="text-sm text-muted-foreground">
           Pays {heldWords(draft.cashHeld)} in cash, set before this village changed its currency. Left empty, that stays as it is.
         </p>
       )}
       {offered === null ? (
-        <p className="text-xs opacity-70">Reading which tokens this village pays for work.</p>
+        <p className="text-sm text-muted-foreground">Reading which tokens this village pays for work.</p>
       ) : offered.length === 0 ? (
-        <p className="text-xs opacity-70">
+        <p className="text-sm text-muted-foreground">
           This village has no rule paying any token for this kind of work yet, so it pays in no tokens. A rule is added on the Mint panel.
         </p>
       ) : (
@@ -259,7 +259,7 @@ export default function WorkValueEditor({
               </span>
             </label>
           ))}
-          <p className="text-xs opacity-70">A token left at 0 is not paid.</p>
+          <p className="text-sm text-muted-foreground">A token left at 0 is not paid.</p>
         </fieldset>
       )}
     </div>

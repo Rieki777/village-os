@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
 import { ROLE_CCOS_WORDS } from "@shared/roleCcos";
+import { GROUP_PLAIN } from "@shared/roleProposalHonesty";
 import { LOAD_WORDS } from "@shared/roleProposalLoad";
 import { fakeServer, ORG, PROPOSAL_ID, proposalWith, type DraftBody } from "@/test/roleProposalFixture";
 
@@ -36,8 +37,8 @@ import { RP_WORDS } from "./proposalWords";
 
 let server: ReturnType<typeof fakeServer>;
 
-function draw(body: DraftBody, step: string, extra: Parameters<typeof proposalWith>[1] = {}) {
-  server = fakeServer(body, { extra });
+function draw(body: DraftBody, step: string, extra: Parameters<typeof proposalWith>[1] = {}, opts: { failPut?: boolean } = {}) {
+  server = fakeServer(body, { extra, failPut: opts.failPut });
   vi.stubGlobal("fetch", vi.fn(server.fetch));
   window.history.replaceState(null, "", `/role-proposals/${PROPOSAL_ID}?step=${step}`);
   return render(
@@ -171,12 +172,20 @@ describe("step 2, each role's words", () => {
 describe("step 3, your season", () => {
   it("ties the season to the village's goals for that season, each with how it helps", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "season");
+    expect((await screen.findByText("Seasonal goals")).className).toContain("text-foreground");
+    expect(screen.getByText("One to three bigger goals for the whole season. Each moon's tasks build toward them.").className).toContain("text-muted-foreground");
+    expect(screen.getByRole("button", { name: "Add a seasonal goal" }).className).toContain("text-notice");
     fireEvent.click(await screen.findByLabelText("Grow the orchard"));
     fireEvent.change(screen.getByLabelText("How it helps: Grow the orchard"), { target: { value: "Fruit for the kitchen." } });
     fireEvent.change(screen.getByLabelText(new RegExp(RP_WORDS.aim)), { target: { value: "Every meal from our own land." } });
     await waitFor(() =>
       expect(lastPut()).toEqual({
-        season: { aim: "Every meal from our own land.", seasonalGoals: [], servesGoals: [{ goal: "Grow the orchard", howItHelps: "Fruit for the kitchen." }] },
+        season: {
+          aim: "Every meal from our own land.",
+          seasonalGoals: [],
+          servesGoals: [{ goal: "Grow the orchard", howItHelps: "Fruit for the kitchen." }],
+          ownWords: { love: "", offer: "", why: "" },
+        },
       }),
     );
     expect(screen.queryByRole("button", { name: RP_WORDS.aiHelp })).toBeNull();
@@ -189,7 +198,14 @@ describe("step 3, your season", () => {
     fireEvent.change(screen.getByLabelText("Goal"), { target: { value: "A harvest supper" } });
     fireEvent.change(screen.getByLabelText("Done when"), { target: { value: "Everyone has eaten from the orchard" } });
     await waitFor(() =>
-      expect(lastPut()).toEqual({ season: { aim: null, seasonalGoals: [{ title: "A harvest supper", doneWhen: "Everyone has eaten from the orchard" }], servesGoals: [] } }),
+      expect(lastPut()).toEqual({
+        season: {
+          aim: null,
+          seasonalGoals: [{ title: "A harvest supper", doneWhen: "Everyone has eaten from the orchard" }],
+          servesGoals: [],
+          ownWords: { love: "", offer: "", why: "" },
+        },
+      }),
     );
   });
 });
@@ -209,12 +225,37 @@ describe("step 4, terms and review dates", () => {
     expect(check.getAttribute("data-load-check")).toBe("within");
     expect(within(check).getByText(LOAD_WORDS.within(30))).toBeTruthy();
     expect(within(check).getByText("Gate keeper: No time written yet")).toBeTruthy();
+    fireEvent.click(within(check).getByRole("button", { name: LOAD_WORDS.writeHours }));
+    expect(await screen.findByText(RP_WORDS.wordsLede)).toBeTruthy();
+  });
+
+  it("an open row names who fills it, a preset names its source, and a blank season name leaves no hole", async () => {
+    draw({ roles: [{ roleId: "r1" }] }, "terms", {
+      target: { seasonId: "s3", name: "", startsOn: "2027-01-01", endsOn: "2027-03-31", ended: false },
+    });
+    expect(await screen.findByText("For next season, starting 1 January 2027.")).toBeTruthy();
+    const term = (await screen.findByText("How long you hold this role")).closest("[data-settings-group]") as HTMLElement;
+    expect(term.textContent).toContain("We'll fill this together with the village's operations role.");
+    for (const line of Object.values(GROUP_PLAIN)) expect(screen.getByText(line)).toBeTruthy();
+    expect(term.textContent).not.toContain("No preset");
+    fireEvent.click(screen.getByRole("button", { name: "Volunteer role" }));
+    expect(term.textContent).toContain("Suggested from Until the season ends.");
+    const pay = screen.getByText("Money for the work, if the role has any").closest("[data-settings-group]") as HTMLElement;
+    expect(pay.textContent).toContain("Suggested from Unpaid. A proposal, not a promise. Confirmed with the village's operations role.");
+  });
+
+  it("an hours chip writes the role's time, which the load check can read", async () => {
+    draw({ roles: [{ roleId: "r3" }] }, "terms");
+    fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.hoursChoice(5) }));
+    await waitFor(() => expect(lastPut()?.roles?.[0]?.words.timeCommitment).toBe("5 hours a week"));
+    expect(screen.getByText(/Gate keeper: about 5 hours a week/)).toBeTruthy();
   });
 
   it("a review date autosaves with its role", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "terms");
-    const reviews = (await screen.findByText(RP_WORDS.reviewDates)).closest("fieldset") as HTMLElement;
+    const reviews = (await screen.findByText(RP_WORDS.reviewDates)).closest("section") as HTMLElement;
     fireEvent.change(within(reviews).getByLabelText("Kitchen keeper"), { target: { value: "2027-02-08" } });
+    expect(within(reviews).getByText("8 February 2027")).toBeTruthy();
     await waitFor(() => expect(lastPut()).toEqual({ roles: [{ roleId: "r1", words: {}, reviewOn: "2027-02-08" }] }));
   });
 
@@ -226,5 +267,15 @@ describe("step 4, terms and review dates", () => {
     expect(await screen.findByText(RP_WORDS.seasonLede)).toBeTruthy();
     expect(screen.getByText("Step 3 of 6")).toBeTruthy();
     expect(window.location.search).toBe("?step=season");
+  });
+
+  it("stays on the step when the save does not land", async () => {
+    draw({ roles: [{ roleId: "r1" }] }, "terms", {}, { failPut: true });
+    const reviews = (await screen.findByText(RP_WORDS.reviewDates)).closest("section") as HTMLElement;
+    fireEvent.change(within(reviews).getByLabelText("Kitchen keeper"), { target: { value: "2027-02-08" } });
+    expect(await screen.findByText(RP_WORDS.notSaved)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: RP_WORDS.back }));
+    expect(screen.getByText(RP_WORDS.termsLede)).toBeTruthy();
+    expect(screen.queryByText(RP_WORDS.seasonLede)).toBeNull();
   });
 });

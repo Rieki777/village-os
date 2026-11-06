@@ -1,7 +1,7 @@
-﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+﻿import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 // Nineteen icons left this list when navGroups and CONTENT_SECTIONS moved to
 // client/src/components/admin/: they were the nav's icons, not this file's.
-import { Lock, Inbox, Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, LogOut, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { linesToList, listToLines } from "@/lib/questBoard";
@@ -37,6 +37,18 @@ import { currencySymbol, figureWithCurrency } from "@shared/money";
 import { holdCancelled, swipeIntent } from "@/lib/gestures";
 import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
+import AdminHeader from "@/components/admin/AdminHeader";
+import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
+import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
+import { tabFromSearch } from "@/components/admin/adminAreas";
+import HealthStrip from "@/components/admin/HealthStrip";
+import AdminHelp from "@/components/admin/AdminHelp";
+import UndoBar from "@/components/admin/UndoBar";
+import { isSnoozed } from "@/components/admin/adminSnooze";
+import { limitNav, simpleNav } from "@/components/admin/adminFeel";
+import { TourCard } from "@/components/admin/AdminFeel";
+
+const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
 import { TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
@@ -48,7 +60,13 @@ import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
-import { FORM_TYPES, putSubmissionStatus } from "@/components/admin/submissionStatus";
+import AdminMobileNav from "@/components/admin/AdminMobileNav";
+import AdminQueueState from "@/components/admin/AdminQueueState";
+import { loadSubmissionRows } from "@/components/admin/adminQueueState";
+import { putSubmissionStatus } from "@/components/admin/submissionStatus";
+import SubmissionHandling from "@/components/admin/SubmissionHandling";
+import SubmissionDesk, { Pick } from "@/components/admin/SubmissionDesk";
+import { useSubmissionFilter } from "@/components/admin/savedViews";
 import OpenProposalsPanel from "@/components/admin/OpenProposalsPanel";
 import ProposalAcceptCash from "@/components/admin/ProposalAcceptCash";
 import LandTab from "@/components/admin/LandTab";
@@ -450,11 +468,9 @@ function MessageReportsTab({ password }: { password: string }) {
  * exists. Collapsed it is a 56px strip of icons that still navigate in one
  * tap, so narrowing costs nothing.
  *
- * Expanded, the two sizes behave differently on purpose. On a wide screen it
- * sits in the layout and pushes the content across. On a phone there is no
- * room to push anything, so it floats over the content with a backdrop and
- * closes itself the moment you choose something — the pattern every mobile
- * drawer uses, because the alternative is squeezing the page to nothing.
+ * Expanded, it sits in the layout and pushes the content across. Below the
+ * laptop width this rail is hidden: the phone uses the bottom sheet, and a
+ * backdrop here would cover that page with nothing behind it to open.
  */
 function AdminNav({
   groups, activeTab, onSelect, open, setOpen,
@@ -577,7 +593,7 @@ function AdminNav({
       {hint && (
         <button
           onClick={dismissHint}
-          className="fixed z-50 left-16 bottom-6 max-w-[15rem] rounded-xl bg-gray-900 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-xl"
+          className="fixed z-50 left-16 bottom-6 hidden max-w-[15rem] rounded-xl bg-gray-900 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-xl lg:block"
         >
           Hold an icon to see its name, or swipe right to slide the whole menu
           out.
@@ -595,18 +611,11 @@ function AdminNav({
           {tip.label}
         </div>
       )}
-      {open && (
-        <button
-          aria-label="Close menu"
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
-        />
-      )}
       <nav
         onTouchStart={swipeStart}
         onTouchEnd={swipeEnd}
         className={`${open ? "fixed z-40 top-0 bottom-0 left-0 w-64 shadow-2xl lg:static lg:shadow-none lg:w-56" : "w-14"} ` +
-          "min-h-[calc(100vh-60px)] bg-white border-r border-gray-200 py-3 flex-shrink-0 overflow-y-auto transition-[width] duration-150"}
+          "max-lg:hidden min-h-[calc(100vh-60px)] bg-white border-r border-gray-200 py-3 flex-shrink-0 overflow-y-auto transition-[width] duration-150"}
       >
         <button
           onClick={() => {
@@ -712,95 +721,46 @@ function prettyType(t: string) {
 
 export function SubmissionsTab({ password }: { password: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [filter, setFilter] = useState<string>("all");
+  const [filter, setFilter] = useSubmissionFilter();
   const [loading, setLoading] = useState(true);
+  const [problem, setProblem] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [snoozeTick, setSnoozeTick] = useState(0);
+  useEffect(() => {
+    const on = () => setSnoozeTick((n) => n + 1);
+    window.addEventListener("admin:snooze", on);
+    return () => window.removeEventListener("admin:snooze", on);
+  }, []);
+  const visible = submissions.filter((s) => snoozeTick >= 0 && !isSnoozed(s.id));
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const url = filter === "all"
-        ? `${API_BASE}/admin/submissions`
-        : `${API_BASE}/admin/submissions?type=${filter}`;
-      const res = await fetch(url, { headers: authHeaders(password) });
-      const data = await res.json();
-      setSubmissions(Array.isArray(data) ? data : []);
-    } catch {
-      setSubmissions([]);
-    }
+    const result = await loadSubmissionRows(password, filter);
+    setSubmissions(result.rows);
+    setProblem(result.problem);
     setLoading(false);
   }, [password, filter]);
 
   useEffect(() => { load(); }, [load]);
 
-  const deleteSubmission = async (id: string) => {
-    if (!confirm("Delete this submission?")) return;
-    // The reload was standing in for an answer: a refused delete redrew the
-    // same row and said nothing, so it read as a click that missed.
-    try {
-      const res = await fetch(`${API_BASE}/admin/submissions/${id}`, { method: "DELETE", headers: authHeaders(password) });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        toast.error(refusal(body, `The server refused that (${res.status}). The submission is still here.`));
-        return;
-      }
-    } catch {
-      toast.error("That did not reach the server. The submission is still here.");
-      return;
-    }
-    load();
-  };
-
   // Moved to submissionStatus.ts, so the proposal cash control shares its sentences (0285).
   const setStatus = async (id: string, status: string, type = "") => { if (await putSubmissionStatus(password, id, status, type)) load(); };
 
   return (
-    <div>
-      {/* flex-wrap and gap, because this row does not fit a phone: the heading
-          plus a 171px type filter plus the refresh button need about 657px, and
-          justify-between on a non-wrapping flex pushed the overflow onto the
-          document rather than onto this row. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Form Submissions</h2>
-        {/* The row above wraps; this group used to not, and the filter sizes itself to its longest
-            option, so at 320px it pushed the button 19px off the edge. It now takes the wrapped line,
-            the filter shrinks into it, and the button never does. */}
-        <div className="flex items-center gap-3 w-full min-w-0 sm:w-auto">
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            aria-label="Form type"
-            className="min-w-0 flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-          >
-            <option value="all">All types</option>
-            {FORM_TYPES.map((t) => (
-              <option key={t} value={t}>{prettyType(t)}</option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={load}
-            aria-label="Look again for new submissions"
-            title="Look again"
-            className="shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
+    <SubmissionDesk password={password} filter={filter} onFilter={setFilter} rows={visible} onChanged={load}>
       <OpenProposalsPanel password={password} />
       {loading ? (
         <div className="text-center py-12 text-gray-400">Loading...</div>
-      ) : submissions.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Inbox className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>No submissions yet</p>
-        </div>
+      ) : problem ? (
+        <AdminQueueState kind="error" message={problem} onRetry={load} />
+      ) : visible.length === 0 ? (
+        <AdminQueueState kind="empty" />
       ) : (
         <div className="space-y-3">
-          {submissions.map((s) => (
-            <div key={s.id} className="border border-gray-200 rounded-xl overflow-hidden">
+          {visible.map((s) => (
+            <div key={s.id} className="flex items-start border border-gray-200 rounded-xl overflow-hidden">
+              <Pick id={s.id} />
+              <div className="min-w-0 flex-1">
               <button
                 onClick={() => setExpanded(expanded === s.id ? null : s.id)}
                 className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors text-left"
@@ -823,15 +783,10 @@ export function SubmissionsTab({ password }: { password: string }) {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteSubmission(s.id); }}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
                   {expanded === s.id ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                 </div>
               </button>
+              <SubmissionHandling password={password} submission={s} onChanged={load} />
 
               {expanded === s.id && (
                 <div className="px-5 py-4 border-t border-gray-100 bg-gray-50">
@@ -881,11 +836,12 @@ export function SubmissionsTab({ password }: { password: string }) {
                   </table>
                 </div>
               )}
+              </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </SubmissionDesk>
   );
 }
 
@@ -957,7 +913,7 @@ export function IntegrationsTab({ password }: { password: string }) {
       </div>
       <SecretsKeyBanner status={data?.villageSecretsKey} />
       {loading && !data ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
-        <div className="space-y-5 max-w-2xl">
+        <div className="w-full space-y-5">
           {/* The one value that flows the OTHER way: what to paste into Stripe. */}
           <div className="bg-teal-deep/5 border border-teal-deep/20 rounded-xl p-4">
             <p className="text-sm font-medium text-gray-900 mb-1">Your Stripe webhook URL</p>
@@ -988,7 +944,7 @@ export function IntegrationsTab({ password }: { password: string }) {
           {CARDS.map((c) => {
             const s = c.key ? statusOf(c.key) : null;
             return (
-              <div key={c.key ?? `module:${c.module}`} className="bg-white border border-gray-100 rounded-xl p-5">
+              <div id={c.module === "saberra" ? "integration-sera" : c.module === "events" ? "integration-calendar" : c.key === "resend_api_key" ? "integration-email" : c.key === "stripe_secret_key" ? "integration-payments" : undefined} key={c.key ?? `module:${c.module}`} className="bg-white border border-gray-100 rounded-xl p-5">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
                   <p className="font-semibold text-gray-900">
                     {c.title}
@@ -2390,11 +2346,11 @@ function MilestonesAdminTab({ password }: { password: string }) {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <select
                         value={m.status}
                         onChange={(e) => update(m.id, { status: e.target.value as Milestone["status"] })}
-                        className="px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                        className="min-h-11 w-full rounded border border-gray-200 bg-white px-2 py-1 text-sm"
                       >
                         <option value="complete">Complete</option>
                         <option value="in-progress">In Progress</option>
@@ -2407,7 +2363,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
                         onChange={(e) => setItems((prev) => prev.map((x) => x.id === m.id ? { ...x, completedDate: e.target.value || null } : x))}
                         onBlur={(e) => update(m.id, { completedDate: e.target.value || null })}
                         placeholder="YYYY-MM (if complete)"
-                        className="px-2 py-1 text-xs border border-gray-200 rounded"
+                        className="min-h-11 w-full rounded border border-gray-200 px-2 py-1 text-sm"
                       />
                       <input
                         type="text"
@@ -2415,7 +2371,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
                         onChange={(e) => setItems((prev) => prev.map((x) => x.id === m.id ? { ...x, phase: e.target.value } : x))}
                         onBlur={(e) => update(m.id, { phase: e.target.value })}
                         placeholder="Phase"
-                        className="px-2 py-1 text-xs border border-gray-200 rounded"
+                        className="min-h-11 w-full rounded border border-gray-200 px-2 py-1 text-sm"
                       />
                     </div>
                     <input
@@ -2424,7 +2380,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
                       onChange={(e) => setItems((prev) => prev.map((x) => x.id === m.id ? { ...x, updateNote: e.target.value } : x))}
                       onBlur={(e) => update(m.id, { updateNote: e.target.value })}
                       placeholder="Status note (optional, shown on homepage)"
-                      className="w-full px-2 py-1 text-xs border border-gray-200 rounded"
+                      className="min-h-11 w-full rounded border border-gray-200 px-2 py-1 text-sm"
                     />
                     {(() => {
                       const d = daysSinceUpdate(m);
@@ -6701,7 +6657,7 @@ function LedgerTab({ password }: { password: string }) {
 
   return (
     <div>
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Ledger</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -6710,7 +6666,7 @@ function LedgerTab({ password }: { password: string }) {
             have issued, which is why everything still sums to zero.
           </p>
         </div>
-        <button onClick={load} className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-50">
+        <button onClick={load} className="admin-nowrap inline-flex min-h-11 shrink-0 items-center rounded-lg border border-gray-200 px-3 text-sm text-gray-700 hover:bg-gray-50">
           Re-check
         </button>
       </div>
@@ -7839,16 +7795,18 @@ function LaunchBanner({ password }: { password: string }) {
   if (!status || status.launchedAt) return null;
   const total = (status.items ?? []).length;
   const done = (status.items ?? []).filter((i: any) => i.state === "ok").length;
+  const short = status.blockingOpen > 0 ? `Launch ${done}/${total} · ${status.blockingOpen} open` : `Launch ${done}/${total}`;
+  const full = `Journey to Launch: ${done} of ${total} done${status.blockingOpen > 0 ? ` · ${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open` : " · ready when a founder says so"}`;
   return (
     <a
       href="/journey-to-launch"
-      className="block bg-amber-400 text-teal-950 px-6 py-2.5 text-sm font-medium hover:bg-amber-300 transition-colors"
+      className="flex items-center gap-2 bg-amber-400 px-3 py-2 text-sm font-medium text-teal-950 hover:bg-amber-300 sm:px-6"
     >
-      <span className="font-semibold">🌳 Journey to Launch:</span>{" "}
-      {done} of {total} done
-      {status.blockingOpen > 0 && ` · ${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open`}
-      {status.blockingOpen === 0 && " · ready when a founder says so"}
-      <span className="float-right">→</span>
+      <span className="min-w-0 flex-1 truncate">
+        <span className="sm:hidden">{short}</span>
+        <span className="hidden sm:inline">{full}</span>
+      </span>
+      <span className="shrink-0" aria-hidden="true">→</span>
     </a>
   );
 }
@@ -7857,6 +7815,7 @@ function LaunchBanner({ password }: { password: string }) {
 
 export default function Admin() {
   const [password, setPassword] = useState<string | null>(null);
+  const { user } = useAuth();
   // Live config, same hook the rest of the app already reads its identity
   // from. The panel header used to hardcode "Amora Admin" over
   // "game.amora.cr" — the first screen a founder on a fresh instance opens,
@@ -7871,9 +7830,7 @@ export default function Admin() {
   // a specific admin screen; "go to Integrations" had no address. Same
   // `activeTab`/`setActiveTab` contract, so the ~35 call sites are untouched,
   // and back/forward now walk tab history the way a browser should.
-  const [activeTab, setActiveTabState] = useState<string>(
-    () => new URLSearchParams(window.location.search).get("tab") ?? "submissions",
-  );
+  const [activeTab, setActiveTabState] = useState<string>(() => tabFromSearch(window.location.search));
   const setActiveTab = useCallback((tab: string) => {
     setActiveTabState(tab);
     const p = new URLSearchParams(window.location.search);
@@ -7881,10 +7838,12 @@ export default function Admin() {
     window.history.pushState({}, "", `${window.location.pathname}?${p.toString()}`);
     // Choosing from low in the rail leaves you scrolled past the top of the
     // panel you just opened; every tab change starts at its own beginning.
+    const main = document.querySelector("main");
+    if (main) main.style.paddingBottom = "";
     window.scrollTo({ top: 0 });
   }, []);
   useEffect(() => {
-    const onPop = () => setActiveTabState(new URLSearchParams(window.location.search).get("tab") ?? "submissions");
+    const onPop = () => setActiveTabState(tabFromSearch(window.location.search));
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -7910,6 +7869,8 @@ export default function Admin() {
     return window.innerWidth >= 1024;
   });
   useEffect(() => { writeStored("local", "admin.navOpen", navOpen ? "1" : "0"); }, [navOpen]);
+  const [night, setNight] = useState<boolean>(() => readAdminNight());
+  useEffect(() => { writeAdminNight(night); }, [night]);
 
   useEffect(() => {
     if (!password) return;
@@ -7924,7 +7885,8 @@ export default function Admin() {
 
   // The retired Module Library tab, and every old link to it, land on the
   // library itself. Before the gate: the library is public.
-  if (activeTab === "modules") {
+  const shownGroups = limitNav(filterNavByModules(navGroups(setupComplete), moduleLifecycles), simpleNav(user?.role));
+  if (activeTab === "modules" && new URLSearchParams(window.location.search).get("module") !== "saberra") {
     return <Redirect to={legacyModulesTabTarget(window.location.search) ?? "/modules"} replace />;
   }
   if (!password) {
@@ -7932,49 +7894,49 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={adminRootClass(night)}>
       {/* S64: the journey banner. Every admin sees the road to launch at the
           top of every admin visit until a founder marks the village launched —
           then it retires itself. */}
       <LaunchBanner password={password} />
-      <header className="bg-teal-deep text-white px-6 py-4 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-            <Lock className="w-4 h-4" />
-          </div>
-          <div>
-            <h1 className="font-semibold text-lg leading-tight">{villageName ? `${villageName} Admin` : "Admin"}</h1>
-            {siteUrl && (
-              <p className="text-xs text-white/60">{siteUrl.replace(/^https?:\/\//, "")}</p>
-            )}
-          </div>
-        </div>
-        <button
-          onClick={() => setPassword(null)}
-          className="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Sign Out
-        </button>
-      </header>
+      <AdminHeader
+        villageName={villageName}
+        siteUrl={siteUrl}
+        night={night}
+        onNight={setNight}
+        onSignOut={() => setPassword(null)}
+        extra={<AdminSeraChip password={password} />}
+      />
 
-      <div className="flex">
+      <div className="flex w-full">
         <AdminNav
-          groups={filterNavByModules(navGroups(setupComplete), moduleLifecycles)}
+          groups={shownGroups}
           activeTab={activeTab}
           onSelect={setActiveTab}
           open={navOpen}
           setOpen={setNavOpen}
+        />
+        <UndoBar />
+        <AdminMobileNav
+          groups={shownGroups}
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+          onSignOut={() => setPassword(null)}
         />
 
         {/* min-w-0 lets a flex child actually shrink — without it a wide
             table inside sets the floor and the page scrolls sideways. The
             padding steps down on small screens, where 32px a side was a
             tenth of the width. */}
-        <main className="admin-fit flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-4xl">
+        <main className="admin-fit min-w-0 w-full max-w-5xl flex-1 p-4 sm:p-6 lg:p-8">
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
+          <TourCard wait={activeTab === "home"} />
+          <HealthStrip password={password} full={activeTab === "home" || activeTab === "integrations"} onOpen={setActiveTab} />
+          <AdminHelp tab={activeTab} />
+          {activeTab === "home" && <Suspense fallback={null}><HomeBase password={password} onOpenTab={setActiveTab} groups={shownGroups} role={user?.role} /></Suspense>}
+          {activeTab === "modules" && <SeraAdminHome />}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
           {/* The two facts only this village can state. VillageAnswers.tsx says why it outlives the checklist. */}

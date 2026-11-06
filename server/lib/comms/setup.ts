@@ -37,7 +37,7 @@ import {
   type SetupItem,
   type SetupKey,
 } from "../../../shared/comms/settings";
-import { GAME_CONFIG } from "../../../shared/gameConfig";
+import { villagePathChoices } from "../villagePaths";
 import { readConfigDocument } from "../../repos/appConfigDocs";
 import { lastDeliveryReportAt, latestTestEmail, type TestEmailRow } from "../../repos/commsOverview";
 import { secretStatus as storedSecretStatus } from "../secrets";
@@ -457,7 +457,7 @@ export async function gatherSetupFacts(deps: GatherDeps): Promise<SetupFacts> {
     webhookSecret: status("resend_webhook_secret"),
     sender: effectiveSender(emailConfig?.sender, env.EMAIL_FROM),
     inboxes: { investor: inbox("investor"), steward: inbox("steward"), resident: inbox("resident"), prosperity: inbox("prosperity") },
-    paths: GAME_CONFIG.paths.map((p) => ({ id: p.id, label: p.label })),
+    paths: villagePathChoices(),
     testEmail,
     lastReportAt,
     holders: null,

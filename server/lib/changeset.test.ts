@@ -104,10 +104,15 @@ describe.skipIf(!configured)("phase one refuses before anything is written", () 
     expect(ledgerRows).toEqual([]);
   });
 
-  it("refuses a dial the village does not govern", async () => {
+  it("refuses the weighing of votes as a plain dial: it lands only as a mode switch", async () => {
     const out = await validateElements(deps(), [{ kind: "dial", key: "governance.weight_mode", to: "token" }]);
     expect(out.ok).toBe(false);
-    expect(out.ok === false && out.problem).toContain("community-governable");
+    expect(out.ok === false && out.problem).toContain("mode switch");
+  });
+
+  it("lands a founder-held dial: who adopts it is decided at the doors, before the executor", async () => {
+    const out = await validateElements(deps(), [{ kind: "dial", key: "abuse.register_per_ip_hourly", to: "50" }]);
+    expect(out.ok, JSON.stringify(out)).toBe(true);
   });
 
   it("refuses to switch the part of the Game that holds the vote", async () => {

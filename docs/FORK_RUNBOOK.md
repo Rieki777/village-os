@@ -156,10 +156,19 @@ above the size of a gathering, not to the size of one person's usage.
   value) or clears; the Journey to Launch row `starter-quests` waits on that. Edit THAT section to
   change a fork's starters. `server/seeds/quests-seed.json` is frozen, seeds nothing, and is read
   only by the two repair passes below; a test pins its hash.
+- `server/seeds/village-paths-before-neutral.json` — every path and stage word as it read before
+  the ladder's default sentences went neutral (2026-11-01, readiness R061). Read once at boot by
+  the `keep-path-words-2026-11-01` runOnce (`server/lib/pathWordsKept.ts`), only for a village
+  that already holds its own `page-*` words or path and stage words, and written into its
+  `village-paths` document under what it saved; a new village never sees it.
 - `server/seeds/page-governance-before-neutral.json` — How We Govern as it read before its
   defaults went neutral (2026-11-01). Read once at boot by the `keep-governance-words-2026-11-01`
   runOnce (`server/lib/governanceWordsKept.ts`), only for a village that already holds its own
   `page-*` words; a new village never sees it.
+- `server/seeds/page-circles-before-neutral.json` — Circles as it read before its defaults went
+  neutral (2026-11-01). Read once at boot by the `keep-circles-words-2026-11-01` runOnce
+  (`server/lib/circlesWordsKept.ts`, on the rule in `server/lib/pageWordsKept.ts`), only for a
+  village that already holds its own `page-*` words; a new village never sees it.
 - `server/seeds/examples-seed.json` — STANDING EXAMPLES: platform-authored
   worked content revealed when a module is first enabled, so a founder meets a
   working module instead of "No items yet." Inert (every mutation refused) and
@@ -2043,3 +2052,39 @@ it, Admin, What's Failing names what is wrong with it in the same words.
 ## The setup game's two root slots (2026-10-13, guild rulings lane)
 
 Admin, Integrations has two new cards, `railway_project_token` (one Railway project and environment) and `dns_zone_token` (one DNS zone), the setup game's master roots from `shared/guilds.ts`. They are store-only: no environment variable stands in for either, so do not set one in Railway. Both are optional, and every variable and record they would plant can still be planted by hand.
+
+## The end-of-moon review's payers (0313, module `moon-review`, 2026-11-03)
+
+- The `payers` document in `app_config` (key `payers`, shape `PayersDoc` in `shared/moonRecap.ts`) names each entity a member's invoice is billed to: legal name, address, tax number, country, currencies, where invoices go (`invoiceTo`) and who is copied (`invoiceCc`, up to five email addresses), the routes it pays, an invoicing switch (off by default), its authority as a note, and a queue note. No seed writes it; a `cash.pay` holder sets it through `PUT /api/moon-review/payers`, and every change writes a `payers_changed` event with old and new values. A second document, `moon-review-settings` (shape `MoonReviewSettings`), holds the host country, its VAT rate, rate source and currency, the tax forms on file, the hold rules and the pilot acknowledgement with its version; it also ships empty, is set through `PUT /api/moon-review/settings`, and writes a `settings_changed` event. Until a payer, the host country and the acknowledgement are set, invoices are refused with "Name who you pay first" and recaps still send. The send-by day is the circle Monday; a third document, `moon_rhythm` (shape `RhythmDoc` in `shared/moonRhythm.ts`), moves one cycle's walkthrough or circle day (`{cycleId: {walkthrough, circle}}`), sets the reminder hour (default 9) and holds `guideUrl`, the village's own End of Moon guide (https only); it also ships empty, and with no guide set no guide link shows. Entity names live there and never in code. Before turning the module on, seat someone in a power group carrying `moon.approve`, and clear `org_roles.cash_minor` on any role paid through this flow so the hourly settlement does not owe it too. On the first boot of this release, `moon.approve_alone` is added once to the roles `founders-circle` and `steward-circle`, and `moon.approve_own` to the role `treasury`, where those roles exist (`runOnce` id `moon-review-keys-2026-11-03`); an admin confirms them under the power groups afterwards, and may take either off.
+
+## Task boards start on (`memberTasks.listDefault`, 2026-11-03, no migration)
+
+- The game variable `memberTasks.listDefault` (boolean, default `true`, "Every member has a task board unless a steward turns one off") decides a member's task board when they have no `member_task_access` row. A steward's explicit off still keeps a board off. No rows are written, so a village that sets the variable to `false` gets exactly the earlier behaviour back, where a board stays off until a steward turns it on.
+
+## The end-of-moon review's three village documents, and where they are edited (decision 22, 2026-11-03)
+
+- `payers`, `moon-review-settings` and `moon_rhythm` in `app_config` all ship empty and are edited on the admin Cash payouts desk, under "End-of-moon review settings", by a `cash.pay` holder (`GET`/`PUT /api/moon-review/payers`, `/settings` and `/rhythm`, in `server/routes/moonReviewSettings.ts`, behind the `moon-review` module). Each save is checked by the contract's parser, and every change writes a `moon_review_events` row (`payers_changed`, `settings_changed`, `rhythm_changed`) with the old and new value of each field that moved. A village fills in its payers, its host country and pilot acknowledgement, and, if it wants them, its moved moon days and guide link; nothing village-specific is set in code or in the environment.
+
+## The village connector (`POST /api/agent/v1/mcp`, 2026-11-03, no migration)
+
+- A remote MCP server on the existing `vat_` agent tokens. A member mints a token under Your agent with `moon.read` (their moon, roles, season and task board) and, if they want, `tasks.write` (their own board pressed Done, Let go or Undo, each write asked first and confirmed), then adds `<origin>/api/agent/v1/mcp` to their client with `Authorization: Bearer <token>`. Every tool runs the member's own route over the loopback at `127.0.0.1:$PORT`, so nothing new needs provisioning, and the connector's name is the village's own name setting. OAuth sign-in for Claude's custom connectors comes with the next piece.
+
+## The Operations agent account (`users.is_agent`, migration 0321, 2026-11-03)
+
+- To give the village an Operations agent: register a member account for it (named so people can tell, such as "Claude (Operations agent)", with its own address on the village's domain), make it an admin, then mark it with `PUT /api/admin/players/<id>/agent {"isAgent": true}`. Only a person may mark an account, and only while it holds no role: an agent account never holds a role. Signed in as the agent account, mint a token under Your agent with the `admin` scope (only an admin can) and add `<origin>/api/agent/v1/mcp` to Claude with it.
+- What the agent may call is the `agent-admin-paths` document in `app_config`, edited at `PUT /api/admin/agent-admin-paths` by an admin who is a person. It ships holding task-board access, the Sera bridge's view and sync, and the moon rhythm. A path added there is a person's to confirm unless it says `"confirm": "agent"`. Erasure, powers and capabilities, money and the moon review's approvals, secrets, accounts and the agent accounts themselves are refused whatever the list says (`shared/agentAdmin.ts`).
+- Every call the agent makes is in `GET /api/admin/agent-actions`. Revoke its token from its Your agent panel or by any admin; a password change ends it too.
+
+## Sera's agent account (`sera.undoable`, 2026-11-03, no new migration)
+
+- To let Sera's agents act in the village: register a member account for it (such as "Sera (Saberra agent)"), never make it an admin, and mark it with `PUT /api/admin/players/<id>/agent {"isAgent": true}`. Signed in as that account, mint a token with the `sera.undoable` scope (only a non-admin agent account can) and hand it to the Sera side; any admin can revoke it. Its tools are a closed list, each undoable for 30 days from the Sera bridge panel: link a member to their Sera person (never over a steward's link), suggest a task on a member's board, switch a member's board on or off. Nothing it does notifies a member.
+
+## The connector's OAuth sign-in (2026-11-03, no new migration)
+
+- Claude's custom connectors sign a member in by OAuth 2.1: `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`, `POST /api/agent/v1/oauth/register`, the consent page at `/oauth/authorize` and `POST /api/agent/v1/oauth/token`. Every address in the metadata is built from `FRONTEND_URL` when it is set (otherwise from the request's host), so a village behind a proxy sets `FRONTEND_URL` to its public origin. Nothing else to provision: clients and codes live in 0319's tables, and the token is an ordinary agent token.
+- Also through `sera.undoable` (2026-11-04): draft an agenda item in a circle's library (a person brings it to the room) and suggest an item on a member's Draft recap, each undoable for 30 days while nobody has touched it. Once a day the `sera-agent-digest` job tells every admin who is a person what Sera's agent did; the members it acted on are not told, and agent accounts are not sent it.
+- The connector's moon tools (`moon.write`: import a moon pack, change an item, set next moon's goals; `moon.review`: the review queue and role signals) call the moon review's own routes and answer "not open" while the module is off. Nothing to provision.
+
+## The End of moon meeting template (module `moon-review`, 2026-11-03, no migration)
+
+- A fourth meeting template, End of moon (category Moon rhythm, `seed_key` `end-of-moon`, flow in `MOON_TEMPLATE` in `shared/sessionTemplates.ts`), is written into `live_session_templates` the first time anyone opens the templates (`GET /api/session-templates`) while the `moon-review` module is on (any lifecycle but off). While the module is off nothing is written, and its three section kinds (Our moons, Moon goals, Sending together) are hidden in the template editor. Once written it is an ordinary row: turning the module off later leaves it, and an edited or archived copy is never written again. No env var and no manual step.

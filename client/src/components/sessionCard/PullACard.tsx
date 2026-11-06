@@ -23,21 +23,22 @@
  * without turning over.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Link } from "wouter";
 import { SYSTEM_LABELS, SIGNS, andList, moonPhaseName, type CardView, type CardsAnswer, type CardSystem } from "@shared/sessionCard";
 import type { SessionView } from "@shared/sessions";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import MoonGlyph from "@/components/calendar/MoonGlyph";
-import { CardRefusal, pullCard, readCards, shareMyLine } from "@/lib/sessionCardApi";
+import { CardRefusal, pullCard, shareMyLine } from "@/lib/sessionCardApi";
 import { BTN_QUIET, BTN_SECONDARY, EYEBROW, H3, HINT, SOFT } from "@/components/sessions/roomUi";
 import type { RoomActions } from "@/components/sessions/useSessionRoom";
 import { useGuideName } from "@/hooks/useGuideName";
 import { fillGuideName } from "@shared/guideName";
+import { CARD_POLL_MS, publishCards, useSharedCards } from "./sharedCards";
 
 /** How often an open card reads the room's cards, so a card pulled on another phone arrives. */
-export const CARD_POLL_MS = 5000;
+export { CARD_POLL_MS };
 
 export const CARD_WORDS = {
   title: "Pull a card",
@@ -59,8 +60,9 @@ export const CARD_WORDS = {
   // {name} is the village's own guide (shared/guideName.ts), filled where the card is drawn.
   maia: "Woven by {name} from today's sky and the lines of the people here.",
   plain: "Read from today's sky and the lines of the people here.",
+  readNext: "This card was read before you joined in. The next card reads you.",
   notRead: {
-    "no-lines": "Find your Gene Keys lines and the next card will read you too.",
+    "no-lines": "Find your Gene Keys, Human Design and astrology, and the next card will read you too.",
     hidden: "Your lines are hidden, so the card welcomes you by name and reads nothing of yours.",
     "no-maia": "Let {name} use your lines and the next card will read you too.",
     "left-out": "You asked to be left out of cards, so the card welcomes you by name.",
@@ -215,7 +217,8 @@ function CardFace({
           </>
         ) : (
           <p className="mt-1.5 text-sm text-muted-foreground">
-            {fillGuideName(answer.notRead ? CARD_WORDS.notRead[answer.notRead] : CARD_WORDS.notRead["no-lines"], guide)}{" "}
+            {/* Read now but not on this card (a yes, or an arrival, after it was pulled): the next one reads them. */}
+            {answer.notRead === null ? CARD_WORDS.readNext : fillGuideName(CARD_WORDS.notRead[answer.notRead], guide)}{" "}
             {answer.notRead && answer.notRead !== "left-out" ? (
               <Link href="/profile/gene-keys" className="text-notice underline underline-offset-2">
                 Your Gene Keys
@@ -275,20 +278,11 @@ export default function PullACard({ view, actions, className = "" }: { view: Ses
     newest.current = top;
   }, []);
 
+  // The room's one card poll, shared with the invitation that follows a member through every stage.
+  const polled = useSharedCards(view.id, live);
   useEffect(() => {
-    if (!live) return;
-    let stop = false;
-    const read = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      readCards(view.id).then((a) => !stop && take(a), () => {});
-    };
-    read();
-    const timer = setInterval(read, CARD_POLL_MS);
-    return () => {
-      stop = true;
-      clearInterval(timer);
-    };
-  }, [live, view.id, take]);
+    if (polled) take(polled);
+  }, [polled, take]);
 
   if (!live) return null;
 
@@ -296,7 +290,9 @@ export default function PullACard({ view, actions, className = "" }: { view: Ses
     setBusy(true);
     setProblem(null);
     try {
-      take(await fn());
+      const a = await fn();
+      take(a);
+      publishCards(view.id, a);
     } catch (e) {
       setProblem(e instanceof CardRefusal ? e.message : "That did not work. Try again.");
     } finally {
@@ -314,7 +310,7 @@ export default function PullACard({ view, actions, className = "" }: { view: Ses
         {CARD_WORDS.title}
       </h3>
       {card && answer ? (
-        <motion.div
+        <m.div
           key={card.id}
           initial={reduced ? false : { rotateY: 90, opacity: 0 }}
           animate={{ rotateY: 0, opacity: 1 }}
@@ -322,7 +318,7 @@ export default function PullACard({ view, actions, className = "" }: { view: Ses
           style={{ transformPerspective: 900 }}
         >
           <CardFace card={card} answer={answer} view={view} actions={actions} busy={busy} onShare={(shared) => act(() => shareMyLine(view.id, card.id, shared))} />
-        </motion.div>
+        </m.div>
       ) : (
         <p className={HINT}>{CARD_WORDS.lede}</p>
       )}

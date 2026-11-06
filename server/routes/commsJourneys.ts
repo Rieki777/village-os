@@ -31,7 +31,7 @@ import type { JourneyDefinition } from "../../shared/comms/contracts";
 import { templateGroups, templateLabel } from "../../shared/comms/defaults/templates";
 import { CONDITIONS_FOR_KIND, CONDITION_LABELS, STOP_LABELS, timingLabel, type StepPatch } from "../../shared/comms/journeySteps";
 import { kindForTemplate, sampleValues } from "../../shared/comms/mergeFields";
-import { GAME_CONFIG } from "../../shared/gameConfig";
+import { villagePathLabel } from "../lib/villagePaths";
 import type { AppDeps } from "../lib/appDeps";
 import { listCalendarItems } from "../lib/calendar";
 import {
@@ -84,8 +84,8 @@ export function journeysTickDeps(deps: Pick<AppDeps, "getPool" | "commsPostOffic
 /** What the screen calls a journey: its Words group's title, a path by its own name. */
 function titleOf(key: string): string {
   const pathId = key.match(/^path\.([a-z0-9-]+)$/)?.[1];
-  const path = pathId ? GAME_CONFIG.paths.find((p) => p.id === pathId) : undefined;
-  if (path) return `${path.label} path`;
+  const label = pathId ? villagePathLabel(pathId) : null;
+  if (label) return `${label} path`;
   return templateGroups(villagePathIds()).find((g) => g.journeyKey === key)?.title ?? key;
 }
 

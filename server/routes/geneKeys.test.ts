@@ -16,7 +16,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { loadModuleSettings, setModuleLifecycle } from "../lib/modules";
-import { assistantNoteFor, forgetMemberGeneKeys, geneKeysForAssistant } from "../lib/geneKeys";
+import { assistantNoteFor, exportMemberGeneKeys, forgetMemberGeneKeys, geneKeysForAssistant } from "../lib/geneKeys";
 import { viewOf } from "../../shared/geneKeys";
 import { evaluateEarnedBadges } from "../lib/badges";
 import { chartAt, zonedToUtc } from "../../shared/geneKeysSky";
@@ -212,6 +212,48 @@ describe.skipIf(!configured)("gene keys against a real schema", () => {
     const [row] = await q("SELECT `profile`, `hd_type`, `chart` FROM `member_gene_keys` WHERE `user_id` = 'm-wren'"); // module-review-ok: fixture SQL against the S5 scratch schema
     expect([row.profile, row.hd_type]).toEqual(["2/5", "Manifestor"]);
     expect(Object.keys(JSON.parse(row.chart)).sort()).toEqual(["design", "personality"]);
+  });
+
+  it("takes the card's own yes in the same save when it is sent, and leaves an earlier choice alone when it is not", async () => {
+    const yes = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", maia: true, cards: true } });
+    expect(yes.status).toBe(200);
+    expect(yes.body.geneKeys.inCards).toBe(true);
+    // Finding them again from the profile sends no card answer: the yes stands.
+    const again = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", maia: true } });
+    expect(again.body.geneKeys.inCards).toBe(true);
+    const no = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", cards: false } });
+    expect(no.body.geneKeys.inCards).toBe(false);
+    expect((await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", cards: "yes" } })).status).toBe(400);
+    // A first save that says nothing about cards is not read on them.
+    await q("DELETE FROM `member_gene_keys`"); // module-review-ok: fixture SQL against the S5 scratch schema
+    const first = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", maia: true } });
+    expect(first.body.geneKeys.inCards).toBe(false);
+  });
+
+  it("keeps a member's own Sun, Moon and rising sign numbers, shows them to them alone, and nothing more", async () => {
+    const saved = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", signs: { sun: 3, moon: 10, rising: null } } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.geneKeys.signs).toEqual({ sun: 3, moon: 10, rising: null });
+    const [row] = await q("SELECT `sun_sign`, `moon_sign`, `rising_sign` FROM `member_gene_keys` WHERE `user_id` = 'm-wren'"); // module-review-ok: fixture SQL against the S5 scratch schema
+    expect([row.sun_sign, row.moon_sign, row.rising_sign]).toEqual([3, 10, null]);
+    // Never on a door that shows lines to anybody else.
+    as("m-kai");
+    const other = await call(handlers, "GET /api/gene-keys/people", { query: { ids: "m-wren" } });
+    expect(JSON.stringify(other.body)).not.toMatch(/signs|sun_sign|moon_sign/);
+    expect(JSON.stringify((await call(handlers, "GET /api/gene-keys/people/:handle", { params: { handle: "wren" } })).body)).not.toMatch(/signs/);
+    as("m-wren");
+    // Export carries them; erasure takes them with the row.
+    const exported = await exportMemberGeneKeys(pool, "m-wren");
+    expect([exported?.sunSign, exported?.moonSign, exported?.risingSign]).toEqual([3, 10, null]);
+    // A new reading with no signs (an older page, or a birth the Moon changed sign in) clears the old ones.
+    const again = await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact" } });
+    expect(again.body.geneKeys.signs).toEqual({ sun: null, moon: null, rising: null });
+    for (const bad of [{ sun: 12 }, { sun: -1 }, { moon: 1.5 }, { rising: "Leo" }, "Leo"]) {
+      expect((await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", signs: bad } })).status, JSON.stringify(bad)).toBe(400);
+    }
+    await call(handlers, "PUT /api/gene-keys/me", { body: { chart: WREN, source: "exact", signs: { sun: 3, moon: 10 } } });
+    expect(await forgetMemberGeneKeys(pool, "m-wren")).toBe(1);
+    expect(await q("SELECT `sun_sign` FROM `member_gene_keys` WHERE `user_id` = 'm-wren'")).toEqual([]); // module-review-ok: fixture SQL against the S5 scratch schema
   });
 
   it("stores nothing a client sends beyond the 26 activations", async () => {

@@ -168,6 +168,8 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
+import { forgetMemberTasks } from "../repos/memberTasks";
+import { forgetMoonReviews } from "../repos/moonRecaps";
 import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
@@ -1562,6 +1564,20 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * Your list (0310): the member's own tasks, their events and their
+       * switch are deleted, tombstones and private detail included. Where they
+       * acted on somebody else's list, the id that named them is cleared.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the list
+       * doors write for anybody signed in until the sessions die.
+       */
+      name: "member-tasks-after-tombstone",
+      run: async () => {
+        await forgetMemberTasks(pool, target.id);
+      },
+    },
+    {
+      /*
        * Quest crews (0067): they leave every crew they are in, the way
        * `crewsRepo.leave` lets a member walk out, and a crew left with nobody
        * in it disbands. Kept, a full crew refused the next person in their
@@ -1628,6 +1644,23 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "member-asks-after-tombstone",
       run: async () => {
         await forgetAsksForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The end-of-moon review (0313): their own words go, the item text, the
+       * proof links, the role audit, the From block, the attestation and
+       * every note, and the pay route goes whole. Amounts, dates, numbers,
+       * bill refs and events stay, as `cash_owed` keeps them
+       * (forgetMoonReviews in server/repos/moonRecaps.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the recap
+       * doors write for anybody signed in until the sessions die. Keyed on
+       * the member, so a resume or a second run changes nothing more.
+       */
+      name: "moon-reviews-after-tombstone",
+      run: async () => {
+        await forgetMoonReviews(pool, target.id);
       },
     },
     {
@@ -2195,6 +2228,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "role-holdings-after-tombstone",
   "sessions-after-tombstone",
   "gene-keys-after-tombstone",
+  "member-tasks-after-tombstone",
   "quest-crews-after-tombstone",
   "quest-claims-after-tombstone",
   "photo-report-reasons-after-tombstone",
@@ -2202,6 +2236,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "reward-moments-after-tombstone",
   "companions-after-tombstone",
   "member-asks-after-tombstone",
+  "moon-reviews-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 

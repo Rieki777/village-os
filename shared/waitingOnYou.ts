@@ -30,6 +30,12 @@
  *                 window closed, and the row is gone. The board draws them
  *                 under their own heading, "Asked to consent" (PR D), each
  *                 linking the application, where Consent and Object live.
+ *   openProposals role proposals from somebody with no account yet
+ *                 (shared/openProposalDecide.ts), confirmed and not decided:
+ *                 `consent` where the reader's circle asks them and they have
+ *                 not answered inside the 2 business days, `adopt` where the
+ *                 reader may adopt or decline it. Each links the proposal's
+ *                 own page, `/open-proposals/:id`.
  *
  * An application leaves the group the moment it leaves `awaiting-holder`:
  * adopted, put to the village or withdrawn. The read filters on the status,
@@ -104,6 +110,27 @@ export interface WaitingConsent {
   closesOn: string;
 }
 
+/**
+ * One role proposal from somebody with no account yet, waiting on the reader
+ * (open proposals part B). Names the proposer by first name only, never their
+ * address.
+ */
+export interface WaitingOpenProposal {
+  id: string;
+  /** `/open-proposals/:id`, where it is read, answered and decided. */
+  href: string;
+  roles: string[];
+  /** The circles those roles sit in, each named once. */
+  circles: string[];
+  proposer: string;
+  /** `consent`: the reader's circle asks them. `adopt`: the reader may adopt or decline it. */
+  ask: "consent" | "adopt";
+  /** The last day of the circle's 2 business days, for a consent row. */
+  closesOn: string | null;
+  /** The day its address confirmed it, a civil date in the village's zone. */
+  confirmedOn: string;
+}
+
 export interface WaitingPayload {
   applications: WaitingApplication[];
   drafts: WaitingDraft[];
@@ -113,6 +140,8 @@ export interface WaitingPayload {
   raisedWithYou?: HeldTension[];
   /** Absent from a server before role proposals PR B: read as none. */
   toConsent?: WaitingConsent[];
+  /** Absent from a server before open proposals part B: read as none. */
+  openProposals?: WaitingOpenProposal[];
 }
 
 /** One gentle reminder, this long after an application was written, to a holder it still waits on. */
@@ -165,6 +194,10 @@ export const WAITING_COPY = {
   consentHeading: "Asked to consent",
   consentIn: (circle: string): string => (circle.trim() ? `In ${circle.trim()}` : ""),
   consentCloses: (day: string): string => `Closes on ${civilDayWords(day)}`,
+  /** A proposal from somebody with no account yet (open proposals part B). */
+  openLine: (proposer: string, roles: readonly string[]): string => `${proposer || "Somebody"} proposes to hold ${seatList(roles)} next season`,
+  openFrom: "From outside the village",
+  openAction: "Adopt it, or decline it",
 } as const;
 
 /** What a draft would create, read off its changes. */
@@ -210,5 +243,18 @@ export function readWaiting(v: unknown): WaitingPayload | null {
     (c): c is WaitingConsent =>
       !!c && typeof c.proposalId === "string" && typeof c.applicationId === "string" && typeof c.href === "string" && isStrings(c.roles) && typeof c.closesOn === "string",
   );
-  return { applications, drafts, toAccept, raisedWithYou, toConsent };
+  // A server from before open proposals part B sends none: the group reads as empty.
+  const openProposals = (Array.isArray(p.openProposals) ? (p.openProposals as any[]) : []).filter(
+    (o): o is WaitingOpenProposal =>
+      !!o &&
+      typeof o.id === "string" &&
+      typeof o.href === "string" &&
+      isStrings(o.roles) &&
+      isStrings(o.circles) &&
+      typeof o.proposer === "string" &&
+      (o.ask === "consent" || o.ask === "adopt") &&
+      (o.closesOn === null || typeof o.closesOn === "string") &&
+      typeof o.confirmedOn === "string",
+  );
+  return { applications, drafts, toAccept, raisedWithYou, toConsent, openProposals };
 }

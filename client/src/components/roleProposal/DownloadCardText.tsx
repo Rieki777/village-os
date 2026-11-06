@@ -8,9 +8,11 @@ import { useState } from "react";
 import { Download } from "lucide-react";
 import { ROLE_CARD_FILENAME_CLIENT, fetchCardText, saveTextFile } from "./roleCardApi";
 import { RC_WORDS } from "./roleCardWords";
-import { QUIET } from "./parts";
+import { FOCUS } from "./parts";
 
-export default function DownloadCardText({ url, className = QUIET }: { url: string; className?: string }) {
+const DOWNLOAD = `inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-dash-gold-lit underline underline-offset-2 hover:bg-muted ${FOCUS}`;
+
+export default function DownloadCardText({ url, className = DOWNLOAD }: { url: string; className?: string }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const go = async () => {

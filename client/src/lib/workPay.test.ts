@@ -14,11 +14,17 @@ const RATES = { base: "EUR", asOf: "2026-10-21", rates: { CRC: 500, USD: 1.1, CH
 const pay = (over: Partial<WorkPay> = {}): WorkPay => ({ value: null, lines: [], source: "standard", cadence: "once", ...over });
 
 describe("the value and its conversion", () => {
-  it("converts into US dollars when the viewer has chosen nothing", () => {
-    expect(conversionTarget("CRC", "")).toBe("USD");
-    const words = valueWords({ minor: 2500000, currency: "CRC" }, RATES, "");
+  it("converts into the village's own currency when the viewer has chosen nothing (readiness R154)", () => {
+    expect(conversionTarget("CRC", "", "CHF")).toBe("CHF");
+    const words = valueWords({ minor: 2500000, currency: "CRC" }, RATES, "", "CHF");
     expect(words.own).toContain("25,000");
-    expect(words.converted).toBe("about $55.00");
+    expect(words.converted).toMatch(/^about CHF\s47\.50$/);
+  });
+
+  it("converts into nothing when neither the viewer nor the village named a currency, never a borrowed dollar", () => {
+    expect(conversionTarget("CRC", "", "")).toBeNull();
+    expect(valueWords({ minor: 2500000, currency: "CRC" }, RATES, "", "").converted).toBeNull();
+    expect(conversionTarget("CHF", "", "CHF"), "a value already in the village's currency").toBeNull();
   });
 
   it("converts into the viewer's own choice, and not at all when that is the value's own currency", () => {

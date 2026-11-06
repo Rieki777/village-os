@@ -255,10 +255,12 @@ describe.skipIf(!configured)("earned equity, claimed toward Hypha", () => {
     );
     // An accepted proposal is work too (Rye, 2026-10-23), so it gets an Earned
     // Equity rule beside the quest's and the role's, off like them.
-    expect(rows.map((r) => ({ ...r, amount: Number(r.amount), ceiling: Number(r.ceiling) }))).toEqual([
+    // The role's is blank: no flat role mint (Rye, 2026-11-01), so a role pays
+    // Earned Equity only from its own list once a village turns this on.
+    expect(rows.map((r) => ({ ...r, amount: r.amount === null ? null : Number(r.amount), ceiling: Number(r.ceiling) }))).toEqual([
       { id: "rule-proposal.accepted-earned-equity", trigger: "proposal.accepted", amount: 1, ceiling: 1, recipient: "claimant", enabled: 0 },
       { id: "rule-quest.completed-earned-equity", trigger: "quest.completed", amount: 1, ceiling: 1, recipient: "claimant", enabled: 0 },
-      { id: "rule-role.cycle-earned-equity", trigger: "role.cycle", amount: 1, ceiling: 1, recipient: "holder", enabled: 0 },
+      { id: "rule-role.cycle-earned-equity", trigger: "role.cycle", amount: null, ceiling: 1, recipient: "holder", enabled: 0 },
     ]);
     // Off means the engine never reads them.
     for (const trigger of ["proposal.accepted", "quest.completed", "role.cycle"]) {

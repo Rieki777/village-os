@@ -46,7 +46,12 @@ export interface DraftBody {
   roles: Array<{ roleId: string; words?: RoleWords; reviewOn?: string | null }>;
   newRoles?: Array<{ id: string; circleId: string; seats?: number; words: RoleWords; reviewOn?: string | null }>;
   settings?: SeatSettings;
-  season?: { aim: string | null; seasonalGoals: Array<{ title: string; doneWhen: string | null }>; servesGoals: Array<{ goal: string; howItHelps: string | null }> };
+  season?: {
+    aim: string | null;
+    seasonalGoals: Array<{ title: string; doneWhen: string | null }>;
+    servesGoals: Array<{ goal: string; howItHelps: string | null }>;
+    ownWords?: { love: string; offer: string; why: string };
+  };
 }
 
 export const OFF_SHARE: ShareOut = { on: false, audience: "members", link: null, token: null, anyoneReaches: true, anyoneNote: null };
@@ -174,7 +179,7 @@ export interface Asked {
  * The routes the steps call, answering as the server would. `extra` is laid
  * over every proposal it answers with; `card` is the preview's payload.
  */
-export function fakeServer(start: DraftBody, opts: { extra?: Partial<ProposalOut>; card?: unknown; comments?: unknown[]; whoApproves?: string } = {}) {
+export function fakeServer(start: DraftBody, opts: { extra?: Partial<ProposalOut>; card?: unknown; comments?: unknown[]; whoApproves?: string; failPut?: boolean } = {}) {
   let stored = start;
   let share: ShareOut = opts.extra?.share ?? OFF_SHARE;
   const asked: Asked[] = [];
@@ -186,6 +191,7 @@ export function fakeServer(start: DraftBody, opts: { extra?: Partial<ProposalOut
     asked.push({ method, url, body });
     if (url === "/api/governance/role-applications") return json({ applications: APPLICATIONS });
     if (url === BASE && method === "PUT") {
+      if (opts.failPut) return json({ message: "The save did not land." }, 500);
       stored = answerPut(stored, body);
       return json({ proposal: now() });
     }

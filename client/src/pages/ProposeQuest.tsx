@@ -1,6 +1,6 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Lightbulb, ArrowLeft, CheckCircle2, Sparkles, MessageCircle, ClipboardList, Inbox } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -128,7 +128,7 @@ export default function ProposeQuest() {
       <Layout>
         <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[60vh]">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="max-w-xl mx-auto text-center bg-card border border-border rounded-2xl p-10 shadow-sm"
@@ -161,7 +161,7 @@ export default function ProposeQuest() {
                   </a>
                 </Link>
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       </Layout>
@@ -173,7 +173,7 @@ export default function ProposeQuest() {
       <Layout>
         <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[60vh]">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="max-w-xl mx-auto text-center bg-card border border-teal/20 rounded-2xl p-10 shadow-sm"
@@ -213,7 +213,7 @@ export default function ProposeQuest() {
                   Propose another
                 </button>
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       </Layout>
@@ -228,7 +228,7 @@ export default function ProposeQuest() {
       {/* Hero */}
       <section className="py-16 bg-gradient-to-b from-teal/10 to-background">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="max-w-2xl mx-auto text-center"
@@ -249,7 +249,7 @@ export default function ProposeQuest() {
               Tell us about the Quest you want to create. Anyone can propose one, and
               the {projectName} team will reach out to explore it with you.
             </p>
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
@@ -301,7 +301,7 @@ export default function ProposeQuest() {
       {/* Form */}
       <section className={`pb-24 bg-background ${mode === "ai" && aiAvailable ? "hidden" : ""}`}>
         <div className="container">
-          <motion.form
+          <m.form
             onSubmit={submit}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -453,7 +453,7 @@ export default function ProposeQuest() {
               Your proposal goes straight to the {projectName} team. No idea is too small. The
               village is built from them.
             </p>
-          </motion.form>
+          </m.form>
         </div>
       </section>
     </Layout>

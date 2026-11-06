@@ -77,6 +77,15 @@ describe("step 5, preview", () => {
 });
 
 describe("step 6, share", () => {
+  it("sends open terms to the operations role, and leaves submit on the server's own reason", async () => {
+    draw({ roles: [{ roleId: "r1" }] }, "share");
+    const send = await screen.findByRole("button", { name: RP_WORDS.sendToOps("the village's operations role") });
+    expect((screen.getAllByRole("button", { name: RP_WORDS.submit })[0] as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: RP_WORDS.makeLink })).toBeTruthy();
+    fireEvent.click(send);
+    await waitFor(() => expect(called("POST", "/share")[0].body).toEqual({ audience: "members" }));
+  });
+
   it("makes a link, switches who reads it, copies it, makes a new one and turns it off", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "share");
     fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.makeLink }));
@@ -124,7 +133,7 @@ describe("step 6, share", () => {
 describe("step 6, submit", () => {
   it("confirms who approves it, shows the words aligned with, sends them, and then shows where it stands", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "share", { extra: { submitBlocked: null, readyToSubmit: true } });
-    fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.submit }));
+    fireEvent.click((await screen.findAllByRole("button", { name: RP_WORDS.submit }))[0]);
     const confirm = (await screen.findByText(RP_WORDS.whoApproves)).closest("[data-submit-confirm]") as HTMLElement;
     // A server that names nobody (an older one) leaves the plain line, which promises no particular power.
     expect(RP_WORDS.whoApproves).toBe("The circle consents within 2 business days, or a founder or steward role adopts it.");
@@ -141,7 +150,7 @@ describe("step 6, submit", () => {
   it("E8: names who adopts in this village, as the server read it from who holds the power, and never promises a power nobody holds", async () => {
     const who = "The circle consents within 2 business days, or Steward Circle (Hal) adopts it.";
     draw({ roles: [{ roleId: "r1" }] }, "share", { extra: { submitBlocked: null, readyToSubmit: true }, whoApproves: who });
-    fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.submit }));
+    fireEvent.click((await screen.findAllByRole("button", { name: RP_WORDS.submit }))[0]);
     const confirm = (await screen.findByText(who)).closest("[data-submit-confirm]") as HTMLElement;
     expect(confirm).toBeTruthy();
     expect(screen.queryByText(RP_WORDS.whoApproves)).toBeNull();
@@ -152,12 +161,12 @@ describe("step 6, submit", () => {
   it("a draft that is not ready says the server's reason and cannot be submitted", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "share");
     expect(await screen.findByText("Write your aim for the season, then submit.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: RP_WORDS.submit }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getAllByRole("button", { name: RP_WORDS.submit })[0] as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("Not yet closes the confirm and submits nothing", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "share", { extra: { submitBlocked: null, readyToSubmit: true } });
-    fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.submit }));
+    fireEvent.click((await screen.findAllByRole("button", { name: RP_WORDS.submit }))[0]);
     fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.notYet }));
     expect(screen.queryByText(RP_WORDS.whoApproves)).toBeNull();
     expect(called("POST", "/submit")).toHaveLength(0);

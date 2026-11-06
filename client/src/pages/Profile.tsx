@@ -26,6 +26,7 @@ import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
 import AlignedSection from "@/components/profile/AlignedSection";
 import YourRolesSection from "@/components/profile/YourRolesSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
+import MyMoonMount from "@/components/myMoon/MyMoonMount";
 import ProposeBanner from "@/components/roleProposal/ProposeBanner";
 import ProposeRolesEntry from "@/components/roleProposal/ProposeRolesEntry";
 import SurfacedBanner from "@/components/profile/SurfacedBanner";
@@ -33,6 +34,7 @@ import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
 import TaskBoard from "@/components/profile/TaskBoard";
 import TasksWaitingCard from "@/components/profile/TasksWaitingCard";
+import YourListMount from "@/components/yourList/YourListMount";
 import ProfileJournalCard from "@/components/journal/ProfileJournalCard";
 import { ProfileGeneKeysCard } from "@/components/geneKeys/ProfileGeneKeys";
 import { TASK_BOARD_ANCHOR } from "@shared/sessionTasks";
@@ -41,14 +43,14 @@ import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule, useModuleOn } from "@/modules/ModuleProvider";
 import { authToken, fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { onProfileRefresh } from "@/lib/profileRefresh";
-import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 import { roleWithHolders } from "@shared/roleHolderLabel";
 import type { StageAdvance } from "@/components/StageAdvanced";
 import StatRow from "@/components/profileDash/StatRow";
@@ -115,7 +117,7 @@ import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/d
  */
 
 export default function Profile() {
-  const brochureOn = useBrochurePages() === true;
+  const storyShown = useStoryPageShown();
   const [, navigate] = useLocation();
   const tokenName = useTokenName("Recognition");
   const { user, logout, loading, updateProfile } = useAuth();
@@ -307,9 +309,9 @@ export default function Profile() {
     return (
       <Layout>
         <div className="sheet-night flex min-h-screen items-center justify-center bg-background">
-          <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity }}>
+          <m.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity }}>
             <Heart className="h-12 w-12 text-teal-deep" />
-          </motion.div>
+          </m.div>
         </div>
       </Layout>
     );
@@ -345,7 +347,8 @@ export default function Profile() {
       id: p.id,
       label: p.label,
       role: p.role,
-      route: p.route,
+      // A path whose page is switched off keeps its tile and loses the link.
+      route: storyShown(p.route) ? p.route : "",
       offered: true,
     })),
     ...user.paths
@@ -379,11 +382,18 @@ export default function Profile() {
         measures. MoonDock is `fixed` and placed last for source order: a
         keyboard reaches the member's own page before it reaches an ornament.
       */}
-      <div className="relative sheet-night min-h-screen bg-background pb-20 pt-4 sm:py-10">
+      <div className="relative sheet-night min-h-screen bg-background pb-32 pt-4 sm:py-10 md:pb-28">
         <NightMotes />
         <div className="relative mx-auto max-w-[1300px] px-4 sm:px-10">
           <ProfileTabs tab={tab} onTab={setTab} />
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
+          <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
+            {/* The role proposal, first under the tabs. On a phone it is on
+                Today and on Roles, so it is the first thing on either tab.
+                A desktop shows it here, above the hero. */}
+            <div className={`flex flex-col gap-4 ${tabOf(["today", "roles"])}`}>
+              <ProposeBanner />
+              <ProposeRolesEntry />
+            </div>
             {/* WHO YOU ARE PLAYING, FIRST. The ladder position comes from the
                 page's own reads (`prog.stageIndex`, `config.stages`), never a
                 second fetch inside the hero. */}
@@ -502,6 +512,7 @@ export default function Profile() {
                   progress={progress}
                   progressUnit={nextRung?.rule.type === "training-complete" ? "lessons" : "quests consented"}
                   nextRuleWords={nextRung?.description ?? null}
+                  ladderTitle={config?.ladder?.title}
                 />
               </div>
             ) : null}
@@ -567,6 +578,7 @@ export default function Profile() {
                 {(sessionsOn || governanceOn) && (
                   <div id={TASK_BOARD_ANCHOR} className={`scroll-mt-28 ${tabOf("quests")}`}>
                     <TaskBoard sessions={sessionsOn} />
+                    <YourListMount />
                   </div>
                 )}
                 <div className={tabOf("quests")}>
@@ -585,24 +597,6 @@ export default function Profile() {
                 <div className={`empty:hidden ${tabOf("quests")}`}>
                   <PartiesCard data={dash} />
                 </div>
-                <div id="roles" className={`scroll-mt-28 flex flex-col gap-6 ${tabOf("roles")}`}>
-                  <YourRolesSection />
-                  <ProposeBanner />
-                  <ProposeRolesEntry />
-                  <PlayerRoleCard />
-                  <SeasonPlanSection />
-                </div>
-                {config && prog ? (
-                  <div className={tabOf("roles")}>
-                    <PowersMap
-                      catalogue={prog.capabilityCatalogue ?? []}
-                      stages={config.stages}
-                      stageIndex={prog.stageIndex}
-                      consentedQuests={prog.consentedQuests}
-                      training={prog.training ?? null}
-                    />
-                  </div>
-                ) : null}
                 <div id="my-needs" className={tabOf("sheet")}>
                   <NeedCard />
                 </div>
@@ -615,6 +609,28 @@ export default function Profile() {
               </aside>
             </div>
 
+            {/* The work roles, the card and the season sit across the page.
+                In the narrow character column the headings wrapped a word at
+                a time and the applications card left a blank field beside it.
+                The proposal door itself stays at the top. */}
+            <div id="roles" className={`scroll-mt-28 flex flex-col gap-6 ${tabOf("roles")}`}>
+              <YourRolesSection />
+              <PlayerRoleCard />
+              <MyMoonMount />
+              <SeasonPlanSection />
+            </div>
+            {config && prog ? (
+              <div className={tabOf("roles")}>
+                <PowersMap
+                  catalogue={prog.capabilityCatalogue ?? []}
+                  stages={config.stages}
+                  stageIndex={prog.stageIndex}
+                  consentedQuests={prog.consentedQuests}
+                  training={prog.training ?? null}
+                />
+              </div>
+            ) : null}
+
             {/* THE SHEET: about you, your paths and the settings, as the design's
                 last band. Each one is the section it always was. */}
             <div className={`flex flex-col gap-6 sm:gap-8 ${tabOf("sheet")}`}>
@@ -624,7 +640,7 @@ export default function Profile() {
               </div>
               {/* ABOUT YOU IS A DAY-ONE ACT. The bio Save is the whole point:
                   the editor used to discard every word on close, silently. */}
-              <motion.section
+              <m.section
                 id="about"
                 aria-labelledby="bio-h"
                 initial={{ opacity: 0, y: 20 }}
@@ -696,7 +712,7 @@ export default function Profile() {
                     {user.bio || "No bio yet. Add one to help other villagers know you."}
                   </p>
                 )}
-              </motion.section>
+              </m.section>
 
               {/* The anchor the surfaced banner and "Walk another path" point at. */}
               <div id="sheet-paths" className="scroll-mt-28">
@@ -712,7 +728,7 @@ export default function Profile() {
               </div>
 
               {config && prog ? (
-                <MaturityLadder showNext={false} stages={config.stages} stageIndex={prog.stageIndex} consentedQuests={prog.consentedQuests} />
+                <MaturityLadder showNext={false} title={config.ladder?.title} stages={config.stages} stageIndex={prog.stageIndex} consentedQuests={prog.consentedQuests} />
               ) : null}
 
               {/* BORROWED AND BOOKED: loans, stays and homes asked about, live only.
@@ -735,7 +751,7 @@ export default function Profile() {
                   <QuietSection
                     key={sec.id}
                     title={label}
-                    quiet={sec.quiet}
+                    quiet={sec.quiet.replace("{path}", label)}
                     action={`Walk the ${label} path`}
                     busy={savingPath === sec.path}
                     onAction={() => sec.path && void togglePath(sec.path)}
@@ -744,7 +760,7 @@ export default function Profile() {
               })}
 
               {/* Contributions */}
-              <motion.section
+              <m.section
                 aria-labelledby="contrib-h"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -755,7 +771,7 @@ export default function Profile() {
                 </h2>
                 {recentContributions.length === 0 ? (
                   /* R47: say what is missing, then point at the one door. */
-                  brochureOn ? (
+                  storyShown("/work-with-us") ? (
                     <p className="text-muted-foreground">
                       No contributions yet. Propose one through{" "}
                       <Link href="/work-with-us" className="font-medium text-foreground underline underline-offset-2">
@@ -770,7 +786,7 @@ export default function Profile() {
                   <ul className="space-y-4">
                     <AnimatePresence>
                       {recentContributions.map((contrib, idx) => (
-                        <motion.li
+                        <m.li
                           key={contrib.id}
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
@@ -792,12 +808,12 @@ export default function Profile() {
                             </p>
                             <p className="text-xs text-muted-foreground">{new Date(contrib.date).toLocaleDateString()}</p>
                           </div>
-                        </motion.li>
+                        </m.li>
                       ))}
                     </AnimatePresence>
                   </ul>
                 )}
-              </motion.section>
+              </m.section>
 
               {/* Standing, gratitude and this moon, from /api/me/profile. */}
               <ProfileSheet />
@@ -855,7 +871,7 @@ export default function Profile() {
             </div>
 
             {/* Quick links, inside the SPA router. */}
-            <motion.nav
+            <m.nav
               aria-labelledby="links-h"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -870,7 +886,7 @@ export default function Profile() {
                   { href: "/circles", label: "Circles" },
                   { href: "/housing", label: "Housing" },
                 ]
-                  .filter((l) => brochureOn || !isBrochurePath(l.href))
+                  .filter((l) => storyShown(l.href))
                   .map((l) => (
                     <li key={l.href}>
                       <Link href={l.href} className="flex min-h-11 items-center justify-between rounded-lg p-3 hover:bg-muted">
@@ -880,8 +896,8 @@ export default function Profile() {
                     </li>
                   ))}
               </ul>
-            </motion.nav>
-          </motion.div>
+            </m.nav>
+          </m.div>
         </div>
         <MoonDock />
       </div>
@@ -891,6 +907,7 @@ export default function Profile() {
           stages={stages}
           name={user.name}
           portrait={null}
+          ladderTitle={config?.ladder?.title}
           onClose={() => setAdvance(null)}
         />
       ) : null}

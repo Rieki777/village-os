@@ -287,13 +287,37 @@ describe.skipIf(!DB_CONFIGURED)("the public amendment history", () => {
     expect(handoff.text).not.toContain(SECRET);
   });
 
-  it("the founder-held dial cannot be proposed at all, which is the first lock", async () => {
+  // The subject used to be tokens.base_rpc_url, the one dial marked `withheld`.
+  // It is a sealed integration secret now (#719, then #700), so it is no dial
+  // at all and cannot be proposed (the next test). The rule this test holds is
+  // the general one: a founder-held dial may be proposed, and a value that
+  // looks like a credential is withheld from strangers whichever dial carries
+  // it (`withheldFromPublic` in shared/gameVariables.ts). governance.hub_url is
+  // founder-held and takes a URL, which is exactly where a key can ride.
+  it("a founder-held dial may be proposed (Rye, 2026-09-25), and a credential in its value still reaches no stranger", async () => {
     const made = await call("POST", "/api/game/mechanics/proposals", {
-      title: "Move the RPC", rationale: "Should be refused.",
-      changes: [{ key: "tokens.base_rpc_url", to: "https://base-mainnet.g.alchemy.com/v2/AuthzRoundKeyTwo0123456789" }],
+      title: "Point at a new hub", rationale: "Anyone may propose any dial; a key in the value stays private.",
+      changes: [{ key: "governance.hub_url", to: "https://hub.example.test/listen?token=AuthzRoundKeyTwo0123456789" }],
+    });
+    expect(made.status, made.text).toBe(200);
+    const list = await call("GET", "/api/game/mechanics/proposals", undefined, "");
+    expect(list.status).toBe(200);
+    expect(list.text).toContain("Point at a new hub");
+    expect(list.text).not.toContain("AuthzRoundKeyTwo");
+    const doc = await call("GET", `/api/game/mechanics/proposals/${String(made.json?.id)}/document`, undefined, "");
+    expect(doc.status, doc.text.slice(0, 300)).toBe(200);
+    expect(doc.text).not.toContain("AuthzRoundKeyTwo");
+  });
+
+  it("the sealed RPC endpoint is no dial: a change-set naming it is refused, and says where it is kept", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      title: "Move the RPC", rationale: "A credential does not belong in the public amendment history.",
+      changes: [{ key: "tokens.base_rpc_url", to: "https://base-mainnet.g.alchemy.com/v2/AuthzRoundKeyThree0123456789" }],
     });
     expect(made.status, made.text).toBe(400);
-    expect(made.text).toContain("founder-held");
+    expect(made.text).toMatch(/Integrations/);
+    const list = await call("GET", "/api/game/mechanics/proposals", undefined, "");
+    expect(list.text).not.toContain("AuthzRoundKeyThree");
   });
 
   it("an ordinary change still reads in full", async () => {

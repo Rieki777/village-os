@@ -48,6 +48,7 @@ import { roleCcos, roleTerm, type HoldingWellOut, type ListSectionOut, type Text
 import type { RoleEditKey } from "./playerCardEdit";
 import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationStatus } from "./seatApplications";
 import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applicationGroups";
+import { AFTER_ADOPT_LINE, MEMBER_LATER_LINE, loadHoursLine, openRowLine } from "./roleProposalHonesty";
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 import type { AccomplishmentMoon } from "./taskAccomplishments";
 import { roleProposalsOut, type RoleProposalIn, type RoleProposalOut } from "./playerCardProposals";
@@ -315,6 +316,11 @@ export interface PlayerCardInput {
    * reading "Starts once adopted". Live by default.
    */
   mode?: CardMode;
+  /**
+   * Who fills an open row on a proposal preview. The chart's operations role,
+   * or null for the fallback that names no village. Live cards ignore it.
+   */
+  fillWith?: string | null;
   /** Seasons whose end has passed, for the "Past" group. */
   endedSeasonIds?: readonly string[];
   /** The owner's old seatings that came through no application. */
@@ -624,7 +630,7 @@ function playsAs(role: PlayerRoleIn, names: Read<Record<string, string> | null>)
 
 function signsFor(role: PlayerRoleIn, input: PlayerCardInput): Slot<SignOut[]> {
   if (role.settings === undefined) return UNREAD;
-  if (input.mode === "proposal") return empty(W.startsOnceAdopted);
+  if (input.mode === "proposal") return empty(AFTER_ADOPT_LINE);
   const measures = role.settings?.scoreboard?.measures ?? [];
   if (!measures.length) return empty(W.noSigns);
   const windows = cycleWindows(input.now, LUNAR_CLOCK, input.timeZone);
@@ -674,7 +680,7 @@ function viewerHoldsRole(role: PlayerRoleIn, input: PlayerCardInput): boolean {
 
 function tensionsFor(role: PlayerRoleIn, input: PlayerCardInput): RoleOut["tensions"] {
   if (role.tensions === undefined) return UNREAD;
-  if (input.mode === "proposal") return empty(W.startsOnceAdopted);
+  if (input.mode === "proposal") return empty(AFTER_ADOPT_LINE);
   const viewer = input.viewerUserId ?? null;
   const holds = viewerHoldsRole(role, input);
   const openAll = role.tensions.filter((t) => t.status === "open");
@@ -728,7 +734,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
   // 0274: the CCOS sections, and the review chip from the role's own terms.
   const terms = input.frameworkTerms === true;
   const ccos = roleCcos(role, terms);
-  if (ccos.review) chips.push(ccos.review);
+  if (ccos.review) chips.push(input.mode === "proposal" && ccos.review === W.noReviewDate ? openRowLine(input.fillWith) : ccos.review);
 
   const powers =
     role.powers === undefined
@@ -740,6 +746,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
             ),
           )
         : empty(W.noPowers);
+  const opsOpen = input.mode === "proposal" ? openRowLine(input.fillWith) : W.notWritten;
   const anyShared = !!role.powers?.some((p) => p.sharedWith?.length);
   // A10: nothing handed over, so say what the role suits, once per power and
   // never a power it already holds. An unread or empty list leaves the card
@@ -766,10 +773,10 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     circle,
     time: ccos.time,
     plays: playsAs(role, input.archetypeNames),
-    decide: { heading: W.decide, term: roleTerm("decide", terms), text: textSlot(role.domain, W.notWritten) },
+    decide: { heading: W.decide, term: roleTerm("decide", terms), text: textSlot(role.domain, opsOpen) },
     authorities: ccos.authorities,
-    bringMe: { heading: W.bringMe, items: wordsSlot(role.bringMe, W.notWritten) },
-    countOnMe: { heading: W.countOnMe, term: roleTerm("countOnMe", terms), items: wordsSlot(role.accountabilities, W.notWritten) },
+    bringMe: { heading: W.bringMe, items: wordsSlot(role.bringMe, opsOpen) },
+    countOnMe: { heading: W.countOnMe, term: roleTerm("countOnMe", terms), items: wordsSlot(role.accountabilities, opsOpen) },
     responsibilities: ccos.responsibilities,
     working: { heading: W.working, term: roleTerm("working", terms), items: signsFor(role, input) },
     worksWith: {
@@ -779,11 +786,11 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
           ? UNREAD
           : role.worksWith.length
             ? shown(role.worksWith.map((w) => (clean(w.about) ? W.worksWithLine(w.roleName, clean(w.about)!) : w.roleName)))
-            : empty(W.notWritten),
+            : empty(opsOpen),
     },
     holdingWell: ccos.holdingWell,
-    notMine: { heading: W.notMine, term: roleTerm("notMine", terms), items: wordsSlot(role.notMine, W.notWritten) },
-    runbook: { heading: W.runbook, text: textSlot(role.runbook, W.notWritten) },
+    notMine: { heading: W.notMine, term: roleTerm("notMine", terms), items: wordsSlot(role.notMine, opsOpen) },
+    runbook: { heading: W.runbook, text: textSlot(role.runbook, input.mode === "proposal" ? MEMBER_LATER_LINE : W.notWritten) },
     powers: showSuited
       ? { heading: W.suitedTo, items: shown(suited.map((p) => p.label)), note: W.suitedNote }
       : { heading: anyShared ? W.powersShared : W.powers, items: powers, note: null },
@@ -807,6 +814,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
       : [];
 
   const plan = input.plan;
+  const proposal = input.mode === "proposal";
   const aim: Slot<string> = plan === undefined ? UNREAD : plan === null ? empty(W.noPlan) : textSlot(plan.aim, W.noAim);
   const sg = input.seasonalGoals;
   const sgList = (sg ?? [])
@@ -826,7 +834,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
     plan === undefined
       ? UNREAD
       : !plan || !plan.goals.length
-        ? empty(W.noGoals)
+        ? empty(proposal ? openRowLine(input.fillWith) : W.noGoals)
         : shown(
             plan.goals
               .filter((g) => clean(g.goal))
@@ -834,12 +842,11 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
           );
 
   const titleOf = new Map((roles ?? []).map((r) => [r.id, r.name]));
-  const proposal = input.mode === "proposal";
   const tasks: AcrossOut["tasks"] =
     input.tasks === undefined
       ? UNREAD
       : proposal
-        ? empty(W.startsOnceAdopted)
+        ? empty(AFTER_ADOPT_LINE)
         : input.tasks.length === 0
         ? empty(W.noTasks)
         : shown(
@@ -858,7 +865,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
     roles === undefined || (signLists.length > 0 && signLists.every((s) => s.kind === "unread"))
       ? UNREAD
       : proposal
-        ? empty(W.startsOnceAdopted)
+        ? empty(AFTER_ADOPT_LINE)
         : allSigns.length
           ? shown(allSigns)
           : empty(W.noSigns);
@@ -869,7 +876,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
   const words = [W.loadRoles(n), ...(openTasks ? [W.loadTasks(openTasks.n)] : [])].join(" · ");
   const lr = input.loadRead;
   const own: AcrossOut["load"]["own"] =
-    lr === undefined ? UNREAD : lr === null ? empty(W.loadNotSet) : shown({ step: lr, words: W.loadStep[lr] });
+    lr === undefined ? UNREAD : lr === null ? empty(proposal ? loadHoursLine(input.fillWith) : W.loadNotSet) : shown({ step: lr, words: W.loadStep[lr] });
   return {
     heading,
     doors,
@@ -881,10 +888,10 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
     signs,
     signsLede: W.signsLede(clean(input.villageName ?? null)),
     load: { heading: W.load, words, roles: rolesFig, openTasks, own, caption: W.loadCaption },
-    growingEdge: { heading: W.growingEdge, text: input.growingEdge === undefined ? UNREAD : textSlot(input.growingEdge, W.notWritten) },
+    growingEdge: { heading: W.growingEdge, text: input.growingEdge === undefined ? UNREAD : textSlot(input.growingEdge, proposal ? openRowLine(input.fillWith) : W.notWritten) },
     whoCouldHoldNext: {
       heading: W.whoCouldHoldNext,
-      text: input.whoCouldHoldNext === undefined ? UNREAD : textSlot(input.whoCouldHoldNext, W.notWritten),
+      text: input.whoCouldHoldNext === undefined ? UNREAD : textSlot(input.whoCouldHoldNext, proposal ? openRowLine(input.fillWith) : W.notWritten),
     },
   };
 }
@@ -907,7 +914,9 @@ function timeline(input: PlayerCardInput, roles: PlayerRoleIn[]): TimelineOut {
   if (cursor.getTime() > from.getTime()) spans.push({ start: from, end: cursor, title: W.gettingStarted, starting: true });
   let guard = 0;
   while (cursor.getTime() <= to.getTime() && guard++ < 24) {
-    const b = LUNAR_CLOCK.boundsFor(cursor);
+    // Look up the moment just after the boundary, so a moon's end never
+    // resolves back to the same moon and repeats until the guard stops it.
+    const b = LUNAR_CLOCK.boundsFor(new Date(cursor.getTime() + 1));
     spans.push({ start: b.startsAt, end: b.endsAt, title: moonNameOf(b.startsAt, tz), starting: false });
     cursor = b.endsAt;
   }
@@ -1030,10 +1039,11 @@ function agreementRows(s: SeatSettings, input: PlayerCardInput): AgreementRow[] 
     if (s.term.endsOn) term.push(W.endsOn(day(s.term.endsOn) ?? s.term.endsOn));
     else if (s.term.lengthMoons) term.push(W.lengthMoons(s.term.lengthMoons));
     else if (s.term.endsOn === null) term.push(W.endsWithSeason);
-    term.push(s.term.reviewOn ? W.reviewDate(day(s.term.reviewOn) ?? s.term.reviewOn) : W.noReviewDate);
+    const openReview = input.mode === "proposal" ? openRowLine(input.fillWith) : W.noReviewDate;
+    term.push(s.term.reviewOn ? W.reviewDate(day(s.term.reviewOn) ?? s.term.reviewOn) : openReview);
     if (s.term.renewalOn) term.push(W.renewalDate(day(s.term.renewalOn) ?? s.term.renewalOn));
     if (s.term.noticeDays !== undefined) term.push(W.notice(s.term.noticeDays));
-  } else term.push(W.noReviewDate);
+  } else term.push(input.mode === "proposal" ? openRowLine(input.fillWith) : W.noReviewDate);
   rows.push({ label: W.term, lines: term, small: false });
 
   const clocks: string[] = [];
@@ -1155,7 +1165,7 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
           ? UNREAD
           : input.howIHold && input.howIHold.some((h) => clean(h.text))
             ? shown(input.howIHold.filter((h) => clean(h.text)).map((h) => ({ label: h.label, text: clean(h.text)! })))
-            : empty(W.notWritten),
+            : empty(input.mode === "proposal" ? MEMBER_LATER_LINE : W.notWritten),
     },
     applications: applications(input),
     agreements: agreements(input, list),

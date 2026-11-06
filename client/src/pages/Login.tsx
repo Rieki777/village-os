@@ -3,7 +3,7 @@ import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useGoogleSignInReturn } from "@/components/auth/useGoogleSignInReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { internalPath } from "@/lib/internalPath";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Heart, ArrowRight, Mail, Lock } from "lucide-react";
 import { useState } from "react";
 import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
@@ -43,7 +43,7 @@ export default function Login() {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-teal-deep/5 to-amber/5 py-16">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="max-w-md mx-auto"
@@ -97,14 +97,14 @@ export default function Login() {
                 the same button again with no idea why nothing happened.
               */}
               {error && (
-                <motion.div
+                <m.div
                   role="alert"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
                 >
                   {error}
-                </motion.div>
+                </m.div>
               )}
 
               {/*
@@ -151,7 +151,7 @@ export default function Login() {
                 </div>
               </div>
 
-              <motion.button
+              <m.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 disabled={loading}
@@ -160,7 +160,7 @@ export default function Login() {
               >
                 {loading ? "Signing in…" : "Sign in"}
                 {!loading && <ArrowRight className="w-5 h-5" />}
-              </motion.button>
+              </m.button>
 
               <p className="text-center">
                 <a href="/forgot-password" className="text-sm text-teal-deep hover:underline">
@@ -179,14 +179,14 @@ export default function Login() {
 
             <div className="mt-8 text-center">
               <p className="text-gray-600 mb-4">New here?</p>
-              <motion.a
+              <m.a
                 whileHover={{ scale: 1.05 }}
                 href="/register"
                 className="inline-flex items-center gap-2 px-6 py-3 border-2 border-amber-ink text-amber-ink font-semibold rounded-lg hover:bg-amber-ink/5 transition-colors"
               >
                 Create an account
                 <ArrowRight className="w-5 h-5" />
-              </motion.a>
+              </m.a>
               {/* The second way to ask to join (Rye, 2026-09-09): in a village
                   that joins by invitation, somebody here with no account and
                   no link is exactly who needs it. */}
@@ -197,7 +197,7 @@ export default function Login() {
                 </a>
               </p>
             </div>
-          </motion.div>
+          </m.div>
         </div>
       </div>
     </Layout>

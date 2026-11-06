@@ -1,0 +1,125 @@
+/**
+ * The bridge board's reading: counts, plus the names of members linked to Sera
+ * (a steward-only answer). Never a task title, a note, or a library owner id.
+ * A table that is not in this database yet answers "not ready", never an error,
+ * so the board can say "Building" while another change is still landing.
+ */
+import type { Pool } from "mysql2/promise";
+import type { BridgeAnswer } from "@shared/seraBridgeBoard";
+import { notesRelease, outboxCounts, syncRecord } from "./memberTaskFeedback";
+import { parseSyncLast } from "@shared/seraSyncHealth";
+
+type Row = Record<string, unknown>;
+
+async function tables(pool: Pool, names: string[]): Promise<Set<string>> {
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (${names.map(() => "?").join(",")})`,
+    names,
+  );
+  return new Set((rows as Row[]).map((r) => String(r.t ?? r.TABLE_NAME)));
+}
+
+async function one(pool: Pool, sql: string, args: unknown[] = []): Promise<Row> {
+  const [rows] = await pool.query(sql, args);
+  return ((rows as Row[])[0] ?? {}) as Row;
+}
+
+const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+/** The board counts, by the `listIsOn` rule: a row decides, no row means `listDefault` (A6). */
+export async function bridgeLists(pool: Pool, have: Set<string>, listDefault: boolean): Promise<BridgeAnswer["lists"]> {
+  const empty = { ready: false, linkedPeople: 0, listsOn: 0, imported: 0, importedOpen: 0, lastBatch: null };
+  if (!have.has("member_tasks") || !have.has("member_task_access") || !have.has("sera_person_links")) return empty;
+  const linked = await one(pool, "SELECT COUNT(DISTINCT `user_id`) AS n FROM `sera_person_links`");
+  const dflt = listDefault ? 1 : 0;
+  const on = await one(pool, "SELECT COUNT(*) AS n FROM `users` u LEFT JOIN `member_task_access` a ON a.`user_id` = u.`id` WHERE COALESCE(a.`list_on`, ?) = 1", [dflt]);
+  const imp = await one(
+    pool,
+    "SELECT COUNT(*) AS n, SUM(`status` = 'open') AS o FROM `member_tasks` WHERE `source` = 'sera'",
+  );
+  const last = await one(
+    pool,
+    "SELECT `import_batch` AS b, MAX(`created_at`) AS at, COUNT(*) AS n FROM `member_tasks` WHERE `source` = 'sera' AND `import_batch` IS NOT NULL GROUP BY `import_batch` ORDER BY MAX(`created_at`) DESC LIMIT 1",
+  );
+  const [ppl] = await pool.query(
+    "SELECT u.`name` AS name, COALESCE(a.`list_on`, ?) AS on_, " +
+      "(SELECT COUNT(*) FROM `member_tasks` t WHERE t.`user_id` = l.`user_id` AND t.`source` = 'sera') AS imported, " +
+      "(SELECT MAX(s.`last_synced_at`) FROM `sera_person_links` s WHERE s.`user_id` = l.`user_id`) AS synced_at, " +
+      "(SELECT MAX(t.`created_at`) FROM `member_tasks` t WHERE t.`user_id` = l.`user_id` AND t.`source` = 'sera' AND t.`import_batch` IS NOT NULL) AS last_at " +
+      "FROM (SELECT DISTINCT `user_id` FROM `sera_person_links`) l JOIN `users` u ON u.`id` = l.`user_id` " +
+      "LEFT JOIN `member_task_access` a ON a.`user_id` = l.`user_id` ORDER BY u.`name` LIMIT 50",
+    [dflt],
+  );
+  const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? String(v) : null);
+  const people = (ppl as Row[]).map((r) => ({ name: String(r.name ?? ""), listOn: n(r.on_) === 1, imported: n(r.imported), lastImportAt: iso(r.last_at), lastSyncedAt: iso(r.synced_at) }));
+  const at = last.at instanceof Date ? last.at.toISOString() : last.at ? String(last.at) : null;
+  return {
+    ready: true,
+    linkedPeople: n(linked.n),
+    listsOn: n(on.n),
+    imported: n(imp.n),
+    importedOpen: n(imp.o),
+    lastBatch: last.b ? { id: String(last.b), at, tasks: n(last.n) } : null,
+    people,
+  };
+}
+
+export async function bridgeFeedback(pool: Pool, have: Set<string>): Promise<BridgeAnswer["feedback"]> {
+  const off = { ready: false, sent: 0, queued: 0, failed: 0, notesHeld: 0, notesReleased: null };
+  if (!have.has("member_task_outbox") || !have.has("member_task_bridge")) return off;
+  // The outbox is what goes to Sera; `member_task_feedback` is what members said.
+  const counts = await outboxCounts(pool);
+  const membersOff = have.has("member_task_prefs")
+    ? n((await one(pool, "SELECT COUNT(*) AS n FROM `member_task_prefs` WHERE `feedback_on` = 0")).n)
+    : 0;
+  const sum = (status: string, kind?: string) =>
+    Object.entries(counts).reduce((t, [k, v]) => {
+      const [kk, ss] = k.split(":");
+      return ss === status && (!kind || kk === kind) ? t + v : t;
+    }, 0);
+  return {
+    ready: true,
+    sent: sum("sent"),
+    queued: sum("queued"),
+    failed: sum("failed"),
+    notesHeld: sum("held", "note"),
+    notesReleased: (await notesRelease(pool)) === "released",
+    membersOff,
+  };
+}
+
+/** The first waiting Needs Owner tasks, with the role's name when the library's role id is one of ours. */
+async function needsOwnerItems(pool: Pool): Promise<{ title: string; role: string | null }[]> {
+  const [rows] = await pool.query(
+    "SELECT q.`title`, q.`sera_role_id` AS rid, r.`name` AS rname FROM `member_task_import_queue` q LEFT JOIN `org_roles` r ON r.`id` = q.`sera_role_id` " +
+      "WHERE q.`status` = 'waiting' ORDER BY q.`created_at` DESC LIMIT 10",
+  );
+  return (rows as Row[]).map((r) => ({ title: String(r.title ?? ""), role: r.rid ? (r.rname ? String(r.rname) : "a role in Sera") : null }));
+}
+
+export async function bridgeReading(pool: Pool, listDefault: boolean): Promise<Omit<BridgeAnswer, "connection">> {
+  const have = await tables(pool, [
+    "member_tasks",
+    "member_task_access",
+    "sera_person_links",
+    "member_task_import_queue",
+    "member_task_outbox",
+    "member_task_bridge",
+    "member_task_prefs",
+    "external_proposals",
+  ]);
+  const lists = await bridgeLists(pool, have, listDefault);
+  const feedback = await bridgeFeedback(pool, have);
+  const review = have.has("external_proposals")
+    ? n((await one(pool, "SELECT COUNT(*) AS n FROM `external_proposals` WHERE `module_id` = 'saberra' AND `status` = 'proposed'")).n)
+    : 0;
+  const needsOwner = have.has("member_task_import_queue")
+    ? {
+        ready: true,
+        waiting: n((await one(pool, "SELECT COUNT(*) AS n FROM `member_task_import_queue` WHERE `status` = 'waiting'")).n),
+        items: await needsOwnerItems(pool),
+      }
+    : { ready: false, waiting: 0 };
+  const sync = have.has("member_task_bridge") ? parseSyncLast(await syncRecord(pool).catch(() => null)) : null;
+  return { lists, feedback, reviewQueue: { waiting: review }, needsOwner, sync };
+}

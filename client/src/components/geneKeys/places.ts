@@ -15,6 +15,9 @@ export interface Place {
   key: string;
   country: string;
   zone: string;
+  /** Degrees north and east, from GeoNames; null in a list that does not carry them. For the rising sign only. */
+  lat: number | null;
+  lon: number | null;
 }
 
 export function fold(s: string): string {
@@ -28,10 +31,12 @@ export function parsePlaces(text: string): Place[] {
   for (; i < lines.length && lines[i] !== ""; i++) zones.push(lines[i]);
   const out: Place[] = [];
   for (i += 1; i < lines.length; i++) {
-    const [name, ascii, country, z] = lines[i].split("\t");
+    const [name, ascii, country, z, la, lo] = lines[i].split("\t");
     const zone = zones[parseInt(z ?? "", 36)];
     if (!name || !zone) continue;
-    out.push({ name, key: fold(ascii || name), country, zone });
+    const lat = la ? Number(la) : NaN, lon = lo ? Number(lo) : NaN;
+    const known = Number.isFinite(lat) && Number.isFinite(lon);
+    out.push({ name, key: fold(ascii || name), country, zone, lat: known ? lat : null, lon: known ? lon : null });
   }
   return out;
 }

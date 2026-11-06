@@ -282,6 +282,20 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} objections to your role proposals.",
     celebrate: false,
   },
+  // A role proposal from somebody with no account yet (open proposals part
+  // B), once its address confirmed it. Bell only, like the member pair above.
+  open_role_proposal_consent_ask: {
+    group: "decisions",
+    blurb: "Somebody from outside the village proposes to hold roles in a circle you hold a role in. Consent or object within 2 business days.",
+    many: "{n} role proposals from outside the village ask your circle to consent.",
+    celebrate: false,
+  },
+  open_role_proposal_waiting: {
+    group: "decisions",
+    blurb: "Somebody from outside the village proposes to hold roles. You hold the power that seats people, so it is yours to adopt or decline.",
+    many: "{n} role proposals from outside the village wait on you.",
+    celebrate: false,
+  },
   // The three nudges to propose roles for next season. Bell only; the
   // profile banner says the same thing for as long as it is true.
   role_proposal_window_open: {
@@ -368,6 +382,29 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
    * The body is the treasurer's own note on how it was paid. Not celebrated,
    * for redemption's reason: the platform records the payment and never sees it.
    */
+  /**
+   * The end-of-moon review (module moon-review, server/lib/moonReview.ts): a
+   * recap returned, approved, a range changed, a self-approval to review, and
+   * "Your pay is sent". The title carries the contract's own words.
+   */
+  moon_review: {
+    group: "work",
+    blurb: "Your moon recap moved: returned, approved, or paid.",
+    many: "{n} updates on moon recaps.",
+    celebrate: false,
+  },
+  /**
+   * Once a day, what Sera's agent did since the last summary (B7,
+   * server/lib/seraAgent.ts). Sent to the live holders of moon.approve and
+   * moon.approve_alone, never to an agent account. Each action can be undone
+   * for 30 days from the Sera bridge panel.
+   */
+  sera_agent_digest: {
+    group: "work",
+    blurb: "What Sera's agent changed since the last summary, each one undoable for 30 days.",
+    many: "{n} summaries of what Sera's agent did.",
+    celebrate: false,
+  },
   cash_paid: {
     group: "economy",
     blurb: "The village marked cash it owed you as paid.",
@@ -468,6 +505,20 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // a gentle note near a task's date, a task handed back to its circle, and a
   // task sitting with a seat nobody holds. None of them celebrate: each one
   // asks somebody to look at work, and none happened TO the reader.
+  // Your own list (server/lib/memberTaskNudges.ts): a task near its date, and
+  // a task somebody asked you for. In-app only; nothing celebrates.
+  my_task_due: {
+    group: "work",
+    blurb: "A task on your own list is due soon. Open your list to see it.",
+    many: "{n} tasks on your list are due soon.",
+    celebrate: false,
+  },
+  my_task_asked: {
+    group: "work",
+    blurb: "Someone asked you for a task on your own list. Open your list to see who.",
+    many: "{n} tasks on your list are waiting on you.",
+    celebrate: false,
+  },
   session_action_due: {
     group: "work",
     blurb: "A task you hold from a live session is near its date, or its date just passed. Answer it on your task board.",

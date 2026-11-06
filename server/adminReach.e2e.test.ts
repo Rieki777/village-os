@@ -437,6 +437,61 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     expect(cfg.json.images.logoAlt).toBe("");
   });
 
+  it("a path's and a stage's own words reach /api/game/config, which the join form and every ladder read", async () => {
+    const before = await asStranger("/api/game/config");
+    expect(before.json.paths.find((p: any) => p.id === "steward").label, "a village that never saved reads today's name").toBe("Village Steward");
+    expect(before.json.ladder).toEqual({ title: "Path of Growth" });
+
+    const saved = await call("PUT", "/api/admin/village-paths", {
+      paths: { steward: { label: "Keeper", description: "Tend {village} with us." } },
+      stages: { member: { name: "Kin" } },
+      ladder: { title: "The Spiral" },
+    });
+    expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+
+    const cfg = await asStranger("/api/game/config");
+    const steward = cfg.json.paths.find((p: any) => p.id === "steward");
+    expect(steward).toMatchObject({ id: "steward", label: "Keeper", route: "/steward", role: "Co-Creator" });
+    expect(steward.description).not.toContain("{village}");
+    // Every word the founder did not touch still reads as it did.
+    expect(cfg.json.paths.find((p: any) => p.id === "investor").label).toBe("Investor");
+    expect(cfg.json.ladder).toEqual({ title: "The Spiral" });
+    expect(cfg.json.stages.find((s: any) => s.id === "member").name).toBe("Kin");
+    expect(cfg.json.stages.map((s: any) => s.id), "the rungs keep their ids and their order").toEqual(before.json.stages.map((s: any) => s.id));
+
+    const me = await call("GET", "/api/game/me");
+    expect(me.status).toBe(200);
+    expect(me.json.stages.find((s: any) => s.id === "member").name).toBe("Kin");
+
+    // The same name reaches the path's email: the platform's welcome, rendered
+    // the way Comms renders it to send, and the journey's title in Comms.
+    const email = await call("POST", "/api/admin/comms/words/path.steward.welcome/preview", {});
+    expect(email.status, JSON.stringify(email.json)).toBe(200);
+    expect(email.json.subject).toBe("Welcome to the Keeper path");
+    expect(email.json.text).toContain("Keeper path");
+    const words = await call("GET", "/api/admin/comms/words");
+    expect(words.json.groups.find((g: any) => g.id === "path.steward").title).toBe("Keeper path");
+
+    // Refusals change nothing: an unknown id, a word over its limit, and a caller without the power.
+    for (const body of [{ paths: { pirate: { label: "Pirate" } } }, { paths: { steward: { label: "x".repeat(25) } } }]) {
+      const refused = await call("PUT", "/api/admin/village-paths", body);
+      expect(refused.status, JSON.stringify(body)).toBe(400);
+    }
+    const stranger = await call("PUT", "/api/admin/village-paths", { paths: { steward: { label: "Intruder" } } }, "");
+    expect([401, 403]).toContain(stranger.status);
+    expect((await asStranger("/api/game/config")).json.paths.find((p: any) => p.id === "steward").label, "a refused save changes nothing").toBe("Keeper");
+
+    // A blank box goes back to today's word, and so does a reset (a save without it).
+    const blank = await call("PUT", "/api/admin/village-paths", { paths: { steward: { label: "   " } }, stages: { sage: { name: "Elder" } } });
+    expect(blank.status, JSON.stringify(blank.json)).toBe(200);
+    expect(blank.json.stored).toEqual({ stages: { sage: { name: "Elder" } } });
+    const after = await asStranger("/api/game/config");
+    expect(after.json.paths.find((p: any) => p.id === "steward").label).toBe("Village Steward");
+    expect(after.json.ladder).toEqual({ title: "Path of Growth" });
+    expect(after.json.stages.find((s: any) => s.id === "sage").name).toBe("Elder");
+    expect(after.json.stages.find((s: any) => s.id === "member").name).toBe("Member");
+  });
+
   it("a linked crowdpool campaign reaches /api/crowdpool/campaigns", async () => {
     const saved = await call("PUT", "/api/admin/modules/crowdpool/config", {
       config: { villageCampaigns: [{ slug: "second-raising" }] },

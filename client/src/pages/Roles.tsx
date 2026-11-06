@@ -2,7 +2,7 @@ import Layout from "@/components/Layout";
 import { Link } from "wouter";
 /** The link from a circle's group to its own card (`/circles/:id`). */
 const OPEN_CIRCLE_CARD = "Open this circle's card";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { ArrowRight, Briefcase, ChevronDown, Link2 } from "lucide-react";
 import { iconFor } from "@/lib/circleIcons";
 import { useEffect, useId, useRef, useState } from "react";
@@ -20,6 +20,8 @@ import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
 import RoleHolderCards from "@/components/playerCard/RoleHolderCards";
 import RaiseTension from "@/components/roleTension/RaiseTension";
+import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
+import { RP_WORDS } from "@/components/roleProposal/proposalWords";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
@@ -220,7 +222,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
     el.focus({ preventScroll: true });
   }, [arrive]);
   return (
-    <motion.div
+    <m.div
       // The linked row is drawn in place. Its entrance offset is still on it
       // when the scroll is measured, so it would settle 20px higher, under
       // the sticky nav (measured in Chromium: header top 92, nav bottom 96).
@@ -268,7 +270,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
           its first frame and leaves the reader at the top of the page. */}
       <AnimatePresence initial={!arrive}>
         {expanded && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -295,6 +297,11 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                   link to it has nothing to ask anybody. */}
               {!role.isExample && <RoleHolderCards role={role.raw} />}
               {!role.isExample && <SeatLinkCopy seatId={role.id} seatName={role.name} />}
+              {!role.isExample && (
+                <Link href={proposeRoleHref(role.id)} className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2">
+                  {RP_WORDS.proposeThisRole}
+                </Link>
+              )}
               {!role.isExample && <RaiseTension roleId={role.id} roleName={role.name} />}
               {/* The card is the seat today. This is the seat's whole record,
                   ended holdings included, which is the half a village loses
@@ -325,10 +332,10 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 </div>
               )}
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -462,7 +469,7 @@ export default function Roles() {
       <section className="py-24 bg-background">
         <div className="container">
           {/* Header */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-16"
@@ -483,7 +490,7 @@ export default function Roles() {
               is a way to hold some of it with your own hands, by{" "}
               <InfoTip tip="A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.">consent</InfoTip>.
             </p>
-          </motion.div>
+          </m.div>
 
           <div className="max-w-4xl mx-auto">
             {/* Offered here because this is the page that names you: the
@@ -492,7 +499,7 @@ export default function Roles() {
                 every visit after the first. */}
             <SeatClaimCard />
             {/* How it works */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -508,7 +515,7 @@ export default function Roles() {
                   <p className={`text-xs text-muted-foreground leading-relaxed${"pending" in item && item.pending ? " invisible" : ""}`}>{item.description}</p>
                 </div>
               ))}
-            </motion.div>
+            </m.div>
 
             {/* Members-only people: every seat card below still carries its
                 aim, its domain and whether it is held. This says whose names
@@ -572,7 +579,7 @@ export default function Roles() {
             ))}
 
             {/* How tensions work */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -587,10 +594,10 @@ export default function Roles() {
               <p className="text-muted-foreground">
                 Decisions are made by consent. Consent means no one holds a reasoned objection based on their ability to do their work. It does not require unanimous agreement. The circle tries the change for an agreed period, then evaluates. Roles here are invitations to a specific way of serving the living purpose, not fixed job descriptions.
               </p>
-            </motion.div>
+            </m.div>
           </div>
 
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -600,7 +607,7 @@ export default function Roles() {
               Explore Our Circles
               <ArrowRight className="w-4 h-4" />
             </Link>
-          </motion.div>
+          </m.div>
         </div>
       </section>
     </Layout>

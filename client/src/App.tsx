@@ -4,15 +4,15 @@ import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
-import { MotionConfig } from "framer-motion";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { LazyMotion, MotionConfig } from "framer-motion";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ScrollToTop from "./components/ScrollToTop";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
-import { brochurePage, useBrochurePages } from "./lib/brochure";
+import { brochurePage, storyPageShown, useBrochurePages } from "./lib/brochure";
 import { useGameConfig } from "./lib/gameApi";
 
 /**
@@ -82,6 +82,8 @@ function PageTitle() {
   const village = config?.project?.name ?? "";
   const commitment = config?.project?.commitmentName ?? "";
   const favicon = String(config?.images?.favicon ?? "").trim();
+  // Each story page's own switch rides the same config (Admin, Pages).
+  const switches = useMemo(() => (config ? { brochurePages: config.brochurePages, brochureHidden: config.brochureHidden } : null), [config]);
 
   // The tab ICON is identity too. index.html ships a neutral platform favicon
   // (a static file cannot know which village it serves); this swaps in the
@@ -101,8 +103,10 @@ function PageTitle() {
 
   useEffect(() => {
     if (!village) return;
-    document.title = documentTitle(location, village, { commitment });
-  }, [location, village, commitment]);
+    // A story page this village does not serve answers not found, so its tab
+    // names the village alone, the same as its share card (server/lib/pageMeta.ts).
+    document.title = documentTitle(storyPageShown(switches, location) ? location : "/", village, { commitment });
+  }, [location, village, commitment, switches]);
 
   return null;
 }
@@ -128,8 +132,19 @@ function PageTitle() {
  * New page? Add it to the lazy list. Only add to the eager set if it renders
  * on first paint for a signed-out visitor.
  */
-import Home from "./pages/Home";
+/*
+ * Home is the brochure landing page, and it only renders once the brochure
+ * switch has loaded (LandingRoute above), so it never paints before an async
+ * step anyway. It is lazy to keep its ~17 KB out of the main chunk, and the
+ * fetch starts at boot on "/" so it runs in parallel with that config request.
+ */
+const loadHome = () => import("./pages/Home");
+if (typeof window !== "undefined" && window.location.pathname === "/") void loadHome();
+const Home = lazy(loadHome);
 import Login from "./pages/Login";
+
+// The animation engine, after the first page: see lib/motionFeatures.ts.
+const loadMotionFeatures = () => import("./lib/motionFeatures").then((mod) => mod.default);
 
 const lazyPage = (loader: () => Promise<{ default: React.ComponentType<any> }>) => lazy(loader);
 const VillageWelcome = lazyPage(() => import("./pages/VillageWelcome"));
@@ -140,6 +155,7 @@ const ResidentJourney = brochurePage(() => import("./pages/ResidentJourney"));
 const ProsperityJourney = brochurePage(() => import("./pages/ProsperityJourney"));
 const LoveLetter = brochurePage(() => import("./pages/LoveLetter"));
 const Circles = lazyPage(() => import("./pages/Circles"));
+const OAuthAuthorize = lazyPage(() => import("./pages/OAuthAuthorize"));
 const CircleCardPage = lazyPage(() => import("./pages/CircleCardPage"));
 const Places = lazyPage(() => import("./pages/Places"));
 const PlacePhotos = lazyPage(() => import("./pages/PlacePhotos"));
@@ -209,6 +225,7 @@ const Introductions = lazyPage(() => import("./pages/Introductions"));
 const RequestMembership = lazyPage(() => import("./pages/RequestMembership"));
 const ProposeARole = lazyPage(() => import("./pages/ProposeARole"));
 const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) => ({ default: m.ConfirmProposal })));
+const OpenProposal = lazyPage(() => import("./pages/OpenProposal"));
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
@@ -346,6 +363,8 @@ function Router() {
           class select into a lookup for a member called "characters". */}
       <Route path="/profile/:handle" component={PublicProfile} />
       <Route path="/login" component={Login} />
+      {/* A connector's sign-in (addendum v6, B4): the member allows or refuses. */}
+      <Route path="/oauth/authorize" component={OAuthAuthorize} />
       <Route path="/register" component={Register} />
       <Route path="/request-membership" component={RequestMembership} />
       {/* Confirm before :token, so the email's link is never read as a link made for one person. */}
@@ -375,6 +394,7 @@ function Router() {
       <Route path="/propose" component={Propose} />
       {/* One application to hold roles, on terms. Members only, behind terms.read. */}
       <Route path="/role-applications/:id" component={SeatApplication} />
+      <Route path="/open-proposals/:id" component={OpenProposal} />
       <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
       {/* Propose my roles for next season. /new and /shared/:token before /:id, which would take them. */}
       <Route path="/role-proposals/new" component={NewRoleProposal} />
@@ -425,6 +445,7 @@ function App() {
        * run `repeat: Infinity` and never stopped for anyone.
        */}
       <MotionConfig reducedMotion="user">
+      <LazyMotion features={loadMotionFeatures}>
         <AuthProvider>
         <ModuleProvider>
           <TooltipProvider>
@@ -440,6 +461,7 @@ function App() {
 
         </ModuleProvider>
         </AuthProvider>
+      </LazyMotion>
       </MotionConfig>
     </ThemeProvider>
   );

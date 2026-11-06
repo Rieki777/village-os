@@ -378,7 +378,7 @@ describe("tensions in plain words (PR 9)", () => {
 
   it("proposal mode: Starts once adopted and no door", () => {
     const r = card({ mode: "proposal" }, { tensions: [] });
-    expect(r.tensions).toEqual({ kind: "empty", words: "Starts once adopted" });
+    expect(r.tensions).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     expect(r.tensionDoor).toBeNull();
   });
 });
@@ -432,6 +432,19 @@ describe("the timeline", () => {
     expect(none.some((m) => m.kind === "invoice")).toBe(false);
     const some = buildPlayerCard(input({ roles: [role(1, { invoiceOn: ["2026-10-30"] })] })).timeline.moons.flatMap((m) => m.markers);
     expect(some.filter((m) => m.kind === "invoice")).toHaveLength(1);
+  });
+  it("shows every moon once, in order, across a long season", () => {
+    const t = buildPlayerCard(
+      input({
+        now: new Date("2026-07-01T18:00:00Z"),
+        season: { id: "s2", name: "Season of Foundations", startsOn: "2026-06-21", endsOn: "2026-12-31" },
+      }),
+    ).timeline;
+    const moons = t.moons.filter((m) => m.title !== "Getting started");
+    expect(moons.length).toBeGreaterThanOrEqual(6);
+    expect(moons.length).toBeLessThanOrEqual(8);
+    const labels = moons.map((m) => m.label);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });
 
@@ -547,11 +560,11 @@ describe("proposal mode (PR 3): the card a role application asks for", () => {
 
   it("every live section reads Starts once adopted", () => {
     const card = proposal();
-    expect(card.across.tasks).toEqual({ kind: "empty", words: "Starts once adopted" });
-    expect(card.across.signs).toEqual({ kind: "empty", words: "Starts once adopted" });
+    expect(card.across.tasks).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
+    expect(card.across.signs).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     for (const r of card.roles) {
-      expect(r.working.items).toEqual({ kind: "empty", words: "Starts once adopted" });
-      expect(r.tensions).toEqual({ kind: "empty", words: "Starts once adopted" });
+      expect(r.working.items).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
+      expect(r.tensions).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     }
     expect(card.across.load.openTasks).toBeNull();
   });
@@ -564,6 +577,47 @@ describe("proposal mode (PR 3): the card a role application asks for", () => {
     const rows = value(proposal().agreements.roles[0].rows);
     expect(rows[0].label).toBe("Term");
     expect(rows.slice(-3).every((r) => r.small)).toBe(true);
+  });
+
+  it("an open row on a proposal names who fills it, and the load card names the hours", () => {
+    const card = buildPlayerCard(
+      input({
+        mode: "proposal",
+        fillWith: "Operations Steward",
+        loadRead: null,
+        growingEdge: null,
+        whoCouldHoldNext: null,
+        plan: { aim: null, goals: [] },
+        roles: [role(1, { settings: { v: 1, term: { endsOn: "2026-12-31" } } })],
+      }),
+    );
+    const line = "We'll fill this together with Operations Steward.";
+    expect(card.across.growingEdge.text).toEqual({ kind: "empty", words: line });
+    expect(card.across.whoCouldHoldNext.text).toEqual({ kind: "empty", words: line });
+    expect(card.across.goals).toEqual({ kind: "empty", words: line });
+    expect(card.across.load.own).toEqual({ kind: "empty", words: "We'll fill the hours together with Operations Steward." });
+    expect(card.roles[0].chips.join(" ")).toContain(line);
+    expect(card.roles[0].chips.join(" ")).not.toContain("No review date set");
+    const none = buildPlayerCard(input({ mode: "proposal", fillWith: null, loadRead: null, growingEdge: null, plan: null }));
+    expect(none.across.load.own).toEqual({ kind: "empty", words: "We'll fill the hours together with the village's operations role." });
+    expect(none.across.growingEdge.text).toEqual({ kind: "empty", words: "We'll fill this together with the village's operations role." });
+    const live = buildPlayerCard(input({ loadRead: null, growingEdge: null, plan: { aim: null, goals: [] } }));
+    expect(live.across.load.own).toEqual({ kind: "empty", words: "Not set this moon" });
+    expect(live.across.growingEdge.text).toEqual({ kind: "empty", words: "Not written yet" });
+    expect(live.across.goals).toEqual({ kind: "empty", words: "No village goals named yet" });
+  });
+
+  it("a proposal names who fills each open role row, and never says Not written yet", () => {
+    const card = buildPlayerCard(
+      input({ mode: "proposal", fillWith: "Operations Steward", howIHold: [], roles: [role(1, { worksWith: [], runbook: null, notMine: [], tensions: [] })] }),
+    );
+    const r = card.roles[0];
+    expect(r.worksWith.items).toEqual({ kind: "empty", words: "We'll fill this together with Operations Steward." });
+    expect(r.runbook.text).toEqual({ kind: "empty", words: "Open for now. You'll write this once you hold the role." });
+    expect(card.howIHold.items).toEqual({ kind: "empty", words: "Open for now. You'll write this once you hold the role." });
+    expect(r.tensions).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
+    expect(JSON.stringify(card)).not.toContain("Not written yet");
+    expect(JSON.stringify({ roles: card.roles, across: card.across })).not.toContain("Starts once adopted");
   });
 
   it("a live card is unchanged by the mode it does not ask for", () => {

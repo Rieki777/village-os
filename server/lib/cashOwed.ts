@@ -84,6 +84,11 @@ interface OweInput {
   workRef: string;
   workTitle: string;
   cash: WorkValue | null;
+  /**
+   * The moon review only: a recap sent before the member left is still paid
+   * (spec section 6, "A member who leaves after sending still gets paid").
+   */
+  allowDeparted?: boolean;
 }
 
 /**
@@ -96,7 +101,7 @@ async function owe(db: Pool | PoolConnection, p: OweInput): Promise<boolean> {
   // No cash is owed to a member who has left (round 4, finding 3): the
   // treasurer's queue would carry a line nobody can claim. This is the one
   // writer of `cash_owed`, so a quest, a proposal and a role all stop here.
-  if (await departedById(db, p.userId)) return false;
+  if (!p.allowDeparted && (await departedById(db, p.userId))) return false;
   const id = newId();
   await insertCashOwedRow(db, {
     id,
@@ -147,6 +152,72 @@ export async function oweRoleCycleCash(pool: Pool, cycleKey: string): Promise<nu
     if (recorded) written++;
   }
   return written;
+}
+
+/** One line of an approved moon invoice, as `oweApprovedRoleCash` reads it. */
+export interface MoonCashLine {
+  key: string;
+  kind: "pay" | "allowance";
+  firstSeatId: string;
+  roleNames: readonly string[];
+  currency: string | null;
+  amountMinor: number | null;
+  held: boolean;
+  cashOwedId: string | null;
+}
+
+/**
+ * The cash owed key of one moon invoice line: `cashKeys.role(cycle, the
+ * application's first seat, member)`, the same key the settlement's own role
+ * cash uses, so one seat's moon is never owed twice from both doors. An
+ * allowance line names its seat with `:allowance` after it, because the pay
+ * line of the same application already holds the plain key.
+ */
+export function moonLineCashKey(cycleId: string, line: Pick<MoonCashLine, "kind" | "firstSeatId">, userId: string): string {
+  return cashKeys.role(cycleId, line.kind === "allowance" ? `${line.firstSeatId}:allowance` : line.firstSeatId, userId);
+}
+
+/**
+ * THE CASH AN APPROVED MOON INVOICE OWES (spec section 6): one row per line
+ * that carries money, through the one writer `owe`, then claimed through the
+ * existing claim path, because `insertCashOwedRow` writes only `owed` and the
+ * member already said they are ready to be paid by sending the invoice.
+ *
+ * Refused, writing nothing the caller keeps, when a key already holds a row
+ * this invoice did not write: the caller runs this inside the approval's
+ * transaction and rolls back on a refusal. A line that already names its
+ * row (a retried approval) keeps it. Returns each line with `cashOwedId` set.
+ */
+export async function oweApprovedRoleCash<L extends MoonCashLine>(
+  db: Pool | PoolConnection,
+  p: { cycleId: string; userId: string; invoiceTitle: string; lines: readonly L[] },
+): Promise<{ ok: true; lines: L[] } | { ok: false; rowId: string }> {
+  const out: L[] = [];
+  for (const line of p.lines) {
+    if (line.held || !line.currency || !line.amountMinor || line.amountMinor <= 0) {
+      out.push({ ...line });
+      continue;
+    }
+    const key = moonLineCashKey(p.cycleId, line, p.userId);
+    const holder = await cashOwedIdForOccurrence(db, key);
+    if (holder && holder !== line.cashOwedId) return { ok: false, rowId: holder };
+    if (!holder) {
+      await owe(db, {
+        occurrenceKey: key,
+        userId: p.userId,
+        workKind: "role",
+        workRef: line.firstSeatId,
+        workTitle: `${line.roleNames.join(", ")}, ${p.invoiceTitle}`,
+        cash: { minor: line.amountMinor, currency: line.currency },
+        allowDeparted: true,
+      });
+    }
+    const id = await cashOwedIdForOccurrence(db, key);
+    if (!id) throw new Error(`moon invoice: no cash owed row holds ${key} after writing it`);
+    await claimCashOwedRow(db, id, p.userId);
+    out.push({ ...line, cashOwedId: id });
+  }
+  return { ok: true, lines: out };
 }
 
 /**

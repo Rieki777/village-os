@@ -13,8 +13,8 @@ import { MessageCircle } from "lucide-react";
 import { GUIDE_WORDS, type GuideState } from "@shared/guideChoice";
 import { saveGuide } from "@/lib/guideApi";
 
-const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep";
-const SWITCH = `inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-teal-deep hover:bg-teal-deep/5 disabled:opacity-50 ${FOCUS}`;
+const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const SWITCH = `inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-notice hover:bg-muted disabled:opacity-50 ${FOCUS}`;
 
 export default function GuidePicker({ state, onChange }: { state: GuideState; onChange: (next: GuideState) => void }) {
   const [busy, setBusy] = useState(false);
@@ -33,10 +33,10 @@ export default function GuidePicker({ state, onChange }: { state: GuideState; on
   };
 
   return (
-    <div className="grid gap-1 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm" data-guide-answering={answering.id}>
+    <div className="grid gap-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm" data-guide-answering={answering.id}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 font-medium text-stone-800">
-          <MessageCircle className="h-4 w-4 text-teal-deep" aria-hidden="true" />
+        <p className="flex items-center gap-1.5 font-medium text-foreground">
+          <MessageCircle className="h-4 w-4 text-notice" aria-hidden="true" />
           {GUIDE_WORDS.answering(answering.name)}
         </p>
         {other && (
@@ -45,9 +45,9 @@ export default function GuidePicker({ state, onChange }: { state: GuideState; on
           </button>
         )}
       </div>
-      {about && <p className="text-stone-600">{about}</p>}
+      {about && <p className="text-muted-foreground">{about}</p>}
       {state.note && (
-        <p className="text-stone-700" role="status">
+        <p className="text-foreground" role="status">
           {state.note}
         </p>
       )}

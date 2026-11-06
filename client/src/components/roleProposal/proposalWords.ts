@@ -12,6 +12,7 @@
  * is read by anyone holding it, so it stays counts and role titles.
  */
 import type { ConsentState } from "@shared/roleProposalConsent";
+import { seasonHeading } from "@shared/roleProposalHonesty";
 
 export const STEPS = ["roles", "words", "season", "terms", "preview", "share"] as const;
 export type StepKey = (typeof STEPS)[number];
@@ -26,12 +27,20 @@ export const STEP_TITLES: Record<StepKey, string> = {
 };
 
 export const RP_WORDS = {
-  // The profile button.
+  // The profile button. The card at the top of the profile uses the shorter
+  // lines below. This pair stays for the list under My applications.
   propose: "Propose my roles for next season",
   continue: "Continue my proposal for next season",
+  profileKicker: "Next season",
+  profilePropose: "Propose your role",
+  profileProposeLine: "Say the roles you will hold next season.",
+  profileContinue: "Continue your role proposal",
+  profileSubmitted: "Your role proposal",
+  profileSee: "See where it stands",
+  profileFailed: "Your role proposal did not load.",
   // The page.
   title: "Propose my roles for next season",
-  forSeason: (name: string, starts: string) => `For ${name}, starting ${starts}.`,
+  forSeason: (name: string, starts: string) => seasonHeading(name, starts),
   signIn: "Sign in to propose your roles.",
   signInLine: "Propose the roles you will hold next season, and share the draft for feedback before you submit it.",
   membersOnly: "Proposing roles opens at the member rung.",
@@ -44,6 +53,34 @@ export const RP_WORDS = {
   next: "Next",
   saving: "Saving",
   saved: "Saved",
+  savedReturn: "Saved. Come back from your profile.",
+  // The quick path, in front of the six steps.
+  welcomeTitle: "Let's draft your roles",
+  welcomeLede: "Three short questions, then we draft it with you. Save and come back any time.",
+  guideHere: (who: string) => `Your guide here is ${who}.`,
+  termsLoading: "Loading your terms…",
+  opsFillsOpen: (ops: string) => `Anything left open, you fill in together with ${ops}.`,
+  quickPath: "Quick path",
+  fullControl: "All the steps",
+  yourWordsTitle: "In your words",
+  yourWordsLede: "Write the way you talk. These stay exactly as you wrote them.",
+  yourWordsKept: "Your words, kept as you wrote them",
+  anyLanguage: "Any language is welcome. Write in the language you think in.",
+  love: "What do you love doing?",
+  offer: "What would you offer the village?",
+  whyHere: "Why here, why now?",
+  loveHint: "A ramble is welcome. Speak it if that is easier.",
+  startQuestions: "Start the three questions",
+  goFailed: "That did not save, so you are still on this step. Your words are kept on this page. Check your connection, then try again.",
+  stayHere: "Stay here",
+  editYourWords: "Edit your words",
+  onToRoles: "Pick the roles",
+  proposeThisRole: "Propose this role for next season",
+  hoursQuestion: "About how many hours a week?",
+  hoursChoice: (n: number) => `${n} hours a week`,
+  notSureHours: "Not sure",
+  notSureYet: "Not sure yet",
+  notSureLine: (partner: string) => `Leave these open. We'll fill them together with ${partner}.`,
   notSaved: "Not saved, try again",
   tryAgain: "Try again",
 
@@ -57,6 +94,7 @@ export const RP_WORDS = {
   noRolesYet: "This village has no roles on its chart yet. Propose a new one below.",
   loadingRoles: "Reading the roles",
   rolesFailed: "The roles did not load. Try again in a moment.",
+  roleNotOnChart: "That role is not on the chart, so it was left off this proposal.",
   circleLine: (circle: string, purpose: string | null) => (purpose ? `${circle}: ${purpose}` : circle),
   noCircle: "Not in a circle yet",
   youHoldThis: "You hold this role now",
@@ -70,6 +108,11 @@ export const RP_WORDS = {
   newRoleCircle: "The circle it sits in",
   pickCircle: "Pick a circle",
   addNewRole: "Add this new role",
+  addAnotherRole: "Add another role",
+  suggestionsHeading: "Roles that fit your words",
+  suggested: "Suggested",
+  noSuggestions: "No role suggestions from your words yet; pick below, or propose a new one.",
+  fromYourWords: "From your words:",
   removeNewRole: (name: string) => `Take ${name} off this proposal`,
   newRoleTag: "New role",
   noCircles: "This village has no circles yet, so a new role has nowhere to sit.",
@@ -116,6 +159,9 @@ export const RP_WORDS = {
   shareLede: "Share a link to this draft before you submit it, and read the feedback here.",
   shareOff: "The link is off. Nobody else can read this draft.",
   makeLink: "Make a share link",
+  sendToOps: (who: string) => `Send to ${who} to finish the terms together`,
+  sendOpsLine: (who: string) => `The terms are still open. ${who} can read this draft and fill them with you.`,
+  sentToOps: (who: string) => `Sent. ${who} can open the link.`,
   whoReads: "Who can read it",
   membersOnlyTier: "Members of the village",
   membersOnlyLine: "Members with the link read it, terms included, and can leave feedback.",
@@ -146,7 +192,7 @@ export const RP_WORDS = {
   seeApplication: "See the application",
   submittedOn: (day: string) => `Submitted on ${day}.`,
   myProposals: "My role proposals",
-  proposalFor: (season: string) => `Role proposal for ${season}`,
+  proposalFor: (season: string) => `Role proposal for ${season.trim() || "next season"}`,
   proposalNoSeason: "Role proposal for next season",
   draftWords: "Draft, not submitted yet",
 

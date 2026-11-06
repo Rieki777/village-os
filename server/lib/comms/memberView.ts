@@ -18,7 +18,7 @@ import { templateGroups, templateLabel } from "../../../shared/comms/defaults/te
 import { CONDITION_LABELS, STOP_LABELS, timingLabel } from "../../../shared/comms/journeySteps";
 import { sampleValues } from "../../../shared/comms/mergeFields";
 import type { MemberCommsView, MemberDialView, MemberEmailView } from "../../../shared/comms/memberView";
-import { GAME_CONFIG } from "../../../shared/gameConfig";
+import { villagePathLabel } from "../villagePaths";
 import { ringOf, VARIABLES_BY_KEY } from "../../../shared/gameVariables";
 import { allVariables } from "../variables";
 import { allJourneyStatuses, villagePathIds } from "./journeyDefinitions";
@@ -36,8 +36,8 @@ export interface MemberViewDeps {
 /** What a journey is called: a path by its own name, everything else by its Words group. */
 export function journeyTitle(key: string): string {
   const pathId = key.match(/^path\.([a-z0-9-]+)$/)?.[1];
-  const path = pathId ? GAME_CONFIG.paths.find((p) => p.id === pathId) : undefined;
-  if (path) return `${path.label} path`;
+  const label = pathId ? villagePathLabel(pathId) : null;
+  if (label) return `${label} path`;
   return templateGroups(villagePathIds()).find((g) => g.journeyKey === key)?.title ?? key;
 }
 

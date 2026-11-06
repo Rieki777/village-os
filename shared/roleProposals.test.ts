@@ -22,6 +22,7 @@ import {
   applicationWordsOf,
   changesRoles,
   COMMENT_MAX,
+  bodyOf,
   emptyBody,
   MAX_PROPOSAL_ROLES,
   NOT_ROLE_WORDS,
@@ -191,6 +192,36 @@ describe("a body update", () => {
     expect(r.value.season.aim).toBe("Feed thirty people.");
   });
 
+  it("keeps the member's own words exactly, and a later aim does not rewrite them", () => {
+    const love = "I love the bread,  the early oven";
+    const first = parseBodyUpdate({ season: { ownWords: { love, offer: "loaves on Fridays", why: "the kitchen asked" } } }, emptyBody(), ctx());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value.season.ownWords).toEqual({ love, offer: "loaves on Fridays", why: "the kitchen asked" });
+    const again = parseBodyUpdate({ season: { aim: "Feed thirty people." } }, first.value, ctx());
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(again.value.season.ownWords).toEqual(first.value.season.ownWords);
+    expect(again.value.season.aim).toBe("Feed thirty people.");
+    const read = bodyOf({ season: { ownWords: { love, offer: "loaves on Fridays" } } });
+    expect(read.season.ownWords).toEqual({ love, offer: "loaves on Fridays", why: "" });
+  });
+
+  it("keeps an answer in any language exactly, spaces included", () => {
+    const love = "Me encanta el horno, パンと窯";
+    const offer = "Je tiens le four  ";
+    const why = "لماذا هنا";
+    const first = parseBodyUpdate({ season: { ownWords: { love, offer, why } } }, emptyBody(), ctx());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value.season.ownWords).toEqual({ love, offer, why });
+    const aim = "El dominio es la cocina";
+    const words = parseBodyUpdate({ roles: [{ roleId: "role-garden", words: { aim } }] }, emptyBody(), ctx());
+    expect(words.ok).toBe(true);
+    if (!words.ok) return;
+    expect(words.value.roles[0]?.words.aim).toBe(aim);
+  });
+
   it(`holds at most ${MAX_SEATS} roles across those the village has and new ones`, () => {
     expect(MAX_PROPOSAL_ROLES).toBe(MAX_SEATS);
     const five = ["role-garden", "role-kitchen", "role-water", "role-paths", "role-tools"].map((roleId) => ({ roleId }));
@@ -257,6 +288,10 @@ describe("submit readiness", () => {
     expect(submitRefusal({ ...ready, season: { ...ready.season, aim: null } }, true)).toBe(PROPOSAL_WORDS.noAim);
     expect(submitRefusal({ ...ready, season: { ...ready.season, seasonalGoals: [] } }, true)).toBe(PROPOSAL_WORDS.noSeasonalGoal);
     expect(submitRefusal(ready, true)).toBeNull();
+  });
+
+  it("does not block submit when the terms are still open", () => {
+    expect(submitRefusal({ ...ready, settings: { v: 1 } }, true)).toBeNull();
   });
 
   it("says Rye's words when next season has no dates", () => {

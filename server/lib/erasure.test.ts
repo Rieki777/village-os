@@ -36,6 +36,7 @@
  * file pass while the sweep wrote nothing anywhere. No TEST_DATABASE_URL and
  * the suite skips (harness rule).
  */
+import { insertTask, setListOn } from "../repos/memberTasks";
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
@@ -523,11 +524,13 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "role-holdings-after-tombstone",
       "sessions-after-tombstone",
       "gene-keys-after-tombstone",
+      "member-tasks-after-tombstone",
       "quest-crews-after-tombstone",
       "quest-claims-after-tombstone",
       "photo-report-reasons-after-tombstone",
       "session-cards-after-tombstone",
       "member-asks-after-tombstone",
+      "moon-reviews-after-tombstone",
       "reward-moments-after-tombstone",
       "companions-after-tombstone",
       "audit",
@@ -630,6 +633,28 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(await q("SELECT `id` FROM `proposal_drafts` WHERE `user_id` = ?", [id])).toHaveLength(0);
     expect((await erasureRecord(pool, id))!.stepsDone).toContain("proposal-drafts");
     expect(await q("SELECT `id` FROM `proposal_drafts` WHERE `user_id` = ?", [neighbour])).toHaveLength(1);
+  });
+
+  it("takes their own task list with them: tasks, tombstones, events and the switch", async () => {
+    const id = "er-tasks-1";
+    const neighbour = "er-tasks-neighbour";
+    const target = await seedMember(id);
+    await setListOn(pool, id, true, null);
+    await setListOn(pool, neighbour, true, id);
+    await insertTask(pool, id, { title: "Mine", tier: "high", dueOn: null, horizon: null, minutes: null, privateDetail: "journal words", source: "journal", createdOn: "2026-11-02" }, id);
+    await insertTask(pool, neighbour, { title: "Theirs", tier: "priority", dueOn: null, horizon: null, minutes: null, privateDetail: null, source: "self", createdOn: "2026-11-02" }, id);
+    const named = async () =>
+      Number((await q(
+        "SELECT (SELECT COUNT(*) FROM `member_tasks` WHERE `user_id` = ?) + " +
+          "(SELECT COUNT(*) FROM `member_task_events` WHERE `user_id` = ? OR `by_user_id` = ?) + " +
+          "(SELECT COUNT(*) FROM `member_task_access` WHERE `user_id` = ? OR `set_by_user_id` = ?) AS n",
+        [id, id, id, id, id],
+      ))[0].n);
+    expect(await named(), "the fixture must name them, or the zero below proves nothing").toBeGreaterThan(0);
+    await anonymizeMember(pool, target, null, deps());
+    expect(await named()).toBe(0);
+    expect((await erasureRecord(pool, id))!.stepsDone).toContain("member-tasks-after-tombstone");
+    expect(await q("SELECT `id` FROM `member_tasks` WHERE `user_id` = ?", [neighbour])).toHaveLength(1);
   });
 
   it("takes the journal with them: entries, pulse, the feedback yes, and feedback both ways", async () => {
@@ -847,11 +872,29 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       [`stmt-${id}`, id, "member", "You garden on Tuesdays."],
     );
 
+    await pool.query( // module-review-ok: a fixture seeding assistant_statements before erasure, not a product read path
+      "INSERT INTO `agent_oauth_codes` (`code_hash`, `client_id`, `user_id`, `scopes_json`, `code_challenge`, `redirect_uri`) VALUES (?,?,?,?,?,?)",
+      ["c".repeat(64), "client-1", id, JSON.stringify(["moon.read"]), "challenge", "https://example.test/cb"],
+    );
+    await pool.query( // module-review-ok: a fixture seeding agent_oauth_codes before erasure, not a product read path
+      "INSERT INTO `agent_actions` (`id`, `token_id`, `actor_user_id`, `scope`, `tool`, `echo_hash`, `subject_user_id`) VALUES (?,?,?,?,?,?,?)",
+      [`act-${id}`, "tok-other", "agent-account", "admin", "admin_request", "e".repeat(64), id],
+    );
+    // An admin path that names the member as a segment, and somebody else's action the member undid.
+    await pool.query( // module-review-ok: a fixture seeding agent_actions before erasure, not a product read path
+      "INSERT INTO `agent_actions` (`id`, `token_id`, `actor_user_id`, `scope`, `tool`, `method`, `path`, `echo_hash`) VALUES (?,?,?,?,?,?,?,?)",
+      [`act-path-${id}`, "tok-other", "agent-account", "admin", "admin_request", "PUT", `/api/admin/member-tasks/access/${id}`, "f".repeat(64)],
+    );
+    await pool.query( // module-review-ok: a fixture seeding agent_actions before erasure, not a product read path
+      "INSERT INTO `agent_actions` (`id`, `token_id`, `actor_user_id`, `scope`, `tool`, `echo_hash`, `undone_by_user_id`) VALUES (?,?,?,?,?,?,?)",
+      [`act-undo-${id}`, "tok-other", "agent-account", "sera.undoable", "suggest_task", "a".repeat(64), id],
+    );
+
     const before = await agentRowsRemaining(pool, id);
     expect(
       before,
       "the fixture must actually put rows there, or the assertion below passes over nothing",
-    ).toEqual({ deliveries: 1, inboxes: 1, keys: 1, drafts: 1, tokens: 1, profiles: 1, statements: 1 });
+    ).toEqual({ deliveries: 1, inboxes: 1, keys: 1, drafts: 1, tokens: 1, profiles: 1, statements: 1, oauthCodes: 1, actions: 3 });
 
     await anonymizeMember(pool, target, "admin-1", deps());
 
@@ -863,6 +906,8 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       tokens: 0,
       profiles: 0,
       statements: 0,
+      oauthCodes: 0,
+      actions: 0,
     });
   });
 });

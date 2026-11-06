@@ -60,13 +60,13 @@ export default function SharedProposal({ token, shared }: { token: string; share
   return (
     <div className="grid gap-5" data-shared-tier={you.tier}>
       <header className="grid gap-1">
-        <h1 className="font-display text-3xl font-bold text-stone-900">{RP_WORDS.sharedTitle}</h1>
+        <h1 className="font-display text-3xl font-bold text-foreground">{RP_WORDS.sharedTitle}</h1>
         <p className={LEDE}>{target ? RP_WORDS.forSeason(target.name, civilDayWords(target.startsOn)) : proposal.targetWords}</p>
         {you.isOwner && (
-          <p className="text-sm text-stone-800">
+          <p className="text-sm text-foreground">
             {RP_WORDS.yourOwn}{" "}
             <Link href={`/role-proposals/${encodeURIComponent(proposal.id)}`} className={`${QUIET} px-0`}>
-              {RP_WORDS.editYourOwn}
+              {proposal.status === "draft" ? RP_WORDS.editYourOwn : RP_WORDS.profileSee}
             </Link>
           </p>
         )}
@@ -81,10 +81,10 @@ export default function SharedProposal({ token, shared }: { token: string; share
 
       {you.mayComment && !you.isOwner && (
         <section aria-labelledby="rp-shared-feedback" className={`${PANEL} grid gap-2`} data-comment-box="">
-          <h2 id="rp-shared-feedback" className="font-semibold text-stone-900">
+          <h2 id="rp-shared-feedback" className="font-semibold text-foreground">
             {RP_WORDS.feedbackLabel}
           </h2>
-          <label className="grid gap-1 text-sm text-stone-700">
+          <label className="grid gap-1 text-sm text-muted-foreground">
             {RP_WORDS.feedbackHelp}
             <textarea rows={4} maxLength={COMMENT_MAX} value={text} onChange={(e) => setText(e.target.value)} className={INPUT} aria-label={RP_WORDS.feedbackLabel} />
           </label>
@@ -94,7 +94,7 @@ export default function SharedProposal({ token, shared }: { token: string; share
             </button>
           </div>
           {said && (
-            <p role={said.ok ? "status" : "alert"} className={`text-sm ${said.ok ? "text-teal-deep" : "text-coral"}`}>
+            <p role={said.ok ? "status" : "alert"} className={`text-sm ${said.ok ? "text-dash-gold-lit" : "text-coral"}`}>
               {said.text}
             </p>
           )}
@@ -109,14 +109,14 @@ export default function SharedProposal({ token, shared }: { token: string; share
 function OwnFeedback({ comments }: { comments: readonly CommentOut[] }) {
   return (
     <section aria-labelledby="rp-own-feedback" className={`${PANEL} grid gap-2`}>
-      <h2 id="rp-own-feedback" className="font-semibold text-stone-900">
+      <h2 id="rp-own-feedback" className="font-semibold text-foreground">
         {RP_WORDS.yourFeedback}
       </h2>
       <ul className="grid gap-2">
         {comments.map((c) => (
-          <li key={c.id} className="rounded-lg border border-stone-200 p-3">
-            <p className="whitespace-pre-line break-words text-stone-900">{c.text}</p>
-            <p className="mt-1 text-xs text-stone-600">{c.writtenOn}</p>
+          <li key={c.id} className="rounded-lg border border-border p-3">
+            <p className="whitespace-pre-line break-words text-foreground">{c.text}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{c.writtenOn}</p>
           </li>
         ))}
       </ul>
