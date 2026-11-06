@@ -184,6 +184,9 @@ export async function saveExitPolicy(
   req: Parameters<AppDeps["isAdmin"]>[0],
   rawBody: unknown | (() => unknown),
 ): Promise<{ status: number; body: Record<string, unknown> }> {
+  // A stranger is turned away before the queue, so nobody signed out can make
+  // an admin's save wait behind them (check-route-limits reads this door).
+  if (!(await deps.isAdmin(req))) return { status: 401, body: { error: "auth_required" } };
   // One write at a time, and a body given as a function is built inside the
   // lock from the document as it then stands (server/lib/exitPolicyWrites.ts).
   return withExitPolicyLock(() => saveExitPolicyNow(deps, req, typeof rawBody === "function" ? (rawBody as () => unknown)() : rawBody));
