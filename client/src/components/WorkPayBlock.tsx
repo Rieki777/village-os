@@ -128,6 +128,11 @@ export default function WorkPayBlock({
             <p className="text-xs text-muted-foreground">These are the village&apos;s standard amounts.</p>
           )}
           {cash && <p className="text-foreground">Plus {cash} in cash, per the role agreement.</p>}
+          {pay.lines.filter((l) => l.meaning).map((l) => (
+            <p key={`meaning:${l.token}`} data-work-pay-meaning="" className="text-xs text-muted-foreground">
+              {l.name}: {l.meaning}
+            </p>
+          ))}
           {voices.length > 0 && (
             <p data-work-pay-voice="" className="text-xs text-muted-foreground">
               {voices.join(" and ")} is your say in the village&apos;s decisions.

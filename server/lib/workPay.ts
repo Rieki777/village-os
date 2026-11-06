@@ -23,6 +23,7 @@
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
 import {
+  EARNED_EQUITY,
   HEARTS,
   humanAtScale,
   quoteWorkPay,
@@ -75,6 +76,7 @@ function linesOf(work: ValuedWork, rules: readonly MintRule[], kind: "quest" | "
       name: tokenDef(l.token)?.name ?? l.token,
       amount: humanAtScale(l.units, l.decimals),
       ...(tokenDef(l.token)?.kind === "voice" ? { voice: true } : {}),
+      ...(l.token === EARNED_EQUITY && tokenDef(l.token)?.description ? { meaning: String(tokenDef(l.token)!.description) } : {}),
     })),
   };
 }
@@ -148,6 +150,12 @@ export function payableTokens(rules: readonly MintRule[]): PayableToken[] {
  */
 export function payLineProblem(rules: readonly MintRule[], token: string): string | null {
   if (token === HEARTS) return GRATITUDE_NEVER_PAYS;
+  // EARNED EQUITY MEANS WHAT THE VILLAGE SAYS IT MEANS (Rye, 2026-11-05), so a
+  // piece of work may not pay it until the village has said, in Admin, Tokens.
+  if (token === EARNED_EQUITY && !String(tokenDef(token)?.description ?? "").trim()) {
+    const name = tokenDef(token)?.name ?? "Earned Equity";
+    return `Say what ${name} is a share of here before a piece of work pays it: Admin, Tokens, the meaning beside ${name}.`;
+  }
   const offered = payableTokens(rules).find((t) => t.token === token);
   if (!offered) {
     const name = tokenDef(token)?.name ?? token;
