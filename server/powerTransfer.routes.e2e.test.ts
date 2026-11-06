@@ -647,7 +647,9 @@ describe.skipIf(!DB_CONFIGURED)("what the village actually got", () => {
     const entry = (powers.json?.powers ?? []).find((p: any) => p.capability === "event.manage");
     expect(entry.heldBy.roleName).toBe("Steward Circle");
     expect(entry.heldBy.byBallot).toBe(true);
-    expect(entry.heldBy.people).toContain("Ida Kestrel");
+    // Role (FirstName), the house form (Rye, 2026-10-30): first names only, never the surname.
+    expect(entry.heldBy.people).toContain("Ida");
+    expect(JSON.stringify(entry)).not.toContain("Kestrel");
     /*
      * R55, held at the payload. A village of two weeks and a village of two
      * years read the same shape here: no count, no total, no fraction, and no
