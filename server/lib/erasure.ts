@@ -2257,6 +2257,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "companions-after-tombstone",
   "member-asks-after-tombstone",
   "moon-reviews-after-tombstone",
+  "notebook-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 
