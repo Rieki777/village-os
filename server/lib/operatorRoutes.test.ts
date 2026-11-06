@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ADMIN_ONLY_ROUTES, ROUTE_POWERS, adminOrRouteHolder, routePower } from "./operatorRoutes";
-import { ALL_CAPABILITIES, STAGE_UNLOCKS, type Capability } from "../../shared/capabilities";
+import { ALL_CAPABILITIES, STAGE_UNLOCKS, TRANSFERABLE, type Capability } from "../../shared/capabilities";
 
 const ROOT = path.resolve(__dirname, "../..");
 const sources = [path.join(ROOT, "server/index.ts"), ...fs.readdirSync(path.join(ROOT, "server/routes")).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).map((f) => path.join(ROOT, "server/routes", f))]
@@ -12,6 +12,12 @@ const sources = [path.join(ROOT, "server/index.ts"), ...fs.readdirSync(path.join
 describe("ROUTE_POWERS: which power opens each admin-only route", () => {
   it("names only powers the gate knows", () => {
     for (const [route, cap] of Object.entries(ROUTE_POWERS)) expect(ALL_CAPABILITIES, route).toContain(cap);
+  });
+
+  it("names only powers the village can be handed, so every mapped route has a power_transfer vote path (Rye, 2026-11-06)", () => {
+    // "EVERYTHING can change with the highest village vote": a route whose power could never be handed
+    // over would be the admin's alone forever, with no vote that could reach it.
+    for (const [route, cap] of Object.entries(ROUTE_POWERS)) expect(TRANSFERABLE[cap], `${route} -> ${cap}`).toBe(true);
   });
 
   it("names no power the stage ladder hands every member, or every member would reach the route", () => {
