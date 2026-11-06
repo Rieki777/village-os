@@ -14,11 +14,13 @@
  * `agent` or the guide read, and this village is "here" and "ours".
  */
 import type { Difference, DifferenceCount, SnapshotRead } from "@shared/seraDifferences";
-import { waitingKind } from "@shared/seraWaiting";
-import { roleWithHolders } from "@shared/roleHolderLabel";
+import { pageKey, waitingKind } from "@shared/seraWaiting";
+import { readDoor, type Door } from "@shared/seraDecides";
 
 /** One difference with its words, as `GET /api/saberra/differences` sends it. */
 export interface ListedDifference extends Difference {
+  /** The waiting arrival that holds it, for the structure review link (review C7), or null when none does. */
+  batchId?: string | null;
   words: { sentence: string; flags: string[]; source: string; open: string | null; openWords: string };
 }
 
@@ -26,6 +28,10 @@ export interface ListedDifference extends Difference {
 export interface CountAnswer extends DifferenceCount {
   lastReadAt: string | null;
   lastReadWhole: boolean;
+  /** Who decides what waits, by the holder test (review S2). Null when the server could not say. */
+  decides: Door | null;
+  /** Who sets pay, the same way. */
+  paySetBy: Door | null;
 }
 
 /** `GET /api/saberra/differences`, behind the review queue's key. */
@@ -40,6 +46,8 @@ export interface ListAnswer {
   lastWholeAt?: { circles: string | null; roles: string | null } | null;
   /** The circles here in chart order, by id. Absent from a server that does not send it. */
   circleOrder?: string[];
+  /** The waiting arrivals the newest read holds whole: only these may fold away (review S1). */
+  heldBatches?: string[];
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -52,6 +60,8 @@ function countOf(v: unknown): DifferenceCount | null {
     total: num(v.total),
     // An older server sends no toDecide; its decisions are the nearest it said.
     toDecide: typeof v.toDecide === "number" ? num(v.toDecide) : num(lanes.decision),
+    small: typeof v.small === "number" ? num(v.small) : num(lanes.lowRisk),
+    facts: typeof v.facts === "number" ? num(v.facts) : num(lanes.facts),
     lanes: { facts: num(lanes.facts), lowRisk: num(lanes.lowRisk), decision: num(lanes.decision) },
     conflicts: num(v.conflicts),
     checkFirst: num(v.checkFirst),
@@ -63,7 +73,13 @@ function countOf(v: unknown): DifferenceCount | null {
 export function readCount(v: unknown): CountAnswer | null {
   const c = countOf(v);
   if (!c || !isObj(v)) return null;
-  return { ...c, lastReadAt: typeof v.lastReadAt === "string" ? v.lastReadAt : null, lastReadWhole: v.lastReadWhole === true };
+  return {
+    ...c,
+    lastReadAt: typeof v.lastReadAt === "string" ? v.lastReadAt : null,
+    lastReadWhole: v.lastReadWhole === true,
+    decides: readDoor(v.decides),
+    paySetBy: readDoor(v.paySetBy),
+  };
 }
 
 const READS: readonly SnapshotRead[] = ["whole", "not-asked", "failed", "cut-short", "empty"];
@@ -76,6 +92,7 @@ function listedOf(v: unknown): ListedDifference | null {
   return {
     ...(v as unknown as Difference),
     flags: Array.isArray(v.flags) ? (v.flags as Difference["flags"]) : [],
+    batchId: typeof v.batchId === "string" && v.batchId !== "" ? v.batchId : null,
     words: {
       sentence: w.sentence as string,
       flags: Array.isArray(w.flags) ? w.flags.filter((f): f is string => typeof f === "string") : [],
@@ -104,6 +121,7 @@ export function readList(v: unknown): ListAnswer | null {
       ? { circles: typeof whole.circles === "string" ? whole.circles : null, roles: typeof whole.roles === "string" ? whole.roles : null }
       : null,
     circleOrder: Array.isArray(v.circleOrder) ? v.circleOrder.filter((c): c is string => typeof c === "string") : [],
+    heldBatches: Array.isArray(v.heldBatches) ? v.heldBatches.filter((c): c is string => typeof c === "string") : [],
   };
 }
 
@@ -158,8 +176,10 @@ export interface CircleGroup {
 
 /** The circle a difference concerns: the circle itself, or the one a role sits in (US2.3). */
 export function circleKeyOf(d: Difference): string {
-  if (d.subject.kind === "circle") return d.subject.ourId ?? `sera:${d.subject.pageId ?? d.key}`;
-  return d.subject.circleId ?? "none";
+  // One key for a page id on both sides (shared pageKey), so a new circle and its roles meet (review C4).
+  if (d.subject.kind === "circle") return d.subject.ourId ?? `sera:${pageKey(d.subject.pageId ?? d.key)}`;
+  const id = d.subject.circleId;
+  return id === null ? "none" : id.startsWith("sera:") ? `sera:${pageKey(id.slice(5))}` : id;
 }
 
 /** A row shows Check first when the server sent it a flag to show; a flag left off the screen lifts nothing (R39). */
@@ -183,6 +203,14 @@ export function groupByCircle(list: readonly ListedDifference[], chartOrder: rea
     else if (g.name === null && key !== "none") g.name = d.subject.circleName;
     g.items.push(d);
     groups.set(key, g);
+  }
+  // A group nothing names is "Not in a circle": one such group, never two.
+  for (const [key, g] of Array.from(groups.entries())) {
+    if (key === "none" || g.name !== null) continue;
+    const none = groups.get("none") ?? { name: null, items: [] };
+    none.items.push(...g.items);
+    groups.set("none", none);
+    groups.delete(key);
   }
   const out: CircleGroup[] = [];
   for (const [key, g] of Array.from(groups.entries())) {
@@ -311,67 +339,6 @@ export function readTrouble(list: Pick<ListAnswer, "lastReadAt" | "reads" | "las
   return { noAnswer: false, lines };
 }
 
-// ── Who decides, and who sets pay (R38, R23) ────────────────────────────────
-
-/** One power row as `GET /api/village/powers` sends it. */
-export interface DecidePower {
-  heldBy: { roleName: string; people: string[] } | null;
-  heldToday?: string[];
-  stage?: string | null;
-}
-
-/** Who holds one power, read out of the village powers answer. Null when the answer is not one. */
-export function readPower(v: unknown, capability: string): DecidePower | null {
-  if (!isObj(v) || !Array.isArray(v.powers)) return null;
-  const row = v.powers.find((p) => isObj(p) && p.capability === capability);
-  if (!isObj(row)) return null;
-  const held = isObj(row.heldBy) && typeof row.heldBy.roleName === "string" ? row.heldBy : null;
-  return {
-    heldBy: held
-      ? { roleName: held.roleName as string, people: Array.isArray(held.people) ? held.people.filter((p): p is string => typeof p === "string") : [] }
-      : null,
-    heldToday: Array.isArray(row.heldToday) ? row.heldToday.filter((p): p is string => typeof p === "string") : [],
-    stage: typeof row.stage === "string" ? row.stage : null,
-  };
-}
-
-/** The power that decides the chart (R38). */
-export const readDecidePower = (v: unknown): DecidePower | null => readPower(v, "org.decide");
-
-const namesOf = (xs: readonly string[]): string =>
-  xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
-
-/** When nobody holds the power, the village decides by vote (R38). */
-export const NO_HOLDER_WORDS = "Nobody holds the power to decide these right now, so the village decides by vote.";
-
-/** R38: who decides what waits, in the house form "Role (FirstName)". */
-export function whoDecidesWords(p: DecidePower, n: number): string {
-  const it = n === 1 ? "it" : "them";
-  if (p.heldBy) {
-    if (p.heldBy.people.length === 0) return NO_HOLDER_WORDS;
-    return `${roleWithHolders(p.heldBy.roleName, p.heldBy.people)} decides ${it}.`;
-  }
-  const today = p.heldToday ?? [];
-  if (today.length > 0) return `${namesOf(today)} and the stewards decide ${it}.`;
-  if (p.stage) return `Everyone at the ${p.stage} stage or past it can decide ${it}.`;
-  return `The admins decide ${it} for now.`;
-}
-
-/** When nobody holds the power to set pay (R23). */
-export const NO_PAY_HOLDER_WORDS = "Nobody holds the power to set pay right now.";
-
-/** R23: who sets pay, from who holds `cash.pay` here, in the house form "The Treasurer (Rick) sets pay." */
-export function whoSetsPayWords(p: DecidePower): string {
-  if (p.heldBy) {
-    if (p.heldBy.people.length === 0) return NO_PAY_HOLDER_WORDS;
-    return `The ${roleWithHolders(p.heldBy.roleName, p.heldBy.people)} sets pay.`;
-  }
-  const today = p.heldToday ?? [];
-  if (today.length > 0) return `${namesOf(today.map((l, i) => `${i === 0 ? "The" : "the"} ${l}`))} ${today.length === 1 ? "sets" : "set"} pay.`;
-  if (p.stage) return `Everyone at the ${p.stage} stage or past it can set pay.`;
-  return NO_PAY_HOLDER_WORDS;
-}
-
 // ── The merged diff (R33) ───────────────────────────────────────────────────
 
 export type DiffPart = { text: string; side: "both" | "here" | "sera" };
@@ -448,15 +415,3 @@ export function mergedDiff(here: string, sera: string): DiffPart[] {
 
 /** A difference whose two values are words a person can compare: a name or a text field. */
 export const comparable = (d: Difference): boolean => (d.kind === "rename" || d.kind === "textField") && typeof d.sera === "string";
-
-/** The structure review for the newest of the service's waiting batches that change the chart, or null. */
-export function structureHrefFor(
-  batches: ReadonlyArray<{ batchId: string; moduleId: string | null; receivedAt: string | null; items: ReadonlyArray<{ kind: string }> }>,
-  moduleId: string,
-  chartKinds: readonly string[],
-): string | null {
-  const newest = batches
-    .filter((b) => b.moduleId === moduleId && b.items.some((i) => chartKinds.includes(i.kind)))
-    .sort((x, y) => (Date.parse(y.receivedAt ?? "") || 0) - (Date.parse(x.receivedAt ?? "") || 0))[0];
-  return newest ? `/review/structure/${encodeURIComponent(newest.batchId)}` : null;
-}

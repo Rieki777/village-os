@@ -12,7 +12,6 @@ import { describe, expect, it } from "vitest";
 import { listed, type Over } from "@/test/seraDifferences";
 import {
   GROUP_OPEN_MAX,
-  NO_HOLDER_WORDS,
   aheadWords,
   factsWords,
   groupByCircle,
@@ -21,13 +20,10 @@ import {
   inStep,
   mergedDiff,
   readCount,
-  readDecidePower,
   readList,
   readTrouble,
   smallWords,
   splitWaiting,
-  structureHrefFor,
-  whoDecidesWords,
 } from "./seraReview";
 
 const aim = (over: Over = {}) => listed({ kind: "textField", field: "aim", lane: "lowRisk", ...over });
@@ -143,24 +139,6 @@ describe("groups by circle (R31, R37)", () => {
   });
 });
 
-describe("who decides, for a member (R38)", () => {
-  it("names the role and its holder in the house form", () => {
-    expect(whoDecidesWords({ heldBy: null, heldToday: ["Ops lead (Rye)"] }, 5)).toBe("Ops lead (Rye) and the stewards decide them.");
-    expect(whoDecidesWords({ heldBy: { roleName: "Ops lead", people: ["Rye"] } }, 1)).toBe("Ops lead (Rye) decides it.");
-  });
-
-  it("says the village decides by vote when nobody sits in the role that holds it", () => {
-    expect(whoDecidesWords({ heldBy: { roleName: "Ops lead", people: [] } }, 5)).toBe(NO_HOLDER_WORDS);
-    expect(NO_HOLDER_WORDS).toBe("Nobody holds the power to decide these right now, so the village decides by vote.");
-  });
-
-  it("reads the power out of the village powers answer, and nothing else", () => {
-    const p = readDecidePower({ powers: [{ capability: "quest.approve" }, { capability: "org.decide", heldBy: null, heldToday: ["Ops lead (Rye)"] }] });
-    expect(p).toEqual({ heldBy: null, heldToday: ["Ops lead (Rye)"], stage: null });
-    expect(readDecidePower({ batches: [] })).toBeNull();
-  });
-});
-
 describe("what the last read could not bring (R36)", () => {
   const now = new Date(2026, 10, 6, 15, 0);
   const at = (h: number, m = 0) => new Date(2026, 10, 6, h, m).toISOString();
@@ -233,13 +211,5 @@ describe("reading the answers", () => {
     });
     expect(out?.differences).toHaveLength(1);
     expect(out?.differences[0].words.open).toBeNull();
-  });
-
-  it("links the newest of the service's waiting chart batches to the structure review", () => {
-    const b = (batchId: string, receivedAt: string, kind = "org.proposed", moduleId = "saberra") => ({ batchId, moduleId, receivedAt, items: [{ kind }] });
-    expect(
-      structureHrefFor([b("old", "2026-11-01T00:00:00Z"), b("new", "2026-11-05T00:00:00Z"), b("vendor", "2026-11-06T00:00:00Z", "org.proposed", "other")], "saberra", ["org.proposed"]),
-    ).toBe("/review/structure/new");
-    expect(structureHrefFor([b("t", "2026-11-05T00:00:00Z", "tension.observed")], "saberra", ["org.proposed"])).toBeNull();
   });
 });

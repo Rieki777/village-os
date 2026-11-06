@@ -201,7 +201,7 @@ export default function Review() {
   }, []);
   const consent = useConsentClaims(headers);
   // The outside service's differences, one list (components/review/SeraDifferences.tsx).
-  const sera = useSeraOnReview(headers);
+  const sera = useSeraOnReview();
 
   /**
    * Ask every unconfirmed store again. This is the only thing that can finish

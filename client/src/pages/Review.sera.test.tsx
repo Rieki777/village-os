@@ -32,7 +32,10 @@ import { listed } from "@/test/seraDifferences";
 type Answer = [status: number, body: unknown];
 
 const EMPTY = { batches: [], quests: [], drops: [], counts: { proposals: 0, quests: 0 } };
-const COUNT = { total: 2, toDecide: 2, lanes: { facts: 0, lowRisk: 0, decision: 2 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
+const COUNT = {
+  total: 2, toDecide: 2, small: 0, facts: 0, lanes: { facts: 0, lowRisk: 0, decision: 2 }, conflicts: 0, checkFirst: 0, oursAhead: 0,
+  decides: { by: "holders", labels: ["Ops lead (Rye)"], more: 0, stewards: true, others: 0 }, paySetBy: { by: "admins" },
+};
 
 const item = (id: string, batchId: string, moduleId: string) => ({
   id,
@@ -68,7 +71,8 @@ const LIST = {
   lastReadWhole: true,
   reads: { circles: "whole", roles: "whole" },
   count: COUNT,
-  differences: [listed({ subject: { name: "Water Steward" } }), listed({ kind: "roleRest", field: null, sera: "gone", ours: "live", subject: { name: "Dish Rota" } })],
+  differences: [listed({ subject: { name: "Water Steward" } }), listed({ kind: "roleRest", field: null, sera: "gone", ours: "live", subject: { name: "Dish Rota" } })].map((d) => ({ ...d, batchId: "sync-abc" })),
+  heldBatches: ["sync-abc"],
 };
 
 function serve(r: { queue: Answer; claims?: Answer; count?: Answer; list?: Answer; guide?: Answer; powers?: Answer }) {
@@ -130,6 +134,26 @@ describe("the service's old batches, once the list holds them", () => {
     expect(decide[0].getAttribute("href")).toBe("/review/structure/sync-abc");
   });
 
+  it("never fold a batch carrying a note, which keeps Accept, Reject and its text box (S1)", async () => {
+    const tension = { ...item("p3", "sync-abc", "saberra"), kind: "tension.observed", payload: { title: "The well runs dry in May" } };
+    serve({ queue: [200, { ...QUEUE, batches: [{ ...QUEUE.batches[0], items: [...QUEUE.batches[0].items, tension] }, QUEUE.batches[1]] }] });
+    renderReview();
+    await screen.findByRole("heading", { level: 2, name: "Sera suggests 2 changes for you to decide" });
+    expect(screen.queryByText("Earlier Sera arrivals, now listed above")).toBeNull();
+    const box = screen.getAllByRole("textbox").find((t) => (t as HTMLTextAreaElement).value.includes("The well runs dry"));
+    const card = box?.closest("div.border") as HTMLElement;
+    expect(within(card).getByRole("button", { name: "Accept this one" })).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "Reject" })).toBeTruthy();
+  });
+
+  it("never fold a batch the newest read does not hold, such as one landed after a failed snapshot", async () => {
+    serve({ queue: [200, QUEUE], list: [200, { ...LIST, heldBatches: [] }] });
+    renderReview();
+    await screen.findByRole("heading", { level: 2, name: "Sera suggests 2 changes for you to decide" });
+    expect(screen.queryByText("Earlier Sera arrivals, now listed above")).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Accept all/ })).toHaveLength(2);
+  });
+
   it("keep their cards when the list did not load, so nothing goes unseen", async () => {
     serve({ queue: [200, QUEUE], list: [500, { error: "Could not read the differences." }] });
     renderReview();
@@ -145,7 +169,6 @@ describe("a member the queue refuses", () => {
       queue: [403, { error: "auth_required" }],
       list: [401, { error: "auth_required" }],
       guide: [200, { options: [{ id: "saberra", name: "Sera" }] }],
-      powers: [200, { powers: [{ capability: "org.decide", heldBy: null, heldToday: ["Ops lead (Rye)"] }] }],
     });
     renderReview();
     expect(await screen.findByRole("heading", { level: 2, name: "Sera suggests 2 changes for the chart" })).toBeTruthy();

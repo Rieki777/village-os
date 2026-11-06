@@ -46,7 +46,8 @@ interface Props {
 }
 
 export function CompareBlocks({ d, agent, layout }: Props) {
-  const ours = d.ours ?? "";
+  // Our words as stored here, never the compared form (the engine sends both).
+  const ours = d.oursAsStored ?? d.ours ?? "";
   const theirs = d.sera ?? "";
   const [full, setFull] = useState(false);
   const id = useId();

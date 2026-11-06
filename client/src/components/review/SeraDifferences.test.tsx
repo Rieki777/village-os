@@ -24,7 +24,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { Router } from "wouter";
 
 vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
@@ -32,10 +32,14 @@ vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
 import SeraDifferences, { SeraSummaryLine, useSeraDifferences } from "./SeraDifferences";
 import { listed } from "@/test/seraDifferences";
 import type { ListedDifference } from "@/lib/seraReview";
+import { countDifferences } from "@shared/seraDifferences";
 
 type Answer = [status: number, body: unknown];
 
-const COUNT = { total: 0, toDecide: 0, lanes: { facts: 0, lowRisk: 0, decision: 0 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
+const COUNT = {
+  total: 0, toDecide: 0, small: 0, facts: 0, lanes: { facts: 0, lowRisk: 0, decision: 0 }, conflicts: 0, checkFirst: 0, oursAhead: 0,
+  decides: { by: "admins" }, paySetBy: { by: "vote" },
+};
 const TODAY_1405 = () => {
   const d = new Date();
   d.setHours(14, 5, 0, 0);
@@ -49,13 +53,14 @@ function listAnswer(differences: ListedDifference[], over: Record<string, unknow
     lastReadWhole: true,
     reads: { circles: "whole", roles: "whole" },
     count: COUNT,
-    differences,
+    differences: differences.map((d) => ({ batchId: d.lane === "facts" || d.state === "oursAhead" ? null : "sync-1", ...d })),
     circleOrder: ["c-water", "c-kitchen"],
+    heldBatches: ["sync-1"],
     ...over,
   };
 }
 
-function serve(routes: { count?: Answer; list?: Answer; guide?: Answer; powers?: Answer }) {
+function serve(routes: { count?: Answer; list?: Answer; guide?: Answer }) {
   const fetchMock = vi.fn(async (url: string) => {
     const path = String(url);
     const [status, body]: Answer =
@@ -65,26 +70,22 @@ function serve(routes: { count?: Answer; list?: Answer; guide?: Answer; powers?:
           ? (routes.list ?? [200, listAnswer([])])
           : path === "/api/guide"
             ? (routes.guide ?? [404, {}])
-            : path === "/api/village/powers"
-              ? // By default nobody holds the power to set pay; a test that needs a holder says so.
-                (routes.powers ?? [200, { powers: [{ capability: "cash.pay", heldBy: null, heldToday: [] }] }])
-              : [404, {}];
+            : [404, {}];
     return { ok: status >= 200 && status < 300, status, json: async () => body };
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
-function Harness({ structureHref = "/review/structure/sync-1", draftOpen = false, witness = 0 }) {
-  const headers = useCallback(() => ({}), []);
-  const { read, load } = useSeraDifferences(headers);
+function Harness({ draftOpen = false, witness = 0 }) {
+  const { read, load } = useSeraDifferences();
   useEffect(() => {
     void load();
   }, [load]);
   return (
     <Router>
       <SeraSummaryLine read={read} witness={witness} />
-      <SeraDifferences read={read} structureHref={structureHref} draftOpen={draftOpen} onRetry={load} />
+      <SeraDifferences read={read} draftOpen={draftOpen} onRetry={load} />
     </Router>
   );
 }
@@ -277,13 +278,14 @@ describe("the Waiting for you board", () => {
     // The move, the new role and the rest. The conflict compares first, and pay is set by hand.
     expect(links).toHaveLength(3);
     for (const l of links) expect(l.getAttribute("href")).toBe("/review/structure/sync-1");
+    // Who sets pay comes from the count's door (S2): after launch with nobody holding it, the vote line.
     expect(screen.getByText("Nobody holds the power to set pay right now.")).toBeTruthy();
   });
 
   it("says who sets pay, from who holds the power to set it here, in the house form", async () => {
     serve({
       list: [200, listAnswer(mainBoard())],
-      powers: [200, { powers: [{ capability: "cash.pay", heldBy: null, heldToday: ["Treasurer (Rick)"] }] }],
+      count: [200, { ...COUNT, lastReadAt: TODAY_1405(), lastReadWhole: true, paySetBy: { by: "holders", labels: ["Treasurer (Rick)"], more: 0, stewards: false, others: 0 } }],
     });
     show();
     expect(await screen.findByText("The Treasurer (Rick) sets pay.")).toBeTruthy();
@@ -300,29 +302,66 @@ describe("the Waiting for you board", () => {
     expect(screen.getAllByRole("article").map((a) => a.textContent?.includes("Well Monitor"))).toEqual([true]);
   });
 
-  it("says plainly when no arrival waits in the structure review, and draws no link", async () => {
-    serve({ list: [200, listAnswer(mainBoard())] });
-    render(
-      <Router>
-        <HarnessNoBatch />
-      </Router>,
-    );
+  it("links each row to the arrival that holds it, and says plainly when none does (C7)", async () => {
+    const board = mainBoard();
+    serve({ list: [200, listAnswer(board.map((d) => ({ ...d, batchId: d.kind === "roleMove" ? "sync-move" : null })))] });
+    show();
     await screen.findByRole("heading", { level: 2 });
-    expect(screen.queryByRole("link", { name: "Decide it in the structure review" })).toBeNull();
-    expect(screen.getAllByText("No arrival from Sera waits in the structure review right now.").length).toBeGreaterThan(0);
+    const links = screen.getAllByRole("link", { name: "Decide it in the structure review" });
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/review/structure/sync-move"]);
+    expect(screen.getAllByText("No arrival from Sera waits in the structure review right now.").length).toBe(2);
+  });
+
+  it("puts a new circle and its roles in one group when the service sends dashed page ids (C4)", async () => {
+    const C = "1a2b3c4d-1111-2222-3333-444455556666";
+    const circle = listed({ kind: "circleAdd", field: null, params: { roles: 1 }, subject: { kind: "circle", pageId: C, ourId: null, name: "Land Stewardship", circleId: null, circleName: null } });
+    const role = listed({ kind: "roleAdd", field: null, subject: { ourId: null, name: "Seed Keeper", circleId: `sera:${C.replace(/-/g, "")}`, circleName: "Land Stewardship" } });
+    serve({ list: [200, listAnswer([circle, role])] });
+    show();
+    expect(await screen.findByRole("heading", { level: 3, name: "Land Stewardship: 2 changes" })).toBeTruthy();
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(1);
+  });
+
+  it("draws one Not in a circle group, never two", async () => {
+    const a = listed({ subject: { name: "Alpha", circleId: null, circleName: null } });
+    const b = listed({ subject: { name: "Beta", circleId: "c-gone", circleName: null } });
+    serve({ list: [200, listAnswer([a, b])] });
+    show();
+    expect(await screen.findByRole("heading", { level: 3, name: "Not in a circle: 2 changes" })).toBeTruthy();
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(1);
+  });
+
+  it("says one set of numbers everywhere: the summary, the headline, the member view, the small line and the count (C8)", async () => {
+    const mix = [
+      ...["A", "B", "C"].map((n) => listed({ subject: { name: `Decide ${n}` } })),
+      ...["D", "E"].map((n) => listed({ kind: "textField", field: "aim", lane: "lowRisk", subject: { name: `Small ${n}` } })),
+      ...["F", "G", "H", "I"].map((n) => listed({ kind: "valueField", field: "Role Type", lane: "facts", sera: "Core", ours: null, subject: { name: `Fact ${n}` } })),
+    ];
+    const count = { ...countDifferences(mix), lastReadAt: TODAY_1405(), lastReadWhole: true, decides: { by: "admins" }, paySetBy: { by: "admins" } };
+    expect(count).toMatchObject({ toDecide: 3, small: 2, facts: 4, total: 5 });
+    serve({ count: [200, count], list: [200, listAnswer(mix, { count })] });
+    show({ witness: 0 });
+    expect((await screen.findByRole("heading", { level: 2 })).textContent).toBe("Sera suggests 3 changes for you to decide");
+    expect(screen.getByRole("link", { name: "3 Sera changes" })).toBeTruthy();
+    expect(screen.getByText(/^2 small changes also wait for you/)).toBeTruthy();
+    cleanup();
+    serve({ count: [200, count], list: [401, { error: "auth_required" }], guide: [200, { options: [{ id: "saberra", name: "Sera" }] }] });
+    show();
+    expect((await screen.findByRole("heading", { level: 2 })).textContent).toBe("Sera suggests 3 changes for the chart");
   });
 });
 
-function HarnessNoBatch() {
-  const headers = useCallback(() => ({}), []);
-  const { read, load } = useSeraDifferences(headers);
-  useEffect(() => {
-    void load();
-  }, [load]);
-  return <SeraDifferences read={read} structureHref={null} draftOpen={false} onRetry={load} />;
-}
-
 describe("the conflict board", () => {
+  it("shows our words as stored under Here now, never the compared form", async () => {
+    const both = listed({ kind: "textField", field: "aim", lane: "lowRisk", state: "conflict", sera: "Keeps the wells.", ours: "keeps the wells clear.", subject: { name: "Well Keeper" } });
+    serve({ list: [200, listAnswer([{ ...both, oursAsStored: "Keeps  the wells clear, with Jane Example." }])] });
+    show();
+    await screen.findByRole("heading", { level: 2 });
+    fireEvent.click(screen.getByRole("button", { name: "Compare them" }));
+    const here = screen.getByRole("heading", { level: 3, name: "Here now" }).closest("section") as HTMLElement;
+    expect(here.querySelector("p")?.textContent).toBe("Keeps  the wells clear, with Jane Example.");
+  });
+
   it("stacks Here now over the service's version, with one merged diff and a four-line clamp", async () => {
     serve({ list: [200, listAnswer(mainBoard())] });
     show();
@@ -434,7 +473,10 @@ describe("the read states", () => {
 
 describe("what a member sees", () => {
   // The board's set: four decisions and a purpose conflict to decide, two small changes, three facts.
-  const count = { ...COUNT, total: 10, toDecide: 5, lanes: { facts: 3, lowRisk: 3, decision: 4 }, conflicts: 1, lastReadAt: TODAY_1405(), lastReadWhole: true };
+  const count = {
+    ...COUNT, total: 7, toDecide: 5, small: 2, facts: 3, lanes: { facts: 3, lowRisk: 3, decision: 4 }, conflicts: 1, lastReadAt: TODAY_1405(), lastReadWhole: true,
+    decides: { by: "holders", labels: ["Ops lead (Rye)"], more: 0, stewards: true, others: 0 },
+  };
   const guide = { choice: "village", options: [{ id: "village", name: "the village guide" }, { id: "saberra", name: "Sera" }] };
 
   it("shows the count and who decides, and never a subject", async () => {
@@ -442,7 +484,6 @@ describe("what a member sees", () => {
       count: [200, count],
       list: [401, { error: "auth_required" }],
       guide: [200, guide],
-      powers: [200, { powers: [{ capability: "org.decide", heldBy: null, heldToday: ["Ops lead (Rye)"] }] }],
     });
     show();
     expect((await screen.findByRole("heading", { level: 2 })).textContent).toBe("Sera suggests 5 changes for the chart");
@@ -455,10 +496,9 @@ describe("what a member sees", () => {
 
   it("says the village decides by vote when nobody holds the power", async () => {
     serve({
-      count: [200, count],
+      count: [200, { ...count, decides: { by: "vote" } }],
       list: [401, { error: "auth_required" }],
       guide: [200, guide],
-      powers: [200, { powers: [{ capability: "org.decide", heldBy: { roleName: "Ops lead", people: [] } }] }],
     });
     show();
     expect(await screen.findByText("Nobody holds the power to decide these right now, so the village decides by vote.")).toBeTruthy();

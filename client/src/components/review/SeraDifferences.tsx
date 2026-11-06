@@ -32,6 +32,7 @@ import { Link } from "wouter";
 import { ChevronDown } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
 import { headlineCount } from "@shared/seraWaiting";
+import { whoDecidesWords, whoSetsPayWords, type Door } from "@shared/seraDecides";
 import { STRUCTURE_KINDS } from "@shared/structurePlan";
 import SeraCompare, { CompareBlocks } from "@/components/review/SeraCompare";
 import {
@@ -48,18 +49,12 @@ import {
   lastCheckedWords,
   checkFirst,
   readCount,
-  readDecidePower,
   readList,
-  readPower,
   readTrouble,
   SERA_MODULE,
-  structureHrefFor,
   smallWords,
   splitWaiting,
-  whoDecidesWords,
-  whoSetsPayWords,
   type CountAnswer,
-  type DecidePower,
   type ListAnswer,
   type ListedDifference,
 } from "@/lib/seraReview";
@@ -68,8 +63,8 @@ export type SeraRead =
   | { phase: "loading" }
   | { phase: "off" }
   | { phase: "failed"; error: string }
-  | { phase: "member"; count: CountAnswer; agent: string; power: DecidePower | null }
-  | { phase: "listed"; count: CountAnswer; list: ListAnswer; pay: DecidePower | null };
+  | { phase: "member"; count: CountAnswer; agent: string }
+  | { phase: "listed"; count: CountAnswer; list: ListAnswer };
 
 /** Said wherever the agent's own name could not be read. */
 const NEUTRAL_AGENT = "The outside service";
@@ -84,45 +79,37 @@ function agentFromGuide(g: unknown): string {
   return name || NEUTRAL_AGENT;
 }
 
-/** The two reads, and for a member the guide's name and who holds the power to decide. */
-export function useSeraDifferences(headers: () => Record<string, string>) {
+/**
+ * The two reads, and for a member the guide's name. Each call names its path
+ * and carries the token itself, so scripts/check-auth-fetch.mjs reads every one
+ * (review S6). Who decides and who sets pay ride on the count (review S2).
+ */
+export function useSeraDifferences() {
   const [read, setRead] = useState<SeraRead>({ phase: "loading" });
   const load = useCallback(async () => {
-    if (!authToken()) return setRead({ phase: "off" });
-    const json = async (path: string) => {
-      const r = await fetch(path, { headers: headers() });
-      return { status: r.status, ok: r.ok, body: await r.json().catch(() => null) };
-    };
+    const token = authToken();
+    if (!token) return setRead({ phase: "off" });
+    const answer = async (r: Response) => ({ status: r.status, ok: r.ok, body: await r.json().catch(() => null) });
     try {
-      const c = await json("/api/saberra/differences/count");
+      const c = await answer(await fetch("/api/saberra/differences/count", { headers: { Authorization: `Bearer ${token}` } }));
       // Off, or signed out: the section is not this reader's, and says nothing.
       if (c.status === 401 || c.status === 403 || c.status === 404) return setRead({ phase: "off" });
       if (!c.ok) return setRead({ phase: "failed", error: errorOf(c.body) ?? "Could not read the differences" });
       const count = readCount(c.body);
       if (!count) return setRead({ phase: "off" });
-      const l = await json("/api/saberra/differences");
+      const l = await answer(await fetch("/api/saberra/differences", { headers: { Authorization: `Bearer ${token}` } }));
       if (l.status === 401 || l.status === 403) {
-        const [guide, powers] = await Promise.all([
-          json("/api/guide").catch(() => null),
-          json("/api/village/powers").catch(() => null),
-        ]);
-        return setRead({
-          phase: "member",
-          count,
-          agent: agentFromGuide(guide?.ok ? guide.body : null),
-          power: powers?.ok ? readDecidePower(powers.body) : null,
-        });
+        const guide = await fetch("/api/guide", { headers: { Authorization: `Bearer ${token}` } }).then(answer).catch(() => null);
+        return setRead({ phase: "member", count, agent: agentFromGuide(guide?.ok ? guide.body : null) });
       }
       if (!l.ok) return setRead({ phase: "failed", error: errorOf(l.body) ?? "Could not read the differences" });
       const list = readList(l.body);
       if (!list) return setRead({ phase: "failed", error: "The list came back in a shape this page cannot read" });
-      // Who sets pay, for a pay row (R23). A failed read leaves the line out, never a guess.
-      const powers = list.differences.some((d) => d.kind === "pay") ? await json("/api/village/powers").catch(() => null) : null;
-      setRead({ phase: "listed", count, list, pay: powers?.ok ? readPower(powers.body, "cash.pay") : null });
+      setRead({ phase: "listed", count, list });
     } catch {
       setRead({ phase: "failed", error: "Could not reach the server" });
     }
-  }, [headers]);
+  }, []);
   return { read, load };
 }
 
@@ -220,20 +207,20 @@ function Source({ d }: { d: ListedDifference }) {
 
 interface Ctx {
   agent: string;
-  structureHref: string | null;
-  /** Who holds the power to set pay, or null when it could not be read. */
-  pay: DecidePower | null;
+  /** Who holds the power to set pay, from the count, or null when it could not be said. */
+  pay: Door | null;
   onCompare: (d: ListedDifference) => void;
 }
 
 /** The way on from a row while the list is read-only: the structure review, or a plain sentence when nothing waits there. */
 function DecideThere({ ctx, d, block }: { ctx: Ctx; d: ListedDifference; block?: boolean }) {
   if (d.kind === "pay") return ctx.pay ? <p className="text-[13px] text-muted-foreground">{whoSetsPayWords(ctx.pay)}</p> : null;
-  if (!ctx.structureHref) {
+  // The arrival that holds THIS difference (review C7), never one link for every row.
+  if (!d.batchId) {
     return <p className="text-[13px] text-muted-foreground">No arrival from {ctx.agent} waits in the structure review right now.</p>;
   }
   return (
-    <Link href={ctx.structureHref} className={block ? `${primary} min-h-[48px] w-full text-[15px]` : primary}>
+    <Link href={`/review/structure/${encodeURIComponent(d.batchId)}`} className={block ? `${primary} min-h-[48px] w-full text-[15px]` : primary}>
       Decide it in the structure review
     </Link>
   );
@@ -337,13 +324,11 @@ type Only = "checkFirst" | "conflicts" | null;
 function SeraList({
   list,
   pay,
-  structureHref,
   draftOpen,
   onRetry,
 }: {
   list: ListAnswer;
-  pay: DecidePower | null;
-  structureHref: string | null;
+  pay: Door | null;
   draftOpen: boolean;
   onRetry: () => Promise<void>;
 }) {
@@ -379,7 +364,6 @@ function SeraList({
   const pick = shownList.find((d) => d.key === selected) ?? shownList[0] ?? null;
   const ctx: Ctx = {
     agent,
-    structureHref,
     pay,
     onCompare: (d) => {
       backTo.current = d.key;
@@ -696,7 +680,7 @@ function SeraList({
 }
 
 /** R38: what a member without the queue's key sees. The count, who decides, and never a subject. */
-function SeraMember({ count, agent, power }: { count: CountAnswer; agent: string; power: DecidePower | null }) {
+function SeraMember({ count, agent }: { count: CountAnswer; agent: string }) {
   const ids = useId();
   // The headline's own rule (shared/seraWaiting.ts), so a member and a moderator read one number.
   const n = headlineCount(count);
@@ -711,7 +695,7 @@ function SeraMember({ count, agent, power }: { count: CountAnswer; agent: string
     <section id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
       <div className={`${card} p-3.5 flex flex-col gap-2.5`}>
         <h2 id={`${ids}-h`} className="text-[19px] leading-snug font-bold text-foreground">{heading}</h2>
-        {n > 0 && power && <p className="text-[15px] leading-normal text-foreground">{whoDecidesWords(power, n)}</p>}
+        {n > 0 && count.decides && <p className="text-[15px] leading-normal text-foreground">{whoDecidesWords(count.decides, n)}</p>}
         <p className="text-sm leading-normal text-muted-foreground">Small changes applying by themselves: off.</p>
       </div>
       <p className="text-[13px] leading-normal text-muted-foreground">
@@ -724,17 +708,15 @@ function SeraMember({ count, agent, power }: { count: CountAnswer; agent: string
 /** The section, by what the two reads answered. */
 export default function SeraDifferences({
   read,
-  structureHref,
   draftOpen,
   onRetry,
 }: {
   read: SeraRead;
-  structureHref: string | null;
   draftOpen: boolean;
   onRetry: () => Promise<void>;
 }) {
   if (read.phase === "loading" || read.phase === "off") return null;
-  if (read.phase === "member") return <SeraMember count={read.count} agent={read.agent} power={read.power} />;
+  if (read.phase === "member") return <SeraMember count={read.count} agent={read.agent} />;
   if (read.phase === "failed") {
     return (
       <section id="sera-changes" aria-labelledby="sera-failed-h" className={`${card} p-5 scroll-mt-24`}>
@@ -748,7 +730,7 @@ export default function SeraDifferences({
       </section>
     );
   }
-  return <SeraList list={read.list} pay={read.pay} structureHref={structureHref} draftOpen={draftOpen} onRetry={onRetry} />;
+  return <SeraList list={read.list} pay={read.count.paySetBy} draftOpen={draftOpen} onRetry={onRetry} />;
 }
 
 /**
@@ -800,15 +782,18 @@ export function SeraEarlierArrivals({
 const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
 
 /** The two reads, what waits on this reader, and which of the queue's batches fold away, for /review. */
-export function useSeraOnReview(headers: () => Record<string, string>) {
-  const { read, load } = useSeraDifferences(headers);
-  // Once the list holds the service's records, its old batches fold away unoffered (spec R28 retires them later).
-  const listed = read.phase === "listed" && read.list.lastReadAt !== null;
+export function useSeraOnReview() {
+  const { read, load } = useSeraDifferences();
+  // An old arrival folds away unoffered only when EVERY item in it changes the chart and the newest read
+  // holds it whole (review S1): a note keeps its Accept, Reject and text box, and an arrival landed after
+  // a failed snapshot stays offered. Spec R28 retires them later.
+  const held = read.phase === "listed" && read.list.lastReadAt !== null ? new Set(read.list.heldBatches ?? []) : new Set<string>();
   return {
     read,
     load,
     waits: seraWaiting(read),
-    folds: (b: { moduleId: string | null }) => listed && b.moduleId === SERA_MODULE,
+    folds: (b: { batchId: string; moduleId: string | null; items: ReadonlyArray<{ kind: string }> }) =>
+      b.moduleId === SERA_MODULE && held.has(b.batchId) && b.items.length > 0 && b.items.every((i) => CHART_KINDS.includes(i.kind)),
   };
 }
 export type SeraOnReview = ReturnType<typeof useSeraOnReview>;
@@ -828,12 +813,7 @@ export function SeraTop({
   return (
     <>
       <SeraSummaryLine read={sera.read} witness={witness} />
-      <SeraDifferences
-        read={sera.read}
-        structureHref={structureHrefFor(queue?.batches ?? [], SERA_MODULE, CHART_KINDS)}
-        draftOpen={(queue?.openDrafts ?? []).length > 0}
-        onRetry={sera.load}
-      />
+      <SeraDifferences read={sera.read} draftOpen={(queue?.openDrafts ?? []).length > 0} onRetry={sera.load} />
     </>
   );
 }
@@ -843,7 +823,7 @@ export function SeraMemberPage({ sera }: { sera: SeraOnReview }) {
   return (
     <>
       <h1 className="text-2xl font-bold text-foreground">Review</h1>
-      <SeraDifferences read={sera.read} structureHref={null} draftOpen={false} onRetry={sera.load} />
+      <SeraDifferences read={sera.read} draftOpen={false} onRetry={sera.load} />
     </>
   );
 }
