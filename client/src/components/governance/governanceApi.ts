@@ -12,6 +12,7 @@
  * field the server stopped sending should fail at the typecheck, not by
  * quietly showing an empty bar to a village mid-vote.
  */
+import type { VoiceSpreadView } from "@shared/voiceSpread";
 import { authToken } from "@/lib/gameApi";
 import type { BallotMethod, VoteChoice } from "@shared/governanceEngine";
 
@@ -385,6 +386,8 @@ export const fetchBallots = (page?: { limit?: number; offset?: number }) => {
 export const fetchBallot = (id: string) =>
   call<DecisionRecord>(`/api/governance/ballots/${encodeURIComponent(id)}`);
 export const fetchStanding = () => call<Standing>("/api/governance/standing");
+/** How Voice is spread over the roll, and this season's votes as counts. Groups only: names nobody. */
+export const fetchVoiceSpread = () => call<VoiceSpreadView>("/api/governance/voice-spread");
 
 /**
  * Lineage for the objections a panel is already holding, asked for by their

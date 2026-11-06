@@ -400,6 +400,44 @@ describe.skipIf(!DB_CONFIGURED)("the public library catalogue", () => {
   });
 });
 
+describe.skipIf(!DB_CONFIGURED)("a stranger cannot make the village mail one address over and over (R106)", () => {
+  // Both public doors send to the address the stranger typed. Bounded per IP
+  // only, so anyone could aim the village's own mail at one inbox, with a
+  // greeting they chose. Each address now hears from a door three times a day.
+  const toRows = async (origin: string, to: string) => {
+    const [rows] = await pool.query<any[]>("SELECT body_html FROM comms_messages WHERE origin = ? AND to_email = ?", [origin, to]); // module-review-ok: the e2e harness reading its own scratch schema
+    return rows.map((r) => String(r.body_html ?? ""));
+  };
+  const settle = async (origin: string, to: string, atLeast: number) => {
+    for (let i = 0; i < 40 && (await toRows(origin, to)).length < atLeast; i++) await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 400));
+    return toRows(origin, to);
+  };
+
+  it("acknowledges a work-with-us proposal to one address three times a day", async () => {
+    const longName = "R".repeat(500);
+    for (let i = 0; i < 4; i++) {
+      const sent = await call("POST", "/api/forms/submit", {
+        type: "work-with-us", data: { name: longName, email: "repeat@example.test", work: `proposal ${i}` },
+      }, "");
+      expect(sent.status, sent.text).toBe(200);
+    }
+    const acks = await settle("forms.ack", "repeat@example.test", 3);
+    // An acknowledgement is essential mail, so its body is never stored; the
+    // greeting's length is held by greetingName's own test (lib/workWithUsAck).
+    expect(acks.length, "the fourth acknowledgement is not sent").toBe(3);
+  });
+
+  it("sends the investor packet to one address three times a day", async () => {
+    expect((await call("PUT", "/api/admin/variables/abuse.investor_docs_per_ip_hourly", { value: "50" })).status).toBe(200);
+    for (let i = 0; i < 4; i++) {
+      const asked = await call("POST", "/api/investor-docs/request", { name: "Repeat Asker", email: "packet@example.test", accredited: true }, "");
+      expect(asked.status, asked.text).toBe(200);
+    }
+    expect((await settle("investor.packet", "packet@example.test", 3)).length).toBe(3);
+  });
+});
+
 describe.skipIf(!DB_CONFIGURED)("a power the village holds does not move on an admin's say", () => {
   it("hands intake.moderate to the Steward Circle the first time", async () => {
     const roles = await call("GET", "/api/roles", undefined, "");

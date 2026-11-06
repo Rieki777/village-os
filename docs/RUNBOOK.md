@@ -117,7 +117,7 @@ A well village:
 ```json
 {
   "status": "ok",
-  "build": "2026-07-28-wave1-a1b2c3d",
+  "build": "2026-10-03-cfaa41f",
   "timestamp": "2026-09-02T02:14:07.221Z",
   "database": { "ok": true, "ms": 11 },
   "uploads": { "files": 412, "mb": 730, "photoFiles": 118, "photoMb": 402 }
@@ -165,6 +165,24 @@ this is not a moment for a restore. The page names the file and the step
 number that failed. Send that page, or a photograph of it, to whoever operates
 your deployment. If the version before this update was working, rolling back
 to it (section 4) restores service while the failed update is looked at.
+
+### A page that says the village's accounts did not add up.
+
+Maintenance mode again, for a different reason: `/health` answers `503` with
+`"status": "maintenance"` and an error of kind `ledger-invariant`. Before it
+answers anyone, the server checks that every token's balances sum to zero and
+that only the accounts that issue a token are below zero. One of those checks
+failed, so it refused to open the village on numbers it could not trust.
+Nothing was moved by the check.
+
+1. Railway, the app service log: copy every line that starts
+   `[ledger invariant]`. Each one names the token or the account. The public
+   page shows only how many there are, on purpose.
+2. Do not change a balance by hand to make the check pass. Balances are
+   worked out from the ledger, so an edited balance hides the cause and is
+   recomputed away.
+3. The previous version runs the same check, so rolling back does not bring
+   the village back. Send the lines to whoever operates your deployment.
 
 ### It loads, and everything a member does errors.
 
@@ -387,7 +405,9 @@ a copy and most of a copy.
 To put the files back: copy everything in `unpacked/` except `MANIFEST.txt` and
 `EXPORT-STATUS.txt` into `/app/data/uploads/` on the volume. That needs a shell
 on the running service (`railway ssh`), so it needs someone with Railway
-access. Restoring the database and the volume from the same day keeps names and
+access. No command is given for the copy, because none has been rehearsed on a
+hosted village: plan it with whoever holds the Railway project before you need
+it, and treat a hosted uploads restore as unsupported until one has been. Restoring the database and the volume from the same day keeps names and
 files together.
 
 ---

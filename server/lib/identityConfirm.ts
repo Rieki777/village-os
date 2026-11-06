@@ -264,18 +264,27 @@ export function confirmedWithin(member: { prefs?: any; tokenVersion?: number }, 
   return until !== null && nowMs <= until;
 }
 
-/** One cookie by name, out of the raw header. No cookie parser is wired in this app. */
+/**
+ * One cookie by name, out of the raw header. No cookie parser is wired in this app.
+ *
+ * TWO OF THE NAME IS NO VALUE (R041). A sibling subdomain can set a cookie of
+ * the same name with a longer path, and the browser sends it first, so taking
+ * the first match let a cookie the village never set win. Both readers in the
+ * server are this one function.
+ */
 export function readCookieValue(header: string | undefined, name: string): string | null {
+  const found: string[] = [];
   for (const part of String(header ?? "").split(";")) {
     const eq = part.indexOf("=");
     if (eq < 0 || part.slice(0, eq).trim() !== name) continue;
-    try {
-      return decodeURIComponent(part.slice(eq + 1).trim()) || null;
-    } catch {
-      return null;
-    }
+    found.push(part.slice(eq + 1).trim());
   }
-  return null;
+  if (found.length !== 1) return null;
+  try {
+    return decodeURIComponent(found[0]) || null;
+  } catch {
+    return null;
+  }
 }
 
 /**

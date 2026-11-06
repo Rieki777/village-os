@@ -33,9 +33,17 @@
 import http from "node:http";
 import type { ApplyFailureDetail } from "./migrate";
 
+/**
+ * Why the server is refusing to come up normally: an update that stopped, or
+ * (R132) a ledger that did not add up at boot. The ledger kind carries a count
+ * and no account, because this page is public and the problem lines name
+ * accounts; each one is in the server log under `[ledger invariant]`.
+ */
+export type MaintenanceDetail = ApplyFailureDetail | { kind: "ledger-invariant"; problems: number; message: string };
+
 export interface MaintenanceServerOptions {
   /** Why the server is refusing to come up normally. */
-  detail: ApplyFailureDetail;
+  detail: MaintenanceDetail;
   /** Port to bind. Railway sets `PORT`; the caller decides how to read it. */
   port: number;
   /** Defaults to all interfaces, matching how the real app binds in production. */
@@ -54,8 +62,16 @@ function escapeHtml(s: string): string {
 }
 
 /** One honest headline and a couple of short, plain sentences, per failure kind. */
-function humanSummary(detail: ApplyFailureDetail): { headline: string; body: string[] } {
+function humanSummary(detail: MaintenanceDetail): { headline: string; body: string[] } {
   switch (detail.kind) {
+    case "ledger-invariant":
+      return {
+        headline: "The village's accounts did not add up when it started, so it stopped before serving anyone.",
+        body: [
+          "Every token's balances have to sum to zero, and only the accounts that issue a token may go below it. One of those checks failed, so the server refused to open the village on top of numbers it could not trust.",
+          "Nothing was moved: the check runs before a single request is answered. Going back to the last version that worked does not fix the numbers, so send the detail below before anyone changes a balance by hand.",
+        ],
+      };
     case "migration-failed":
       return {
         headline: `An update stopped partway through, at step ${detail.statementIndex} of ${detail.statementsTotal} in ${detail.file}.`,

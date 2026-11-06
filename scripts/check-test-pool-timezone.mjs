@@ -119,6 +119,12 @@ for (const file of files) {
 }
 
 const total = unpinned.length;
+// A missing baseline fails (R203). It used to read as infinity, so deleting the
+// file cleared the gate. `--update-baseline` writes a first one.
+if (!fs.existsSync(BASELINE_PATH) && !UPDATE) {
+  console.error(`the test-pool baseline is missing (${BASELINE_PATH}). Write one on purpose with --update-baseline; a gate with no baseline holds nothing.`);
+  process.exit(1);
+}
 const baseline = fs.existsSync(BASELINE_PATH)
   ? JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"))
   : { total: Number.POSITIVE_INFINITY };
