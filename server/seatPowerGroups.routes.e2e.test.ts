@@ -148,6 +148,13 @@ describe.skipIf(!DB_CONFIGURED)("0322: holding a seat grants its Power groups", 
     expect((await call("GET", "/api/admin/org-roles/ops-lead/power-groups")).json?.roleIds).toEqual(["founders-circle"]);
   });
 
+  it("the roles shelf counts and names the seat-granted holder, as the gate and the admin roster do (R161)", async () => {
+    const shelf = (await call("GET", "/api/roles")).json;
+    const founders = (Array.isArray(shelf) ? shelf : shelf?.roles ?? []).find((g: any) => g.id === "founders-circle");
+    expect(founders.holders.map((h: any) => h.userId), "Sam sits in Founders Circle through the Ops Lead seat").toContain(sam.id);
+    expect(founders.holderCount).toBe(Number(await holderCount("founders-circle")));
+  });
+
   it("writes the link to the admin trail", async () => {
     const [rows] = await pool.query<any[]>("SELECT text FROM health_events WHERE kind = 'audit' AND entity_type = 'org_role' AND entity_ref = 'ops-lead'"); // module-review-ok: the e2e harness reading its own scratch schema
     expect(rows.map((r: any) => r.text)).toContain("org_role:groups:ops-lead:+founders-circle:-none");
@@ -158,6 +165,9 @@ describe.skipIf(!DB_CONFIGURED)("0322: holding a seat grants its Power groups", 
     expect(ended.status, ended.text).toBeLessThan(300);
     expect(await held("org.seat", sam.token)).toBe(false);
     expect(await opensPanel(sam.token)).toBe(false);
+    const shelf = (await call("GET", "/api/roles")).json;
+    const founders = (Array.isArray(shelf) ? shelf : shelf?.roles ?? []).find((g: any) => g.id === "founders-circle");
+    expect(founders.holders.map((h: any) => h.userId), "an ended seating holds nothing on the shelf either").not.toContain(sam.id);
   });
 
   it("unlinking leaves the seat carrying nothing", async () => {

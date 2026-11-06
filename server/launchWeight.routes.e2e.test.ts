@@ -416,7 +416,7 @@ describe.skipIf(!DB_CONFIGURED)("everybody carries weight, and skew is left alon
  * pass once the window has run out. Every step is the real route; only the
  * clock is moved, the same way `expire` moves it.
  */
-async function turnOnByVote(moduleId: string, to: "members" | "public") {
+async function turnOnByVote(moduleId: string, to: "off" | "preview" | "members" | "public") {
   const made = await call("POST", "/api/game/mechanics/proposals", {
     body: {
       title: `Turn on ${moduleId}`,
@@ -618,6 +618,33 @@ describe.skipIf(!DB_CONFIGURED)("after launch, turning a module on is the villag
     });
     expect(made.status).toBe(400);
     expect(JSON.stringify(made.json)).toContain("set at launch");
+  });
+
+  it("refuses that admin a pause of governance, which nothing could turn back on (R156)", async () => {
+    const res = await call("PUT", "/api/admin/modules/governance/lifecycle", {
+      body: { lifecycle: "off" },
+    });
+    expect(res.status, JSON.stringify(res.json)).toBe(403);
+    const catalog = await call("GET", "/api/modules/catalog");
+    const row = (catalog.json?.modules ?? []).find((m: any) => m.id === "governance");
+    expect(row?.lifecycle, "governance is still on for members").toBe("members");
+  });
+
+  it("the village switches a module on AND off by vote while nobody holds module.switch (Rye, 2026-11-06)", async () => {
+    await turnOnByVote("forum", "members");
+    await turnOnByVote("forum", "off");
+  });
+
+  it("control: the vote cannot switch governance, the module every vote runs on", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Turn governance off",
+        rationale: "A vote that would end every vote after it.",
+        changes: [{ kind: "module_lifecycle", moduleId: "governance", to: "off" }],
+      },
+    });
+    expect(made.status, JSON.stringify(made.json)).toBeGreaterThanOrEqual(400);
+    expect(JSON.stringify(made.json)).toContain("holds the vote itself");
   });
 
   it("still lets that admin narrow a module that is on", async () => {
