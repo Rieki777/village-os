@@ -144,7 +144,13 @@ function rowOf(r: RowDataPacket): SnapshotRow {
   };
 }
 
-/** Delete every row older than the newest `keep`. Returns how many went. */
+/**
+ * Delete every row older than the newest `keep`, except the two newest whole
+ * reads of each kind: a run of attempts the service never answered (review C6)
+ * must not prune the last full check the list says it is from, nor the two
+ * whole reads "missing twice" counts (R4). The age prune still takes them.
+ * Returns how many went.
+ */
 export async function pruneSnapshots(pool: Pool, keep: number): Promise<number> {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT seq FROM saberra_snapshots ORDER BY seq DESC LIMIT 1 OFFSET ?",
@@ -152,7 +158,13 @@ export async function pruneSnapshots(pool: Pool, keep: number): Promise<number> 
   );
   const oldestKept = rows[0]?.seq;
   if (oldestKept === undefined || oldestKept === null) return 0;
-  const [res] = await pool.query<ResultSetHeader>("DELETE FROM saberra_snapshots WHERE seq < ?", [Number(oldestKept)]);
+  const whole = async (column: "circles_read" | "roles_read") =>
+    (await pool.query<RowDataPacket[]>(`SELECT seq FROM saberra_snapshots WHERE ${column} = 'whole' ORDER BY seq DESC LIMIT 2`))[0].map((r) => Number(r.seq));
+  const held = Array.from(new Set([...(await whole("circles_read")), ...(await whole("roles_read"))]));
+  const [res] = await pool.query<ResultSetHeader>(
+    `DELETE FROM saberra_snapshots WHERE seq < ?${held.length ? ` AND seq NOT IN (${held.map(() => "?").join(",")})` : ""}`,
+    [Number(oldestKept), ...held],
+  );
   return res.affectedRows;
 }
 

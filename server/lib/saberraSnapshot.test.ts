@@ -35,7 +35,23 @@ const state = vi.hoisted(() => ({
   tools: [] as unknown[],
   /** When true, keeping a snapshot fails the way a database refusal would. */
   snapshotFails: false,
+  /** When true, opening a session throws, the way a refused connection does. */
+  sessionThrows: false,
+  /** When true, storing the facts throws: a failure after the service answered. */
+  factsFail: false,
 }));
+
+// The real facts store, with one switch: a write that throws after the read was kept.
+vi.mock("../repos/moduleFacts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../repos/moduleFacts")>();
+  return {
+    ...real,
+    upsertFacts: async (...args: Parameters<typeof real.upsertFacts>) => {
+      if (state.factsFail) throw Object.assign(new Error("Lock wait timeout exceeded"), { code: "ER_LOCK_WAIT_TIMEOUT" });
+      return real.upsertFacts(...args);
+    },
+  };
+});
 
 // The real repo, with one switch: a snapshot write that throws on demand.
 vi.mock("../repos/saberraSnapshots", async (importOriginal) => {
@@ -60,7 +76,10 @@ vi.mock("./secrets", () => ({
 }));
 
 vi.mock("./saberraClient", () => ({
-  openSession: async () => state.session,
+  openSession: async () => {
+    if (state.sessionThrows) throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
+    return state.session;
+  },
   listTools: async () => ({ ok: true, tools: state.tools }),
   callTool: async (_c: unknown, _s: string, _t: string, args: Record<string, unknown>) => {
     const wire = String(args.kind ?? args.record_type);
@@ -165,6 +184,8 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     state.endless = {};
     state.tools = [];
     state.snapshotFails = false;
+    state.sessionThrows = false;
+    state.factsFail = false;
     await pool.query("DELETE FROM saberra_snapshots WHERE seq > 0"); // module-review-ok: fixture SQL, each test starts from no snapshot
     await writeSyncLogDocument(pool, { runs: [], landedFingerprint: null });
   });
@@ -414,6 +435,59 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect(first.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "name", agreed: { name: true, aim: true, circle: "c2-land" } });
     const second = await newest();
     expect(second.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "earlier", agreed: { name: true, aim: true, circle: "c2-land" } });
+  });
+
+  it("THE SERVICE NOT ANSWERING IS KEPT AS A READ, both kinds failed and carried, so the list says when it last tried (review C6)", async () => {
+    serviceHolds("quiet");
+    await syncByHand(pool);
+    const whole = await newest();
+    const ids = (s: Snapshot) => [s.circles.records.map((r) => r.id), s.roles.records.map((r) => r.id)];
+    const tried = async () => {
+      const s = await newest();
+      expect([s.circles.read, s.roles.read]).toEqual(["failed", "failed"]);
+      // Carried, so nothing looks removed and the page still shows the last full check.
+      expect(ids(s)).toEqual(ids(whole));
+      const read = await readDifferences(pool);
+      expect(read.latest).toMatchObject({ takenAt: s.takenAt, circles: "failed", roles: "failed" });
+      expect(read.lastWhole).toEqual({ circles: whole.takenAt, roles: whole.takenAt });
+      return s;
+    };
+
+    // No session at all.
+    const before = (await recentSnapshots(pool, 1))[0]!.seq;
+    state.session = null;
+    expect((await syncByHand(pool)).status).toBe(502);
+    expect((await recentSnapshots(pool, 1))[0]!.seq).toBeGreaterThan(before);
+    await tried();
+
+    // A call that throws.
+    const again = (await recentSnapshots(pool, 1))[0]!.seq;
+    state.session = "snap-1";
+    state.sessionThrows = true;
+    await expect(syncByHand(pool)).rejects.toThrow();
+    expect((await recentSnapshots(pool, 1))[0]!.seq).toBeGreaterThan(again);
+    await tried();
+
+    // The control: a failure after the service answered keeps the read it made, and no failed one on top.
+    state.sessionThrows = false;
+    state.factsFail = true;
+    await expect(syncByHand(pool)).rejects.toThrow();
+    const [top, under] = await recentSnapshots(pool, 2);
+    expect([top!.snapshot.circles.read, top!.snapshot.roles.read]).toEqual(["whole", "whole"]);
+    expect(under!.snapshot.circles.read).toBe("failed");
+  });
+
+  it("THIRTY ATTEMPTS THE SERVICE NEVER ANSWERED NEVER PRUNE THE LAST FULL CHECK (review C6)", async () => {
+    serviceHolds("outage");
+    await syncByHand(pool);
+    const whole = await newest();
+    const failed = { asked: ["circle", "role"], failed: ["circle", "role"], truncated: [], records: [] };
+    for (let i = 0; i < SNAPSHOT_KEEP + 2; i += 1) await writeSnapshot(pool, failed, "scheduled", new Date());
+    const kept = await recentSnapshots(pool, 100);
+    // The newest thirty, and the last whole read of each kind besides.
+    expect(kept).toHaveLength(SNAPSHOT_KEEP + 1);
+    expect(kept[kept.length - 1]!.snapshot).toMatchObject({ takenAt: whole.takenAt, circles: { read: "whole" }, roles: { read: "whole" } });
+    expect((await readDifferences(pool)).lastWhole).toEqual({ circles: whole.takenAt, roles: whole.takenAt });
   });
 
   it("A SNAPSHOT THAT CANNOT BE KEPT NEVER STOPS THE SYNC: the proposals still land", async () => {

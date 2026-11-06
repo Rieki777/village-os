@@ -476,14 +476,27 @@ async function runLocked(
     await writeSyncLog(pool, { runs: appendRun(log.runs, run), landedFingerprint });
     return run;
   };
+  /*
+   * A SERVICE THAT NEVER ANSWERED IS KEPT AS A READ TOO (review C6): both kinds
+   * failed and carried from the read before (R5), so the list's newest read is
+   * this attempt and it can say "didn't answer at 14:05; this list is from the
+   * last full check, at 09:00" (`lastWhole`), never an older time or "in step".
+   * Only before the service answered: once it has, its own read is kept, and a
+   * later failure is ours, never a read that failed. Never stops the sync.
+   */
+  let answered = false;
+  const keepUnanswered = () =>
+    writeSnapshot(pool, { asked: ["circle", "role"], failed: ["circle", "role"], truncated: [], records: [] }, trigger, at).catch(() => undefined);
 
   try {
     const sessionId = await openSession(client);
     if (!sessionId) {
+      await keepUnanswered();
       const run = await finish(blankRun(at, trigger, "failed", "no-session"));
       return { status: 502, body: { error: NO_SESSION_SENTENCE }, run };
     }
     const fetched = await readService(client, sessionId);
+    answered = true;
     const fingerprint = fingerprintRead(fetched.records);
 
     /*
@@ -540,6 +553,7 @@ async function runLocked(
     const run = await finish(describeLanding(describeRead(blankRun(at, trigger, "landed", reason), fetched), answer), fingerprint);
     return { status: 200, body: answer, run };
   } catch (e) {
+    if (!answered) await keepUnanswered();
     await finish(blankRun(at, trigger, "failed", "error")).catch(() => undefined);
     throw e;
   }
