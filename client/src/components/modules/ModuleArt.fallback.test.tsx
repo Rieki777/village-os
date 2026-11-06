@@ -5,8 +5,10 @@
  * `client/src/lib/moduleImages.test.ts` lets a module ship the drawn fallback
  * instead of a webp, because the image budget ratchet has no headroom left and
  * the fallback costs none. That exemption is only honest if the card really
- * draws something, so this renders the case the exemption creates: redemption,
- * whose `/images/modules/redemption.webp` does not exist.
+ * draws something, so this renders the case the exemption creates: saberra,
+ * whose `/images/modules/saberra.webp` does not exist. (Redemption was the
+ * subject until it got bundled art on 2026-11-05; saberra is the one module
+ * left on the fallback.)
  *
  * THIS FILE USED TO ASSERT THE DEFECT. It checked that the card tried
  * `/images/modules/redemption.webp` first and only drew the gradient after the
@@ -17,7 +19,7 @@
  *
  * So the unit here is the WHOLE list of sources a card puts on screen, walked
  * by failing each one in turn (`error` is what the browser fires on a missing
- * file, and what `ModuleArt` listens for), not a mock of fetch. Redemption must
+ * file, and what `ModuleArt` listens for), not a mock of fetch. Saberra must
  * walk nothing it cannot have; a module that does ship art is the positive
  * control, so a card that stopped requesting ANY bundled art would fail too.
  */
@@ -81,22 +83,22 @@ function expectCatalogColours(container: HTMLElement, hue: number) {
 }
 
 describe("a module card with no bundled art", () => {
-  const card = MODULE_CATALOG.redemption;
+  const card = MODULE_CATALOG.saberra;
 
   it("draws the gradient and the emblem without requesting a file that does not exist", () => {
-    expect(card, "redemption must have a catalog card").toBeTruthy();
+    expect(card, "saberra must have a catalog card").toBeTruthy();
     const { srcs, container } = walk(
-      <ModuleArt id="redemption" hue={card.hue} emblem={card.emblem} className="h-32" />,
+      <ModuleArt id="saberra" hue={card.hue} emblem={card.emblem} className="h-32" />,
     );
-    expect(srcs, "redemption ships no webp, so the card must not ask for one").toEqual([]);
+    expect(srcs, "saberra ships no webp, so the card must not ask for one").toEqual([]);
     expectDrawn(container);
     expectCatalogColours(container, card.hue);
   });
 
   it("tries the village's own upload, then draws, never guessing a bundled path", () => {
-    const upload = "/uploads/modules/redemption-own.webp";
+    const upload = "/uploads/modules/saberra-own.webp";
     const { srcs, container } = walk(
-      <ModuleArt id="redemption" hue={card.hue} emblem={card.emblem} imageUrl={upload} />,
+      <ModuleArt id="saberra" hue={card.hue} emblem={card.emblem} imageUrl={upload} />,
     );
     expect(srcs).toEqual([upload]);
     expectDrawn(container);
