@@ -180,7 +180,7 @@ import {
 import { catalystUserIds } from "../repos/users";
 import { slateFor } from "../repos/stewardSlate";
 import { capabilityHoldings, moveCapabilityToVillage, STEWARD_ROLE_ID } from "./capabilityHolding";
-import { readLaunchSelection } from "./launchHandover";
+import { readLaunchCrossing, readLaunchSelection, writeLaunchCrossing } from "./launchHandover";
 import { boolVar, stringVar } from "./variables";
 
 /**
@@ -1934,45 +1934,72 @@ export async function seatCatalystsAsStewards(
       "Nobody holds the steward role, so the village's powers stay where they were. " +
       "A power entrusted to a role nobody sits in belongs to nobody at all. " +
       "The stewards hand them over by their own act once the village votes somebody into the role.";
+    // Owed now, and the first vote-seating finishes it (R165).
+    if ((await readLaunchCrossing(pool)) !== "crossed") await writeLaunchCrossing(pool, "waiting");
   } else {
-    const refusals: string[] = [];
-    /*
-     * A POWER THE VILLAGE ALREADY HOLDS IS NOT THE LAUNCH'S TO MOVE (R158).
-     * `moveCapabilityToVillage` upserts, so crossing a key another role holds
-     * would silently re-point it onto the Steward role. Such a key is left with
-     * its holder and reported; one the Steward role already holds is left alone
-     * too, so a retried close rewrites nothing.
-     */
-    const holderOf = new Map((await capabilityHoldings(pool)).map((h) => [h.capability, h.holderRoleId]));
-    for (const capability of (await readLaunchSelection(pool)).capabilities) {
-      const holder = holderOf.get(capability);
-      if (holder && holder !== STEWARD_ROLE_ID) {
-        base.capabilitiesKeptElsewhere.push({ capability, holderRoleId: holder });
-        continue;
-      }
-      if (holder === STEWARD_ROLE_ID) continue;
-      const moved = await moveCapabilityToVillage(pool, {
-        capability,
-        holderRoleId: STEWARD_ROLE_ID,
-        movedByBallotId: launchBallotId,
-        note: "The village's own hand on this, from the vote that started its Game.",
-      });
-      if (moved.ok) base.capabilitiesMoved.push(capability);
-      else refusals.push(`${capability}: ${moved.error}`);
-    }
+    const crossed = await crossLaunchSelection(pool, launchBallotId, "The village's own hand on this, from the vote that started its Game.");
+    base.capabilitiesMoved.push(...crossed.moved);
+    base.capabilitiesKeptElsewhere.push(...crossed.keptElsewhere);
     // TRUE ONLY WHEN EVERY SELECTED POWER IS THERE, which is what the caller's own
     // "the powers did not cross" notice means. `capabilitiesMoved` counts this
     // call's crossings and goes empty on a retry, so it is the wrong thing to
     // read: the question is the state of the table, not the work of this run.
-    base.holdingMoved = refusals.length === 0;
-    if (refusals.length > 0) {
-      base.holdingHeld = refusals.join(" ");
+    base.holdingMoved = crossed.refusals.length === 0;
+    if (crossed.refusals.length > 0) {
+      base.holdingHeld = crossed.refusals.join(" ");
       base.error = base.error ?? base.holdingHeld;
+    } else {
+      await writeLaunchCrossing(pool, "crossed");
     }
   }
 
   return base;
 }
+
+/**
+ * THE STEWARDS' LAUNCH SELECTION, CROSSING TO THE VILLAGE (R158, R165).
+ *
+ * One function for both moments it happens: the launch, when somebody holds
+ * the steward seat, and the first vote-seating after a launch that seated
+ * nobody. A selected power another role already holds stays with it (R158;
+ * Rye, 2026-11-01: never re-point a power the village holds), and one the
+ * Steward role already holds is left alone, so a retry rewrites nothing.
+ */
+export async function crossLaunchSelection(
+  pool: Pool,
+  ballotId: string,
+  note: string,
+): Promise<{ moved: string[]; keptElsewhere: Array<{ capability: string; holderRoleId: string }>; refusals: string[] }> {
+  const moved: string[] = [];
+  const keptElsewhere: Array<{ capability: string; holderRoleId: string }> = [];
+  const refusals: string[] = [];
+  const holderOf = new Map((await capabilityHoldings(pool)).map((h) => [h.capability, h.holderRoleId]));
+  for (const capability of (await readLaunchSelection(pool)).capabilities) {
+    const holder = holderOf.get(capability);
+    if (holder && holder !== STEWARD_ROLE_ID) {
+      keptElsewhere.push({ capability, holderRoleId: holder });
+      continue;
+    }
+    if (holder === STEWARD_ROLE_ID) continue;
+    const r = await moveCapabilityToVillage(pool, { capability, holderRoleId: STEWARD_ROLE_ID, movedByBallotId: ballotId, note });
+    if (r.ok) moved.push(capability);
+    else refusals.push(`${capability}: ${r.error}`);
+  }
+  return { moved, keptElsewhere, refusals };
+}
+
+/**
+ * The vote-seating's half (R165): when the village votes somebody into the
+ * steward seat after a launch that seated nobody, the selection the launch
+ * owed crosses now, once. Null when nothing is owed.
+ */
+export async function crossOwedLaunchSelection(pool: Pool, seatingBallotId: string): Promise<Awaited<ReturnType<typeof crossLaunchSelection>> | null> {
+  if ((await readLaunchCrossing(pool)) !== "waiting") return null;
+  const crossed = await crossLaunchSelection(pool, seatingBallotId, "The stewards' launch selection, crossing when the village voted somebody into the steward role.");
+  if (crossed.refusals.length === 0) await writeLaunchCrossing(pool, "crossed");
+  return crossed;
+}
+
 
 // ── The per-term history (0176) ─────────────────────────────────────────────
 
