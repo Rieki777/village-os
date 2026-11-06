@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { readProposedSeats } from "./proposedSeats";
 import {
+  archivedRefusal,
   decideStructure,
   planStructure,
   seatIdFor,
@@ -446,5 +447,75 @@ describe("what the source holds a role to pay", () => {
       expect(payload).not.toHaveProperty("sourcePay");
       for (const k of ["valueMinor", "valueTokens", "cashMinor", "termsOffer"]) expect(payload).not.toHaveProperty(k);
     }
+  });
+});
+
+describe("a role this village already made from the source (D2, 2026-11-06)", () => {
+  // A role published from the source keeps an id made from its page id. The
+  // next sync sends it again: it answers by name AND by id, and the id is its
+  // own, so it is the same role to update. It used to be reported as "A role
+  // with the id ... already exists", so "update" could never pass for it.
+  const madeHere = seatIdFor("rec-pm-page");
+  const lived: PlanLiveSeat[] = [
+    ...LIVE_SEATS.filter((s) => s.name !== "Project Manager"),
+    { id: madeHere, name: "Project Manager", circleId: "development-circle", active: true, isExample: false, holders: 1 },
+  ];
+  const sent = (name: string): PlanProposal[] => [
+    { id: "xprop-again", kind: "org.proposed", payload: { seats: [{ name, circleName: "Development Circle", aim: "Plans the build.", id: "rec-pm-page" }] } },
+  ];
+
+  it("MATCHES ITSELF BY ITS OWN ID and carries no id problem, so an update can pass", () => {
+    const p = planStructure(sent("Project Manager"), LIVE_CIRCLES, lived);
+    expect(p.seats[0].problem).toBeNull();
+    expect(p.seats[0].match?.seatId).toBe(madeHere);
+    const d = decideStructure(p, { conflicts: { "xprop-again#0": { choice: "update" } } });
+    expect(d.problems).toEqual([]);
+    expect(d.changes.map((c) => `${c.op} ${c.orgRoleId}`)).toEqual([`update_seat ${madeHere}`]);
+  });
+
+  it("finds it by id even after this village renamed it", () => {
+    const renamed = lived.map((s) => (s.id === madeHere ? { ...s, name: "Build Planner" } : s));
+    const p = planStructure(sent("Project Manager"), LIVE_CIRCLES, renamed);
+    expect(p.seats[0].match?.seatId).toBe(madeHere);
+    expect(p.seats[0].problem).toBeNull();
+  });
+
+  it("still refuses when a RESTED role holds that id, because creating it would collide", () => {
+    const rested = lived.map((s) => (s.id === madeHere ? { ...s, active: false } : s));
+    const p = planStructure(sent("Project Manager"), LIVE_CIRCLES, rested);
+    expect(p.seats[0].problem).toBe(`A role with the id "${madeHere}" already exists`);
+  });
+});
+
+describe("archivedRefusal: what the source archived is never accepted outside the structure review (D1, 2026-11-06)", () => {
+  it("is null when nothing in the batch is archived", () => {
+    expect(archivedRefusal(batch())).toBeNull();
+  });
+
+  it("names an archived circle, and sends the steward to the structure review", () => {
+    const said = archivedRefusal([circle("xc-old", "Old Kitchen", { Status: "Archived" })]);
+    expect(said).toBe(
+      '"Old Kitchen" is archived where it came from, so accepting it here would bring it back. Review the batch as one structure change, where archived records are listed apart.',
+    );
+  });
+
+  it("counts an archived role, and a role whose circle is archived, the way the structure review does", () => {
+    const said = archivedRefusal([
+      circle("xc-old", "Old Kitchen", { Status: "Archived" }),
+      {
+        id: "xprop-s",
+        kind: "org.proposed",
+        payload: {
+          seats: [
+            { name: "Cook", circleName: "Old Kitchen", id: "rec-cook" },
+            { name: "Retired Role", circleName: "Development Circle", id: "rec-ret", sourceStatus: "Archived" },
+            { name: "Planner", circleName: "Development Circle", id: "rec-plan", sourceStatus: "Active" },
+          ],
+        },
+      },
+    ]);
+    expect(said).toBe(
+      '3 of these are archived where they came from ("Old Kitchen", "Cook", "Retired Role"), so accepting them here would bring them back. Review the batch as one structure change, where archived records are listed apart.',
+    );
   });
 });
