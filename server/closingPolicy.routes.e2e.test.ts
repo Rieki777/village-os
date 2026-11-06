@@ -173,7 +173,8 @@ async function closingRow(): Promise<{ item: any; others: { id: string; title: s
   const item = items.find((i) => i.id === ROW_ID);
   expect(item, "the checklist must carry the closing-policy-named row").toBeTruthy();
   const others = items
-    .filter((i) => i.severity === "blocking" && i.state !== "ok" && i.id !== ROW_ID)
+    // A row the launch vote may carry open (`carriedByVote`) is counted and holds nothing.
+    .filter((i) => i.severity === "blocking" && i.state !== "ok" && i.id !== ROW_ID && i.carriedByVote !== true)
     .map((i) => ({ id: String(i.id), title: String(i.title) }));
   return { item, others };
 }
