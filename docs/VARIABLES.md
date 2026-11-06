@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 195 open and 47 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 195 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 215 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 217 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-242 dials in 36 categories. 143 carry a minimum and a maximum. By type: 107 integer, 19 decimal, 18 percentage, 28 boolean, 31 choice, 38 text, 1 longtext.
+244 dials in 36 categories. 144 carry a minimum and a maximum. By type: 107 integer, 19 decimal, 19 percentage, 29 boolean, 31 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ Each dial also says WHEN a change lands. 215 of them as soon as it is saved, and
 | The Mint | 7 | 6 | 1 |
 | Progression | 31 | 31 | 0 |
 | Quests | 2 | 2 | 0 |
-| Governance | 44 | 40 | 4 |
+| Governance | 46 | 40 | 6 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -182,6 +182,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How long a proposal coming back may open outside its window | `governance.window_grace_days` | Governance | integer | `7` | the whole village |
 | How voting weight is assigned | `governance.weight_mode` | Governance | choice | `equal` | the founder or an admin |
 | The weight token | `governance.weight_token` | Governance | text | `gratitude` | the founder or an admin |
+| Cap one member's voting weight | `governance.weight_cap_on` | Governance | boolean | `false` | the founder or an admin |
+| The most voting weight one member can carry | `governance.weight_cap_pct` | Governance | percentage | `20` | the founder or an admin |
 | Unity needed to pass | `governance.unity_pct` | Governance | percentage | `80` | the whole village |
 | Quorum needed to count | `governance.quorum_pct` | Governance | percentage | `20` | the whole village |
 | How long a ballot stays open | `governance.vote_days` | Governance | integer | `7` | the whole village |
@@ -401,7 +403,7 @@ How many tokens the village shares out when a lunar cycle closes. The pool is sp
 | Key | `gratitude.pool_per_cycle` |
 | Type | integer, a whole number |
 | Default | `1000` |
-| Range | 0 to 1000000 |
+| Range | 0 to 1000000000 |
 | Counted in | tokens |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
@@ -553,7 +555,7 @@ How many separate taps of appreciation one member can leave for another in a cyc
 
 ### Issuance cap per lunar cycle
 
-The most this village can bring into existence of one token in one lunar cycle, counted across every door and not by hand alone: hand-mints, co-signed grants, treasury stocking, stay-credit comps, purchases and adjustments, and the credits a work-exchange quest releases all spend the same number. COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door that issues this token, because a cap of zero means zero.
+The most this village can bring into existence of one token in one lunar cycle. It counts what the mint faucet issues: hand-mints, co-signed grants, treasury stocking, stay-credit comps, purchases and adjustments, and the credits a work-exchange quest releases all spend the same number. Pay for quests, roles and accepted proposals, and the gratitude pool, issue from faucets of their own and are not counted. COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door of the mint faucet for this token, because a cap of zero means zero.
 
 | Fact | Value |
 | --- | --- |
@@ -812,7 +814,7 @@ How much voice someone gathers before their chip turns claimable. What this real
 | Key | `economy.voice_claim_threshold` |
 | Type | integer, a whole number |
 | Default | `100` |
-| Range | 1 to 100000 |
+| Range | 1 to 100000000 |
 | Counted in | voice |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
@@ -827,7 +829,7 @@ How much earned equity someone gathers before they can carry it across to Hypha.
 | Key | `economy.equity_claim_threshold` |
 | Type | integer, a whole number |
 | Default | `1` |
-| Range | 1 to 100000 |
+| Range | 1 to 100000000 |
 | Counted in | equity |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
@@ -1659,7 +1661,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-44 dials. 40 for the whole village, 4 for the founder or an admin.
+46 dials. 40 for the whole village, 6 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -2073,6 +2075,35 @@ Which token weighs votes when the weight mode is token. Only tokens this platfor
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a constitutional vote, at the highest bar the village has set |
 
+### Cap one member's voting weight
+
+Turns on a ceiling on how much of the vote any one member carries. It only matters when the weight mode is token, where a member weighs their balance, so one large holder could meet quorum alone or carry a vote. With this on, when a ballot opens no member carries more than the share below of that ballot's vote, and the rest of the vote is shared among everyone else in proportion to what they hold. What it costs: a large holder's balance past the cap stops counting, and on a small roll balances stop counting at all: with fewer than 5 members holding weight at the default 20 (100 divided by the cap), everyone weighs the same. It is off unless you turn it on.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.weight_cap_on` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### The most voting weight one member can carry
+
+While the cap above is on, the largest share of a ballot's vote that one member can carry. It only matters in token mode, and only with the cap switched on. At 20, a member holding 90 beside four members holding 2.5 each carries a fifth of the vote, the same as each of them, and members under the cap keep their balance in full. With fewer than 5 members holding weight at 20, everyone weighs the same, because five shares of 20 is the least that makes a whole vote. Lower spreads power wider and needs more holders before balances count at all. To have no cap, turn the switch off. This number never does that.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.weight_cap_pct` |
+| Type | percentage, a percentage |
+| Default | `20` |
+| Range | 1 to 100 |
+| Counted in | % |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
 ### Unity needed to pass
 
 Of the votes cast for or against, the share that must be in favor for a ballot run on the village's own dials to pass. Abstentions help a ballot reach quorum and take no side here. 100 asks for consensus in effect; the Hypha surface this inherits from runs at 80.
@@ -2406,7 +2437,7 @@ The one place this platform sends people for governance, proposals, treasury and
 
 ### Hypha space id (on-chain)
 
-The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain proposal your DAO creates is stamped with it. Found in your Hypha space's URL or from any of its proposals on Basescan. Fill this in and the governance webhook checks it: a delivery that names a different space is refused, even when its signature is good, because one hub watches Base for many villages off one listener and a routing mistake there arrives correctly signed. A delivery that names no space at all is still accepted and an operator is told, so an idle check is never read as a passing one. Blank checks nothing.
+The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain proposal your DAO creates is stamped with it. Found in your Hypha space's URL or from any of its proposals on Basescan. Fill this in and the governance webhook checks it: a delivery that names a different space is refused, even when its signature is good, because one hub watches Base for many villages off one listener and a routing mistake there arrives correctly signed. A delivery that names no space at all is recorded and an operator is told, and a passed one waits for a person to apply it, so an idle check is never read as a passing one. Blank checks nothing.
 
 | Fact | Value |
 | --- | --- |
@@ -4354,6 +4385,7 @@ The generator reads these and fails loudly if any of them moves:
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`
 - `shared/governingPurpose.ts`
+- `shared/mintCapWords.ts`
 - `shared/moonSettlement.ts`
 - `shared/needs.ts`
 - `shared/villageMoon.ts`

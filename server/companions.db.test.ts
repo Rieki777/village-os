@@ -21,7 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { register } from "./routes/companions";
-import { landItem, planConfirm, claimForDoor, syncArmy, turnTheDay, armyView, handOffPurchase, type CompanionsEnv } from "./lib/companions";
+import { landItem, planConfirm, claimForDoor, syncArmy, turnTheDay, armyView, handOffPurchase, mailtoFor, MEMBER_ADDRESS, type CompanionsEnv } from "./lib/companions";
 import { companionsOf, itemById, forgetCompanionsForMember } from "./repos/companions";
 import { recordToLandInput } from "./lib/companionSera";
 import { CONSENT_PREFS_KEY, readConsents } from "./lib/companionConsent";
@@ -226,12 +226,44 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     expect(ok.ok).toBe(true);
   });
 
+  it("sends an email draft to a vendor's address, and never to a member's own (ruling 15)", async () => {
+    const ana = (await companionsOf(pool, "u-ana")).find((c) => c.scope === "personal")!;
+    const email = (to: string, key: string) =>
+      landItem(env(), ana, { type: "draft", kind: "email", title: "Ask the farm shop", payload: { subject: "Six trays", text: "Could you hold six?", toOutside: to }, quote: "get trays", sourceRef: "chat:40", origin: "chat", dedupeKey: key });
+    const vendor = await email("shop@farm.example", "vendor-mail-1");
+    expect(vendor.ok, JSON.stringify(vendor)).toBe(true);
+    if (!vendor.ok) return;
+    expect(mailtoFor(vendor.item.payload!)).toBe("mailto:shop%40farm.example?subject=Six%20trays&body=Could%20you%20hold%20six%3F");
+    // Control: Ben's own address, typed in another case, is refused and stores nothing.
+    expect(await email("BEN@example.test", "vendor-mail-2")).toEqual({ ok: false, error: MEMBER_ADDRESS });
+    // A purchase's vendor line is free text; a member's address inside it is refused the same way.
+    const purchase = await landItem(env(), ana, { type: "draft", kind: "purchase", title: "Trays", payload: { budgetId: "b-any", amountMinor: 100, toOutside: "Ben's stall, ben@example.test" }, quote: "trays", sourceRef: "chat:41", origin: "chat" });
+    expect(purchase).toEqual({ ok: false, error: MEMBER_ADDRESS });
+    // At the yes it is asked again: the vendor joined the village after the draft landed.
+    await pool.query("INSERT INTO users (id, name, email, handle, password_hash, is_example) VALUES ('u-shop', 'Farm Shop', 'Shop@Farm.example', 'farmshop', '', 0)"); // module-review-ok: a fixture member on the scratch schema, the vendor turned member
+    try {
+      expect(await planConfirm(pool, "u-ana", vendor.item.id, undefined)).toEqual({ ok: false, status: 409, error: MEMBER_ADDRESS });
+    } finally {
+      await pool.query("DELETE FROM users WHERE id = 'u-shop'"); // module-review-ok: removing the fixture member this test added
+    }
+    const yes = await planConfirm(pool, "u-ana", vendor.item.id, undefined);
+    expect(yes.ok && yes.plan).toEqual({ way: "mail", mailto: "mailto:shop%40farm.example?subject=Six%20trays&body=Could%20you%20hold%20six%3F" });
+  });
+
   it("refuses the outside service's records whole by the same rules, with no network anywhere", () => {
     const base = { id: "page-1", updated_at: "2026-10-30T10:00:00Z", status: "Open" as const, item_type: "Draft" as const, scope: "Role" as const, scope_ref: "role-page", title: "Pay the trays", source_quote: "Can someone get us six trays?", source_ref: "meeting-9" };
     const role = () => "r-treasurer";
     expect(recordToLandInput({ ...base, draft_kind: "cash_payment", amount: 10 }, role).ok).toBe(false);
     expect(recordToLandInput({ ...base, draft_kind: "token_payment", amount: 10.5, currency_or_token: "credits", to_role_ref: "x" }, role).ok).toBe(false);
-    expect(recordToLandInput({ ...base, draft_kind: "email", to_outside: "shop@example.test", subject: "Trays", draft_text: "Hold six" }, role).ok).toBe(false);
+    // A vendor's address in to_outside rides through on an email (Rye, 2026-10-31, ruling 15: "don't refuse vendor emails").
+    const vendor = recordToLandInput({ ...base, draft_kind: "email", to_outside: "shop@farm.example", subject: "Trays", draft_text: "Hold six" }, role);
+    expect(vendor.ok && vendor.input.payload).toEqual({ subject: "Trays", text: "Hold six", toOutside: "shop@farm.example" });
+    // A member's own address never crosses, whatever its case.
+    const members = new Set(["ana@example.test"]);
+    expect(recordToLandInput({ ...base, draft_kind: "email", to_outside: "Ana@Example.test", subject: "Trays", draft_text: "Hold six" }, role, members)).toEqual({ ok: false, error: MEMBER_ADDRESS });
+    // to_outside on a kind that writes to no outsider, and an address anywhere else, are still refused whole.
+    expect(recordToLandInput({ ...base, draft_kind: "message", to_outside: "shop@farm.example", draft_text: "hi", to_role_ref: "x" }, role).ok).toBe(false);
+    expect(recordToLandInput({ ...base, draft_kind: "email", subject: "Trays", draft_text: "write to shop@farm.example" }, role).ok).toBe(false);
     expect(recordToLandInput({ ...base, source_ref: null, draft_kind: "message", draft_text: "hi", to_role_ref: "x" }, role).ok).toBe(false);
     // Control: the same record, whole and sourced, maps.
     const ok = recordToLandInput({ ...base, draft_kind: "token_payment", amount: 10, currency_or_token: "credits", to_role_ref: "x" }, role);

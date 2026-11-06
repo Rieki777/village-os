@@ -43,3 +43,8 @@ PLAN_TO_A.md export-ignore
 .env.* export-ignore
 # Attributes have no negation, so the template is switched back on by name.
 .env.example -export-ignore
+
+# A PDF is bytes. server/testkit/fixtures/gate-keeper.chromium.pdf is a real
+# printed PDF the PDF reader's tests read; a line-ending rewrite would break its
+# cross-reference offsets.
+*.pdf binary

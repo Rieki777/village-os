@@ -534,7 +534,7 @@ describe.skipIf(!DB_CONFIGURED)("the village votes on what it mints", () => {
 
   it("AFTER LAUNCH AN ORDINARY ADMIN CANNOT change a minting rule, and is told where the door is", async () => {
     const anna = voters[0];
-    const promoted = await call("PUT", `/api/admin/users/${anna.id}/role`, { body: { role: "admin" } });
+    const promoted = await call("PUT", `/api/admin/users/${anna.id}/role`, { body: { role: "admin", addressUnprovedOk: true } });
     expect(promoted.status, JSON.stringify(promoted.json)).toBe(200);
 
     const refused = await call("PATCH", `/api/admin/economy/rules/${questVoice}`, {

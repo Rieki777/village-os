@@ -37,7 +37,7 @@ own hub's ingest address, e.g. `https://hub.example.org/api/feedback/ingest`:
       "kind": "bug",              // or "idea"
       "title": "…",
       "detail": "…",
-      "pageUrl": "https://…",     // where they stood, when captured
+      "pageUrl": "https://…",     // where they stood, when captured: origin and path only, never a query or fragment
       "fingerprint": "40 hex chars", // sha256 prefix over kind+normalized text
       "createdAt": "2026-07-28T…Z"
     }

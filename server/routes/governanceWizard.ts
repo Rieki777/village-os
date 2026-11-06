@@ -29,7 +29,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { capabilityDecision, hasCapability } from "../../shared/capabilities";
-import { weightHistory, weightsFor } from "../lib/governanceWeights";
+import { weightCapLine, weightHistory, weightsFor } from "../lib/governanceWeights";
 import { tokenDef } from "../lib/ledger";
 import {
   ADVISORY_TYPES,
@@ -86,7 +86,11 @@ export function register(app: Express, deps: Deps): void {
       snapshot.mode === "equal"
         ? "Every member who may vote weighs the same here. One person, one vote."
         : snapshot.mode === "token"
-          ? `Your weight is your balance of ${tokenName ?? "the village's chosen token"} at the moment a ballot opens, and it freezes there for that vote.`
+          ? [
+              `Your weight is your balance of ${tokenName ?? "the village's chosen token"} at the moment a ballot opens, and it freezes there for that vote.`,
+              // Said only while the cap is on, because only then is it true.
+              weightCapLine(snapshot),
+            ].filter(Boolean).join(" ")
           : "The stewards allocate weight one member at a time, and every change carries a reason. Yours is below.";
     res.json({
       mode: snapshot.mode,

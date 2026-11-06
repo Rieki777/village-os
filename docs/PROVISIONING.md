@@ -448,6 +448,26 @@ happened to 25 variables by 2026-09-02, seven of them founder-facing, and eight
 of the 25 were unreachable by grep as well, because the code reads them through
 a string (`keyEnv: "MAPBOX_TOKEN"`) rather than as `process.env.MAPBOX_TOKEN`.
 
+## 9a. Take a backup, and restore it once
+
+Nothing in this walkthrough has made a backup yet, and nothing makes one for
+you. Until a copy of the village exists somewhere other than the service it
+runs on, one bad deploy or one lost volume ends it. The Launch Plan lists this
+as a blocking item for the same reason.
+
+1. **Turn on the host's own copies.** On Railway: the MySQL service's
+   backups, and a snapshot of the app's volume.
+2. **Keep your own.** `docs/RUNBOOK.md`, "Where the backup runs", sets up the
+   encrypted nightly backup with a restore drill. It runs from a **private**
+   GitHub repository, once per village, and needs `BACKUP_EXPORT_TOKEN` (step
+   9) for the uploads half.
+3. **Keep the generated values.** Copy every value step 3 generated into a
+   password manager. A restored database cannot open the keys it sealed
+   without `VILLAGE_SECRETS_KEY` and `MEMBER_SECRETS_KEY`, and a different
+   `AUTH_TOKEN_SECRET` signs every member out.
+4. **Restore it once** into a scratch database, following `docs/RUNBOOK.md`,
+   "Restoring the database from a backup", before you rely on it.
+
 ## 10. Confirm it actually works
 
 Sign in with the password you set, and open the Launch Plan

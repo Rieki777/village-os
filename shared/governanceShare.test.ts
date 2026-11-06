@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shareOfTotal, topShares } from "./governanceShare";
+import { capWeights, shareOfTotal, topShares } from "./governanceShare";
 
 const m = (entries: [string, bigint | number][]): Map<string, bigint | number> => new Map(entries);
 
@@ -73,5 +73,75 @@ describe("topShares", () => {
     const top = topShares(m([["a", 0], ["b", 0]]), 1);
     expect(top).toHaveLength(1);
     expect(top[0].share).toBe(0);
+  });
+});
+
+/*
+ * THE CAP ON ONE MEMBER'S SHARE OF THE VOTE (Rye, 2026-11-05). The DB-backed
+ * proof that a frozen roll carries it is server/lib/governanceWeights.cap.test.ts;
+ * these are the edges of the arithmetic.
+ */
+describe("capWeights", () => {
+  const n = (entries: [string, number][]): Map<string, number> => new Map(entries);
+  const total = (m: Map<string, number>): number => Array.from(m.values()).reduce((s, w) => s + w, 0);
+
+  it("brings one holder of 90 among four of 2.5 to exactly 20% of the vote, like everybody else", () => {
+    const out = capWeights(n([["big", 90], ["a", 2.5], ["b", 2.5], ["c", 2.5], ["d", 2.5]]), 20);
+    for (const id of ["big", "a", "b", "c", "d"]) {
+      expect(out.get(id), id).toBe(2.5);
+      expect(out.get(id)! * 5, `${id} is a fifth of the frozen total`).toBe(total(out));
+    }
+  });
+
+  it("holds one large holder among ten to 20% of the vote and leaves the other nine as they were", () => {
+    const others: [string, number][] = [10, 20, 30, 40, 50, 60, 70, 80, 90].map((w) => [`m${w}`, w]);
+    const out = capWeights(n([["big", 1000], ...others]), 20);
+    expect(out.get("big")! / total(out)).toBeLessThanOrEqual(0.2);
+    // Same numbers, so the same order and the same proportions between them.
+    for (const [id, w] of others) expect(out.get(id), id).toBe(w);
+  });
+
+  it("keeps clamping while the redistribution lifts somebody else over the cap", () => {
+    // 300 is under 20% of the raw total and over it once 1000 is capped.
+    const others: [string, number][] = [10, 20, 30, 40, 50, 60, 70, 80].map((w) => [`m${w}`, w]);
+    const out = capWeights(n([["big", 1000], ["second", 300], ...others]), 20);
+    expect(out.get("big")).toBe(120);
+    expect(out.get("second")).toBe(120);
+    expect(out.get("big")! / total(out)).toBe(0.2);
+    for (const [id, w] of others) expect(out.get(id), id).toBe(w);
+  });
+
+  it("weighs two holders the same at a cap of 20, because neither can stay under it", () => {
+    const out = capWeights(n([["big", 100], ["small", 1], ["none", 0]]), 20);
+    expect(out.get("big")).toBe(out.get("small"));
+    expect(out.get("big")).toBeGreaterThan(0);
+    expect(out.get("none")).toBe(0);
+  });
+
+  it("weighs everybody the same below five holders at 20, and a lone holder is still the whole vote", () => {
+    const four = capWeights(n([["a", 50], ["b", 30], ["c", 15], ["d", 5]]), 20);
+    expect(new Set(four.values()).size).toBe(1);
+    const lone = capWeights(n([["only", 100], ["none", 0]]), 20);
+    expect(lone.get("none")).toBe(0);
+    expect(shareOfTotal(lone).get("only")).toBe(1);
+  });
+
+  it("reads 0 as zero, never as unlimited, and a number it cannot read as 0", () => {
+    expect(capWeights(n([["a", 5], ["b", 5]]), 0).get("a")).toBe(0);
+    expect(capWeights(n([["a", 5], ["b", 5]]), Number.NaN).get("a")).toBe(0);
+  });
+
+  it("changes nothing at 100, and floors a negative weight at zero on the way through", () => {
+    const out = capWeights(n([["a", 7], ["b", -3]]), 100);
+    expect(out.get("a")).toBe(7);
+    expect(out.get("b")).toBe(0);
+  });
+
+  it("rounds a capped weight down to the four places a frozen weight is stored at", () => {
+    // At 30, three holders of 1 leave 70% of the vote for 3, so 30% is
+    // 3 x 30 / 70 = 1.285714..., and the column keeps 1.2857 of it.
+    const out = capWeights(n([["big", 1000], ["a", 1], ["b", 1], ["c", 1]]), 30);
+    expect(out.get("big")).toBe(1.2857);
+    expect(out.get("big")! / total(out)).toBeLessThanOrEqual(0.3);
   });
 });
