@@ -126,9 +126,9 @@ export async function readSeraInvoices(
       await resolveFlag(pool, storedFlagKey(null, { dedupeKey: `sera_unmatched:${r.id}` }), at);
     } else {
       m.kind === "ambiguous" ? out.ambiguous++ : out.unmatched++;
-      const amora = m.kind === "ambiguous" ? `${m.invoiceIds.length} invoices fit` : "no invoice fits";
+      const village = m.kind === "ambiguous" ? `${m.invoiceIds.length} invoices fit` : "no invoice fits";
       const other = `${r.amountMinor} ${r.currency}${r.reference ? ` ref ${r.reference}` : ""}`;
-      flags.push({ kind: "sera_unmatched", subject: r.id, amora, other, dedupeKey: `sera_unmatched:${r.id}` });
+      flags.push({ kind: "sera_unmatched", subject: r.id, village, other, dedupeKey: `sera_unmatched:${r.id}` });
     }
   }
   // Village-level flags (no member): an unmatched record stays flagged until it matches.

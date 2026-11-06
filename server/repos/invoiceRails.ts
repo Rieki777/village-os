@@ -180,7 +180,7 @@ export interface FlagRow {
   userId: string | null;
   kind: string;
   subject: string;
-  amora: string;
+  village: string;
   other: string;
   firstSeenAt: string;
   lastSeenAt: string;
@@ -189,7 +189,7 @@ export interface FlagRow {
 
 const toFlag = (r: RowDataPacket): FlagRow => ({
   id: String(r.id), dedupeKey: String(r.dedupe_key), userId: r.user_id == null ? null : String(r.user_id), kind: String(r.kind), subject: String(r.subject),
-  amora: String(r.amora_value), other: String(r.other_value), firstSeenAt: String(r.first_seen_at), lastSeenAt: String(r.last_seen_at),
+  village: String(r.village_value), other: String(r.other_value), firstSeenAt: String(r.first_seen_at), lastSeenAt: String(r.last_seen_at),
   resolvedAt: r.resolved_at == null ? null : String(r.resolved_at),
 });
 
@@ -215,9 +215,9 @@ export async function writeFlags(
     const key = storedFlagKey(userId, f);
     keys.push(key);
     await db.query(
-      "INSERT INTO `treasury_sync_flags` (`id`, `dedupe_key`, `user_id`, `kind`, `subject`, `amora_value`, `other_value`, `first_seen_at`, `last_seen_at`, `resolved_at`) " +
+      "INSERT INTO `treasury_sync_flags` (`id`, `dedupe_key`, `user_id`, `kind`, `subject`, `village_value`, `other_value`, `first_seen_at`, `last_seen_at`, `resolved_at`) " +
         "VALUES (?,?,?,?,?,?,?,?,?,NULL) ON DUPLICATE KEY UPDATE `last_seen_at` = VALUES(`last_seen_at`), `resolved_at` = NULL",
-      [newId(), key, userId, f.kind, f.subject.slice(0, 120), f.amora.slice(0, 100), f.other.slice(0, 100), at, at],
+      [newId(), key, userId, f.kind, f.subject.slice(0, 120), f.village.slice(0, 100), f.other.slice(0, 100), at, at],
     );
   }
   // Only a subject this sync compared on a fresh read of both sides may close

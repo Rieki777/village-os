@@ -82,10 +82,10 @@ describe.skipIf(!configured)("the treasury sync reconciles three sources, flags 
     expect(writes.every((s) => /(treasury_sync_views|treasury_sync_flags|sera_invoice_reports)/.test(s))).toBe(true);
   });
 
-  it("shows Sera's amount beside Amora's and flags the difference, keeping Amora's as the figure", async () => {
+  it("shows Sera's amount beside the village's and flags the difference, keeping the village's as the figure", async () => {
     seraRecords = [{ id: "s1", reference: "us-llc-0007", currency: "USD", amountMinor: 110000, status: "received", receivedAt: "2026-11-06T10:00:00.000Z" }];
     const v = await syncTreasury(deps(base), "u1", "manual");
-    expect(v.invoices[0]).toMatchObject({ ref: "us-llc-0007", amoraMinor: 120000, seraMinor: 110000, disagree: true });
+    expect(v.invoices[0]).toMatchObject({ ref: "us-llc-0007", villageMinor: 120000, seraMinor: 110000, disagree: true });
     expect(v.tracks[0].track[1]).toMatchObject({ step: "received", done: true, by: "sera" });
     expect((await openFlagsFor(base, "u1")).map((f) => f.kind)).toEqual(["sera_amount_differs"]);
   });
@@ -116,7 +116,7 @@ describe.skipIf(!configured)("the treasury sync reconciles three sources, flags 
     chainAnswer = async () => ({ offered: true, tokens: [{ slug: "equity", formatted: "7", readAt: "2026-11-06T12:00:00.000Z", stale: false }] });
     const ledgerWithEquity = { ...deps(base), ledgerTokens: async () => [{ slug: "equity", name: "Equity", amount: "5" }] };
     const v = await syncTreasury(ledgerWithEquity, "u1", "manual");
-    expect(v.tokens[0]).toMatchObject({ amora: "5", chain: "7", disagree: true });
+    expect(v.tokens[0]).toMatchObject({ village: "5", chain: "7", disagree: true });
     expect((await openFlagsFor(base, "u1")).map((f) => f.kind)).toEqual(["chain_differs"]);
     chainAnswer = async () => { throw new Error(`rpc down at ${SECRET_RPC}`); };
     const after = await syncTreasury(ledgerWithEquity, "u1", "manual");
@@ -129,7 +129,7 @@ describe.skipIf(!configured)("the treasury sync reconciles three sources, flags 
     chainAnswer = async () => ({ offered: true, tokens: [{ slug: "equity", formatted: "7", readAt: "2026-11-06T12:00:00.000Z", stale: false }] });
     await syncTreasury({ ...deps(base), ledgerTokens: async () => [{ slug: "equity", name: "Equity", amount: "5" }] }, "u1", "manual");
     const v = await syncTreasury({ ...deps(base), ledgerTokens: async () => { throw new Error("db"); } }, "u1", "manual");
-    expect(v.sources.amora.state).toBe("not_read");
+    expect(v.sources.village.state).toBe("not_read");
     expect(await openFlagsFor(base, "u1")).toHaveLength(1);
   });
 

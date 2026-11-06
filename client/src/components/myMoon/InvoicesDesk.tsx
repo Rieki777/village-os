@@ -170,7 +170,7 @@ export function InvoicesDeskView({ data, init, reload }: { data: QueueData; init
 /** What `GET /api/cash-owed/invoice-track` answers (invoice rails). */
 export interface RailsData {
   tracks: Array<TrackRow & { userId: string; memberName: string | null }>;
-  flags: Array<{ id: string; userId: string | null; memberName: string | null; kind: FlagKind; subject: string; amora: string; other: string; firstSeenAt: string }>;
+  flags: Array<{ id: string; userId: string | null; memberName: string | null; kind: FlagKind; subject: string; village: string; other: string; firstSeenAt: string }>;
   unmatched: Array<{ seraId: string; reference: string | null; currency: string; amountMinor: number; status: SeraInvoiceStatus; receivedAt: string }>;
 }
 
@@ -188,7 +188,7 @@ export function RailsPanel({ data, nameOf }: { data: RailsData; nameOf: (userId:
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm text-foreground">
             {data.flags.map((f) => (
               <li key={f.id} className="break-words">
-                {FLAG_WORDS[f.kind]}: {f.subject}{f.userId ? `, ${f.memberName ?? nameOf(f.userId)}` : ""}. Here: {f.amora}. There: {f.other}.
+                {FLAG_WORDS[f.kind]}: {f.subject}{f.userId ? `, ${f.memberName ?? nameOf(f.userId)}` : ""}. Here: {f.village}. There: {f.other}.
               </li>
             ))}
           </ul>

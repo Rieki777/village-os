@@ -38,14 +38,14 @@ describe("the track: sent, received by Sera, approved, paid", () => {
     expect(t[0]).toMatchObject({ done: true, at: "2026-11-06T10:00:00.000Z", by: "member" });
     expect(t[1]).toMatchObject({ done: false, at: null, by: null });
   });
-  it("marks received only from Sera's own report, never from Amora's email", () => {
+  it("marks received only from Sera's own report, never from the village's email", () => {
     const mailed = trackOf({ invoice: inv(), mail: { queuedAt: "2026-11-06T10:00:01.000Z", sentAt: "2026-11-06T10:00:02.000Z" }, report: null });
     expect(mailed[1].done).toBe(false);
     expect(mailed[0].emailedAt).toBe("2026-11-06T10:00:02.000Z");
     const got = trackOf({ invoice: inv(), mail: null, report: report() });
     expect(got[1]).toMatchObject({ done: true, at: "2026-11-06T10:05:00.000Z", by: "sera" });
   });
-  it("takes approved and paid from Amora's row, never from Sera's status", () => {
+  it("takes approved and paid from the village's row, never from Sera's status", () => {
     const t = trackOf({ invoice: inv(), mail: null, report: report({ status: "paid" }) });
     expect(t[2].done).toBe(false);
     expect(t[3].done).toBe(false);
@@ -77,7 +77,7 @@ describe("reading Sera's record: typed fields only", () => {
   });
 });
 
-describe("matching a Sera record to exactly one Amora invoice", () => {
+describe("matching a Sera record to exactly one the village invoice", () => {
   const cands: MatchCandidate[] = [
     { invoiceId: "mv-1", ref: "us-llc-0007", userId: "u1", codeName: "cn-otter", moon: "lunar-000328", currency: "USD", totalMinor: 120000 },
     { invoiceId: "mv-2", ref: "us-llc-0008", userId: "u2", codeName: "cn-heron", moon: "lunar-000328", currency: "USD", totalMinor: 90000 },
@@ -119,23 +119,23 @@ describe("reconcile: one view, each number with its source, disagreements flagge
   it("agrees when every source agrees, and raises no flag", () => {
     const r = reconcile(base);
     expect(r.flags).toEqual([]);
-    expect(r.tokens[0]).toMatchObject({ slug: "equity", amora: "40.00", chain: "40", disagree: false });
+    expect(r.tokens[0]).toMatchObject({ slug: "equity", village: "40.00", chain: "40", disagree: false });
   });
   it("flags a chain balance that differs from the ledger, by any amount", () => {
     const r = reconcile({ ...base, chain: { ...base.chain, tokens: [{ slug: "equity", formatted: "40.000000000000000001", readAt: base.readAt, stale: false }] } });
     expect(r.tokens[0].disagree).toBe(true);
-    expect(r.flags).toEqual([expect.objectContaining({ kind: "chain_differs", subject: "equity", amora: "40.00", other: "40.000000000000000001" })]);
+    expect(r.flags).toEqual([expect.objectContaining({ kind: "chain_differs", subject: "equity", village: "40.00", other: "40.000000000000000001" })]);
   });
-  it("flags Sera's amount when it differs, and keeps Amora's as the figure", () => {
+  it("flags Sera's amount when it differs, and keeps the village's as the figure", () => {
     const r = reconcile({ ...base, invoices: [{ ...base.invoices[0], sera: { ...base.invoices[0].sera, amountMinor: 110000 } }] });
-    expect(r.invoices[0]).toMatchObject({ amoraMinor: 120000, seraMinor: 110000, disagree: true });
+    expect(r.invoices[0]).toMatchObject({ villageMinor: 120000, seraMinor: 110000, disagree: true });
     expect(r.flags[0]).toMatchObject({ kind: "sera_amount_differs", subject: "us-llc-0007" });
   });
-  it("flags Sera's status when Sera says paid and Amora does not", () => {
+  it("flags Sera's status when Sera says paid and the village does not", () => {
     const r = reconcile({ ...base, invoices: [{ ...base.invoices[0], sera: { ...base.invoices[0].sera, status: "paid" } }] });
-    expect(r.flags[0]).toMatchObject({ kind: "sera_status_differs", amora: "approved", other: "paid" });
+    expect(r.flags[0]).toMatchObject({ kind: "sera_status_differs", village: "approved", other: "paid" });
   });
-  it("Sera having only received an invoice Amora is still waiting on is not a disagreement", () => {
+  it("Sera having only received an invoice the village is still waiting on is not a disagreement", () => {
     const r = reconcile({ ...base, invoices: [{ ...base.invoices[0], status: "waiting", sera: { ...base.invoices[0].sera, status: "received" } }] });
     expect(r.flags).toEqual([]);
   });
@@ -171,7 +171,7 @@ describe("after the money pass: nothing hidden, nothing resolved without a fresh
   };
   it("compares a token the chain holds and the ledger has no row for, as zero here", () => {
     const r = reconcile({ ...base, chain: { ...base.chain, tokens: [...base.chain.tokens, { slug: "voice", formatted: "500", readAt: at, stale: false }] } });
-    expect(r.tokens.find((t) => t.slug === "voice")).toMatchObject({ amora: "0", chain: "500", disagree: true });
+    expect(r.tokens.find((t) => t.slug === "voice")).toMatchObject({ village: "0", chain: "500", disagree: true });
     expect(r.flags.map((f) => f.subject)).toEqual(["voice"]);
   });
   it("a stale chain value is shown as differing but raises no flag and is not a fresh comparison", () => {

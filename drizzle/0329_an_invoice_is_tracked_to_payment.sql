@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS `treasury_sync_flags` (
   `user_id` varchar(64) NULL,
   `kind` varchar(32) NOT NULL,
   `subject` varchar(120) NOT NULL,
-  `amora_value` varchar(100) NOT NULL,
+  `village_value` varchar(100) NOT NULL,
   `other_value` varchar(100) NOT NULL,
   `first_seen_at` varchar(32) NOT NULL,
   `last_seen_at` varchar(32) NOT NULL,

@@ -28,10 +28,10 @@ const track: TrackRow = {
 
 const view = (over: Record<string, unknown> = {}) => ({
   readAt: "2026-11-06T12:00:00.000Z", syncedAt: "2026-11-06T12:00:00.000Z", trigger: "manual", sera: "not_offered",
-  sources: { amora: { state: "read", readAt: "2026-11-06T12:00:00.000Z" }, chain: { state: "not_offered", readAt: null }, sera: { state: "not_offered", readAt: null } },
-  tokens: [{ slug: "equity", name: "Earned Equity", amora: "40.00", chain: null, chainReadAt: null, chainStale: false, disagree: false }],
+  sources: { village: { state: "read", readAt: "2026-11-06T12:00:00.000Z" }, chain: { state: "not_offered", readAt: null }, sera: { state: "not_offered", readAt: null } },
+  tokens: [{ slug: "equity", name: "Earned Equity", village: "40.00", chain: null, chainReadAt: null, chainStale: false, disagree: false }],
   cash: [{ currency: "USD", owedMinor: 120000 }],
-  invoices: [{ ref: "us-llc-0007", status: "approved", currency: "USD", amoraMinor: 120000, seraStatus: null, seraMinor: null, seraCurrency: null, seraAt: null, disagree: false }],
+  invoices: [{ ref: "us-llc-0007", status: "approved", currency: "USD", villageMinor: 120000, seraStatus: null, seraMinor: null, seraCurrency: null, seraAt: null, disagree: false }],
   flags: [], tracks: [track], ...over,
 });
 
@@ -83,9 +83,9 @@ describe("the Sync", () => {
   it("Sync posts to the sync door and marks every row whose sources disagree", async () => {
     const differing = view({
       sera: "read",
-      sources: { amora: { state: "read", readAt: "2026-11-06T12:00:00.000Z" }, chain: { state: "read", readAt: "2026-11-06T12:00:00.000Z" }, sera: { state: "read", readAt: "2026-11-06T12:00:00.000Z" } },
-      tokens: [{ slug: "equity", name: "Earned Equity", amora: "40.00", chain: "39", chainReadAt: "2026-11-06T12:00:00.000Z", chainStale: false, disagree: true }],
-      invoices: [{ ref: "us-llc-0007", status: "approved", currency: "USD", amoraMinor: 120000, seraStatus: "approved", seraMinor: 110000, seraCurrency: "USD", seraAt: null, disagree: true }],
+      sources: { village: { state: "read", readAt: "2026-11-06T12:00:00.000Z" }, chain: { state: "read", readAt: "2026-11-06T12:00:00.000Z" }, sera: { state: "read", readAt: "2026-11-06T12:00:00.000Z" } },
+      tokens: [{ slug: "equity", name: "Earned Equity", village: "40.00", chain: "39", chainReadAt: "2026-11-06T12:00:00.000Z", chainStale: false, disagree: true }],
+      invoices: [{ ref: "us-llc-0007", status: "approved", currency: "USD", villageMinor: 120000, seraStatus: "approved", seraMinor: 110000, seraCurrency: "USD", seraAt: null, disagree: true }],
     });
     const calls = routes({ "GET /api/me/treasury": { body: { view: null } }, "POST /api/me/treasury/sync": { body: { view: differing } } });
     render(<TreasurySync tracks={[]} />);
@@ -115,7 +115,7 @@ describe("the Treasurer's rails panel", () => {
         nameOf={() => "a member"}
         data={{
           tracks: [{ ...track, userId: "u1", memberName: "Ana" }],
-          flags: [{ id: "f1", userId: "u1", memberName: "Ana", kind: "sera_amount_differs", subject: "us-llc-0007", amora: "120000 USD", other: "110000 USD", firstSeenAt: "2026-11-06T12:00:00.000Z" }],
+          flags: [{ id: "f1", userId: "u1", memberName: "Ana", kind: "sera_amount_differs", subject: "us-llc-0007", village: "120000 USD", other: "110000 USD", firstSeenAt: "2026-11-06T12:00:00.000Z" }],
           unmatched: [{ seraId: "s9", reference: null, currency: "USD", amountMinor: 5000, status: "received", receivedAt: "2026-11-06T10:00:00.000Z" }],
         }}
       />,

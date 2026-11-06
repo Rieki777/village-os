@@ -94,7 +94,7 @@ describe.skipIf(!configured)("Sera's invoice records are read typed, stored once
     await invoice("mv-2", "u1", 8, 120000, "cr-srl");
     records = [rec({ id: "sera-4", reference: null })];
     expect(await readSeraInvoices(pool, client(), deps)).toMatchObject({ ambiguous: 1, matched: 0 });
-    expect((await openFlags(pool))[0]).toMatchObject({ kind: "sera_unmatched", amora: "2 invoices fit" });
+    expect((await openFlags(pool))[0]).toMatchObject({ kind: "sera_unmatched", village: "2 invoices fit" });
   });
 
   it("an unmatched record is attached once the invoice it names is sent, and its flag resolves", async () => {

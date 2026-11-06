@@ -170,7 +170,7 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
           <div className="space-y-3" aria-live="polite">
             <p className="text-xs text-muted-foreground">Last synced {instant(view.syncedAt)}</p>
             <ul className="space-y-1 rounded-xl border border-border p-3">
-              {(["amora", "chain", "sera"] as const).map((s) => (
+              {(["village", "chain", "sera"] as const).map((s) => (
                 <SourceLine key={s} name={s} state={view.sources[s].state} readAt={view.sources[s].readAt} />
               ))}
             </ul>
@@ -187,7 +187,7 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground">
                     <th scope="col" className="pb-1 font-medium">Token</th>
-                    <th scope="col" className="pb-1 font-medium">{SOURCE_WORDS.amora}</th>
+                    <th scope="col" className="pb-1 font-medium">{SOURCE_WORDS.village}</th>
                     <th scope="col" className="pb-1 font-medium">{SOURCE_WORDS.chain}</th>
                   </tr>
                 </thead>
@@ -198,7 +198,7 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
                         {t.name}
                         {t.disagree && <span className="block text-xs font-normal text-foreground">Differs</span>}
                       </th>
-                      <td className="break-all py-2 pr-2 tabular-nums">{t.amora}</td>
+                      <td className="break-all py-2 pr-2 tabular-nums">{t.village}</td>
                       <td className="break-all py-2 tabular-nums">
                         {t.chain ?? <span className="text-muted-foreground">Not on chain</span>}
                         {t.chain && t.chainStale && <span className="block text-xs text-muted-foreground">as of {instant(t.chainReadAt)}</span>}
@@ -211,7 +211,7 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
 
             {view.cash.length > 0 && (
               <p className="text-sm text-card-foreground">
-                Cash still owed to you, from {SOURCE_WORDS.amora.toLowerCase()}: {view.cash.map((c) => formatMoney(c.owedMinor, c.currency)).join(", ")}
+                Cash still owed to you, from {SOURCE_WORDS.village.toLowerCase()}: {view.cash.map((c) => formatMoney(c.owedMinor, c.currency)).join(", ")}
               </p>
             )}
 
@@ -221,7 +221,7 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground">
                     <th scope="col" className="pb-1 font-medium">Invoice</th>
-                    <th scope="col" className="pb-1 font-medium">{SOURCE_WORDS.amora}</th>
+                    <th scope="col" className="pb-1 font-medium">{SOURCE_WORDS.village}</th>
                     <th scope="col" className="pb-1 font-medium">{SOURCE_WORDS.sera}</th>
                   </tr>
                 </thead>
@@ -232,7 +232,7 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
                         {i.ref}
                         {i.disagree && <span className="block text-xs font-normal text-foreground">Differs</span>}
                       </th>
-                      <td className="py-2 pr-2">{formatMoney(i.amoraMinor, i.currency)}<span className="block text-xs text-muted-foreground">{INVOICE_STATUS_WORDS[i.status]}</span></td>
+                      <td className="py-2 pr-2">{formatMoney(i.villageMinor, i.currency)}<span className="block text-xs text-muted-foreground">{INVOICE_STATUS_WORDS[i.status]}</span></td>
                       <td className="py-2">
                         {i.seraMinor === null ? <span className="text-muted-foreground">No record</span> : (
                           <>{formatMoney(i.seraMinor, i.seraCurrency ?? i.currency)}<span className="block text-xs text-muted-foreground">{i.seraStatus ? SERA_STATUS_WORDS[i.seraStatus] : ""}</span></>

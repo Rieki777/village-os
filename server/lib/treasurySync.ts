@@ -18,7 +18,7 @@
  * no flag: a difference is only marked resolved by a sync that read both
  * sides and no longer sees it.
  *
- * The figure that counts stays the village's (constitution II.2): Amora's
+ * The figure that counts stays the village's (constitution II.2): the village's
  * Finance approval writes cash owed and the Treasurer marks it paid. Sera's
  * and the chain's figures are shown beside it and flagged when they differ.
  */
@@ -118,7 +118,7 @@ export async function syncTreasury(deps: TreasuryDeps, userId: string, trigger: 
 
   const view = reconcile({
     readAt: at,
-    ledger: { ok: ledger.ok, readAt: ledger.ok ? at : (previous?.sources.amora.readAt ?? null), tokens: ledger.tokens, cash: ledger.cash },
+    ledger: { ok: ledger.ok, readAt: ledger.ok ? at : (previous?.sources.village.readAt ?? null), tokens: ledger.tokens, cash: ledger.cash },
     chain: { ok: chain.ok, offered: chain.offered, readAt: chain.ok ? at : (previous?.sources.chain.readAt ?? null), tokens: chain.tokens },
     sera: { ok: seraOk, offered: seraOffered, readAt: seraOk ? at : (previous?.sources.sera.readAt ?? null) },
     invoices: comparedInvoices.map((t) => {

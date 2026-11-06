@@ -112,7 +112,7 @@ export function register(app: Express, deps: Deps): void {
     const [flags, unmatched] = await Promise.all([openFlags(pool), unmatchedSeraReports(pool)]);
     res.json({
       tracks,
-      flags: flags.map((f) => ({ id: f.id, userId: f.userId, memberName: f.userId ? (nameOf.get(f.userId) ?? null) : null, kind: f.kind, subject: f.subject, amora: f.amora, other: f.other, firstSeenAt: f.firstSeenAt, lastSeenAt: f.lastSeenAt })),
+      flags: flags.map((f) => ({ id: f.id, userId: f.userId, memberName: f.userId ? (nameOf.get(f.userId) ?? null) : null, kind: f.kind, subject: f.subject, village: f.village, other: f.other, firstSeenAt: f.firstSeenAt, lastSeenAt: f.lastSeenAt })),
       unmatched: unmatched.map((r) => ({ seraId: r.id, reference: r.reference, moon: r.moon, currency: r.currency, amountMinor: r.amountMinor, status: r.status, receivedAt: r.receivedAt, matchState: r.matchState })),
     });
   });

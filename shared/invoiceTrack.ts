@@ -197,7 +197,7 @@ export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
 
 // ── Reconcile ────────────────────────────────────────────────────────────────
 
-export type SyncSourceName = "amora" | "chain" | "sera";
+export type SyncSourceName = "village" | "chain" | "sera";
 export type SourceState = "read" | "not_read" | "not_offered";
 
 export interface ReconcileInput {
@@ -224,7 +224,7 @@ export interface SyncFlag {
   kind: FlagKind;
   /** The token slug or the invoice reference. */
   subject: string;
-  amora: string;
+  village: string;
   other: string;
   /** Stable over syncs that see the same difference, so one difference is one flag. */
   dedupeKey: string;
@@ -233,9 +233,9 @@ export interface SyncFlag {
 export interface ReconciledView {
   readAt: string;
   sources: Record<SyncSourceName, { state: SourceState; readAt: string | null }>;
-  tokens: Array<{ slug: string; name: string; amora: string; chain: string | null; chainReadAt: string | null; chainStale: boolean; disagree: boolean }>;
+  tokens: Array<{ slug: string; name: string; village: string; chain: string | null; chainReadAt: string | null; chainStale: boolean; disagree: boolean }>;
   cash: Array<{ currency: string; owedMinor: number }>;
-  invoices: Array<{ ref: string; status: InvoiceStatus; currency: string; amoraMinor: number; seraStatus: SeraInvoiceStatus | null; seraMinor: number | null; seraCurrency: string | null; seraAt: string | null; disagree: boolean }>;
+  invoices: Array<{ ref: string; status: InvoiceStatus; currency: string; villageMinor: number; seraStatus: SeraInvoiceStatus | null; seraMinor: number | null; seraCurrency: string | null; seraAt: string | null; disagree: boolean }>;
   flags: SyncFlag[];
   /** The subjects compared on a fresh read of both sides, per source: only their flags may resolve. */
   compared: { chain: string[]; sera: string[] };
@@ -246,15 +246,15 @@ export interface ReconciledView {
  * against any; rejected agrees only with returned or void; approved agrees
  * with waiting, approved or paid, never with void; paid only with paid.
  */
-function statusAgrees(amora: InvoiceStatus, sera: SeraInvoiceStatus): boolean {
+function statusAgrees(village: InvoiceStatus, sera: SeraInvoiceStatus): boolean {
   if (sera === "received") return true;
   // A rejection while the village still waits is shown: someone should read it.
-  if (sera === "rejected") return amora === "returned" || amora === "void";
-  if (sera === "approved") return amora === "approved" || amora === "paid" || amora === "waiting";
-  return amora === "paid";
+  if (sera === "rejected") return village === "returned" || village === "void";
+  if (sera === "approved") return village === "approved" || village === "paid" || village === "waiting";
+  return village === "paid";
 }
 
-const flagKey = (kind: FlagKind, subject: string, amora: string, other: string) => `${kind}:${subject}:${amora}:${other}`.slice(0, 190);
+const flagKey = (kind: FlagKind, subject: string, village: string, other: string) => `${kind}:${subject}:${village}:${other}`.slice(0, 190);
 
 export function reconcile(input: ReconcileInput): ReconciledView {
   const flags: SyncFlag[] = [];
@@ -277,10 +277,10 @@ export function reconcile(input: ReconcileInput): ReconciledView {
       // a balance cached last week can neither raise nor close today's flag.
       if (!c.stale) {
         compared.chain.push(slug);
-        if (disagree) flags.push({ kind: "chain_differs", subject: slug, amora: t.amount, other: chain, dedupeKey: flagKey("chain_differs", slug, t.amount, chain) });
+        if (disagree) flags.push({ kind: "chain_differs", subject: slug, village: t.amount, other: chain, dedupeKey: flagKey("chain_differs", slug, t.amount, chain) });
       }
     }
-    return { slug, name: t.name, amora: t.amount, chain, chainReadAt: chain !== null ? (c?.readAt ?? null) : null, chainStale: chain !== null && (c?.stale ?? false), disagree };
+    return { slug, name: t.name, village: t.amount, chain, chainReadAt: chain !== null ? (c?.readAt ?? null) : null, chainStale: chain !== null && (c?.stale ?? false), disagree };
   });
 
   const seraRead = input.sera.ok && input.sera.offered;
@@ -291,27 +291,27 @@ export function reconcile(input: ReconcileInput): ReconciledView {
       compared.sera.push(i.ref);
       if (s.currency !== i.currency || s.amountMinor !== i.totalMinor) {
         disagree = true;
-        const amora = `${i.totalMinor} ${i.currency}`;
+        const village = `${i.totalMinor} ${i.currency}`;
         const other = `${s.amountMinor} ${s.currency}`;
-        flags.push({ kind: "sera_amount_differs", subject: i.ref, amora, other, dedupeKey: flagKey("sera_amount_differs", i.ref, amora, other) });
+        flags.push({ kind: "sera_amount_differs", subject: i.ref, village, other, dedupeKey: flagKey("sera_amount_differs", i.ref, village, other) });
       }
       if (!statusAgrees(i.status, s.status)) {
         disagree = true;
-        flags.push({ kind: "sera_status_differs", subject: i.ref, amora: i.status, other: s.status, dedupeKey: flagKey("sera_status_differs", i.ref, i.status, s.status) });
+        flags.push({ kind: "sera_status_differs", subject: i.ref, village: i.status, other: s.status, dedupeKey: flagKey("sera_status_differs", i.ref, i.status, s.status) });
       }
       if ((i.seraCount ?? 1) > 1) {
         disagree = true;
         const other = `${i.seraCount} records`;
-        flags.push({ kind: "sera_duplicate", subject: i.ref, amora: "1 invoice", other, dedupeKey: flagKey("sera_duplicate", i.ref, "1", String(i.seraCount)) });
+        flags.push({ kind: "sera_duplicate", subject: i.ref, village: "1 invoice", other, dedupeKey: flagKey("sera_duplicate", i.ref, "1", String(i.seraCount)) });
       }
     }
-    return { ref: i.ref, status: i.status, currency: i.currency, amoraMinor: i.totalMinor, seraStatus: s?.status ?? null, seraMinor: s?.amountMinor ?? null, seraCurrency: s?.currency ?? null, seraAt: s?.statusAt ?? null, disagree };
+    return { ref: i.ref, status: i.status, currency: i.currency, villageMinor: i.totalMinor, seraStatus: s?.status ?? null, seraMinor: s?.amountMinor ?? null, seraCurrency: s?.currency ?? null, seraAt: s?.statusAt ?? null, disagree };
   });
 
   return {
     readAt: input.readAt,
     sources: {
-      amora: { state: state(input.ledger), readAt: input.ledger.readAt },
+      village: { state: state(input.ledger), readAt: input.ledger.readAt },
       chain: { state: state(input.chain), readAt: input.chain.readAt },
       sera: { state: state(input.sera), readAt: input.sera.readAt },
     },
@@ -347,7 +347,7 @@ export const TRACK_ACTOR_WORDS: Record<TrackActor, string> = {
 };
 
 export const SOURCE_WORDS: Record<SyncSourceName, string> = {
-  amora: "This village's records",
+  village: "This village's records",
   chain: "Base chain",
   sera: "Sera",
 };
