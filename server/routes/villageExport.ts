@@ -77,7 +77,7 @@ export function sizeWords(bytes: number): string {
 }
 
 /** Every admin, and every steward whose term has not lapsed. Examples never. */
-async function exportWitnesses(deps: Deps): Promise<string[]> {
+export async function exportWitnesses(deps: Pick<AppDeps, "members" | "getPool">): Promise<string[]> {
   const everyone = await deps.members.all();
   const real = new Map(everyone.filter((m: any) => m?.id && !m.isExample).map((m: any) => [String(m.id), m]));
   const out = new Set<string>();

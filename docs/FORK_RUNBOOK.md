@@ -1678,8 +1678,14 @@ code. Where a step needs a technical helper, that is called out.
    Peering, above). Rotating it is not a simple swap: every peer will pause
    with "signing key changed" until an admin on their side presses "accept
    and resume". Do this one deliberately, and tell peer villages it is
-   coming, rather than as a reflexive part of this checklist. Ask a technical
-   helper; it needs a database write, not an admin screen.
+   coming, rather than as a reflexive part of this checklist. An admin does
+   it under Admin, Integrations, in the "Village signing key" card, by typing
+   the confirmation it asks for (readiness R069): it re-mints the key sealed
+   under `VILLAGE_SECRETS_KEY`, records both key ids in the audit log, and
+   tells the admins and stewards the same hour. It refuses while that
+   variable is missing or malformed, since a new private half is never stored
+   in the clear. The same card offers it when the key reads unreadable, which
+   is what a restore under a different `VILLAGE_SECRETS_KEY` leaves.
 5. **Passwords.** Ask a technical helper to check how many accounts are
    still on the legacy hash (`passwordHash` not starting with `$2`, a plain
    64-character hex string). Any account in that state has a password that

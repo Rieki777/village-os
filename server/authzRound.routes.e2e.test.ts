@@ -334,6 +334,40 @@ describe.skipIf(!DB_CONFIGURED)("the public amendment history", () => {
   });
 });
 
+describe.skipIf(!DB_CONFIGURED)("the village signing key, replaced from Admin (R069)", () => {
+  // The only recovery for a leaked or stranded key was a hand-written DELETE on
+  // app_config. Now an admin replaces it, behind a typed confirmation.
+  it("shows the key, refuses without the typed confirmation, and replaces it with one", async () => {
+    const before = await call("GET", "/api/admin/identity/signing-key");
+    expect(before.status, before.text).toBe(200);
+    expect(before.json).toMatchObject({ canSign: true, atRest: "sealed" });
+
+    const unconfirmed = await call("POST", "/api/admin/identity/signing-key/rotate", { confirm: "yes" });
+    expect(unconfirmed.status, unconfirmed.text).toBe(400);
+    expect((await call("GET", "/api/admin/identity/signing-key")).json.kid, "the control: nothing moved").toBe(before.json.kid);
+
+    const rotated = await call("POST", "/api/admin/identity/signing-key/rotate", { confirm: before.json.confirmWith });
+    expect(rotated.status, rotated.text).toBe(200);
+    expect(rotated.json).toMatchObject({ ok: true, previousKid: before.json.kid });
+    expect(rotated.json.kid).not.toBe(before.json.kid);
+
+    // What peers read now carries the new key and is signed with it.
+    const discovery = await call("GET", "/.well-known/village.json", undefined, "");
+    expect(discovery.status, discovery.text).toBe(200);
+    expect(discovery.json.publicKey.kid).toBe(rotated.json.kid);
+    expect(discovery.json.proof.kid).toBe(rotated.json.kid);
+
+    // The admins and stewards were told, the same hour.
+    const [told] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM notifications WHERE type = 'signing_key_rotated'"); // module-review-ok: the e2e harness reading its own scratch schema
+    expect(Number(told[0]?.n)).toBeGreaterThan(0);
+  });
+
+  it("refuses a stranger", async () => {
+    const r = await call("POST", "/api/admin/identity/signing-key/rotate", { confirm: "make a new key" }, "");
+    expect(r.status).toBe(401);
+  });
+});
+
 describe.skipIf(!DB_CONFIGURED)("a hub outcome that names no Hypha space (R039)", () => {
   // One hub listener serves many villages, so a delivery about somebody
   // else's space can arrive correctly signed. With a space id recorded, a
