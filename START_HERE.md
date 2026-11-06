@@ -159,8 +159,13 @@ detail, including custom domains, payments and the health check.
 ## Backups
 
 **Until a copy of your village exists somewhere other than the computer it
-runs on, one broken disk ends it.** A backup is two things: the database, and
-the folder of uploaded photographs and documents.
+runs on, one broken disk ends it.** A backup is three things: the database,
+the folder of uploaded photographs and documents, and a copy of your `.env`.
+The `.env` holds the keys the database is sealed and signed with
+(`VILLAGE_SECRETS_KEY`, `MEMBER_SECRETS_KEY`, `AUTH_TOKEN_SECRET` and the
+rest). A database restored on a new machine without them cannot open the keys
+it stored, and signs every member out. Keep that copy somewhere private, such
+as a password manager, apart from the `backups` folder.
 
 On one computer with Docker, from the village's folder (in a Bash shell: on
 Windows, Git Bash or WSL):
@@ -168,26 +173,30 @@ Windows, Git Bash or WSL):
 ```
 mkdir -p backups
 docker compose exec -T db sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --no-tablespaces village' | gzip > backups/village-$(date +%F).sql.gz
-docker run --rm -v village-os_village-data:/data:ro -v "$PWD/backups":/backup alpine tar czf /backup/uploads-$(date +%F).tar.gz -C /data .
+MSYS_NO_PATHCONV=1 docker run --rm -v village-os_village-data:/data:ro -v "$PWD/backups":/backup alpine tar czf /backup/uploads-$(date +%F).tar.gz -C /data .
 ```
 
 Copy the `backups` folder somewhere else: another disk, another machine, a
 storage service. Do it on a schedule (cron, Task Scheduler), and keep more
 than one day.
 
-To restore into a fresh install, start only the database, load both files,
-then start the village:
+To restore into a fresh install, put your `.env` back first, then start only
+the database, wait for it to be ready, load both files, and start the village:
 
 ```
-docker compose up -d db
+docker compose up -d --wait db
 gunzip -c backups/village-DATE.sql.gz | docker compose exec -T db sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" village'
 docker compose create app
-docker run --rm -v village-os_village-data:/data -v "$PWD/backups":/backup alpine tar xzf /backup/uploads-DATE.tar.gz -C /data
+MSYS_NO_PATHCONV=1 docker run --rm -v village-os_village-data:/data -v "$PWD/backups":/backup alpine tar xzf /backup/uploads-DATE.tar.gz -C /data
 docker compose up -d
 ```
 
 These exact commands are run, and the restored village signed into, on every
-change to the self-host path (`.github/workflows/selfhost-smoke.yml`).
+change to the self-host path and to this file
+(`.github/workflows/selfhost-smoke.yml`). `MSYS_NO_PATHCONV=1` stops Git Bash
+on Windows rewriting `/data` and `/backup` into Windows paths, and does nothing
+anywhere else. `scripts/start-here-backup-contract.test.mjs` fails if this
+section and the smoke stop matching.
 
 On a hosting provider, use its own database backups and volume snapshots, and
 download a copy now and then. `docs/RUNBOOK.md` covers an encrypted nightly

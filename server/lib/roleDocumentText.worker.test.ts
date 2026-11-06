@@ -131,6 +131,22 @@ describe("a PDF read runs on a thread of its own", () => {
     await vi.waitFor(() => expect(pdfWorkersRunning()).toBe(0), { timeout: 2000 });
   });
 
+  it("reads a PDF a real printer made, through the worker, on the installed unpdf (#787)", async () => {
+    // Printed by headless Chromium (Skia/PDF) from a three-line page set in Josefin Sans (OFL):
+    // compressed streams, a subset CID font and a ToUnicode map, none of which makePdf writes.
+    // A unpdf major that moves getDocumentProxy, or a PDF.js that the worker cannot load, turns this red.
+    const bytes = fs.readFileSync(path.join(__dirname, "../testkit/fixtures/gate-keeper.chromium.pdf"));
+    const { readPdf } = await import("./roleDocumentText");
+    const r = await readPdf(bytes);
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    if (!r.ok) return;
+    expect(r.kind).toBe("pdf");
+    const words = r.text.replace(/\s+/g, " ").trim();
+    expect(words).toContain("Gate keeper");
+    expect(words).toContain("Opens the gate at dawn and closes it at dusk.");
+    expect(words).toContain("Keeps the key log for the village.");
+  });
+
   it("still reads a real PDF's words, on the real PDF.js", async () => {
     const { readPdf } = await import("./roleDocumentText");
     const r = await readPdf(makePdf(["Gate keeper", "Opens the gate at dawn"]));

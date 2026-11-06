@@ -50,6 +50,12 @@ export interface PayLine {
    * every other token, and on an older server.
    */
   voice?: boolean;
+  /**
+   * What this token means in this village, in the village's own words (Admin,
+   * Tokens; 0283). Carried on an Earned Equity line, whose meaning is set per
+   * village (Rye, 2026-11-05) and shown wherever it is paid.
+   */
+  meaning?: string;
 }
 
 /**

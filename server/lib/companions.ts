@@ -52,6 +52,8 @@ import {
   MAX_BODY,
   MAX_QUOTE,
   MAX_TITLE,
+  MEMBER_ADDRESS,
+  outsideAddressesOf,
   parseLook,
   QUESTION_EXPIRY_DAYS,
   refusalFor,
@@ -76,6 +78,7 @@ import {
   itemByDedupeKey,
   itemById,
   itemsForCompanions,
+  anyMemberAddress,
   membersByIds,
   openHeld,
   questionsShownOn,
@@ -250,6 +253,7 @@ export async function landItem(env: CompanionsEnv, companion: CompanionRow, inpu
     return { ok: false, error: "A question carries no draft kind." };
   }
   if (carriesContact([title, body, quote])) return { ok: false, error: "An item may not carry an email address or a phone number." };
+  if (await anyMemberAddress(pool, outsideAddressesOf(payload))) return { ok: false, error: MEMBER_ADDRESS };
   if (input.dueOn != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(input.dueOn))) return { ok: false, error: "due_on must be a date." };
 
   const dedupeKey =
@@ -439,15 +443,19 @@ export function draftDetail(kind: DraftKind, p: Record<string, unknown>, names: 
     case "quest":
       return [p.description ? String(p.description) : "", p.firstStep ? `First step: ${String(p.firstStep)}` : ""].filter(Boolean).join("\n");
     case "email":
-      return `Subject: ${String(p.subject)}\n"${String(p.text)}"`;
+      return `${p.toOutside ? `To ${String(p.toOutside)}\n` : ""}Subject: ${String(p.subject)}\n"${String(p.text)}"`;
     default:
       return "";
   }
 }
 
+/** The member's own mail, opened with the draft's words, and addressed to the vendor when the draft names one. */
 export function mailtoFor(p: Record<string, unknown>): string {
-  return `mailto:?subject=${encodeURIComponent(String(p.subject ?? ""))}&body=${encodeURIComponent(String(p.text ?? ""))}`;
+  const to = typeof p.toOutside === "string" ? encodeURIComponent(p.toOutside.trim()) : "";
+  return `mailto:${to}?subject=${encodeURIComponent(String(p.subject ?? ""))}&body=${encodeURIComponent(String(p.text ?? ""))}`;
 }
+
+export { MEMBER_ADDRESS };
 
 function scopeLine(c: CompanionRow, roleNames: Map<string, string>): string {
   if (c.scope === "personal") return PERSONAL_NAME;
@@ -633,6 +641,8 @@ export async function planConfirm(pool: Pool, userId: string, itemId: string, ed
   const why = validateCompanionPayload(kind, merged.payload);
   if (why) return { ok: false, status: 400, error: why };
   const p = merged.payload;
+  // Asked again at the yes: a vendor may have joined the village since the draft landed.
+  if (await anyMemberAddress(pool, outsideAddressesOf(p))) return { ok: false, status: 409, error: MEMBER_ADDRESS };
   const names = await namesFor(pool, [{ payload: p }]);
   const nonce = `companion-${it.id}`;
 

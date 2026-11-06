@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handledOnThisDevice, loadSubmissionRows, plainLoadProblem } from "./adminQueueState";
+import { handledOnThisDevice, loadSubmissionRows, plainLoadProblem } from "./adminQueueModel";
 
 beforeEach(() => {
   localStorage.clear();

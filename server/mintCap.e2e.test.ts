@@ -232,7 +232,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
     expect(bo.status, `Bo must register: ${bo.text.slice(0, 200)}`).toBe(200);
     boToken = String(bo.json?.token ?? "");
     boId = String(bo.json?.user?.id ?? "");
-    expect((await call("PUT", `/api/admin/users/${boId}/role`, { role: "admin" }, founderToken)).status).toBe(200);
+    expect((await call("PUT", `/api/admin/users/${boId}/role`, { role: "admin", addressUnprovedOk: true }, founderToken)).status).toBe(200);
 
     // Stays ships OFF. Every door this file drives mounts behind it.
     const on = await call("PUT", "/api/admin/modules/stays/lifecycle", { lifecycle: "public" }, founderToken);

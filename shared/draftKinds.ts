@@ -196,6 +196,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
     "give both approvals of another member's end-of-moon recap, the work and the invoice, by themselves, which removes the second pair of eyes",
   "moon.approve_own":
     "approve their own end-of-moon recap and invoice, each one marked as approved by the member themselves for review after the fact",
+  "power.assign": "give powers to the village's roles and take them away: which Power groups a role carries, and what each group can do",
   "companion.use": "keep AI companions on their profile, answer what they ask, and say yes or no to what they draft, each yes going through that draft's own door",
   "comms.manage":
     "run the village's email: turn automations on and off, change their words, send letters to people who agreed to get them, and see the village's address book and every email the village still keeps: who it went to, its subject, whether it arrived, and its words",

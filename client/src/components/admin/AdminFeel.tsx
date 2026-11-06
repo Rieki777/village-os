@@ -3,7 +3,7 @@
  * a weekly line, and the switches for all of them.
  */
 import { useEffect, useState } from "react";
-import { TOUR_STEPS, bumpWeek, feelOn, setFeel, showEverything, simpleNav, weekCount, type FeelKey } from "./adminFeel";
+import { TOUR_STEPS, bumpWeek, feelOn, setFeel, showEverything, simpleNav, weekCount, type FeelKey } from "./adminFeelState";
 import { readHandledCount } from "./handledToday";
 
 export function TourCard({ wait = false }: { wait?: boolean }) {

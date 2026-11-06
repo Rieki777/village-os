@@ -97,6 +97,8 @@ import { matchOnEvent } from "./lib/seraPersonMatch";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
+import { giveOnlyWhatYouHold, makePowerAssignGate, register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
+import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
@@ -385,9 +387,11 @@ import {
   type BallotRow,
 } from "./lib/ballots";
 import {
-  weightsFor,
+  WEIGHT_CAP_ON_KEY,
+  WEIGHT_CAP_PCT_KEY,
+  rollWeightsFor,
+  weightModeNow,
   weightTokenProblem,
-  type WeightModeSnapshot,
 } from "./lib/governanceWeights";
 import { ADVISORY_TYPES, typeRefusesCapability } from "./lib/proposalDrafts";
 import {
@@ -413,8 +417,8 @@ import {
 } from "../shared/ballotSubjects";
 import { timingOf } from "../shared/governanceKinds";
 import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../shared/tokenScale";
-/** The two dials a started Game answers for itself, through a governance_mode ballot. */
-const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
+/** The dials a started Game answers for itself: the mode and token by a governance_mode ballot, the cap by a proposal. */
+const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token", WEIGHT_CAP_ON_KEY, WEIGHT_CAP_PCT_KEY]);
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
 import {
   allTokens,
@@ -672,9 +676,11 @@ import { routeQuestion } from "./lib/assistantRouter";
 import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemplates";
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
-import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles } from "./lib/starterRoles";
+import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
+import { isUnprovedRaise, UNPROVED_RAISE_REFUSAL } from "./lib/founderGrant";
+import { publicDatabaseError } from "./lib/healthProbe";
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
@@ -721,6 +727,7 @@ import { backfillPathEnrollments } from "./lib/comms/paths";
 import { exportCommsForMember, sweepIdleContacts } from "./repos/commsPeople";
 import {
   confirmManual,
+  launchedAtOf,
   launchStatus,
   launchVoteBlocked,
   recordLaunchCarried,
@@ -888,6 +895,7 @@ import { latestSettlementRefusals } from "./repos/settlementBallots";
 import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
 import { precompressedAssets } from "./lib/precompressedAssets";
+import { retireContentCopy } from "./lib/retiredContentCopy";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -1768,7 +1776,7 @@ function secretEquals(provided: string | undefined, expected: string): boolean {
  */
 /** Whether this member row is an admin: the role, or a live admin group (sheet 19, server/lib/groupAdmin.ts). */
 function userIsAdmin(user: any): boolean {
-  return !!user && (user.role === "admin" || user.role === "founder" || adminGroupsOf(String(user.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0);
+  return !!user && (user.role === "admin" || user.role === "founder" || adminGroupsOf(String(user.id), loadRoles() as any, loadPowerHoldings(), new Date(), holdingHasLapsed).length > 0);
 }
 
 async function isAdmin(req: express.Request): Promise<boolean> {
@@ -1927,6 +1935,7 @@ async function ensureDataFiles() {
   await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
   await runOnce("cash-pay-to-treasury-2026-10-30", () => grantCashPayToTreasury(rolesRepo).then(() => undefined)); // Rye, 2026-10-30
   await runOnce("moon-review-keys-2026-11-03", () => grantMoonReviewKeys(rolesRepo, MOON_REVIEW_GRANTS).then(() => undefined)); // decisions 18 and 19
+  await runOnce("steward-circle-role-powers-2026-11-05", () => grantMoonReviewKeys(rolesRepo, STEWARD_CIRCLE_GRANTS, "Steward Circle's role and adoption powers (Rye, 2026-11-01)").then(() => undefined));
   await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
@@ -2557,33 +2566,11 @@ async function retireBlendedTokenCopy() {
       await settingsRepo.put(settings);
     }
   } catch { /* same */ }
-  // The "Hearts" era survives inside the seeded content document (journey step
-  // details, circle focus lines). Deep-walk and swap exact strings only.
-  const CONTENT_SWAPS: Record<string, string> = {
-    "Earn Hearts for contributions": "Earn Gratitude for contributions",
-    "Learn about Hearts currency": "Learn how Gratitude and the value pool work",
-    "Hearts Economy": "Gratitude Economy",
-  };
+  // The seeded content document's retired strings: server/lib/retiredContentCopy.ts.
   try {
     const content = contentRepo.get();
     if (content && typeof content === "object") {
-      let changed = false;
-      const walk = (node: any) => {
-        if (Array.isArray(node)) {
-          node.forEach((v, i) => {
-            if (typeof v === "string") { if (CONTENT_SWAPS[v]) { node[i] = CONTENT_SWAPS[v]; changed = true; } }
-            else walk(v);
-          });
-        } else if (node && typeof node === "object") {
-          for (const k of Object.keys(node)) {
-            const v = node[k];
-            if (typeof v === "string") { if (CONTENT_SWAPS[v]) { node[k] = CONTENT_SWAPS[v]; changed = true; } }
-            else walk(v);
-          }
-        }
-      };
-      walk(content);
-      if (changed) await contentRepo.put(content);
+      if (retireContentCopy(content)) await contentRepo.put(content);
     }
   } catch { /* same */ }
 }
@@ -2835,6 +2822,10 @@ function loadRoleHolders(): RoleHolderRow[] {
   return roleHoldersRepo.all();
 }
 
+/** What every power READ sees: role_holders plus what held seats grant (0322, server/lib/seatGrants.ts). Writers keep loadRoleHolders. */
+const seatGrants = new SeatGrantCache(() => readSeatGrantSnapshot(getPool(), (id) => members.byId(id)));
+const loadPowerHoldings = (): RoleHolderRow[] => effectiveHoldings(loadRoleHolders(), bridgedHoldings(seatGrants.snapshot(), lapseContext())) as RoleHolderRow[];
+
 /**
  * Serializes every role_holders snapshot→mutate→replaceAll cycle. replaceAll
  * yields to the event loop before it swaps the cache, so two overlapping
@@ -2878,7 +2869,7 @@ const rolesFor = (userId: string) => namedRoles(roleIdsFor(userId), loadRoles())
 function roleCapabilitiesFor(userId: string): string[] {
   const now = new Date();
   const held = new Set(
-    loadRoleHolders().filter((r) => r.userId === userId && !holdingHasLapsed(r, now)).map((r) => r.roleId),
+    loadPowerHoldings().filter((r) => r.userId === userId && !holdingHasLapsed(r, now)).map((r) => r.roleId),
   );
   const caps = new Set<string>();
   for (const role of loadRoles()) {
@@ -3030,10 +3021,11 @@ const holderReads: HolderReads = {
   badgesLive: () => effectiveLifecycle("badges") !== "off",
   dormantBadgeIds,
   badgeRows: () => badgeCapabilityRows(getPool()),
-  roleHolders: loadRoleHolders,
+  roleHolders: loadPowerHoldings,
   roles: loadRoles,
 };
 const liveHoldersOf = (capability: string): Promise<string[]> => liveHoldersNow(holderReads, capability);
+const powerAssignGate = makePowerAssignGate({ authedUser, capabilityCtx, liveHoldersOf });
 const rolesCarrying = (capability: string) => rolesCarryingCapability(loadRoles(), capability);
 
 /**
@@ -3574,7 +3566,7 @@ async function recordAdminReach(cap: Capability, user: any, _where: string): Pro
   });
   try {
     const holderIds = holder
-      ? loadRoleHolders().filter((r: any) => r.roleId === holder.holderRoleId).map((r: any) => r.userId)
+      ? loadPowerHoldings().filter((r: any) => r.roleId === holder.holderRoleId).map((r: any) => r.userId)
       : [];
     for (const userId of holderIds) {
       if (userId === user.id) continue;
@@ -3693,7 +3685,7 @@ function publicUser(u: any) {
     contributions: u.contributions ?? [],
     quests: u.quests ?? [],
     recognitionBalance: u.recognitionBalance ?? 0,
-    adminAccess: adminReaches(u.role) || adminGroupsOf(String(u.id), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).length > 0,
+    adminAccess: adminReaches(u.role) || adminGroupsOf(String(u.id), loadRoles() as any, loadPowerHoldings(), new Date(), holdingHasLapsed).length > 0,
     bio: u.bio ?? "",
     avatar: u.avatar ?? null,
     joinedAt: u.joinedAt ?? new Date().toISOString(),
@@ -3977,7 +3969,7 @@ function adminReaches(role: unknown): boolean {
  * does not exist.
  */
 async function accountsWithAdminReach(): Promise<any[]> {
-  return accountsWithReach(await members.all(), loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed, isExampleUser); // sheet 19: a live admin group is a way in too
+  return accountsWithReach(await members.all(), loadRoles() as any, loadPowerHoldings(), new Date(), holdingHasLapsed, isExampleUser); // sheet 19: a live admin group is a way in too
 }
 
 /**
@@ -4186,10 +4178,9 @@ async function probeDatabase(): Promise<DatabaseProbe> {
     }
     return { ok: true, ms: Date.now() - started };
   } catch (e) {
-    // The message, not the stack, and never the connection string: this
-    // endpoint is unauthenticated. mysql2 messages name the error class
-    // (ECONNREFUSED, ER_ACCESS_DENIED_ERROR) without the credentials.
-    return { ok: false, error: String((e as any)?.message ?? e ?? "unknown error").slice(0, 200) };
+    // The code, never the message: this endpoint is unauthenticated, and a
+    // mysql2 message can name the account and its host (R116, lib/healthProbe.ts).
+    return { ok: false, error: publicDatabaseError(e) };
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -6454,6 +6445,7 @@ async function startServer() {
   app.use(["/api/map/draft", "/api/map/publish", "/api/agent/v1/map/draft"], express.json({ limit: SCENE_BODY_LIMIT }));
 
   app.use(express.json({ limit: "1mb" }));
+  registerSeatGrantFreshness(app, seatGrants); // 0322: the seat grants the synchronous gate reads, fresh for every API request
   registerPeopleLock(app, { authedUser, getPool, boolVar });
 
   // ── LANE L6 ZONE START: your agent ──────────────────────────────────────────
@@ -8272,6 +8264,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       });
     }
     const fromRole = target.role ?? "member";
+    // R104: never raise an account whose address nobody proved without saying so (lib/founderGrant.ts).
+    const unprovedRaise = isUnprovedRaise(fromRole, role, target as any);
+    if (unprovedRaise && req.body?.addressUnprovedOk !== true) return res.status(409).json(UNPROVED_RAISE_REFUSAL);
     if (founderStands) {
       if (fromRole === "founder" && role !== "founder") {
         const founders = (await members.all()).filter((u: any) => u.role === "founder");
@@ -8290,7 +8285,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     await members.update(target.id, (u: any) => { u.role = role; });
     void recordEvent(getPool(), {
       kind: "audit",
-      text: `role:${fromRole}->${role}`,
+      text: `role:${fromRole}->${role}${unprovedRaise ? " (address unconfirmed)" : ""}`,
       actorUserId: actor.id,
       entityType: "user",
       entityRef: target.id,
@@ -9853,7 +9848,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
    * this is a permission table.
    */
   app.put("/api/admin/roles/:id/capabilities", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const may = await powerAssignGate(req); // power.assign, holder-only (ROLE_POWERS_DESIGN.md §6)
+    if (!may.ok) return res.status(may.status).json(may.body);
     const all = rolesRepo.all();
     const idx = all.findIndex((r: any) => r.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: "Role not found" });
@@ -9875,12 +9871,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const { granted, refused } = decision;
 
     const before = ((all[idx] as any).capabilities ?? []) as string[];
+    const notHeld = giveOnlyWhatYouHold(may, granted.filter((c) => !before.includes(c)));
+    if (notHeld) return res.status(403).json(notHeld);
     all[idx] = { ...all[idx], capabilities: granted } as any;
     await rolesRepo.replaceAll(all);
 
     const added = granted.filter((c) => !before.includes(c));
     const removed = before.filter((c) => !(granted as string[]).includes(c));
-    const actor = adminActor(req)?.id ?? null;
+    const actor = may.actor?.id ?? null;
     void recordEvent(getPool(), {
       kind: "audit",
       text: `role:capabilities:${req.params.id}:+${added.join("|") || "none"}:-${removed.join("|") || "none"}`,
@@ -12320,6 +12318,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
 
   // ── S69: payment products — every payment a project issues or receives ──
   app.use("/api/products", requireModule("commerce"));
+  app.use("/api/admin/products", requireModule("commerce")); // R102: off is 404 for admins too
 
   /** The catalog, audience-filtered. Public products show to everyone. */
   app.get("/api/products", async (req, res) => {
@@ -12604,6 +12603,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   // these handlers only pick the ref out of config and serve what the cache
   // answers. Nothing here writes anything anywhere.
   app.use("/api/crowdpool", requireModule("crowdpool"));
+  app.use("/api/admin/crowdpool", requireModule("crowdpool")); // R102
 
   /** One card per linked campaign: the /campaigns page. */
   app.get("/api/crowdpool/campaigns", async (_req, res) => {
@@ -12670,6 +12670,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   // ── End crowdpool zone ─────────────────────────────────────────────────────
 
   app.use("/api/network", requireModule("network"));
+  app.use("/api/admin/network", requireModule("network")); // R102: an off network syncs with nobody
 
   /**
    * The member view: what we share, what peers share, one payload.
@@ -13049,7 +13050,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       // Roles, what each carries, and how many hold each as the gate counts them (lapsed terms
       // out), so the panel can say who could hold a power today and warn when nobody holds a role.
       roles: rolesRepo.all().map((r: any) => ({
-        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadRoleHolders(), r.id),
+        id: r.id, name: r.name ?? r.id, capabilities: (r.capabilities ?? []) as string[], isExample: !!r.isExample, holderCount: liveHolderCount(loadPowerHoldings(), r.id),
       })),
       notYetWired: NOT_YET_WIRED, leftEmptyByRemoval: await leftEmptyByRemovalNow(holderReads, holdings.map((h) => h.capability), stageUnlockOverridesFromVars()), // Power groups: the removal warning
     });
@@ -13165,7 +13166,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         { roleId: h.holderRoleId, roleName: h.holderRoleName, movedAt: h.movedAt, byBallot: !!h.movedByBallotId },
       ]),
     );
-    const seats = loadRoleHolders();
+    const seats = loadPowerHoldings(); // 0322: whoever sits there through a role, too
     const names = new Map((await members.all()).map((m: any) => [m.id, m.name]));
     res.json({
       powers: powersForReading(holders).map((p) => ({
@@ -14091,7 +14092,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     );
     let notified = 0;
     for (const task of tasks) {
-      const holders = loadRoleHolders().filter((h: any) => h.roleId === String(task.role_id));
+      const holders = loadPowerHoldings().filter((h: any) => h.roleId === String(task.role_id));
       for (const h of holders as any[]) {
         await notify({
           userId: h.userId,
@@ -14389,7 +14390,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const policy: any = readExitPolicy();
     const roleId = String(policy?.restorative?.intakeContactRole ?? "");
     if (!roleId) return res.status(409).json({ error: "No intake contact role is configured yet. Write to the stewards directly" });
-    const holders = loadRoleHolders().filter((h: any) => h.roleId === roleId);
+    const holders = loadPowerHoldings().filter((h: any) => h.roleId === roleId);
     if (!holders.length) return res.status(409).json({ error: "The intake role has no holders right now. Write to the stewards directly" });
     const intakeId = `ri-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     for (const h of holders as any[]) {
@@ -15441,6 +15442,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json(await runLibrarySweep());
   });
 
+  // R102: mounted here, above the reaper, which registered before the exchange block and so answered while it was off.
+  app.use("/api/admin/exchange", requireModule("exchange"));
   /** The exchange reaper on demand — see runExchangeReconcile. */
   app.post("/api/admin/exchange/reconcile", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
@@ -15631,7 +15634,6 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // admin — not a second permission system.
 
   app.use("/api/exchange", requireModule("exchange"));
-  app.use("/api/admin/exchange", requireModule("exchange"));
 
   /**
    * LOOK. `GET /api/admin/exchange` is the management OVERVIEW (glass round).
@@ -17154,7 +17156,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // because it answers only to the account behind the token, and derived from
   // live rows on every read so a rung falls with nothing written anywhere.
   registerPathLadderRoutes(app, { authedUser, getPool, lapseContext, isAdmin, members });
-  registerGroupAdminRoutes(app, { isAdmin, getPool, members, rolesRepo, loadRoleHolders });
+  registerGroupAdminRoutes(app, { isAdmin, getPool, members, rolesRepo, loadRoleHolders: loadPowerHoldings });
+  registerSeatPowerGroupRoutes(app, { isAdmin, getPool, members, rolesRepo, loadRoleHolders, lapseContext, seatGrants, addActivity, authedUser, capabilityCtx, liveHoldersOf });
   registerVouchRoutes(app, { authedUser, getPool, members, guardCapability, stageOf, recordStageEvent });
 
   // Journey to Launch: the founding team's own tracker, read and written
@@ -18642,7 +18645,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   registerSitePullRoutes(app, { isAdmin, adminActor, overLimit, clientIp, uploadsDir: UPLOADS_DIR });
   // Brand overlay: the Setup Wizard reads/writes this to white-label the site live.
-  registerBrandRoutes(app, { isAdmin, brandRepo, getBrand, withoutOrphanedAlt });
+  registerBrandRoutes(app, { isAdmin, brandRepo, getBrand, withoutOrphanedAlt, launchedAt: () => launchedAtOf(getPool()) });
 
   /**
    * The Living Map's skin, for the shell to hand its iframe.
@@ -21204,9 +21207,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
     }
     if (space.verdict === "unstated") {
-      // Accepted, and said out loud. A check that cannot run must never read as
-      // a check that passed, and refusing instead would take a working
-      // integration down the first time a sender dropped an optional field.
+      // Recorded, said out loud, and never applied on its own (R039, below). A
+      // check that cannot run must never read as a check that passed, and
+      // refusing instead would take a working integration down the first time a
+      // sender dropped an optional field.
       void reportError(new Error("Hypha outcome carried no space id, so the space check did not run"), {
         where: "mechanics governance callback",
       });
@@ -21327,6 +21331,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
       await notifyAdmins("governance", `Verified on-chain but applying is off: ${p.title}`, `gmp:${p.id}:frozen`);
       return res.json({ received: true, status: "passed_verified", held: "applying is switched off" });
     }
+    // R039: with a space id recorded, an outcome naming no space could be another
+    // village's vote, so it waits for a person (POST /api/admin/mechanics/proposals/:id/apply).
+    if (space.verdict === "unstated") {
+      await notifyAdmins("governance", `Verified, but the outcome named no Hypha space, so it waits for you to apply it: ${p.title}`, `gmp:${p.id}:unstated-space`);
+      return res.json({ received: true, status: "passed_verified", held: "the outcome named no Hypha space, so a person applies it" });
+    }
     const result = await applyMechanicsProposal(fresh, null);
     return res.json({ received: true, status: result.ok ? "applied" : "passed_verified", applied: result.applied, failed: result.failed });
   });
@@ -21374,12 +21384,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.use("/api/governance", requireModule("governance"));
   app.use("/api/admin/governance", requireModule("governance"));
 
-  /** The weight-mode snapshot the NEXT ballot would freeze (founder-held). */
-  function weightModeNow(): WeightModeSnapshot {
-    const raw = stringVar("governance.weight_mode");
-    const mode = raw === "token" || raw === "custom" ? raw : "equal";
-    return { mode, token: mode === "token" ? stringVar("governance.weight_token").trim() : null };
-  }
+  // `weightModeNow`, the snapshot the NEXT ballot would freeze, lives in
+  // server/lib/governanceWeights.ts beside the cap it now carries.
 
   /**
    * The village-wide electorate, built through the ONE gate: every real,
@@ -21409,8 +21415,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       const ctx = await capabilityCtx(u);
       if (hasCapability("ballot.vote", ctx)) eligible.push(u);
     }
+    // The whole roll, so the cap on one member's weight (when it is on) is
+    // measured against everybody who may vote, and frozen with them.
     const snapshot = weightModeNow();
-    const weights = await weightsFor(getPool(), eligible.map((u: any) => String(u.id)), snapshot);
+    const weights = await rollWeightsFor(getPool(), eligible.map((u: any) => String(u.id)), snapshot);
     return eligible.map((u: any) => ({ userId: String(u.id), weight: weights.get(String(u.id)) ?? 0 }));
   }
 
@@ -23295,7 +23303,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       amendedKeysFor(getPool(), b.id),
       ballotsFor(getPool(), b.subjectType, b.subjectRef),
     ]);
-    res.json(ballotForViewer(viewer, {
+    // Signing in is not being admitted (with membership.invite_only off anybody can). The named
+    // roll is for whoever may vote, this ballot's own electors and admins; anyone else reads a stranger's (R098).
+    const readsRoll = !!viewer && (payload.myWeight !== null || (await isAdmin(req)) || hasCapability("ballot.vote", await capabilityCtx(viewer)));
+    res.json(ballotForViewer(readsRoll ? viewer : null, {
       ...payload,
       appliedKeys,
       priorAttempts: chain
@@ -25747,7 +25758,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(400).json({ error: "userId and action (add|remove) are required" });
     }
     const member = await members.byId(userId);
-    if (action === "remove" && role.grantsAdmin && !accountsWithReach(await members.all(), loadRoles() as any, loadRoleHolders().filter((h) => !(h.roleId === role.id && h.userId === userId)), new Date(), holdingHasLapsed, isExampleUser).length) return res.status(409).json({ error: LAST_ADMIN_REFUSAL }); // sheet 19
+    if (action === "remove" && role.grantsAdmin && !accountsWithReach(await members.all(), loadRoles() as any, loadPowerHoldings().filter((h) => !(h.roleId === role.id && h.userId === userId)), new Date(), holdingHasLapsed, isExampleUser).length) return res.status(409).json({ error: LAST_ADMIN_REFUSAL }); // sheet 19
     if (!member || (action === "add" && !holderStands(member))) return res.status(404).json({ error: "Member not found" }); // a tombstone is nobody to appoint, and a stray holding of one can still be removed
 
     // A role can require a minimum stage: appointments respect the ladder too.
@@ -25814,7 +25825,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerPulseRoutes(app, { getPool });
   registerPlayersRoutes(app, {
     isAdmin, members, claimsRepo, computeStage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext,
-    adminGroupsFor: (id: string) => adminGroupsOf(id, loadRoles() as any, loadRoleHolders(), new Date(), holdingHasLapsed).map((g) => g.name),
+    adminGroupsFor: (id: string) => adminGroupsOf(id, loadRoles() as any, loadPowerHoldings(), new Date(), holdingHasLapsed).map((g) => g.name),
     trainingCompletions: (ids: readonly string[]) => completionsForMany(getPool(), ids),
     paidByVillage: (ids: readonly string[]) => paidByVillageMany(getPool(), ids, contributionTokens()),
   });

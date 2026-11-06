@@ -22,6 +22,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import {
   CREDITS,
+  EARNED_EQUITY,
   ensureVoiceToken,
   HEARTS,
   keys,
@@ -551,5 +552,48 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
         await pool.query("DELETE FROM `badges` WHERE `id` IN ('wp-b-builder','wp-b-self')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       }
     });
+  });
+});
+
+/*
+ * EARNED EQUITY MEANS WHAT THE VILLAGE SAYS IT MEANS (Rye, 2026-11-05: its
+ * meaning "is unique project to project, SET IN ADMIN per village", "shown
+ * wherever EE appears"). The meaning is the token's own description (0283,
+ * Admin, Tokens). A piece of work may not name Earned Equity until the village
+ * has said what it is, and a line that pays it carries the village's words.
+ */
+describe.skipIf(!configured)("Earned Equity is what the village says it is", () => {
+  let db2: TestDb;
+  let pool2: mysql.Pool;
+  const eeRules = (): MintRule[] => [rule({ id: "ee", trigger: "quest.completed", tokenSlug: EARNED_EQUITY, amount: null, ceiling: 1 })];
+  const meaning = async (text: string | null) => {
+    await pool2.query("UPDATE `tokens` SET `description` = ? WHERE `slug` = ?", [text, EARNED_EQUITY]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await loadTokenRegistry(pool2);
+  };
+
+  beforeAll(async () => {
+    db2 = await provisionTestDb();
+    pool2 = testPool(db2, { connectionLimit: 3 });
+    await loadVariables(pool2);
+    await loadTokenRegistry(pool2);
+  }, 180_000);
+
+  afterAll(async () => {
+    await pool2?.end();
+    await db2?.drop();
+    if (pool) await loadTokenRegistry(pool).catch(() => {});
+  });
+
+  it("refuses a line of Earned Equity until the village has said what it is a share of", async () => {
+    await meaning(null);
+    expect(payLineProblem(eeRules(), EARNED_EQUITY)).toMatch(/what Earned Equity is a share of/);
+    await meaning("A share of the hearth land trust's yearly surplus.");
+    expect(payLineProblem(eeRules(), EARNED_EQUITY)).toBeNull();
+  });
+
+  it("carries the village's own words on every line that pays it", async () => {
+    await meaning("A share of the hearth land trust's yearly surplus.");
+    const card = questPay({ valueMinor: null, valueCurrency: null, valueTokens: [{ token: EARNED_EQUITY, amount: 3 }] }, eeRules());
+    expect(card.lines).toEqual([expect.objectContaining({ token: EARNED_EQUITY, amount: 3, meaning: "A share of the hearth land trust's yearly surplus." })]);
   });
 });
