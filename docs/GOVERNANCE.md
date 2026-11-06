@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `9798dee921aff94a`, which regenerating reproduces.
+It describes the sources at fingerprint `e1963ce34713a3ee`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -516,10 +516,11 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/standing` | signed in | none |
 | GET | `/api/governance/stewardship` | signed in | none |
 | POST | `/api/governance/vetoes/:id/redact` | administrator | none |
+| GET | `/api/governance/voice-spread` | anyone, including a stranger | none |
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-64 routes: 50 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+65 routes: 51 under the governance prefix and 14 under the mechanics prefix. 10 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle a stranger reads the ballot list, one decision and the objection lineage as titles, counts, tallies, dials and status. Who voted, how, who has not voted yet, who objected and the document itself are for signed-in members, and ruling 22, still staged, is about what members read.
 
@@ -1055,7 +1056,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "9798dee921aff94a",
+  "commit": "e1963ce34713a3ee",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -2266,6 +2267,13 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "door": "administrator",
       "capability": null,
       "file": "server/routes/governanceVetoes.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/voice-spread",
+      "door": "anyone, including a stranger",
+      "capability": null,
+      "file": "server/routes/voiceSpread.ts"
     },
     {
       "method": "GET",
