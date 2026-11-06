@@ -632,7 +632,12 @@ describe.skipIf(!DB_CONFIGURED)("what a decision changed, read cold by somebody 
     expect(again.status, JSON.stringify(again.json)).toBe(200);
     secondBallot = String(again.json?.ballot?.id ?? "");
 
-    const read = await call("GET", `/api/governance/ballots/${secondBallot}`, { token: memberToken });
+    // Read cold by an admitted member who closed nothing. The suite's ordinary
+    // member never reached member stage, and an account the village has not
+    // admitted reads a ballot as a stranger does, closing notes emptied (R098).
+    const reader = await register("Ida Vale", `ida-${PORT}@example.test`);
+    expect((await call("PUT", `/api/admin/players/${reader.id}/stage`, { body: { stageId: "member" } })).status).toBe(200);
+    const read = await call("GET", `/api/governance/ballots/${secondBallot}`, { token: reader.token });
     expect(read.status).toBe(200);
     const priors = read.json?.priorAttempts ?? [];
     expect(priors.length, "the earlier attempt is on the record").toBe(1);
