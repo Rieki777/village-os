@@ -4,7 +4,7 @@ import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { insertInvoice } from "../repos/moonRecaps";
-import type { TreasuryDeps } from "../lib/treasurySync";
+import type { TreasuryDeps } from "../lib/holdingsReconcile";
 import { minorToDecimal, register, SYNC_LIMIT } from "./invoiceRails";
 
 describe("ledger minor units as an exact decimal", () => {

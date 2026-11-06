@@ -273,7 +273,7 @@ export function reconcile(input: ReconcileInput): ReconciledView {
 
   // Every slug either side holds: a token on chain with no ledger row reads
   // zero here and is compared, never left out.
-  const slugs = [...input.ledger.tokens.map((t) => t.slug), ...[...chainBySlug.keys()].filter((s) => !ledgerBySlug.has(s))];
+  const slugs = [...input.ledger.tokens.map((t) => t.slug), ...Array.from(chainBySlug.keys()).filter((s) => !ledgerBySlug.has(s))];
   const tokens = (input.ledger.ok ? slugs : []).map((slug) => {
     const t = ledgerBySlug.get(slug) ?? { slug, name: slug, amount: "0" };
     const c = chainBySlug.get(slug) ?? null;

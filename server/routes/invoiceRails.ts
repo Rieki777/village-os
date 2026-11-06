@@ -12,7 +12,7 @@
  * which admins pass the way they pass the payouts queue (constitution VII.9).
  *
  * Every sync and the job write an audit line. A sync never moves money or
- * tokens (server/lib/treasurySync.ts says how that is held).
+ * tokens (server/lib/holdingsReconcile.ts says how that is held).
  *
  * IN ITS OWN MODULE, for the reason server/routes/cashOwed.ts gives: the
  * import and the register call are the only lines server/index.ts pays.
@@ -23,7 +23,7 @@ import { recordEvent } from "../lib/events";
 import { registerJob } from "../lib/scheduler";
 import { retryUnsentInvoiceMail, type InvoiceMailDeps } from "../lib/invoiceMail";
 import { readSeraInvoices, type SeraReadOutcome } from "../lib/seraInvoices";
-import { invoiceTracksFor, syncTreasury, type TreasuryDeps, type TreasuryView } from "../lib/treasurySync";
+import { invoiceTracksFor, syncTreasury, type TreasuryDeps, type TreasuryView } from "../lib/holdingsReconcile";
 import { membersWithInvoices, openFlags, syncViewOf, unmatchedSeraReports } from "../repos/invoiceRails";
 import crypto from "node:crypto";
 import type { Pool } from "mysql2/promise";

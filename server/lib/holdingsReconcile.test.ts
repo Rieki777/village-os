@@ -6,7 +6,7 @@ import { openFlags, openFlagsFor } from "../repos/invoiceRails";
 import { balancesFor, memberAccount } from "./ledger";
 import { unpaidCashOf } from "./formerMember";
 import { SERA_INVOICE_TOOL, type SeraInvoiceClient } from "./seraInvoices";
-import { syncTreasury, type TreasuryDeps } from "./treasurySync";
+import { syncTreasury, type TreasuryDeps } from "./holdingsReconcile";
 
 const configured = testDbConfigured();
 

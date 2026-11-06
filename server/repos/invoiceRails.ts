@@ -4,7 +4,7 @@
  * disagreements a sync found. Raw SQL, every write keyed so a retry is a no-op.
  *
  * Nothing here writes the ledger, the token balances or cash owed: the sync is
- * read-only by construction, and server/lib/treasurySync.test.ts holds it to
+ * read-only by construction, and server/lib/holdingsReconcile.test.ts holds it to
  * that over every statement this file can send.
  */
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";

@@ -36,7 +36,7 @@ export const MAIL_MAX_ATTEMPTS = 3;
 /** The statuses in which an invoice still stands as the member sent it. */
 // Waiting only: an email "for approval" about an invoice already approved or
 // paid would invite a second approval or payment.
-const RETRY_STATUSES: ReadonlySet<InvoiceView["status"]> = new Set(["waiting"]);
+const RETRY_STATUSES: ReadonlySet<InvoiceView["status"]> = new Set<InvoiceView["status"]>(["waiting"]);
 
 export interface InvoiceMailDeps {
   getPool(): Pool;

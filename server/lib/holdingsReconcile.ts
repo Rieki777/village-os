@@ -9,7 +9,7 @@
  *
  * READ-ONLY. Syncing never moves money or tokens. This file imports no write
  * path of the ledger, the token balances or cash owed, and every number it is
- * handed comes through a reader; server/lib/treasurySync.test.ts records every
+ * handed comes through a reader; server/lib/holdingsReconcile.test.ts records every
  * statement a sync sends and fails on any write to those tables. What it
  * writes is its own: the member's last view, the disagreements, and Sera's
  * typed records.

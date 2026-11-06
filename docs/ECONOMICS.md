@@ -621,7 +621,7 @@ when it was last read: the ledger and `cash_owed` here, the Base chain (`readOnc
 Sera's invoice records. A difference is flagged to the `cash.pay` holder and never averaged, and a
 flag closes only when a later sync reads both sides fresh and no longer sees it. Finance approval
 and the Treasurer's transfer stay the only writes to `cash_owed`: a sync writes no ledger row, no
-balance and no cash row, which `server/lib/treasurySync.test.ts` checks over every statement it
+balance and no cash row, which `server/lib/holdingsReconcile.test.ts` checks over every statement it
 sends.
 
 **An erasure leaves these rows.** They are the village's record of money it owed and paid, and a
