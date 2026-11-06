@@ -12320,6 +12320,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
 
   // ── S69: payment products — every payment a project issues or receives ──
   app.use("/api/products", requireModule("commerce"));
+  app.use("/api/admin/products", requireModule("commerce")); // R102: off is 404 for admins too
 
   /** The catalog, audience-filtered. Public products show to everyone. */
   app.get("/api/products", async (req, res) => {
@@ -12604,6 +12605,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   // these handlers only pick the ref out of config and serve what the cache
   // answers. Nothing here writes anything anywhere.
   app.use("/api/crowdpool", requireModule("crowdpool"));
+  app.use("/api/admin/crowdpool", requireModule("crowdpool")); // R102
 
   /** One card per linked campaign: the /campaigns page. */
   app.get("/api/crowdpool/campaigns", async (_req, res) => {
@@ -12670,6 +12672,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   // ── End crowdpool zone ─────────────────────────────────────────────────────
 
   app.use("/api/network", requireModule("network"));
+  app.use("/api/admin/network", requireModule("network")); // R102: an off network syncs with nobody
 
   /**
    * The member view: what we share, what peers share, one payload.
@@ -15441,6 +15444,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     res.json(await runLibrarySweep());
   });
 
+  // R102: mounted here, above the reaper, which registered before the exchange block and so answered while it was off.
+  app.use("/api/admin/exchange", requireModule("exchange"));
   /** The exchange reaper on demand — see runExchangeReconcile. */
   app.post("/api/admin/exchange/reconcile", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
@@ -15631,7 +15636,6 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // admin — not a second permission system.
 
   app.use("/api/exchange", requireModule("exchange"));
-  app.use("/api/admin/exchange", requireModule("exchange"));
 
   /**
    * LOOK. `GET /api/admin/exchange` is the management OVERVIEW (glass round).
