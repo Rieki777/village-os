@@ -13,7 +13,7 @@ const view = (over: Partial<InvoiceView> = {}): InvoiceView => ({
   id: "mv-1", status: "waiting", statusLine: "Waiting on approval", memberNumber: "INV-12", billRef: "us-llc-0007",
   billTo: { payerKey: "us-llc", legalName: "Payer LLC", address: "2 Street", taxId: null, invoiceTo: "pay@example.test", invoiceCc: [] },
   from: { legalName: "A. Member", address: "1 Road" }, period: "6 Oct to 3 Nov 2026",
-  lines: [{ key: "app-1", applicationId: "app-1", firstSeatId: "s1", kind: "pay", roleIds: ["r1"], roleNames: ["Steward"], basis: "fixed", listedAs: null, currency: "USD", termsMinor: 120000, per: "moon", range: null, proposedMinor: null, finalMinor: null, daysInMoon: 28, daysHeld: 28, amountMinor: 120000, basisLine: "28 of 28 days", approvedItemIds: [], cashOwedId: null, held: false }] as InvoiceView["lines"],
+  lines: [{ key: "app-1", applicationId: "app-1", firstSeatId: "s1", kind: "pay", roleIds: ["r1"], roleNames: ["Steward"], basis: "per_moon", listedAs: null, currency: "USD", termsMinor: 120000, per: "moon", range: null, proposedMinor: null, finalMinor: null, daysInMoon: 28, daysHeld: 28, amountMinor: 120000, basisLine: "28 of 28 days", approvedItemIds: [], cashOwedId: null, held: false }] as InvoiceView["lines"],
   currency: "USD", totalMinor: 120000, expectedOn: null, paidOn: null, selfApproved: false, supportLine: "Support document.", externalInvoiceKey: null,
   workSummary: null, workSummaryHtml: null, sendRefusal: null, ...over,
 });

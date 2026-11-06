@@ -233,7 +233,7 @@ export async function paidReferenceOf(db: Queryable, cashOwedIds: readonly strin
   if (cashOwedIds.length === 0) return null;
   const [rows] = await db.query<RowDataPacket[]>("SELECT DISTINCT `paid_note` AS `note` FROM `cash_owed` WHERE `id` IN (?) AND `state` = 'paid'", [cashOwedIds]);
   const refs = new Set(rows.map((r) => /Reference: (.+)$/.exec(String(r.note ?? ""))?.[1]?.trim() ?? null));
-  return refs.size === 1 ? ([...refs][0] ?? null) : null;
+  return refs.size === 1 ? (Array.from(refs)[0] ?? null) : null;
 }
 
 // ── Reading moon_invoices for the rails (ids only; the row shape is moonRecaps') ──

@@ -48,11 +48,16 @@ export interface InvoiceMailDeps {
 
 export type MailOutcome = "sent" | "queued" | "failed" | "duplicate" | "no_inbox" | "no_reference";
 
-/** What the content hash covers: everything a reader of the invoice would see change. */
+/**
+ * What the content hash covers: every figure and party a reader of the invoice
+ * would see change. The period and the basis words are left out: they follow
+ * the cycle and the terms, and the daily retry rebuilds the PDF from the
+ * stored row, which carries the cycle id where the send carried its words.
+ */
 export function contentHashOf(v: InvoiceView): string {
   const canon = JSON.stringify([
-    v.billRef, v.memberNumber, v.period, v.currency, v.totalMinor, v.from?.legalName ?? null, v.from?.address ?? null, v.billTo?.legalName ?? null,
-    v.lines.map((l) => [l.key, l.roleNames, l.basisLine, l.amountMinor, l.currency, l.listedAs]),
+    v.billRef, v.memberNumber, v.currency, v.totalMinor, v.from?.legalName ?? null, v.from?.address ?? null, v.billTo?.legalName ?? null,
+    v.lines.map((l) => [l.key, l.roleNames, l.amountMinor, l.currency, l.listedAs]),
   ]);
   return crypto.createHash("sha256").update(canon).digest("hex");
 }
